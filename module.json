@@ -1,0 +1,16 @@
+{
+    "name": "AI",
+    "alias": "ai",
+    "description": "Foundation for persistent, believable AI players in OGameX.",
+    "keywords": [
+        "ai",
+        "players",
+        "ogamex"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\AI\\Providers\\AIServiceProvider"
+    ],
+    "files": []
+}
+

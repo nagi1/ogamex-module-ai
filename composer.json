@@ -1,0 +1,17 @@
+{
+    "name": "nagi1/ogamex-module-ai",
+    "description": "Foundation for persistent, believable AI players in OGameX.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Modules\\AI\\": "app/"
+        }
+    },
+    "scripts": {
+        "ogamex:test": "bash scripts/ogamex test",
+        "ogamex:enable": "bash scripts/ogamex enable",
+        "ogamex:disable": "bash scripts/ogamex disable"
+    }
+}
+
