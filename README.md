@@ -29,6 +29,9 @@ git clone git@github.com:nagi1/ogamex-module-ai.git /path/to/ogamex-next/Modules
 
 The module uses the OGameX module conventions documented in
 `OGameX/docs/modules.md` and follows `Modules/HelloWorld` as its reference.
+See [docs/development.md](docs/development.md) for the complete development
+and maintenance workflow, including installation, testing, releases, and
+repository ownership.
 
 ## Development loop
 

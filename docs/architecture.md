@@ -38,3 +38,12 @@ An optional language model may produce chat text or rare strategic advice from
 a limited context, but it must never execute game actions or access the
 database directly.
 
+## Repository lifecycle
+
+The AI module is maintained as an independent Git repository and installed as
+a normal checkout at `OGameX/Modules/AI`. It is not a Git submodule. Module
+commits, branches, releases, and tests remain separate from the OGameX parent
+repository; integration tests run through the OGameX host application.
+
+See [development.md](development.md) for the installation, local development,
+testing, release, and maintenance workflow.
