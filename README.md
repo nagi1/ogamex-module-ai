@@ -61,12 +61,16 @@ Set `OGAMEX_ROOT` when the OGameX checkout is elsewhere:
 OGAMEX_ROOT=/path/to/ogamex-next bash scripts/ogamex test
 ```
 
-The wrapper uses host PHP by default. Set `OGAMEX_RUNNER=docker` to run the
-same commands through OGameX's `ogamex-app` service:
+The wrapper uses host PHP by default. When using the already-running local
+development environment, execute through its existing application service:
 
 ```bash
-OGAMEX_RUNNER=docker bash scripts/ogamex test
+OGAMEX_RUNNER=local-docker-dev bash scripts/ogamex test
 ```
+
+This never starts a default Compose stack or creates a one-off application
+container. Start `local-docker-dev/` once from OGameX and keep using its
+`ogamex-app` service for module commands.
 
 After changing `composer.json`, refresh the OGameX autoloader from the OGameX
 root:
@@ -111,3 +115,7 @@ must only build perception from information the player could legally know.
 The existing Rust battle engine remains the source of battle outcomes when
 combat simulation is introduced. Laravel remains responsible for orchestration,
 scheduling, perception, decision policy, memory, and execution through OGameX.
+
+## Implementation plan
+
+Start with [the short five-phase roadmap](plan/README.md). It explains what we are building and the next step. Technical details, research and the unchanged original proposal are optional references.

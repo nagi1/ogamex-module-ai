@@ -9,4 +9,3 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
     ->group(function (): void {
         Route::get('/', [AIController::class, 'index'])->name('index');
     });
-
