@@ -11,7 +11,7 @@ class AIRouteTest extends IsolatedAccountTestCase
 
     public function createApplication(): Application
     {
-        $trackedFile = dirname(__DIR__, 3) . '/modules_statuses.json';
+        $trackedFile = dirname(__DIR__, 4) . '/modules_statuses.json';
         $statuses = json_decode((string) file_get_contents($trackedFile), true);
         $statuses['AI'] = true;
 
@@ -45,4 +45,3 @@ class AIRouteTest extends IsolatedAccountTestCase
         $response->assertSee('AI module is loaded');
     }
 }
-

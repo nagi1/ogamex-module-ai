@@ -20,6 +20,13 @@ OGameX/
     └── AI/  # this repository
 ```
 
+This is a normal independent Git checkout, not a Git submodule. Install it
+with a regular clone:
+
+```bash
+git clone git@github.com:nagi1/ogamex-module-ai.git /path/to/ogamex-next/Modules/AI
+```
+
 The module uses the OGameX module conventions documented in
 `OGameX/docs/modules.md` and follows `Modules/HelloWorld` as its reference.
 
@@ -101,4 +108,3 @@ must only build perception from information the player could legally know.
 The existing Rust battle engine remains the source of battle outcomes when
 combat simulation is introduced. Laravel remains responsible for orchestration,
 scheduling, perception, decision policy, memory, and execution through OGameX.
-
