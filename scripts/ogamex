@@ -11,11 +11,21 @@ if [[ -z "$OGAMEX_ROOT" || ! -f "$OGAMEX_ROOT/artisan" ]]; then
 fi
 
 run_core() {
-    if [[ "${OGAMEX_RUNNER:-host}" == "docker" ]]; then
-        (cd "$OGAMEX_ROOT" && docker compose run --rm --no-deps ogamex-app "$@")
-    else
-        (cd "$OGAMEX_ROOT" && "$@")
-    fi
+    case "${OGAMEX_RUNNER:-host}" in
+        host)
+            (cd "$OGAMEX_ROOT" && "$@")
+            ;;
+        local-docker-dev)
+            # local-docker-dev is already running the application. Execute in
+            # that service rather than creating a one-off container from the
+            # default Compose stack.
+            (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose exec -T ogamex-app "$@")
+            ;;
+        *)
+            echo "Unknown OGAMEX_RUNNER '${OGAMEX_RUNNER}'. Use 'host' or 'local-docker-dev'." >&2
+            exit 1
+            ;;
+    esac
 }
 
 command_name="${1:-help}"
@@ -48,4 +58,3 @@ case "$command_name" in
         exit 0
         ;;
 esac
-

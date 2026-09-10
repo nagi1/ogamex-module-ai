@@ -94,12 +94,18 @@ Use a different OGameX checkout by setting `OGAMEX_ROOT`:
 OGAMEX_ROOT=/path/to/ogamex-next bash scripts/ogamex test
 ```
 
-Use the Docker application service when the OGameX environment is running in
-Docker:
+When `local-docker-dev/` is already running, use its existing application
+service instead of starting a separate Compose container:
 
 ```bash
-OGAMEX_RUNNER=docker bash scripts/ogamex test
+OGAMEX_RUNNER=local-docker-dev bash scripts/ogamex test
 ```
+
+The wrapper runs `docker compose exec -T ogamex-app` from
+`local-docker-dev/`; it does not run `docker compose run` and never starts the
+default OGameX stack. See the host project's
+[`local-docker-dev/README.md`](../../../local-docker-dev/README.md) for the
+environment setup.
 
 Because the module checkout is physically inside the OGameX directory, the
 existing OGameX Docker bind mount includes the module without an additional
@@ -182,6 +188,19 @@ OGameX owns:
 - shared domain events
 - core database behavior
 
+## Implementation standards
+
+AI module code follows Laravel's normal extension patterns and is designed for
+safe replacement over time. Depend on interfaces in jobs, commands, and domain
+services; register concrete implementations in `AIServiceProvider`; and keep
+framework-facing code thin. Do not put policy branches, database queries, or
+game-rule calculations into controllers, commands, or jobs.
+
+Use integer-backed enums for finite persisted categories, named constants or
+value objects for every stable value, and migrations with indexes driven by the
+actual query paths. Run focused parallel tests while developing, then the full
+parallel suite before handoff.
+
 The module chooses intent. OGameX validates and executes it. If the module
 needs a missing extension point, make that a separate, focused OGameX change.
 
@@ -231,4 +250,3 @@ after a real AI-module requirement demonstrates that it is needed.
 - nWidart Laravel Modules: https://github.com/nWidart/laravel-modules
 - nWidart module publishing: https://nwidart.com/laravel-modules/v6/advanced-tools/publishing-modules
 - Composer path repositories: https://getcomposer.org/doc/05-repositories.md#path
-
