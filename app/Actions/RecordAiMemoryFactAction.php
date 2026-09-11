@@ -22,6 +22,7 @@ class RecordAiMemoryFactAction
         CarbonImmutable $validFrom,
         CarbonImmutable|null $expiresAt = null,
         int|null $speakerPlayerId = null,
+        CarbonImmutable|null $validTo = null,
     ): AiMemoryFact {
         return AiMemoryFact::query()->firstOrCreate([
             'player_id' => $playerId,
@@ -33,6 +34,7 @@ class RecordAiMemoryFactAction
             'speaker_player_id' => $speakerPlayerId,
             'value' => $value,
             'valid_from' => $validFrom,
+            'valid_to' => $validTo,
             'expires_at' => $expiresAt,
             'revision' => 1,
         ]);

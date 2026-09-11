@@ -27,6 +27,7 @@ use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
 use Modules\AI\Domain\Experience\NativeExperienceEngine;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
+use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
@@ -55,6 +56,7 @@ class AIServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         ChatMessage::observe(ObserveCommittedChatMessage::class);
+        ChatMessage::observe(RedactDeletedChatMemory::class);
     }
 
     public function register(): void

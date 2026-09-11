@@ -25,6 +25,7 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiEmotionalEpisode;
+use Modules\AI\Models\AiMemoryFact;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -66,6 +67,7 @@ class CommittedChatObservationTestCase extends TestCase
 
     protected function tearDown(): void
     {
+        AiMemoryFact::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiAffectState::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiEmotionalEpisode::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiCommitment::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
@@ -291,6 +293,36 @@ test('non-direct, self-sent, deleted, and disabled sources are not observed', fu
 
     expect($results)->each->toBeNull()
         ->and(AiObservation::query()->count())->toBe(0);
+});
+
+test('deleting an observed chat source redacts its dependent current memory', function (): void {
+    $sender = $this->createChatPlayer();
+    $recipient = $this->createChatPlayer();
+    $this->createProfile($recipient);
+    $chatMessage = ChatMessage::create([
+        'sender_id' => $sender->id,
+        'recipient_id' => $recipient->id,
+        'message' => 'This claim can be removed.',
+    ]);
+    $observation = AiObservation::query()->where('source_id', $chatMessage->id)->sole();
+
+    app(RecordAiMemoryFactAction::class)->handle(
+        $recipient->id,
+        $sender->id,
+        AiMemoryPredicate::AllianceMembership,
+        AiMemoryEvidenceKind::Claimed,
+        ['alliance_tag' => 'RAVEN'],
+        $observation->id,
+        CarbonImmutable::parse('2026-09-11 10:00 UTC'),
+        null,
+        $sender->id,
+    );
+    $chatMessage->delete();
+
+    $fact = AiMemoryFact::query()->where('source_observation_id', $observation->id)->sole();
+
+    expect($fact->redacted_at)->not->toBeNull()
+        ->and(app(FindCurrentAiMemoryFactsAction::class)->handle($recipient->id, $sender->id, AiMemoryPredicate::AllianceMembership, CarbonImmutable::parse('2026-09-11 12:00 UTC')))->toBeEmpty();
 });
 
 test('an attributed claim remains distinct from verified current knowledge and expires independently', function (): void {

@@ -19,6 +19,7 @@ class FindCurrentAiMemoryFactsAction
             ->where('subject_player_id', $subjectPlayerId)
             ->where('predicate', $predicate)
             ->where('valid_from', '<=', $now)
+            ->whereNull('redacted_at')
             ->where(function ($query) use ($now): void {
                 $query->whereNull('valid_to')->orWhere('valid_to', '>', $now);
             })
