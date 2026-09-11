@@ -1,44 +1,44 @@
 # Agent work packages
 
-Assign one package to one agent. Agents work in separate Git worktrees for the repository they change. A host-package agent uses a host worktree; a module-package agent uses an AI-module worktree. No agent edits this plan while implementing. The coordinator alone updates planning documents after integrating a result.
+Assign one package to one module agent. Agents work only in the AI-module worktree. No agent edits this plan while implementing. The coordinator alone updates planning documents after integrating a result.
 
 Every agent begins by reading the assigned package and the named section of [details/IMPLEMENTATION.md](details/IMPLEMENTATION.md). It then checks the current target branch, implements only its allowed scope, runs the named checks, and returns: changed files, commit, checks/results, unresolved risks and the next package now unblocked. It does not start adjacent work because it looks easy.
 
 ## Package 1 — safe module bridge
 
-**Status:** complete locally; host bridge and module foundation remain
-uncommitted. **Owner:** one host agent, then one module agent after the host
-contract merges.
+**Status:** complete locally; module foundation remains uncommitted. **Owner:** one module agent.
 
 **Goal:** an AI-controlled existing player queues one building through the exact validated game path; duplicate work cannot queue a second building.
 
-**Dependencies:** none for the host slice. The module slice depends on the merged host action contract.
+**Dependencies:** none.
 
-**Host scope:** only `GlobalGame`, a new `PlayerGameStateService`, a building-only `ModulePlayerActionService`, `BuildingQueueService`, the related controller delegation and focused host tests. Extract player refresh from middleware. Resolve fresh actor and owned planet. Put ownership, eligibility, resource and prerequisite validation on the shared path. Return a domain result, not an HTTP response.
+**Module scope:** profile/work/receipt migrations and models, `QueueAiBuildingAction`, `ProcessAiWork`, `BuildFirstBuilding`, `RunDueAiWork`, and focused module tests. Use lease token, per-player lock and one idempotency key through the module receipt. No fleets, combat, chat, memory provider or UI.
 
-**Module scope after host merge:** only profile/work/receipt migrations and models, `ProcessAiWork`, `BuildFirstBuilding`, `RunDueAiWork`, and focused module tests. Use lease token, per-player lock and one idempotency key from work item through action receipt to host call. No fleets, combat, chat, memory provider or UI.
+**Allowed repositories:** `Modules/AI` only. **Do not modify:** host services, controllers, fleet code, events, battle engine, social systems, core module loader or any later package.
 
-**Allowed repositories:** host for host slice; `Modules/AI` only for module slice. **Do not modify:** fleet code, events, battle engine, social systems, core module loader or any later package.
-
-**Acceptance:** valid building queues once; duplicate delivery queues once; invalid input writes no game state; human build action still works through the shared path; no model/provider request.
+**Acceptance:** valid building queues once; duplicate delivery queues once; invalid input writes no game state; no model/provider request.
 
 ## Package 2 — legal perception and deterministic sessions
 
-**Status:** blocked by Package 1. **Owner:** one host agent for contracts, one module agent after those contracts merge.
+**Status:** complete locally. **Owner:** one module agent.
 
 **Goal:** varied AI accounts make reproducible zero-token choices using only legal information.
 
-**Host scope:** `PlayerObservationService`; extraction of fleet validation from `FleetController` into `FleetDispatchValidationService`; action-gateway additions for research, units, fleet dispatch, recall and colonization; a pure `BattleEstimateService`; after-commit correlated lifecycle events. Preserve existing controllers and mission behavior. Do not let AI subscribe to existing in-transaction `BattleResolved` or `FleetMissionArrived` as durable outcomes.
-
-**Module scope:** schedules, session planner, perception snapshot, candidate factory, utility scorer, seeded random source, clock, decision traces and Miner/Turtle/Fleeter/Trader/Casual policies. Always evaluate do-nothing and eligible fleetsave. List score components and source timestamps in traces.
+**Module scope:** module-owned observation reduction, schedules, session planner, perception snapshot, candidate factory, utility scorer, seeded random source, clock, decision traces and Miner/Turtle/Fleeter/Trader/Casual policies. Always evaluate do-nothing and eligible fleetsave. List score components and source timestamps in traces. Unavailable game actions remain recorded, safe intents.
 
 **Do not modify:** relationships, generated chat, PvE campaign code, population UI or provider adapters.
 
-**Acceptance:** frozen clock + seed reproduce trace; traces expose no hidden target data; an estimate has no writes/events; stale intel blocks risky raid; Miner does not attack; Fleeter saves exposed fleet; loss leads to bounded recovery.
+**Acceptance:** frozen clock + seed reproduce trace; traces expose no hidden target data; an estimate has no writes/events; stale intel blocks risky raid; Miner builds from legal options and never attacks; Turtle queues units/defence and never attacks; Fleeter saves an exposed fleet ahead of a visible raid; Trader colonizes from legal options and never attacks; Casual selects do-nothing when no safe action exists; novice and veteran skill bands select differently within their defined near-equal-choice bounds; recovery input is bounded and visible in the recorded score. These are dedicated feature scenarios, not only unit or line-coverage assertions.
+
+**Test-fixture rule:** use real OGameX services, models and validation paths. Mockery is prohibited. A narrow container override is permitted only to verify an explicitly replaceable package/action boundary, never as a substitute for testing production mechanics.
+
+**Container rule:** actions, jobs, services, policies and collaborators are resolved through `app()` or `app()->makeWith()` in module code and tests. Direct `new` is limited to plain value objects and deliberately non-container data.
+
+**Pest rule:** all AI-module tests use native Pest 5 syntax and named datasets for repeated mechanics. Run PCOV with PAO and `--tia`; never enable Xdebug for this suite. Pest dependencies remain module-local. PHPUnit-style test classes/assertions and Mockery are prohibited.
 
 ## Package 3 — facts, relationships and optional conversation
 
-**Status:** blocked by Package 2 committed events. **Owner:** one module agent; host event additions, if missing, are a separate narrowly scoped host pull request.
+**Status:** blocked by Package 2's future event-consumption decision. **Owner:** one module agent. Reuse events already published by OGameX; a host change is considered only if a generic, independently useful event is truly absent.
 
 **Goal:** accounts remember meaningful, expiring facts and agreements; conversation remains optional and budgeted.
 
@@ -76,4 +76,4 @@ contract merges.
 
 ## Integration order
 
-Merge packages strictly 1 → 2 → 3 → 4 → 5. A package that needs an unmerged host contract produces its contract pull request and stops. The next module agent works only from the merged contract revision, recorded in its handoff.
+Merge packages strictly 1 → 2 → 3 → 4 → 5. A package first uses existing OGameX services, models and module extension points. Only a proven missing generic capability may produce a separate host pull request; the next module agent then works only from that merged revision, recorded in its handoff.

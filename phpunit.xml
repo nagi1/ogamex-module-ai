@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" bootstrap="../../vendor/autoload.php" colors="true" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/13.3/phpunit.xsd">
+  <testsuites>
+    <testsuite name="AI Module">
+      <directory suffix="Test.php">./tests/Feature</directory>
+      <directory suffix="Test.php">./tests/Unit</directory>
+    </testsuite>
+  </testsuites>
+  <php>
+    <env name="APP_ENV" value="testing"/>
+    <env name="CACHE_DRIVER" value="array"/>
+    <env name="CACHE_STORE" value="array"/>
+    <env name="SESSION_DRIVER" value="array"/>
+    <env name="QUEUE_CONNECTION" value="sync"/>
+    <env name="BROADCAST_CONNECTION" value="log"/>
+    <env name="BCRYPT_ROUNDS" value="4"/>
+  </php>
+  <source>
+    <include>
+      <directory suffix=".php">./app</directory>
+    </include>
+    <exclude>
+      <directory suffix=".php">./config</directory>
+      <directory suffix=".php">./database</directory>
+      <directory suffix=".php">./resources</directory>
+      <directory suffix=".php">./routes</directory>
+      <directory suffix=".php">./tests</directory>
+    </exclude>
+  </source>
+</phpunit>

@@ -17,6 +17,15 @@ not deduct resources, create queues, or reproduce game rules itself.
 
 ## Implementation conventions
 
+### Nagi agent baseline
+
+[`AGENTS.md`](../AGENTS.md) is the module's persistent Codex agent definition
+and implementation memory. It requires SOLID/DRY/KISS/YAGNI, action-oriented
+business logic, container resolution, early returns instead of `else`, native
+Pest 5 with PCOV, and comments only for non-obvious reasons or invariants.
+Read it before module work; its module-local rules take precedence over a
+generic coding preference.
+
 - Persisted finite state is represented by integer-backed PHP enums. Database
   columns use unsigned tiny integers and enum casts; names remain in code and
   migrations, not in hot indexes.
@@ -39,7 +48,16 @@ not deduct resources, create queues, or reproduce game rules itself.
   or infrastructure adapters must be addable without changing callers.
 - Apply SOLID at the module boundary: a job coordinates one work attempt,
   a policy scores choices, a repository/store owns persistence mechanics, and
-  the host action gateway remains the only executor of game rules.
+  the host action gateway remains the only executor of game rules. Prefer a
+  module-local adapter with an explicit record-only fallback over expanding
+  OGameX. A host change is justified only when it is generic, independently
+  useful without AI, and cannot be expressed through an existing boundary.
+- Use container-resolved application actions for behavior initiated by jobs,
+  commands or listeners. Resolve the small contract with Laravel's
+  `app(Contract::class)` at that framework boundary, bind its default action in
+  `AIServiceProvider`, and replace it with `$this->app->instance(...)` in
+  tests. This is the module's persistent implementation-memory for swappable
+  orchestration; do not construct a collaborator directly in a job.
 
 ## Proposed boundaries
 
@@ -76,4 +94,4 @@ testing, release, and maintenance workflow.
 
 ## Phased implementation
 
-The [implementation plan](../plan/README.md) expands this scaffold boundary into deliverable phases. Its [host extension assessment](../plan/details/specs/module-extension-points.md) distinguishes existing support from required generic host changes.
+The [implementation plan](../plan/README.md) expands this scaffold boundary into deliverable phases. Its [extension assessment](../plan/details/specs/module-extension-points.md) records the existing boundaries used by the module and deferred generic capabilities; it does not authorize AI-specific host APIs.

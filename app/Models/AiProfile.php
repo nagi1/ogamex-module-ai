@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
@@ -15,10 +16,9 @@ use Modules\AI\Enums\AiSkillBand;
  * @property bool $enabled
  * @property array<string, mixed>|null $settings
  */
+#[Unguarded]
 class AiProfile extends Model
 {
-    protected $guarded = [];
-
     protected function casts(): array
     {
         return ['archetype' => AiArchetype::class, 'skill_band' => AiSkillBand::class, 'enabled' => 'boolean', 'settings' => 'array'];

@@ -190,6 +190,12 @@ OGameX owns:
 
 ## Implementation standards
 
+All module agents follow the durable [Nagi agent baseline](../AGENTS.md). It
+is the module's Codex agent definition and repository memory: use descriptive,
+small action-oriented code; early returns rather than `else`; brief
+why/invariant comments only; real Laravel feature fixtures; and the module's
+Pest 5/PCOV verification gates.
+
 AI module code follows Laravel's normal extension patterns and is designed for
 safe replacement over time. Depend on interfaces in jobs, commands, and domain
 services; register concrete implementations in `AIServiceProvider`; and keep
@@ -201,8 +207,76 @@ value objects for every stable value, and migrations with indexes driven by the
 actual query paths. Run focused parallel tests while developing, then the full
 parallel suite before handoff.
 
-The module chooses intent. OGameX validates and executes it. If the module
-needs a missing extension point, make that a separate, focused OGameX change.
+## Container actions
+
+Treat a job, command, or listener as a thin framework boundary. It resolves a
+small module action contract through `app(Contract::class)`; the default action
+is registered in `AIServiceProvider`. This keeps application behavior
+replaceable in integration tests with `$this->app->instance(...)` and avoids
+hard-coding concrete orchestration into queue delivery. Actions choose or
+coordinate intent only—host action services still validate and execute game
+rules.
+
+Resolve every container-managed action, job, service, policy and collaborator
+through `app()` (or `app()->makeWith()` when runtime scalar arguments are
+required), in production code and tests. Do not instantiate those classes with
+`new`; that would bypass Laravel bindings and make replacement/testing harder.
+Use `new` only for simple value objects, enums' data, or other objects that are
+deliberately outside the container.
+
+## Domain identifiers
+
+Use an enum for every stable AI domain value: persona, work and receipt state,
+candidate type, capability, candidate reason/rejection, and defined action
+outcome. A string is acceptable only for an external framework/database field,
+serialized observation key, or a one-off dynamic value such as an exception
+message. Feature tests assert enum values for defined behavior.
+
+## Test realism
+
+AI module feature tests use real OGameX models, services, database state,
+queues, locks and validation paths. Do not use Mockery or routine mocks. A
+container override is permitted only when the test specifically proves that a
+replaceable package/action boundary works; keep that override narrow and test
+the production implementation separately. Prefer production-like fixtures over
+stubs, and treat a mock as an exceptional last resort that must be explained in
+the test name.
+
+## Agent test runs and coverage
+
+Write all AI module tests in native Pest 5 syntax. Do not introduce PHPUnit
+test classes or PHPUnit assertion methods in module tests; use Pest's `test`,
+`expect`, hooks and named datasets so repeated policy cases remain one readable
+behavior specification. Run changed-test selection with `--tia` after a full
+green run; its baseline branch is explicitly `main` in `tests/Pest.php`. Keep Pest tooling in this module's `composer.json`; do not add it to
+the OGameX host solely for AI tests.
+
+Run static analysis with the module-local `phpstan.neon`. It intentionally
+avoids host-wide suppression rules so the module gate remains independent of
+unrelated host diagnostics.
+
+Run agent-facing verification through Laravel PAO's compact result format and
+PCOV—not Xdebug. In the existing `local-docker-dev` service, use the module
+configuration and point PCOV at the module source explicitly:
+
+```bash
+PAO_FORCE=1 php -d pcov.enabled=1 \
+  -d pcov.directory=/var/www/Modules/AI/app \
+  ./vendor/bin/pest --configuration=Modules/AI/phpunit.xml --coverage --exactly=100
+```
+
+The module `phpunit.xml` is the strict source filter; `pcov.directory` is
+equally important because the container defaults PCOV to the host application
+directory. Keep branch-focused feature fixtures alongside the PCOV line
+coverage gate: PCOV does not expose a branch-coverage metric. The local
+container is the test runtime; do not alter application source configuration
+just to enable a coverage driver.
+
+The module chooses intent. OGameX validates and executes only intents it can
+already accept. When a capability is unavailable, keep the decision and trace
+inside the module and use a record-only/no-op adapter; do not add an AI-specific
+OGameX API. A host extension is exceptional and must be generic, reusable, and
+independently justified.
 
 ## Branches, commits, and releases
 
