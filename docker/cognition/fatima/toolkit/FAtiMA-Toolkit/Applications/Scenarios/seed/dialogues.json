@@ -1,0 +1,7 @@
+[
+  {"CurrentState":"s1","NextState":"s2","Meaning":"Question","Style":"Neutral","Utterance":"What are you doing?"},
+  {"CurrentState":"s1","NextState":"s3","Meaning":"Question","Style":"Neutral","Utterance":"How are you feeling?"},
+  {"CurrentState":"s2","NextState":"s4","Meaning":"Answer","Style":"Neutral","Utterance":"Nothing special."},
+  {"CurrentState":"s3","NextState":"s4","Meaning":"Answer","Style":"Neutral","Utterance":"I am feeling great."},
+  {"CurrentState":"s3","NextState":"s4","Meaning":"Answer","Style":"Rude","Utterance":"None of your business."}
+]

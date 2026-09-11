@@ -1,0 +1,47 @@
+# Opt-in Phase 3 cognition drivers.
+#
+# This file is deliberately separate from the application stack: no Phase 3
+# baseline requires any driver, and the AI module must keep working with every
+# optional driver absent. The application container reaches these services over
+# the host gateway it already maps (`host.docker.internal`), so the host Compose
+# stack stays untouched.
+#
+#   docker compose -f Modules/AI/docker/cognition/docker-compose.yml up -d --build
+#   docker compose -f Modules/AI/docker/cognition/docker-compose.yml up -d fatima
+#
+# The published ports bind every interface because the application container
+# arrives over the Docker host gateway, not over loopback. Restrict the bind
+# address on a shared server, or attach these services to the application's
+# private network.
+name: ogamex-ai-cognition
+
+services:
+  # Structured CBR scoring behind Modules\AI\Contracts\ExperienceEngine.
+  cbrkit:
+    build:
+      context: ./cbrkit
+    image: ogamex-ai-cognition-cbrkit:1.6.0
+    ports:
+      - "${AI_CBRKIT_BIND:-0.0.0.0}:${AI_CBRKIT_PORT:-8091}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/openapi.json', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Integrated appraisal and social importance behind Modules\AI\Contracts\AffectEngine.
+  fatima:
+    build:
+      context: ./fatima
+    image: ogamex-ai-cognition-fatima:net8
+    ports:
+      - "${AI_FATIMA_BIND:-0.0.0.0}:${AI_FATIMA_PORT:-8092}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-m", "3", "http://127.0.0.1:8000/scenarios"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped

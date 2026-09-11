@@ -1,0 +1,698 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{5C4CD8BB-DE9C-45A0-ADB3-441D420A7200}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>IntegratedAuthoringToolWF</RootNamespace>
+    <AssemblyName>IntegratedAuthoringToolWF</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <TargetFrameworkProfile />
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\..\Binaries\FAtiMA-AuthoringTools\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>true</Prefer32Bit>
+    <CodeAnalysisRuleSet>
+    </CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>
+    </CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>IntegratedAuthoringToolWF.Program</StartupObject>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>fatima-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="AboutForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AboutForm.Designer.cs">
+      <DependentUpon>AboutForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AddEmotionalReactionForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AddEmotionalReactionForm.Designer.cs">
+      <DependentUpon>AddEmotionalReactionForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AddOrEditDialogueActionForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AddOrEditDialogueActionForm.Designer.cs">
+      <DependentUpon>AddOrEditDialogueActionForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Audio\AudioStreamModifier.cs" />
+    <Compile Include="Audio\SampleJoiner.cs" />
+    <Compile Include="AddCharacterForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AddCharacterForm.Designer.cs">
+      <DependentUpon>AddCharacterForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AuthorAssistant.cs" />
+    <Compile Include="DialogueHelpers\GenerateDialogue Wizard.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="DialogueHelpers\GenerateDialogue Wizard.Designer.cs">
+      <DependentUpon>GenerateDialogue Wizard.cs</DependentUpon>
+    </Compile>
+    <Compile Include="DialogueHelpers\GenerateDialogueActions.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="DialogueHelpers\GenerateDialogueActions.Designer.cs">
+      <DependentUpon>GenerateDialogueActions.cs</DependentUpon>
+    </Compile>
+    <Compile Include="DialogueHelpers\GPTOutputForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="DialogueHelpers\GPTOutputForm.Designer.cs">
+      <DependentUpon>GPTOutputForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IEP\ComputeDescriptionForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IEP\ComputeDescriptionForm.Designer.cs">
+      <DependentUpon>ComputeDescriptionForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IEP\ComputeDescriptionHints.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IEP\ComputeDescriptionHints.Designer.cs">
+      <DependentUpon>ComputeDescriptionHints.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IEP\ConnectToServerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IEP\ConnectToServerForm.Designer.cs">
+      <DependentUpon>ConnectToServerForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IEP\GenerateBeliefsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IEP\GenerateBeliefsForm.Designer.cs">
+      <DependentUpon>GenerateBeliefsForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IEP\IEPOutputForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IEP\IEPOutputForm.Designer.cs">
+      <DependentUpon>IEPOutputForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IEP\OutputManager.cs" />
+    <Compile Include="IEP\QuickAddWizard.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IEP\QuickAddWizard.Designer.cs">
+      <DependentUpon>QuickAddWizard.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ImageForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ImageForm.Designer.cs">
+      <DependentUpon>ImageForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Metabeliefs\MetaBeliefForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Metabeliefs\MetaBeliefForm.Designer.cs">
+      <DependentUpon>MetaBeliefForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="RPCInspectForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="RPCInspectForm.Designer.cs">
+      <DependentUpon>RPCInspectForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="TextToSpeechForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="TextToSpeechForm.Designer.cs">
+      <DependentUpon>TextToSpeechForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TTSEngines\BakedTTS.cs" />
+    <Compile Include="TTSEngines\VoicePlayer.cs" />
+    <Compile Include="TTSEngines\TextToSpeechEngine.cs" />
+    <Compile Include="TTSEngines\IVoice.cs" />
+    <Compile Include="TTSEngines\L2F\L2FSpeechEngine.cs" />
+    <Compile Include="TTSEngines\L2F\LanguageResources.cs" />
+    <Compile Include="TTSEngines\System\SystemTextToSpeechEngine.cs" />
+    <Compile Include="TTSEngines\Viseme.cs" />
+    <Compile Include="WepAPI\MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WepAPI\MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WepAPI\Program.cs" />
+    <Compile Include="WordModel\AddOrEditActionTemplateForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WordModel\AddOrEditActionTemplateForm.Designer.cs">
+      <DependentUpon>AddOrEditActionTemplateForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WordModel\AddorEditEffect.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WordModel\AddorEditEffect.Designer.cs">
+      <DependentUpon>AddorEditEffect.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WordModel\MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WordModel\MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Include="AboutForm.resx">
+      <DependentUpon>AboutForm.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="AddCharacterForm.resx">
+      <DependentUpon>AddCharacterForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="AddEmotionalReactionForm.resx">
+      <DependentUpon>AddEmotionalReactionForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="AddOrEditDialogueActionForm.resx">
+      <DependentUpon>AddOrEditDialogueActionForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="DialogueHelpers\GenerateDialogue Wizard.resx">
+      <DependentUpon>GenerateDialogue Wizard.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="DialogueHelpers\GenerateDialogueActions.resx">
+      <DependentUpon>GenerateDialogueActions.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="DialogueHelpers\GPTOutputForm.resx">
+      <DependentUpon>GPTOutputForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IEP\ComputeDescriptionForm.resx">
+      <DependentUpon>ComputeDescriptionForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IEP\ComputeDescriptionHints.resx">
+      <DependentUpon>ComputeDescriptionHints.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IEP\ConnectToServerForm.resx">
+      <DependentUpon>ConnectToServerForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IEP\GenerateBeliefsForm.resx">
+      <DependentUpon>GenerateBeliefsForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IEP\IEPOutputForm.resx">
+      <DependentUpon>IEPOutputForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IEP\QuickAddWizard.resx">
+      <DependentUpon>QuickAddWizard.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ImageForm.resx">
+      <DependentUpon>ImageForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Metabeliefs\MetaBeliefForm.resx">
+      <DependentUpon>MetaBeliefForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <SubType>Designer</SubType>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="RPCInspectForm.resx">
+      <DependentUpon>RPCInspectForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="TextToSpeechForm.resx">
+      <DependentUpon>TextToSpeechForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WepAPI\MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WordModel\AddOrEditActionTemplateForm.resx">
+      <DependentUpon>AddOrEditActionTemplateForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WordModel\AddorEditEffect.resx">
+      <DependentUpon>AddorEditEffect.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WordModel\MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <None Include="External\config6">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="packages.config" />
+    <None Include="Properties\DataSources\RolePlayCharacter.BeliefDTO.datasource" />
+    <None Include="Properties\DataSources\RolePlayCharacter.EventHelper.datasource" />
+    <None Include="Properties\DataSources\RolePlayCharacter.Identity.datasource" />
+    <None Include="Properties\DataSources\RolePlayCharacter.RolePlayCharacterAsset.datasource" />
+    <None Include="Properties\DataSources\RolePlayCharacter.RPCConsts.datasource" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Assets\CommeillFaut\CommeillFaut.csproj">
+      <Project>{ba21951c-1799-4d0f-aa99-62df857f3b71}</Project>
+      <Name>CommeillFaut</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Assets\EmotionalAppraisal\EmotionalAppraisal.csproj">
+      <Project>{0a2a1ee9-bd5d-44aa-a22d-291612488f06}</Project>
+      <Name>EmotionalAppraisal</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Assets\EmotionalDecisionMaking\EmotionalDecisionMaking.csproj">
+      <Project>{a1e56f5c-eaac-43e5-a922-5b244168ea5c}</Project>
+      <Name>EmotionalDecisionMaking</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Assets\IntegratedAuthoringTool\IntegratedAuthoringTool.csproj">
+      <Project>{f6ad95a5-889c-41a4-b613-b81f09a424ee}</Project>
+      <Name>IntegratedAuthoringTool</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Assets\RolePlayCharacter\RolePlayCharacter.csproj">
+      <Project>{986ea00a-7aa4-4d9e-b986-e6f290e7aa3f}</Project>
+      <Name>RolePlayCharacter</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Assets\SocialImportance\SocialImportance.csproj">
+      <Project>{823e8a41-5231-4b06-bbab-e62651e15bc7}</Project>
+      <Name>SocialImportance</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Assets\WorldModel\WorldModel.csproj">
+      <Project>{c751a38c-44d9-4918-b1f1-55a80147471d}</Project>
+      <Name>WorldModel</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Components\ActionLibrary\ActionLibrary.csproj">
+      <Project>{e011d502-5c0f-4a3f-9f1a-337ff025eb48}</Project>
+      <Name>ActionLibrary</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Components\AutobiographicMemory\AutobiographicMemory.csproj">
+      <Project>{c1cc38c5-72f5-4545-b4f7-c65b2883909c}</Project>
+      <Name>AutobiographicMemory</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Components\Conditions\Conditions.csproj">
+      <Project>{59041269-E52E-4CDD-84E0-92FDCFBF270D}</Project>
+      <Name>Conditions</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Components\GAIPS.Rage\GAIPS.Rage.csproj">
+      <Project>{9feca6e5-c949-44f1-be40-d3303ab2ef05}</Project>
+      <Name>GAIPS.Rage</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Components\KnowledgeBase\KnowledgeBase.csproj">
+      <Project>{a632a90a-0ee6-430f-acf2-25bb7ced21e7}</Project>
+      <Name>KnowledgeBase</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Components\WellFormedNames\WellFormedNames.csproj">
+      <Project>{bc47528f-fbf6-465e-bb0e-f68f50f31c13}</Project>
+      <Name>WellFormedNames</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Utilities\Utilities\Utilities.csproj">
+      <Project>{eb915898-6d95-4631-8364-f281aa9a24e4}</Project>
+      <Name>Utilities</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Wrappers\WebServer\WebServer.csproj">
+      <Project>{8d2e220b-2764-4798-ac75-e75f4847ccc6}</Project>
+      <Name>WebServer</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\CommeillFautWF\CommeillFautWF.csproj">
+      <Project>{fd251a80-d5d3-4776-b323-37496fd9c550}</Project>
+      <Name>CommeillFautWF</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\EmotionalAppraisalWF\EmotionalAppraisalWF.csproj">
+      <Project>{36ef269c-7ab2-4029-bbf4-18f908af46f6}</Project>
+      <Name>EmotionalAppraisalWF</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\EmotionalDecisionMakingWF\EmotionalDecisionMakingWF.csproj">
+      <Project>{a1727658-04b9-479a-98db-f04c897488cc}</Project>
+      <Name>EmotionalDecisionMakingWF</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\GAIPS.AssetEditorTools\GAIPS.AssetEditorTools.csproj">
+      <Project>{c61fb19d-e715-4eb4-afca-27ff81a14777}</Project>
+      <Name>GAIPS.AssetEditorTools</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\RolePlayCharacterWF\RolePlayCharacterWF.csproj">
+      <Project>{63ec96bc-d3e1-491b-8c55-61a0f5fba210}</Project>
+      <Name>RolePlayCharacterWF</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\SocialImportanceWF\SocialImportanceWF.csproj">
+      <Project>{8c1bbedb-3334-4877-84b2-99e4e7c5abd8}</Project>
+      <Name>SocialImportanceWF</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Antlr3.Runtime, Version=3.5.0.2, Culture=neutral, PublicKeyToken=eb42632606e9261f, processorArchitecture=MSIL">
+      <HintPath>..\packages\Antlr.3.5.0.2\lib\Antlr3.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus, Version=4.1.0.0, Culture=neutral, PublicKeyToken=ea159fdaa78159a1, processorArchitecture=MSIL">
+      <HintPath>..\packages\EPPlus.4.1.0\lib\net40\EPPlus.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Equin.ApplicationFramework.BindingListView, Version=1.4.5222.35545, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Equin.ApplicationFramework.BindingListView.1.4.5222.35545\lib\net40-Client\Equin.ApplicationFramework.BindingListView.dll</HintPath>
+    </Reference>
+    <Reference Include="GAIPS.Serialization, Version=1.5.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\GAIPS.Serialization.1.5.0\lib\net35\GAIPS.Serialization.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="NAudio, Version=1.5.4.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NAudio.1.5\lib\NAudio.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="NAudio.Vorbis, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NAudio.Vorbis.1.0.0.0\lib\net35\NAudio.Vorbis.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="NVorbis, Version=0.8.4.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NVorbis.0.8.4.0\lib\NVorbis.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Serilog, Version=2.0.0.0, Culture=neutral, PublicKeyToken=24c2f752a8e58a10, processorArchitecture=MSIL">
+      <HintPath>..\packages\Serilog.2.11.0\lib\net46\Serilog.dll</HintPath>
+    </Reference>
+    <Reference Include="Serilog.Sinks.File, Version=5.0.0.0, Culture=neutral, PublicKeyToken=24c2f752a8e58a10, processorArchitecture=MSIL">
+      <HintPath>..\packages\Serilog.Sinks.File.5.0.0\lib\net45\Serilog.Sinks.File.dll</HintPath>
+    </Reference>
+    <Reference Include="SoundTouch.Net, Version=1.9.2.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\SoundTouch.Net.1.9.2.2\lib\net40\SoundTouch.Net.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.DirectoryServices" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Speech" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.XML" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\composition.xcf" />
+    <None Include="Resources\RAGE-logo-high-res.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\gaips.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\inescid.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\magic-wand2.png" />
+    <None Include="Resources\idea.png" />
+    <EmbeddedResource Include="version.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <None Include="Resources\down-arrow.png" />
+    <None Include="Resources\dialogue.png" />
+    <None Include="Resources\reaction.png" />
+    <None Include="Resources\icons8-chatbot-401.png" />
+    <None Include="Resources\scenario1.png" />
+    <None Include="Resources\scenario.png" />
+    <None Include="Resources\rules.png" />
+    <None Include="Resources\magic-wand1.png" />
+    <None Include="Resources\magic-wand.png" />
+    <None Include="Resources\database.png" />
+    <None Include="Resources\icons8-web-design-401.png" />
+    <None Include="Resources\NormalFace2.png" />
+    <None Include="Resources\right-arrow2.png" />
+    <None Include="Resources\enter %281%29.png" />
+    <None Include="Resources\enter.png" />
+    <None Include="Resources\upRight1.png" />
+    <None Include="Resources\downLeft.png" />
+    <None Include="Resources\enter2 - Copy.png" />
+    <None Include="Resources\downRight.png" />
+    <None Include="Resources\upRight.png" />
+    <None Include="Resources\wizard-hat.png" />
+    <None Include="Resources\icons8-system-report-40.png" />
+    <None Include="Resources\icons8-system-information-40.png" />
+    <None Include="Resources\right-arrow1.png" />
+    <None Include="Resources\icons8-last-401.png" />
+    <None Include="Resources\icons8-skip-48.png" />
+    <None Include="Resources\icons8-last-40.png" />
+    <None Include="Resources\icons8-end-16.png" />
+    <None Include="Resources\right-arrow.png" />
+    <None Include="Resources\icons8-chatbot-40.png" />
+    <None Include="Resources\icons8-responsive-40.png" />
+    <None Include="Resources\icons8-preview-pane-40.png" />
+    <None Include="Resources\icons8-bot-40.png" />
+    <None Include="Resources\icons8-template-40.png" />
+    <None Include="Resources\icons8-web-design-40.png" />
+    <None Include="Resources\NormalFace1.png" />
+    <None Include="Resources\Study1.png" />
+    <None Include="Resources\Study.png" />
+    <None Include="Resources\Pagina-Demo-face1.png" />
+    <None Include="Resources\NormalFace.png" />
+    <None Include="Resources\Pagina-Publications-300x300.png" />
+    <None Include="Resources\Pagina-Home.png" />
+    <None Include="Resources\Pagina-Get-Started.png" />
+    <None Include="Resources\Pagina-Demo-face.png" />
+    <None Include="Resources\Pagina-Demo2.png" />
+    <None Include="Resources\PikPng.com_close-icon-png_3024323.png" />
+    <None Include="Resources\left.png" />
+    <None Include="Resources\icons8-ajuda-16.png" />
+    <None Include="Resources\icons8-divisa-circulada-à-direita-40.png" />
+    <None Include="Resources\iconHelp.png" />
+    <None Include="Resources\icons8-help-80.png" />
+    <None Include="Resources\icons8-help-100.png" />
+    <None Include="Resources\icons8-help-96.png" />
+    <None Include="Resources\help.png" />
+    <None Include="Resources\red.png" />
+    <None Include="Resources\green.png" />
+    <None Include="Resources\online.png" />
+    <None Include="Resources\offline.jpg" />
+    <None Include="Resources\logo_Final_Horizontal_Black.png" />
+    <None Include="Resources\Icon_Final_White.png" />
+    <None Include="Resources\0-silence.png" />
+    <None Include="Resources\1+11-AxAhUh.png" />
+    <None Include="Resources\2-Aa.png" />
+    <None Include="Resources\3-Ao.png" />
+    <None Include="Resources\4-EyEhAe.png" />
+    <None Include="Resources\5-Er.png" />
+    <None Include="Resources\6-YIyIhIx.png" />
+    <None Include="Resources\7-WUwU.png" />
+    <None Include="Resources\8+10-Ow.png" />
+    <None Include="Resources\9-Aw.png" />
+    <None Include="Resources\12-H.png" />
+    <None Include="Resources\13-R.png" />
+    <None Include="Resources\14-L.png" />
+    <None Include="Resources\15-SZTs.png" />
+    <None Include="Resources\16-ShChJhZh.png" />
+    <None Include="Resources\17-ThDh.png" />
+    <None Include="Resources\18-FV.png" />
+    <None Include="Resources\19-DTDxN.png" />
+    <None Include="Resources\20-KGNg.png" />
+    <None Include="Resources\21-PBM.png" />
+    <Content Include="External\cdt.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\cgraph.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\dot.exe">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\freetype6.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\gvc.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\gvplugin_core.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\gvplugin_dot_layout.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\gvplugin_gd.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\gvplugin_gdiplus.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\gvplugin_pango.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\iconv.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\intl.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\jpeg62.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libatk-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libcairo-2.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libexpat-1.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libexpat.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libfontconfig-1.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libfreetype-6.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgdk-win32-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgdkglext-win32-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgdk_pixbuf-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgio-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libglade-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libglib-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgmodule-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgobject-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgthread-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgtk-win32-2.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libgtkglext-win32-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libltdl-3.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libpango-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libpangocairo-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libpangoft2-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libpangowin32-1.0-0.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libpng12.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libpng14-14.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\librsvg-2-2.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\libxml2.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\ltdl.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\Pathplan.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="External\zlib1.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="fatima-icon.ico" />
+    <Content Include="fatima.ico" />
+    <None Include="Resources\assistantbackground.png" />
+    <None Include="Resources\assistantbackground1.png" />
+    <None Include="Resources\assistantbackground2.png" />
+    <None Include="Resources\boticon.png" />
+    <Content Include="Resources\BubbleIcon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.5.2">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4.5.2 %28x86 and x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>"C:\Program Files\Git\bin\git.exe" describe --long &gt; "$(ProjectDir)\version.txt"</PreBuildEvent>
+  </PropertyGroup>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

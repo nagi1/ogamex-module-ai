@@ -1,0 +1,41 @@
+{
+	"root":
+		{
+			"classId": 0,
+			"AttributionRules": [
+				{
+					"RuleName": "All Friends",
+					"Target": "[x]",
+					"Value": 20,
+					"Conditions":
+						{
+							"Set": ["IsFriend([x]) = True"]
+						}
+				}],
+			"Claims": [],
+			"Conferrals": [
+				{
+					"ConferralSI": 1,
+					"Action": "Greet",
+					"Target": "Player",
+					"Conditions":
+						{
+							"Set": []
+						}
+				},
+				{
+					"ConferralSI": 20,
+					"Action": "Hug",
+					"Target": "Player",
+					"Conditions":
+						{
+							"Set": []
+						}
+				}]
+		},
+	"types": [
+		{
+			"TypeId": 0,
+			"ClassName": "SocialImportance.SocialImportanceAsset, SocialImportance, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+		}]
+}

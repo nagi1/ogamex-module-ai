@@ -1,0 +1,5 @@
+# Build output of the vendored FAtiMA toolkit. `dotnet` writes bin/obj next to
+# every project and, for the Debug configuration, into Binaries/ at the tree root.
+toolkit/**/bin/
+toolkit/**/obj/
+toolkit/FAtiMA-Toolkit/Binaries/

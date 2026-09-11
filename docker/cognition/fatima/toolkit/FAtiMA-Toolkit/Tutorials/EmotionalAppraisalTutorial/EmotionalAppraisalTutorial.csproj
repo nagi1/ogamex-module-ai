@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Assets\EmotionalAppraisal\EmotionalAppraisal.csproj" />
+    <ProjectReference Include="..\..\Components\AutobiographicMemory\AutobiographicMemory.csproj" />
+    <ProjectReference Include="..\..\Components\KnowledgeBase\KnowledgeBase.csproj" />
+    <ProjectReference Include="..\..\Components\WellFormedNames\WellFormedNames.csproj" />
+  </ItemGroup>
+
+  
+</Project>

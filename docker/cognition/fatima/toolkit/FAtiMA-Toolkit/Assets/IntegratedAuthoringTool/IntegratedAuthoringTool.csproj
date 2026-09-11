@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Version>1.7.0.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>..\..\Binaries\FAtiMA-Engine\</OutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\..\Binaries\FAtiMA-Engine\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Components\ActionLibrary\ActionLibrary.csproj" />
+    <ProjectReference Include="..\..\Components\GAIPS.Rage\GAIPS.Rage.csproj" />
+    <ProjectReference Include="..\..\Components\KnowledgeBase\KnowledgeBase.csproj" />
+    <ProjectReference Include="..\..\Components\WellFormedNames\WellFormedNames.csproj" />
+    <ProjectReference Include="..\..\Utilities\SerializationUtilities\SerializationUtilities.csproj" />
+    <ProjectReference Include="..\..\Utilities\Utilities\Utilities.csproj" />
+    <ProjectReference Include="..\RolePlayCharacter\RolePlayCharacter.csproj" />
+    <ProjectReference Include="..\WorldModel\WorldModel.csproj" />
+  </ItemGroup>
+
+
+</Project>

@@ -1,0 +1,18 @@
+# Unrelated local project (has its own repository)
+llm-opinion-dynamics/
+
+# Local tool settings
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# .NET build artifacts
+bin/
+obj/
+Binaries/
+packages/
+*.user
+.vs/

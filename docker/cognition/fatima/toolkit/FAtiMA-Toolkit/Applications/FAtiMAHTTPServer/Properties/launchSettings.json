@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FAtiMAHTTPServer": {
+      "commandName": "Project"
+    },
+    "newProfile1": {
+      "commandName": "Project"
+    }
+  }
+}

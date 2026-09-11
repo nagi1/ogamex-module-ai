@@ -1,0 +1,11 @@
+{
+  "name": "@ogamex-ai/agentos-driver",
+  "private": true,
+  "type": "module",
+  "description": "Module-owned AgentOS cognitive-memory driver. Memory subset only.",
+  "dependencies": {
+    "@framers/agentos": "0.10.16",
+    "graphology": "^0.26.0",
+    "graphology-types": "^0.24.8"
+  }
+}

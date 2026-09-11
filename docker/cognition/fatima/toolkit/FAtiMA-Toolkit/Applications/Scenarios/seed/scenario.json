@@ -1,0 +1,125 @@
+{
+	"root":
+		{
+			"classId": 0,
+			"ScenarioName": "ChatDemo",
+			"Description": "Running example of the FAtiMA Toolkit paper (Fig. 2, Tables 2-3, Sections 3.7 and 5)",
+			"Dialogues": [
+				{
+					"CurrentState": "s1",
+					"NextState": "s2",
+					"Meaning": "Question",
+					"Style": "Neutral",
+					"Utterance": "What are you doing?",
+					"UtteranceId": "TTS-FA1E632140EFC07770E5680D5ED04C71"
+				}, 
+				{
+					"CurrentState": "s1",
+					"NextState": "s3",
+					"Meaning": "Question",
+					"Style": "Neutral",
+					"Utterance": "How are you feeling?",
+					"UtteranceId": "TTS-585968410C9D27DD1F65FFEDFFC060D3"
+				}, 
+				{
+					"CurrentState": "s2",
+					"NextState": "s4",
+					"Meaning": "Answer",
+					"Style": "Neutral",
+					"Utterance": "Nothing special.",
+					"UtteranceId": "TTS-97FFB6BF38DFED1A411FD99A47053B20"
+				}, 
+				{
+					"CurrentState": "s3",
+					"NextState": "s4",
+					"Meaning": "Answer",
+					"Style": "Neutral",
+					"Utterance": "I am feeling great.",
+					"UtteranceId": "TTS-4B52716B8CE3661197D8368F880FCA09"
+				}, 
+				{
+					"CurrentState": "s3",
+					"NextState": "s4",
+					"Meaning": "Answer",
+					"Style": "Rude",
+					"Utterance": "None of your business.",
+					"UtteranceId": "TTS-896EF506190BCF636AD9FAA4516365C3"
+				}],
+			"Characters": [
+				{
+					"KnowledgeBase":
+						{
+							"Perspective": "John",
+							"Knowledge":
+								{
+									"SELF":
+										{
+											"DialogueState(Player)": "s1, 1",
+											"RapportLevel(John, Player)": "5, 1"
+										}
+								}
+						},
+					"BodyName": null,
+					"VoiceName": null,
+					"EmotionalState":
+						{
+							"Mood": -5,
+							"initialTick": 0,
+							"EmotionalPool": [],
+							"AppraisalConfiguration":
+								{
+									"HalfLifeDecayConstant": 0.5,
+									"EmotionInfluenceOnMoodFactor": 0.3,
+									"MoodInfluenceOnEmotionFactor": 0.3,
+									"MinimumMoodValueForInfluencingEmotions": 0.5,
+									"EmotionalHalfLifeDecayTime": 15,
+									"MoodHalfLifeDecayTime": 60
+								}
+						},
+					"AutobiographicMemory":
+						{
+							"Tick": 0,
+							"records": []
+						},
+					"OtherAgents":
+						{
+							"dictionary": []
+						},
+					"Goals": []
+				}],
+			"WorldModel":
+				{
+					"Effects":
+						{
+							"dictionary": [
+								{
+									"key": "Event(Action-End, [s], Speak([cs], [ns], [m], [st]), [t])",
+									"value": [
+										{
+											"PropertyName": "DialogueState([s])",
+											"NewValue": "[ns]",
+											"ObserverAgent": "[t]"
+										}, 
+										{
+											"PropertyName": "DialogueState([t])",
+											"NewValue": "[ns]",
+											"ObserverAgent": "[s]"
+										}]
+								}]
+						},
+					"Priorities":
+						{
+							"dictionary": [
+								{
+									"key": "Event(Action-End, [s], Speak([cs], [ns], [m], [st]), [t])",
+									"value": 1
+								}]
+						}
+				}
+		},
+	"types": [
+		{
+			"TypeId": 0,
+			"ClassName": "IntegratedAuthoringTool.IntegratedAuthoringToolAsset, IntegratedAuthoringTool, Version=1.7.0.0, Culture=neutral, PublicKeyToken=null"
+		}]
+}

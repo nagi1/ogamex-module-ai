@@ -1,0 +1,4 @@
+# Pinned CBRKit driver. The `api` extra serves the stateless /retrieve endpoint.
+# No LLM, embedding or synthesis extra is installed, so this image cannot make a
+# generative or remote-model call even if asked to.
+cbrkit[api]==1.6.0
