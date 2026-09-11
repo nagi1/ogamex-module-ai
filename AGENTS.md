@@ -17,6 +17,15 @@ Write clean, maintainable, production-ready code. Keep changes module-first: reu
 - Never use `else`, `else if`, or `elseif`; use early returns, strategies, lookup tables, or a `match` expression where appropriate.
 - Do not add dependencies, abstractions, or refactors without a demonstrated module need and user approval when the scope is material.
 
+## Phase 3 architectural memory
+
+- Read `plan/details/specs/phase-3-cognition.md` and the assigned milestone before implementation; `plan/details/research/phase-3-current-state.md` distinguishes shipped behavior from proposals.
+- Keep cognition drivers behind small module-owned contracts and Laravel bindings. OGame-specific state/feature mapping and action resolution stay in module adapters; no standalone framework, generic game planner or second player runtime yet.
+- Native structured truth, persona, obligations and outcome records belong to the module. FAtiMA/CiF, CBRKit, AgentOS and PsychSim are candidate implementations, never alternate authorities or mandatory sidecars.
+- Ordinary gameplay, native event/memory processing, structured CBR and AI-to-AI social exchanges make zero generative calls. Use authored dialogue before optional human-language escalation; one foreground request may include validated proposals, never a separate extraction chain.
+- Semantic retrieval, ML compression, Theory of Mind, strategic advice and deferred model batches need their documented activation/measurement gates. Mem0 is rejected. Preserve attribution/permissions and provider-off behavior across every driver swap.
+- Validate libraries, Linux deployment and performance through pinned real-adapter experiments; do not treat claims or hypothetical graphs in the imported conversation as implemented facts.
+
 ## Reading and comments
 
 - Study comparable host/module code and database schema before changing a feature. Follow established Laravel patterns.

@@ -4,10 +4,11 @@ The `AI` module adds a home for persistent, believable AI players in OGameX.
 This repository contains the module only. OGameX remains responsible for game
 rules, legal state, validation, and execution.
 
-The module is intentionally a foundation at this stage. It includes a
-module-local boot page, configuration, translations, an isolated feature test,
-and the domain areas where AI behavior can grow. It does not yet implement AI
-accounts or gameplay decisions.
+The module includes the Phase 1 building adapter and Phase 2 deterministic
+profiles, perception, session scheduling and recorded decision intents. Broader
+gameplay capabilities remain conditional on validated action adapters.
+Phase 3 social cognition, experience, memory and conversation are planned;
+external cognition/memory/language drivers are not yet implemented.
 
 ## OGameX integration
 

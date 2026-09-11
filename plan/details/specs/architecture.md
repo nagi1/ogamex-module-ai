@@ -1,6 +1,6 @@
 # Architecture within the existing module
 
-Owner: AI module. Host evidence: [repository inspection](../research/repository-inspection.md). Required host changes: [extension work](module-extension-points.md).
+Owner: AI module. Current evidence: [Phase 3 assessment](../research/phase-3-current-state.md). Possible generic gaps, not mandatory host work: [extension assessment](module-extension-points.md). Detailed cognition: [Phase 3](phase-3-cognition.md).
 
 ## Preserve the installed structure
 
@@ -10,7 +10,7 @@ The module is an independent ordinary Git checkout, not a submodule and not host
 
 ## Decision flow
 
-Core advances authoritative state. A module adapter obtains the account's permitted observations. Policies generate and score a bounded set of candidates. The selected intent goes through the shared core action path. A committed receipt updates module memory and the next due time.
+Core advances authoritative state. A module adapter obtains the account's permitted observations. Policies generate and score a bounded set of candidates. Executable intents use the normal core action path; current session candidates otherwise remain recorded intents. Phase 3 reducers will update memory only from actual correlated committed outcomes, never from a selected but unexecuted action.
 
 Observation, cost/time quotation, execution, simulation and memory are separate responsibilities, not a new generic agent framework. Policies receive values rather than unrestricted game models. Include observation age, source and ruleset version; unknown enemy data stays unknown.
 
@@ -26,12 +26,20 @@ Separate decisions, simulation and optional language queues. Never hold a gamepl
 
 ## Events and game progression
 
-Six game events already exist, but their presence does not prove after-commit delivery. The existing battle event occurs inside calculation and lacks mission/report correlation. Fix the specific lifecycle gaps before treating events as durable facts; lightweight listeners enqueue work after successful commit.
+Six game events already exist, but their presence does not prove after-commit delivery. The existing battle event occurs inside calculation and lacks mission/report correlation. First use module-owned after-commit observation and bounded reconciliation of owner-delivered records. A separate generic host hook is considered only for a demonstrated gap; event presence alone does not authorize durable fact ingestion.
 
-Reuse existing fleet arrival/recovery processing and expose the required player refresh independently of HTTP middleware. Do not manufacture requests, impersonate accounts in shared worker state or repeat universe-wide progression per account.
+Reuse existing fleet arrival/recovery processing and the existing generic player refresh service independently of HTTP middleware. Do not manufacture requests, impersonate accounts in shared worker state or repeat universe-wide progression per account.
 
 After downtime, materialize current state and replan. Do not replay missed attacks in a burst. Disablement stops new decisions while core flights continue. PvE additionally follows its protected shutdown contract.
 
 ## Two modes, one engine
 
 Normal mode selects personal goals. PvE adds coalition membership, campaign objectives and limited faction coordination. Both reuse observation, economy, fleet policies, memory, scheduling, battle estimates and execution. Campaign bookkeeping may inspect committed results for scoring; it must not pass hidden human state to enemy policies.
+
+## Internal cognitive abstraction
+
+Phase 3 adds six concrete contract boundaries: affect, social cognition, experience ranking, long-term recall, language and context construction. Native module actions own state reduction, case persistence and high-level intent resolution. Laravel's existing provider/container supplies replaceability; no framework kernel, independent package or general game planner is introduced.
+
+Generic payloads contain scoped actors, goals, stimuli, beliefs, relationships, experiences and intentions. OGame adapters retain planet/fleet/resource/technology knowledge and legal action mapping. Optional FAtiMA/CiF, CBRKit and AgentOS drivers never become alternate sources of game truth. PsychSim, embeddings and compression remain gated future capabilities, not an interface tree to scaffold in advance.
+
+Ordinary gameplay, known social exchanges and native memory require no generative calls. Human-language escalation may make one bounded request including proposals, followed by deterministic validation and current permission checks. Rare advice is a disabled post-baseline experiment. The [Phase 3 specification](phase-3-cognition.md) owns detailed data lifetimes, fallback rules, examples and the final architecture diagram.

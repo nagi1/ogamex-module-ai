@@ -17,26 +17,19 @@ The goal is enjoyable play for humans. We increase the population only when the 
 
 ## Current implementation status
 
-**Phase 1 / Package 1 is complete locally and remains unmerged.** The following work exists:
+**Phases 1–2 are recorded in module commit `e1c48a2`. Phase 3 is planned, not implemented.** The module has profiles, leased/idempotent work, a normal validated building adapter, legal perception, seeded archetype policies, session schedules and decision traces.
 
-- The host has a shared player-state refresh service and a building-only module
-  action gateway. Human building requests delegate through that gateway.
-- Focused host tests cover a legal build, rejected foreign planet, and rejected
-  non-building. Rector, Pint and PHPStan pass. The full parallel suite exposed
-  a pre-existing shared-settings lock timeout; that exact test passes alone.
-- The AI module has profile/work/receipt migrations, enum-backed state
-  definitions, a swappable deterministic building-scoring policy, a work job
-  and a due-work command.
-
-Migration-backed parallel tests cover successful work, duplicate delivery, lock
-contention and host rejection. Rector, Pint and PHPStan pass.
+Session choices are recorded intents; selecting a fleet/research/trade candidate is not proof of executing that action. Memory/relationship tables, affect/social cognition, CBR, AI conversation and external drivers do not exist yet. See the [current-state assessment](details/research/phase-3-current-state.md) for the actual code, integration limitations and corrections to older diagrams. This documentation revision does not claim a new gameplay test run.
 
 ## Decisions already made
 
 - Use the existing OGameX Next module system. AI behavior stays in the AI module.
 - The game remains responsible for rules, costs and execution. Add small shared extension points where the module needs them.
 - Ordinary gameplay and game-event memory use algorithms and database records, with **zero language-model tokens**.
-- Use language models selectively for conversation. Test Mem0 or alternatives only if basic memory proves insufficient.
+- Use authored social dialogue before selectively escalating human language to an LLM. Include validated extraction proposals in the same request.
+- Add native affect/social cognition and structured experience behind small Laravel-bound module contracts. FAtiMA/CiF and CBRKit are candidates, not prerequisites.
+- Keep advanced recall optional. AgentOS memory-only is a candidate after native benchmarks; Mem0 is rejected. Embeddings, PsychSim and ML compression require their own evidence.
+- Keep OGame-specific competence outside cognitive contracts. Prove real driver swaps in this module before considering a standalone framework.
 - Give accounts different skills, routines and priorities. They use legal information, suffer real losses and rebuild normally.
 
 ## Build it in five phases
@@ -47,17 +40,19 @@ Let a module-controlled account read the information it is allowed to see and pe
 
 **Done when:** one account can queue a building through the normal game rules, and retrying the work cannot queue it twice.
 
-### 2. Make believable players
+### 2. Make believable players — deterministic slice complete
 
 First add growth, research, sessions and fleetsaving. Then add colonies, spying, selective raids, losses and recovery. Mix miners, casual players, traders and fleeters.
 
 **Done when:** a small group can play through a simulated month with sensible routines and real consequences, using no language model.
 
-### 3. Add relationships and conversation
+### 3. Add social cognition, experience and conversation — planned
 
-Remember rivals, favors and agreements. Add alliance cooperation, delayed replies and optional generated conversation within a strict budget.
+Remember rivals, favors, claims and agreements. Add goal-aware affect, CiF-style social protocols, outcome-based CBR, authored dialogue, delayed/coalesced replies and optional human-language generation. The LLM remains a language specialist with no gameplay authority.
 
-**Done when:** accounts remember important interactions across sessions and keep playing when the language provider is unavailable.
+**Done when:** real feature scenarios prove memory, social consequences, outcome learning and permission-checked conversation across sessions; native behavior works with optional services absent; enabled drivers pass conformance/swap and budget checks.
+
+Read the [detailed Phase 3 architecture](details/specs/phase-3-cognition.md), including eight end-to-end flows, minimal contracts, failure behavior, small delivery slices and the final diagram. The [decision history](details/DECISIONS.md) explains superseded technologies; [validation](details/specs/validation.md) and [evaluation](details/research/memory-comparison.md) define evidence still needed. Rare strategic advice is a disabled later experiment, not a baseline task or periodic call.
 
 ### 4. Test with humans, then grow
 
@@ -77,6 +72,6 @@ This is a committed separate phase, not a second AI engine. Its design draws on 
 
 Use [WORK-PACKAGES.md](WORK-PACKAGES.md). It gives each agent an exclusive scope, dependencies, allowed paths, output and handoff format. Do not assign two agents to the same package. An agent may inspect another package but must not edit its files or implement its work. The coordinator integrates package pull requests in order.
 
-**Work only on Package 1 now.** The module scaffold exists and repository inspection is complete; gameplay implementation has not started. Package 1 connects one account's legal game view and building action, then proves retries cannot repeat it.
+**Current work: Phase 3 planning.** No Phase 3 code or dependencies are added by this revision. When implementation is requested, start with Package 3's source/schema/permission slice and proceed through the linked milestones. Do not repeat completed Package 1/2 work or assume historical future capabilities already exist.
 
 The detailed [implementation map](details/IMPLEMENTATION.md) is the technical source for proposed files, migrations, services, event boundaries and tests. Open only the section named by the assigned package. Everything else under `details/` is reference material, not an entry point or a task list.

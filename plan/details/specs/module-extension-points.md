@@ -20,6 +20,14 @@ Phase 1 and Phase 2 use the existing module provider/route/migration discovery, 
 
 E1 also needs durable action correlation: reuse an existing core operation ID where available, otherwise add the smallest receipt seam needed to reconcile uncertain dispatch. This is required before autonomous fleets.
 
+## Phase 3 source and chat findings
+
+The [current-state assessment](../research/phase-3-current-state.md) updates the older inspection: owner-delivered report records, module-registered after-commit listeners/observers and bounded legal-state reconciliation are the first integration choices. Broadcast/calculation events do not prove durability, and observer coverage must be checked for bulk-update paths. No automatic host chat/alliance event rewrite is part of Phase 3.
+
+The existing `ChatService` send methods do not enforce every rule from `ChatController`. `DeliverAiReplyAction` must reuse/recheck host-equivalent recipient, self-message, ignore, membership and text checks, including changes while generation is in flight. Also add a module reply-to scope/visibility guard: the inspected controller does not provide it. Test actual persistence, controller-equivalent behavior and the extra module ACL guard. A normal service call without those checks is not a permission boundary.
+
+Cognition, case features, memory schemas, language budgets and provider drivers all belong to `Modules/AI`. Reuse `AIServiceProvider` bindings and module configuration; none requires a new host cognitive abstraction or framework.
+
 ## Contract caveats
 
 The existing extension draft permits observation and additive UI only. E6 is a **new restricted category**, not something those passive events already support. Document its precedence, failure behavior and opt-in scope before implementation; do not hide enforcement in a controller or rely on a social truce.

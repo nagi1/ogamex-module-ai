@@ -1,7 +1,7 @@
 # AI module architecture
 
-This document records the boundary for the module scaffold. It is not a
-feature plan.
+This document records the module's ownership and implementation conventions.
+The linked Phase 3 specification separates current code from future features.
 
 ## Ownership
 
@@ -48,7 +48,7 @@ generic coding preference.
   or infrastructure adapters must be addable without changing callers.
 - Apply SOLID at the module boundary: a job coordinates one work attempt,
   a policy scores choices, a repository/store owns persistence mechanics, and
-  the host action gateway remains the only executor of game rules. Prefer a
+  normal host domain services remain the only executors of game rules. Prefer a
   module-local adapter with an explicit record-only fallback over expanding
   OGameX. A host change is justified only when it is generic, independently
   useful without AI, and cannot be expressed through an existing boundary.
@@ -78,9 +78,33 @@ is demonstrated.
 
 Laravel remains the orchestration layer. The existing Rust battle engine should
 be reused for battle outcomes and simulations when combat behavior is added.
-An optional language model may produce chat text or rare strategic advice from
-a limited context, but it must never execute game actions or access the
-database directly.
+An optional language model may interpret or express unrestricted human
+conversation after authored/social routes are considered. It returns text and
+bounded proposals in one request; deterministic module code validates them.
+Rare strategic advice is a disabled, later experiment with its own activation
+gate. No model executes game actions or accesses the database directly.
+
+## Planned Phase 3 cognition
+
+The [detailed Phase 3 plan](../plan/details/specs/phase-3-cognition.md) defines
+native affect/social cognition, structured CBR, exact memory, conversation
+escalation and six concrete module contract seams. Bind implementations in the
+existing Laravel provider; keep OGame-specific data mapping and intent
+resolution outside driver-neutral payloads. No framework extraction or new
+host cognition service is planned.
+
+FAtiMA/CiF and CBRKit are replaceable candidates after native behavior works.
+AgentOS is an optional memory-only candidate, not the player runtime. PsychSim,
+embeddings and ML compression remain gated experiments. Native module records
+own persona, accepted state, obligations and outcomes; optional driver indexes
+and checkpoints are versioned projections. Provider failure must preserve
+ordinary gameplay and authored social behavior.
+
+The [assessment](../plan/details/research/phase-3-current-state.md) records that
+these features do not yet exist after Phase 2. It also explains why ordinary
+chat sends need host-equivalent permission checks and why current events are
+not automatically durable memory sources. Follow the [decision history](../plan/details/DECISIONS.md)
+instead of treating every suggestion in the original conversation as current.
 
 ## Repository lifecycle
 

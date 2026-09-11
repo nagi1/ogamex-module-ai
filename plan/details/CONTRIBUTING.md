@@ -22,6 +22,8 @@ Build developer tools incrementally: seed an isolated test universe, replay a sc
 
 Use the existing Domain directories. Put scheduling jobs in Jobs, event consumers in Listeners, persistence in Models/migrations and infrastructure adapters in Support. Extend the structure only when a concrete feature needs it; do not reorganize the host or create a second framework.
 
+For Phase 3, follow the [cognition specification](specs/phase-3-cognition.md) and its small milestones. Six concrete contract seams support current work; optional embedding/compression/Theory-of-Mind contracts wait for an actual experiment. Drivers remain candidates behind Laravel bindings, native state remains authoritative, and package extraction is deferred until real replacement proves the boundary. The [decision history](DECISIONS.md) supersedes abandoned recommendations from the imported discussion.
+
 ## Handoffs and releases
 
 Record phase/issue, repository commit, implemented files, actual checks/results, unresolved risk and next task. Update context only when working state changes. Keep transcripts and logs out of context. Store supporting traces in test/CI artifacts.

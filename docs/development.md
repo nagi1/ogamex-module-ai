@@ -176,7 +176,7 @@ The AI module owns:
 - memory and relationships
 - response scheduling
 - module-owned persistence
-- adapters for optional chat or strategic advice
+- adapters for optional human language; strategic advice remains a disabled later experiment
 
 OGameX owns:
 
@@ -317,6 +317,26 @@ Before merging a module change:
 
 The module should remain small and understandable. Add framework machinery only
 after a real AI-module requirement demonstrates that it is needed.
+
+## Phase 3 planning and driver work
+
+The [Phase 3 specification](../plan/details/specs/phase-3-cognition.md) is the
+implementation reference for native cognition, social protocols, experience,
+memory, context and language. Its [current-state assessment](../plan/details/research/phase-3-current-state.md)
+and [decision history](../plan/details/DECISIONS.md) prevent obsolete scaffold
+assumptions or discarded provider recommendations from being reintroduced.
+
+Use small module-owned Laravel contracts with native/disabled implementations;
+add a real external driver only through a focused compatibility and behavior
+experiment. No framework extraction, universal planner or mandatory sidecar
+stack is authorized. Keep future optional contracts unimplemented until they
+have a concrete caller. Record driver versions, real Linux checks, state/swap
+behavior and measured costs rather than assuming library claims are true.
+
+The documentation-only planning revision requires Markdown/link/source and
+consistency checks. It does not require a live LLM, dependency installation or
+a claim that PHP gameplay tests were rerun. Subsequent implementation must pass
+the existing Pest 5/PAO/PCOV/TIA and quality gates with real feature scenarios.
 
 ## References
 

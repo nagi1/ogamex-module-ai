@@ -6,7 +6,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 1 — safe module bridge
 
-**Status:** complete locally; module foundation remains uncommitted. **Owner:** one module agent.
+**Status:** foundation committed; included in the Phase 2 baseline `e1c48a2`. **Owner:** one module agent.
 
 **Goal:** an AI-controlled existing player queues one building through the exact validated game path; duplicate work cannot queue a second building.
 
@@ -20,7 +20,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 2 — legal perception and deterministic sessions
 
-**Status:** complete locally. **Owner:** one module agent.
+**Status:** deterministic slice committed at `e1c48a2`; unsupported capabilities remain recorded intents. **Owner:** one module agent.
 
 **Goal:** varied AI accounts make reproducible zero-token choices using only legal information.
 
@@ -28,7 +28,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Do not modify:** relationships, generated chat, PvE campaign code, population UI or provider adapters.
 
-**Acceptance:** frozen clock + seed reproduce trace; traces expose no hidden target data; an estimate has no writes/events; stale intel blocks risky raid; Miner builds from legal options and never attacks; Turtle queues units/defence and never attacks; Fleeter saves an exposed fleet ahead of a visible raid; Trader colonizes from legal options and never attacks; Casual selects do-nothing when no safe action exists; novice and veteran skill bands select differently within their defined near-equal-choice bounds; recovery input is bounded and visible in the recorded score. These are dedicated feature scenarios, not only unit or line-coverage assertions.
+**Acceptance for this completed slice:** frozen clock + seed reproduce trace; traces expose no hidden target data; stale intel blocks a risky raid intent; Miner selects legal building intents and never attacks; Turtle selects units/defence intents and never attacks; Fleeter selects fleetsave ahead of a visible raid; Trader selects colonization intents and never attacks; Casual selects do-nothing when no safe action exists; novice and veteran skill bands select differently within their defined near-equal-choice bounds; recovery input is bounded and visible in the recorded score. These are dedicated intent/decision feature scenarios, not proof of unit queuing, fleetsaving, colonization or simulated combat execution. Future executable adapters/estimation need their own host-effect and no-write tests; the existing first-building path is tested separately.
 
 **Test-fixture rule:** use real OGameX services, models and validation paths. Mockery is prohibited. A narrow container override is permitted only to verify an explicitly replaceable package/action boundary, never as a substitute for testing production mechanics.
 
@@ -36,17 +36,25 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Pest rule:** all AI-module tests use native Pest 5 syntax and named datasets for repeated mechanics. Run PCOV with PAO and `--tia`; never enable Xdebug for this suite. Pest dependencies remain module-local. PHPUnit-style test classes/assertions and Mockery are prohibited.
 
-## Package 3 — facts, relationships and optional conversation
+## Package 3 — social cognition, experience and bounded conversation
 
-**Status:** blocked by Package 2's future event-consumption decision. **Owner:** one module agent. Reuse events already published by OGameX; a host change is considered only if a generic, independently useful event is truly absent.
+**Status:** detailed planning revision; implementation not started. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
 
-**Goal:** accounts remember meaningful, expiring facts and agreements; conversation remains optional and budgeted.
+**Goal:** believable, persistent social behavior and outcome-based learning with no generative calls for ordinary gameplay; authored dialogue handles known exchanges and optional language handles unrestricted human conversation.
 
-**Scope:** observations, facts, relationship and commitment migrations/models; reducer listener for committed events; relationship policy; compacting expired data; reply planner, usage budget and provider adapter boundary; a native-memory benchmark harness.
+**Required reading:** [actual Phase 2 state](details/research/phase-3-current-state.md), [Phase 3 architecture and milestones](details/specs/phase-3-cognition.md), [memory/language](details/specs/memory-and-language.md), [budgets](details/specs/budgets.md), [validation](details/specs/validation.md). Read [driver evaluation](details/research/memory-comparison.md) only for a driver/benchmark milestone.
 
-**Do not modify:** deterministic core decision loop, game action validation, battle engine or PvE rules. Do not select or install Mem0, Zep, Graphiti or Letta based on marketing claims.
+**Scope:** native facts/claims/relationships/commitments, affect and goal pressure, significant emotional episodes, structured social protocols/authored dialogue, real outcome cases and CBR, coalesced replies, context selection, atomic budgets, safe normal-host delivery, six concrete module contract seams and repeatable experiments. New optional external adapters are separate focused slices after their native boundaries work.
 
-**Acceptance:** duplicate event produces one fact; expired agreement changes choice; provider outage and exhausted budget still leave normal gameplay working; benchmark compares native facts first on recall, stale rejection, context bytes, latency and cost.
+**Integration:** reuse existing module discovery, provider bindings and actor-scoped services/records. Candidate scoring may consume bounded accepted cognitive/experience inputs when a scenario requires them; do not replace the scheduler/utility engine. Validate source durability and human-equivalent chat permission rules in module actions. Consider a separate generic host hook only for a demonstrated gap.
+
+**Do not build:** a framework/package split, generic game planner, mandatory sidecars, automatic reflection/extraction, per-event summaries, AI-to-AI LLM chat, a new fleet/combat engine or mandatory semantic/vector storage. Do not implement Phase 3 as part of this documentation revision. Mem0 is rejected; FAtiMA, CBRKit, AgentOS and PsychSim remain candidates behind boundaries.
+
+**Milestones:** 3A sources; 3B facts/obligations; 3C native affect; 3D social protocols; 3E experience; 3F authored delivery; 3G context/budgets; 3H optional language; 3I separate driver experiments; 3J acceptance/measurement. Each has a testable outcome in the [implementation sequence](details/specs/phase-3-cognition.md#delivery-slices-and-completion-evidence). Optional experiments do not make every sidecar a release dependency.
+
+**Acceptance:** the eight specified flows and behavioral matrix pass using real module/host paths; no leaked/stale truth, duplicate side effects or unapproved commitments; known social exchanges work with no LLM; one bounded foreground generation includes any proposals; provider-off gameplay continues; driver replacement preserves module-owned persona/obligations; benchmark reports actual behavior, prompt/token use, latency, CPU/RAM and failures rather than claiming unmeasured capacity.
+
+**Engineering rules:** Nagi instructions apply: descriptive action methods, no forwarding-only wrappers, no `else` branches, enums for defined values, Laravel `app()` bindings, native Pest 5 datasets, PAO, PCOV and TIA. No Mockery or Xdebug. Tests cover behavior/edges/branches in addition to changed-area line coverage; real adapter integration and opt-in provider quality experiments are distinct.
 
 ## Package 4 — operability and disclosed pilot
 

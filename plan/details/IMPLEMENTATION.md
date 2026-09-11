@@ -1,16 +1,16 @@
 # Implementation map
 
-This is the practical work map for the five roadmap phases. It describes proposed changes after inspecting OGameX Next at host revision `350657a3` and the AI module at `45f8a276`. Names below are planned interfaces, not claims that they already exist. Do not begin a later row until its listed dependencies and acceptance tests pass.
+This is the practical work map for the five roadmap phases. The original map used host `350657a3` / module `45f8a276`; the Phase 3 revision uses the [actual baseline](research/phase-3-current-state.md), host `02e23c13` / module `e1c48a2`. Phase 1/2 rows retain delivery context; new Phase 3 names are proposed, not implemented. The current task is planning only.
 
 The module repository owns AI policy, AI-only persistence, scheduling, decisions, legal-state reduction and test scenarios. The host repository owns ordinary game rules and services only. The host must not import `Modules\\AI`, contain AI strategy, or add AI-specific gateways, observations or events.
 
 ## First delivery: one AI queues one building
 
-This is the only implementation scope to begin now. It proves that an AI is an ordinary player account and that retries do not create duplicate orders.
+This foundation is already present. It establishes the ordinary-account building path and retry tests; do not redo it when starting Phase 3.
 
 | Repository | Proposed file | Change | Why it exists |
 | --- | --- | --- | --- |
-| Host | `app/Services/PlayerGameStateService.php` | Add `advance(playerId)`. Move player update, current-planet update and due-fleet processing now coordinated by `app/Http/Middleware/GlobalGame.php` into this service; let the middleware call it. | A scheduled account needs the same game refresh as a web request without faking HTTP or a login. |
+| Existing host dependency | `app/Services/PlayerGameStateService.php` | Reuse the existing shared refresh operation through the module adapter. | A scheduled account needs normal game refresh without faking HTTP or a login. No new AI-specific host gateway. |
 | Module | `app/Actions/QueueAiBuildingAction.php`, `Contracts/QueueAiBuilding.php` | Resolve a fresh actor, reduce its owned state, and delegate to the existing `BuildingQueueService`. Return a module-owned typed result. | AI behavior and its adapter stay in the module; game rules remain in OGameX. |
 | Module | `database/migrations/*_create_ai_profiles_table.php` | Create one profile per player: `player_id` unique, `archetype`, `skill_band`, `random_seed`, `enabled`, `settings`, timestamps. | Stable personality without duplicating `users`. |
 | Module | `database/migrations/*_create_ai_work_items_table.php` | Create scheduled work: `player_id`, `kind`, `due_at`, `payload`, `schedule_generation`, `idempotency_key` unique, `state`, `attempts`, `lease_until`, timestamps; index due state/time. | Safe retries and multiple workers. |
@@ -45,25 +45,29 @@ The module may call existing OGameX services and models only as a narrow adapter
 
 Work order: land the module action adapter; add owned-state reduction; add sessions/perceptions/candidates; retain unavailable capabilities as traceable no-ops. Tests cover a Miner that never attacks, a Fleeter that selects a fleetsave intent, rejected stale intel, reproducible seed/clock traces, and traces that never contain unseen target values.
 
-## Phase 3: relationships, alliances and bounded language
+## Phase 3: social cognition, experience and bounded language
 
-Start with facts from actual game events. Chat is optional and never the source of gameplay memory or actions.
+The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
 
-| Proposed file | Table/fields | Work |
+| Proposed module area/files | Records | Responsibility |
 | --- | --- | --- |
-| `app/Models/AiObservation.php` | `ai_observations`: owner, source type/id, subject, observed time, payload, confidence, expiry; unique owner/source. | Legal, time-bounded observations. |
-| `app/Models/AiMemoryFact.php` | `ai_memory_facts`: owner, subject nullable, predicate, value, valid from/to, expiry, source type/id; index owner/subject/expiry. | Compact facts such as raid, active agreement or stale spy report. |
-| `app/Models/AiRelationship.php` | `ai_relationships`: owner/other unique, trust, threat, affinity, debt, updated time. | One bounded relationship per meaningful counterpart, never an N×N server matrix. |
-| `app/Models/AiCommitment.php` | `ai_commitments`: participants, type, terms, start/end, state, source message/event. | Explicit treaty, trade, ACS or alliance obligation with expiry. |
-| `app/Listeners/RecordAiGameEvent.php` | Existing records. | Normalize committed host events into observations, facts, relationship updates and review work. |
-| `app/Domain/Decision/RelationshipPolicy.php` | None. | Makes trust/threat/commitment score inputs; cannot bypass rules. |
-| `app/Domain/Conversation/ConversationBudget.php`, `ReplyPlanner.php` | `ai_conversation_usage`: universe/date, requests, tokens, cost; `ai_pending_replies`: player, source message, due time, state. | Delayed replies, universe/player budgets and templates when provider fails. |
+| `app/Models/AiObservation.php`, `AiMemoryFact.php`; new migrations | `ai_observations`, `ai_memory_facts`: scope/owner/source identity, time, evidence kind, attributed speaker, validity and revision | Committed legal observations and explicit fact/claim distinction. Verify ID types; do not invent a host universe table. |
+| `AiRelationship.php`, `AiCommitment.php`; `Domain/Memory` | Sparse relationships and exact proposed/accepted obligations with source/fulfillment references | Native policy owns trust and commitment transitions. No driver or generated reply can fulfill a transport. |
+| `Listeners` / `Actions/RecordObservedGameEventAction.php` | Source cursors, deduplication and optional projection outbox | After-commit observation plus bounded legal reconciliation; calculation/broadcast events alone are not durable facts. |
+| `Contracts/AffectEngine.php`; `Actions/AppraiseObservedEventAction.php`; `Domain/Cognition` | Versioned affect/goals and significant emotional episodes | Native goal-aware appraisal; external FAtiMA is a later tested implementation of the same boundary. |
+| `Contracts/SocialCognition.php`; `Actions/EvaluateSocialExchangeAction.php`; `Domain/Conversation` | Exchange participants, typed terms, step, expiry and outcome | Native CiF-style protocols, authored dialogue and bounded AI-to-AI exchanges. |
+| `Contracts/ExperienceEngine.php`; `Actions/RecordExperienceOutcomeAction.php`, `ExtractOGameExperienceFeaturesAction.php` | Native pending/final cases with feature/ruleset versions and actual receipt/report outcome | Deterministic case ranking via native implementation or optional CBRKit. Never learn a successful mission from a record-only intent. |
+| `Actions/MapObservedGameEventToStimulusAction.php`, `ResolveCognitiveIntentAction.php`; existing policy integration | Typed snapshots, accepted intentions and reasoned traces | Translate OGame observations to generic cognition inputs and back to existing policy/capability paths. No universal planner or new execution engine. |
+| `Contracts/LongTermMemory.php`, `ContextBuilder.php`; `Domain/Memory` / `Domain/Conversation` | Native selected source IDs, context/ACL/term revisions | Exact/native recall and deterministic context budget; optional advanced memory returns revalidated projections. |
+| `Contracts/LanguageGateway.php`; `Support` provider adapter and disabled implementation | Request ID, response envelope, usage and failure result | One foreground generation containing text and optional proposals; no tool access or separate extractor. |
+| `Actions/PlanAiReplyAction.php`, `ValidateAiReplyProposalsAction.php`, `DeliverAiReplyAction.php`; short conversation jobs | Pending reply generation, source range, due/expiry, budget reservation and delivery receipt/core chat ID | Coalescing, route selection, validation, host-equivalent send permissions and crash/idempotency handling outside gameplay locks. |
+| `AIServiceProvider`, module config and `tests/Feature` / `tests/Unit` | Driver/capability configuration, versioned fixtures and experiment artifacts | Register only used contracts, native/null defaults, real adapter conformance and behavioral/ablation scenarios. |
 
-Native tables are the first memory system and cost zero model tokens to collect/retrieve/score. Facts require source and expiry. A maintenance job compacts expired observations. Do not send complete history to a model.
+Create only records and actions needed by the current milestone; table names are proposals, not permission to create a universal cognition schema. Use new module migrations and explicit indexes/constraints. Canonical persona, obligations and case outcomes survive driver changes. Runtime configuration, native implementation and a narrowly justified null path come before optional sidecars.
 
-Only then benchmark Mem0 `infer=false`, Mem0 extracted memory, Zep/Graphiti temporal graphs and Letta-style persistent blocks against sanitized AI conversations and facts. Measure correct recall, stale-fact rejection, context bytes, p95 latency, provider calls and cost per active player. Vendor accuracy/latency comparisons are not an OGameX result. Adopt an adapter only if it beats the native fact baseline and can be disabled without losing core behavior.
+Test FAtiMA/CiF and CBRKit only after their native boundaries have real scenarios. AgentOS memory-only, PsychSim, embeddings and ML compression are optional later experiments, not required framework components. Mem0 is rejected. [Driver evaluation](research/memory-comparison.md) defines candidate status, Linux/version verification, bounded ablations and measured adoption gates.
 
-Host work is committed chat and alliance lifecycle events. `ChatService` remains the permission authority; the module calls it only after `ReplyPlanner` permits a reply. Test provider outage, budget exhaustion, agreement expiry, duplicate delivery and relationship change from a real event.
+Reuse existing actor-scoped host records and module extension points first. `ChatService` send methods do not enforce every controller permission rule; the module delivery action must apply host-equivalent recipient/ignore/membership/message checks before sending and after generation, plus an explicit module reply-to scope/visibility guard absent from the inspected controller. Add a separate generic host hook only when the first milestone proves an actual durability/visibility gap. No mandatory host chat/alliance rewrite is authorized.
 
 ## Phase 4: pilot, tools and population control
 
@@ -99,8 +103,8 @@ Integration tests: two humans cannot attack, spy-counterattack, missile or ACS e
 
 1. Module: profile/work/receipt migrations, module-owned queue action, first decision and processing job.
 2. Module: session planner, perception reduction, candidates, traces and deterministic profiles.
-3. Module: fact/relationship/commitment store and listeners for events already published by OGameX.
-4. Module: optional conversation adapter and memory benchmark harness.
+3. Module: Phase 3 milestones 3A–3G, one concern per PR: observed sources, native facts/obligations, affect, social protocols, experience, authored delivery and context/budgets.
+4. Module: 3H optional language, separate 3I driver spikes and 3J evidence/acceptance; do not bundle sidecar adoption with the baseline.
 5. Module: pilot tools, caps and operational metrics.
 6. Host + module: only if a future cooperative mode cannot use an existing generic boundary, add a narrow generic safety policy and pair it with the campaign director tests.
 
@@ -116,9 +120,9 @@ The untouched [raw plan](reference/raw-original-plan.md) remains the complete so
 | 6–8: AI identity, normal-play identity, target behaviour | Root goal; Package 1 profile; Package 2 profile policies and legal perception. |
 | 9–13: routine, sessions, latency, imperfect play, fair information | Package 2 session planner, seeded variability, do-nothing choice, limited observations and trace acceptance tests. |
 | 14–18: state/perception, legal actions, utility, skill and personality | Package 1 profile/work records; Package 2 perceptions, action gateway, candidates, scorer and profile policies. |
-| 19–22: memory, chat, response timing and limited LLM use | Package 3 facts/relationships/commitments, delayed reply planner, budgets, outage fallback and measured memory-provider evaluation. |
+| 19–22: memory, chat, response timing and limited LLM use | Package 3 cognition/experience/claims/commitments, authored social escalation, delayed/coalesced replies, one-request proposals, budgets and measured optional drivers. Rare advice/deferred enrichment are explicit disabled later experiments. |
 | 23–27: scheduler, AI tick, game progression, queues/locks and event wakeups | Package 1 work lease/lock/receipt and scheduler command; Package 2 schedules and safe record-only intents. Future event wakeups consume only existing published events unless a generic host capability is separately justified. |
-| 28–31: Rust battle engine, human-like estimates, simulation budget and combat flow | Package 2 pure `BattleEstimateService`, explicit observed/assumed inputs, no-write rule and stale-intel rejection tests. |
+| 28–31: Rust battle engine, human-like estimates, simulation budget and combat flow | Package 2 rejects stale intel and retains safe recorded intents. Pure estimation and autonomous combat execution are deferred capabilities; no implemented `BattleEstimateService` is claimed. |
 | 32–33: fleetsave/defence and normal-mode alliances | Package 2 fleetsave candidate and action validation; Package 3 commitments, relationships and alliance event handling. |
 | 34–38: Empire mode, mode comparison, coordination, strategy and relationships | Root separate-mode decision; Package 5 campaign director, objectives, contributions, reward allocation and policy safety. |
 | 39–40: scalability and Laravel/Rust division | Package 4 population caps/metrics; Package 2 keeps scheduling/policy in Laravel and battle calculation behind the existing engine adapter. |

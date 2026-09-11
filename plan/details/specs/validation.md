@@ -22,6 +22,60 @@ Use an injected clock, fixed seeds and versioned rulesets. Test allowed outcomes
 
 Core rule tests remain in core; the module adds contract, behavior and end-to-end tests where its boundary can fail. Include paired human-action/AI-action equivalence for each new adapter.
 
+## Phase 3 behavior and failure matrix
+
+These are implementation acceptance scenarios for [Phase 3](phase-3-cognition.md), not assertions that the tests exist today. Write native Pest 5 tests and named datasets using real OGameX models, committed records, services, queues and database transactions where practical. Use PAO and PCOV; never Xdebug, PHPUnit-style module tests or Mockery. A narrow container replacement is justified for driver conformance/outage experiments and must be tested alongside the actual enabled adapter.
+
+| Scenario / dataset | Required observation |
+| --- | --- |
+| Greeting, thanks, routine acknowledgement | Authored route, zero generative requests, correct recipient and one delivery receipt. |
+| Known substantive resource/trade request | Social policy handles accept/reject/counter/clarify without an LLM; exact terms survive persistence. |
+| Unsupported trade/transport capability | No false delivery promise, fleet launch or fulfilled case; explicit decline/clarification/unsupported result. |
+| Prior betrayal → apology → two fulfilled trades | Current trust/stance can improve while betrayal history and outstanding obligations remain. Verify the selected response's supporting reasons. |
+| Same loss, different persona | Miner/Turtle/Fleeter/Trader/Casual appraisal/social consequences differ according to authored policy while facts and legal knowledge remain identical. |
+| Low/high loyalty, patience, honesty or vengefulness within a persona | Named trait settings produce the documented interaction differences; no hidden resource/skill advantage. Do not invent traits without defining their native mapping. |
+| Anger decays while debt remains | Frozen-time decay changes transient affect; exact outstanding obligation stays enforceable until a valid transition. |
+| Promise for 2M crystal, only 1.7M available when due | No overspend or invented fulfillment; current policy chooses a permitted partial/renegotiation/refusal path and records its exact terms. |
+| Complex conditional negotiation | One generation returns interpretation/text/proposals; deterministic validation rejects ambiguous deadlines, unknown parties, invalid units or unaffordable/unsupported commitments. |
+| Model text commits to terms that policy rejects | No contradictory text is sent. Authored clarification/refusal or silence, with no second generation to repair it. |
+| “Raven says Draco will attack” | Preserve speaker, source and uncertainty. No verified attack intent or automatic punishment when the attack does not occur. |
+| Alliance claim → reported departure → verified new membership | Source time and observed time stay distinct; latest verified fact wins for current state, with attributed historical claims retained. |
+| Two observers learn the same event differently | Common source fact, different allowed knowledge/salience; no shared private history or retroactive awareness. |
+| AI-to-AI request/counteroffer loop | Typed bounded protocol, no LLM even for human-visible rendering, no duplicate consequences or unbounded exchanges. |
+| CBR cold start / no similar cases | Ordinary policy continues; no automatic strategic LLM call. |
+| CBR successful, failed and incomplete outcomes | Only real correlated final outcomes affect learned evidence; record-only intent is not a completed action. |
+| CBR missing features, tied scores, outliers, contradictory cases | Defined normalized similarity and stable tie handling; unknown values remain unknown and evidence confidence remains bounded. |
+| CBR old ruleset/feature schema, wrong owner or private seed cases | Excluded or explicitly migrated/authorized; no cross-owner knowledge leak or incompatible vector/feature comparison. |
+| Novice/veteran and each archetype with controlled experience | Different experience access influences allowed choices as specified; no omniscient shared training history or bypass of policy constraints. |
+| Duplicate/rolled-back/late event | One accepted observation/state consequence; rollback produces none; late events cannot overwrite newer truth. |
+| Same event affects affect/social/CBR | Shared provenance with distinct purposes; integrated FAtiMA session advances once and projections cannot form a self-reinforcing fact loop. |
+| Coalesced messages; new turn arrives during generation | One sealed request per generation; new pending work retains its source identity, and stale in-flight text is checked before sending. |
+| Continuous sender / oversized message / locale variants | Maximum coalescing age and context are enforced; protected terms/current message are not silently truncated; English/Arabic/mixed-language cases remain attributed. |
+| Recipient blocks AI or leaves alliance during generation | Delivery is refused under current host-equivalent policy; no new generation or disclosure to the old channel. |
+| Deleted source/reply-to target or module disabled mid-flight | No stale delivery or fact resurrection; appropriate expiry/cancellation and usage accounting. |
+| Two sequential actors in a long-lived worker | No persona, ACL, channel, cache, driver-session or credential context leaks. |
+| Concurrent reservation at final daily allowance | At most the allowed provider attempts; retries/failures count; advice/enrichment cannot evade parent caps. |
+| Timeout with unknown billing / crash before usage settlement | Outstanding reservation retained and reconciled once; no blind duplicate generation. |
+| Crash after chat persistence / before delivery completion | Existing chat ID is reconciled; no duplicate persisted message. Broadcast behavior is tested separately from durable writes. |
+| Wrong schema, truncated JSON, prompt injection, unknown fact IDs | Reject proposals and unsafe text; no tools, hidden facts, raw trust writes or executable actions. |
+| Native record retention/access expires or is deleted while optional index lags | All retrieval paths, including direct ID and cached/provided IDs, hide it immediately; deletion retries cannot resurrect it. Temporal validity expiry alone preserves authorized historical evidence. |
+| FAtiMA/CBRKit/AgentOS/embedding/LLM unavailable | Native or disabled fallback from the failure matrix; no blocked gameplay worker or mandatory missing sidecar. |
+| Driver swap or restart with active agreement | Persona, exact obligations, sources and accepted cognitive state remain; incompatible checkpoints are explicitly rebuilt/versioned. |
+| Context selection, optional compression | Hard total and per-section limits; provenance, claim/commitment terms, current input and legal constraints remain intact. |
+| External memory profile advertised as zero-token | Instrument the real configured driver: no generative requests; embeddings/network/CPU are separately accounted for. |
+
+Map tests to the eight end-to-end flows and milestones. Use pairwise datasets for independent combinations, plus explicit multi-factor scenarios for important interactions such as stale membership + in-flight reply + provider timeout. Do not mechanically multiply every enum or assert only the implementation's own score formula. Expected outcomes must demonstrate player behavior, host effects or preserved invariants.
+
+Keep complete branch/edge-case scenarios alongside the 100% changed-area PCOV line-coverage gate. PCOV does not report branch coverage; a line percentage cannot prove every behavior. Pure domain tests cover similarity/decay/validation boundaries, and feature tests prove the corresponding mechanics through the real module application. Run the existing Phase 2 regressions and the required Rector/Pint/PHPStan/Pest/PAO/PCOV/TIA checks after implementation, not as a claimed result of this documentation revision.
+
+## Driver experiments and model-quality evaluation
+
+Separate reproducible CI from opt-in external evaluations. CI uses the production native/disabled implementations and a narrow controlled provider boundary for error/schema/budget cases. Any enabled external driver also needs a real integration/conformance run against a pinned runtime/provider; passing only a replacement stub does not certify the adapter. Live LLM quality/cost evaluations are explicit budgeted runs on sanitized/consented fixtures, not uncontrolled calls on every CI execution.
+
+Use the precise [A–G configurations](../research/memory-comparison.md#evaluation-corpus-and-experiments): A disables affect/experience enrichment while retaining native facts/social rules; B enables affect; C adds experience; D/E/F independently extend C with recall, Theory of Mind or semantics; G changes only the language provider against a fixed cognition configuration. Test native/external replacements separately from enabling/removing a capability. Use the same source fixtures, ruleset, persona and clock/seed where applicable; record external nondeterminism and repeat trials. Test English, Arabic and mixed-language messages. Measure route distribution, believability, repetition, factual/proposal correctness and baseline differences; do not use exact generated wording as a deterministic assertion.
+
+For 100/500/1,000 registered players, specify active fraction, message/event rate, history size and burst profile. Report hardware, concurrency, evaluations/second, average/p95 prompt size, all token categories, cost per active human conversation, CPU/RAM and queue lag. These are experiments to discover capacity; no throughput or cost-saving percentage is assumed. [Driver evaluation](../research/memory-comparison.md) defines the optional-memory threshold and reporting template.
+
 ## Release gates
 
 Host/module integration adds explicit checks for rollback-suppressed notifications, battle simulation without live opponent reads or committed events, controller/service validation parity and fresh actor context in long-lived workers. Test the existing module's enabled/disabled resource registration using isolated status files. [Extension work](module-extension-points.md) owns the exact gates.
