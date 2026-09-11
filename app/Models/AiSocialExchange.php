@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialResponseReason;
 
 /**
  * @property int $id
@@ -20,7 +21,7 @@ use Modules\AI\Enums\AiSocialResponse;
  * @property AiSocialExchangeState $state
  * @property AiSocialResponse|null $response
  * @property array<string, mixed>|null $response_terms
- * @property string|null $response_reason
+ * @property AiSocialResponseReason|null $response_reason
  * @property Carbon|null $due_at
  * @property Carbon|null $responded_at
  * @property int|null $commitment_id
@@ -35,6 +36,7 @@ class AiSocialExchange extends Model
             'type' => AiSocialExchangeType::class,
             'state' => AiSocialExchangeState::class,
             'response' => AiSocialResponse::class,
+            'response_reason' => AiSocialResponseReason::class,
             'terms' => 'array',
             'response_terms' => 'array',
             'due_at' => 'datetime',

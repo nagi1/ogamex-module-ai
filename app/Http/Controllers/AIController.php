@@ -11,6 +11,7 @@ class AIController extends OGameController
     public function index(): Factory|View
     {
         $this->setBodyId('overview');
+        /** @var view-string $view */
         $view = 'ai::index';
 
         return view($view, [

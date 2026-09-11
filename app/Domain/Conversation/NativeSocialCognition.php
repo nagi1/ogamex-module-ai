@@ -4,8 +4,11 @@ namespace Modules\AI\Domain\Conversation;
 
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Enums\AiSocialExchangeType;
+use Modules\AI\Enums\AiSocialRepair;
 use Modules\AI\Enums\AiSocialResource;
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialResponseReason;
+use Modules\AI\Enums\AiSocialTerm;
 
 class NativeSocialCognition implements SocialCognition
 {
@@ -16,7 +19,7 @@ class NativeSocialCognition implements SocialCognition
         return match ($exchange->type) {
             AiSocialExchangeType::HelpRequest => $this->evaluateHelpRequest($exchange),
             AiSocialExchangeType::Apology => $this->evaluateApology($exchange),
-            AiSocialExchangeType::Greeting, AiSocialExchangeType::Thanks => new SocialExchangeEvaluation(AiSocialResponse::Accept, 'routine_acknowledgement'),
+            AiSocialExchangeType::Greeting, AiSocialExchangeType::Thanks => app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::RoutineAcknowledgement]),
             AiSocialExchangeType::TradeOffer => $this->evaluateTradeOffer($exchange),
             AiSocialExchangeType::CeasefireRequest => $this->evaluateCeasefireRequest($exchange),
             AiSocialExchangeType::Warning => $this->evaluateWarning($exchange),
@@ -30,50 +33,50 @@ class NativeSocialCognition implements SocialCognition
         $amount = $this->requestedAmount($exchange);
 
         if ($amount === null) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'missing_or_invalid_amount');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::MissingOrInvalidAmount]);
         }
 
         if ($exchange->outstandingCommitments >= self::MAX_OUTSTANDING_COMMITMENTS) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'too_many_outstanding_commitments');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::TooManyOutstandingCommitments]);
         }
 
         if ($amount > $exchange->availableAmount) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Counter, 'insufficient_available_amount', ['amount' => $exchange->availableAmount]);
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Counter, 'reason' => AiSocialResponseReason::InsufficientAvailableAmount, 'counterTerms' => [AiSocialTerm::Amount->value => $exchange->availableAmount]]);
         }
 
         $cooperation = $this->cooperationScore($exchange);
 
         if ($cooperation >= 0.75) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Accept, 'trusted_and_safe');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::TrustedAndSafe]);
         }
 
         if ($cooperation <= 0.25) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'insufficient_trust');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::InsufficientTrust]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'terms_need_confirmation');
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::TermsNeedConfirmation]);
     }
 
     private function evaluateApology(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
-        if (($exchange->terms['acknowledges_harm'] ?? false) !== true) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'harm_not_acknowledged');
+        if (($exchange->terms[AiSocialTerm::AcknowledgesHarm->value] ?? false) !== true) {
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::HarmNotAcknowledged]);
         }
 
         if ($exchange->threat >= 0.75) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'harm_not_repaired');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::HarmNotRepaired]);
         }
 
         if ($exchange->trust + $exchange->affinity + (($exchange->respect + $exchange->socialImportance) / 2) >= 0.5) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Accept, 'apology_acknowledged');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::ApologyAcknowledged]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Counter, 'compensation_needed', ['repair' => 'compensation']);
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Counter, 'reason' => AiSocialResponseReason::CompensationNeeded, 'counterTerms' => [AiSocialTerm::Repair->value => AiSocialRepair::Compensation->value]]);
     }
 
     private function requestedAmount(SocialExchangeContext $exchange): float|null
     {
-        $amount = $exchange->terms['amount'] ?? null;
+        $amount = $exchange->terms[AiSocialTerm::Amount->value] ?? null;
 
         if (!is_int($amount) && !is_float($amount)) {
             return null;
@@ -89,68 +92,71 @@ class NativeSocialCognition implements SocialCognition
     private function evaluateTradeOffer(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
         if (!$this->hasTradeTerms($exchange)) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'missing_or_invalid_trade_terms');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::MissingOrInvalidTradeTerms]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'transport_capability_unavailable');
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::TransportCapabilityUnavailable]);
     }
 
     private function evaluateCeasefireRequest(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
         if ($exchange->dueAt === null) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'missing_ceasefire_expiry');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::MissingCeasefireExpiry]);
         }
 
         if ($exchange->threat >= 0.75) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'unsafe_ceasefire_request');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::UnsafeCeasefireRequest]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'ceasefire_enforcement_unavailable');
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::CeasefireEnforcementUnavailable]);
     }
 
     private function evaluateWarning(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
-        if (($exchange->terms['coercive'] ?? false) === true) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'coercive_warning');
+        if (($exchange->terms[AiSocialTerm::Coercive->value] ?? false) === true) {
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::CoerciveWarning]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'warning_acknowledged_without_commitment');
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::WarningAcknowledgedWithoutCommitment]);
     }
 
     private function evaluateCooperationRequest(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
-        $scope = $exchange->terms['scope'] ?? null;
+        $scope = $exchange->terms[AiSocialTerm::Scope->value] ?? null;
 
         if (!is_string($scope) || trim($scope) === '') {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'missing_cooperation_scope');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::MissingCooperationScope]);
         }
 
         if ($this->cooperationScore($exchange) <= 0.25) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'insufficient_trust');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::InsufficientTrust]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'cooperation_capability_unavailable');
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::CooperationCapabilityUnavailable]);
     }
 
     private function evaluateCompensationOffer(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
-        if (($exchange->terms['acknowledges_harm'] ?? false) !== true) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'harm_not_acknowledged');
+        if (($exchange->terms[AiSocialTerm::AcknowledgesHarm->value] ?? false) !== true) {
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::HarmNotAcknowledged]);
         }
 
         if ($exchange->dueAt === null) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'missing_compensation_due_at');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::MissingCompensationDueAt]);
         }
 
-        if (!$this->hasResourceAmount($exchange->terms)) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Clarify, 'missing_or_invalid_compensation_terms');
+        if (!$this->hasResourceAmount(
+            $exchange->terms[AiSocialTerm::Resource->value] ?? null,
+            $exchange->terms[AiSocialTerm::Amount->value] ?? null,
+        )) {
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Clarify, 'reason' => AiSocialResponseReason::MissingOrInvalidCompensationTerms]);
         }
 
         if ($exchange->threat >= 0.75) {
-            return new SocialExchangeEvaluation(AiSocialResponse::Reject, 'harm_not_repaired');
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::HarmNotRepaired]);
         }
 
-        return new SocialExchangeEvaluation(AiSocialResponse::Accept, 'compensation_recorded');
+        return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::CompensationRecorded]);
     }
 
     private function cooperationScore(SocialExchangeContext $exchange): float
@@ -163,23 +169,17 @@ class NativeSocialCognition implements SocialCognition
 
     private function hasTradeTerms(SocialExchangeContext $exchange): bool
     {
-        return $this->hasResourceAmount([
-            'resource' => $exchange->terms['offered_resource'] ?? null,
-            'amount' => $exchange->terms['offered_amount'] ?? null,
-        ]) && $this->hasResourceAmount([
-            'resource' => $exchange->terms['requested_resource'] ?? null,
-            'amount' => $exchange->terms['requested_amount'] ?? null,
-        ]);
+        return $this->hasResourceAmount(
+            $exchange->terms[AiSocialTerm::OfferedResource->value] ?? null,
+            $exchange->terms[AiSocialTerm::OfferedAmount->value] ?? null,
+        ) && $this->hasResourceAmount(
+            $exchange->terms[AiSocialTerm::RequestedResource->value] ?? null,
+            $exchange->terms[AiSocialTerm::RequestedAmount->value] ?? null,
+        );
     }
 
-    /**
-     * @param array<string, mixed> $terms
-     */
-    private function hasResourceAmount(array $terms): bool
+    private function hasResourceAmount(mixed $resource, mixed $amount): bool
     {
-        $resource = $terms['resource'] ?? null;
-        $amount = $terms['amount'] ?? null;
-
         if (!is_string($resource) || AiSocialResource::tryFrom($resource) === null) {
             return false;
         }

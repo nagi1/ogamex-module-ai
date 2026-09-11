@@ -47,7 +47,10 @@ class PlayerPerceptionBuilder
         return CarbonImmutable::createFromTimestamp((int) ($observation['observed_at'] ?? $this->clock->now()->getTimestamp()));
     }
 
-    /** @param array<int, mixed> $observedPlanets @return array<int, array{id:int, resources:array{metal:float, crystal:float, deuterium:float}}> */
+    /**
+     * @param array<int, mixed> $observedPlanets
+     * @return list<array{id:int, resources:array{metal:float, crystal:float, deuterium:float}}>
+     */
     private function visiblePlanets(array $observedPlanets): array
     {
         $visiblePlanets = [];
@@ -70,7 +73,10 @@ class PlayerPerceptionBuilder
         return $visiblePlanets;
     }
 
-    /** @param array<int, mixed> $reports @return array<int, array<string, mixed>> */
+    /**
+     * @param array<int, mixed> $reports
+     * @return list<array<string, mixed>>
+     */
     private function targetReports(array $reports): array
     {
         $visibleReports = [];
@@ -92,7 +98,10 @@ class PlayerPerceptionBuilder
         return $visibleReports;
     }
 
-    /** @param array<string, mixed> $actions @return array<string, bool> */
+    /**
+     * @param array<string, mixed> $actions
+     * @return array<string, bool>
+     */
     private function availableActions(array $actions): array
     {
         $result = [];
@@ -103,7 +112,10 @@ class PlayerPerceptionBuilder
         return $result;
     }
 
-    /** @param array<string, mixed> $timestamps @return array<string, string> */
+    /**
+     * @param array<string, mixed> $timestamps
+     * @return array<string, string>
+     */
     private function sourceTimestamps(array $timestamps, CarbonImmutable $observedAt): array
     {
         $result = ['owned_state' => $observedAt->toIso8601String()];

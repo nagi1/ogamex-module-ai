@@ -20,7 +20,11 @@ use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
+use Modules\AI\Enums\AiSocialRepair;
+use Modules\AI\Enums\AiSocialResource;
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialResponseReason;
+use Modules\AI\Enums\AiSocialTerm;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiObservation;
@@ -41,7 +45,7 @@ uses(IsolatedAccountTestCase::class);
 beforeEach(function (): void {
     app()->bind(SocialCognition::class, NativeSocialCognition::class);
     app()->bind(RandomSource::class, SeededRandomSource::class);
-    app()->bind(AiClock::class, fn (): FixtureAiClock => new FixtureAiClock(CarbonImmutable::parse('2024-01-01 00:00:00 UTC')));
+    app()->bind(AiClock::class, fn (): FixtureAiClock => app()->makeWith(FixtureAiClock::class, ['now' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC')]));
 });
 
 test('a trusted affordable help request becomes an accepted commitment and authored reply', function (): void {
@@ -61,7 +65,7 @@ test('a trusted affordable help request becomes an accepted commitment and autho
         $counterparty->id,
         $source->id,
         AiSocialExchangeType::HelpRequest,
-        ['resource' => 'crystal', 'amount' => 100],
+        [AiSocialTerm::Resource->value => AiSocialResource::Crystal->value, AiSocialTerm::Amount->value => 100],
         CarbonImmutable::parse('2026-09-12 12:00:00 UTC'),
     );
     $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
@@ -87,7 +91,7 @@ test('a help exchange uses bounded native responses and cannot be evaluated twic
         ->and($first->response_terms)->toBe($responseTerms)
         ->and($second->response)->toBe($response)
         ->and($second->revision)->toBe($first->revision)
-        ->and(app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $this->currentUserId, 999, AiSocialExchangeType::HelpRequest, ['amount' => 1]))->toBeNull();
+        ->and(app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $this->currentUserId, 999, AiSocialExchangeType::HelpRequest, [AiSocialTerm::Amount->value => 1]))->toBeNull();
 })->with('native social response cases');
 
 test('an overdue exchange expires without creating a commitment', function (): void {
@@ -98,7 +102,7 @@ test('an overdue exchange expires without creating a commitment', function (): v
         $counterparty->id,
         $source->id,
         AiSocialExchangeType::HelpRequest,
-        ['amount' => 10],
+        [AiSocialTerm::Amount->value => 10],
         CarbonImmutable::parse('2026-09-11 12:30:00 UTC'),
     );
     $expired = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 10, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
@@ -109,13 +113,13 @@ test('an overdue exchange expires without creating a commitment', function (): v
 
 test('an acknowledged low-threat apology is accepted without inventing a commitment', function (): void {
     $counterparty = $this->createUser();
-    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 5004, AiSocialExchangeType::Apology, ['acknowledges_harm' => true]);
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 5004, AiSocialExchangeType::Apology, [AiSocialTerm::AcknowledgesHarm->value => true]);
     AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.3, 'affinity' => 0.3, 'threat' => 0.2, 'respect' => 0, 'social_importance' => 0, 'last_observation_id' => 5004, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
 
     $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, CarbonImmutable::parse('2026-09-11 11:00 UTC'));
 
     expect($evaluated?->response)->toBe(AiSocialResponse::Accept)
-        ->and($evaluated?->response_reason)->toBe('apology_acknowledged')
+        ->and($evaluated?->response_reason)->toBe(AiSocialResponseReason::ApologyAcknowledged)
         ->and($evaluated?->commitment_id)->toBeNull();
 });
 
@@ -130,54 +134,54 @@ test('an unacknowledged or unsafe apology receives a bounded native response', f
         ->and($evaluated?->commitment_id)->toBeNull();
 })->with([
     'missing acknowledgement' => [[], 0.1, AiSocialResponse::Clarify],
-    'unsafe history' => [['acknowledges_harm' => true], 0.8, AiSocialResponse::Reject],
+    'unsafe history' => [[AiSocialTerm::AcknowledgesHarm->value => true], 0.8, AiSocialResponse::Reject],
 ]);
 
 test('native social cognition keeps invalid, overcommitted, and uncertain requests distinct', function (): void {
     $evaluatedAt = CarbonImmutable::parse('2026-09-11 13:00:00 UTC');
     $engine = app(SocialCognition::class);
 
-    $invalid = $engine->evaluateSocialExchange(new SocialExchangeContext(1, AiSocialExchangeType::HelpRequest, ['amount' => 0], 1, 1, 0, 0, 100, $evaluatedAt));
-    $overcommitted = $engine->evaluateSocialExchange(new SocialExchangeContext(2, AiSocialExchangeType::HelpRequest, ['amount' => 10], 1, 1, 0, 3, 100, $evaluatedAt));
-    $uncertain = $engine->evaluateSocialExchange(new SocialExchangeContext(3, AiSocialExchangeType::HelpRequest, ['amount' => 10], 0.5, 0.2, 0, 0, 100, $evaluatedAt));
+    $invalid = $engine->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, ['exchangeId' => 1, 'type' => AiSocialExchangeType::HelpRequest, 'terms' => [AiSocialTerm::Amount->value => 0], 'trust' => 1, 'affinity' => 1, 'threat' => 0, 'outstandingCommitments' => 0, 'availableAmount' => 100, 'evaluatedAt' => $evaluatedAt]));
+    $overcommitted = $engine->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, ['exchangeId' => 2, 'type' => AiSocialExchangeType::HelpRequest, 'terms' => [AiSocialTerm::Amount->value => 10], 'trust' => 1, 'affinity' => 1, 'threat' => 0, 'outstandingCommitments' => 3, 'availableAmount' => 100, 'evaluatedAt' => $evaluatedAt]));
+    $uncertain = $engine->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, ['exchangeId' => 3, 'type' => AiSocialExchangeType::HelpRequest, 'terms' => [AiSocialTerm::Amount->value => 10], 'trust' => 0.5, 'affinity' => 0.2, 'threat' => 0, 'outstandingCommitments' => 0, 'availableAmount' => 100, 'evaluatedAt' => $evaluatedAt]));
 
     expect($invalid->response)->toBe(AiSocialResponse::Clarify)
         ->and($overcommitted->response)->toBe(AiSocialResponse::Reject)
-        ->and($overcommitted->reason)->toBe('too_many_outstanding_commitments')
+        ->and($overcommitted->reason)->toBe(AiSocialResponseReason::TooManyOutstandingCommitments)
         ->and($uncertain->response)->toBe(AiSocialResponse::Clarify);
 });
 
 test('a safe but untrusted apology requests compensation without clearing prior harm', function (): void {
-    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(new SocialExchangeContext(
-        1,
-        AiSocialExchangeType::Apology,
-        ['acknowledges_harm' => true],
-        0.1,
-        0.1,
-        0.1,
-        0,
-        0,
-        CarbonImmutable::parse('2026-09-11 13:00:00 UTC'),
-    ));
+    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, [
+        'exchangeId' => 1,
+        'type' => AiSocialExchangeType::Apology,
+        'terms' => [AiSocialTerm::AcknowledgesHarm->value => true],
+        'trust' => 0.1,
+        'affinity' => 0.1,
+        'threat' => 0.1,
+        'outstandingCommitments' => 0,
+        'availableAmount' => 0,
+        'evaluatedAt' => CarbonImmutable::parse('2026-09-11 13:00:00 UTC'),
+    ]));
 
     expect($evaluation->response)->toBe(AiSocialResponse::Counter)
-        ->and($evaluation->reason)->toBe('compensation_needed')
-        ->and($evaluation->counterTerms)->toBe(['repair' => 'compensation']);
+        ->and($evaluation->reason)->toBe(AiSocialResponseReason::CompensationNeeded)
+        ->and($evaluation->counterTerms)->toBe([AiSocialTerm::Repair->value => AiSocialRepair::Compensation->value]);
 });
 
-test('typed social protocols have bounded capability-safe native responses', function (AiSocialExchangeType $type, array $terms, CarbonImmutable|null $dueAt, float $threat, AiSocialResponse $response, string $reason): void {
-    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(new SocialExchangeContext(
-        1,
-        $type,
-        $terms,
-        0.6,
-        0.2,
-        $threat,
-        0,
-        100,
-        CarbonImmutable::parse('2026-09-11 13:00:00 UTC'),
-        $dueAt,
-    ));
+test('typed social protocols have bounded capability-safe native responses', function (AiSocialExchangeType $type, array $terms, CarbonImmutable|null $dueAt, float $threat, AiSocialResponse $response, AiSocialResponseReason $reason): void {
+    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, [
+        'exchangeId' => 1,
+        'type' => $type,
+        'terms' => $terms,
+        'trust' => 0.6,
+        'affinity' => 0.2,
+        'threat' => $threat,
+        'outstandingCommitments' => 0,
+        'availableAmount' => 100,
+        'evaluatedAt' => CarbonImmutable::parse('2026-09-11 13:00:00 UTC'),
+        'dueAt' => $dueAt,
+    ]));
 
     expect($evaluation->response)->toBe($response)
         ->and($evaluation->reason)->toBe($reason);
@@ -191,7 +195,7 @@ test('accepted compensation records an outstanding counterparty commitment with 
         $counterparty->id,
         8001,
         AiSocialExchangeType::CompensationOffer,
-        ['acknowledges_harm' => true, 'resource' => 'crystal', 'amount' => 200],
+        [AiSocialTerm::AcknowledgesHarm->value => true, AiSocialTerm::Resource->value => AiSocialResource::Crystal->value, AiSocialTerm::Amount->value => 200],
         $dueAt,
     );
     $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange?->id ?? 0, 0, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
@@ -200,7 +204,7 @@ test('accepted compensation records an outstanding counterparty commitment with 
     expect($evaluated?->response)->toBe(AiSocialResponse::Accept)
         ->and($commitment->state)->toBe(AiCommitmentState::Accepted)
         ->and($commitment->direction)->toBe(AiCommitmentDirection::ExpectedFromCounterparty)
-        ->and($commitment->terms)->toEqual(['acknowledges_harm' => true, 'resource' => 'crystal', 'amount' => 200])
+        ->and($commitment->terms)->toEqual([AiSocialTerm::AcknowledgesHarm->value => true, AiSocialTerm::Resource->value => AiSocialResource::Crystal->value, AiSocialTerm::Amount->value => 200])
         ->and($commitment->due_at?->equalTo($dueAt))->toBeTrue()
         ->and($commitment->fulfilled_at)->toBeNull();
 });
@@ -257,12 +261,12 @@ test('social protocol depth is limited to one response turn', function (): void 
 });
 
 test('authored replies are bounded to known response variants and never invent terms', function (AiSocialResponse|null $response, array|null $terms): void {
-    $exchange = new AiSocialExchange([
+    $exchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
         'type' => AiSocialExchangeType::HelpRequest,
         'response' => $response,
         'response_terms' => $terms,
         'revision' => 1,
-    ]);
+    ]]);
     $exchange->id = 1;
 
     $reply = app(BuildAuthoredSocialReplyAction::class)->handle($exchange, 42);
@@ -281,49 +285,49 @@ test('authored replies are bounded to known response variants and never invent t
 })->with('authored social response cases');
 
 test('authored protocol replies remain within their typed response families', function (AiSocialExchangeType $type, AiSocialResponse $response): void {
-    $exchange = new AiSocialExchange([
+    $exchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
         'type' => $type,
         'response' => $response,
-        'response_terms' => ['amount' => 20],
+        'response_terms' => [AiSocialTerm::Amount->value => 20],
         'revision' => 1,
-    ]);
+    ]]);
     $exchange->id = 2;
 
     expect(app(BuildAuthoredSocialReplyAction::class)->handle($exchange, 42))->toBeString()->not->toBeEmpty();
 })->with('authored protocol reply cases');
 
 dataset('native social response cases', [
-    'insufficient availability counters' => [['amount' => 100], 20.0, AiSocialResponse::Counter, ['amount' => 20]],
-    'untrusted request rejects' => [['amount' => 10], 100.0, AiSocialResponse::Reject, null],
-    'missing amount clarifies' => [['resource' => 'metal'], 100.0, AiSocialResponse::Clarify, null],
+    'insufficient availability counters' => [[AiSocialTerm::Amount->value => 100], 20.0, AiSocialResponse::Counter, [AiSocialTerm::Amount->value => 20]],
+    'untrusted request rejects' => [[AiSocialTerm::Amount->value => 10], 100.0, AiSocialResponse::Reject, null],
+    'missing amount clarifies' => [[AiSocialTerm::Resource->value => AiSocialResource::Metal->value], 100.0, AiSocialResponse::Clarify, null],
 ]);
 
 dataset('authored social response cases', [
     'no response remains silent' => [null, null],
     'accept is authored' => [AiSocialResponse::Accept, null],
     'reject is authored' => [AiSocialResponse::Reject, null],
-    'counter uses only its supplied amount' => [AiSocialResponse::Counter, ['amount' => 20]],
+    'counter uses only its supplied amount' => [AiSocialResponse::Counter, [AiSocialTerm::Amount->value => 20]],
     'clarification is authored' => [AiSocialResponse::Clarify, null],
 ]);
 
 dataset('typed social protocol cases', [
-    'greeting' => [AiSocialExchangeType::Greeting, [], null, 0, AiSocialResponse::Accept, 'routine_acknowledgement'],
-    'thanks' => [AiSocialExchangeType::Thanks, [], null, 0, AiSocialResponse::Accept, 'routine_acknowledgement'],
-    'invalid trade terms clarify' => [AiSocialExchangeType::TradeOffer, [], null, 0, AiSocialResponse::Clarify, 'missing_or_invalid_trade_terms'],
-    'valid trade rejects without transport capability' => [AiSocialExchangeType::TradeOffer, ['offered_resource' => 'metal', 'offered_amount' => 100, 'requested_resource' => 'crystal', 'requested_amount' => 50], null, 0, AiSocialResponse::Reject, 'transport_capability_unavailable'],
-    'ceasefire needs expiry' => [AiSocialExchangeType::CeasefireRequest, [], null, 0, AiSocialResponse::Clarify, 'missing_ceasefire_expiry'],
-    'ceasefire does not claim enforcement' => [AiSocialExchangeType::CeasefireRequest, [], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, 'ceasefire_enforcement_unavailable'],
-    'unsafe ceasefire rejects' => [AiSocialExchangeType::CeasefireRequest, [], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0.8, AiSocialResponse::Reject, 'unsafe_ceasefire_request'],
-    'coercive warning rejects' => [AiSocialExchangeType::Warning, ['coercive' => true], null, 0, AiSocialResponse::Reject, 'coercive_warning'],
-    'ordinary warning does not create a promise' => [AiSocialExchangeType::Warning, [], null, 0, AiSocialResponse::Clarify, 'warning_acknowledged_without_commitment'],
-    'cooperation needs a scope' => [AiSocialExchangeType::CooperationRequest, [], null, 0, AiSocialResponse::Clarify, 'missing_cooperation_scope'],
-    'cooperation does not invent a game action' => [AiSocialExchangeType::CooperationRequest, ['scope' => 'mutual defence'], null, 0, AiSocialResponse::Clarify, 'cooperation_capability_unavailable'],
-    'unsafe cooperation rejects' => [AiSocialExchangeType::CooperationRequest, ['scope' => 'mutual defence'], null, 0.8, AiSocialResponse::Reject, 'insufficient_trust'],
-    'compensation needs acknowledgement' => [AiSocialExchangeType::CompensationOffer, [], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, 'harm_not_acknowledged'],
-    'compensation needs a due time' => [AiSocialExchangeType::CompensationOffer, ['acknowledges_harm' => true, 'resource' => 'metal', 'amount' => 100], null, 0, AiSocialResponse::Clarify, 'missing_compensation_due_at'],
-    'compensation needs valid terms' => [AiSocialExchangeType::CompensationOffer, ['acknowledges_harm' => true, 'resource' => 'unknown', 'amount' => 100], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, 'missing_or_invalid_compensation_terms'],
-    'compensation rejects nonnumeric amount' => [AiSocialExchangeType::CompensationOffer, ['acknowledges_harm' => true, 'resource' => 'metal', 'amount' => '100'], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, 'missing_or_invalid_compensation_terms'],
-    'unsafe compensation rejects' => [AiSocialExchangeType::CompensationOffer, ['acknowledges_harm' => true, 'resource' => 'metal', 'amount' => 100], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0.8, AiSocialResponse::Reject, 'harm_not_repaired'],
+    'greeting' => [AiSocialExchangeType::Greeting, [], null, 0, AiSocialResponse::Accept, AiSocialResponseReason::RoutineAcknowledgement],
+    'thanks' => [AiSocialExchangeType::Thanks, [], null, 0, AiSocialResponse::Accept, AiSocialResponseReason::RoutineAcknowledgement],
+    'invalid trade terms clarify' => [AiSocialExchangeType::TradeOffer, [], null, 0, AiSocialResponse::Clarify, AiSocialResponseReason::MissingOrInvalidTradeTerms],
+    'valid trade rejects without transport capability' => [AiSocialExchangeType::TradeOffer, [AiSocialTerm::OfferedResource->value => AiSocialResource::Metal->value, AiSocialTerm::OfferedAmount->value => 100, AiSocialTerm::RequestedResource->value => AiSocialResource::Crystal->value, AiSocialTerm::RequestedAmount->value => 50], null, 0, AiSocialResponse::Reject, AiSocialResponseReason::TransportCapabilityUnavailable],
+    'ceasefire needs expiry' => [AiSocialExchangeType::CeasefireRequest, [], null, 0, AiSocialResponse::Clarify, AiSocialResponseReason::MissingCeasefireExpiry],
+    'ceasefire does not claim enforcement' => [AiSocialExchangeType::CeasefireRequest, [], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, AiSocialResponseReason::CeasefireEnforcementUnavailable],
+    'unsafe ceasefire rejects' => [AiSocialExchangeType::CeasefireRequest, [], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0.8, AiSocialResponse::Reject, AiSocialResponseReason::UnsafeCeasefireRequest],
+    'coercive warning rejects' => [AiSocialExchangeType::Warning, [AiSocialTerm::Coercive->value => true], null, 0, AiSocialResponse::Reject, AiSocialResponseReason::CoerciveWarning],
+    'ordinary warning does not create a promise' => [AiSocialExchangeType::Warning, [], null, 0, AiSocialResponse::Clarify, AiSocialResponseReason::WarningAcknowledgedWithoutCommitment],
+    'cooperation needs a scope' => [AiSocialExchangeType::CooperationRequest, [], null, 0, AiSocialResponse::Clarify, AiSocialResponseReason::MissingCooperationScope],
+    'cooperation does not invent a game action' => [AiSocialExchangeType::CooperationRequest, [AiSocialTerm::Scope->value => 'mutual defence'], null, 0, AiSocialResponse::Clarify, AiSocialResponseReason::CooperationCapabilityUnavailable],
+    'unsafe cooperation rejects' => [AiSocialExchangeType::CooperationRequest, [AiSocialTerm::Scope->value => 'mutual defence'], null, 0.8, AiSocialResponse::Reject, AiSocialResponseReason::InsufficientTrust],
+    'compensation needs acknowledgement' => [AiSocialExchangeType::CompensationOffer, [], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, AiSocialResponseReason::HarmNotAcknowledged],
+    'compensation needs a due time' => [AiSocialExchangeType::CompensationOffer, [AiSocialTerm::AcknowledgesHarm->value => true, AiSocialTerm::Resource->value => AiSocialResource::Metal->value, AiSocialTerm::Amount->value => 100], null, 0, AiSocialResponse::Clarify, AiSocialResponseReason::MissingCompensationDueAt],
+    'compensation needs valid terms' => [AiSocialExchangeType::CompensationOffer, [AiSocialTerm::AcknowledgesHarm->value => true, AiSocialTerm::Resource->value => 'unknown', AiSocialTerm::Amount->value => 100], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, AiSocialResponseReason::MissingOrInvalidCompensationTerms],
+    'compensation rejects nonnumeric amount' => [AiSocialExchangeType::CompensationOffer, [AiSocialTerm::AcknowledgesHarm->value => true, AiSocialTerm::Resource->value => AiSocialResource::Metal->value, AiSocialTerm::Amount->value => '100'], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0, AiSocialResponse::Clarify, AiSocialResponseReason::MissingOrInvalidCompensationTerms],
+    'unsafe compensation rejects' => [AiSocialExchangeType::CompensationOffer, [AiSocialTerm::AcknowledgesHarm->value => true, AiSocialTerm::Resource->value => AiSocialResource::Metal->value, AiSocialTerm::Amount->value => 100], CarbonImmutable::parse('2026-09-12 13:00:00 UTC'), 0.8, AiSocialResponse::Reject, AiSocialResponseReason::HarmNotRepaired],
 ]);
 
 dataset('authored protocol reply cases', [

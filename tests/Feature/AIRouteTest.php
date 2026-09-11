@@ -42,9 +42,9 @@ test('an admin can open the AI module page', function (): void {
 
     $response = $this->get('/admin/ai');
 
-    $response->assertOk();
-    $response->assertSee('AI Players');
-    $response->assertSee('AI module is loaded');
-    expect(app(RunAiSession::class))->toBeInstanceOf(RunAiSessionAction::class);
+    expect($response->status())->toBe(200)
+        ->and($response->getContent())->toContain('AI Players')
+        ->toContain('AI module is loaded')
+        ->and(app(RunAiSession::class))->toBeInstanceOf(RunAiSessionAction::class);
     expect(app(QueueAiBuilding::class))->toBeInstanceOf(QueueAiBuildingAction::class);
 });

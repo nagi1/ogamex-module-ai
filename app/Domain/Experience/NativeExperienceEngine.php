@@ -10,7 +10,7 @@ class NativeExperienceEngine implements ExperienceEngine
 {
     public function rankSimilarExperiences(ExperienceQuery $query): array
     {
-        return AiExperienceCase::query()
+        return array_values(AiExperienceCase::query()
             ->where('player_id', $query->playerId)
             ->where('family', $query->family)
             ->where('feature_version', $query->featureVersion)
@@ -21,10 +21,13 @@ class NativeExperienceEngine implements ExperienceEngine
             ->sortByDesc(fn (RankedExperience $experience): array => [$experience->similarity, -$experience->caseId])
             ->take(max(0, $query->limit))
             ->values()
-            ->all();
+            ->all());
     }
 
-    /** @param array<string, int|float|string|null> $left @param array<string, int|float|string|null> $right */
+    /**
+     * @param array<string, int|float|string|null> $left
+     * @param array<string, int|float|string|null> $right
+     */
     private function similarity(array $left, array $right): float
     {
         $shared = array_intersect_key($left, $right);

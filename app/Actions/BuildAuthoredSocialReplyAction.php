@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialTerm;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\RandomSource;
 
@@ -33,7 +34,7 @@ class BuildAuthoredSocialReplyAction
         };
         $index = (int) floor($this->randomSource->unitInterval($personaSeed, 'social-exchange:' . $exchange->id . ':' . $exchange->revision) * count($lines));
         $line = $lines[$index];
-        $amount = $exchange->response_terms['amount'] ?? null;
+        $amount = $exchange->response_terms[AiSocialTerm::Amount->value] ?? null;
 
         return is_int($amount) || is_float($amount) ? str_replace('{amount}', (string) $amount, $line) : $line;
     }

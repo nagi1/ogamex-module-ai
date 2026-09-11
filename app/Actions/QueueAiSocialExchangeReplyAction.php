@@ -41,13 +41,11 @@ class QueueAiSocialExchangeReplyAction
 
         $message = app(BuildAuthoredSocialReplyAction::class)->handle($exchange, $profile->random_seed);
 
-        assert($message !== null);
-
         return app(QueueAiAuthoredReplyAction::class)->handle(
             $exchange->player_id,
             $exchange->counterparty_player_id,
             $source->source_id,
-            $message,
+            $message ?? '',
             $expiresAt,
         );
     }

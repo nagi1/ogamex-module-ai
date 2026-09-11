@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Conversation;
 
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialResponseReason;
 
 readonly class SocialExchangeEvaluation
 {
@@ -11,7 +12,7 @@ readonly class SocialExchangeEvaluation
      */
     public function __construct(
         public AiSocialResponse $response,
-        public string $reason,
+        public AiSocialResponseReason $reason,
         public array|null $counterTerms = null,
     ) {
     }

@@ -13,6 +13,7 @@ Write clean, maintainable, production-ready code. Keep changes module-first: reu
 - Prefer small, single-purpose methods, descriptive names, and practical immutability.
 - Choose readable code before clever code, optimize only from measured evidence, and handle errors explicitly.
 - Resolve container-managed actions, jobs, services, policies, and collaborators through `app()` or `app()->makeWith()`. Bind defaults in `AIServiceProvider` so they remain replaceable.
+- Do not use `new` for module-managed actions, services, policies, drivers, or domain payloads; resolve them through `app()` / `app()->makeWith()`. Laravel-required anonymous migration classes are the only exception.
 - Use enums for stable domain values. A one-use dynamic value may remain a string when an enum would not improve the design.
 - Never use `else`, `else if`, or `elseif`; use early returns, strategies, lookup tables, or a `match` expression where appropriate.
 - Do not add dependencies, abstractions, or refactors without a demonstrated module need and user approval when the scope is material.

@@ -1,9 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
@@ -30,16 +28,8 @@ use Tests\IsolatedAccountTestCase;
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
-    if (!Schema::hasTable('ai_profiles')) {
-        Artisan::call('migrate', [
-            '--path' => dirname(__DIR__, 2) . '/database/migrations',
-            '--realpath' => true,
-            '--force' => true,
-        ]);
-    }
-
-    $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
-    $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
+    app()->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
+    app()->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
 });
 
 test('due building work is idempotent', function (): void {
@@ -63,10 +53,10 @@ test('an invalid owned planet is recorded as a rejected real action', function (
 
     $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
 
-    $this->assertDatabaseHas('ai_action_receipts', [
-        'idempotency_key' => $work->idempotency_key,
-        'state' => AiReceiptState::Rejected->value,
-    ]);
+    expect(AiActionReceipt::query()
+        ->where('idempotency_key', $work->idempotency_key)
+        ->where('state', AiReceiptState::Rejected)
+        ->exists())->toBeTrue();
 });
 
 test('the real queue action rejects banned and vacation players', function (): void {
@@ -135,7 +125,7 @@ test('a disabled profile completes work without a game action', function (): voi
     $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
 
     expect($work->fresh()?->state)->toBe(AiWorkState::Completed);
-    $this->assertDatabaseMissing('ai_action_receipts', ['idempotency_key' => $work->idempotency_key]);
+    expect(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->exists())->toBeFalse();
 });
 
 test('future work stays pending and terminal receipts prevent a second action', function (): void {
@@ -170,10 +160,10 @@ test('a profile without a planet receives a safe rejection', function (): void {
 
     $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
 
-    $this->assertDatabaseHas('ai_action_receipts', [
-        'idempotency_key' => $work->idempotency_key,
-        'state' => AiReceiptState::Rejected->value,
-    ]);
+    expect(AiActionReceipt::query()
+        ->where('idempotency_key', $work->idempotency_key)
+        ->where('state', AiReceiptState::Rejected)
+        ->exists())->toBeTrue();
     expect($work->fresh()?->state)->toBe(AiWorkState::Completed);
 });
 

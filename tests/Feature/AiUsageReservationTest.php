@@ -41,7 +41,7 @@ test('settling a reservation releases unused token capacity once while retaining
         usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 200, 80),
         usageBudgetLimits(),
     );
-    assert($reservation !== null);
+    expect($reservation)->not->toBeNull();
 
     $settled = app(SettleAiUsageReservationAction::class)->handle($reservation->id, 120, 30, CarbonImmutable::parse('2026-09-11 12:00 UTC'));
     $duplicateSettlement = app(SettleAiUsageReservationAction::class)->handle($reservation->id, 1, 1, CarbonImmutable::parse('2026-09-11 13:00 UTC'));
@@ -64,7 +64,7 @@ test('invalid requested or actual token counts are refused without changing a bu
         usageReservationRequest($this->currentUserId, 'conversation-a', 'request-b', 20, 20),
         usageBudgetLimits(),
     );
-    assert($reservation !== null);
+    expect($reservation)->not->toBeNull();
     $invalidSettlement = app(SettleAiUsageReservationAction::class)->handle($reservation->id, -1, 10, CarbonImmutable::parse('2026-09-11 12:00 UTC'));
     $oversizedSettlement = app(SettleAiUsageReservationAction::class)->handle($reservation->id, 21, 10, CarbonImmutable::parse('2026-09-11 12:00 UTC'));
 
@@ -80,7 +80,7 @@ test('an unknown or exact settlement does not change a valid reservation ledger'
         usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 20, 10),
         usageBudgetLimits(),
     );
-    assert($reservation !== null);
+    expect($reservation)->not->toBeNull();
 
     $settled = app(SettleAiUsageReservationAction::class)->handle($reservation->id, 20, 10, CarbonImmutable::parse('2026-09-11 12:00 UTC'));
 

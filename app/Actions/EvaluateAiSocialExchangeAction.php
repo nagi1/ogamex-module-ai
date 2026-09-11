@@ -49,20 +49,21 @@ class EvaluateAiSocialExchangeAction
                 ->where('counterparty_player_id', $exchange->counterparty_player_id)
                 ->where('state', AiCommitmentState::Accepted)
                 ->count();
-            $evaluation = app(SocialCognition::class)->evaluateSocialExchange(new SocialExchangeContext(
-                $exchange->id,
-                $exchange->type,
-                $exchange->terms,
-                (float) $relationship?->trust,
-                (float) $relationship?->affinity,
-                (float) $relationship?->threat,
-                $outstandingCommitments,
-                max(0, $availableAmount),
-                $evaluatedAt,
-                $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
-                (float) $relationship?->respect,
-                (float) $relationship?->social_importance,
-            ));
+            $context = app()->makeWith(SocialExchangeContext::class, [
+                'exchangeId' => $exchange->id,
+                'type' => $exchange->type,
+                'terms' => $exchange->terms,
+                'trust' => (float) $relationship?->trust,
+                'affinity' => (float) $relationship?->affinity,
+                'threat' => (float) $relationship?->threat,
+                'outstandingCommitments' => $outstandingCommitments,
+                'availableAmount' => max(0, $availableAmount),
+                'evaluatedAt' => $evaluatedAt,
+                'dueAt' => $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
+                'respect' => (float) $relationship?->respect,
+                'socialImportance' => (float) $relationship?->social_importance,
+            ]);
+            $evaluation = app(SocialCognition::class)->evaluateSocialExchange($context);
 
             $exchange->update([
                 'state' => AiSocialExchangeState::Responded,
