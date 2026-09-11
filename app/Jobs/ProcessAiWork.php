@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
+use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiReceiptState;
@@ -107,7 +108,7 @@ class ProcessAiWork implements ShouldQueue
             ['idempotency_key' => $workItem->idempotency_key],
             ['player_id' => $workItem->player_id, 'action_type' => AiActionType::QueueBuilding, 'state' => AiReceiptState::Processing],
         );
-        if (in_array($receipt->state, [AiReceiptState::Completed, AiReceiptState::Rejected], true)) {
+        if (in_array($receipt->state, [AiReceiptState::Accepted, AiReceiptState::Completed, AiReceiptState::Rejected], true)) {
             $this->completeLease($workItem, $leaseToken);
 
             return;
@@ -115,7 +116,7 @@ class ProcessAiWork implements ShouldQueue
 
         $planetId = $this->ownedPlanetIdFor($workItem);
         if ($planetId === 0) {
-            $receipt->update(['state' => AiReceiptState::Rejected, 'result' => ['reason' => AiQueueActionReason::NoOwnedPlanet->value]]);
+            $receipt->update(['state' => AiReceiptState::Rejected, 'result' => [AiActionReceiptResultKey::Reason->value => AiQueueActionReason::NoOwnedPlanet->value]]);
             $this->completeLease($workItem, $leaseToken);
 
             return;
@@ -124,8 +125,13 @@ class ProcessAiWork implements ShouldQueue
         $choice = $buildFirstBuilding->choose($profile);
         $result = app(QueueAiBuilding::class)->handle($workItem->player_id, $planetId, $choice['building_id']);
         $receipt->update([
-            'state' => $result->successful ? AiReceiptState::Completed : AiReceiptState::Rejected,
-            'result' => ['queue_id' => $result->queueId, 'reason' => $result->reason, 'decision' => $choice],
+            'state' => $result->successful ? AiReceiptState::Accepted : AiReceiptState::Rejected,
+            'result' => [
+                AiActionReceiptResultKey::QueueId->value => $result->queueId,
+                AiActionReceiptResultKey::Reason->value => $result->reason,
+                AiActionReceiptResultKey::Decision->value => $choice,
+                AiActionReceiptResultKey::PlanetId->value => $planetId,
+            ],
         ]);
         $this->completeLease($workItem, $leaseToken);
     }

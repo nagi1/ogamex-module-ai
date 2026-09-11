@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Providers;
 
+use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\RunDueAiWork;
@@ -26,6 +27,7 @@ use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
 use Modules\AI\Domain\Experience\NativeExperienceEngine;
+use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
@@ -34,6 +36,7 @@ use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
+use OGame\Events\Game\BuildingCompleted;
 use OGame\Models\AllianceMember;
 use OGame\Models\ChatMessage;
 
@@ -60,6 +63,7 @@ class AIServiceProvider extends ModuleServiceProvider
         ChatMessage::observe(ObserveCommittedChatMessage::class);
         ChatMessage::observe(RedactDeletedChatMemory::class);
         AllianceMember::observe(ObserveCommittedAllianceMembership::class);
+        Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
     }
 
     public function register(): void

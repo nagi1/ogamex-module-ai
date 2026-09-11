@@ -8,4 +8,5 @@ enum AiObservationKind: int
     case DirectChatMessageReceived = 1;
     case AllianceMembershipJoined = 2;
     case AllianceMembershipLeft = 3;
+    case BuildingCompleted = 4;
 }

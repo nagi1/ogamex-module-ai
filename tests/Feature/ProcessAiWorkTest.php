@@ -2,13 +2,21 @@
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
+use Modules\AI\Actions\RecordAiBuildingCompletionExperienceAction;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
+use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiBuildingExperienceFeature;
+use Modules\AI\Enums\AiExperienceCaseFamily;
+use Modules\AI\Enums\AiExperienceOutcome;
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
@@ -16,13 +24,21 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Enums\FirstBuildingTarget;
 use Modules\AI\Jobs\ProcessAiWork;
+use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Models\AiActionReceipt;
+use Modules\AI\Models\AiExperienceCase;
+use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\AiClock;
+use Modules\AI\Support\SystemAiClock;
+use OGame\Events\Game\BuildingCompleted;
+use OGame\Factories\PlanetServiceFactory;
 use OGame\Models\Ban;
 use OGame\Models\BuildingQueue;
 use OGame\Models\Resources;
 use OGame\Models\User;
+use OGame\Services\PlayerGameStateService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -30,10 +46,15 @@ uses(IsolatedAccountTestCase::class);
 beforeEach(function (): void {
     app()->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
     app()->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
+    app()->bind(AiClock::class, SystemAiClock::class);
 });
 
 test('due building work is idempotent', function (): void {
-    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddResources(app()->makeWith(Resources::class, [
+        'metal' => 1_000_000,
+        'crystal' => 1_000_000,
+        'deuterium' => 1_000_000,
+    ]));
     aiWorkProfile($this->currentUserId);
     $work = aiBuildingWork($this->currentUserId, 'idempotent');
     $job = $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id]);
@@ -45,6 +66,100 @@ test('due building work is idempotent', function (): void {
 
     expect(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(1)
         ->and(AiActionReceipt::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
+});
+
+test('a completed host building queue retains one correlated upgrade experience', function (): void {
+    $this->planetAddResources(app()->makeWith(Resources::class, [
+        'metal' => 1_000_000,
+        'crystal' => 1_000_000,
+        'deuterium' => 1_000_000,
+    ]));
+    aiWorkProfile($this->currentUserId);
+    $work = aiBuildingWork($this->currentUserId, 'completed-outcome');
+
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle(app(BuildFirstBuilding::class));
+
+    $receipt = AiActionReceipt::query()->where('player_id', $this->currentUserId)->sole();
+    $queue = BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->sole();
+
+    expect($receipt->state)->toBe(AiReceiptState::Accepted)
+        ->and(AiExperienceCase::query()->where('player_id', $this->currentUserId)->exists())->toBeFalse();
+
+    Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
+    BuildingQueue::query()->whereKey($queue->id)->update(['time_end' => now()->subSecond()->getTimestamp()]);
+    $player = app(PlayerGameStateService::class)->advance($this->currentUserId, $this->currentPlanetId);
+    $planet = app(PlanetServiceFactory::class)->makeForPlayer($player, $this->currentPlanetId, false);
+    $planet->updateBuildingQueue();
+
+    $observation = AiObservation::query()
+        ->where('player_id', $this->currentUserId)
+        ->where('source_type', AiObservationSource::BuildingQueue)
+        ->where('source_id', $queue->id)
+        ->sole();
+    $case = AiExperienceCase::query()
+        ->where('player_id', $this->currentUserId)
+        ->where('outcome_observation_id', $observation->id)
+        ->sole();
+
+    expect($observation->kind)->toBe(AiObservationKind::BuildingCompleted)
+        ->and($case->family)->toBe(AiExperienceCaseFamily::BuildingUpgrade)
+        ->and($case->outcome)->toBe(AiExperienceOutcome::Succeeded)
+        ->and($case->features)->toMatchArray([
+            AiBuildingExperienceFeature::PlanetId->value => $this->currentPlanetId,
+            AiBuildingExperienceFeature::ObjectId->value => $queue->object_id,
+            AiBuildingExperienceFeature::TargetLevel->value => $queue->object_level_target,
+        ]);
+
+    $planet->updateBuildingQueue();
+
+    expect(AiExperienceCase::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
+
+    AiActionReceipt::create([
+        'player_id' => $this->currentUserId,
+        'idempotency_key' => 'ambiguous-completion:' . $this->currentUserId,
+        'action_type' => AiActionType::QueueBuilding,
+        'state' => AiReceiptState::Accepted,
+        'result' => [
+            AiActionReceiptResultKey::PlanetId->value => $this->currentPlanetId,
+            AiActionReceiptResultKey::QueueId->value => $queue->id,
+        ],
+    ]);
+
+    expect(app(RecordAiBuildingCompletionExperienceAction::class)->handle(
+        $this->currentPlanetId,
+        'metal_mine',
+        $queue->object_level_target,
+    ))->toBeNull()
+        ->and(AiExperienceCase::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
+});
+
+test('building completion correlation rejects absent and incomplete receipt evidence', function (): void {
+    $record = app(RecordAiBuildingCompletionExperienceAction::class);
+    $machineName = 'metal_mine';
+
+    expect($record->handle(PHP_INT_MAX, $machineName, 1))->toBeNull()
+        ->and($record->handle($this->currentPlanetId, $machineName, 1))->toBeNull();
+
+    AiActionReceipt::create([
+        'player_id' => $this->currentUserId,
+        'idempotency_key' => 'missing-queue-id:' . $this->currentUserId,
+        'action_type' => AiActionType::QueueBuilding,
+        'state' => AiReceiptState::Accepted,
+        'result' => [AiActionReceiptResultKey::PlanetId->value => $this->currentPlanetId],
+    ]);
+    AiActionReceipt::create([
+        'player_id' => $this->currentUserId,
+        'idempotency_key' => 'missing-queue:' . $this->currentUserId,
+        'action_type' => AiActionType::QueueBuilding,
+        'state' => AiReceiptState::Accepted,
+        'result' => [
+            AiActionReceiptResultKey::PlanetId->value => $this->currentPlanetId,
+            AiActionReceiptResultKey::QueueId->value => PHP_INT_MAX,
+        ],
+    ]);
+
+    expect($record->handle($this->currentPlanetId, $machineName, 1))->toBeNull()
+        ->and(AiExperienceCase::query()->where('player_id', $this->currentUserId)->exists())->toBeFalse();
 });
 
 test('an invalid owned planet is recorded as a rejected real action', function (): void {
@@ -142,7 +257,7 @@ test('future work stays pending and terminal receipts prevent a second action', 
         'player_id' => $this->currentUserId,
         'idempotency_key' => $terminal->idempotency_key,
         'action_type' => AiActionType::QueueBuilding,
-        'state' => AiReceiptState::Completed,
+        'state' => AiReceiptState::Accepted,
     ]);
 
     $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $future->id])->handle($this->app->make(BuildFirstBuilding::class));
