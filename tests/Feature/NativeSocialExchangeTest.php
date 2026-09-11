@@ -16,6 +16,7 @@ use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiObservation;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
@@ -90,6 +91,32 @@ test('an overdue exchange expires without creating a commitment', function (): v
     expect($expired->state)->toBe(AiSocialExchangeState::Expired)
         ->and($expired->commitment_id)->toBeNull();
 });
+
+test('an acknowledged low-threat apology is accepted without inventing a commitment', function (): void {
+    $counterparty = $this->createUser();
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 5004, AiSocialExchangeType::Apology, ['acknowledges_harm' => true]);
+    AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.3, 'affinity' => 0.3, 'threat' => 0.2, 'respect' => 0, 'social_importance' => 0, 'last_observation_id' => 5004, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
+
+    $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, CarbonImmutable::parse('2026-09-11 11:00 UTC'));
+
+    expect($evaluated?->response)->toBe(AiSocialResponse::Accept)
+        ->and($evaluated?->response_reason)->toBe('apology_acknowledged')
+        ->and($evaluated?->commitment_id)->toBeNull();
+});
+
+test('an unacknowledged or unsafe apology receives a bounded native response', function (array $terms, float $threat, AiSocialResponse $response): void {
+    $counterparty = $this->createUser();
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 5005 + (int) $threat, AiSocialExchangeType::Apology, $terms);
+    AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.8, 'affinity' => 0.8, 'threat' => $threat, 'respect' => 0, 'social_importance' => 0, 'last_observation_id' => $exchange->source_observation_id, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
+
+    $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, CarbonImmutable::parse('2026-09-11 11:00 UTC'));
+
+    expect($evaluated?->response)->toBe($response)
+        ->and($evaluated?->commitment_id)->toBeNull();
+})->with([
+    'missing acknowledgement' => [[], 0.1, AiSocialResponse::Clarify],
+    'unsafe history' => [['acknowledges_harm' => true], 0.8, AiSocialResponse::Reject],
+]);
 
 test('native social cognition keeps invalid, overcommitted, and uncertain requests distinct', function (): void {
     $evaluatedAt = CarbonImmutable::parse('2026-09-11 13:00:00 UTC');

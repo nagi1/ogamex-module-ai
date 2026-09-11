@@ -8,6 +8,7 @@ use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\SocialExchangeContext;
 use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiSocialExchangeState;
+use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiRelationship;
@@ -67,7 +68,7 @@ class EvaluateAiSocialExchangeAction
                 'revision' => $exchange->revision + 1,
             ]);
 
-            if ($evaluation->response !== AiSocialResponse::Accept) {
+            if ($evaluation->response !== AiSocialResponse::Accept || !$this->responseCreatesCommitment($exchange)) {
                 return $exchange->refresh();
             }
 
@@ -83,5 +84,10 @@ class EvaluateAiSocialExchangeAction
 
             return $exchange->refresh();
         });
+    }
+
+    private function responseCreatesCommitment(AiSocialExchange $exchange): bool
+    {
+        return $exchange->type === AiSocialExchangeType::HelpRequest;
     }
 }
