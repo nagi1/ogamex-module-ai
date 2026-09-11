@@ -31,7 +31,6 @@ use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
-use Modules\AI\Domain\Experience\NativeExperienceEngine;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
@@ -39,6 +38,7 @@ use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\ExperienceEngineSelector;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SystemAiClock;
@@ -92,7 +92,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
         $this->app->bind(AffectEngine::class, NativeAffectEngine::class);
-        $this->app->bind(ExperienceEngine::class, NativeExperienceEngine::class);
+        $this->app->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
         $this->app->bind(ContextBuilder::class, NativeContextBuilder::class);
         $this->app->bind(LongTermMemory::class, NativeLongTermMemory::class);
         $this->app->bind(LanguageGateway::class, fn (): LanguageGateway => (bool) config('ai.language.enabled', false)
