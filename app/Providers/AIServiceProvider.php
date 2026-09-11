@@ -26,6 +26,7 @@ use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
 use Modules\AI\Domain\Experience\NativeExperienceEngine;
+use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AiClock;
@@ -33,6 +34,7 @@ use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
+use OGame\Models\AllianceMember;
 use OGame\Models\ChatMessage;
 
 class AIServiceProvider extends ModuleServiceProvider
@@ -57,6 +59,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
         ChatMessage::observe(ObserveCommittedChatMessage::class);
         ChatMessage::observe(RedactDeletedChatMemory::class);
+        AllianceMember::observe(ObserveCommittedAllianceMembership::class);
     }
 
     public function register(): void

@@ -13,6 +13,8 @@ use Modules\AI\Actions\RecordAiCommitmentAction;
 use Modules\AI\Actions\RecordAiEmotionalEpisodeAction;
 use Modules\AI\Actions\RecordAiMemoryFactAction;
 use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
+use Modules\AI\Actions\RecordObservedAllianceMembershipEndAction;
+use Modules\AI\Actions\RecordObservedAllianceMembershipStartAction;
 use Modules\AI\Actions\RecordObservedChatMessageAction;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
@@ -32,6 +34,7 @@ use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\Alliance;
+use OGame\Models\AllianceMember;
 use OGame\Models\ChatMessage;
 use OGame\Models\User;
 use Tests\TestCase;
@@ -80,6 +83,7 @@ class CommittedChatObservationTestCase extends TestCase
                     ->orWhereIn('recipient_id', $this->createdPlayerIds);
             })
             ->forceDelete();
+        AllianceMember::query()->whereIn('user_id', $this->createdPlayerIds)->delete();
         Alliance::query()->whereKey($this->createdAllianceIds)->delete();
         User::query()->whereKey($this->createdPlayerIds)->delete();
 
@@ -171,6 +175,106 @@ test('a rolled back chat message never becomes an observation', function (): voi
     }
 
     expect(AiObservation::query()->where('player_id', $recipient->id)->exists())->toBeFalse();
+});
+
+test('committed alliance membership changes retain accepted facts only for legal AI observers', function (): void {
+    $joiningPlayer = $this->createChatPlayer();
+    $allianceAiPlayer = $this->createChatPlayer();
+    $outsideAiPlayer = $this->createChatPlayer();
+    $alliance = $this->createAlliance($joiningPlayer);
+    $this->createProfile($joiningPlayer);
+    $this->createProfile($allianceAiPlayer);
+    $this->createProfile($outsideAiPlayer);
+
+    DB::transaction(function () use ($alliance, $joiningPlayer, $allianceAiPlayer): void {
+        AllianceMember::create([
+            'alliance_id' => $alliance->id,
+            'user_id' => $joiningPlayer->id,
+            'joined_at' => now(),
+        ]);
+        AllianceMember::create([
+            'alliance_id' => $alliance->id,
+            'user_id' => $allianceAiPlayer->id,
+            'joined_at' => now(),
+        ]);
+        User::query()->whereKey($joiningPlayer->id)->update(['alliance_id' => $alliance->id]);
+        User::query()->whereKey($allianceAiPlayer->id)->update(['alliance_id' => $alliance->id]);
+    });
+
+    $joiningFact = AiMemoryFact::query()
+        ->where('player_id', $allianceAiPlayer->id)
+        ->where('subject_player_id', $joiningPlayer->id)
+        ->where('predicate', AiMemoryPredicate::AllianceMembership)
+        ->sole();
+
+    expect($joiningFact->value)->toBe(['alliance_id' => $alliance->id])
+        ->and($joiningFact->evidence_kind)->toBe(AiMemoryEvidenceKind::Verified)
+        ->and(AiObservation::query()->where('player_id', $outsideAiPlayer->id)->exists())->toBeFalse();
+
+    $joiningMembership = AllianceMember::query()->where('user_id', $joiningPlayer->id)->sole();
+
+    expect(app(RecordObservedAllianceMembershipStartAction::class)->handle($joiningMembership->id))->toBe(0);
+
+    DB::transaction(function () use ($joiningPlayer): void {
+        AllianceMember::query()->where('user_id', $joiningPlayer->id)->sole()->delete();
+        User::query()->whereKey($joiningPlayer->id)->update(['alliance_id' => null]);
+    });
+
+    $currentFact = AiMemoryFact::query()
+        ->where('player_id', $allianceAiPlayer->id)
+        ->where('subject_player_id', $joiningPlayer->id)
+        ->where('predicate', AiMemoryPredicate::AllianceMembership)
+        ->orderByDesc('id')
+        ->firstOrFail();
+
+    expect($joiningFact->fresh()?->valid_to)->not->toBeNull()
+        ->and($currentFact->value)->toBe(['alliance_id' => null])
+        ->and($currentFact->sourceObservation?->source_type)->toBe(AiObservationSource::AllianceMembershipLeft)
+        ->and(AiObservation::query()->where('player_id', $outsideAiPlayer->id)->exists())->toBeFalse()
+        ->and(app(RecordObservedAllianceMembershipEndAction::class)->handle(
+            $currentFact->sourceObservation?->source_id ?? 0,
+            $joiningPlayer->id,
+            $alliance->id,
+            CarbonImmutable::instance($currentFact->sourceObservation?->source_time ?? now()),
+        ))->toBe(0);
+});
+
+test('a rolled back alliance membership transition is not observed', function (): void {
+    $joiningPlayer = $this->createChatPlayer();
+    $alliance = $this->createAlliance($joiningPlayer);
+    $this->createProfile($joiningPlayer);
+
+    try {
+        DB::transaction(function () use ($alliance, $joiningPlayer): void {
+            AllianceMember::create([
+                'alliance_id' => $alliance->id,
+                'user_id' => $joiningPlayer->id,
+                'joined_at' => now(),
+            ]);
+            User::query()->whereKey($joiningPlayer->id)->update(['alliance_id' => $alliance->id]);
+
+            throw new RuntimeException('Force the transition to roll back.');
+        });
+    } catch (RuntimeException) {
+    }
+
+    expect(AiObservation::query()->where('source_type', AiObservationSource::AllianceMembershipJoined)->exists())->toBeFalse();
+});
+
+test('stale alliance membership sources do not create membership facts', function (): void {
+    $player = $this->createChatPlayer();
+    $alliance = $this->createAlliance($player);
+    $this->createProfile($player);
+    $membership = AllianceMember::withoutEvents(fn (): AllianceMember => AllianceMember::create([
+        'alliance_id' => $alliance->id,
+        'user_id' => $player->id,
+        'joined_at' => now(),
+    ]));
+
+    expect(app(RecordObservedAllianceMembershipStartAction::class)->handle($membership->id))->toBe(0)
+        ->and(app(RecordObservedAllianceMembershipStartAction::class)->handle(PHP_INT_MAX))->toBe(0)
+        ->and(app(RecordObservedAllianceMembershipEndAction::class)->handle($membership->id, $player->id, $alliance->id, CarbonImmutable::now()))->toBe(0)
+        ->and(AiMemoryFact::query()->where('player_id', $player->id)->exists())->toBeFalse();
 });
 
 test('retrying a source does not duplicate or rewrite its observation', function (): void {

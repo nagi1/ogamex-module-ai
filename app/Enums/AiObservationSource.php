@@ -6,4 +6,6 @@ namespace Modules\AI\Enums;
 enum AiObservationSource: int
 {
     case ChatMessage = 1;
+    case AllianceMembershipJoined = 2;
+    case AllianceMembershipLeft = 3;
 }
