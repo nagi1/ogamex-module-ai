@@ -1,72 +1,89 @@
 #!/usr/bin/env bash
 #
-# Real end-to-end trial for the AI module's queue, Horizon, supervisor and
-# container wiring. Runs inside the local-docker-dev application container:
+# Real end-to-end trial for the AI module's queue, Horizon, supervisor and container
+# wiring. Runs inside the local-docker-dev application container:
 #
 #   docker compose exec -T ogamex-app bash Modules/AI/scripts/e2e-queue-horizon.sh
 #
-# It never edits the tracked modules_statuses.json: it points the module activator
-# at throwaway status files and restores everything on exit.
+# It never edits the tracked modules_statuses.json: every command runs against a
+# throwaway status file, and the shared test database and Redis are restored on exit.
 set -uo pipefail
 
 APP_ROOT="${OGAMEX_ROOT:-/var/www}"
-ARTISAN="php ${APP_ROOT}/artisan"
 STATUSES="${APP_ROOT}/modules_statuses.json"
 BACKUP="/tmp/e2e-statuses.backup.json"
 ON="/tmp/e2e-ai-on.json"
 OFF="/tmp/e2e-ai-off.json"
 QUEUE_CONF="/tmp/e2e-queue-worker.conf"
 SUPERVISORD_CONF="/tmp/e2e-supervisord.conf"
+SCRATCH="/tmp/e2e-modules"
+SCRATCH_ON="/tmp/e2e-scratch-on.json"
+SCRATCH_OFF="/tmp/e2e-scratch-off.json"
+SCRATCH_OUT="/tmp/e2e-scratch-queue.conf"
+CYCLE="/tmp/e2e-cycle.json"
+DROP_STATUS="/tmp/e2e-drop.json"
 HORIZON_PID=""
 
 FAILS=0
 pass() { printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAILS=$((FAILS + 1)); }
 step() { printf '\n== %s ==\n' "$1"; }
-check() { if [ "$1" = "0" ]; then pass "$2"; else fail "$2"; fi; }
-expect_failure() { if [ "$1" = "0" ]; then fail "$2"; else pass "$2"; fi; }
+
+# Long command output is captured and matched with bash patterns instead of `grep -q`:
+# a pipeline ending in a fast-exiting grep makes the upstream command report a pipe
+# error under pipefail even when the pattern matched.
+assert_contains() { if [[ "$2" == *"$3"* ]]; then pass "$1"; else fail "$1 (missing: $3)"; fi; }
+assert_absent() { if [[ "$2" != *"$3"* ]]; then pass "$1"; else fail "$1 (unexpected: $3)"; fi; }
+assert_empty() { if [ -z "$2" ]; then pass "$1"; else fail "$1 (got: $2)"; fi; }
+assert_nonempty() { if [ -n "$2" ]; then pass "$1"; else fail "$1 (nothing found)"; fi; }
+assert_ok() { if [ "$2" = 0 ]; then pass "$1"; else fail "$1 (failed)"; fi; }
+assert_failed() { if [ "$2" != 0 ]; then pass "$1"; else fail "$1 (unexpectedly succeeded)"; fi; }
+assert_enabled() { if module_enabled "$2" "$3"; then pass "$1"; else fail "$1 (module is disabled)"; fi; }
+assert_disabled() { if module_enabled "$2" "$3"; then fail "$1 (module is still enabled)"; else pass "$1"; fi; }
+
+artisan() { MODULES_STATUSES_FILE="$1" php "${APP_ROOT}/artisan" "${@:2}" 2>&1; }
+artisan_redis() { MODULES_STATUSES_FILE="$1" QUEUE_CONNECTION=redis php "${APP_ROOT}/artisan" "${@:2}" 2>&1; }
+module_enabled() { php -r 'exit((json_decode((string) file_get_contents($argv[1]), true)[$argv[2]] ?? false) ? 0 : 1);' "$1" "$2"; }
 
 # Drive the real host loader with an explicit module root and status file.
-loader_append_config() {
-    MODULES_ROOT="$2" MODULES_STATUSES_FILE="$3" sh -c '. '"${APP_ROOT}"'/docker/module-hooks.sh; append_module_supervisor_config "$1"' e2e-target "$1"
+loader_append() {
+    local target="$1" root="$2" statuses="$3"
+    : > "$target"
+    MODULES_ROOT="$root" MODULES_STATUSES_FILE="$statuses" \
+        sh -c ". '${APP_ROOT}'/docker/module-hooks.sh; append_module_supervisor_config \"\$1\"" e2e "$target"
 }
 
-loader_entrypoint_hooks() {
-    MODULES_ROOT="$1" MODULES_STATUSES_FILE="$2" sh -c '. '"${APP_ROOT}"'/docker/module-hooks.sh; run_module_entrypoint_hooks queue'
+loader_hooks() {
+    MODULES_ROOT="$1" MODULES_STATUSES_FILE="$2" sh -c ". '${APP_ROOT}'/docker/module-hooks.sh; run_module_entrypoint_hooks queue"
 }
 
-status_enabled() {
-    php -r 'exit((json_decode((string) file_get_contents($argv[1]), true)[$argv[2]] ?? false) ? 0 : 1);' "$1" "$2"
-}
-
-# Number of module tables in the connected database, so a drop-data run can be
-# proven to remove (and a re-install to recreate) the real schema.
+# Module tables in the connected database, so a drop-data run can be proven to remove
+# and a re-install to recreate the real schema.
 ai_table_count() {
     mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT:-3306}" -u "${DB_USERNAME}" ${DB_PASSWORD:+-p${DB_PASSWORD}} -N \
         -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_DATABASE}' AND MID(table_name, 1, 3) = 'ai_';" 2>/dev/null
 }
 
 cleanup() {
-    if [ -n "$HORIZON_PID" ]; then kill "$HORIZON_PID" >/dev/null 2>&1 || true; fi
-    if [ -n "${JOB_HORIZON_PID:-}" ]; then kill "$JOB_HORIZON_PID" >/dev/null 2>&1 || true; fi
+    for pid in "$HORIZON_PID" "${JOB_HORIZON_PID:-}"; do
+        [ -n "$pid" ] && kill "$pid" >/dev/null 2>&1
+    done
+
     php "${APP_ROOT}/artisan" horizon:terminate >/dev/null 2>&1 || true
-    if [ -f "$SUPERVISORD_CONF" ]; then supervisorctl -c "$SUPERVISORD_CONF" shutdown >/dev/null 2>&1 || true; fi
+    [ -f "$SUPERVISORD_CONF" ] && supervisorctl -c "$SUPERVISORD_CONF" shutdown >/dev/null 2>&1
     php "${APP_ROOT}/artisan" config:clear >/dev/null 2>&1 || true
-    if [ -f "$BACKUP" ]; then cp "$BACKUP" "$STATUSES"; fi
+    [ -f "$BACKUP" ] && cp "$BACKUP" "$STATUSES"
 
     # A drop-data run must never leave the shared test database without the module
     # schema, even when the trial is interrupted half way through.
-    if [ "${DROPPED:-0}" = "1" ]; then
-        MODULES_STATUSES_FILE="${DROP_STATUS:-/tmp/e2e-drop.json}" php "${APP_ROOT}/artisan" module:migrate AI --force >/dev/null 2>&1 || true
-    fi
+    MODULES_STATUSES_FILE="$DROP_STATUS" php "${APP_ROOT}/artisan" module:migrate AI --force >/dev/null 2>&1 || true
 
     # The job-throughput step creates one work item and, when needed, one profile.
     if [ -n "${WORK_ITEM_ID:-}" ]; then
         QUEUE_CONNECTION=redis php "${APP_ROOT}/Modules/AI/scripts/e2e-dispatch-ai-job.php" cleanup "$WORK_ITEM_ID" "${PROFILE_ID:-0}" >/dev/null 2>&1 || true
     fi
 
-    rm -rf "$ON" "$OFF" "$BACKUP" "$QUEUE_CONF" "$SUPERVISORD_CONF" /tmp/e2e-modules /tmp/e2e-cycle.json /tmp/e2e-cycle-queue.conf /tmp/e2e-missing-dir /tmp/e2e-scratch-on.json /tmp/e2e-scratch-off.json /tmp/e2e-scratch-queue.conf /tmp/e2e-scratch-bad.json /tmp/e2e-scratch-dir /tmp/e2e-scratch-other.json /tmp/e2e-scratch-php.err /tmp/e2e-dry.json /tmp/e2e-drop.json
-    rm -f /tmp/e2e-*.log
+    rm -rf "$ON" "$OFF" "$BACKUP" "$QUEUE_CONF" "$SUPERVISORD_CONF" "$SCRATCH" "$CYCLE" "$DROP_STATUS" "$SCRATCH_ON" "$SCRATCH_OFF" "$SCRATCH_OUT" /tmp/e2e-modules /tmp/e2e-scratch-* /tmp/e2e-*.log /tmp/e2e-supervisord.*
 }
 trap cleanup EXIT
 
@@ -78,36 +95,24 @@ php "${APP_ROOT}/artisan" config:clear >/dev/null 2>&1 || true
 echo "AI module E2E — queue / Horizon / supervisor / loader"
 
 step "1. Runtime readiness"
-php -m | grep -qx redis; check $? "phpredis extension is loaded"
-HORIZON_STATUS="$(php "${APP_ROOT}/artisan" horizon:status 2>&1 || true)"
-if echo "$HORIZON_STATUS" | grep -Eq "Horizon is (in)?active"; then
-    pass "Horizon reaches Redis"
-else
-    fail "Horizon cannot reach Redis: $(echo "$HORIZON_STATUS" | head -2 | tr '\n' ' ')"
-fi
+assert_ok "phpredis extension is loaded" "$(php -m | grep -qx redis && echo 0 || echo 1)"
+assert_contains "Horizon reaches Redis" "$(artisan_redis "$OFF" horizon:status)" "Horizon is"
 
 step "2. Disabled module leaves no trace"
-if MODULES_STATUSES_FILE="$OFF" APP_ENV=production php "${APP_ROOT}/artisan" config:show horizon 2>&1 | grep -q "supervisor-ai"; then
-    fail "horizon config has AI lanes while disabled"
-else
-    pass "horizon config has no AI lanes while disabled"
-fi
-
-MODULES_STATUSES_FILE="$OFF" MODULES_ROOT="${APP_ROOT}/Modules" sh -c ". ${APP_ROOT}/docker/module-hooks.sh; : > '${QUEUE_CONF}'; append_module_supervisor_config '${QUEUE_CONF}'"
-if grep -q "program:ai-queue-worker" "$QUEUE_CONF"; then fail "disabled module contributed a worker pool"; else pass "disabled module contributes no worker pool"; fi
+assert_absent "horizon config has no AI lanes while disabled" \
+    "$(MODULES_STATUSES_FILE="$OFF" APP_ENV=production php "${APP_ROOT}/artisan" config:show horizon 2>&1)" "supervisor-ai"
+assert_ok "loader accepts a disabled module" "$(loader_append "$QUEUE_CONF" "${APP_ROOT}/Modules" "$OFF" && echo 0 || echo 1)"
+assert_empty "disabled module contributes no worker pool" "$(cat "$QUEUE_CONF")"
 
 step "3. Enabled module registers redis Horizon lanes"
 for environment in production staging local qa; do
-    if MODULES_STATUSES_FILE="$ON" APP_ENV="$environment" php "${APP_ROOT}/artisan" config:show horizon 2>&1 | grep -q "supervisor-ai-language"; then
-        pass "AI lanes present for APP_ENV=$environment"
-    else
-        fail "AI lanes missing for APP_ENV=$environment"
-    fi
+    assert_contains "AI lanes present for APP_ENV=${environment}" \
+        "$(MODULES_STATUSES_FILE="$ON" APP_ENV="$environment" php "${APP_ROOT}/artisan" config:show horizon 2>&1)" "supervisor-ai-language"
 done
 
 step "4. Generated supervisor pool actually starts the AI worker"
-MODULES_STATUSES_FILE="$ON" MODULES_ROOT="${APP_ROOT}/Modules" sh -c ". ${APP_ROOT}/docker/module-hooks.sh; : > '${QUEUE_CONF}'; append_module_supervisor_config '${QUEUE_CONF}'"
-if grep -q "program:ai-queue-worker" "$QUEUE_CONF"; then pass "enabled module contributed its worker pool"; else fail "enabled module did not contribute a worker pool"; fi
+loader_append "$QUEUE_CONF" "${APP_ROOT}/Modules" "$ON"
+assert_contains "enabled module contributed its worker pool" "$(cat "$QUEUE_CONF")" "program:ai-queue-worker"
 
 cat > "$SUPERVISORD_CONF" <<EOF
 [supervisord]
@@ -128,213 +133,171 @@ cat "$QUEUE_CONF" >> "$SUPERVISORD_CONF"
 
 supervisord -c "$SUPERVISORD_CONF" >/tmp/e2e-supervisord.out 2>&1
 sleep 3
-if supervisorctl -c "$SUPERVISORD_CONF" status 2>&1 | grep -q "ai-queue-worker.*RUNNING"; then
-    pass "generated supervisor config starts ai-queue-worker"
-else
-    fail "ai-queue-worker did not start; see /tmp/e2e-supervisord.log"
-    supervisorctl -c "$SUPERVISORD_CONF" status 2>&1 | sed 's/^/    /'
-fi
+STATUS_OUT="$(supervisorctl -c "$SUPERVISORD_CONF" status 2>&1)"
+assert_contains "generated supervisor config starts ai-queue-worker" "$STATUS_OUT" "ai-queue-worker"
+[ -n "$STATUS_OUT" ] || printf '%s\n' "    see /tmp/e2e-supervisord.log"
 supervisorctl -c "$SUPERVISORD_CONF" shutdown >/dev/null 2>&1 || true
 
 step "5. Horizon provisions the AI supervisors for real"
 MODULES_STATUSES_FILE="$ON" php "${APP_ROOT}/artisan" horizon >/tmp/e2e-horizon.log 2>&1 &
 HORIZON_PID=$!
 sleep 12
-SUPERVISORS="$(php "${APP_ROOT}/artisan" horizon:supervisors 2>&1 || true)"
-if echo "$SUPERVISORS" | grep -q "supervisor-ai"; then pass "Horizon provisioned supervisor-ai"; else fail "Horizon did not provision supervisor-ai"; echo "$SUPERVISORS" | sed 's/^/    /'; fi
-if echo "$SUPERVISORS" | grep -q "supervisor-ai-language"; then pass "Horizon provisioned supervisor-ai-language"; else fail "Horizon did not provision supervisor-ai-language"; fi
+SUPERVISORS="$(artisan_redis "$ON" horizon:supervisors)"
+assert_contains "Horizon provisioned supervisor-ai" "$SUPERVISORS" "supervisor-ai"
+assert_contains "Horizon provisioned supervisor-ai-language" "$SUPERVISORS" "supervisor-ai-language"
 php "${APP_ROOT}/artisan" horizon:terminate >/dev/null 2>&1 || true
 sleep 2
 kill "$HORIZON_PID" >/dev/null 2>&1 || true
 HORIZON_PID=""
 
 step "6. Loader edge cases (scratch module root)"
-SCRATCH="/tmp/e2e-modules"
-SCRATCH_ON="/tmp/e2e-scratch-on.json"
-SCRATCH_OFF="/tmp/e2e-scratch-off.json"
-SCRATCH_OUT="/tmp/e2e-scratch-queue.conf"
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH/Fake/docker/supervisor/dir-fragment.conf" "$SCRATCH/Fake/docker/entrypoint.d"
 printf '[program:fake-worker]\ncommand=sleep 3600\n' > "$SCRATCH/Fake/docker/supervisor/fake.conf"
 printf 'echo "entrypoint hook ran for role=$role"\n' > "$SCRATCH/Fake/docker/entrypoint.d/10-fake.sh"
 printf '{"Fake": true}' > "$SCRATCH_ON"
 printf '{"Fake": false}' > "$SCRATCH_OFF"
+printf 'not json at all' > /tmp/e2e-scratch-bad.json
+mkdir -p /tmp/e2e-scratch-dir
+
+assert_ok "loader accepts an enabled scratch module" "$(loader_append "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_ON" && echo 0 || echo 1)"
+assert_contains "enabled scratch module contributed its fragment" "$(cat "$SCRATCH_OUT")" "program:fake-worker"
+assert_contains "the contribution is attributed to the module" "$(cat "$SCRATCH_OUT")" "contributed by module Fake"
+assert_absent "a directory named *.conf is skipped" "$(cat "$SCRATCH_OUT")" "dir-fragment"
+
+assert_ok "loader accepts a disabled scratch module" "$(loader_append "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_OFF" && echo 0 || echo 1)"
+assert_empty "disabled scratch module contributes nothing" "$(cat "$SCRATCH_OUT")"
+
+assert_ok "loader survives a missing status file" "$(loader_append "$SCRATCH_OUT" "$SCRATCH" /tmp/e2e-does-not-exist.json && echo 0 || echo 1)"
+assert_empty "a missing status file contributes nothing" "$(cat "$SCRATCH_OUT")"
+
+assert_ok "loader survives a malformed status file" "$(loader_append "$SCRATCH_OUT" "$SCRATCH" /tmp/e2e-scratch-bad.json && echo 0 || echo 1)"
+assert_empty "a malformed status file contributes nothing" "$(cat "$SCRATCH_OUT")"
+
+printf '{"Other": true}' > /tmp/e2e-scratch-other.json
+assert_ok "loader ignores a module without a status entry" "$(loader_append "$SCRATCH_OUT" "$SCRATCH" /tmp/e2e-scratch-other.json && echo 0 || echo 1)"
+assert_empty "a module without a status entry contributes nothing" "$(cat "$SCRATCH_OUT")"
+
+assert_ok "loader survives a status path that is a directory" "$(loader_append "$SCRATCH_OUT" "$SCRATCH" /tmp/e2e-scratch-dir && echo 0 || echo 1)"
+assert_empty "a directory status path contributes nothing" "$(cat "$SCRATCH_OUT")"
+
+LOADER_ERR="$(loader_append /tmp/e2e-missing-dir/queue.conf "$SCRATCH" "$SCRATCH_ON" 2>&1)"; LOADER_STATUS=$?
+assert_failed "loader fails when the supervisor target cannot be written" "$LOADER_STATUS"
+assert_contains "the failure names the unwritable target" "$LOADER_ERR" "not writable"
+
+assert_contains "entrypoint hook runs for an enabled module" "$(loader_hooks "$SCRATCH" "$SCRATCH_ON")" "entrypoint hook ran for role=queue"
+assert_empty "entrypoint hook is skipped while disabled" "$(loader_hooks "$SCRATCH" "$SCRATCH_OFF")"
 
 : > "$SCRATCH_OUT"
-loader_append_config "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_ON"; check $? "loader accepts an enabled scratch module"
-if grep -q "program:fake-worker" "$SCRATCH_OUT"; then pass "enabled scratch module contributed its fragment"; else fail "enabled scratch module contributed nothing"; fi
-if grep -q "contributed by module Fake" "$SCRATCH_OUT"; then pass "contribution is attributed to the module"; else fail "contribution marker missing"; fi
-if grep -q "dir-fragment" "$SCRATCH_OUT"; then fail "a directory named *.conf was read as a fragment"; else pass "a directory named *.conf is skipped"; fi
-
-: > "$SCRATCH_OUT"
-loader_append_config "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_OFF"; check $? "loader accepts a disabled scratch module"
-if [ -s "$SCRATCH_OUT" ]; then fail "disabled scratch module contributed config"; else pass "disabled scratch module contributes nothing"; fi
-
-: > "$SCRATCH_OUT"
-loader_append_config "$SCRATCH_OUT" "$SCRATCH" "/tmp/e2e-does-not-exist.json"; check $? "loader survives a missing status file"
-if [ -s "$SCRATCH_OUT" ]; then fail "missing status file still contributed config"; else pass "missing status file contributes nothing"; fi
-
-LOADER_ERR="$(loader_append_config "/tmp/e2e-missing-dir/queue.conf" "$SCRATCH" "$SCRATCH_ON" 2>&1)"
-LOADER_STATUS=$?
-expect_failure $LOADER_STATUS "loader fails when the supervisor target cannot be written"
-if echo "$LOADER_ERR" | grep -q "not writable"; then pass "the failure names the unwritable target"; else fail "the failure does not explain the unwritable target"; fi
-
-HOOKS_ON="$(loader_entrypoint_hooks "$SCRATCH" "$SCRATCH_ON")"
-if echo "$HOOKS_ON" | grep -q "entrypoint hook ran for role=queue"; then pass "entrypoint hook runs for an enabled module"; else fail "entrypoint hook did not run for an enabled module"; fi
-HOOKS_OFF="$(loader_entrypoint_hooks "$SCRATCH" "$SCRATCH_OFF")"
-if echo "$HOOKS_OFF" | grep -q "entrypoint hook ran"; then fail "entrypoint hook ran for a disabled module"; else pass "entrypoint hook is skipped while disabled"; fi
-
-SCRATCH_BAD="/tmp/e2e-scratch-bad.json"
-SCRATCH_OTHER="/tmp/e2e-scratch-other.json"
-SCRATCH_DIR="/tmp/e2e-scratch-dir"
-SCRATCH_PHP_ERR="/tmp/e2e-scratch-php.err"
-printf 'not json at all' > "$SCRATCH_BAD"
-printf '{"Other": true}' > "$SCRATCH_OTHER"
-mkdir -p "$SCRATCH_DIR"
-
-: > "$SCRATCH_OUT"
-loader_append_config "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_BAD"; check $? "loader survives a malformed status file"
-if [ -s "$SCRATCH_OUT" ]; then fail "a malformed status file still contributed config"; else pass "a malformed status file contributes nothing"; fi
-
-: > "$SCRATCH_OUT"
-loader_append_config "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_OTHER"; check $? "loader ignores modules that are absent from the status file"
-if [ -s "$SCRATCH_OUT" ]; then fail "a module without a status entry still contributed config"; else pass "a module without a status entry contributes nothing"; fi
-
-: > "$SCRATCH_OUT"
-loader_append_config "$SCRATCH_OUT" "$SCRATCH" "$SCRATCH_DIR"; check $? "loader survives a status path that is a directory"
-if [ -s "$SCRATCH_OUT" ]; then fail "a directory status path still contributed config"; else pass "a directory status path contributes nothing"; fi
-
-: > "$SCRATCH_OUT"
-MODULES_ROOT="$SCRATCH" MODULES_STATUSES_FILE="$SCRATCH_ON" sh -c "PATH=/nonexistent; . ${APP_ROOT}/docker/module-hooks.sh; append_module_supervisor_config '$SCRATCH_OUT'" 2>"$SCRATCH_PHP_ERR"
-if [ -s "$SCRATCH_OUT" ]; then fail "a module was applied without php available"; else pass "a missing php binary degrades to no contribution"; fi
-if grep -q "php is not available" "$SCRATCH_PHP_ERR"; then pass "the missing php binary is explained on stderr"; else fail "the missing php binary is not explained: $(head -2 "$SCRATCH_PHP_ERR" | tr '\n' ' ')"; fi
+MODULES_ROOT="$SCRATCH" MODULES_STATUSES_FILE="$SCRATCH_ON" sh -c "PATH=/nonexistent; . ${APP_ROOT}/docker/module-hooks.sh; append_module_supervisor_config '$SCRATCH_OUT'" 2>/tmp/e2e-scratch-php.err
+assert_empty "a missing php binary degrades to no contribution" "$(cat "$SCRATCH_OUT")"
+assert_contains "the missing php binary is explained on stderr" "$(cat /tmp/e2e-scratch-php.err)" "php is not available"
 
 step "7. Failure paths explain themselves"
-MISSING_OUT="$(MODULES_STATUSES_FILE="$OFF" php "${APP_ROOT}/artisan" ogamex:module:install NotARealModule 2>&1)"
-MISSING_STATUS=$?
-expect_failure $MISSING_STATUS "install fails for an unknown module"
-echo "$MISSING_OUT" | grep -q "was not found"; check $? "the failure names the unknown module"
-echo "$MISSING_OUT" | grep -q "module:list"; check $? "the failure points at module:list"
+assert_contains "install fails for an unknown module by name" "$(artisan "$OFF" ogamex:module:install NotARealModule)" "was not found"
+assert_contains "the failure points at module:list" "$(artisan "$OFF" ogamex:module:install NotARealModule)" "module:list"
 
-DEAD_REDIS_OUT="$(MODULES_STATUSES_FILE="$OFF" QUEUE_CONNECTION=redis REDIS_HOST=127.0.0.1 REDIS_PORT=1 php "${APP_ROOT}/artisan" ogamex:module:install AI --dry-run 2>&1)"
-DEAD_REDIS_STATUS=$?
-expect_failure $DEAD_REDIS_STATUS "install fails when Redis cannot be reached"
-echo "$DEAD_REDIS_OUT" | grep -qi "Redis connection failed"; check $? "the failure names the Redis connection"
-echo "$DEAD_REDIS_OUT" | grep -q "could not be verified"; check $? "the failure says that nothing was changed"
-echo "$DEAD_REDIS_OUT" | grep -q "ogamex:module:doctor"; check $? "the failure points at the doctor command"
+DEAD_REDIS="$(MODULES_STATUSES_FILE="$OFF" QUEUE_CONNECTION=redis REDIS_HOST=127.0.0.1 REDIS_PORT=1 php "${APP_ROOT}/artisan" ogamex:module:install AI --dry-run 2>&1)"; DEAD_REDIS_STATUS=$?
+assert_failed "install fails when Redis cannot be reached" "$DEAD_REDIS_STATUS"
+assert_contains "the failure names the Redis connection" "$DEAD_REDIS" "Redis connection failed"
+assert_contains "the failure says that nothing was changed" "$DEAD_REDIS" "could not be verified"
+assert_contains "the failure points at the doctor command" "$DEAD_REDIS" "ogamex:module:doctor"
 
-DOCTOR_DEAD="$(MODULES_STATUSES_FILE="$OFF" QUEUE_CONNECTION=redis REDIS_HOST=127.0.0.1 REDIS_PORT=1 php "${APP_ROOT}/artisan" ogamex:module:doctor AI 2>&1)"
-DOCTOR_DEAD_STATUS=$?
-expect_failure $DOCTOR_DEAD_STATUS "the doctor exits non-zero for a broken environment"
-echo "$DOCTOR_DEAD" | grep -q "blocking problem"; check $? "the doctor summarises the blocking problems"
+DOCTOR_DEAD="$(MODULES_STATUSES_FILE="$OFF" QUEUE_CONNECTION=redis REDIS_HOST=127.0.0.1 REDIS_PORT=1 php "${APP_ROOT}/artisan" ogamex:module:doctor AI 2>&1)"; DOCTOR_DEAD_STATUS=$?
+assert_failed "the doctor exits non-zero for a broken environment" "$DOCTOR_DEAD_STATUS"
+assert_contains "the doctor summarises the blocking problems" "$DOCTOR_DEAD" "blocking problem"
 
-DOCTOR_OK="$(MODULES_STATUSES_FILE="$OFF" php "${APP_ROOT}/artisan" ogamex:module:doctor AI 2>&1)"
-DOCTOR_OK_STATUS=$?
-check $DOCTOR_OK_STATUS "the doctor exits zero for a healthy environment"
-echo "$DOCTOR_OK" | grep -q "disabled"; check $? "the doctor explains that the module is disabled"
+DOCTOR_OK="$(artisan "$OFF" ogamex:module:doctor AI)"; DOCTOR_OK_STATUS=$?
+assert_ok "the doctor exits zero for a healthy environment" "$DOCTOR_OK_STATUS"
+assert_contains "the doctor explains that the module is disabled" "$DOCTOR_OK" "disabled"
 
-DRY_STATUS_FILE="/tmp/e2e-dry.json"
-printf '{"HelloWorld": false}' > "$DRY_STATUS_FILE"
-MODULES_STATUSES_FILE="$DRY_STATUS_FILE" php "${APP_ROOT}/artisan" ogamex:module:install AI --dry-run >/dev/null 2>&1
-status_enabled "$DRY_STATUS_FILE" AI; expect_failure $? "a dry run does not enable the module"
-if grep -q '"AI": true' "$DRY_STATUS_FILE"; then fail "a dry run rewrote the status file"; else pass "a dry run leaves the status file untouched"; fi
-
-step "8. Install/uninstall dry runs verify docker + shell + redis"
-INSTALL_OUT="$(MODULES_STATUSES_FILE="$OFF" php "${APP_ROOT}/artisan" ogamex:module:install AI --dry-run 2>&1)"
-echo "$INSTALL_OUT" | grep -q "Verify the runtime and container wiring"; check $? "install verifies the runtime and container wiring"
-echo "$INSTALL_OUT" | grep -q "Supervisor fragment: docker/supervisor"; check $? "install reports the discovered supervisor fragment"
-echo "$INSTALL_OUT" | grep -q "Queue driver: database"; check $? "install reports the database queue driver"
-
-REDIS_OUT="$(MODULES_STATUSES_FILE="$OFF" QUEUE_CONNECTION=redis php "${APP_ROOT}/artisan" ogamex:module:install AI --dry-run 2>&1)"
-echo "$REDIS_OUT" | grep -q "Queue driver: redis"; check $? "install detects the redis queue driver"
-echo "$REDIS_OUT" | grep -q "phpredis extension: loaded"; check $? "install detects phpredis"
-echo "$REDIS_OUT" | grep -q "Redis connection: reachable"; check $? "install verifies Redis is reachable"
-
-UNINSTALL_OUT="$(MODULES_STATUSES_FILE="$ON" php "${APP_ROOT}/artisan" ogamex:module:uninstall AI --dry-run 2>&1)"
-echo "$UNINSTALL_OUT" | grep -q "Report container cleanup"; check $? "uninstall reports the container cleanup step"
-echo "$UNINSTALL_OUT" | grep -q "Supervisor fragment: docker/supervisor"; check $? "uninstall reports the discovered supervisor fragment"
-echo "$UNINSTALL_OUT" | grep -q "keeps its data"; check $? "uninstall explains that data is retained"
-step "9. Real install/uninstall cycle on a throwaway status file"
-CYCLE="/tmp/e2e-cycle.json"
-CACHE="${APP_ROOT}/bootstrap/cache/config.php"
 printf '{"HelloWorld": false}' > "$CYCLE"
+MODULES_STATUSES_FILE="$CYCLE" php "${APP_ROOT}/artisan" ogamex:module:install AI --dry-run >/dev/null 2>&1
+assert_disabled "a dry run does not enable the module" "$CYCLE" AI
+assert_absent "a dry run leaves the status file untouched" "$(cat "$CYCLE")" '"AI": true'
+
+step "8. Install/uninstall dry runs verify docker, shell and redis"
+INSTALL_OUT="$(artisan "$OFF" ogamex:module:install AI --dry-run)"
+assert_contains "install verifies the runtime and container wiring" "$INSTALL_OUT" "Verify the runtime and container wiring"
+assert_contains "install reports the discovered supervisor fragment" "$INSTALL_OUT" "Supervisor fragment: docker/supervisor"
+assert_contains "install reports the database queue driver" "$INSTALL_OUT" "Queue driver: database"
+
+REDIS_OUT="$(artisan_redis "$OFF" ogamex:module:install AI --dry-run)"
+assert_contains "install detects the redis queue driver" "$REDIS_OUT" "Queue driver: redis"
+assert_contains "install detects phpredis" "$REDIS_OUT" "phpredis extension: loaded"
+assert_contains "install verifies Redis is reachable" "$REDIS_OUT" "Redis connection: reachable"
+
+UNINSTALL_OUT="$(artisan "$ON" ogamex:module:uninstall AI --dry-run)"
+assert_contains "uninstall reports the container cleanup step" "$UNINSTALL_OUT" "Report container cleanup"
+assert_contains "uninstall reports the discovered supervisor fragment" "$UNINSTALL_OUT" "Supervisor fragment: docker/supervisor"
+assert_contains "uninstall explains that data is retained" "$UNINSTALL_OUT" "keeps its data"
+
+step "9. Real install/uninstall cycle on a throwaway status file"
+CACHE="${APP_ROOT}/bootstrap/cache/config.php"
 
 MODULES_STATUSES_FILE="$CYCLE" php "${APP_ROOT}/artisan" config:cache >/dev/null 2>&1
-[ -f "$CACHE" ] && pass "config cache created for the trial" || fail "could not cache the config for the trial"
+assert_ok "config cache created for the trial" "$([ -f "$CACHE" ] && echo 0 || echo 1)"
 
-INSTALL_REAL="$(MODULES_STATUSES_FILE="$CYCLE" php "${APP_ROOT}/artisan" ogamex:module:install AI 2>&1)"
-echo "$INSTALL_REAL" | grep -q "Run the module migrations"; check $? "real install runs the module migrations"
-echo "$INSTALL_REAL" | grep -q "is installed and enabled"; check $? "real install reports success"
-status_enabled "$CYCLE" AI; check $? "real install enabled the module in the status file"
-if [ -f "$CACHE" ]; then fail "real install left the config cache in place"; else pass "real install cleared the config cache"; fi
+INSTALL_REAL="$(artisan "$CYCLE" ogamex:module:install AI)"
+assert_contains "real install runs the module migrations" "$INSTALL_REAL" "Run the module migrations"
+assert_contains "real install reports success" "$INSTALL_REAL" "is installed and enabled"
+assert_enabled "real install enabled the module in the status file" "$CYCLE" AI
+assert_ok "real install cleared the config cache" "$([ -f "$CACHE" ] && echo 1 || echo 0)"
 
 MODULES_STATUSES_FILE="$CYCLE" php "${APP_ROOT}/artisan" config:cache >/dev/null 2>&1
-[ -f "$CACHE" ] && pass "config cache recreated before uninstall" || fail "could not re-cache the config"
+assert_ok "config cache recreated before uninstall" "$([ -f "$CACHE" ] && echo 0 || echo 1)"
 
-UNINSTALL_REAL="$(MODULES_STATUSES_FILE="$CYCLE" php "${APP_ROOT}/artisan" ogamex:module:uninstall AI 2>&1)"
-echo "$UNINSTALL_REAL" | grep -q "is uninstalled and disabled"; check $? "real uninstall reports success"
-status_enabled "$CYCLE" AI; expect_failure $? "real uninstall disabled the module in the status file"
-if [ -f "$CACHE" ]; then fail "real uninstall left the config cache in place"; else pass "real uninstall cleared the config cache"; fi
+UNINSTALL_REAL="$(artisan "$CYCLE" ogamex:module:uninstall AI)"
+assert_contains "real uninstall reports success" "$UNINSTALL_REAL" "is uninstalled and disabled"
+assert_disabled "real uninstall disabled the module in the status file" "$CYCLE" AI
+assert_ok "real uninstall cleared the config cache" "$([ -f "$CACHE" ] && echo 1 || echo 0)"
 
-: > "$QUEUE_CONF"
-loader_append_config "$QUEUE_CONF" "${APP_ROOT}/Modules" "$CYCLE"
-if grep -q "program:ai-queue-worker" "$QUEUE_CONF"; then fail "uninstalled module still contributes a worker pool"; else pass "uninstalled module contributes no worker pool"; fi
-
-CYCLE_HORIZON="$(MODULES_STATUSES_FILE="$CYCLE" php "${APP_ROOT}/artisan" config:show horizon 2>&1)"
-if echo "$CYCLE_HORIZON" | grep -q "supervisor-ai"; then fail "uninstalled module still owns Horizon lanes"; else pass "uninstalled module owns no Horizon lanes"; fi
+assert_ok "loader accepts the uninstalled module" "$(loader_append "$QUEUE_CONF" "${APP_ROOT}/Modules" "$CYCLE" && echo 0 || echo 1)"
+assert_empty "uninstalled module contributes no worker pool" "$(cat "$QUEUE_CONF")"
+assert_absent "uninstalled module owns no Horizon lanes" "$(artisan "$CYCLE" config:show horizon)" "supervisor-ai"
 
 step "10. Drop-data and a fresh install rebuild the module schema"
-DROP_STATUS="/tmp/e2e-drop.json"
-DROPPED=0
 # The module is disabled here on purpose: migrating and resetting must both work
-# without the module being enabled first, otherwise a fresh install silently
-# applies nothing and a drop-data run silently keeps its tables.
+# without the module being enabled first, otherwise a fresh install silently applies
+# nothing and a drop-data run silently keeps its tables.
 printf '{"HelloWorld": false}' > "$DROP_STATUS"
 
 BEFORE_TABLES="$(ai_table_count)"
-if [ "${BEFORE_TABLES:-0}" -gt 0 ]; then pass "module tables exist before the drop-data run (${BEFORE_TABLES})"; else fail "module tables are missing before the drop-data run; run [php artisan module:migrate AI] first"; fi
+assert_ok "module tables exist before the drop-data run (${BEFORE_TABLES})" "$([ "${BEFORE_TABLES:-0}" -gt 0 ] && echo 0 || echo 1)"
 
-DROP_OUT="$(MODULES_STATUSES_FILE="$DROP_STATUS" php "${APP_ROOT}/artisan" ogamex:module:uninstall AI --drop-data --force 2>&1)"
-DROPPED=1
-echo "$DROP_OUT" | grep -q "Roll back every module migration"; check $? "drop-data rolls every module migration back"
-echo "$DROP_OUT" | grep -q "is uninstalled and disabled"; check $? "drop-data reports success"
-status_enabled "$DROP_STATUS" AI; expect_failure $? "drop-data disables the module"
+DROP_OUT="$(artisan "$DROP_STATUS" ogamex:module:uninstall AI --drop-data --force)"
+assert_contains "drop-data rolls every module migration back" "$DROP_OUT" "Roll back every module migration"
+assert_contains "drop-data reports success" "$DROP_OUT" "is uninstalled and disabled"
+assert_disabled "drop-data disables the module" "$DROP_STATUS" AI
 
 AFTER_TABLES="$(ai_table_count)"
-if [ "${AFTER_TABLES:-1}" -eq 0 ]; then pass "drop-data removed every module table"; else fail "drop-data left ${AFTER_TABLES} module table(s) behind"; fi
+assert_ok "drop-data removed every module table" "$([ "${AFTER_TABLES:-1}" -eq 0 ] && echo 0 || echo 1)"
 
-RESTORE_OUT="$(MODULES_STATUSES_FILE="$DROP_STATUS" php "${APP_ROOT}/artisan" ogamex:module:install AI 2>&1)"
-echo "$RESTORE_OUT" | grep -q "is installed and enabled"; check $? "a fresh install of the disabled module succeeds"
+RESTORE_OUT="$(artisan "$DROP_STATUS" ogamex:module:install AI)"
+assert_contains "a fresh install of the disabled module succeeds" "$RESTORE_OUT" "is installed and enabled"
 RESTORED_TABLES="$(ai_table_count)"
-if [ "${RESTORED_TABLES:-0}" -ge "${BEFORE_TABLES:-1}" ]; then pass "a fresh install recreated the module schema (${RESTORED_TABLES} tables)"; else fail "a fresh install only created ${RESTORED_TABLES} of ${BEFORE_TABLES} tables"; fi
-DROPPED=0
+assert_ok "a fresh install recreated the module schema (${RESTORED_TABLES} tables)" \
+    "$([ "${RESTORED_TABLES:-0}" -ge "${BEFORE_TABLES:-1}" ] && echo 0 || echo 1)"
 
 step "11. A real AI job runs through the module Horizon lane"
 # The job is queued on the module's own "ai" lane, which exists only while the module
-# is enabled, so a state change proves the whole chain: Redis -> Horizon supervisor-ai
-# -> the module's job class -> the module's tables.
+# is enabled, so a state change proves the whole chain: Redis, the Horizon supervisor
+# of the module, the module's job class and its tables.
 JOB_DISPATCH="$(MODULES_STATUSES_FILE="$ON" QUEUE_CONNECTION=redis php "${APP_ROOT}/Modules/AI/scripts/e2e-dispatch-ai-job.php" dispatch "$ON" 2>&1)"
-WORK_ITEM_ID="$(echo "$JOB_DISPATCH" | sed -n 's/.*work_item_id=\([0-9]*\).*/\1/p')"
-PROFILE_ID="$(echo "$JOB_DISPATCH" | sed -n 's/.*profile_id=\([0-9]*\).*/\1/p')"
-
-if [ -n "$WORK_ITEM_ID" ]; then
-    pass "a real ProcessAiWork job was queued on the module ai lane (item ${WORK_ITEM_ID})"
-else
-    fail "the job could not be queued: $(echo "$JOB_DISPATCH" | tail -2 | tr '\n' ' ')"
-fi
+WORK_ITEM_ID="$(sed -n 's/.*work_item_id=\([0-9]*\).*/\1/p' <<<"$JOB_DISPATCH")"
+PROFILE_ID="$(sed -n 's/.*profile_id=\([0-9]*\).*/\1/p' <<<"$JOB_DISPATCH")"
+assert_nonempty "a real ProcessAiWork job was queued on the module ai lane" "$WORK_ITEM_ID"
 
 if [ -n "$WORK_ITEM_ID" ]; then
     MODULES_STATUSES_FILE="$ON" QUEUE_CONNECTION=redis php "${APP_ROOT}/artisan" horizon >/tmp/e2e-job-horizon.log 2>&1 &
     JOB_HORIZON_PID=$!
-    sleep 12
 
     JOB_STATE=""
-    for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    for _ in $(seq 1 12); do
+        sleep 2
         JOB_STATE="$(MODULES_STATUSES_FILE="$ON" QUEUE_CONNECTION=redis php "${APP_ROOT}/Modules/AI/scripts/e2e-dispatch-ai-job.php" state "$WORK_ITEM_ID" 2>/dev/null)"
-        case "$JOB_STATE" in
-            *"state=1"*|*"state=2"*) sleep 2 ;;
-            *) break ;;
-        esac
+
+        [[ "$JOB_STATE" == *"state=1"* || "$JOB_STATE" == *"state=2"* ]] || break
     done
 
     case "$JOB_STATE" in
@@ -349,16 +312,16 @@ if [ -n "$WORK_ITEM_ID" ]; then
     kill "$JOB_HORIZON_PID" >/dev/null 2>&1 || true
     JOB_HORIZON_PID=""
 
-    JOB_CLEANUP="$(QUEUE_CONNECTION=redis php "${APP_ROOT}/Modules/AI/scripts/e2e-dispatch-ai-job.php" cleanup "$WORK_ITEM_ID" "${PROFILE_ID:-0}" 2>&1)"
-    if echo "$JOB_CLEANUP" | grep -q "cleaned"; then pass "the trial removed its own work item and profile"; else fail "the trial left its job fixtures behind"; fi
-
+    assert_contains "the trial removed its own work item and profile" \
+        "$(QUEUE_CONNECTION=redis php "${APP_ROOT}/Modules/AI/scripts/e2e-dispatch-ai-job.php" cleanup "$WORK_ITEM_ID" "${PROFILE_ID:-0}" 2>&1)" "cleaned"
     WORK_ITEM_ID=""
 fi
 
-printf '\n%s\n' "---------------------------------------------"
-if [ "$FAILS" -eq 0 ]; then
-    printf '\033[32mE2E PASSED\033[0m — all scenarios verified\n'
-    exit 0
+printf '\n---------------------------------------------\n'
+if [ "$FAILS" -ne 0 ]; then
+    printf '\033[31mE2E FAILED\033[0m — %s check(s) failed\n' "$FAILS"
+
+    exit 1
 fi
-printf '\033[31mE2E FAILED\033[0m — %s check(s) failed\n' "$FAILS"
-exit 1
+
+printf '\033[32mE2E PASSED\033[0m — all scenarios verified\n'
