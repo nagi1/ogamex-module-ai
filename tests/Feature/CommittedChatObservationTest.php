@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Modules\AI\Actions\AcceptAiCommitmentAction;
+use Modules\AI\Actions\DecayAiAffectStateAction;
 use Modules\AI\Actions\FindCurrentAiMemoryFactsAction;
 use Modules\AI\Actions\FulfillAiCommitmentAction;
 use Modules\AI\Actions\ReconcileAiChatObservationsAction;
@@ -14,6 +15,7 @@ use Modules\AI\Actions\RecordAiCommitmentAction;
 use Modules\AI\Actions\RecordAiMemoryFactAction;
 use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Actions\RecordObservedChatMessageAction;
+use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiMemoryEvidenceKind;
@@ -21,6 +23,7 @@ use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
@@ -60,7 +63,7 @@ class CommittedChatObservationTestCase extends TestCase
     {
         parent::setUp();
 
-        if (Schema::hasColumn('ai_relationships', 'last_observation_id')) {
+        if (Schema::hasTable('ai_affect_states')) {
             return;
         }
 
@@ -73,6 +76,7 @@ class CommittedChatObservationTestCase extends TestCase
 
     protected function tearDown(): void
     {
+        AiAffectState::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiRelationship::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiObservation::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiProfile::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
@@ -446,4 +450,22 @@ test('a relationship is sourced, bounded, and cannot be revised by a late intera
         ->and($late?->trust)->toBe('1.0000')
         ->and(AiRelationship::query()->where('player_id', $owner->id)->where('other_player_id', $otherPlayer->id)->count())->toBe(1)
         ->and($record->handle($owner->id, $owner->id, $source->id, CarbonImmutable::now()))->toBeNull();
+});
+
+test('affect decay is deterministic, bounded, and does not alter commitments', function (): void {
+    $owner = $this->createChatPlayer();
+    $state = AiAffectState::create([
+        'player_id' => $owner->id,
+        'emotion' => AiAffectEmotion::Anger,
+        'intensity' => 0.5,
+        'updated_for' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'revision' => 1,
+    ]);
+
+    $decayed = app(DecayAiAffectStateAction::class)->handle($state, CarbonImmutable::parse('2026-09-12 12:00:00 UTC'));
+    $unchanged = app(DecayAiAffectStateAction::class)->handle($decayed, CarbonImmutable::parse('2026-09-12 11:00:00 UTC'));
+
+    expect($decayed->intensity)->toBe('0.2500')
+        ->and($decayed->revision)->toBe(2)
+        ->and($unchanged->revision)->toBe(2);
 });
