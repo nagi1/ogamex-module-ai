@@ -32,6 +32,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\ThrowingBuildFirstBuilding;
 use OGame\Events\Game\BuildingCompleted;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Models\Ban;
@@ -40,6 +41,8 @@ use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\PlayerGameStateService;
 use Tests\IsolatedAccountTestCase;
+
+require_once __DIR__ . '/../Support/ThrowingBuildFirstBuilding.php';
 
 uses(IsolatedAccountTestCase::class);
 
@@ -286,20 +289,9 @@ test('a thrown decision retries and then fails at the configured attempt limit',
     aiWorkProfile($this->currentUserId);
     $retry = aiBuildingWork($this->currentUserId, 'throw-retry');
     $failed = aiBuildingWork($this->currentUserId, 'throw-failed', attempts: 2);
-    // This is the narrowly scoped, container-resolved failure seam that proves
-    // queue retry limits. All normal action tests use the production decision.
-    $this->app->bind(BuildFirstBuilding::class, static function (): BuildFirstBuilding {
-        return new class () extends BuildFirstBuilding {
-            public function __construct()
-            {
-            }
-
-            public function choose(AiProfile $profile): array
-            {
-                throw new RuntimeException('test decision failure');
-            }
-        };
-    });
+    // This container-bound failure seam isolates retry limits; normal tests use
+    // the production decision.
+    $this->app->bind(BuildFirstBuilding::class, ThrowingBuildFirstBuilding::class);
     $decision = $this->app->make(BuildFirstBuilding::class);
 
     expect(fn () => $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $retry->id])->handle($decision))->toThrow(RuntimeException::class, 'test decision failure');

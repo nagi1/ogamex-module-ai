@@ -28,15 +28,15 @@ readonly class RoutineProfile
         $timezone = (string) ($settings[AiProfileSettings::TIMEZONE] ?? AiProfileSettings::DEFAULT_TIMEZONE);
 
         try {
-            new DateTimeZone($timezone);
+            app()->makeWith(DateTimeZone::class, ['timezone' => $timezone]);
         } catch (Exception) {
             $timezone = AiProfileSettings::DEFAULT_TIMEZONE;
         }
 
-        return new self(
-            $timezone,
-            max(self::MINIMUM_MINUTES, (int) ($settings[AiProfileSettings::SESSION_MINUTES] ?? self::DEFAULT_SESSION_MINUTES)),
-            max(self::MINIMUM_MINUTES, (int) ($settings[AiProfileSettings::SESSION_GAP_MINUTES] ?? self::DEFAULT_SESSION_GAP_MINUTES)),
-        );
+        return app()->makeWith(self::class, [
+            'timezone' => $timezone,
+            'sessionMinutes' => max(self::MINIMUM_MINUTES, (int) ($settings[AiProfileSettings::SESSION_MINUTES] ?? self::DEFAULT_SESSION_MINUTES)),
+            'sessionGapMinutes' => max(self::MINIMUM_MINUTES, (int) ($settings[AiProfileSettings::SESSION_GAP_MINUTES] ?? self::DEFAULT_SESSION_GAP_MINUTES)),
+        ]);
     }
 }

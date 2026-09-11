@@ -25,9 +25,9 @@ class SessionPlanner
         $variation = $this->randomSource->unitInterval($profile->random_seed, $context) - 0.5;
         $gapMinutes = max(1, (int) round($routine->sessionGapMinutes * (1 + ($variation * self::VARIATION_FRACTION))));
 
-        return new SessionPlan(
-            $now->addMinutes($routine->sessionMinutes),
-            $now->addMinutes($gapMinutes),
-        );
+        return app()->makeWith(SessionPlan::class, [
+            'sessionEndsAt' => $now->addMinutes($routine->sessionMinutes),
+            'nextDueAt' => $now->addMinutes($gapMinutes),
+        ]);
     }
 }

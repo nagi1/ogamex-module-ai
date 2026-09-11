@@ -7,6 +7,7 @@ use Modules\AI\Tests\Support\FixtureAiClock;
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
 
 use Carbon\CarbonImmutable;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -29,7 +30,9 @@ uses(IsolatedAccountTestCase::class);
 beforeEach(function (): void {
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
     $this->app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
-    $this->app->singleton(ArchetypePolicyRegistry::class, fn ($app): ArchetypePolicyRegistry => new ArchetypePolicyRegistry($app->tagged(ArchetypePolicy::class)));
+    $this->app->singleton(ArchetypePolicyResolver::class, fn ($app): ArchetypePolicyRegistry => $app->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => $app->tagged(ArchetypePolicy::class),
+    ]));
 });
 
 test('frozen seed and observation reproduce the trace', function () {
@@ -112,25 +115,25 @@ test('recovery input is bounded and recorded in the deterministic score', functi
 /** @param array<string, bool> $actions @param array<int, array<string, mixed>> $reports */
 function aiDecisionSnapshot(array $actions, bool $fleetsaveEligible = false, array $reports = []): PerceptionSnapshot
 {
-    return new PerceptionSnapshot(
-        1,
-        CarbonImmutable::createFromTimestamp(1_789_012_345),
-        [['id' => 1, 'resources' => ['metal' => 2_000, 'crystal' => 2_000, 'deuterium' => 2_000]]],
-        $reports,
-        $actions + ['save_resources' => false, 'build' => false, 'research' => false, 'queue_units' => false, 'spy' => false, 'colonize' => false],
-        $fleetsaveEligible,
-        0.0,
-        ['owned_state' => '2026-09-11T00:00:00+00:00'],
-    );
+    return app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => 1,
+        'observedAt' => CarbonImmutable::createFromTimestamp(1_789_012_345),
+        'planets' => [['id' => 1, 'resources' => ['metal' => 2_000, 'crystal' => 2_000, 'deuterium' => 2_000]]],
+        'targetReports' => $reports,
+        'availableActions' => $actions + ['save_resources' => false, 'build' => false, 'research' => false, 'queue_units' => false, 'spy' => false, 'colonize' => false],
+        'fleetsaveEligible' => $fleetsaveEligible,
+        'recoveryFactor' => 0.0,
+        'sourceTimestamps' => ['owned_state' => '2026-09-11T00:00:00+00:00'],
+    ]);
 }
 
 function aiDecisionProfile(AiArchetype $archetype): AiProfile
 {
-    return new AiProfile([
+    return app()->makeWith(AiProfile::class, ['attributes' => [
         'id' => 1,
         'player_id' => 1,
         'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 42,
-    ]);
+    ]]);
 }

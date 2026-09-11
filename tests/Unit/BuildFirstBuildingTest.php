@@ -17,7 +17,7 @@ beforeEach(function (): void {
 });
 
 test('it selects the highest weighted candidate deterministically', function () {
-    $profile = new AiProfile([
+    $profile = app()->makeWith(AiProfile::class, ['attributes' => [
         'id' => 1,
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
@@ -27,7 +27,7 @@ test('it selects the highest weighted candidate deterministically', function () 
                 FirstBuildingTarget::CrystalMine->name => 100,
             ],
         ],
-    ]);
+    ]]);
 
     $decision = app(BuildFirstBuilding::class)->choose($profile);
 

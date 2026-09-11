@@ -7,6 +7,7 @@ use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Contracts\AffectEngine;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\LongTermMemory;
@@ -87,6 +88,8 @@ class AIServiceProvider extends ModuleServiceProvider
             TraderPolicy::class,
             CasualPolicy::class,
         ], ArchetypePolicy::class);
-        $this->app->singleton(ArchetypePolicyRegistry::class, fn ($app): ArchetypePolicyRegistry => new ArchetypePolicyRegistry($app->tagged(ArchetypePolicy::class)));
+        $this->app->singleton(ArchetypePolicyResolver::class, fn (): ArchetypePolicyRegistry => app()->makeWith(ArchetypePolicyRegistry::class, [
+            'policies' => $this->app->tagged(ArchetypePolicy::class),
+        ]));
     }
 }

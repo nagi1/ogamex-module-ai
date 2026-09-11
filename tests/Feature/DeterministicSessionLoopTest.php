@@ -7,9 +7,8 @@ require_once __DIR__ . '/../Support/FixturePlayerPerceptionBuilder.php';
 
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Application;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schema;
 use Modules\AI\Actions\RunAiSessionAction;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
@@ -44,14 +43,6 @@ use Tests\IsolatedAccountTestCase;
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
-    if (!Schema::hasTable('ai_decision_traces')) {
-        Artisan::call('migrate', [
-            '--path' => dirname(__DIR__, 2) . '/database/migrations',
-            '--realpath' => true,
-            '--force' => true,
-        ]);
-    }
-
     $now = aiDeterministicNow();
     Date::setTestNow($now);
     $this->app->bind(AiClock::class, SystemAiClock::class);
@@ -59,7 +50,9 @@ beforeEach(function (): void {
     $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
     $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
     $this->app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
-    $this->app->singleton(ArchetypePolicyRegistry::class, fn ($app): ArchetypePolicyRegistry => new ArchetypePolicyRegistry($app->tagged(ArchetypePolicy::class)));
+    $this->app->singleton(ArchetypePolicyResolver::class, fn ($app): ArchetypePolicyRegistry => $app->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => $app->tagged(ArchetypePolicy::class),
+    ]));
 });
 
 test('a full published candidate set is traced without unpublished target state', function (): void {
@@ -125,7 +118,7 @@ test('every persona completes its session and receives one successor schedule', 
 
 function aiDeterministicNow(): CarbonImmutable
 {
-    return CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC') ?? throw new LogicException('Unable to create frozen clock time.');
+    return CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC') ?? throw app()->makeWith(LogicException::class, ['message' => 'Unable to create frozen clock time.']);
 }
 
 function aiDeterministicRun(AiProfile $profile): AiWorkItem
@@ -160,11 +153,11 @@ function aiDeterministicInstallPerception(Application $app, PerceptionSnapshot $
 /** @param array<string, bool> $actions @param array<int, array<string, mixed>> $reports */
 function aiDeterministicSnapshot(int $playerId, int $planetId, CarbonImmutable $now, array $actions, bool $fleetsaveEligible, array $reports = []): PerceptionSnapshot
 {
-    return new PerceptionSnapshot(
-        $playerId,
-        $now,
-        [['id' => $planetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
-        $reports ?: [[
+    return app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => $playerId,
+        'observedAt' => $now,
+        'planets' => [['id' => $planetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
+        'targetReports' => $reports ?: [[
             'report_id' => 8,
             'observed_at' => $now->getTimestamp(),
             'expires_at' => $now->addHour()->getTimestamp(),
@@ -172,9 +165,9 @@ function aiDeterministicSnapshot(int $playerId, int $planetId, CarbonImmutable $
             'travel_cost' => 0.2,
             'attack_permitted' => true,
         ]],
-        $actions + array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
-        $fleetsaveEligible,
-        0.1,
-        ['owned_state' => $now->toIso8601String()],
-    );
+        'availableActions' => $actions + array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
+        'fleetsaveEligible' => $fleetsaveEligible,
+        'recoveryFactor' => 0.1,
+        'sourceTimestamps' => ['owned_state' => $now->toIso8601String()],
+    ]);
 }

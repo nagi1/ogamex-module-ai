@@ -18,12 +18,15 @@ class CandidateActionFactory
         // rather than pressure to invent an action or access hidden state.
         $raidGeneration = $this->raidCandidatesFromVisibleReports($perception);
 
-        return new CandidateGeneration([
-            $this->doNothing($perception),
-            ...$this->publishedCapabilityCandidates($perception),
-            ...$this->eligibleFleetSaveCandidates($perception),
-            ...$raidGeneration->candidates,
-        ], $raidGeneration->rejections);
+        return app()->makeWith(CandidateGeneration::class, [
+            'candidates' => [
+                $this->doNothing($perception),
+                ...$this->publishedCapabilityCandidates($perception),
+                ...$this->eligibleFleetSaveCandidates($perception),
+                ...$raidGeneration->candidates,
+            ],
+            'rejections' => $raidGeneration->rejections,
+        ]);
     }
 
     /** @return array<int, CandidateAction> */
@@ -38,13 +41,13 @@ class CandidateActionFactory
             }
 
             $type = $capability->actionType();
-            $candidates[] = new CandidateAction(
-                $type,
-                AiCandidateReason::publishedCapability($capability),
-                [],
-                $this->features($resourceNeed, $type === AiCandidateActionType::SaveResources ? 0.7 : 0.2, 0, 0, $perception->recoveryFactor),
-                $perception->sourceTimestamps,
-            );
+            $candidates[] = app()->makeWith(CandidateAction::class, [
+                'type' => $type,
+                'reason' => AiCandidateReason::publishedCapability($capability),
+                'parameters' => [],
+                'features' => $this->features($resourceNeed, $type === AiCandidateActionType::SaveResources ? 0.7 : 0.2, 0, 0, $perception->recoveryFactor),
+                'sourceTimestamps' => $perception->sourceTimestamps,
+            ]);
         }
 
         return $candidates;
@@ -57,13 +60,13 @@ class CandidateActionFactory
             return [];
         }
 
-        return [new CandidateAction(
-            AiCandidateActionType::FleetSave,
-            AiCandidateReason::EligibleFleetSave->value,
-            [],
-            $this->features(0, 1, 0, 0, $perception->recoveryFactor),
-            $perception->sourceTimestamps,
-        )];
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::FleetSave,
+            'reason' => AiCandidateReason::EligibleFleetSave->value,
+            'parameters' => [],
+            'features' => $this->features(0, 1, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
     }
 
     private function raidCandidatesFromVisibleReports(PerceptionSnapshot $perception): CandidateGeneration
@@ -85,27 +88,30 @@ class CandidateActionFactory
                 continue;
             }
 
-            $candidates[] = new CandidateAction(
-                AiCandidateActionType::Raid,
-                AiCandidateReason::FreshVisibleReport->value,
-                ['report_id' => $report['report_id']],
-                $this->features(0.7, 0.1, $report['confidence'], $report['travel_cost'], $perception->recoveryFactor),
-                [AiCandidateReason::reportSource($report['report_id']) => date(DATE_ATOM, $report['observed_at'])],
-            );
+            $candidates[] = app()->makeWith(CandidateAction::class, [
+                'type' => AiCandidateActionType::Raid,
+                'reason' => AiCandidateReason::FreshVisibleReport->value,
+                'parameters' => ['report_id' => $report['report_id']],
+                'features' => $this->features(0.7, 0.1, $report['confidence'], $report['travel_cost'], $perception->recoveryFactor),
+                'sourceTimestamps' => [AiCandidateReason::reportSource($report['report_id']) => date(DATE_ATOM, $report['observed_at'])],
+            ]);
         }
 
-        return new CandidateGeneration($candidates, $rejections);
+        return app()->makeWith(CandidateGeneration::class, [
+            'candidates' => $candidates,
+            'rejections' => $rejections,
+        ]);
     }
 
     private function doNothing(PerceptionSnapshot $perception): CandidateAction
     {
-        return new CandidateAction(
-            AiCandidateActionType::DoNothing,
-            AiCandidateReason::AlwaysAvailable->value,
-            [],
-            $this->features(0, 0.1, 0, 0, $perception->recoveryFactor),
-            $perception->sourceTimestamps,
-        );
+        return app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::DoNothing,
+            'reason' => AiCandidateReason::AlwaysAvailable->value,
+            'parameters' => [],
+            'features' => $this->features(0, 0.1, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ]);
     }
 
     /** @return array{resource_need:float,energy_blocker:float,safety:float,target_confidence:float,travel_cost:float,recovery:float} */

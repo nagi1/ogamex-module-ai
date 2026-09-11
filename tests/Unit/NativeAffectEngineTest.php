@@ -16,8 +16,20 @@ beforeEach(function (): void {
 test('aid and overwhelming threat receive their deterministic appraisals', function (): void {
     $engine = app(AffectEngine::class);
 
-    $gratitude = $engine->appraiseObservedEvent(new ObservedStimulus(AiArchetype::Miner, 0, 0.5, 0, 0.5));
-    $fear = $engine->appraiseObservedEvent(new ObservedStimulus(AiArchetype::Miner, 0.2, 0, 0.8, 0));
+    $gratitude = $engine->appraiseObservedEvent(app()->makeWith(ObservedStimulus::class, [
+        'archetype' => AiArchetype::Miner,
+        'harm' => 0,
+        'aid' => 0.5,
+        'threat' => 0,
+        'relationshipTrust' => 0.5,
+    ]));
+    $fear = $engine->appraiseObservedEvent(app()->makeWith(ObservedStimulus::class, [
+        'archetype' => AiArchetype::Miner,
+        'harm' => 0.2,
+        'aid' => 0,
+        'threat' => 0.8,
+        'relationshipTrust' => 0,
+    ]));
 
     expect($engine)->toBeInstanceOf(NativeAffectEngine::class)
         ->and($gratitude->emotion)->toBe(AiAffectEmotion::Gratitude)
@@ -27,7 +39,13 @@ test('aid and overwhelming threat receive their deterministic appraisals', funct
 });
 
 test('harm appraisal varies by archetype while remaining bounded', function (AiArchetype $archetype, float $expectedIntensity): void {
-    $appraisal = app(AffectEngine::class)->appraiseObservedEvent(new ObservedStimulus($archetype, 4, 0, 0, 0));
+    $appraisal = app(AffectEngine::class)->appraiseObservedEvent(app()->makeWith(ObservedStimulus::class, [
+        'archetype' => $archetype,
+        'harm' => 4,
+        'aid' => 0,
+        'threat' => 0,
+        'relationshipTrust' => 0,
+    ]));
 
     expect($appraisal->emotion)->toBe(AiAffectEmotion::Anger)
         ->and($appraisal->intensity)->toBe($expectedIntensity);

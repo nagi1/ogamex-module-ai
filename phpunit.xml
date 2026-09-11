@@ -20,6 +20,7 @@
       <directory suffix=".php">./app</directory>
     </include>
     <exclude>
+      <directory suffix=".php">./app/Rules</directory>
       <directory suffix=".php">./config</directory>
       <directory suffix=".php">./database</directory>
       <directory suffix=".php">./resources</directory>

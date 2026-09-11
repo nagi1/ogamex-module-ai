@@ -31,8 +31,6 @@ class DeliverAiSealedReplyAction
                 return null;
             }
 
-            assert($reply->expires_at !== null);
-
             if ($reply->expires_at->lessThanOrEqualTo($this->clock->now())) {
                 $reply->update([
                     'state' => AiConversationReplyState::Expired,

@@ -5,3 +5,13 @@ parameters:
     level: 8
     paths:
         - app
+
+services:
+    -
+        class: Modules\AI\Rules\DisallowDirectInstantiationRule
+        tags:
+            - phpstan.rules.rule
+    -
+        class: Modules\AI\Rules\DisallowElseRule
+        tags:
+            - phpstan.rules.rule

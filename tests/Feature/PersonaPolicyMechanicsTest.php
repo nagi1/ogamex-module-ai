@@ -4,10 +4,9 @@ require_once __DIR__ . '/../Support/FixturePlayerPerceptionBuilder.php';
 
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Container\Container;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Facades\Schema;
 use Modules\AI\Actions\RunAiSessionAction;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
@@ -43,10 +42,6 @@ use Tests\IsolatedAccountTestCase;
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
-    if (!Schema::hasTable('ai_decision_traces')) {
-        Artisan::call('migrate', ['--path' => dirname(__DIR__, 2) . '/database/migrations', '--realpath' => true, '--force' => true]);
-    }
-
     Date::setTestNow(aiPersonaNow());
     $this->app->bind(AiClock::class, SystemAiClock::class);
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
@@ -69,11 +64,13 @@ test('each persona applies its published policy through a persisted session', fu
     $candidateActions = array_column($trace->candidates, 'action');
 
     expect($trace->selected_action)->toBe($expected);
-    if ($expectsRaid) {
-        expect($candidateActions)->toContain(AiCandidateActionType::Raid->name);
-    } else {
+    if (!$expectsRaid) {
         expect($candidateActions)->not->toContain(AiCandidateActionType::Raid->name);
+
+        return;
     }
+
+    expect($candidateActions)->toContain(AiCandidateActionType::Raid->name);
 })->with('persona policy mechanics');
 
 test('casual safely does nothing when no permitted action is available', function (): void {
@@ -95,7 +92,9 @@ test('skill bands vary selection only within their defined deterministic margins
 function aiPersonaRegisterPolicies(Container $app): void
 {
     $app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
-    $app->singleton(ArchetypePolicyRegistry::class, static fn (Container $container): ArchetypePolicyRegistry => new ArchetypePolicyRegistry($container->tagged(ArchetypePolicy::class)));
+    $app->singleton(ArchetypePolicyResolver::class, static fn (Container $container): ArchetypePolicyRegistry => $container->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => $container->tagged(ArchetypePolicy::class),
+    ]));
 }
 
 /** @param array<string, bool> $actions */
@@ -118,10 +117,19 @@ function aiPersonaSnapshot(int $playerId, int $planetId, array $actions, bool $f
 {
     $now = aiPersonaNow();
 
-    return new PerceptionSnapshot($playerId, $now, [['id' => $planetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]], [['report_id' => 1, 'observed_at' => $now->getTimestamp(), 'expires_at' => $now->addHour()->getTimestamp(), 'confidence' => 0.8, 'travel_cost' => 0.2, 'attack_permitted' => $attackPermitted]], $actions + array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false), $fleetsaveEligible, 0.1, ['owned_state' => $now->toIso8601String()]);
+    return app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => $playerId,
+        'observedAt' => $now,
+        'planets' => [['id' => $planetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
+        'targetReports' => [['report_id' => 1, 'observed_at' => $now->getTimestamp(), 'expires_at' => $now->addHour()->getTimestamp(), 'confidence' => 0.8, 'travel_cost' => 0.2, 'attack_permitted' => $attackPermitted]],
+        'availableActions' => $actions + array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
+        'fleetsaveEligible' => $fleetsaveEligible,
+        'recoveryFactor' => 0.1,
+        'sourceTimestamps' => ['owned_state' => $now->toIso8601String()],
+    ]);
 }
 
 function aiPersonaNow(): CarbonImmutable
 {
-    return CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC') ?? throw new LogicException('Unable to create frozen clock time.');
+    return CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC') ?? throw app()->makeWith(LogicException::class, ['message' => 'Unable to create frozen clock time.']);
 }

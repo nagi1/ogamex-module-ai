@@ -17,7 +17,13 @@ class NativeExperienceEngine implements ExperienceEngine
             ->where('ruleset_version', $query->rulesetVersion)
             ->whereIn('outcome', [AiExperienceOutcome::Succeeded, AiExperienceOutcome::Failed, AiExperienceOutcome::Inconclusive])
             ->get()
-            ->map(fn (AiExperienceCase $case): RankedExperience => new RankedExperience($case->id, $case->outcome, $this->similarity($query->features, $case->features), (float) $case->utility, (float) $case->uncertainty))
+            ->map(fn (AiExperienceCase $case): RankedExperience => app()->makeWith(RankedExperience::class, [
+                'caseId' => $case->id,
+                'outcome' => $case->outcome,
+                'similarity' => $this->similarity($query->features, $case->features),
+                'utility' => (float) $case->utility,
+                'uncertainty' => (float) $case->uncertainty,
+            ]))
             ->sortByDesc(fn (RankedExperience $experience): array => [$experience->similarity, -$experience->caseId])
             ->take(max(0, $query->limit))
             ->values()

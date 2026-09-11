@@ -13,7 +13,11 @@ class NativeContextBuilder implements ContextBuilder
             $candidate = json_encode([$section->name => $section->value], JSON_THROW_ON_ERROR);
             if (mb_strlen(json_encode($selected, JSON_THROW_ON_ERROR)) + mb_strlen($candidate) > max(0, $maximumCharacters)) {
                 if ($section->isProtected) {
-                    return new ConversationContext($selected, json_encode($selected, JSON_THROW_ON_ERROR), false);
+                    return app()->makeWith(ConversationContext::class, [
+                        'sections' => $selected,
+                        'serialized' => json_encode($selected, JSON_THROW_ON_ERROR),
+                        'protectedContentFits' => false,
+                    ]);
                 }
 
                 continue;
@@ -21,7 +25,11 @@ class NativeContextBuilder implements ContextBuilder
             $selected[$section->name] = $section->value;
         }
 
-        return new ConversationContext($selected, json_encode($selected, JSON_THROW_ON_ERROR), true);
+        return app()->makeWith(ConversationContext::class, [
+            'sections' => $selected,
+            'serialized' => json_encode($selected, JSON_THROW_ON_ERROR),
+            'protectedContentFits' => true,
+        ]);
     }
 
     /** @param array<array-key, mixed|ConversationContextSection> $sections
@@ -32,9 +40,16 @@ class NativeContextBuilder implements ContextBuilder
         $normalizedSections = [];
 
         foreach ($sections as $name => $value) {
-            $normalizedSections[] = $value instanceof ConversationContextSection
-                ? $value
-                : new ConversationContextSection((string) $name, $value);
+            if ($value instanceof ConversationContextSection) {
+                $normalizedSections[] = $value;
+
+                continue;
+            }
+
+            $normalizedSections[] = app()->makeWith(ConversationContextSection::class, [
+                'name' => (string) $name,
+                'value' => $value,
+            ]);
         }
 
         usort($normalizedSections, fn (ConversationContextSection $left, ConversationContextSection $right): int => $right->isProtected <=> $left->isProtected);

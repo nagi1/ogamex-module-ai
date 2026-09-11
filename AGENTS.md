@@ -6,6 +6,16 @@ Use this as the base operating contract for all work in `Modules/AI`.
 
 Write clean, maintainable, production-ready code. Keep changes module-first: reuse existing OGameX extension points and do not move AI policy, persistence, or orchestration into the host.
 
+## Nagi implementation baseline
+
+- Apply SOLID, DRY, KISS, YAGNI, composition over inheritance, high cohesion, and low coupling.
+- Keep business logic in descriptive action classes. Do not add forwarding-only proxy methods.
+- Prefer small, single-purpose methods, practical immutability, shallow control flow, readable code, and measured optimization only.
+- Use early returns, strategies, lookup tables, or `match`; never write `else`, `else if`, or `elseif`.
+- Handle failures explicitly. Comments are short, meaningful explanations of *why*, never narration of syntax.
+- Before changing a feature, inspect comparable module and host code and verify the real schema. Follow existing patterns; do not add dependencies, speculative refactors, or abstractions without an evidenced module need and approval.
+- Consult official Filament v5 documentation before changing Filament components.
+
 ## Design
 
 - Apply SOLID, DRY, KISS, YAGNI, composition over inheritance, high cohesion, and low coupling.

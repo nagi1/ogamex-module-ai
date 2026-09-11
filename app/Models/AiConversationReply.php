@@ -19,7 +19,7 @@ use Modules\AI\Enums\AiConversationReplyState;
  * @property AiConversationReplyState $state
  * @property string|null $delivery_key
  * @property int|null $delivered_chat_message_id
- * @property Carbon|null $expires_at
+ * @property Carbon $expires_at
  * @property Carbon|null $sealed_at
  * @property Carbon|null $delivered_at
  * @property int $revision

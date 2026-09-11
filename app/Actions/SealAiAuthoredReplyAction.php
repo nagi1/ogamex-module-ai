@@ -27,7 +27,6 @@ class SealAiAuthoredReplyAction
             }
 
             $now = $this->clock->now();
-            assert($reply->expires_at !== null);
 
             if ($reply->expires_at->lessThanOrEqualTo($now)) {
                 $reply->update([

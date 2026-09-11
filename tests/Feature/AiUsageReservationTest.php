@@ -15,11 +15,11 @@ uses(IsolatedAccountTestCase::class);
 
 test('usage reservation atomically enforces every scope and preserves idempotency', function (): void {
     $reserve = app(ReserveAiUsageAction::class);
-    $limits = new UsageBudgetLimits(
-        new UsageBudgetLimit(2, 300, 100),
-        new UsageBudgetLimit(2, 300, 100),
-        new UsageBudgetLimit(1, 200, 80),
-    );
+    $limits = app()->makeWith(UsageBudgetLimits::class, [
+        'universe' => usageBudgetLimit(2, 300, 100),
+        'player' => usageBudgetLimit(2, 300, 100),
+        'conversation' => usageBudgetLimit(1, 200, 80),
+    ]);
     $first = $reserve->handle(usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 100, 40), $limits);
     $duplicate = $reserve->handle(usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 100, 40), $limits);
     $conversationCap = $reserve->handle(usageReservationRequest($this->currentUserId, 'conversation-a', 'request-b', 100, 40), $limits);
@@ -92,22 +92,31 @@ test('an unknown or exact settlement does not change a valid reservation ledger'
 
 function usageReservationRequest(int $playerId, string $conversationKey, string $requestKey, int $inputTokens, int $outputTokens): UsageReservationRequest
 {
-    return new UsageReservationRequest(
-        'default',
-        $playerId,
-        $conversationKey,
-        $requestKey,
-        $inputTokens,
-        $outputTokens,
-        CarbonImmutable::parse('2026-09-11 10:00 UTC'),
-    );
+    return app()->makeWith(UsageReservationRequest::class, [
+        'universeScope' => 'default',
+        'playerId' => $playerId,
+        'conversationKey' => $conversationKey,
+        'requestKey' => $requestKey,
+        'inputTokens' => $inputTokens,
+        'outputTokens' => $outputTokens,
+        'reservedAt' => CarbonImmutable::parse('2026-09-11 10:00 UTC'),
+    ]);
 }
 
 function usageBudgetLimits(): UsageBudgetLimits
 {
-    return new UsageBudgetLimits(
-        new UsageBudgetLimit(5, 1000, 500),
-        new UsageBudgetLimit(5, 1000, 500),
-        new UsageBudgetLimit(5, 1000, 500),
-    );
+    return app()->makeWith(UsageBudgetLimits::class, [
+        'universe' => usageBudgetLimit(5, 1000, 500),
+        'player' => usageBudgetLimit(5, 1000, 500),
+        'conversation' => usageBudgetLimit(5, 1000, 500),
+    ]);
+}
+
+function usageBudgetLimit(int $attempts, int $inputTokens, int $outputTokens): UsageBudgetLimit
+{
+    return app()->makeWith(UsageBudgetLimit::class, [
+        'attempts' => $attempts,
+        'inputTokens' => $inputTokens,
+        'outputTokens' => $outputTokens,
+    ]);
 }

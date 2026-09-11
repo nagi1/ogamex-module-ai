@@ -103,7 +103,7 @@ class EvaluateAiSocialExchangeAction
         return match ($exchange->type) {
             AiSocialExchangeType::HelpRequest => AiCommitmentDirection::PromisedByPlayer,
             AiSocialExchangeType::CompensationOffer => AiCommitmentDirection::ExpectedFromCounterparty,
-            default => throw new LogicException('Only commitment-producing exchanges have a direction.'),
+            default => throw app()->makeWith(LogicException::class, ['message' => 'Only commitment-producing exchanges have a direction.']),
         };
     }
 }

@@ -29,16 +29,16 @@ class PlayerPerceptionBuilder
     {
         $observedAt = $this->observedAt($observation);
 
-        return new PerceptionSnapshot(
-            (int) ($observation['player_id'] ?? 0),
-            $observedAt,
-            $this->visiblePlanets((array) ($observation['planets'] ?? [])),
-            $this->targetReports((array) ($observation['target_reports'] ?? [])),
-            $this->availableActions((array) ($observation['available_actions'] ?? [])),
-            (bool) ($observation['fleetsave_eligible'] ?? false),
-            max(0.0, min(1.0, (float) ($observation['recovery_factor'] ?? 0))),
-            $this->sourceTimestamps((array) ($observation['source_timestamps'] ?? []), $observedAt),
-        );
+        return app()->makeWith(PerceptionSnapshot::class, [
+            'playerId' => (int) ($observation['player_id'] ?? 0),
+            'observedAt' => $observedAt,
+            'planets' => $this->visiblePlanets((array) ($observation['planets'] ?? [])),
+            'targetReports' => $this->targetReports((array) ($observation['target_reports'] ?? [])),
+            'availableActions' => $this->availableActions((array) ($observation['available_actions'] ?? [])),
+            'fleetsaveEligible' => (bool) ($observation['fleetsave_eligible'] ?? false),
+            'recoveryFactor' => max(0.0, min(1.0, (float) ($observation['recovery_factor'] ?? 0))),
+            'sourceTimestamps' => $this->sourceTimestamps((array) ($observation['source_timestamps'] ?? []), $observedAt),
+        ]);
     }
 
     /** @param array<string, mixed> $observation */

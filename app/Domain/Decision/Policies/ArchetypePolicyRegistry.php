@@ -3,9 +3,10 @@
 namespace Modules\AI\Domain\Decision\Policies;
 
 use LogicException;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Enums\AiArchetype;
 
-class ArchetypePolicyRegistry
+class ArchetypePolicyRegistry implements ArchetypePolicyResolver
 {
     /** @var array<int, ArchetypePolicy> */
     private array $policies = [];
@@ -21,7 +22,7 @@ class ArchetypePolicyRegistry
     public function for(AiArchetype $archetype): ArchetypePolicy
     {
         if (!isset($this->policies[$archetype->value])) {
-            throw new LogicException('No policy registered for ' . $archetype->name);
+            throw app()->makeWith(LogicException::class, ['message' => 'No policy registered for ' . $archetype->name]);
         }
 
         return $this->policies[$archetype->value];

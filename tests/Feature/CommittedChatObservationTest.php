@@ -169,7 +169,7 @@ test('a rolled back chat message never becomes an observation', function (): voi
                 'message' => 'Discarded request',
             ]);
 
-            throw new RuntimeException('Force the transaction to roll back.');
+            throw app()->makeWith(RuntimeException::class, ['message' => 'Force the transaction to roll back.']);
         });
     } catch (RuntimeException) {
     }
@@ -253,7 +253,7 @@ test('a rolled back alliance membership transition is not observed', function ()
             ]);
             User::query()->whereKey($joiningPlayer->id)->update(['alliance_id' => $alliance->id]);
 
-            throw new RuntimeException('Force the transition to roll back.');
+            throw app()->makeWith(RuntimeException::class, ['message' => 'Force the transition to roll back.']);
         });
     } catch (RuntimeException) {
     }
@@ -319,7 +319,9 @@ test('reconciliation retains a late source without replacing newer observed hist
         'created_at' => $newerSourceTime,
         'updated_at' => $newerSourceTime,
     ]);
-    app()->instance(AiClock::class, new FixtureAiClock(CarbonImmutable::parse('2026-09-11 12:00:00 UTC')));
+    app()->instance(AiClock::class, app()->makeWith(FixtureAiClock::class, [
+        'now' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+    ]));
 
     app(RecordObservedChatMessageAction::class)->handle($newerMessage->id);
     $createdObservations = app(ReconcileAiChatObservationsAction::class)->handle($recipient->id);

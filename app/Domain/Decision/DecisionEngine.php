@@ -20,6 +20,12 @@ class DecisionEngine
         $selected = $this->utilityScorer->select($profile, $scored, $decisionKey);
         $inputHash = hash('sha256', json_encode($perception->traceInput(), JSON_THROW_ON_ERROR));
 
-        return new DecisionTrace($perception, $scored, $selected, $generation->rejections, $inputHash);
+        return app()->makeWith(DecisionTrace::class, [
+            'perception' => $perception,
+            'candidates' => $scored,
+            'selected' => $selected,
+            'rejections' => $generation->rejections,
+            'inputHash' => $inputHash,
+        ]);
     }
 }

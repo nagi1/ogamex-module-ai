@@ -2,7 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
-use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\RandomSource;
 
@@ -23,7 +23,7 @@ class UtilityScorer
     private const ARCHETYPE_WEIGHT = 25.0;
 
     public function __construct(
-        private ArchetypePolicyRegistry $policyRegistry,
+        private ArchetypePolicyResolver $policyRegistry,
         private RandomSource $randomSource,
     ) {
     }
@@ -50,7 +50,11 @@ class UtilityScorer
                 'archetype_preference' => $policy->preference($candidate->type) * self::ARCHETYPE_WEIGHT,
                 'seeded_variation' => $variation,
             ];
-            $scored[] = new ScoredCandidate($candidate, array_sum($components), $components);
+            $scored[] = app()->makeWith(ScoredCandidate::class, [
+                'candidate' => $candidate,
+                'score' => array_sum($components),
+                'components' => $components,
+            ]);
         }
 
         // A stable secondary key prevents an otherwise identical replay from

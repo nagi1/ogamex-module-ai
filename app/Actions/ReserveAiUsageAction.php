@@ -77,7 +77,7 @@ class ReserveAiUsageAction
             ->where(function ($query) use ($scopes): void {
                 $scopes->each(function (array $scope) use ($query): void {
                     $query->orWhere(function ($scopeQuery) use ($scope): void {
-                        $scopeQuery->where('scope', $scope['scope'])->where('scope_key', $scope['key']);
+                        $scopeQuery->where('scope', $scope['scope']->value)->where('scope_key', $scope['key']);
                     });
                 });
             })

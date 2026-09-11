@@ -40,8 +40,16 @@ test('native recall is owner scoped, provenance-preserving, and excludes non-cur
     app(RecordAiMemoryFactAction::class)->handle($this->currentUserId, $subject->id, AiMemoryPredicate::AllianceMembership, AiMemoryEvidenceKind::Claimed, ['alliance_tag' => 'HIDDEN'], 2004, CarbonImmutable::parse('2026-09-11 10:00 UTC'));
     app(RedactAiMemoryFactsAction::class)->handle($this->currentUserId, 2004, CarbonImmutable::parse('2026-09-11 11:00 UTC'));
 
-    $recalled = app(LongTermMemory::class)->recallRelevantMemories(new MemoryRecallQuery($this->currentUserId, $subject->id, CarbonImmutable::parse('2026-09-11 12:00 UTC')));
-    $otherOwner = app(LongTermMemory::class)->recallRelevantMemories(new MemoryRecallQuery($this->currentUserId + 1, $subject->id, CarbonImmutable::parse('2026-09-11 12:00 UTC')));
+    $recalled = app(LongTermMemory::class)->recallRelevantMemories(app()->makeWith(MemoryRecallQuery::class, [
+        'playerId' => $this->currentUserId,
+        'subjectPlayerId' => $subject->id,
+        'now' => CarbonImmutable::parse('2026-09-11 12:00 UTC'),
+    ]));
+    $otherOwner = app(LongTermMemory::class)->recallRelevantMemories(app()->makeWith(MemoryRecallQuery::class, [
+        'playerId' => $this->currentUserId + 1,
+        'subjectPlayerId' => $subject->id,
+        'now' => CarbonImmutable::parse('2026-09-11 12:00 UTC'),
+    ]));
 
     expect($recalled)->toHaveCount(1)
         ->and($recalled[0]['value'])->toBe(['alliance_tag' => 'RAVEN'])
@@ -68,10 +76,18 @@ test('context selection preserves earlier sections and applies a hard character 
 test('protected context is prioritized and reports when it cannot fit intact', function (): void {
     $prioritized = app(ContextBuilder::class)->buildConversationContext([
         'older_memory' => str_repeat('x', 200),
-        new ConversationContextSection('exact_terms', ['amount' => 10], true),
+        app()->makeWith(ConversationContextSection::class, [
+            'name' => 'exact_terms',
+            'value' => ['amount' => 10],
+            'isProtected' => true,
+        ]),
     ], 80);
     $overflowed = app(ContextBuilder::class)->buildConversationContext([
-        new ConversationContextSection('current_message', str_repeat('x', 200), true),
+        app()->makeWith(ConversationContextSection::class, [
+            'name' => 'current_message',
+            'value' => str_repeat('x', 200),
+            'isProtected' => true,
+        ]),
     ], 80);
 
     expect($prioritized->sections)->toHaveKey('exact_terms')

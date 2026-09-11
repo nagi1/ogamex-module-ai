@@ -21,7 +21,9 @@ require_once __DIR__ . '/../Support/FixtureAiClock.php';
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
-    app()->bind(AiClock::class, fn (): FixtureAiClock => new FixtureAiClock(CarbonImmutable::parse('2024-01-01 00:00:00 UTC')));
+    app()->bind(AiClock::class, fn (): FixtureAiClock => app()->makeWith(FixtureAiClock::class, [
+        'now' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC'),
+    ]));
 });
 
 test('an enabled AI sends a bounded direct reply only within its reply conversation', function (): void {
@@ -40,12 +42,15 @@ test('an enabled AI sends a bounded direct reply only within its reply conversat
 test('delivery rejects disabled, blocked, invalid, and cross-conversation replies', function (): void {
     $recipient = $this->createUser();
     $other = $this->createUser();
+    $unrelated = $this->createUser();
     AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 1, 'enabled' => true]);
     $otherConversation = ChatMessage::create(['sender_id' => $other->id, 'recipient_id' => $this->currentUserId, 'message' => 'Private']);
+    $unrelatedConversation = ChatMessage::create(['sender_id' => $unrelated->id, 'recipient_id' => $recipient->id, 'message' => 'Unrelated private message']);
     IgnoredPlayer::create(['user_id' => $recipient->id, 'ignored_user_id' => $this->currentUserId]);
 
     expect(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $recipient->id, 'blocked'))->toBeNull()
         ->and(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $other->id, 'wrong reply', $otherConversation->id))->not->toBeNull()
+        ->and(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $other->id, 'unrelated reply', $unrelatedConversation->id))->toBeNull()
         ->and(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $recipient->id, str_repeat('x', 2001)))->toBeNull();
 
     AiProfile::query()->where('player_id', $this->currentUserId)->update(['enabled' => false]);

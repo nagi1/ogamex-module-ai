@@ -1,8 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schema;
 use Modules\AI\Actions\RunAiSessionAction;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
@@ -32,16 +31,14 @@ use Tests\IsolatedAccountTestCase;
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
-    if (!Schema::hasTable('ai_schedules')) {
-        Artisan::call('migrate', ['--path' => dirname(__DIR__, 2) . '/database/migrations', '--realpath' => true, '--force' => true]);
-    }
-
     $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
     $this->app->bind(AiClock::class, SystemAiClock::class);
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
     $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
     $this->app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
-    $this->app->singleton(ArchetypePolicyRegistry::class, fn ($app): ArchetypePolicyRegistry => new ArchetypePolicyRegistry($app->tagged(ArchetypePolicy::class)));
+    $this->app->singleton(ArchetypePolicyResolver::class, fn ($app): ArchetypePolicyRegistry => $app->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => $app->tagged(ArchetypePolicy::class),
+    ]));
 });
 
 test('session work records a redacted trace and schedules one successor through container actions', function (): void {

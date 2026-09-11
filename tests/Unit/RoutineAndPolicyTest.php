@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -26,7 +27,9 @@ uses(IsolatedAccountTestCase::class);
 beforeEach(function (): void {
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
     $this->app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
-    $this->app->singleton(ArchetypePolicyRegistry::class, fn ($app): ArchetypePolicyRegistry => new ArchetypePolicyRegistry($app->tagged(ArchetypePolicy::class)));
+    $this->app->singleton(ArchetypePolicyResolver::class, fn ($app): ArchetypePolicyRegistry => $app->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => $app->tagged(ArchetypePolicy::class),
+    ]));
 });
 
 test('routine profile uses safe defaults for invalid or too small settings', function () {
@@ -44,7 +47,7 @@ test('routine profile uses safe defaults for invalid or too small settings', fun
 });
 
 test('session plans are seeded and keep due work in the future', function () {
-    $now = CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC') ?? throw new LogicException('Unable to create fixed session time.');
+    $now = CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC') ?? throw app()->makeWith(LogicException::class, ['message' => 'Unable to create fixed session time.']);
     $profile = aiRoutineProfile([
         AiProfileSettings::TIMEZONE => 'Asia/Riyadh',
         AiProfileSettings::SESSION_MINUTES => 10,
@@ -64,8 +67,14 @@ test('next due calculator handles future and elapsed session plans', function ()
     $now = CarbonImmutable::createFromTimestamp(1_789_012_345);
     $calculator = app(NextDueTimeCalculator::class);
 
-    expect($calculator->fromSession(new SessionPlan($now, $now->addMinutes(2)), $now))->toEqual($now->addMinutes(2));
-    expect($calculator->fromSession(new SessionPlan($now, $now), $now))->toEqual($now->addMinute());
+    expect($calculator->fromSession(app()->makeWith(SessionPlan::class, [
+        'sessionEndsAt' => $now,
+        'nextDueAt' => $now->addMinutes(2),
+    ]), $now))->toEqual($now->addMinutes(2));
+    expect($calculator->fromSession(app()->makeWith(SessionPlan::class, [
+        'sessionEndsAt' => $now,
+        'nextDueAt' => $now,
+    ]), $now))->toEqual($now->addMinute());
 });
 
 test('seeded random source is isolated and bounded', function () {
@@ -78,7 +87,7 @@ test('seeded random source is isolated and bounded', function () {
 });
 
 test('policies cover every profile and reject only declared raid profiles', function () {
-    $registry = app(ArchetypePolicyRegistry::class);
+    $registry = app(ArchetypePolicyResolver::class);
 
     foreach (AiArchetype::cases() as $archetype) {
         $policy = $registry->for($archetype);
@@ -95,21 +104,22 @@ test('policies cover every profile and reject only declared raid profiles', func
 });
 
 test('registry fails closed when a profile policy is missing', function () {
-    $registry = new ArchetypePolicyRegistry([app(MinerPolicy::class)]);
+    $registry = app()->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => [app(MinerPolicy::class)],
+    ]);
 
-    $this->expectException(LogicException::class);
-    $registry->for(AiArchetype::Fleeter);
+    expect(fn (): mixed => $registry->for(AiArchetype::Fleeter))->toThrow(LogicException::class);
 });
 
 /** @param array<string, mixed> $settings */
 function aiRoutineProfile(array $settings): AiProfile
 {
-    return new AiProfile([
+    return app()->makeWith(AiProfile::class, ['attributes' => [
         'id' => 1,
         'player_id' => 1,
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 42,
         'settings' => $settings,
-    ]);
+    ]]);
 }
