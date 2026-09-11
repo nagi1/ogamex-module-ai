@@ -6,6 +6,7 @@ use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Contracts\AffectEngine;
+use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
@@ -20,6 +21,7 @@ use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
+use Modules\AI\Domain\Experience\NativeExperienceEngine;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
@@ -57,6 +59,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
         $this->app->bind(AffectEngine::class, NativeAffectEngine::class);
+        $this->app->bind(ExperienceEngine::class, NativeExperienceEngine::class);
         $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
         $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
