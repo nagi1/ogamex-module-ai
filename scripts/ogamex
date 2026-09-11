@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-
+#
+# The AI module's task runner: one short command for every module task, run from the
+# module checkout. Commands execute on the host by default; OGAMEX_RUNNER=local-docker-dev
+# runs them inside the application container instead.
 set -euo pipefail
 
 MODULE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OGAMEX_ROOT="${OGAMEX_ROOT:-$(cd "$MODULE_ROOT/../.." 2>/dev/null && pwd || true)}"
 
-if [[ -z "$OGAMEX_ROOT" || ! -f "$OGAMEX_ROOT/artisan" ]]; then
+if [ -z "$OGAMEX_ROOT" ] || [ ! -f "$OGAMEX_ROOT/artisan" ]; then
     echo "OGameX root not found. Set OGAMEX_ROOT to the OGameX checkout." >&2
+
     exit 1
 fi
 
@@ -16,28 +20,47 @@ run_core() {
             (cd "$OGAMEX_ROOT" && "$@")
             ;;
         local-docker-dev)
-            # local-docker-dev is already running the application. Execute in
-            # that service rather than creating a one-off container from the
-            # default Compose stack.
+            # local-docker-dev already runs the application, so commands execute in that
+            # container instead of a one-off container from the default stack.
             (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose exec -T ogamex-app "$@")
             ;;
         *)
             echo "Unknown OGAMEX_RUNNER '${OGAMEX_RUNNER}'. Use 'host' or 'local-docker-dev'." >&2
+
             exit 1
             ;;
     esac
 }
 
-# Tests always run in parallel: every worker owns its own database clone (see the
-# host's ParallelTestSchemaServiceProvider), so there is no serial mode. A serial
-# run wastes the whole session. Pin the worker count with PARALLEL_PROCESSES=<n>.
+# Tests always run in parallel: every worker owns its database clone and its compiled
+# caches, so bailing early costs nothing while a serial run wastes the session.
 pest_flags() {
-    if [[ -n "${PARALLEL_PROCESSES:-}" ]]; then
-        printf '%s' "--parallel --bail --processes=${PARALLEL_PROCESSES}"
-        return
-    fi
+    printf '%s' "--parallel --bail${PARALLEL_PROCESSES:+ --processes=${PARALLEL_PROCESSES}}"
+}
 
-    printf '%s' "--parallel --bail"
+usage() {
+    cat <<'TEXT'
+Usage: bash scripts/ogamex <command> [args...]
+
+Lifecycle (host commands; the module never reimplements them):
+  install [--dry-run]                   verify, migrate, run the install hook, enable, refresh
+  uninstall [--drop-data] [--dry-run]   uninstall hook, optional data drop, disable, refresh
+  doctor                                read-only queue/container/Redis wiring report
+  enable | disable                      raw status-file toggles only
+  e2e-lifecycle                         live host trial: absent, install, pickup, uninstall
+
+Checks:
+  artisan <args...>                     run any artisan command in the host
+  test                                  Pest for this module, parallel with --bail
+  test-all                              the whole OGameX suite, parallel with --bail
+  quality                               Rector, Pint, PHPStan, then this module's tests
+  coverage                              the one serial run: PCOV coverage of Modules/AI/app
+
+Environment:
+  OGAMEX_ROOT          OGameX checkout (default: two levels above this script)
+  OGAMEX_RUNNER        host (default) or local-docker-dev
+  PARALLEL_PROCESSES   pin the number of test workers
+TEXT
 }
 
 command_name="${1:-help}"
@@ -48,25 +71,23 @@ case "$command_name" in
         run_core php artisan "$@"
         ;;
     install)
-        # Host lifecycle command: verify wiring, migrate, run the install hook, enable,
-        # refresh caches and restart the workers. --dry-run prints the plan first.
+        # --dry-run prints the plan; data and status files stay untouched.
         run_core php artisan ogamex:module:install AI "$@"
         ;;
     uninstall)
-        # Host lifecycle command. Data is kept unless --drop-data is given.
+        # Data is kept unless --drop-data is given.
         run_core php artisan ogamex:module:uninstall AI "$@"
         ;;
     doctor)
-        # Read-only diagnosis of the queue/container/Redis wiring.
+        # Exits non-zero on a blocking wiring problem.
         run_core php artisan ogamex:module:doctor AI "$@"
         ;;
     enable)
-        # Raw toggle: flips only the status file. Use `install` when the module was
-        # never installed, so its migrations, hook and the caches are handled too.
+        # Status-file toggle only; use `install` when the module was never installed.
         run_core php artisan module:enable AI
         ;;
     disable)
-        # Raw toggle: see `enable`. Use `uninstall` to also refresh caches and workers.
+        # Status-file toggle only; use `uninstall` to also refresh caches and workers.
         run_core php artisan module:disable AI
         ;;
     test)
@@ -77,13 +98,6 @@ case "$command_name" in
         # shellcheck disable=SC2046
         run_core ./vendor/bin/pest $(pest_flags) "$@"
         ;;
-    e2e-lifecycle)
-        # Host trial for the whole module life: the module is moved out of Modules/,
-        # installed for real, picked up by supervisord and Horizon, and uninstalled
-        # again, with the tracked status file restored afterwards. It drives Docker
-        # itself, so it always runs on the host, not through OGAMEX_RUNNER.
-        (cd "$OGAMEX_ROOT" && MODULE=AI bash scripts/e2e-module-install-trial.sh)
-        ;;
     quality)
         run_core composer run rector
         run_core composer run cs
@@ -93,25 +107,25 @@ case "$command_name" in
         ;;
     coverage)
         # Coverage is the one serial run: Laravel's parallel runner cannot merge PCOV
-        # coverage across ParaTest workers (the worker coverage files never appear).
-        # The CLI opcode cache is off because PCOV cannot instrument opcodes that
-        # opcache interned before it was enabled. The report is then reduced to this
-        # module's own source, which is the scope its 100% gate applies to.
+        # coverage across workers, and PCOV cannot instrument opcodes that the CLI
+        # opcode cache interned before it was enabled. The report is then reduced to
+        # this module's own source, which is the scope its 100% gate applies to.
         run_core php -d opcache.enable_cli=0 -d pcov.enabled=1 ./vendor/bin/pest --testsuite=Modules --filter=AI --bail --coverage-clover=/tmp/ogamex-ai-coverage.xml
         run_core php Modules/AI/scripts/coverage-summary.php /tmp/ogamex-ai-coverage.xml
         ;;
-    help|*)
-        echo "Usage: bash scripts/ogamex {artisan|install|uninstall|doctor|enable|disable|test|test-all|quality|coverage|e2e-lifecycle} [args...]"
-        echo ""
-        echo "Lifecycle (host commands, run from the module checkout):"
-        echo "  install [--dry-run]                     migrate, run the install hook, enable, refresh caches"
-        echo "  uninstall [--drop-data] [--dry-run]     uninstall hook, optional data drop, disable, refresh caches"
-        echo "  doctor                                  read-only wiring report for this module"
-        echo "  enable / disable                        raw status-file toggles only"
-        echo "  e2e-lifecycle                           live host trial: absent, install, pickup, uninstall"
-        echo ""
-        echo "Tests always run in parallel with --bail; coverage is the one serial run."
-        echo "  PARALLEL_PROCESSES=<n>    pin the worker count"
-        exit 0
+    e2e-lifecycle)
+        # The host trial drives Docker itself, so it always runs on the host, never
+        # through OGAMEX_RUNNER.
+        (cd "$OGAMEX_ROOT" && MODULE=AI bash scripts/e2e-module-install-trial.sh)
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "Unknown command [${command_name}]." >&2
+        echo >&2
+        usage >&2
+
+        exit 2
         ;;
 esac
