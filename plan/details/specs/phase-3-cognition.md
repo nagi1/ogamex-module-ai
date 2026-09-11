@@ -217,6 +217,18 @@ Phase 5 reuses accepted persona, social, experience and language boundaries for 
 
 ## Delivery slices and completion evidence
 
+### Required remaining pre-LLM execution order
+
+Slices 3B and 3C are complete. Finish the remaining deterministic baseline in this dependency order; a slice may not be marked implemented merely because its records or interfaces exist.
+
+1. **Complete 3F's deterministic delivery substrate first.** Add module-owned pending replies, authorized conversation/source ranges, sealing/coalescing rules, stable delivery keys, persisted host chat-message receipts and stale-source/permission reconciliation. Existing direct sending is only the final adapter. This gives every later authored social response a durable, idempotent delivery boundary.
+2. **Close the 3G concurrent-cap proof next.** Keep the existing provider-off ledger/context/recall baseline, but add a true concurrent database contention fixture against the same cap before any future request-dispatch path can depend on it. No language/provider work is enabled in this step.
+3. **Complete 3D on the delivery substrate.** Add only explicit typed exchanges that have deterministic terms, bounded state/depth and authored zero-LLM replies. Greetings, thanks, help/resource requests, trade offers, ceasefires, apologies, warnings and cooperation requests may decline or clarify unsupported capabilities; they must never imply a transport, ceasefire enforcement, fleet action or fulfilled obligation. Compensation requires an explicit commitment direction and exact due terms; it remains outstanding until independent correlated evidence fulfills it.
+4. **Complete 3E only from a durable completed host outcome.** Select and test a specific ordinary OGameX operation whose completion can be correlated after commit. An `AiActionReceipt` that says a building queue was accepted is not a completed building outcome and cannot produce a successful experience case. Preserve pending/failed/inconclusive cases and source/receipt provenance, then retain only once the outcome is final.
+5. **Run the final pre-3H acceptance pass.** Re-run the complete native social, experience, delivery, recall/context and budget matrix with provider-off behavior. Do not begin `LanguageGateway`, provider configuration, SDK installation or LLM tests until every deterministic proof above is complete.
+
+This ordering is intentional: delivery receipts establish social-message reality; protocol commitments require that boundary; learning requires an independently durable outcome rather than a chosen intent or accepted queue; budget contention is proved before any later dispatcher can rely on it.
+
 | Slice | Concrete deliverable | Required proof before moving on |
 | --- | --- | --- |
 | 3A — source audit and observations | **Implemented:** direct inbound chat observations, post-commit reduction, deduplication and bounded legal reconciliation. | Feature coverage for rollback, duplicate, late-source and recipient isolation; no external dependency. |
