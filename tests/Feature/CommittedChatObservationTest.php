@@ -12,6 +12,7 @@ use Modules\AI\Actions\FulfillAiCommitmentAction;
 use Modules\AI\Actions\ReconcileAiChatObservationsAction;
 use Modules\AI\Actions\RecordAiCommitmentAction;
 use Modules\AI\Actions\RecordAiMemoryFactAction;
+use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Actions\RecordObservedChatMessageAction;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCommitmentState;
@@ -23,6 +24,7 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\Alliance;
@@ -58,7 +60,7 @@ class CommittedChatObservationTestCase extends TestCase
     {
         parent::setUp();
 
-        if (Schema::hasTable('ai_commitments')) {
+        if (Schema::hasColumn('ai_relationships', 'last_observation_id')) {
             return;
         }
 
@@ -71,6 +73,7 @@ class CommittedChatObservationTestCase extends TestCase
 
     protected function tearDown(): void
     {
+        AiRelationship::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiObservation::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiProfile::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         ChatMessage::withTrashed()
@@ -419,4 +422,28 @@ test('an accepted commitment is fulfilled once with evidence or expires after it
         ->and($fulfilled?->fulfillment_observation_id)->toBe($fulfillmentSource->id)
         ->and($expired?->state)->toBe(AiCommitmentState::Expired)
         ->and($expired?->fulfillment_observation_id)->toBeNull();
+});
+
+test('a relationship is sourced, bounded, and cannot be revised by a late interaction', function (): void {
+    $owner = $this->createChatPlayer();
+    $otherPlayer = $this->createChatPlayer();
+    $source = AiObservation::create([
+        'player_id' => $owner->id,
+        'source_type' => AiObservationSource::ChatMessage,
+        'source_id' => 401,
+        'kind' => AiObservationKind::DirectChatMessageReceived,
+        'subject_player_id' => $otherPlayer->id,
+        'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+    ]);
+    $record = app(RecordAiRelationshipInteractionAction::class);
+    $first = $record->handle($owner->id, $otherPlayer->id, $source->id, CarbonImmutable::parse('2026-09-11 12:00:00 UTC'), 2, -1, 2);
+    $late = $record->handle($owner->id, $otherPlayer->id, $source->id, CarbonImmutable::parse('2026-09-11 11:00:00 UTC'), -1, 1);
+
+    expect($first?->trust)->toBe('1.0000')
+        ->and($first?->threat)->toBe('0.0000')
+        ->and($first?->last_observation_id)->toBe($source->id)
+        ->and($late?->trust)->toBe('1.0000')
+        ->and(AiRelationship::query()->where('player_id', $owner->id)->where('other_player_id', $otherPlayer->id)->count())->toBe(1)
+        ->and($record->handle($owner->id, $owner->id, $source->id, CarbonImmutable::now()))->toBeNull();
 });
