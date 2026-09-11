@@ -5,6 +5,7 @@ use Modules\AI\Actions\RecordAiMemoryFactAction;
 use Modules\AI\Actions\RedactAiMemoryFactsAction;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\LongTermMemory;
+use Modules\AI\Domain\Conversation\ConversationContextSection;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Domain\Conversation\NativeLongTermMemory;
@@ -60,5 +61,22 @@ test('context selection preserves earlier sections and applies a hard character 
 
     expect($context->sections)->toHaveKeys(['persona', 'terms'])
         ->and($context->sections)->not->toHaveKey('older_memory')
+        ->and($context->protectedContentFits)->toBeTrue()
         ->and(mb_strlen($context->serialized))->toBeLessThanOrEqual(80);
+});
+
+test('protected context is prioritized and reports when it cannot fit intact', function (): void {
+    $prioritized = app(ContextBuilder::class)->buildConversationContext([
+        'older_memory' => str_repeat('x', 200),
+        new ConversationContextSection('exact_terms', ['amount' => 10], true),
+    ], 80);
+    $overflowed = app(ContextBuilder::class)->buildConversationContext([
+        new ConversationContextSection('current_message', str_repeat('x', 200), true),
+    ], 80);
+
+    expect($prioritized->sections)->toHaveKey('exact_terms')
+        ->and($prioritized->sections)->not->toHaveKey('older_memory')
+        ->and($prioritized->protectedContentFits)->toBeTrue()
+        ->and($overflowed->sections)->toBe([])
+        ->and($overflowed->protectedContentFits)->toBeFalse();
 });
