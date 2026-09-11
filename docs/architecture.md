@@ -59,6 +59,52 @@ generic coding preference.
   tests. This is the module's persistent implementation-memory for swappable
   orchestration; do not construct a collaborator directly in a job.
 
+## Queue and Horizon integration
+
+The host runs Laravel Horizon over Redis and owns the host lanes in
+`config/horizon.php` (`app/Enums/QueueName.php`). The module owns its own lanes:
+
+| Lane | Queue | Supervisor | Purpose |
+| --- | --- | --- | --- |
+| AI work | `ai` | `supervisor-ai` | Deterministic `ProcessAiWork` jobs: sessions, building, social and experience work |
+| AI language | `ai-language` | `supervisor-ai-language` | Bounded foreground language generation; one provider request per sealed reply |
+
+The plan lives in [`config/horizon.php`](../config/horizon.php) and is applied to
+`config('horizon.*')` by `Modules\AI\Support\HorizonConfiguration` from
+`HorizonServiceProvider`. Horizon reads its config when the master supervisor
+starts, after every provider has booted, so the host horizon file stays generic.
+The plan is applied only while the module is enabled, so disabling the module
+removes every AI supervisor, wait and queue with no host change.
+`HorizonConfiguration` requires the plan file directly when `config('ai.horizon')`
+is absent, so the lanes still register when the module was enabled after
+`config:cache` had already run. Tune the lanes with the module's own
+`AI_HORIZON_*` environment variables.
+
+`ProcessAiWork` sets its lane in the constructor, exposes Horizon tags (`ai`,
+`ai:work`, `ai:work-item:{id}`) for dashboard filtering, bounds itself with
+`$timeout` and `$maxExceptions`, and reclaims an expired `Leased` work item so a
+queue retry or the scheduler can finish it instead of the item staying stuck.
+`AIServiceProvider::configureSchedules()` dispatches `ai:run-due-work` every
+minute with `withoutOverlapping`.
+
+Horizon supervisor timeouts stay below the redis `retry_after` (660s): 30s for the
+AI work lane and 60s for the language lane (above `ai.language.timeout_seconds`).
+AI queued work needs Redis and Horizon; the database worker pools only drain the
+fleet lanes. Do not run Horizon while `QUEUE_CONNECTION` is not `redis` — Horizon
+only consumes redis, so module jobs would sit on an unconsumed database queue.
+
+### Install and uninstall
+
+`Modules/AI/app/Hooks/InstallModule` and `UninstallModule` are discovered by the
+host lifecycle commands (`php artisan ogamex:module:install AI`,
+`php artisan ogamex:module:uninstall AI`). The install hook reports Horizon and
+cache prerequisites; the uninstall hook explains that module data is retained unless
+`--drop-data` is given. The host owns enabling, migrations, cache refresh and worker
+restart; see the host `docs/module-lifecycle.md`.
+
+`Modules/AI/docker/supervisor/queue-worker.conf` adds the database-driver worker pool
+and is applied by the host's generic module loader only while the module is enabled.
+
 ## Proposed boundaries
 
 - \`Domain/Perception\`: builds the information available to one AI player.

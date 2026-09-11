@@ -4,6 +4,7 @@ namespace Modules\AI\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 
@@ -18,6 +19,7 @@ use Modules\AI\Enums\AiObservationSource;
  * @property int $source_id
  * @property AiObservationKind $kind
  * @property int|null $subject_player_id
+ * @property Carbon $observed_at
  */
 #[Unguarded]
 class AiObservation extends Model

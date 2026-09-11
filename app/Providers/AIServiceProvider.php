@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Providers;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
@@ -10,6 +11,7 @@ use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\ExperienceEngine;
+use Modules\AI\Contracts\LanguageGateway;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
@@ -28,6 +30,8 @@ use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
 use Modules\AI\Domain\Experience\NativeExperienceEngine;
+use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
+use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
@@ -49,6 +53,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
     protected array $providers = [
         RouteServiceProvider::class,
+        HorizonServiceProvider::class,
     ];
 
     protected array $commands = [
@@ -67,6 +72,15 @@ class AIServiceProvider extends ModuleServiceProvider
         Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
     }
 
+    /**
+     * Dispatch due AI work every minute. The command only leases and enqueues; every
+     * decision still runs inside its leased, idempotent job on the AI Horizon lane.
+     */
+    protected function configureSchedules(Schedule $schedule): void
+    {
+        $schedule->command('ai:run-due-work')->everyMinute()->withoutOverlapping(5);
+    }
+
     public function register(): void
     {
         parent::register();
@@ -76,6 +90,9 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->bind(ExperienceEngine::class, NativeExperienceEngine::class);
         $this->app->bind(ContextBuilder::class, NativeContextBuilder::class);
         $this->app->bind(LongTermMemory::class, NativeLongTermMemory::class);
+        $this->app->bind(LanguageGateway::class, fn (): LanguageGateway => (bool) config('ai.language.enabled', false)
+            ? app(LaravelAiLanguageGateway::class)
+            : app(NullLanguageGateway::class));
         $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
         $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
