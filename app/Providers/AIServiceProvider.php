@@ -5,8 +5,10 @@ namespace Modules\AI\Providers;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\RunDueAiWork;
+use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
+use Modules\AI\Domain\Cognition\NativeAffectEngine;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
@@ -52,6 +54,7 @@ class AIServiceProvider extends ModuleServiceProvider
         parent::register();
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
+        $this->app->bind(AffectEngine::class, NativeAffectEngine::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
         $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
         $this->app->bind(AiClock::class, SystemAiClock::class);
