@@ -6,6 +6,7 @@ Owner: runtime/cost. Every number below is a proposed starting limit or arithmet
 
 - Normal decisions, scheduling, recovery, game-event reducers, native memory, appraisal, authored social exchanges and structured CBR: **0 generative calls**. Their baseline also needs no embeddings.
 - A known substantive social exchange first tries authored dialogue. Only selective human-language realization or interpretation/reply may reserve a foreground LLM request.
+- Every enabled LLM request goes through the module's Laravel AI SDK `LanguageGateway` adapter; its provider/model choice and any SDK failover attempt are accounted as provider attempts in this ledger.
 - Generate text and any fact/intent/commitment proposals together. No separate classifier, extractor, realization, judge or repair-model chain for the same reply.
 - No autonomous AI-to-AI LLM loops, periodic reflection, automatic per-event summaries, background model-based personality changes or general gameplay batch planning.
 - Rare strategic advice is a later opt-in Phase 3+ experiment, disabled in the baseline. The [activation gate](phase-3-cognition.md#later-capabilities-and-explicit-activation-gates) requires a meaningful unresolved major-event decision, cooldown, dedupe and a separately allocated share of the global budget. Normal policy never waits for it.

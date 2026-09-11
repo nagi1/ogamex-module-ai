@@ -16,11 +16,13 @@ use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
+use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
+use OGame\Models\ChatMessage;
 
 class AIServiceProvider extends ModuleServiceProvider
 {
@@ -41,6 +43,8 @@ class AIServiceProvider extends ModuleServiceProvider
         // parent::boot() loads the module's routes, views, config, migrations,
         // commands, and schedules through Laravel Modules.
         parent::boot();
+
+        ChatMessage::observe(ObserveCommittedChatMessage::class);
     }
 
     public function register(): void

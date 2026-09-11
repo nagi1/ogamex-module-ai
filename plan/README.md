@@ -26,7 +26,7 @@ Session choices are recorded intents; selecting a fleet/research/trade candidate
 - Use the existing OGameX Next module system. AI behavior stays in the AI module.
 - The game remains responsible for rules, costs and execution. Add small shared extension points where the module needs them.
 - Ordinary gameplay and game-event memory use algorithms and database records, with **zero language-model tokens**.
-- Use authored social dialogue before selectively escalating human language to an LLM. Include validated extraction proposals in the same request.
+- Use authored social dialogue before selectively escalating human language to an LLM through the first-party Laravel AI SDK. Include validated extraction proposals in the same request.
 - Add native affect/social cognition and structured experience behind small Laravel-bound module contracts. FAtiMA/CiF and CBRKit are candidates, not prerequisites.
 - Keep advanced recall optional. AgentOS memory-only is a candidate after native benchmarks; Mem0 is rejected. Embeddings, PsychSim and ML compression require their own evidence.
 - Keep OGame-specific competence outside cognitive contracts. Prove real driver swaps in this module before considering a standalone framework.
@@ -52,7 +52,7 @@ Remember rivals, favors, claims and agreements. Add goal-aware affect, CiF-style
 
 **Done when:** real feature scenarios prove memory, social consequences, outcome learning and permission-checked conversation across sessions; native behavior works with optional services absent; enabled drivers pass conformance/swap and budget checks.
 
-Read the [detailed Phase 3 architecture](details/specs/phase-3-cognition.md), including eight end-to-end flows, minimal contracts, failure behavior, small delivery slices and the final diagram. The [decision history](details/DECISIONS.md) explains superseded technologies; [validation](details/specs/validation.md) and [evaluation](details/research/memory-comparison.md) define evidence still needed. Rare strategic advice is a disabled later experiment, not a baseline task or periodic call.
+Read the [detailed Phase 3 architecture](details/specs/phase-3-cognition.md), including eight end-to-end flows, minimal contracts, failure behavior, small delivery slices and the final diagram. The [Laravel AI SDK integration](details/specs/laravel-ai-sdk.md) specifies the 3H language adapter and its boundaries. The [decision history](details/DECISIONS.md) explains superseded technologies; [validation](details/specs/validation.md) and [evaluation](details/research/memory-comparison.md) define evidence still needed. Rare strategic advice is a disabled later experiment, not a baseline task or periodic call.
 
 ### 4. Test with humans, then grow
 

@@ -47,7 +47,7 @@ Work order: land the module action adapter; add owned-state reduction; add sessi
 
 ## Phase 3: social cognition, experience and bounded language
 
-The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
+The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Slice 3A is implemented; 3B is in progress. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
 
 | Proposed module area/files | Records | Responsibility |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3
 | `Contracts/ExperienceEngine.php`; `Actions/RecordExperienceOutcomeAction.php`, `ExtractOGameExperienceFeaturesAction.php` | Native pending/final cases with feature/ruleset versions and actual receipt/report outcome | Deterministic case ranking via native implementation or optional CBRKit. Never learn a successful mission from a record-only intent. |
 | `Actions/MapObservedGameEventToStimulusAction.php`, `ResolveCognitiveIntentAction.php`; existing policy integration | Typed snapshots, accepted intentions and reasoned traces | Translate OGame observations to generic cognition inputs and back to existing policy/capability paths. No universal planner or new execution engine. |
 | `Contracts/LongTermMemory.php`, `ContextBuilder.php`; `Domain/Memory` / `Domain/Conversation` | Native selected source IDs, context/ACL/term revisions | Exact/native recall and deterministic context budget; optional advanced memory returns revalidated projections. |
-| `Contracts/LanguageGateway.php`; `Support` provider adapter and disabled implementation | Request ID, response envelope, usage and failure result | One foreground generation containing text and optional proposals; no tool access or separate extractor. |
+| `Contracts/LanguageGateway.php`; `Ai/Agents/OgameConversationReplyAgent.php`, `Infrastructure/Language/LaravelAiLanguageGateway.php` and disabled implementation | Request ID, response envelope, usage and failure result | Use `laravel/ai` for the single foreground generation containing text and optional proposals. Keep the SDK non-conversational and tool-free; module jobs/receipts retain lifecycle authority. See [Laravel AI SDK integration](specs/laravel-ai-sdk.md). |
 | `Actions/PlanAiReplyAction.php`, `ValidateAiReplyProposalsAction.php`, `DeliverAiReplyAction.php`; short conversation jobs | Pending reply generation, source range, due/expiry, budget reservation and delivery receipt/core chat ID | Coalescing, route selection, validation, host-equivalent send permissions and crash/idempotency handling outside gameplay locks. |
 | `AIServiceProvider`, module config and `tests/Feature` / `tests/Unit` | Driver/capability configuration, versioned fixtures and experiment artifacts | Register only used contracts, native/null defaults, real adapter conformance and behavioral/ablation scenarios. |
 
@@ -104,7 +104,7 @@ Integration tests: two humans cannot attack, spy-counterattack, missile or ACS e
 1. Module: profile/work/receipt migrations, module-owned queue action, first decision and processing job.
 2. Module: session planner, perception reduction, candidates, traces and deterministic profiles.
 3. Module: Phase 3 milestones 3A–3G, one concern per PR: observed sources, native facts/obligations, affect, social protocols, experience, authored delivery and context/budgets.
-4. Module: 3H optional language, separate 3I driver spikes and 3J evidence/acceptance; do not bundle sidecar adoption with the baseline.
+4. Host + module: 3H installs a pinned compatible `laravel/ai` release in the host Composer root and adds the module's optional Laravel AI adapter; then complete separate 3I driver spikes and 3J evidence/acceptance. Do not bundle sidecar adoption with the baseline.
 5. Module: pilot tools, caps and operational metrics.
 6. Host + module: only if a future cooperative mode cannot use an existing generic boundary, add a narrow generic safety policy and pair it with the campaign director tests.
 

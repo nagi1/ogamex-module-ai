@@ -42,7 +42,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Goal:** believable, persistent social behavior and outcome-based learning with no generative calls for ordinary gameplay; authored dialogue handles known exchanges and optional language handles unrestricted human conversation.
 
-**Required reading:** [actual Phase 2 state](details/research/phase-3-current-state.md), [Phase 3 architecture and milestones](details/specs/phase-3-cognition.md), [memory/language](details/specs/memory-and-language.md), [budgets](details/specs/budgets.md), [validation](details/specs/validation.md). Read [driver evaluation](details/research/memory-comparison.md) only for a driver/benchmark milestone.
+**Required reading:** [actual Phase 2 state](details/research/phase-3-current-state.md), [Phase 3 architecture and milestones](details/specs/phase-3-cognition.md), [memory/language](details/specs/memory-and-language.md), [Laravel AI SDK integration](details/specs/laravel-ai-sdk.md) for 3H, [budgets](details/specs/budgets.md), [validation](details/specs/validation.md). Read [driver evaluation](details/research/memory-comparison.md) only for a driver/benchmark milestone.
 
 **Scope:** native facts/claims/relationships/commitments, affect and goal pressure, significant emotional episodes, structured social protocols/authored dialogue, real outcome cases and CBR, coalesced replies, context selection, atomic budgets, safe normal-host delivery, six concrete module contract seams and repeatable experiments. New optional external adapters are separate focused slices after their native boundaries work.
 
