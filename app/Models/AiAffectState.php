@@ -4,12 +4,13 @@ namespace Modules\AI\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Modules\AI\Enums\AiAffectEmotion;
 
 /**
  * @property int $revision
  * @property string $intensity
- * @property \Illuminate\Support\Carbon $updated_for
+ * @property Carbon $updated_for
  */
 #[Unguarded]
 class AiAffectState extends Model

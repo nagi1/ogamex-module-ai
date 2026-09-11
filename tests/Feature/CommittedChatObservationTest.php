@@ -12,6 +12,7 @@ use Modules\AI\Actions\FindCurrentAiMemoryFactsAction;
 use Modules\AI\Actions\FulfillAiCommitmentAction;
 use Modules\AI\Actions\ReconcileAiChatObservationsAction;
 use Modules\AI\Actions\RecordAiCommitmentAction;
+use Modules\AI\Actions\RecordAiEmotionalEpisodeAction;
 use Modules\AI\Actions\RecordAiMemoryFactAction;
 use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Actions\RecordObservedChatMessageAction;
@@ -25,6 +26,7 @@ use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiCommitment;
+use Modules\AI\Models\AiEmotionalEpisode;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -63,7 +65,7 @@ class CommittedChatObservationTestCase extends TestCase
     {
         parent::setUp();
 
-        if (Schema::hasTable('ai_affect_states')) {
+        if (Schema::hasTable('ai_emotional_episodes')) {
             return;
         }
 
@@ -77,6 +79,7 @@ class CommittedChatObservationTestCase extends TestCase
     protected function tearDown(): void
     {
         AiAffectState::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
+        AiEmotionalEpisode::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiRelationship::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiObservation::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiProfile::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
@@ -428,6 +431,32 @@ test('an accepted commitment is fulfilled once with evidence or expires after it
         ->and($expired?->fulfillment_observation_id)->toBeNull();
 });
 
+test('terminal commitments and unknown identifiers cannot be transitioned again', function (): void {
+    $owner = $this->createChatPlayer();
+    $counterparty = $this->createChatPlayer();
+    $source = AiObservation::create([
+        'player_id' => $owner->id,
+        'source_type' => AiObservationSource::ChatMessage,
+        'source_id' => 303,
+        'kind' => AiObservationKind::DirectChatMessageReceived,
+        'subject_player_id' => $counterparty->id,
+        'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+    ]);
+    $commitment = app(RecordAiCommitmentAction::class)->handle($owner->id, $counterparty->id, ['amount' => 10], $source->id);
+    $accepted = app(AcceptAiCommitmentAction::class)->handle($commitment->id);
+    $acceptedAgain = app(AcceptAiCommitmentAction::class)->handle($commitment->id);
+    $fulfilled = app(FulfillAiCommitmentAction::class)->handle($commitment->id, $source->id, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
+    $fulfilledAgain = app(FulfillAiCommitmentAction::class)->handle($commitment->id, $source->id, CarbonImmutable::parse('2026-09-11 14:00:00 UTC'));
+
+    expect(app(AcceptAiCommitmentAction::class)->handle(PHP_INT_MAX))->toBeNull()
+        ->and(app(FulfillAiCommitmentAction::class)->handle(PHP_INT_MAX, $source->id, CarbonImmutable::parse('2026-09-11 13:00:00 UTC')))->toBeNull()
+        ->and($accepted?->state)->toBe(AiCommitmentState::Accepted)
+        ->and($acceptedAgain?->state)->toBe(AiCommitmentState::Accepted)
+        ->and($fulfilled?->state)->toBe(AiCommitmentState::Fulfilled)
+        ->and($fulfilledAgain?->state)->toBe(AiCommitmentState::Fulfilled);
+});
+
 test('a relationship is sourced, bounded, and cannot be revised by a late interaction', function (): void {
     $owner = $this->createChatPlayer();
     $otherPlayer = $this->createChatPlayer();
@@ -468,4 +497,29 @@ test('affect decay is deterministic, bounded, and does not alter commitments', f
     expect($decayed->intensity)->toBe('0.2500')
         ->and($decayed->revision)->toBe(2)
         ->and($unchanged->revision)->toBe(2);
+});
+
+test('a significant emotional episode is source-deduplicated and keeps its original intensity', function (): void {
+    $owner = $this->createChatPlayer();
+    $source = AiObservation::create([
+        'player_id' => $owner->id,
+        'source_type' => AiObservationSource::ChatMessage,
+        'source_id' => 501,
+        'kind' => AiObservationKind::DirectChatMessageReceived,
+        'subject_player_id' => $this->createChatPlayer()->id,
+        'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+    ]);
+
+    $record = app(RecordAiEmotionalEpisodeAction::class);
+    $first = $record->handle($owner->id, $source->id, AiAffectEmotion::Anger, 4, CarbonImmutable::parse('2026-09-11 12:00:00 UTC'));
+    $duplicate = $record->handle($owner->id, $source->id, AiAffectEmotion::Anger, 0, CarbonImmutable::parse('2026-09-12 12:00:00 UTC'));
+    $fear = $record->handle($owner->id, $source->id, AiAffectEmotion::Fear, -1, CarbonImmutable::parse('2026-09-11 12:00:00 UTC'));
+
+    expect($first->wasRecentlyCreated)->toBeTrue()
+        ->and($first->intensity)->toBe('1.0000')
+        ->and($duplicate->wasRecentlyCreated)->toBeFalse()
+        ->and($duplicate->intensity)->toBe('1.0000')
+        ->and($fear->intensity)->toBe('0.0000')
+        ->and(AiEmotionalEpisode::query()->where('player_id', $owner->id)->count())->toBe(2);
 });

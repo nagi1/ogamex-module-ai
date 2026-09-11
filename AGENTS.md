@@ -39,3 +39,7 @@ Write clean, maintainable, production-ready code. Keep changes module-first: reu
 - Prefer real OGameX models, services, database state, queues, locks, and validation paths. Mockery is prohibited. A narrow container override is allowed only to exercise an explicitly replaceable seam and must be named and justified.
 - Cover every affected behavior, edge case, and branch with meaningful tests; changed module code must maintain 100% PCOV coverage.
 - Run Pint, module PHPStan, Rector dry-run, full Pest, PCOV coverage, and TIA before handoff.
+
+## Phase 3 execution
+
+Continue working autonomously through every deterministic Phase 3 slice and do not stop for progress-only updates. Finish all work before the optional LLM/provider phase: complete 3B through 3G, keep the plan updated after each verified slice, run the required checks, and commit each meaningful completed slice. Stop only when the pre-LLM Phase 3 baseline is genuinely complete or a real blocker requires user input.

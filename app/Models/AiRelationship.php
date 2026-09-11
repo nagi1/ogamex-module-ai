@@ -4,6 +4,7 @@ namespace Modules\AI\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Sparse social state: rows exist only after a legally observed interaction.
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $respect
  * @property string $social_importance
  * @property int $revision
- * @property \Illuminate\Support\Carbon|null $last_interaction_at
+ * @property Carbon|null $last_interaction_at
  */
 #[Unguarded]
 class AiRelationship extends Model

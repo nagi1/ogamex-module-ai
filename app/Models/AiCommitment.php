@@ -4,6 +4,7 @@ namespace Modules\AI\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Modules\AI\Enums\AiCommitmentState;
 
 /**
@@ -11,7 +12,7 @@ use Modules\AI\Enums\AiCommitmentState;
  *
  * @property AiCommitmentState $state
  * @property int $revision
- * @property \Illuminate\Support\Carbon|null $due_at
+ * @property Carbon|null $due_at
  */
 #[Unguarded]
 class AiCommitment extends Model
