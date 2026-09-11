@@ -5,6 +5,9 @@ return [
     'provider' => env('AI_LANGUAGE_PROVIDER', 'openai'),
     'model' => env('AI_LANGUAGE_MODEL', 'gpt-5-mini'),
     'timeout_seconds' => (int) env('AI_LANGUAGE_TIMEOUT_SECONDS', 20),
+    // A timed-out provider call is charged at its reserved maximum once this window
+    // passes, because its remote completion can no longer be observed.
+    'reconciliation_minutes' => (int) env('AI_LANGUAGE_RECONCILIATION_MINUTES', 30),
     'context_characters' => (int) env('AI_LANGUAGE_CONTEXT_CHARACTERS', 8_000),
     'maximum_reply_characters' => (int) env('AI_LANGUAGE_MAXIMUM_REPLY_CHARACTERS', 1_200),
     'maximum_input_tokens' => (int) env('AI_LANGUAGE_MAXIMUM_INPUT_TOKENS', 2_000),

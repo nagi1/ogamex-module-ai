@@ -190,33 +190,46 @@ class GenerateAiReplyAction
                 return;
             }
 
-            if ($result->status === AiLanguageResultStatus::Completed && !$this->settleKnownUsage($request, $result)) {
-                $this->updateRequest($request, AiLanguageRequestState::Uncertain, $result, $latencyMilliseconds);
+            $state = $this->resolveState($request, $result);
+            $this->updateRequest($request, $state, $result, $latencyMilliseconds);
 
+            if ($state !== AiLanguageRequestState::Completed) {
                 return;
             }
 
-            if ($result->status === AiLanguageResultStatus::Completed) {
-                $reply->update(['message' => $result->text, 'revision' => $reply->revision + 1]);
-                $this->updateRequest($request, AiLanguageRequestState::Completed, $result, $latencyMilliseconds);
+            $reply->update(['message' => $result->text, 'revision' => $reply->revision + 1]);
 
-                if ($result->proposals === []) {
-                    return;
-                }
-
-                collect($result->proposals)->each(fn ($proposal) => app(RecordAiLanguageProposalAction::class)->handle($request, $reply->refresh(), $proposal));
-
-                return;
-            }
-
-            if ($result->status === AiLanguageResultStatus::Invalid && $this->settleKnownUsage($request, $result)) {
-                $this->updateRequest($request, AiLanguageRequestState::Invalid, $result, $latencyMilliseconds);
-
-                return;
-            }
-
-            $this->updateRequest($request, AiLanguageRequestState::Uncertain, $result, $latencyMilliseconds);
+            collect($result->proposals)->each(fn ($proposal) => app(RecordAiLanguageProposalAction::class)->handle($request, $reply->refresh(), $proposal));
         });
+    }
+
+    /**
+     * A timed-out provider call may still complete remotely, so its attempt stays reserved
+     * for the reconciliation command instead of being charged against reported zero usage
+     * or resent; every other outcome settles its attempt in this transaction.
+     */
+    private function resolveState(AiLanguageRequest $request, LanguageResult $result): AiLanguageRequestState
+    {
+        if ($result->status === AiLanguageResultStatus::TimedOut) {
+            return AiLanguageRequestState::Uncertain;
+        }
+
+        if (!$this->settleKnownUsage($request, $result)) {
+            return AiLanguageRequestState::Uncertain;
+        }
+
+        return $this->settledState($result->status);
+    }
+
+    private function settledState(AiLanguageResultStatus $status): AiLanguageRequestState
+    {
+        return match ($status) {
+            AiLanguageResultStatus::Completed => AiLanguageRequestState::Completed,
+            AiLanguageResultStatus::Invalid => AiLanguageRequestState::Invalid,
+            // A disabled gateway produced no text, yet it consumed its reserved attempt.
+            AiLanguageResultStatus::Disabled, AiLanguageResultStatus::Failed => AiLanguageRequestState::Failed,
+            AiLanguageResultStatus::TimedOut => AiLanguageRequestState::Uncertain,
+        };
     }
 
     private function settleKnownUsage(AiLanguageRequest $request, LanguageResult $result): bool

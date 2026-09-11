@@ -38,7 +38,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 3 — social cognition, experience and bounded conversation
 
-**Status:** detailed planning revision; implementation not started. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
+**Status:** slices 3A–3H implemented and committed; 3I driver experiments and 3J acceptance/measurement remain. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
 
 **Goal:** believable, persistent social behavior and outcome-based learning with no generative calls for ordinary gameplay; authored dialogue handles known exchanges and optional language handles unrestricted human conversation.
 
@@ -48,7 +48,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Integration:** reuse existing module discovery, provider bindings and actor-scoped services/records. Candidate scoring may consume bounded accepted cognitive/experience inputs when a scenario requires them; do not replace the scheduler/utility engine. Validate source durability and human-equivalent chat permission rules in module actions. Consider a separate generic host hook only for a demonstrated gap.
 
-**Do not build:** a framework/package split, generic game planner, mandatory sidecars, automatic reflection/extraction, per-event summaries, AI-to-AI LLM chat, a new fleet/combat engine or mandatory semantic/vector storage. Do not implement Phase 3 as part of this documentation revision. Mem0 is rejected; FAtiMA, CBRKit, AgentOS and PsychSim remain candidates behind boundaries.
+**Do not build:** a framework/package split, generic game planner, mandatory sidecars, automatic reflection/extraction, per-event summaries, AI-to-AI LLM chat, a new fleet/combat engine or mandatory semantic/vector storage. Track progress in the [delivery slices](details/specs/phase-3-cognition.md#delivery-slices-and-completion-evidence) and keep each change inside its milestone. Mem0 is rejected; FAtiMA, CBRKit, AgentOS and PsychSim remain candidates behind boundaries.
 
 **Milestones:** 3A sources; 3B facts/obligations; 3C native affect; 3D social protocols; 3E experience; 3F authored delivery; 3G context/budgets; 3H optional language; 3I separate driver experiments; 3J acceptance/measurement. Each has a testable outcome in the [implementation sequence](details/specs/phase-3-cognition.md#delivery-slices-and-completion-evidence). Optional experiments do not make every sidecar a release dependency.
 

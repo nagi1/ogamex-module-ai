@@ -3,17 +3,11 @@
 use Carbon\CarbonImmutable;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Modules\AI\Actions\GenerateAiReplyAction;
-use Modules\AI\Actions\QueueAiAuthoredReplyAction;
 use Modules\AI\Actions\RecordAiLanguageProposalAction;
-use Modules\AI\Actions\RecordObservedChatMessageAction;
-use Modules\AI\Actions\SealAiAuthoredReplyAction;
 use Modules\AI\Ai\Agents\OgameConversationReplyAgent;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\LanguageGateway;
-use Modules\AI\Domain\Conversation\ConversationContext;
-use Modules\AI\Domain\Conversation\LanguageProposal;
 use Modules\AI\Domain\Conversation\LanguageRequest;
-use Modules\AI\Domain\Conversation\LanguageResult;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiConversationReplyState;
@@ -25,24 +19,23 @@ use Modules\AI\Enums\AiLanguageResultStatus;
 use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialResource;
+use Modules\AI\Enums\AiUsageBudgetScope;
 use Modules\AI\Enums\AiUsageReservationState;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Models\AiCommitment;
-use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiLanguageProposal;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiMemoryFact;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiUsageBudget;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Providers\AIServiceProvider;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\ConcurrentLanguageRequestContextBuilder;
-use Modules\AI\Tests\Support\FixedLanguageGateway;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use Modules\AI\Tests\Support\TimeoutOgameConversationReplyAgent;
-use OGame\Models\ChatMessage;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -50,6 +43,7 @@ require_once __DIR__ . '/../Support/FixedLanguageGateway.php';
 require_once __DIR__ . '/../Support/LanguageGatewayTimeout.php';
 require_once __DIR__ . '/../Support/TimeoutOgameConversationReplyAgent.php';
 require_once __DIR__ . '/../Support/ConcurrentLanguageRequestContextBuilder.php';
+require_once __DIR__ . '/../Support/LanguageTestFixtures.php';
 
 uses(IsolatedAccountTestCase::class);
 
@@ -132,17 +126,49 @@ test('an SDK-valid proposal without explicit source terms is recorded as rejecte
         ->and(AiMemoryFact::query()->where('player_id', $this->currentUserId)->where('predicate', AiMemoryPredicate::ResourceDebt)->count())->toBe(0);
 });
 
-test('a provider failure preserves the reserved attempt and delivers the authored fallback', function (): void {
+test('a definite provider failure settles its attempt once and delivers the authored fallback', function (): void {
     [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'Can you answer this?');
     OgameConversationReplyAgent::fake([
         fn () => throw app()->makeWith(RuntimeException::class, ['message' => 'Provider unavailable.']),
     ])->preventStrayPrompts();
 
     $delivered = app(GenerateAiReplyAction::class)->handle($reply->id);
+    $reservation = AiUsageReservation::query()->sole();
+
+    expect($delivered?->message)->toBe('Authored fallback.')
+        ->and(AiLanguageRequest::query()->sole()->state)->toBe(AiLanguageRequestState::Failed)
+        ->and($reservation->state)->toBe(AiUsageReservationState::Settled)
+        ->and($reservation->actual_input_tokens)->toBe(0)
+        ->and(AiUsageBudget::query()->where('scope', AiUsageBudgetScope::Player->value)->where('scope_key', (string) $this->currentUserId)->sole()->reserved_attempts)->toBe(1);
+});
+
+test('a provider timeout keeps its attempt reserved for reconciliation and is never resent', function (): void {
+    [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'Can you answer this?');
+    OgameConversationReplyAgent::fake([
+        fn () => throw app()->makeWith(LanguageGatewayTimeout::class, ['message' => 'Provider timeout.']),
+    ])->preventStrayPrompts();
+
+    $delivered = app(GenerateAiReplyAction::class)->handle($reply->id);
+    $reservation = AiUsageReservation::query()->sole();
 
     expect($delivered?->message)->toBe('Authored fallback.')
         ->and(AiLanguageRequest::query()->sole()->state)->toBe(AiLanguageRequestState::Uncertain)
-        ->and(AiUsageReservation::query()->sole()->state)->toBe(AiUsageReservationState::Reserved);
+        ->and($reservation->state)->toBe(AiUsageReservationState::Reserved)
+        ->and(AiLanguageRequest::query()->sole()->provider_request_id)->toBeNull();
+});
+
+test('an uncertain request redelivers its authored fallback without another provider call', function (): void {
+    [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'Can you answer this?');
+    languageRequestRecord($reply, AiLanguageRequestState::Uncertain);
+    OgameConversationReplyAgent::fake()->preventStrayPrompts();
+
+    $delivered = app(GenerateAiReplyAction::class)->handle($reply->id);
+
+    expect($delivered?->message)->toBe('Authored fallback.')
+        ->and(AiLanguageRequest::query()->count())->toBe(1)
+        ->and(AiUsageReservation::query()->count())->toBe(1);
+
+    OgameConversationReplyAgent::assertNeverPrompted();
 });
 
 test('provider-off and AI-to-AI replies keep the authored zero-prompt path', function (): void {
@@ -350,109 +376,3 @@ test('proposal persistence rejects unauthorized evidence and retains only explic
         ->and($commitment->state)->toBe(AiLanguageProposalState::Accepted)
         ->and(AiCommitment::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
 });
-
-function languageRequest(): LanguageRequest
-{
-    return app()->makeWith(LanguageRequest::class, [
-        'replyId' => 1,
-        'playerId' => 1,
-        'counterpartyPlayerId' => 2,
-        'requestKey' => 'language-test',
-        'context' => app()->makeWith(ConversationContext::class, ['sections' => [], 'serialized' => '{"safe":true}', 'protectedContentFits' => true]),
-        'authorizedSourceMessageIds' => [1],
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
-        'timeoutSeconds' => 17,
-        'maximumReplyCharacters' => 1_200,
-    ]);
-}
-
-function languageResult(AiLanguageResultStatus $status, string|null $text, int $inputTokens, int $outputTokens): LanguageResult
-{
-    return app()->makeWith(LanguageResult::class, [
-        'status' => $status,
-        'text' => $text,
-        'interpretation' => null,
-        'proposals' => [],
-        'inputTokens' => $inputTokens,
-        'outputTokens' => $outputTokens,
-        'providerRequestId' => null,
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
-    ]);
-}
-
-function bindFixedLanguageResult(LanguageResult $result, Closure|null $beforeResult = null): void
-{
-    app()->bind(LanguageGateway::class, fn (): FixedLanguageGateway => app()->makeWith(FixedLanguageGateway::class, [
-        'result' => $result,
-        'beforeResult' => $beforeResult,
-    ]));
-}
-
-function languageProposal(AiLanguageProposalType $type, int $sourceMessageId, AiSocialResource|null $resource, int|null $amount, CarbonImmutable|null $dueAt = null): LanguageProposal
-{
-    return app()->makeWith(LanguageProposal::class, ['type' => $type, 'sourceMessageId' => $sourceMessageId, 'resource' => $resource, 'amount' => $amount, 'dueAt' => $dueAt]);
-}
-
-function languageRequestRecord(AiConversationReply $reply, AiLanguageRequestState $state): AiLanguageRequest
-{
-    $reservation = AiUsageReservation::query()->create([
-        'universe_scope' => 'default',
-        'player_id' => $reply->player_id,
-        'conversation_key' => $reply->player_id . ':' . $reply->counterparty_player_id,
-        'request_key' => 'test-reservation:' . $reply->id,
-        'reserved_for' => '2024-01-01',
-        'reserved_input_tokens' => 2_000,
-        'reserved_output_tokens' => 320,
-        'state' => AiUsageReservationState::Reserved,
-    ]);
-
-    return AiLanguageRequest::query()->create([
-        'conversation_reply_id' => $reply->id,
-        'usage_reservation_id' => $reservation->id,
-        'request_key' => 'test-language:' . $reply->id,
-        'state' => $state,
-        'context_hash' => hash('sha256', 'test-language:' . $reply->id),
-    ]);
-}
-
-/** @return array{0: AiConversationReply, 1: ChatMessage} */
-function sealedLanguageReply(Closure $createUser, int $playerId, string $sourceText, bool $counterpartyIsAi = false): array
-{
-    $counterparty = $createUser();
-    AiProfile::query()->firstOrCreate(['player_id' => $playerId], [
-        'player_id' => $playerId,
-        'archetype' => AiArchetype::Miner,
-        'skill_band' => AiSkillBand::Standard,
-        'random_seed' => 7,
-        'enabled' => true,
-    ]);
-
-    if ($counterpartyIsAi) {
-        AiProfile::create([
-            'player_id' => $counterparty->id,
-            'archetype' => AiArchetype::Trader,
-            'skill_band' => AiSkillBand::Standard,
-            'random_seed' => 8,
-            'enabled' => true,
-        ]);
-    }
-
-    $source = ChatMessage::create([
-        'sender_id' => $counterparty->id,
-        'recipient_id' => $playerId,
-        'message' => $sourceText,
-    ]);
-    app(RecordObservedChatMessageAction::class)->handle($source->id);
-    $reply = app(QueueAiAuthoredReplyAction::class)->handle(
-        $playerId,
-        $counterparty->id,
-        $source->id,
-        'Authored fallback.',
-        CarbonImmutable::now()->addHour(),
-    );
-    $sealed = app(SealAiAuthoredReplyAction::class)->handle($reply?->id ?? 0);
-
-    return [$sealed, $source];
-}

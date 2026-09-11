@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
 use Laravel\Horizon\ProvisioningPlan;
@@ -13,41 +12,11 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\HorizonConfiguration;
+use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
-use Tests\IsolatedAccountTestCase;
 
-/**
- * Boots the host application with the AI module enabled so its providers — and the
- * Horizon lanes and schedules they register — are loaded. Mirrors AIRouteTest.
- */
-class AiQueueModuleTestCase extends IsolatedAccountTestCase
-{
-    private string $statusesFile;
-
-    public function createApplication(): Application
-    {
-        $trackedFile = dirname(__DIR__, 4) . '/modules_statuses.json';
-        $statuses = json_decode((string) file_get_contents($trackedFile), true);
-        $statuses['AI'] = true;
-        $this->statusesFile = sys_get_temp_dir() . '/modules_statuses_' . uniqid('', true) . '.json';
-        file_put_contents($this->statusesFile, json_encode($statuses, JSON_PRETTY_PRINT));
-        putenv('MODULES_STATUSES_FILE=' . $this->statusesFile);
-
-        return parent::createApplication();
-    }
-
-    protected function tearDown(): void
-    {
-        if (is_file($this->statusesFile)) {
-            unlink($this->statusesFile);
-        }
-
-        putenv('MODULES_STATUSES_FILE');
-
-        parent::tearDown();
-    }
-}
+require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
 
 uses(AiQueueModuleTestCase::class);
 

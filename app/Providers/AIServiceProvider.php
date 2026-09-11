@@ -6,7 +6,9 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
+use Modules\AI\Console\Commands\ReconcileLanguageRequests;
 use Modules\AI\Console\Commands\RunDueAiWork;
+use Modules\AI\Console\Commands\RunLanguageConformance;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\ContextBuilder;
@@ -57,7 +59,9 @@ class AIServiceProvider extends ModuleServiceProvider
     ];
 
     protected array $commands = [
+        ReconcileLanguageRequests::class,
         RunDueAiWork::class,
+        RunLanguageConformance::class,
     ];
 
     public function boot(): void
@@ -79,6 +83,7 @@ class AIServiceProvider extends ModuleServiceProvider
     protected function configureSchedules(Schedule $schedule): void
     {
         $schedule->command('ai:run-due-work')->everyMinute()->withoutOverlapping(5);
+        $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
     }
 
     public function register(): void

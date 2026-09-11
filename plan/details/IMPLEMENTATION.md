@@ -47,7 +47,7 @@ Work order: land the module action adapter; add owned-state reduction; add sessi
 
 ## Phase 3: social cognition, experience and bounded language
 
-The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Slice 3A is implemented; 3B is in progress. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
+The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Slices 3A–3G and the optional 3H language slice are implemented; 3I driver experiments and 3J acceptance/measurement remain. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
 
 | Proposed module area/files | Records | Responsibility |
 | --- | --- | --- |

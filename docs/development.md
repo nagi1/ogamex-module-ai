@@ -91,6 +91,8 @@ bash scripts/ogamex test
 bash scripts/ogamex test-all
 bash scripts/ogamex quality
 bash scripts/ogamex e2e-lifecycle        # live host trial: absent, install, pickup, uninstall
+bash scripts/ogamex artisan ai:reconcile-language-requests
+bash scripts/ogamex artisan ai:language-conformance --confirm
 ```
 
 `install`, `uninstall` and `doctor` are thin wrappers around the host's
@@ -149,6 +151,46 @@ environment setup.
 Because the module checkout is physically inside the OGameX directory, the
 existing OGameX Docker bind mount includes the module without an additional
 mount or synchronization step.
+
+## Language operations
+
+The language slice stays provider-off until `AI_LANGUAGE_ENABLED=true`. Two operator
+commands keep its accounting honest and produce the conformance evidence the
+[Laravel AI SDK integration](../plan/details/specs/laravel-ai-sdk.md) plan requires:
+
+```bash
+bash scripts/ogamex artisan ai:reconcile-language-requests
+bash scripts/ogamex artisan ai:language-conformance --confirm
+bash scripts/ogamex artisan ai:language-conformance --corpus --confirm
+```
+
+`ai:reconcile-language-requests` settles attempts whose provider completion can no
+longer be observed. A timed-out request keeps its reservation `Reserved`, because the
+provider may still have completed remotely; after
+`AI_LANGUAGE_RECONCILIATION_MINUTES` (default 30) the attempt is charged at its
+reserved maximum exactly once and the request stays `Uncertain`. A definite provider
+failure and an invalid envelope settle immediately at the usage the provider
+reported, so a reserved attempt is never released and never counted twice. The command
+is scheduled every ten minutes while the module is enabled.
+
+`ai:language-conformance` is the opt-in external run: it is the only module code that
+may contact a real provider, it refuses to run without `--confirm`, and it sends
+sanitized fixtures only — no player data, no private chat, no production identifiers.
+`--corpus` sends all five labelled cases (English, Arabic, mixed language and a
+prompt-injection case) instead of the first smoke case. Every run writes a JSON
+artifact to `storage/app/ai-language-conformance/<timestamp>.json` holding the
+selected provider/model/timeout, and per case: status, interpretation, character
+count, proposed-candidate count, token usage, latency and the expected
+interpretation/proposal. The report also carries the completed-case count and the
+repeated-reply count, and the command exits non-zero when any case did not complete.
+Provider credentials stay in the host environment; the module never stores a secret,
+and CI never runs this command — the deterministic suite uses the SDK's agent fake
+with stray prompts prevented.
+
+Review the artifact against the recorded expectations before treating a provider run
+as accepted. The command collects evidence; it does not score believability, prompt
+quality or cost, and the reviewed thresholds stay the human gate from the validation
+plan.
 
 ## Composer and autoloading
 

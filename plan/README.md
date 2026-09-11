@@ -17,9 +17,9 @@ The goal is enjoyable play for humans. We increase the population only when the 
 
 ## Current implementation status
 
-**Phases 1–2 are recorded in module commit `e1c48a2`. Phase 3 is planned, not implemented.** The module has profiles, leased/idempotent work, a normal validated building adapter, legal perception, seeded archetype policies, session schedules and decision traces.
+**Phases 1–2 are recorded in module commit `e1c48a2`. Phase 3 slices 3A–3H are implemented and committed; 3I driver experiments and 3J acceptance/measurement remain.** The module has profiles, leased/idempotent work, a normal validated building adapter, legal perception, seeded archetype policies, session schedules and decision traces.
 
-Session choices are recorded intents; selecting a fleet/research/trade candidate is not proof of executing that action. Memory/relationship tables, affect/social cognition, CBR, AI conversation and external drivers do not exist yet. See the [current-state assessment](details/research/phase-3-current-state.md) for the actual code, integration limitations and corrections to older diagrams. This documentation revision does not claim a new gameplay test run.
+Phase 3 adds source-backed facts, claims, relationships, commitments and affect, typed zero-LLM social protocols with authored replies, outcome-based experience cases, a sealed host delivery ledger, bounded context selection and atomic daily usage ledgers. The optional language slice is implemented behind `LanguageGateway` with a disabled default and the pinned `laravel/ai` SDK: normal gameplay, structured exchanges and AI-to-AI replies still make no generative call, and the only provider contact is the opt-in sanitized conformance command. External drivers (FAtiMA/CiF, CBRKit, AgentOS, PsychSim), embeddings and the 100/500/1,000-player measurements are not implemented, and session choices remain recorded intents rather than proof that an action executed. See the [current-state assessment](details/research/phase-3-current-state.md) for the pre-Phase-3 snapshot, integration limitations and corrections to older diagrams.
 
 ## Decisions already made
 
@@ -72,6 +72,6 @@ This is a committed separate phase, not a second AI engine. Its design draws on 
 
 Use [WORK-PACKAGES.md](WORK-PACKAGES.md). It gives each agent an exclusive scope, dependencies, allowed paths, output and handoff format. Do not assign two agents to the same package. An agent may inspect another package but must not edit its files or implement its work. The coordinator integrates package pull requests in order.
 
-**Current work: Phase 3 planning.** No Phase 3 code or dependencies are added by this revision. When implementation is requested, start with Package 3's source/schema/permission slice and proceed through the linked milestones. Do not repeat completed Package 1/2 work or assume historical future capabilities already exist.
+**Current work: 3I driver experiments and 3J acceptance/measurement.** Slices 3A–3H are implemented and committed in the module repository; the optional language slice still needs its operator-run real-provider conformance artifact and human review. Do not repeat completed Package 1/2 work, and do not treat 3I/3J optional drivers or measurements as already proven.
 
 The detailed [implementation map](details/IMPLEMENTATION.md) is the technical source for proposed files, migrations, services, event boundaries and tests. Open only the section named by the assigned package. Everything else under `details/` is reference material, not an entry point or a task list.

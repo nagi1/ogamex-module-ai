@@ -1,9 +1,15 @@
 <?php
 
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
-uses(TestCase::class);
+// Opt into Laravel's parallel test database: the token-suffixed worker clone is
+// only selected for test cases using one of the database traits, and the base
+// database has no module tables. The spawned processes inherit the connection
+// configured here, so without this trait their seed insert targets the base
+// database and dies on the missing ai_usage_* tables.
+uses(TestCase::class, DatabaseTransactions::class);
 
 test('concurrent reservations cannot exceed a shared conversation cap', function (): void {
     $suffix = bin2hex(random_bytes(8));

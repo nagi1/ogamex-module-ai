@@ -85,13 +85,41 @@ is absent, so the lanes still register when the module was enabled after
 `$timeout` and `$maxExceptions`, and reclaims an expired `Leased` work item so a
 queue retry or the scheduler can finish it instead of the item staying stuck.
 `AIServiceProvider::configureSchedules()` dispatches `ai:run-due-work` every
-minute with `withoutOverlapping`.
+minute with `withoutOverlapping`, and `ai:reconcile-language-requests` every ten
+minutes.
 
 Horizon supervisor timeouts stay below the redis `retry_after` (660s): 30s for the
 AI work lane and 60s for the language lane (above `ai.language.timeout_seconds`).
 AI queued work needs Redis and Horizon; the database worker pools only drain the
 fleet lanes. Do not run Horizon while `QUEUE_CONNECTION` is not `redis` — Horizon
 only consumes redis, so module jobs would sit on an unconsumed database queue.
+
+### Language receipt lifecycle
+
+`GenerateAiReplyAction` is the only path that may call `LanguageGateway`. It resolves
+an already sealed reply, reserves one attempt through the module ledger, writes the
+`ai_language_requests` receipt while it is `Generating`, calls the gateway, and then
+settles the receipt and the reservation in one transaction:
+
+| Provider outcome | Request state | Reservation | Reply |
+| --- | --- | --- | --- |
+| Valid structured envelope | `Completed` | settled at reported usage | generated text plus validated proposals |
+| Schema-invalid envelope | `Invalid` | settled at reported usage | authored fallback |
+| Definite transport failure | `Failed` | settled at reported usage | authored fallback |
+| Timeout | `Uncertain` | stays `Reserved` until reconciliation | authored fallback |
+
+An attempted request always consumes one unit of daily capacity: settling releases
+unused tokens but never the attempt, `request_key` is unique, and an existing receipt
+prevents a second reservation for the same reply. A timed-out attempt is never resent;
+the scheduled `ai:reconcile-language-requests` command charges it at its reserved
+maximum once the provider can no longer complete it. `AiUsageBudgetScope` rows are
+locked for the universe, player and conversation before a reservation, so concurrent
+requests cannot exceed a shared cap.
+
+The opt-in `ai:language-conformance` command is the only caller that may reach a real
+provider, and it sends sanitized fixtures only. It exists to record real status,
+usage, latency and failure behavior for the conformance gate; it never runs in CI and
+it cannot execute a game action.
 
 ### Install and uninstall
 
