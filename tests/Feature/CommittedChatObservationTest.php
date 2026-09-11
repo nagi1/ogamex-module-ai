@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Modules\AI\Actions\AcceptAiCommitmentAction;
@@ -43,6 +44,11 @@ require_once __DIR__ . '/../Support/FixtureAiClock.php';
 
 class CommittedChatObservationTestCase extends TestCase
 {
+    // Opt into Laravel's parallel test database: the token-suffixed worker clone is
+    // only selected for test cases using one of the database traits, and the base
+    // database has no module tables. This also rolls the fixtures back automatically.
+    use DatabaseTransactions;
+
     /** @var list<int> */
     private array $createdAllianceIds = [];
 
