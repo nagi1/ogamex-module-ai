@@ -20,6 +20,9 @@ readonly class SocialExchangeContext
         public int $outstandingCommitments,
         public float $availableAmount,
         public CarbonImmutable $evaluatedAt,
+        public CarbonImmutable|null $dueAt = null,
+        public float $respect = 0,
+        public float $socialImportance = 0,
     ) {
     }
 }

@@ -4,8 +4,10 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\SocialExchangeContext;
+use Modules\AI\Enums\AiCommitmentDirection;
 use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
@@ -57,6 +59,9 @@ class EvaluateAiSocialExchangeAction
                 $outstandingCommitments,
                 max(0, $availableAmount),
                 $evaluatedAt,
+                $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
+                (float) $relationship?->respect,
+                (float) $relationship?->social_importance,
             ));
 
             $exchange->update([
@@ -78,6 +83,7 @@ class EvaluateAiSocialExchangeAction
                 $exchange->terms,
                 $exchange->source_observation_id,
                 $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
+                $this->commitmentDirection($exchange),
             );
             $commitment = app(AcceptAiCommitmentAction::class)->handle($commitment->id);
             $exchange->update(['commitment_id' => $commitment?->id]);
@@ -88,6 +94,15 @@ class EvaluateAiSocialExchangeAction
 
     private function responseCreatesCommitment(AiSocialExchange $exchange): bool
     {
-        return $exchange->type === AiSocialExchangeType::HelpRequest;
+        return in_array($exchange->type, [AiSocialExchangeType::HelpRequest, AiSocialExchangeType::CompensationOffer], true);
+    }
+
+    private function commitmentDirection(AiSocialExchange $exchange): AiCommitmentDirection
+    {
+        return match ($exchange->type) {
+            AiSocialExchangeType::HelpRequest => AiCommitmentDirection::PromisedByPlayer,
+            AiSocialExchangeType::CompensationOffer => AiCommitmentDirection::ExpectedFromCounterparty,
+            default => throw new LogicException('Only commitment-producing exchanges have a direction.'),
+        };
     }
 }

@@ -9,6 +9,8 @@ use Modules\AI\Models\AiSocialExchange;
 
 class RecordAiSocialExchangeAction
 {
+    private const MAX_PROTOCOL_DEPTH = 2;
+
     /**
      * @param array<string, mixed> $terms
      */
@@ -19,8 +21,13 @@ class RecordAiSocialExchangeAction
         AiSocialExchangeType $type,
         array $terms,
         CarbonImmutable|null $dueAt = null,
+        int $protocolDepth = 1,
     ): AiSocialExchange|null {
         if ($playerId === $counterpartyPlayerId) {
+            return null;
+        }
+
+        if ($protocolDepth < 1 || $protocolDepth > self::MAX_PROTOCOL_DEPTH) {
             return null;
         }
 
@@ -33,6 +40,7 @@ class RecordAiSocialExchangeAction
             'terms' => $terms,
             'state' => AiSocialExchangeState::Proposed,
             'due_at' => $dueAt,
+            'protocol_depth' => $protocolDepth,
             'revision' => 1,
         ]);
     }

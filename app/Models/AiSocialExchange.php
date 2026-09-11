@@ -14,6 +14,7 @@ use Modules\AI\Enums\AiSocialResponse;
  * @property int $player_id
  * @property int $counterparty_player_id
  * @property int $source_observation_id
+ * @property int $protocol_depth
  * @property AiSocialExchangeType $type
  * @property array<string, mixed> $terms
  * @property AiSocialExchangeState $state
