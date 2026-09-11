@@ -422,6 +422,19 @@ dataset('authored protocol reply cases', [
     'compensation counter' => [AiSocialExchangeType::CompensationOffer, AiSocialResponse::Counter],
 ]);
 
+test('greeting and thanks exchanges use their authored reply lines', function (AiSocialExchangeType $type, array $expectedLines): void {
+    $counterparty = $this->createUser();
+    $source = socialExchangeObservation($this->currentUserId, $counterparty->id, 640);
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, $source->id, $type, []);
+    $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
+
+    expect($evaluated->response)->toBe(AiSocialResponse::Accept)
+        ->and(app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, socialReplyProfile($this->currentUserId)))->toBeIn($expectedLines);
+})->with([
+    'greeting' => [AiSocialExchangeType::Greeting, ['Greetings.', 'Hello.']],
+    'thanks' => [AiSocialExchangeType::Thanks, ['You are welcome.', 'Acknowledged.']],
+]);
+
 function socialExchangeObservation(int $playerId, int $counterpartyId, int $sourceId): AiObservation
 {
     return AiObservation::create([

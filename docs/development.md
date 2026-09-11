@@ -80,13 +80,52 @@ bash scripts/ogamex test
 The helper runs commands from the OGameX host while keeping the command short:
 
 ```bash
+bash scripts/ogamex install              # host lifecycle: verify, migrate, hook, enable, caches
+bash scripts/ogamex install --dry-run    # print the plan without changing anything
+bash scripts/ogamex uninstall            # uninstall hook, disable, caches (data kept)
+bash scripts/ogamex doctor               # read-only queue/container/Redis wiring report
+bash scripts/ogamex enable               # raw status-file toggle only
+bash scripts/ogamex disable              # raw status-file toggle only
 bash scripts/ogamex artisan module:list
-bash scripts/ogamex enable
-bash scripts/ogamex disable
 bash scripts/ogamex test
 bash scripts/ogamex test-all
 bash scripts/ogamex quality
+bash scripts/ogamex e2e-lifecycle        # live host trial: absent, install, pickup, uninstall
 ```
+
+`install`, `uninstall` and `doctor` are thin wrappers around the host's
+`ogamex:module:*` commands, so the module never reimplements lifecycle logic:
+the host verifies the runtime wiring, migrates the module's own migration path (which
+works while the module is still disabled), runs the module's hooks, enables or
+disables it, refreshes the compiled module cache, clears the application caches and
+restarts the queue workers. `enable`/`disable` remain available for quick manual
+toggling and touch nothing else. See
+[`../../../docs/module-lifecycle.md`](../../../docs/module-lifecycle.md) for the
+host-side contract and [`../../../docs/horizon.md`](../../../docs/horizon.md) for the
+queue/container side.
+
+`e2e-lifecycle` is the exception that is not a Pest run: it drives the real containers
+and the real database through the whole life of the module — moved out of `Modules/`,
+installed, picked up by supervisord and Horizon, uninstalled — and restores the tracked
+`modules_statuses.json` and the module directory afterwards. It runs on the host
+because it stops containers and moves directories. See
+[`../../../docs/module-lifecycle.md`](../../../docs/module-lifecycle.md) for the 22
+checks it makes.
+
+`test`, `test-all` and `quality` run Pest **in parallel with `--bail`**; there is no
+serial mode. Parallel workers are isolated behind their own database, so fail fast
+never costs isolation:
+
+- `--bail` stops at the first failing test instead of finishing a run that is
+already known to be red.
+- Every worker process gets its own database clone
+  (`ParallelTestSchemaServiceProvider`), so tests cannot contend for rows.
+- Tune the run with `PARALLEL_PROCESSES=4 bash scripts/ogamex test`; extra
+  arguments (`--filter=<name>`, `--display-notices`) are forwarded to Pest and keep
+  the parallel and bail flags.
+- `bash scripts/ogamex coverage` is the one serial command: Laravel's parallel
+  runner cannot merge PCOV coverage across workers, and PCOV needs the CLI opcode
+  cache off.
 
 Use a different OGameX checkout by setting `OGAMEX_ROOT`:
 
@@ -146,7 +185,27 @@ The module test suite is executed by the host application:
 
 ```bash
 bash scripts/ogamex test
+bash scripts/ogamex coverage
 ```
+
+`scripts/e2e-queue-horizon.sh` is the container trial for the queue/container wiring
+(Horizon lanes, supervisor pools, entrypoint hooks, Redis, install/uninstall including
+`--drop-data`, and a real `ProcessAiWork` job executed by the module's own Horizon
+lane via `scripts/e2e-dispatch-ai-job.php`). Run it inside the dev container, not from
+the host shell:
+
+```bash
+docker compose exec -T ogamex-app bash /var/www/Modules/AI/scripts/e2e-queue-horizon.sh
+```
+
+It writes to throwaway status files and restores everything on exit, so the tracked
+`modules_statuses.json` is never modified.
+
+The suite is expected to finish in seconds, not minutes. When a run feels slow,
+check the host notes in [`docs/testing.md`](../../../docs/testing.md): the two
+usual causes are a serial run (no `--parallel`) and native prepared statements
+on a high-latency database link, which the host exposes as
+`DB_EMULATE_PREPARES`.
 
 Before pushing a meaningful change, run the OGameX quality chain:
 
@@ -256,14 +315,22 @@ avoids host-wide suppression rules so the module gate remains independent of
 unrelated host diagnostics.
 
 Run agent-facing verification through Laravel PAO's compact result format and
-PCOV—not Xdebug. In the existing `local-docker-dev` service, use the module
-configuration and point PCOV at the module source explicitly:
+PCOV—not Xdebug. Coverage is the one serial run: Laravel's parallel runner cannot
+merge PCOV coverage across workers. The runner owns the whole recipe, including the
+module-scoped 100% gate:
 
 ```bash
-PAO_FORCE=1 php -d pcov.enabled=1 \
-  -d pcov.directory=/var/www/Modules/AI/app \
-  ./vendor/bin/pest --configuration=Modules/AI/phpunit.xml --coverage --exactly=100
+bash scripts/ogamex coverage
+# Module coverage (Modules/AI/app, excluding app/Rules): 1952/1952 = 100.00%
 ```
+
+It switches the CLI opcode cache off (PCOV cannot instrument opcodes that opcache
+interned before it was enabled), runs the suite through the host configuration and
+then reduces the clover report to this module. `app/Rules` is out of scope because
+those PHPStan rules are verified by the PHPStan gate. The command exits non-zero when
+any module statement is untested.
+
+Run static analysis with the module-local `phpstan.neon`.
 
 The module `phpunit.xml` is the strict source filter; `pcov.directory` is
 equally important because the container defaults PCOV to the host application

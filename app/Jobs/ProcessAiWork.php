@@ -6,6 +6,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
@@ -13,6 +14,7 @@ use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
+use Modules\AI\Enums\AiQueueName;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
@@ -28,10 +30,42 @@ class ProcessAiWork implements ShouldQueue
 
     public int $tries = 3;
 
+    /**
+     * Bounds a poison work item so repeated decision exceptions cannot consume the
+     * whole retry budget; retryLease() owns the work-item attempt cap.
+     */
+    public int $maxExceptions = 3;
+
+    /**
+     * Below the supervisor timeout in the host's config/horizon.php so Horizon never
+     * force-kills an auto-balancing worker mid-decision, and below the redis
+     * retry_after so the job is never handed to a second worker.
+     */
+    public int $timeout = 25;
+
     private const PAYLOAD_PLANET_ID = 'planet_id';
 
     public function __construct(public int $workItemId)
     {
+        // Deterministic AI work has its own module-owned Horizon lane so AI volume
+        // cannot starve the general or fleet lanes.
+        $this->onQueue(AiQueueName::Ai->value);
+    }
+
+    /** @return list<string> */
+    public function tags(): array
+    {
+        return ['ai', 'ai:work', 'ai:work-item:' . $this->workItemId];
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        // The work item is reclaimed by its expired lease in claimDueWork() rather than
+        // force-failed here, so a hard worker kill cannot clobber a newer lease.
+        Log::error('AI work item failed after all queue attempts; awaiting lease reclaim', [
+            'work_item_id' => $this->workItemId,
+            'error' => $exception->getMessage(),
+        ]);
     }
 
     public function handle(BuildFirstBuilding $buildFirstBuilding): void
@@ -81,7 +115,7 @@ class ProcessAiWork implements ShouldQueue
         return DB::transaction(function () use ($leaseToken): AiWorkItem|null {
             /** @var AiWorkItem|null $workItem */
             $workItem = AiWorkItem::query()->lockForUpdate()->find($this->workItemId);
-            if ($workItem === null || !in_array($workItem->state, [AiWorkState::Pending, AiWorkState::Retry], true) || $workItem->due_at->isFuture()) {
+            if ($workItem === null || $workItem->due_at->isFuture() || !$this->isClaimable($workItem)) {
                 return null;
             }
 
@@ -94,6 +128,20 @@ class ProcessAiWork implements ShouldQueue
 
             return $workItem->fresh();
         });
+    }
+
+    private function isClaimable(AiWorkItem $workItem): bool
+    {
+        if (in_array($workItem->state, [AiWorkState::Pending, AiWorkState::Retry], true)) {
+            return true;
+        }
+
+        // A worker killed mid-handle leaves the item Leased; reclaim it once the lease
+        // expires so a queue retry or the scheduler can finish the work instead of the
+        // item staying stuck forever.
+        return $workItem->state === AiWorkState::Leased
+            && $workItem->lease_until !== null
+            && $workItem->lease_until->isPast();
     }
 
     private function runClaimedSession(AiProfile $profile, AiWorkItem $workItem, string $leaseToken): void

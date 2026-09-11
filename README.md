@@ -40,20 +40,38 @@ Run these commands from this repository when it is checked out at
 `OGameX/Modules/AI`:
 
 ```bash
-# The module is disabled by default. Enable it for manual browser checks.
+# Install through the host lifecycle command: verify the runtime wiring, migrate the
+# module's own migrations, run app/Hooks/InstallModule.php, enable the module, refresh
+# the compiled caches and restart the queue workers.
+bash scripts/ogamex install --dry-run   # print the plan first
+bash scripts/ogamex install
+
+# Read-only wiring report (queue driver, Horizon, phpredis, Redis, supervisor
+# fragments, entrypoint hooks) with a non-zero exit code when something blocks.
+bash scripts/ogamex doctor
+
+# Uninstall: run app/Hooks/UninstallModule.php, disable, refresh caches and workers.
+# Module data is kept unless you ask for it to be dropped.
+bash scripts/ogamex uninstall
+bash scripts/ogamex uninstall --drop-data --force
+
+# Raw status-file toggles, for manual browser checks while developing. They skip the
+# migrations, hooks and cache refresh that `install`/`uninstall` handle.
 bash scripts/ogamex enable
+bash scripts/ogamex disable
 
 # Run only this module's tests through the OGameX application.
+# Tests always run in parallel with --bail; PARALLEL_PROCESSES=<n> pins the count.
 bash scripts/ogamex test
+
+# Coverage is the one serial run; it fails when any module statement is untested.
+bash scripts/ogamex coverage
 
 # Run an individual test or pass normal Pest arguments.
 bash scripts/ogamex test --filter=AI
 
 # Run any Artisan command in the OGameX application.
 bash scripts/ogamex artisan module:list
-
-# Disable the module after manual checks.
-bash scripts/ogamex disable
 ```
 
 Set `OGAMEX_ROOT` when the OGameX checkout is elsewhere:

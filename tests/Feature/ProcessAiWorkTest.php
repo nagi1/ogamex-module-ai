@@ -271,6 +271,45 @@ test('future work stays pending and terminal receipts prevent a second action', 
         ->and(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(0);
 });
 
+test('an expired lease is reclaimed so a queue retry can finish the work', function (): void {
+    $this->planetAddResources(app()->makeWith(Resources::class, [
+        'metal' => 1_000_000,
+        'crystal' => 1_000_000,
+        'deuterium' => 1_000_000,
+    ]));
+    aiWorkProfile($this->currentUserId);
+    $work = aiBuildingWork($this->currentUserId, 'reclaim');
+    // A worker killed mid-handle leaves the item Leased with an expired lease.
+    $work->update([
+        'state' => AiWorkState::Leased,
+        'lease_token' => 'dead-worker',
+        'lease_until' => now()->subMinute(),
+    ]);
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])
+        ->handle($this->app->make(BuildFirstBuilding::class));
+
+    expect($work->fresh()?->state)->toBe(AiWorkState::Completed)
+        ->and(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->count())->toBe(1);
+});
+
+test('a live lease is not reclaimed by another worker', function (): void {
+    aiWorkProfile($this->currentUserId);
+    $work = aiBuildingWork($this->currentUserId, 'live-lease');
+    $work->update([
+        'state' => AiWorkState::Leased,
+        'lease_token' => 'live-worker',
+        'lease_until' => now()->addMinute(),
+    ]);
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])
+        ->handle($this->app->make(BuildFirstBuilding::class));
+
+    expect($work->fresh()?->state)->toBe(AiWorkState::Leased)
+        ->and($work->fresh()?->lease_token)->toBe('live-worker')
+        ->and(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->count())->toBe(0);
+});
+
 test('a profile without a planet receives a safe rejection', function (): void {
     $playerId = $this->currentUserId + 100_000;
     aiWorkProfile($playerId);
@@ -299,6 +338,18 @@ test('a thrown decision retries and then fails at the configured attempt limit',
 
     expect($retry->fresh()?->state)->toBe(AiWorkState::Retry)
         ->and($failed->fresh()?->state)->toBe(AiWorkState::Failed);
+});
+
+test('a job that exhausted its attempts leaves the work item for lease reclaim', function (): void {
+    $workItem = aiBuildingWork($this->currentUserId, 'lease-reclaim', attempts: 2);
+
+    (new ProcessAiWork($workItem->id))->failed(new RuntimeException('worker died before the lease expired'));
+
+    $unchanged = $workItem->fresh();
+
+    expect($unchanged?->state)->toBe(AiWorkState::Pending)
+        ->and($unchanged?->attempts)->toBe(2)
+        ->and($unchanged?->lease_token)->toBeNull();
 });
 
 function aiWorkProfile(int $playerId, bool $enabled = true): AiProfile

@@ -17,6 +17,8 @@ use Modules\AI\Enums\AiWorkState;
  * @property int $attempts
  * @property string $idempotency_key
  * @property AiWorkState $state
+ * @property string|null $lease_token
+ * @property Carbon|null $lease_until
  */
 #[Unguarded]
 class AiWorkItem extends Model
