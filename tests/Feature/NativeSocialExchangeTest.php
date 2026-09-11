@@ -21,6 +21,7 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialRepair;
+use Modules\AI\Enums\AiSocialReplyLocale;
 use Modules\AI\Enums\AiSocialResource;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
@@ -32,6 +33,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiProfileSettings;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
@@ -74,7 +76,7 @@ test('a trusted affordable help request becomes an accepted commitment and autho
         ->and($evaluated->response)->toBe(AiSocialResponse::Accept)
         ->and($evaluated->commitment_id)->not->toBeNull()
         ->and(AiCommitment::query()->findOrFail($evaluated->commitment_id)->state)->toBe(AiCommitmentState::Accepted)
-        ->and(app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, 42))->toBeIn([
+        ->and(app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, socialReplyProfile($this->currentUserId)))->toBeIn([
             'I can help with the requested amount.',
             'Your request is accepted; I will provide the agreed amount.',
         ]);
@@ -260,8 +262,64 @@ test('social protocol depth is limited to one response turn', function (): void 
         ->and(app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 9003, AiSocialExchangeType::Greeting, [], null, 2)?->protocol_depth)->toBe(2);
 });
 
+test('two enabled AI players deliver exactly one bounded typed response each', function (): void {
+    $counterparty = $this->createUser();
+    $initialMessage = ChatMessage::create(['sender_id' => $counterparty->id, 'recipient_id' => $this->currentUserId, 'message' => 'Greetings']);
+    $firstSource = socialExchangeObservation($this->currentUserId, $counterparty->id, $initialMessage->id);
+    AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 42, 'enabled' => true]);
+    $firstExchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, $firstSource->id, AiSocialExchangeType::Greeting, [], null, 1);
+    $firstEvaluated = app(EvaluateAiSocialExchangeAction::class)->handle($firstExchange?->id ?? 0, 0, CarbonImmutable::parse('2024-01-01 00:30:00 UTC'));
+    $firstReply = app(QueueAiSocialExchangeReplyAction::class)->handle($firstEvaluated?->id ?? 0, CarbonImmutable::parse('2024-01-01 01:00:00 UTC'));
+    $firstDelivered = app(DeliverAiSealedReplyAction::class)->handle(app(SealAiAuthoredReplyAction::class)->handle($firstReply?->id ?? 0)?->id ?? 0);
+
+    $secondSource = socialExchangeObservation($counterparty->id, $this->currentUserId, $firstDelivered?->id ?? 0);
+    AiProfile::create(['player_id' => $counterparty->id, 'archetype' => AiArchetype::Trader, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 7, 'enabled' => true]);
+    $secondExchange = app(RecordAiSocialExchangeAction::class)->handle($counterparty->id, $this->currentUserId, $secondSource->id, AiSocialExchangeType::Thanks, [], null, 2);
+    $secondEvaluated = app(EvaluateAiSocialExchangeAction::class)->handle($secondExchange?->id ?? 0, 0, CarbonImmutable::parse('2024-01-01 00:30:00 UTC'));
+    $secondReply = app(QueueAiSocialExchangeReplyAction::class)->handle($secondEvaluated?->id ?? 0, CarbonImmutable::parse('2024-01-01 01:00:00 UTC'));
+    $secondDelivered = app(DeliverAiSealedReplyAction::class)->handle(app(SealAiAuthoredReplyAction::class)->handle($secondReply?->id ?? 0)?->id ?? 0);
+
+    expect($firstDelivered?->sender_id)->toBe($this->currentUserId)
+        ->and($secondDelivered?->sender_id)->toBe($counterparty->id)
+        ->and($firstExchange?->protocol_depth)->toBe(1)
+        ->and($secondExchange?->protocol_depth)->toBe(2)
+        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $counterparty->id)->count())->toBe(1)
+        ->and(ChatMessage::query()->where('sender_id', $counterparty->id)->where('recipient_id', $this->currentUserId)->count())->toBe(2)
+        ->and(app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, $secondSource->id, AiSocialExchangeType::Thanks, [], null, 3))->toBeNull();
+});
+
+test('authored replies honor locale and skip a recently delivered variant when possible', function (): void {
+    $counterparty = $this->createUser();
+    $profile = socialReplyProfile($this->currentUserId, 42, [AiProfileSettings::SOCIAL_REPLY_LOCALE => AiSocialReplyLocale::Arabic->value]);
+    $firstExchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
+        'player_id' => $this->currentUserId,
+        'counterparty_player_id' => $counterparty->id,
+        'type' => AiSocialExchangeType::Greeting,
+        'response' => AiSocialResponse::Accept,
+        'revision' => 1,
+    ]]);
+    $firstExchange->id = 1;
+    $firstReply = app(BuildAuthoredSocialReplyAction::class)->handle($firstExchange, $profile);
+    AiConversationReply::create(['player_id' => $this->currentUserId, 'counterparty_player_id' => $counterparty->id, 'source_first_message_id' => 1, 'source_last_message_id' => 1, 'message' => $firstReply, 'state' => AiConversationReplyState::Delivered, 'expires_at' => CarbonImmutable::parse('2024-01-01 01:00:00 UTC'), 'delivered_at' => CarbonImmutable::parse('2024-01-01 00:30:00 UTC'), 'revision' => 1]);
+    $secondExchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
+        'player_id' => $this->currentUserId,
+        'counterparty_player_id' => $counterparty->id,
+        'type' => AiSocialExchangeType::Greeting,
+        'response' => AiSocialResponse::Accept,
+        'revision' => 1,
+    ]]);
+    $secondExchange->id = 2;
+    $secondReply = app(BuildAuthoredSocialReplyAction::class)->handle($secondExchange, $profile);
+
+    expect($firstReply)->toBeIn(['تحياتي.', 'مرحباً.'])
+        ->and($secondReply)->toBeIn(['تحياتي.', 'مرحباً.'])
+        ->and($secondReply)->not->toBe($firstReply);
+});
+
 test('authored replies are bounded to known response variants and never invent terms', function (AiSocialResponse|null $response, array|null $terms): void {
     $exchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
+        'player_id' => $this->currentUserId,
+        'counterparty_player_id' => 0,
         'type' => AiSocialExchangeType::HelpRequest,
         'response' => $response,
         'response_terms' => $terms,
@@ -269,7 +327,7 @@ test('authored replies are bounded to known response variants and never invent t
     ]]);
     $exchange->id = 1;
 
-    $reply = app(BuildAuthoredSocialReplyAction::class)->handle($exchange, 42);
+    $reply = app(BuildAuthoredSocialReplyAction::class)->handle($exchange, socialReplyProfile($this->currentUserId));
 
     if ($response === null) {
         expect($reply)->toBeNull();
@@ -279,6 +337,11 @@ test('authored replies are bounded to known response variants and never invent t
 
     expect($reply)->toBeString()->not->toBeEmpty();
 
+    expect(app(BuildAuthoredSocialReplyAction::class)->handle(
+        $exchange,
+        socialReplyProfile($this->currentUserId, settings: [AiProfileSettings::SOCIAL_REPLY_LOCALE => AiSocialReplyLocale::Arabic->value]),
+    ))->toBeString()->not->toBeEmpty();
+
     if ($response === AiSocialResponse::Counter) {
         expect($reply)->toContain('20');
     }
@@ -286,6 +349,8 @@ test('authored replies are bounded to known response variants and never invent t
 
 test('authored protocol replies remain within their typed response families', function (AiSocialExchangeType $type, AiSocialResponse $response): void {
     $exchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
+        'player_id' => $this->currentUserId,
+        'counterparty_player_id' => 0,
         'type' => $type,
         'response' => $response,
         'response_terms' => [AiSocialTerm::Amount->value => 20],
@@ -293,7 +358,11 @@ test('authored protocol replies remain within their typed response families', fu
     ]]);
     $exchange->id = 2;
 
-    expect(app(BuildAuthoredSocialReplyAction::class)->handle($exchange, 42))->toBeString()->not->toBeEmpty();
+    expect(app(BuildAuthoredSocialReplyAction::class)->handle($exchange, socialReplyProfile($this->currentUserId)))->toBeString()->not->toBeEmpty()
+        ->and(app(BuildAuthoredSocialReplyAction::class)->handle(
+            $exchange,
+            socialReplyProfile($this->currentUserId, settings: [AiProfileSettings::SOCIAL_REPLY_LOCALE => AiSocialReplyLocale::Arabic->value]),
+        ))->toBeString()->not->toBeEmpty();
 })->with('authored protocol reply cases');
 
 dataset('native social response cases', [
@@ -364,4 +433,14 @@ function socialExchangeObservation(int $playerId, int $counterpartyId, int $sour
         'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
         'observed_at' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
     ]);
+}
+
+/** @param array<string, mixed> $settings */
+function socialReplyProfile(int $playerId, int $randomSeed = 42, array $settings = []): AiProfile
+{
+    return app()->makeWith(AiProfile::class, ['attributes' => [
+        'player_id' => $playerId,
+        'random_seed' => $randomSeed,
+        'settings' => $settings,
+    ]]);
 }

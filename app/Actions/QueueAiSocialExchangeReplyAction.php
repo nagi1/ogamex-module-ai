@@ -39,7 +39,7 @@ class QueueAiSocialExchangeReplyAction
             return null;
         }
 
-        $message = app(BuildAuthoredSocialReplyAction::class)->handle($exchange, $profile->random_seed);
+        $message = app(BuildAuthoredSocialReplyAction::class)->handle($exchange, $profile);
 
         return app(QueueAiAuthoredReplyAction::class)->handle(
             $exchange->player_id,
