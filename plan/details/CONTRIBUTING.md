@@ -10,7 +10,7 @@ Read the [main roadmap](../README.md) and only the assigned [work package](../WO
 
 The module already includes scripts/ogamex for focused tests, the full test suite, quality checks, Artisan access and enable/disable. Its Docker runner uses the host application service; the default runner uses host PHP. Follow the existing development guide rather than copying command recipes into this plan.
 
-Prefer the host's configured Docker environment. Do not start a second stack alongside local-docker-dev. After code changes, run the required order: Rector, formatting, static analysis and tests. Use relevant fleet/unit-queue race tests for concurrency work. Compile assets only when changing them. Do not change dependencies or lockfiles as incidental setup.
+Use only `/home/nagi/code/ogamex-next/local-docker-dev` for container-backed module development and verification. Do not start or use another OGameX Docker environment. After code changes, run the required order: Rector, formatting, static analysis and tests. Use relevant fleet/unit-queue race tests for concurrency work. Compile assets only when changing them. Do not change dependencies or lockfiles as incidental setup.
 
 Keep module-local feature/unit tests and the existing isolated-status-file pattern; tests must not toggle the tracked module status. Add new migrations, not edits to merged ones. User-facing additions need the established translation conventions. Document module-specific text accurately without claiming it is original OGame text.
 

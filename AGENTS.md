@@ -36,6 +36,7 @@ Write clean, maintainable, production-ready code. Keep changes module-first: reu
 ## Tests and verification
 
 - Tests use native Pest 5 syntax, named datasets for repeated scenarios, PAO, and PCOV. Never use Xdebug.
+- Use only `/home/nagi/code/ogamex-next/local-docker-dev` for container-backed development and verification. Do not start or use another OGameX Docker environment.
 - Prefer real OGameX models, services, database state, queues, locks, and validation paths. Mockery is prohibited. A narrow container override is allowed only to exercise an explicitly replaceable seam and must be named and justified.
 - Cover every affected behavior, edge case, and branch with meaningful tests; changed module code must maintain 100% PCOV coverage.
 - Run Pint, module PHPStan, Rector dry-run, full Pest, PCOV coverage, and TIA before handoff.

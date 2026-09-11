@@ -2,6 +2,8 @@
 
 Owner: AI module memory/social. Phase 3 design: [cognition and contracts](phase-3-cognition.md). Provider selection gates: [comparison](../research/memory-comparison.md). Cost controls: [budgets](budgets.md). This is a planned feature, not an inventory of implemented tables.
 
+Container-backed implementation, migration and verification use only the host repository's `local-docker-dev/` environment. Memory work must not start a competing Docker stack.
+
 ## Native memory is the foundation
 
 Use module-owned tables in the existing relational database first. Reuse host module metadata only for small player/planet identity pointers; it is not the high-volume memory store. Structured event reducers require no LLM or embeddings. Suggested module-owned records:

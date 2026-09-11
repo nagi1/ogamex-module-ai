@@ -2,9 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Application;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Modules\AI\Actions\AcceptAiCommitmentAction;
 use Modules\AI\Actions\DecayAiAffectStateAction;
@@ -64,22 +62,13 @@ class CommittedChatObservationTestCase extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
-        if (Schema::hasTable('ai_emotional_episodes')) {
-            return;
-        }
-
-        Artisan::call('migrate', [
-            '--path' => dirname(__DIR__, 2) . '/database/migrations',
-            '--realpath' => true,
-            '--force' => true,
-        ]);
     }
 
     protected function tearDown(): void
     {
         AiAffectState::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiEmotionalEpisode::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
+        AiCommitment::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiRelationship::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiObservation::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiProfile::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
