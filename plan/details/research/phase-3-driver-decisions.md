@@ -7,8 +7,8 @@ from a product's wording.
 | Driver | Contract | Gate 1 (conformance) | Standing |
 | --- | --- | --- | --- |
 | CBRKit `1.6.0` | `ExperienceEngine` | **Pass** | Enabled opt-in; native retained as fallback |
-| FAtiMA/CiF affect | `AffectEngine` | **Fail** | Driver disabled; native retained |
-| FAtiMA/CiF social | `SocialCognition` | **Partial** | Volition only; not bound |
+| FAtiMA/CiF affect | `AffectEngine` | **Pass** (after a vendored patch) | Adapter being wired |
+| FAtiMA/CiF social | `SocialCognition` | **Pass** (after a vendored patch) | Stance mapping still unbound |
 | AgentOS `0.10.16` | `LongTermMemory` | **Pending** | Blocked on a size decision |
 
 ## CBRKit — pass
@@ -36,63 +36,102 @@ reproduces the module's formula, equivalence is expected and is not evidence of
 value. The driver stays opt-in and disabled by default until a held-out-outcome
 measurement shows a gain.
 
-## FAtiMA/CiF affect — fail
+## FAtiMA/CiF affect — pass, after patching the vendored server
 
-The engine works and appraises correctly in isolation — a `Smile` perception
-produced `Joy` at intensity `3.5` and moved mood from `-5.0` to `-3.95`
-(`3.5 x 0.3`), with the autobiographic record and beliefs intact. It fails the
-contract, not the smoke test.
+The engine appraises correctly: a `Smile` perception produced `Joy` at intensity
+`3.5` and moved mood from `-5.0` to `-3.95` (`3.5 x 0.3`), with the autobiographic
+record and beliefs intact.
 
-**Blocker: character state cannot be read back or written, and does not survive a
-restart.** Enumerated from the running server and the source:
+Unmodified, it failed the contract. `ServerState` holds
+`ConcurrentDictionary<string, IntegratedAuthoringToolAsset[]>` in process memory,
+the HTTP surface exposed beliefs and emotions as **GET only**, and a new instance
+was copied from the scenario template — so character state could be observed but
+never set, read back or survive a restart. `MAX_INSTANCES` also caps instances at
+100 per scenario.
 
-| Resource | Methods | Consequence |
+Upstream did not overlook persistence: `IntegratedAuthoringToolAsset.ToJson()` and
+`FromJson()` are public and are what instance allocation already uses. The gap is
+that their intended host is an in-process C# game or robot, where the caller holds
+the character object and no network boundary exists. State changes were also meant
+to flow through the authored world model, which is why `POST /worldmodel` exists and
+no arbitrary belief write was offered. Serving an external, swappable cognition
+driver simply is not their use case.
+
+Because the toolkit is vendored and maintained here, the two missing operations
+were added to `Wrappers/WebServer`:
+
+| Addition | Resource | Verified behaviour |
 | --- | --- | --- |
-| `/perceptions` | POST | the only way to move state |
-| `/actions`, `/worldmodel` | POST | move state indirectly through authored effects |
-| `/beliefs`, `/emotions`, `/memories`, `/decisions` | **GET only** | state can be observed, never set |
-| `/instances` | GET, POST, DELETE | a new instance is copied from the scenario template |
+| Instance snapshot | `GET /scenarios/{s}/instances/{i}/state` | returns the instance as scenario JSON |
+| Instance restore | `POST /scenarios/{s}/instances/{i}/state` | replaces the instance from that JSON using the template's assets |
+| Belief write | `POST /scenarios/{s}/instances/{i}/characters/{c}/beliefs` | `{name, value}` updates the character's knowledge base |
 
-`ServerState` holds `ConcurrentDictionary<string, IntegratedAuthoringToolAsset[]>`
-in process memory. There is no snapshot or restore endpoint — the only `ToJson`
-call is the template copy used when allocating a fresh instance — and instances cap
-at `MAX_INSTANCES = 100` per scenario. A restart therefore resets mood, emotions and
-beliefs with no way to detect or repair the loss.
+Reproduced end to end: two `Smile` perceptions raised mood `0.0` to `3.135`; a
+restore returned it to `0.0` with emotions cleared and the exported payload
+byte-identical; and setting `RapportLevel(SELF,Player)` to `80` made the next
+appraisal produce `Joy 10.0` (clamped), proving the belief actually drives the
+authored rule rather than merely being stored.
 
-That breaks two gates:
+That closes gate A2 and the Gate 1 snapshot round-trip for `AffectEngine`.
+Remaining limitation: state is still process memory, so the module must treat the
+driver as a rebuildable projection and restore from its own record after a restart.
 
-- **A2 (one authority).** Disabling or swapping the driver silently discards affect
-  state the module cannot reconstruct, because the state only ever existed inside
-  the driver's process.
-- **Gate 1 snapshot round-trip.** Without load/save there is no revision or
-  idempotency handling, so a retry cannot be distinguished from a new appraisal.
-
-`AffectEngine` also receives `relationshipTrust` per call, and the HTTP surface has
-no belief-write resource, so trust cannot be supplied without authoring world-model
-effects for every exchange.
-
-**What would unblock it.** A state export/import path for a character instance, or a
-decision to author OGame appraisal assets whose rules read stimulus magnitudes from
-the event arguments and hold no cross-event state. The latter makes FAtiMA a rule
-interpreter rather than an integrated character, which is a product decision, not an
-engineering one. Until then the native `AffectEngine` remains and FAtiMA stays
-disabled.
-
-## FAtiMA/CiF social — partial
+## FAtiMA/CiF social — pass, after patching the vendored server
 
 CiF loads into the character and registers a `Volition(SocialMove, Step, Target,
 Mode)` dynamic property, and it genuinely drives decisions: a controlled pair gave
 utilities `{2.0, 10.0}` at rapport 5 and `{2.0}` at rapport 1, so the CiF-gated rule
 fires only when the exchange's influence rules allow it.
 
-It still cannot serve `SocialCognition`, which returns *ranked social responses with
-reasons*. No HTTP resource exposes social exchanges at all: they cannot be created,
-listed, read, advanced or inspected at runtime, exchanges are fixed when the scenario
-is authored, and the protocol advances only through authored dialogue carrying
-`SE(name, step)`. `VolitionValue` additionally computes **only at the first step**, so
-the signal answers "should this exchange start", not "what is the current protocol
-state". A module-side stance mapping would be our invention, not driver capability,
-so no binding is made.
+Unmodified, that was the *only* way to reach CiF. No HTTP resource exposed social
+exchanges — they could not be listed, created, read, evaluated or advanced at
+runtime, so a driver swap was impossible even though the engine had the state. The
+surface was added to the vendored `Wrappers/WebServer`:
+
+| Addition | Resource | Verified behaviour |
+| --- | --- | --- |
+| List exchanges | `GET /scenarios/{s}/instances/{i}/characters/{c}/socialexchanges` | returns `Name`, `Steps`, `Target`, starting conditions and influence rules |
+| Evaluate exchanges | `POST .../socialexchanges` with `{target}` | returns each exchange's current step and volition per usable mode |
+| Author an exchange | `POST .../socialexchange` | creates or updates an exchange and returns its id |
+
+`Name`, `Target` and `Mode` are `WellFormedName` values, which Newtonsoft serializes
+as a property bag rather than text; the list projection converts them to strings so
+the wire format is stable.
+
+### Correcting an earlier claim in this record
+
+An earlier revision of this file stated that `VolitionValue` "additionally computes
+**only at the first step**". **That was wrong**, and it was reached by reading the
+guarded branch and stopping there. `SocialExchange.VolitionValue` branches on
+`step == Steps.FirstOrDefault()`: the first step is gated by `StartingConditions`,
+while the `else` branch sums the influence rules for every later step. Reproduced
+with a gated exchange (`Steps = Start, Give, End`, starting condition
+`RapportLevel(SELF, [x]) > 3`, one influence rule worth `7`):
+
+| Rapport | Step | Volitions |
+| --- | --- | --- |
+| 5 | `Start` | `{"*": 7.0}` |
+| 1 | `Start` | `{}` |
+| 1 | `Give` | `{"*": 0.0}` |
+
+The third row is decisive: rapport 1 still fails the starting condition, yet the mode
+is **present and finite** once the step advances. The gate answers "may this exchange
+start", not "is this exchange usable". The step advanced from `Start` to `Give` after
+the instance perceived
+`Event(Action-End, Player, Speak(*, *, SE(GiveMetal, Start), *), John)`, so progress
+is tracked from the character's own autobiographic memory rather than module state.
+
+Gate 1 is therefore met: the driver exposes the exchanges, their multi-step protocol
+position and the per-mode volition. Two limits remain before a binding is made:
+
+1. **Ranked responses with reasons are not a driver output.** CiF yields a scalar
+   volition plus the resolved step. Turning that into ordered stances with
+   justifications is a module-side mapping, so it must be our documented choice — and
+   it must not claim to be driver capability.
+2. **Target binding is still the author's job.** A constant target makes `VolitionValue`
+   throw `BadSubstitutionException`, because it builds a `Substitution` from the target;
+   an unbound `[x]` in a decision rule matches no counterparty. The mapping must supply
+   a concrete target per counterparty.
 
 ## AgentOS — pending
 

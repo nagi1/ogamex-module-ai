@@ -26,6 +26,7 @@ Deliberate changes against the vendored fork:
 | --- | --- |
 | `Applications/FAtiMAHTTPServer/FAtiMAHTTPServer.csproj` retargeted `netcoreapp3.0` → `net8.0` | `netcoreapp3.0` is EOL with no supported runtime image |
 | `Applications/CiFSeeder/` added | CiF assets must be authored through the API; hand-written JSON loads as an empty exchange set |
+| `Wrappers/WebServer` gained instance state, a belief write and the CiF social-exchange resources | the vendored surface was read-only for character state and exposed no CiF at all; an external swappable driver needs both, and neither is reachable any other way |
 | Root `docker-compose.yml` and `FAtiMA-Toolkit/Dockerfile` removed | Both defined a competing stack; this directory's `Dockerfile` and the cognition Compose file are authoritative |
 
 Build output (`bin/`, `obj/`, `Binaries/`) is excluded via `.gitignore` and is never
@@ -76,15 +77,37 @@ instance:
 | `/scenarios` | GET, POST, DELETE, RESET | scenario lifecycle |
 | `/scenarios/{name}/key` | GET | per-scenario auth key |
 | `/scenarios/{name}/instances` | GET, POST, DELETE | per-character instance lifecycle |
+| `.../instances/{id}/state` | GET, POST | **added here**: snapshot and restore the whole instance |
 | `.../instances/{id}/tick` | GET, POST | emotion decay / time advance |
 | `.../instances/{id}/actions` | POST | committed action effect |
 | `.../instances/{id}/characters` | GET | character list |
 | `.../characters/{name}/emotions` | GET | current affect state |
 | `.../characters/{name}/perceptions` | POST | **observations to appraise** |
 | `.../characters/{name}/decisions` | GET | engine-chosen actions |
-| `.../characters/{name}/beliefs` | GET | beliefs |
+| `.../characters/{name}/beliefs` | GET, POST | beliefs; **POST added here** with `{name, value}` |
+| `.../characters/{name}/socialexchanges` | GET, POST | **added here**: list authored exchanges; POST `{target}` evaluates each at its current step |
+| `.../characters/{name}/socialexchange` | POST | **added here**: create or update an exchange at runtime |
 | `.../characters/{name}/memories` | GET | autobiographic memory |
 | `.../instances/{id}/worldmodel` | POST | belief/world updates |
+
+### Operations added to the vendored server
+
+Upstream persists state by serializing the asset in an in-process C# host and reaches
+CiF through authored decision rules, so no network boundary ever needed these.
+Serving an external, swappable driver does:
+
+- `GET .../state` returns the instance as scenario JSON; `POST .../state` replaces it
+  using the template's assets. Verified: mood `0.0 -> 3.135` after two `Smile`
+  perceptions, then `0.0` with emotions cleared after restoring the export.
+- `POST .../beliefs` with `{name, value}` updates the knowledge base. Verified: setting
+  `RapportLevel(SELF,Player)` to `80` made the next appraisal produce `Joy 10.0`
+  (clamped), proving the belief drives the authored rule.
+- `GET .../socialexchanges` lists the authored exchanges as plain strings — `Name`,
+  `Target` and `Mode` are `WellFormedName` values that Newtonsoft would otherwise
+  serialize as their property bag. `POST .../socialexchanges` with `{target}` returns
+  each exchange's current step and its volition per usable mode, and
+  `POST .../socialexchange` creates or updates an exchange. See the volition evidence
+  below.
 
 ## Verified behaviour (real run, 12 September 2026)
 
@@ -111,7 +134,28 @@ difference in `GET .../decisions`:
 | 1 (below the starting condition) | only the two at 2.0 |
 
 The `Volition(SocialMove, Step, Target, Mode)` dynamic property therefore does drive
-decision making. CiF is reachable, but only through authored decision rules.
+decision making. CiF is reachable either through authored decision rules or through
+the evaluation endpoint added here.
+
+**Volition and protocol state.** `POST .../socialexchanges` with `{"target": "Player"}`
+reports the exchange's current step and its volition per usable mode. Against a
+seeded exchange (`Steps = Start, Give, End`, starting condition
+`RapportLevel(SELF, [x]) > 3`, one influence rule worth `7`):
+
+| Rapport | Step | Volitions | Reading |
+| --- | --- | --- | --- |
+| 5 | `Start` | `{"*": 7.0}` | starting condition satisfied |
+| 1 | `Start` | `{}` | starting condition failed, so the mode is unusable |
+| 1 | `Give` | `{"*": 0.0}` | **present and finite**, although rapport 1 still fails the condition |
+
+The third row is the important one. `SocialExchange.VolitionValue` branches on
+`step == Steps.FirstOrDefault()`: the first step is gated by `StartingConditions`,
+while every later step sums the influence rules alone. So the starting condition
+answers *"may this exchange start"*, not *"is this exchange usable"* — and the
+driver does expose multi-step protocol state. The step advanced from `Start` to `Give`
+after the instance perceived
+`Event(Action-End, Player, Speak(*, *, SE(GiveMetal, Start), *), John)`, so progress is
+tracked from the character's own autobiographic memory.
 
 ### CiF authoring constraints (each one silently fails otherwise)
 
@@ -126,23 +170,27 @@ decision making. CiF is reachable, but only through authored decision rules.
    `SocialExchanges`, while the DTO uses `_SocialExchangesDtos`; hand-written JSON
    loads as an empty exchange set. `Applications/CiFSeeder` in this directory is the
    supported authoring path.
-4. **Volition only exists at the first step.** `VolitionValue` returns `-Infinity`
-   unless `step == Steps.FirstOrDefault()`, so CiF answers "should this exchange
-   start", not "what is the current multi-step protocol state".
+4. **The starting condition gates only the first step.** `VolitionValue` returns
+   `-Infinity` when `step == Steps.FirstOrDefault()` and the starting conditions do not
+   unify; for every later step it sums the influence rules with no starting-condition
+   check. Volition therefore exists at **every** step, and a mode can be absent at
+   `Start` yet usable with value `0` at a later step.
 
 ## Known limits — read before binding a contract
 
-1. **CiF has no HTTP surface.** `CommeillFaut` is loaded into the character and
-   registers its `Volition` dynamic property, but no HTTP resource serves social
-   exchanges. There is no runtime endpoint to propose, accept, reject, counter, list
-   or inspect an exchange, and no way to read a current step or mode. Exchanges are
-   fixed at scenario authoring time and reachable only through decision rules, so
-   this driver can satisfy `AffectEngine` fully and `SocialCognition` only partially
-   (a volition scalar, not ranked responses with reasons).
+1. **CiF needs the surface added here.** `CommeillFaut` used to be reachable only
+   through authored decision rules, so an external caller could not list, read,
+   create, evaluate or advance an exchange. The endpoints added above close that:
+   exchanges can be authored at runtime and evaluated per target, returning the
+   current step and the volition per usable mode. What CiF still does **not** provide
+   is *ranked responses with reasons* — it yields a scalar volition plus the resolved
+   step, so `SocialCognition` needs a stance mapping that is ours to define and
+   justify rather than one the driver hands over.
 2. **State is process memory.** `ServerState` holds a
-   `ConcurrentDictionary<string, IntegratedAuthoringToolAsset[]>`. There is no
-   export/import resource, so character state cannot be snapshotted, and a restart
-   loses every instance. The module must be able to re-seed from its own records.
+   `ConcurrentDictionary<string, IntegratedAuthoringToolAsset[]>`, so a restart still
+   loses every instance. The state endpoints added above make the loss *recoverable*
+   rather than silent: the module exports after each meaningful change and restores
+   on demand. The module must still be able to re-seed from its own records.
 3. **One instance pool of 100 per scenario** (`MAX_INSTANCES = 100`), with index 0
    reserved as the immutable template. Scaling beyond 100 characters per scenario
    needs more scenarios.

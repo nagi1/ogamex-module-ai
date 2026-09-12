@@ -9,6 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Assets\CommeillFaut\CommeillFaut.csproj" />
     <ProjectReference Include="..\..\Assets\EmotionalAppraisal\EmotionalAppraisal.csproj" />
     <ProjectReference Include="..\..\Assets\IntegratedAuthoringTool\IntegratedAuthoringTool.csproj" />
     <ProjectReference Include="..\..\Assets\RolePlayCharacter\RolePlayCharacter.csproj" />

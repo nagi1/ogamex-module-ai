@@ -1,4 +1,6 @@
-﻿using GAIPS.Rage;
+﻿using CommeillFaut;
+using CommeillFaut.DTOs;
+using GAIPS.Rage;
 using IntegratedAuthoringTool;
 using Newtonsoft.Json;
 using RolePlayCharacter;
@@ -25,7 +27,13 @@ namespace WebServer
         TICK, 
         ACTIONS,
         ADMINKEY,
-        KEY
+        KEY,
+        // Added by OGameX: character state cannot otherwise be read back or restored,
+        // which makes the driver unusable as a replaceable cognition projection.
+        STATE,
+        // Added by OGameX: the CiF social-exchange surface was not reachable at all.
+        SOCIALEXCHANGES,
+        SOCIALEXCHANGE
     }
 
     public class APIResource
@@ -95,7 +103,7 @@ namespace WebServer
             Execute = HandleBeliefsRequest,
             URLFormat = "/scenarios/{scenarioName}/instances/{instanceId}/characters/{charName}/beliefs",
             URLSegmentSize = 7,
-            ValidOperations = new string[] { "GET" },
+            ValidOperations = new string[] { "GET", "POST" },
         };
 
         //scenarios/{scenarioName}/instances/{instanceId}/characters/{charName}/memories
@@ -168,7 +176,46 @@ namespace WebServer
             URLSegmentSize = 3
         };
 
-        public static APIResource[] Set = { ADMINKEY, SCENARIOS , KEY, INSTANCES, TICK, ACTIONS, CHARACTERS, EMOTIONS, PERCEPTIONS, DECISIONS, WORLDMODEL, BELIEFS, MEMORIES };
+        //scenarios/{scenarioName}/instances/{instanceId}/state  (added by OGameX)
+        //GET exports the whole instance as the scenario JSON format, POST replaces
+        //the instance from that JSON using the scenario template's assets. Without it
+        //nothing outside the process can persist or restore character state, so a
+        //restart silently discards mood, emotions and beliefs.
+        public static APIResource STATE = new APIResource()
+        {
+            Type = APIResourceType.STATE,
+            Execute = HandleStateRequest,
+            URLFormat = "/scenarios/{scenarioName}/instances/{instanceId}/state",
+            URLSegmentSize = 5,
+            ValidOperations = new string[] { "GET", "POST" },
+        };
+
+        //scenarios/{scenarioName}/instances/{instanceId}/characters/{charName}/socialexchanges  (added by OGameX)
+        //GET lists the authored exchanges. POST with {"target": "X"} evaluates them for
+        //that counterparty, returning the active step and the volition of each usable
+        //mode. Before this, an exchange could only be created by authoring a scenario and
+        //its stance was not readable at all.
+        public static APIResource SOCIALEXCHANGES = new APIResource()
+        {
+            Type = APIResourceType.SOCIALEXCHANGES,
+            Execute = HandleSocialExchangesRequest,
+            URLFormat = "/scenarios/{scenarioName}/instances/{instanceId}/characters/{charName}/socialexchanges",
+            URLSegmentSize = 7,
+            ValidOperations = new string[] { "GET", "POST" },
+        };
+
+        //scenarios/{scenarioName}/instances/{instanceId}/characters/{charName}/socialexchange  (added by OGameX)
+        //POST upserts one exchange at runtime instead of requiring a new scenario.
+        public static APIResource SOCIALEXCHANGE = new APIResource()
+        {
+            Type = APIResourceType.SOCIALEXCHANGE,
+            Execute = HandleSocialExchangeRequest,
+            URLFormat = "/scenarios/{scenarioName}/instances/{instanceId}/characters/{charName}/socialexchange",
+            URLSegmentSize = 7,
+            ValidOperations = new string[] { "POST" },
+        };
+
+        public static APIResource[] Set = { ADMINKEY, SCENARIOS , KEY, INSTANCES, TICK, ACTIONS, CHARACTERS, EMOTIONS, PERCEPTIONS, DECISIONS, WORLDMODEL, BELIEFS, MEMORIES, STATE, SOCIALEXCHANGES, SOCIALEXCHANGE };
 
         public static APIResource FromString(string type)
         {
@@ -458,6 +505,9 @@ namespace WebServer
 
         private static string HandleBeliefsRequest(APIRequest req, ServerState serverState)
         {
+            if (req.Method == HTTPMethod.POST)
+                return UpdateBeliefRequest(req, serverState);
+
             if (req.Method != HTTPMethod.GET)
                 return JsonConvert.SerializeObject("Error: Invalid operation");
 
@@ -475,10 +525,210 @@ namespace WebServer
         }
 
 
+        // Added by OGameX. Exposes the CiF surface: read the authored exchanges,
+        // evaluate them for a counterparty, and upsert one at runtime.
+        private static string HandleSocialExchangesRequest(APIRequest req, ServerState serverState)
+        {
+            var exchanges = SocialExchangeAssetFor(req, serverState, out string error);
+
+            if (exchanges == null)
+                return JsonConvert.SerializeObject(error);
+
+            if (req.Method == HTTPMethod.GET)
+                // Name and Mode are WellFormedName values, which Newtonsoft would
+                // serialize as their property bag rather than their text, so they are
+                // projected to strings for a stable wire format.
+                return JsonConvert.SerializeObject(exchanges.GetAllSocialExchanges().Select(exchange => new
+                {
+                    exchange.Id,
+                    Name = exchange.Name?.ToString(),
+                    exchange.Description,
+                    exchange.Steps,
+                    Target = exchange.Target?.ToString(),
+                    exchange.StartingConditions,
+                    InfluenceRules = exchange.InfluenceRules?.Select(rule => new
+                    {
+                        rule.Id,
+                        Mode = rule.Mode?.ToString(),
+                        rule.Value,
+                        rule.Rule,
+                    }),
+                }));
+
+            if (req.Method != HTTPMethod.POST)
+                return JsonConvert.SerializeObject(APIErrors.ERROR_INVALID_HTTP_METHOD);
+
+            var body = RequestBodyMap(req);
+            var target = body != null && body.ContainsKey("target") ? body["target"] : null;
+
+            if (string.IsNullOrEmpty(target))
+                return JsonConvert.SerializeObject("Error: An evaluation body requires 'target'.");
+
+            return JsonConvert.SerializeObject(exchanges.EvaluateExchanges(Name.BuildName(target)));
+        }
+
+        private static string HandleSocialExchangeRequest(APIRequest req, ServerState serverState)
+        {
+            if (req.Method != HTTPMethod.POST)
+                return JsonConvert.SerializeObject(APIErrors.ERROR_INVALID_HTTP_METHOD);
+
+            var exchanges = SocialExchangeAssetFor(req, serverState, out string error);
+
+            if (exchanges == null)
+                return JsonConvert.SerializeObject(error);
+
+            if (string.IsNullOrEmpty(req.RequestBody))
+                return JsonConvert.SerializeObject("Error: Request Body is empty!");
+
+            SocialExchangeDTO dto;
+            try
+            {
+                dto = JsonConvert.DeserializeObject<SocialExchangeDTO>(req.RequestBody);
+            }
+            catch (Exception ex)
+            {
+                return JsonConvert.SerializeObject(string.Format(APIErrors.ERROR_EXCEPTION, ex.Message));
+            }
+
+            if (dto == null || dto.Name == null)
+                return JsonConvert.SerializeObject("Error: An exchange body requires 'Name'.");
+
+            return JsonConvert.SerializeObject(exchanges.AddOrUpdateExchange(dto).ToString());
+        }
+
+        private static Dictionary<string, string> RequestBodyMap(APIRequest req)
+        {
+            if (string.IsNullOrEmpty(req.RequestBody))
+                return null;
+
+            try
+            {
+                return JsonConvert.DeserializeObject<Dictionary<string, string>>(req.RequestBody);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static CommeillFautAsset SocialExchangeAssetFor(APIRequest req, ServerState serverState, out string error)
+        {
+            error = null;
+
+            if (!serverState.Scenarios.TryGetValue(req.ScenarioName, out IntegratedAuthoringToolAsset[] instances))
+            {
+                error = APIErrors.ERROR_UNKNOWN_SCENARIO;
+                return null;
+            }
+
+            var scenario = instances[req.ScenarioInstance];
+
+            if (scenario == null)
+            {
+                error = "Error: Instance does not exist.";
+                return null;
+            }
+
+            var rpc = scenario.Characters.Where(r => r.CharacterName.ToString().EqualsIgnoreCase(req.CharacterName)).FirstOrDefault();
+
+            if (rpc == null)
+            {
+                error = "Error: Unknown character.";
+                return null;
+            }
+
+            if (rpc.m_commeillFautAsset == null)
+            {
+                error = "Error: Character has no social exchange asset.";
+                return null;
+            }
+
+            return rpc.m_commeillFautAsset;
+        }
+
+        // Added by OGameX. The stock server can only observe beliefs, so a caller can
+        // never supply context such as relationship trust for an appraisal.
+        private static string UpdateBeliefRequest(APIRequest req, ServerState serverState)
+        {
+            if (string.IsNullOrEmpty(req.RequestBody))
+                return JsonConvert.SerializeObject("Error: Request Body is empty!");
+
+            Dictionary<string, string> belief;
+            try
+            {
+                belief = JsonConvert.DeserializeObject<Dictionary<string, string>>(req.RequestBody);
+            }
+            catch (Exception ex)
+            {
+                return JsonConvert.SerializeObject(string.Format(APIErrors.ERROR_EXCEPTION, ex.Message));
+            }
+
+            if (belief == null || !belief.ContainsKey("name") || !belief.ContainsKey("value"))
+                return JsonConvert.SerializeObject("Error: A belief body requires 'name' and 'value'.");
+
+            var scenario = serverState.Scenarios[req.ScenarioName][req.ScenarioInstance];
+            var rpc = scenario.Characters.Where(r => r.CharacterName.ToString().EqualsIgnoreCase(req.CharacterName)).FirstOrDefault();
+
+            if (rpc == null)
+                return JsonConvert.SerializeObject("Error: Unknown character.");
+
+            rpc.UpdateBelief(belief["name"], belief["value"]);
+
+            return JsonConvert.SerializeObject("Belief updated.");
+        }
+
+        // Added by OGameX: exports and restores a whole instance so character state
+        // survives a restart and a driver swap cannot silently discard it.
+        private static string HandleStateRequest(APIRequest req, ServerState serverState)
+        {
+            if (!serverState.Scenarios.TryGetValue(req.ScenarioName, out IntegratedAuthoringToolAsset[] instances))
+                return JsonConvert.SerializeObject(APIErrors.ERROR_UNKNOWN_SCENARIO);
+
+            if (req.ScenarioInstance < 0 || req.ScenarioInstance >= instances.Length)
+                return JsonConvert.SerializeObject("Error: Instance index is out of range.");
+
+            if (req.Method == HTTPMethod.GET)
+                return ExportInstanceState(instances, req.ScenarioInstance);
+
+            if (req.Method == HTTPMethod.POST)
+                return ImportInstanceState(instances, req.ScenarioInstance, req.RequestBody);
+
+            return JsonConvert.SerializeObject(APIErrors.ERROR_INVALID_HTTP_METHOD);
+        }
+
+        private static string ExportInstanceState(IntegratedAuthoringToolAsset[] instances, int instance)
+        {
+            var scenario = instances[instance];
+
+            if (scenario == null)
+                return JsonConvert.SerializeObject("Error: Instance does not exist.");
+
+            return scenario.ToJson();
+        }
+
+        private static string ImportInstanceState(IntegratedAuthoringToolAsset[] instances, int instance, string body)
+        {
+            if (instances[0] == null)
+                return JsonConvert.SerializeObject("Error: Scenario template is missing.");
+
+            if (string.IsNullOrEmpty(body))
+                return JsonConvert.SerializeObject("Error: Request Body is empty!");
+
+            try
+            {
+                instances[instance] = IntegratedAuthoringToolAsset.FromJson(body, instances[0].Assets);
+            }
+            catch (Exception ex)
+            {
+                return JsonConvert.SerializeObject(string.Format(APIErrors.ERROR_EXCEPTION, ex.Message));
+            }
+
+            return JsonConvert.SerializeObject("Instance state restored.");
+        }
+
         private static string HandlePerceptionsRequest(APIRequest req, ServerState serverState)
         {
             string[] events = Array.Empty<string>();
-
 
             if (!string.IsNullOrEmpty(req.RequestBody))
             {

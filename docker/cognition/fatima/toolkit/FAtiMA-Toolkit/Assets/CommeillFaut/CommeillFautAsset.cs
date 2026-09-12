@@ -256,6 +256,70 @@ namespace CommeillFaut
         }
 
 
+        /// <summary>
+        /// Reports every authored exchange with the step that is currently active for
+        /// <paramref name="target"/> and the volition of each usable mode at that step.
+        /// </summary>
+        /// <remarks>
+        /// Added by OGameX. The engine already computed volition for any step, but the
+        /// result was only reachable through authored decision rules, so an external
+        /// caller had no way to evaluate an exchange or read its current stance.
+        /// </remarks>
+        public IEnumerable<SocialExchangeEvaluationDTO> EvaluateExchanges(Name target)
+        {
+            var evaluations = new List<SocialExchangeEvaluationDTO>();
+
+            foreach (var exchange in m_SocialExchanges)
+            {
+                var step = FilterStep(exchange.Name, target);
+
+                if (step.ToString() == "-")
+                    continue;
+
+                evaluations.Add(new SocialExchangeEvaluationDTO
+                {
+                    Name = exchange.Name.ToString(),
+                    Description = exchange.Description,
+                    Target = target.ToString(),
+                    Step = step.ToString(),
+                    Steps = exchange.Steps.Select(s => s.ToString()).ToArray(),
+                    Volitions = VolitionsFor(exchange, step, target),
+                });
+            }
+
+            return evaluations;
+        }
+
+        private Dictionary<string, float> VolitionsFor(SocialExchange exchange, Name step, Name target)
+        {
+            var volitions = new Dictionary<string, float>();
+            var modes = new List<Name> { Name.UNIVERSAL_SYMBOL };
+
+            foreach (var rule in exchange.InfluenceRules)
+            {
+                if (rule.Mode.IsUniversal)
+                    continue;
+
+                if (modes.Any(existing => existing.ToString() == rule.Mode.ToString()))
+                    continue;
+
+                modes.Add(rule.Mode);
+            }
+
+            foreach (var mode in modes)
+            {
+                var volition = CalculateSocialMoveVolition(exchange.Name, step, target, mode);
+
+                // Negative infinity means the mode is not usable at this step.
+                if (float.IsNegativeInfinity(volition))
+                    continue;
+
+                volitions[mode.ToString()] = volition;
+            }
+
+            return volitions;
+        }
+
         #region Custom Serialization
 
         public void GetObjectData(ISerializationData dataHolder, ISerializationContext context)
