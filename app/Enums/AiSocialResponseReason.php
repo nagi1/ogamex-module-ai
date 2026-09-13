@@ -27,4 +27,5 @@ enum AiSocialResponseReason: string
     case MissingCompensationDueAt = 'missing_compensation_due_at';
     case MissingOrInvalidCompensationTerms = 'missing_or_invalid_compensation_terms';
     case CompensationRecorded = 'compensation_recorded';
+    case SocialExchangeVolition = 'social_exchange_volition';
 }

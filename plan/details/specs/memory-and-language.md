@@ -55,7 +55,9 @@ Embed eligible conversation prose once per content/model version and queries whe
 
 Do not embed precise resources, fleet composition, mine levels, trust scores, promises or routine ticks. Structured CBR features use deterministic similarity. Semantic preselection of future prose-heavy cases and retrieval of authored dialogue variants are optional experiments; final case scoring and dialogue preconditions remain deterministic.
 
-Prefer a licensed local multilingual embedder when enabled; evaluate English, Arabic and mixed-language messages. This avoids mandatory API embedding charges but still has CPU, memory and operations cost. No embedding model, dimension count or vector database is selected by this plan.
+The embedding model and dimension count are now selected in the [driver decisions record](../research/phase-3-driver-decisions.md): OpenAI embeddings behind the module's `Embedder` contract, pinned to a dated snapshot, 1536 dimensions. The **storage form is still open**, because the module runs on MySQL and the pgvector `halfvec`/`vector` comparison does not apply on that platform. A network call on the recall path is accepted; a provider outage degrades recall to the lexical path and never fails a request. The snapshot is pinned because an embedding model can change silently under a stable name, and changing it is a migration.
+
+English is the measured language for now. Arabic and mixed-language recall are **deferred, not dropped**: the requirement above to evaluate all three is a scope reduction, so it must be recorded with its reason rather than silently dropped.
 
 The `ContextBuilder` selects, ranks, trims and serializes before any compression. Include only stable persona, current affect/stance and relevant goals, authorized fact IDs/terms, selected memory, recent turns, legal communication constraints and the current human input. Section and total budgets include schema/wrapper overhead. Do not ask a model to rediscover emotions from a full chat history.
 

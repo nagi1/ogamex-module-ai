@@ -8,19 +8,20 @@ use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\ConversationContextSection;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
-use Modules\AI\Domain\Conversation\NativeLongTermMemory;
 use Modules\AI\Enums\AiMemoryEvidenceKind;
 use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Models\AiObservation;
+use Modules\AI\Support\LongTermMemorySelector;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
     app()->bind(ContextBuilder::class, NativeContextBuilder::class);
-    app()->bind(LongTermMemory::class, NativeLongTermMemory::class);
+    // Routed through the selector so the module's real recall wiring stays under test.
+    app()->bind(LongTermMemory::class, fn (): LongTermMemory => app(LongTermMemorySelector::class)->resolve());
 });
 
 test('native recall is owner scoped, provenance-preserving, and excludes non-current memory', function (): void {

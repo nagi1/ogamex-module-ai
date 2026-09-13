@@ -4,14 +4,15 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>disable</Nullable>
-    <AssemblyName>CiFSeeder</AssemblyName>
-    <RootNamespace>CiFSeeder</RootNamespace>
+    <AssemblyName>CognitionSeeder</AssemblyName>
+    <RootNamespace>CognitionSeeder</RootNamespace>
   </PropertyGroup>
 
-  <!-- Paths are relative to Applications/CiFSeeder inside the FAtiMA checkout. -->
+  <!-- Paths are relative to Applications/CognitionSeeder inside the FAtiMA checkout. -->
   <ItemGroup>
     <ProjectReference Include="..\..\Assets\IntegratedAuthoringTool\IntegratedAuthoringTool.csproj" />
     <ProjectReference Include="..\..\Assets\RolePlayCharacter\RolePlayCharacter.csproj" />
+    <ProjectReference Include="..\..\Assets\EmotionalAppraisal\EmotionalAppraisal.csproj" />
     <ProjectReference Include="..\..\Assets\EmotionalDecisionMaking\EmotionalDecisionMaking.csproj" />
     <ProjectReference Include="..\..\Assets\CommeillFaut\CommeillFaut.csproj" />
     <ProjectReference Include="..\..\Components\ActionLibrary\ActionLibrary.csproj" />

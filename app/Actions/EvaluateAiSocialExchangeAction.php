@@ -13,6 +13,7 @@ use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Models\AiCommitment;
+use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 
@@ -62,6 +63,10 @@ class EvaluateAiSocialExchangeAction
                 'dueAt' => $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
                 'respect' => (float) $relationship?->respect,
                 'socialImportance' => (float) $relationship?->social_importance,
+                // An external cognition driver addresses a specific character state and
+                // counterparty; the native engine ignores both.
+                'archetype' => AiProfile::query()->where('player_id', $exchange->player_id)->first()?->archetype,
+                'counterpartyPlayerId' => $exchange->counterparty_player_id,
             ]);
             $evaluation = app(SocialCognition::class)->evaluateSocialExchange($context);
 

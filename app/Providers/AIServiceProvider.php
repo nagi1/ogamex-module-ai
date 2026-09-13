@@ -18,10 +18,7 @@ use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
-use Modules\AI\Domain\Cognition\NativeAffectEngine;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
-use Modules\AI\Domain\Conversation\NativeLongTermMemory;
-use Modules\AI\Domain\Conversation\NativeSocialCognition;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
@@ -31,16 +28,24 @@ use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
+use Modules\AI\Enums\AiCognitionDriver;
+use Modules\AI\Infrastructure\Cognition\FatimaClient;
+use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
+use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\ExperienceEngineSelector;
+use Modules\AI\Support\FatimaScenarioTemplate;
+use Modules\AI\Support\LongTermMemorySelector;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
+use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use OGame\Events\Game\BuildingCompleted;
@@ -91,14 +96,25 @@ class AIServiceProvider extends ModuleServiceProvider
         parent::register();
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
-        $this->app->bind(AffectEngine::class, NativeAffectEngine::class);
+        $this->app->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
         $this->app->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
         $this->app->bind(ContextBuilder::class, NativeContextBuilder::class);
-        $this->app->bind(LongTermMemory::class, NativeLongTermMemory::class);
+        $this->app->bind(LongTermMemory::class, fn (): LongTermMemory => app(LongTermMemorySelector::class)->resolve());
         $this->app->bind(LanguageGateway::class, fn (): LanguageGateway => (bool) config('ai.language.enabled', false)
             ? app(LaravelAiLanguageGateway::class)
             : app(NullLanguageGateway::class));
-        $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
+        $this->app->bind(SocialCognition::class, fn (): SocialCognition => app(SocialCognitionSelector::class)->resolve());
+        // Affect and social cognition resolve the same session, so the module advances one
+        // integrated character state rather than one per contract. The circuit breaker needs
+        // the driver name, which a contextual binding supplies without the client having to
+        // resolve itself from inside its own binding.
+        $this->app->when(FatimaClient::class)
+            ->needs(DriverCircuitBreaker::class)
+            ->give(fn (): DriverCircuitBreaker => $this->app->makeWith(DriverCircuitBreaker::class, [
+                'driver' => AiCognitionDriver::Fatima->value,
+            ]));
+        $this->app->singleton(FatimaScenarioTemplate::class);
+        $this->app->singleton(FatimaCognitionSession::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
         $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
         $this->app->bind(AiClock::class, SystemAiClock::class);

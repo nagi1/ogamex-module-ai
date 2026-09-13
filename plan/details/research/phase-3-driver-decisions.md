@@ -6,10 +6,14 @@ from a product's wording.
 
 | Driver | Contract | Gate 1 (conformance) | Standing |
 | --- | --- | --- | --- |
-| CBRKit `1.6.0` | `ExperienceEngine` | **Pass** | Enabled opt-in; native retained as fallback |
-| FAtiMA/CiF affect | `AffectEngine` | **Pass** (after a vendored patch) | Adapter being wired |
-| FAtiMA/CiF social | `SocialCognition` | **Pass** (after a vendored patch) | Stance mapping still unbound |
-| AgentOS `0.10.16` | `LongTermMemory` | **Pending** | Blocked on a size decision |
+| CBRKit `1.6.0` | `ExperienceEngine` | **Pass** | Wired opt-in; native retained as fallback |
+| FAtiMA/CiF affect | `AffectEngine` | **Pass** (after a vendored patch) | Wired opt-in; native retained as fallback |
+| FAtiMA/CiF social | `SocialCognition` | **Pass** (after a vendored patch) | Wired opt-in; native retained as fallback |
+| AgentOS `0.10.16` | `LongTermMemory` | **Deferred** | Not adopted; recall stays native plus a projection |
+
+Gate 1 is satisfied for all three evaluated drivers. Gate 2 (demonstrated value) is
+**not** met for any of them, so every driver remains opt-in and disabled by default,
+and the native path stays the shipped behavior.
 
 ## CBRKit — pass
 
@@ -133,11 +137,71 @@ position and the per-mode volition. Two limits remain before a binding is made:
    an unbound `[x]` in a decision rule matches no counterparty. The mapping must supply
    a concrete target per counterparty.
 
-## AgentOS — pending
+## Binding the two FAtiMA contracts
+
+Both contracts are wired behind module-owned seams and are opt-in through one
+setting. `AiCognitionDriver` names the supported values and `ai.cognition.driver`
+selects one; the default is `native`, so an unconfigured or absent sidecar changes
+nothing.
+
+| Piece | Role |
+| --- | --- |
+| `FatimaScenarioTemplate` | Loads the module-owned scenario fixture, so the driver is served this module's characters rather than a sidecar default. |
+| `FatimaClient` | The only transport. Connect and request timeouts, payload handling, and a driver-scoped `DriverCircuitBreaker`. |
+| `FatimaCognitionSession` | One shared character state per process, serialized by `Cache::lock('ai:cognition:fatima')`. |
+| `FatimaAffectEngine` | `AffectEngine` decorator; falls back to native on any failure. |
+| `FatimaSocialCognition` | `SocialCognition` decorator; falls back to native on any failure. |
+
+Serving both contracts from one **shared** session is deliberate: the acceptance
+criteria require that two contracts are not backed by two independent character
+states, and a lock serializes appraisals so concurrent workers cannot interleave
+them.
+
+### Affect — reproduced behaviour
+
+Stimulus values are signed before they are sent, because the driver's rules cannot
+negate a term and an ill-formed `-[d]` is rejected.
+
+| Stimulus | Observed emotion |
+| --- | --- |
+| Aid `0.5` | Gratitude `0.5` |
+| Harm `0.4` | Anger `0.4` |
+| Threat `0.6` | Fear `0.6` |
+
+Persona differentiation is real: an identical threat of `-0.5` produced
+`0.5 / 0.5 / 0.15 / 0.35 / 0.25` for Miner, Turtle, Fleeter, Trader and Casual.
+
+Two module-side limits are recorded rather than hidden. Only Anger, Fear and
+Gratitude are representable, so any other emotion the driver returns is **declined**
+and the native appraisal is used instead of approximated. Fear is the one branch
+that needs a goal and a prospect rule, so the fixture carries a goal; without it the
+driver has nothing to appraise fear against.
+
+Each appraisal reloads the scenario, which is what makes the result deterministic —
+goal state cannot accumulate across calls and change a later answer.
+
+### Social — reproduced behaviour
+
+| Rapport | Step | Volitions |
+| --- | --- | --- |
+| 5 | `Start` | `{"*": 7.0}` |
+| 1 | `Start` | `{}` |
+| 1 | `Give` | `{"*": 0.0}` |
+
+The third row is the one that matters: the influence-rule branch still yields a
+finite volition after the starting condition fails, so a scalar volition alone cannot
+tell the module whether an exchange is usable.
+
+The decorator therefore has a deliberately narrow authority: it can only **withhold**
+an acceptance that the native rules already granted. It never overrides a native
+non-acceptance, and it declines to answer at all without a persona and a
+counterparty, because the driver needs a concrete target bound per counterparty.
+
+## AgentOS — deferred
 
 The memory subset completes an encode/retrieve cycle with **zero provider
 credentials** and no model download, returning traces with provenance, encoding
-strength, decay stability and a tip-of-the-tongue bucket. Two things block adoption:
+strength, decay stability and a tip-of-the-tongue bucket. Two things blocked adoption:
 
 1. **No local embedder ships.** `EmbeddingManager` requires a provider id plus an
    `AIModelProviderManager`, so the stock configuration reaches an external provider.
@@ -147,4 +211,47 @@ strength, decay stability and a tip-of-the-tongue bucket. Two things block adopt
    `onnxruntime-web` (92 MB) and `@huggingface` (49 MB) are unused by the memory
    subset.
 
-An HTTP sidecar and a size/prune decision are required before this can be evaluated.
+This is a **deferral, not a rejection**. The decisive argument against adopting it now
+is duplication, not size: the module would be running two systems that both own
+persona, goals and recall, with no single authority. AgentOS keeps its place as the
+leading candidate if native recall later shows a measured miss that a projection
+cannot close. Revisit conditions are recorded below.
+
+## Long-term memory and retrieval
+
+The `LongTermMemory` contract exists and is bound. Its default is native, and a
+selector reports an unrecognised driver and falls back rather than failing, so the
+contract is genuinely swappable without a caller change.
+
+Retrieval is staged so that the expensive option is only reached on evidence:
+
+| Stage | Mechanism | Activation |
+| --- | --- | --- |
+| 0 | Native scoped facts: entity, topic, time and current-validity filtering, plus unresolved obligations | Shipped |
+| 1 | Exact and structural filtering already covers the common case | Shipped |
+| 2 | MySQL InnoDB `FULLTEXT` projection over module-owned fact text, behind `LongTermMemory` | Only if stage 1 leaves a measured miss |
+| 3 | Semantic recall | Only with a caller, a measured miss and an approved experiment |
+
+Stage 2 is deterministic and needs no model, which is why it precedes anything
+vector-based.
+
+### Embedding decision
+
+Recorded because the plan previously selected nothing, which would have left this
+implicit.
+
+| | |
+| --- | --- |
+| **Chosen** | OpenAI embeddings behind the module's `Embedder` contract, pinned to a dated snapshot |
+| **Dimensions** | 1536. **Storage form is still open:** the module runs on MySQL, which has no `halfvec`, so the pgvector sizing this record originally assumed does not apply. At 4 bytes per dimension a float32 vector costs roughly 614 MB at 100k memories; a packed float16 column (2 bytes per dimension, ~307 MB) or an external vector store are the realistic options. Not chosen yet, and nothing is stored until stage 3 has a caller. |
+| **Accepted** | A network call on the recall path. A provider outage degrades recall to the lexical path; it never fails a request |
+| **Deferred** | A local embedder, for simplicity |
+| **Deferred, not dropped** | Arabic and mixed-language recall. The plan currently asks for English/Arabic/mixed measurement, so narrowing to English is a **scope reduction** and is recorded as deferred with its reason rather than quietly dropped |
+
+The snapshot is pinned because an embedding model can change silently underneath a
+stable name, and a changed model invalidates every stored vector. Changing the
+snapshot is a migration, and vectors from different models must never be compared.
+
+AgentOS would have required a custom embedder to avoid reaching a provider. Choosing
+the provider directly removes that work and keeps the contract flexible enough to
+swap later, which is the reason this choice does not lock the module to AgentOS.

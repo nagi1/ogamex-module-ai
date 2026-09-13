@@ -1,0 +1,468 @@
+[
+"CommeillFautAsset", 
+{
+	"root":
+		{
+			"classId": 0,
+			"SocialExchanges": [
+				{
+					"Name": "CooperativeMove",
+					"Description": "Whether this counterparty's standing supports a cooperative move",
+					"Steps": ["Start", "Give", "End"],
+					"Target": "[x]",
+					"StartingConditions":
+						{
+							"Set": ["RapportLevel(SELF, [x]) > 3"]
+						},
+					"InfluenceRules": [
+						{
+							"Rules":
+								{
+									"Set": ["RapportLevel(SELF, [x]) > 3"]
+								},
+							"Value": 7,
+							"Mode": "*"
+						}]
+				}]
+		},
+	"types": [
+		{
+			"TypeId": 0,
+			"ClassName": "CommeillFaut.CommeillFautAsset, CommeillFaut, Version=1.7.0.0, Culture=neutral, PublicKeyToken=null"
+		}]
+},
+"EmotionalAppraisalAsset", 
+{
+	"root":
+		{
+			"classId": 0,
+			"Description": null,
+			"AppraisalRules":
+				{
+					"AppraisalWeight": 1,
+					"Rules": [
+						{
+							"EventName": "Event(Action-End, [x], Aid, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Harm, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Threaten, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusThreat(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Goal Success Probablity",
+											"Value": "[d]",
+											"Target": "Safe(SELF)"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Aid, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Harm, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Threaten, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusThreat(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Goal Success Probablity",
+											"Value": "[d]",
+											"Target": "Safe(SELF)"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Aid, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Harm, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Threaten, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusThreat(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Goal Success Probablity",
+											"Value": "[d]",
+											"Target": "Safe(SELF)"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Aid, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Harm, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Threaten, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusThreat(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Goal Success Probablity",
+											"Value": "[d]",
+											"Target": "Safe(SELF)"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Aid, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Harm, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusDesirability(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Desirability",
+											"Value": "[d]",
+											"Target": "-"
+										}, 
+										{
+											"Name": "Praiseworthiness",
+											"Value": "[d]",
+											"Target": "[x]"
+										}]
+								}
+						}, 
+						{
+							"EventName": "Event(Action-End, [x], Threaten, SELF)",
+							"Conditions":
+								{
+									"Set": ["StimulusThreat(SELF, [x]) = [d]"]
+								},
+							"AppraisalVariables":
+								{
+									"AppraisalVariables": [
+										{
+											"Name": "Goal Success Probablity",
+											"Value": "[d]",
+											"Target": "Safe(SELF)"
+										}]
+								}
+						}]
+				}
+		},
+	"types": [
+		{
+			"TypeId": 0,
+			"ClassName": "EmotionalAppraisal.EmotionalAppraisalAsset, EmotionalAppraisal, Version=1.4.1.0, Culture=neutral, PublicKeyToken=null"
+		}]
+},
+"EmotionalDecisionMakingAsset", 
+{
+	"root":
+		{
+			"classId": 0,
+			"ActionTendencies": [
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "Volition(CooperativeMove, Start, Other, *) >= 5", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 9
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 1
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "Volition(CooperativeMove, Start, Other, *) >= 5", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 9
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 1
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "Volition(CooperativeMove, Start, Other, *) >= 5", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 9
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 1
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "Volition(CooperativeMove, Start, Other, *) >= 5", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 9
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 1
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "Volition(CooperativeMove, Start, Other, *) >= 5", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 9
+				}, 
+				{
+					"Action": "Speak([cs], [ns], [m], Neutral)",
+					"Target": "[x]",
+					"Layer": "-",
+					"Conditions":
+						{
+							"Set": ["ValidDialogue([cs], [ns], [m], Neutral) = True", "DialogueState([x]) = [cs]"]
+						},
+					"Priority": 1
+				}]
+		},
+	"types": [
+		{
+			"TypeId": 0,
+			"ClassName": "EmotionalDecisionMaking.EmotionalDecisionMakingAsset, EmotionalDecisionMaking, Version=1.2.0.0, Culture=neutral, PublicKeyToken=null"
+		}]
+},
+"SocialImportanceAsset", 
+{
+	"root":
+		{
+			"classId": 0,
+			"AttributionRules": []
+		},
+	"types": [
+		{
+			"TypeId": 0,
+			"ClassName": "SocialImportance.SocialImportanceAsset, SocialImportance, Version=1.5.0.0, Culture=neutral, PublicKeyToken=null"
+		}]
+}
+]

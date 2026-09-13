@@ -174,6 +174,23 @@ own persona, accepted state, obligations and outcomes; optional driver indexes
 and checkpoints are versioned projections. Provider failure must preserve
 ordinary gameplay and authored social behavior.
 
+### Live versus unwired
+
+This distinction matters more than the contract list: a binding can exist without a
+working adapter behind it, and a working adapter can still be disabled by default.
+
+| State | Components |
+| --- | --- |
+| **Live** (native, always on) | Native affect, native social cognition, native experience engine, native long-term memory. These are the shipped behavior and the fallback for every seam. |
+| **Wired, opt-in** (real adapters, disabled by default) | CBRKit behind `ExperienceEngine`; FAtiMA/CiF behind `AffectEngine` and `SocialCognition`. Selecting one requires an explicit setting and a running sidecar. |
+| **Unwired** (contract only) | `Embedder` and `SemanticRetriever` are deliberately not scaffolded. Semantic recall and ML compression are not implemented. |
+| **Deferred** | AgentOS long-term memory; PsychSim; provider batch enrichment. |
+
+Driver selection is one setting per seam, read through a selector that reports an
+unrecognised value and falls back to native instead of failing. Because the module's
+own bindings are not active in the test suite, each test wires the seam it exercises
+rather than relying on the provider.
+
 The [assessment](../plan/details/research/phase-3-current-state.md) records that
 these features do not yet exist after Phase 2. It also explains why ordinary
 chat sends need host-equivalent permission checks and why current events are
