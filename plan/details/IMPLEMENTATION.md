@@ -1,6 +1,6 @@
 # Implementation map
 
-This is the practical work map for the five roadmap phases. The original map used host `350657a3` / module `45f8a276`; the Phase 3 revision uses the [actual baseline](research/phase-3-current-state.md), host `02e23c13` / module `e1c48a2`. Phase 1/2 rows retain delivery context; new Phase 3 names are proposed, not implemented. The current task is planning only.
+This is the practical work map for the five roadmap phases. The original map used host `350657a3` / module `45f8a276`; the Phase 3 revision uses the [actual baseline](research/phase-3-current-state.md), host `02e23c13` / module `e1c48a2`. Phase 1/2 rows retain delivery context. Phase 3 slices 3A–3I are implemented; only 3J acceptance/measurement remains, so treat the Phase 3 names below as delivered rather than proposed.
 
 The module repository owns AI policy, AI-only persistence, scheduling, decisions, legal-state reduction and test scenarios. The host repository owns ordinary game rules and services only. The host must not import `Modules\\AI`, contain AI strategy, or add AI-specific gateways, observations or events.
 

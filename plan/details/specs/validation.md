@@ -35,7 +35,7 @@ quietly return. A violation shows up as a suite that never finishes, not as a fa
 | Stale sessions are reaped before a run. | `scripts/ogamex reap` releases sessions left idle inside an open transaction, and runs before `test`, `test-all`, `quality` and `coverage`, so one interrupted run cannot poison the next. |
 | Leftover workers are cleared by database session, not by process listing. | The application container ships neither `ps` nor `pkill`. |
 
-A full module suite is roughly 250 tests and completes in about ten seconds with four
+A full module suite is roughly 300 tests and completes in about thirteen seconds with four
 workers; a warm run is under two. Anything slower is a defect in a test, so never
 recover a slow run by raising a timeout or adding workers — eight workers measured
 *slower* than four on a ten-core host.
