@@ -4,6 +4,7 @@ namespace Modules\AI\Infrastructure\Experience;
 
 use Illuminate\Http\Client\Factory;
 use Modules\AI\Support\DriverCircuitBreaker;
+use Modules\AI\Support\DriverResponseLimit;
 use Throwable;
 
 /**
@@ -17,7 +18,7 @@ use Throwable;
  */
 class CbrKitClient
 {
-    public function __construct(private readonly DriverCircuitBreaker $circuit, private readonly Factory $http)
+    public function __construct(private readonly DriverCircuitBreaker $circuit, private readonly Factory $http, private readonly DriverResponseLimit $limit)
     {
     }
 
@@ -50,7 +51,9 @@ class CbrKitClient
             return null;
         }
 
-        $similarities = $response->successful()
+        // An oversized body is charged exactly like a malformed one: the driver answered
+        // with more than the module agreed to read, so its answer is not interpreted.
+        $similarities = $response->successful() && $this->limit->withinLimit($response->body())
             ? $this->similarities($response->json(), array_keys($casebase))
             : null;
 

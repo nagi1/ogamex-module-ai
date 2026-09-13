@@ -4,6 +4,7 @@ namespace Modules\AI\Infrastructure\Cognition;
 
 use Illuminate\Http\Client\Factory;
 use Modules\AI\Support\DriverCircuitBreaker;
+use Modules\AI\Support\DriverResponseLimit;
 use Modules\AI\Support\FatimaScenarioTemplate;
 use Throwable;
 
@@ -25,6 +26,7 @@ class FatimaClient
         private readonly DriverCircuitBreaker $circuit,
         private readonly FatimaScenarioTemplate $template,
         private readonly Factory $http,
+        private readonly DriverResponseLimit $limit,
     ) {
     }
 
@@ -197,7 +199,9 @@ class FatimaClient
             return null;
         }
 
-        if (!$response->successful()) {
+        // An oversized body is charged exactly like a malformed one: the driver answered
+        // with more than the module agreed to read, so its answer is not interpreted.
+        if (!$response->successful() || !$this->limit->withinLimit($response->body())) {
             $this->circuit->recordFailure();
 
             return null;

@@ -18,6 +18,13 @@ return [
         'cooldown_seconds' => (int) env('AI_COGNITION_CIRCUIT_COOLDOWN_SECONDS', 60),
     ],
 
+    'payload' => [
+        // The largest response body the module will read from any optional driver. The
+        // module owns this bound rather than each driver, because a driver must not be
+        // able to enlarge the input surface the module agreed to accept.
+        'maximum_response_bytes' => (int) env('AI_COGNITION_MAXIMUM_RESPONSE_BYTES', 262_144),
+    ],
+
     'memory' => [
         // Recall is a swap point, so the long-term memory implementation is chosen by
         // configuration rather than a fixed binding. Native scoped recall is the only
@@ -29,6 +36,10 @@ return [
 
     'experience' => [
         'driver' => env('AI_EXPERIENCE_DRIVER', 'native'),
+        // How far a finalized, matching outcome may move a decision score. Setting this
+        // to zero disables the enrichment without deleting recorded evidence, which is
+        // the baseline an ablation compares an enabled configuration against.
+        'decision_weight' => (int) env('AI_EXPERIENCE_DECISION_WEIGHT', 20),
         'cbrkit' => [
             'base_url' => env('AI_EXPERIENCE_CBRKIT_URL', 'http://host.docker.internal:8091'),
             'connect_timeout_seconds' => (int) env('AI_EXPERIENCE_CBRKIT_CONNECT_TIMEOUT_SECONDS', 2),
@@ -49,6 +60,8 @@ return [
         // The module re-sends this authored scenario before every appraisal, which both
         // resets the driver's emotional state and keeps the module authoritative.
         'scenario' => env('AI_COGNITION_FATIMA_SCENARIO', 'OgameCognition'),
+        // Optional override for where the module's authored scenario lives. Leave it unset to
+        // use the fixture the module ships; a blank value is treated as unset.
         'scenario_path' => env('AI_COGNITION_FATIMA_SCENARIO_PATH'),
         'instance' => (int) env('AI_COGNITION_FATIMA_INSTANCE', 1),
         // The counterparty the stimulus events are addressed to. The social driver

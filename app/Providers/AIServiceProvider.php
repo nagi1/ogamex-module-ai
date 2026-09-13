@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
+use Modules\AI\Console\Commands\RunCognitionConformance;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Console\Commands\RunLanguageConformance;
 use Modules\AI\Contracts\AffectEngine;
@@ -20,6 +21,7 @@ use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Domain\Decision\BuildingScoringPolicy;
+use Modules\AI\Domain\Decision\ExperienceInformedBuildingScoringPolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -67,6 +69,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
     protected array $commands = [
         ReconcileLanguageRequests::class,
+        RunCognitionConformance::class,
         RunDueAiWork::class,
         RunLanguageConformance::class,
     ];
@@ -119,7 +122,13 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->singleton(FatimaScenarioTemplate::class);
         $this->app->singleton(FatimaCognitionSession::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
-        $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
+        // The seeded policy answers the persona preference; the decorator adds this AI's
+        // finalized outcomes, so experience evidence reaches a real decision instead of
+        // being ranked and never read.
+        $this->app->bind(BuildingScoringPolicy::class, fn (): BuildingScoringPolicy => $this->app->makeWith(
+            ExperienceInformedBuildingScoringPolicy::class,
+            ['seeded' => $this->app->make(SeededBuildingScoringPolicy::class)],
+        ));
         $this->app->bind(AiClock::class, SystemAiClock::class);
         $this->app->bind(RandomSource::class, SeededRandomSource::class);
         $this->app->tag([
