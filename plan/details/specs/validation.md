@@ -22,6 +22,24 @@ Use an injected clock, fixed seeds and versioned rulesets. Test allowed outcomes
 
 Core rule tests remain in core; the module adds contract, behavior and end-to-end tests where its boundary can fail. Include paired human-action/AI-action equivalence for each new adapter.
 
+## Test harness invariants
+
+These are properties of the deterministic harness, not of any single test. Each was
+found by diagnosing a real stall, and each is enforced by `scripts/ogamex` so it cannot
+quietly return. A violation shows up as a suite that never finishes, not as a failure.
+
+| Invariant | Why it matters |
+| --- | --- |
+| A wait that must expire is bounded by `microtime(true)`, never by `Carbon::now()`. | Laravel's `Cache\Lock::block()` derives its deadline from `Carbon::now()`. Feature tests freeze the clock with `IsolatedAccountTestCase::travelTo()`, so that deadline never arrives and the retry loop spins forever. `FatimaCognitionSession::acquireWithin()` is the reference implementation. |
+| Every run is bounded by `timeout` **inside** the container. | `docker compose exec` does not forward a signal, so a killed or timed-out client leaves the worker alive inside the container. A survivor keeps its transaction and row locks, and with the host's `innodb_lock_wait_timeout = 1` every later run then fails in one second — a stale lock that reads as a hang. `TEST_TIMEOUT` and `COVERAGE_TIMEOUT` own that bound; reaching it means a hang, not slowness. |
+| Stale sessions are reaped before a run. | `scripts/ogamex reap` releases sessions left idle inside an open transaction, and runs before `test`, `test-all`, `quality` and `coverage`, so one interrupted run cannot poison the next. |
+| Leftover workers are cleared by database session, not by process listing. | The application container ships neither `ps` nor `pkill`. |
+
+A full module suite is roughly 250 tests and completes in about ten seconds with four
+workers; a warm run is under two. Anything slower is a defect in a test, so never
+recover a slow run by raising a timeout or adding workers — eight workers measured
+*slower* than four on a ten-core host.
+
 ## Phase 3 behavior and failure matrix
 
 These are implementation acceptance scenarios for [Phase 3](phase-3-cognition.md), not assertions that the tests exist today. Write native Pest 5 tests and named datasets using real OGameX models, committed records, services, queues and database transactions where practical. Use PAO and PCOV; never Xdebug, PHPUnit-style module tests or Mockery. A narrow container replacement is justified for driver conformance/outage experiments and must be tested alongside the actual enabled adapter.

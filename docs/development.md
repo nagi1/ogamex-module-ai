@@ -249,6 +249,28 @@ usual causes are a serial run (no `--parallel`) and native prepared statements
 on a high-latency database link, which the host exposes as
 `DB_EMULATE_PREPARES`.
 
+Two harness invariants explain almost every stall observed here, and both are enforced
+by the runner rather than left to discipline:
+
+1. **A wait that must expire cannot be measured with `Carbon::now()`.** Laravel's
+   `Lock::block()` takes its deadline from it, and feature tests freeze the clock with
+   `IsolatedAccountTestCase::travelTo()`, so the deadline never arrives and the retry
+   loop spins forever. Bound such a wait with `microtime(true)`, which the test clock
+   does not touch; `FatimaCognitionSession::acquireWithin()` is the reference
+   implementation.
+2. **`docker compose exec` does not forward signals.** A cancelled or timed-out run
+   leaves its worker alive in the container still holding a transaction, and the host's
+   one-second `innodb_lock_wait_timeout` then makes every later test fail: one stale
+   lock that reads as a hang. `scripts/ogamex` therefore bounds each run with `timeout`
+   inside the container (`TEST_TIMEOUT`, default 120; `COVERAGE_TIMEOUT`, default 600)
+   and reaps leftover sessions with `scripts/ogamex reap` before `test`, `test-all`,
+   `quality` and `coverage`.
+
+The application container ships neither `ps` nor `pkill`, so leftover workers are
+cleared by database session instead of by process listing. A healthy full suite is
+about 250 tests in ten seconds with four workers; a run that does not finish is a bug in
+a test, not a capacity problem.
+
 Before pushing a meaningful change, run the OGameX quality chain:
 
 ```bash

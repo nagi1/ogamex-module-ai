@@ -34,8 +34,31 @@ run_core() {
 
 # Tests always run in parallel: every worker owns its database clone and its compiled
 # caches, so bailing early costs nothing while a serial run wastes the session.
+#
+# The worker count is pinned rather than auto-detected. Laravel keys each clone
+# database off the worker token, so an auto-detected count on a many-core host creates
+# one full schema per core: dozens of databases, a persistent connection per clone, and
+# schema DDL that blocks behind those idle connections. A bounded count keeps the clone
+# set small and lets the same clones be reused across runs instead of accumulating.
 pest_flags() {
-    printf '%s' "--parallel --bail${PARALLEL_PROCESSES:+ --processes=${PARALLEL_PROCESSES}}"
+    printf '%s' "--parallel --bail --processes=${PARALLEL_PROCESSES:-4}"
+}
+
+# The timeout runs *inside* the container, not around the `docker compose exec` client.
+#
+# A docker exec client does not forward a signal to the process it started, so timing the
+# client out or cancelling it leaves the test workers running: they keep their database
+# transactions and row locks, and every later run then fails on a one second lock wait
+# timeout. Bounding the run where the workers actually live means a run cannot outlive its
+# own budget. Hitting this cap means a hang, not slowness.
+pest_runner() {
+    printf 'timeout -k 5 %s ./vendor/bin/pest' "${TEST_TIMEOUT:-120}"
+}
+
+# Clears locks left behind by an earlier killed run before starting a new one, so a stale
+# session is self-healing instead of a manual database rescue.
+reap_stale_test_sessions() {
+    run_core php Modules/AI/scripts/reap-test-sessions.php
 }
 
 usage() {
@@ -55,11 +78,14 @@ Checks:
   test-all                              the whole OGameX suite, parallel with --bail
   quality                               Rector, Pint, PHPStan, then this module's tests
   coverage                              the one serial run: PCOV coverage of Modules/AI/app
+  reap                                  release locks left by a killed test run
 
 Environment:
   OGAMEX_ROOT          OGameX checkout (default: two levels above this script)
   OGAMEX_RUNNER        host (default) or local-docker-dev
   PARALLEL_PROCESSES   pin the number of test workers
+  TEST_TIMEOUT         seconds before a test run is killed in-container (default: 120)
+  COVERAGE_TIMEOUT     seconds before the serial coverage run is killed (default: 600)
 TEXT
 }
 
@@ -91,26 +117,33 @@ case "$command_name" in
         run_core php artisan module:disable AI
         ;;
     test)
+        reap_stale_test_sessions
         # shellcheck disable=SC2046
-        run_core ./vendor/bin/pest --testsuite=Modules --filter=AI $(pest_flags) "$@"
+        run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags) "$@"
         ;;
     test-all)
+        reap_stale_test_sessions
         # shellcheck disable=SC2046
-        run_core ./vendor/bin/pest $(pest_flags) "$@"
+        run_core $(pest_runner) $(pest_flags) "$@"
         ;;
     quality)
         run_core composer run rector
         run_core composer run cs
         run_core composer run stan
+        reap_stale_test_sessions
         # shellcheck disable=SC2046
-        run_core ./vendor/bin/pest --testsuite=Modules --filter=AI $(pest_flags)
+        run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags)
+        ;;
+    reap)
+        reap_stale_test_sessions
         ;;
     coverage)
         # Coverage is the one serial run: Laravel's parallel runner cannot merge PCOV
         # coverage across workers, and PCOV cannot instrument opcodes that the CLI
         # opcode cache interned before it was enabled. The report is then reduced to
         # this module's own source, which is the scope its 100% gate applies to.
-        run_core php -d opcache.enable_cli=0 -d pcov.enabled=1 ./vendor/bin/pest --testsuite=Modules --filter=AI --bail --coverage-clover=/tmp/ogamex-ai-coverage.xml
+        reap_stale_test_sessions
+        run_core timeout -k 5 "${COVERAGE_TIMEOUT:-600}" php -d opcache.enable_cli=0 -d pcov.enabled=1 ./vendor/bin/pest --testsuite=Modules --filter=AI --bail --coverage-clover=/tmp/ogamex-ai-coverage.xml
         run_core php Modules/AI/scripts/coverage-summary.php /tmp/ogamex-ai-coverage.xml
         ;;
     e2e-lifecycle)
