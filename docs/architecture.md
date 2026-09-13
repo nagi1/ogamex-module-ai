@@ -177,14 +177,30 @@ ordinary gameplay and authored social behavior.
 ### Live versus unwired
 
 This distinction matters more than the contract list: a binding can exist without a
-working adapter behind it, and a working adapter can still be disabled by default.
+working adapter behind it, an adapter can be disabled by default, and an implementation
+can exist with nothing in the module actually calling it.
 
 | State | Components |
 | --- | --- |
-| **Live** (native, always on) | Native affect, native social cognition, native experience engine, native long-term memory. These are the shipped behavior and the fallback for every seam. |
+| **Live and driven** | Native affect, appraised from a committed battle report the AI took part in. Native social cognition, evaluated when an exchange is answered. Native long-term memory, read when conversation context is built. These are the shipped behavior and the fallback for every seam. |
+| **Implemented, not yet driven** | The native experience engine ranks compatible cases, but nothing calls it: outcomes are recorded and never yet consulted when a decision is made. |
 | **Wired, opt-in** (real adapters, disabled by default) | CBRKit behind `ExperienceEngine`; FAtiMA/CiF behind `AffectEngine` and `SocialCognition`. Selecting one requires an explicit setting and a running sidecar. |
 | **Unwired** (contract only) | `Embedder` and `SemanticRetriever` are deliberately not scaffolded. Semantic recall and ML compression are not implemented. |
 | **Deferred** | AgentOS long-term memory; PsychSim; provider batch enrichment. |
+
+### What an AI can legally observe
+
+Observations are reduced from committed host rows, never from events: chat messages,
+alliance membership changes, and battle reports. A battle concerns only the planet owner
+and the attacking player named in the stored report, so a player who was neither is never
+given an observation even though the row exists. The stored row is the trigger rather than
+`BattleResolved`, because the event fires before the result is durable.
+
+The report-to-harm mapping is deliberately narrow (version one). It reads resource loss
+only, so a battle can produce harm but never aid, and it derives no threat because whether
+the attacker can strike again is not in the row. An AI that did not come off worse is
+observed but not appraised, because the emotion set cannot express having won and a
+fabricated value would be worse than recording nothing.
 
 Driver selection is one setting per seam, read through a selector that reports an
 unrecognised value and falls back to native instead of failing. Because the module's

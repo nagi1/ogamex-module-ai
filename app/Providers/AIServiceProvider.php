@@ -35,6 +35,7 @@ use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
+use Modules\AI\Observers\ObserveCommittedBattleReport;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AffectEngineSelector;
@@ -50,6 +51,7 @@ use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use OGame\Events\Game\BuildingCompleted;
 use OGame\Models\AllianceMember;
+use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
 
 class AIServiceProvider extends ModuleServiceProvider
@@ -75,6 +77,7 @@ class AIServiceProvider extends ModuleServiceProvider
         // commands, and schedules through Laravel Modules.
         parent::boot();
 
+        BattleReport::observe(ObserveCommittedBattleReport::class);
         ChatMessage::observe(ObserveCommittedChatMessage::class);
         ChatMessage::observe(RedactDeletedChatMemory::class);
         AllianceMember::observe(ObserveCommittedAllianceMembership::class);

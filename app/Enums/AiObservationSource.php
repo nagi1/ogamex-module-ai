@@ -9,4 +9,5 @@ enum AiObservationSource: int
     case AllianceMembershipJoined = 2;
     case AllianceMembershipLeft = 3;
     case BuildingQueue = 4;
+    case BattleReport = 5;
 }
