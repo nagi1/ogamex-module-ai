@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use LogicException;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\SocialExchangeContext;
+use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiCommitmentDirection;
 use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiSocialExchangeState;
@@ -63,6 +64,14 @@ class EvaluateAiSocialExchangeAction
                 'dueAt' => $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
                 'respect' => (float) $relationship?->respect,
                 'socialImportance' => (float) $relationship?->social_importance,
+                // Transient state, read at the moment of evaluation and decayed on the way, so
+                // an apology is weighed against the anger the AI actually holds right now
+                // rather than against what it felt when the harm happened.
+                'anger' => app(CurrentAiAffectIntensityAction::class)->handle(
+                    $exchange->player_id,
+                    AiAffectEmotion::Anger,
+                    $evaluatedAt,
+                ),
                 // An external cognition driver addresses a specific character state and
                 // counterparty; the native engine ignores both.
                 'archetype' => AiProfile::query()->where('player_id', $exchange->player_id)->first()?->archetype,

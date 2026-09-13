@@ -8,9 +8,11 @@ use Modules\AI\Actions\QueueAiSocialExchangeReplyAction;
 use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Actions\RecordAiSocialExchangeAction;
 use Modules\AI\Actions\SealAiAuthoredReplyAction;
+use Modules\AI\Actions\UpdateAiAffectStateAction;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeSocialCognition;
 use Modules\AI\Domain\Conversation\SocialExchangeContext;
+use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCommitmentDirection;
 use Modules\AI\Enums\AiCommitmentState;
@@ -26,6 +28,7 @@ use Modules\AI\Enums\AiSocialResource;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
 use Modules\AI\Enums\AiSocialTerm;
+use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiObservation;
@@ -123,6 +126,58 @@ test('an acknowledged low-threat apology is accepted without inventing a commitm
     expect($evaluated?->response)->toBe(AiSocialResponse::Accept)
         ->and($evaluated?->response_reason)->toBe(AiSocialResponseReason::ApologyAcknowledged)
         ->and($evaluated?->commitment_id)->toBeNull();
+});
+
+test('current anger decides whether the same apology is accepted or answered with a demand', function (float $anger, AiSocialResponse $response): void {
+    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, [
+        'exchangeId' => 1,
+        'type' => AiSocialExchangeType::Apology,
+        'terms' => [AiSocialTerm::AcknowledgesHarm->value => true],
+        'trust' => 0.3,
+        'affinity' => 0.3,
+        'threat' => 0.2,
+        'outstandingCommitments' => 0,
+        'availableAmount' => 0,
+        'evaluatedAt' => CarbonImmutable::parse('2026-09-11 11:00:00 UTC'),
+        'anger' => $anger,
+    ]));
+
+    expect($evaluation->response)->toBe($response);
+})->with([
+    // Earned standing is 0.6, so the same apology clears the threshold while calm.
+    'calm' => [0.0, AiSocialResponse::Accept],
+    'still angry' => [0.2, AiSocialResponse::Counter],
+]);
+
+test('an angry AI demands compensation, and the anger fades without touching trust', function (): void {
+    $counterparty = $this->createUser();
+    $evaluatedAt = CarbonImmutable::parse('2026-09-11 11:00:00 UTC');
+
+    app(UpdateAiAffectStateAction::class)->handle(
+        $this->currentUserId,
+        AiAffectEmotion::Anger,
+        0.6,
+        CarbonImmutable::parse('2026-09-11 10:30:00 UTC'),
+    );
+
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 5004, AiSocialExchangeType::Apology, [AiSocialTerm::AcknowledgesHarm->value => true]);
+    AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.3, 'affinity' => 0.3, 'threat' => 0.2, 'respect' => 0, 'social_importance' => 0, 'last_observation_id' => 5004, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
+
+    $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, $evaluatedAt);
+
+    // Half an hour of decay leaves 0.5948 of anger, which is enough to deny the standing
+    // the same relationship would otherwise have earned.
+    expect($evaluated?->response)->toBe(AiSocialResponse::Counter)
+        ->and($evaluated?->response_reason)->toBe(AiSocialResponseReason::CompensationNeeded)
+        ->and($evaluated?->commitment_id)->toBeNull();
+
+    $state = AiAffectState::query()->where('player_id', $this->currentUserId)->sole();
+
+    expect((float) $state->intensity)->toBeLessThan(0.6)
+        ->and(CarbonImmutable::instance($state->updated_for)->timestamp)->toBe($evaluatedAt->timestamp)
+        // Anger is transient: the earned trust and the absence of an obligation are unchanged.
+        ->and((float) AiRelationship::query()->where('player_id', $this->currentUserId)->sole()->trust)->toBe(0.3)
+        ->and(AiCommitment::query()->where('player_id', $this->currentUserId)->count())->toBe(0);
 });
 
 test('an unacknowledged or unsafe apology receives a bounded native response', function (array $terms, float $threat, AiSocialResponse $response): void {

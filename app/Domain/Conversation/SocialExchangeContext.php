@@ -24,6 +24,10 @@ readonly class SocialExchangeContext
         public CarbonImmutable|null $dueAt = null,
         public float $respect = 0,
         public float $socialImportance = 0,
+        // Transient anger this AI currently holds, after elapsed-time decay. It weighs
+        // against the standing a counterparty has earned, and defaults to zero so an AI with
+        // no recorded affect answers exactly as it did before affect reached this decision.
+        public float $anger = 0.0,
         // An external cognition driver needs to know whose character state answers and
         // which counterparty it addresses. Both are optional so the native engine, which
         // needs neither, stays unaffected.

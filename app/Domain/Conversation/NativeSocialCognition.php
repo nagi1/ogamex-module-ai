@@ -67,7 +67,7 @@ class NativeSocialCognition implements SocialCognition
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::HarmNotRepaired]);
         }
 
-        if ($exchange->trust + $exchange->affinity + (($exchange->respect + $exchange->socialImportance) / 2) >= 0.5) {
+        if ($this->standingWeight($exchange) >= 0.5) {
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::ApologyAcknowledged]);
         }
 
@@ -159,12 +159,24 @@ class NativeSocialCognition implements SocialCognition
         return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::CompensationRecorded]);
     }
 
-    private function cooperationScore(SocialExchangeContext $exchange): float
+    /**
+     * The standing a counterparty has earned with this AI, reduced by current anger.
+     *
+     * Anger is transient state and is deliberately a term here rather than a write: a grudge
+     * changes how the same apology is answered without touching earned trust or an outstanding
+     * obligation, which is what keeps an emotion from quietly settling a debt.
+     */
+    private function standingWeight(SocialExchangeContext $exchange): float
     {
         return $exchange->trust
             + $exchange->affinity
             + (($exchange->respect + $exchange->socialImportance) / 2)
-            - $exchange->threat;
+            - $exchange->anger;
+    }
+
+    private function cooperationScore(SocialExchangeContext $exchange): float
+    {
+        return $this->standingWeight($exchange) - $exchange->threat;
     }
 
     private function hasTradeTerms(SocialExchangeContext $exchange): bool
