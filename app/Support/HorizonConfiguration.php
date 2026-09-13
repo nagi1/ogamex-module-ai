@@ -104,7 +104,7 @@ class HorizonConfiguration
 
         // The module was enabled after config:cache had already run, so its config was
         // never merged. Read the file directly rather than shipping no lanes.
-        $path = dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'horizon.php';
+        $path = $this->planPath();
 
         if (!is_file($path) || !is_readable($path)) {
             Log::warning('AI Horizon plan config is missing or unreadable; no AI lanes were registered.', [
@@ -117,5 +117,23 @@ class HorizonConfiguration
         $fallback = require $path;
 
         return is_array($fallback) ? $fallback : [];
+    }
+
+    /**
+     * The plan file to read, overridable through `ai.horizon_plan_path`.
+     *
+     * The override exists so the missing-file and custom-plan cases can be exercised
+     * against a temporary path. Moving the module's own plan file instead would make any
+     * parallel test process that reads it fail, which is a race rather than a test.
+     */
+    private function planPath(): string
+    {
+        $configured = trim((string) config('ai.horizon_plan_path', ''));
+
+        if ($configured === '') {
+            return dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'horizon.php';
+        }
+
+        return $configured;
     }
 }

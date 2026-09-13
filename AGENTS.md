@@ -19,6 +19,9 @@ Write clean, maintainable, production-ready code. Keep changes module-first: reu
 ## Design
 
 - Apply SOLID, DRY, KISS, YAGNI, composition over inheritance, high cohesion, and low coupling.
+- Never duplicate a capability a supported driver already provides. A seam exists for swap-ease, not for a PHP reimplementation: do not port a driver's algorithm, do not write a second implementation intended to match its output, and do not add a parallel "native equivalent" purely to compare against. A .NET or Python service does appraisal, social volition and case retrieval better than PHP will, and a duplicate leaves two authorities that can drift.
+- Around a driver the module owns only its own authority: scope, attribution, permission, current-validity, validation, budgets, persistence, failure mapping and translation to and from the driver's wire format. Where a driver returns a proposal or evidence, the ordinary module policy still decides how much weight it carries.
+- Existing native engines (`NativeAffectEngine`, `NativeExperienceEngine`, `NativeSocialCognition`) stay as the default and as the fallback an absent or failed driver degrades to. The rule forbids new duplication; it does not ask for shipped fallbacks to be removed.
 - Use action classes for business logic. Do not add proxy/wrapper methods that only forward a call.
 - Prefer small, single-purpose methods, descriptive names, and practical immutability.
 - Choose readable code before clever code, optimize only from measured evidence, and handle errors explicitly.
@@ -31,6 +34,7 @@ Write clean, maintainable, production-ready code. Keep changes module-first: reu
 ## Phase 3 architectural memory
 
 - Read `plan/details/specs/phase-3-cognition.md` and the assigned milestone before implementation; `plan/details/research/phase-3-current-state.md` distinguishes shipped behavior from proposals.
+- Do not write PHP that duplicates a driver's capability. Adding a driver is an integration and swap exercise, never an excuse to reimplement its algorithm better in PHP.
 - Keep cognition drivers behind small module-owned contracts and Laravel bindings. OGame-specific state/feature mapping and action resolution stay in module adapters; no standalone framework, generic game planner or second player runtime yet.
 - Native structured truth, persona, obligations and outcome records belong to the module. FAtiMA/CiF, CBRKit, AgentOS and PsychSim are candidate implementations, never alternate authorities or mandatory sidecars.
 - Ordinary gameplay, native event/memory processing, structured CBR and AI-to-AI social exchanges make zero generative calls. Use authored dialogue before optional human-language escalation; one foreground request may include validated proposals, never a separate extraction chain.

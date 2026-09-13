@@ -71,20 +71,36 @@ test('a stale config cache falls back to the module plan file', function (): voi
 });
 
 test('a missing plan file registers no lanes instead of failing the boot', function (): void {
-    $planFile = dirname(__DIR__, 2).'/config/horizon.php';
-    $backup = $planFile.'.test-backup';
+    // The path is redirected rather than moving the plan file: renaming a file that other
+    // parallel workers read makes an unrelated Horizon test fail intermittently.
+    config([
+        'ai.horizon' => null,
+        'ai.horizon_plan_path' => sys_get_temp_dir().'/ogamex-missing-horizon-'.uniqid().'.php',
+        'horizon.environments' => ['production' => []],
+    ]);
 
-    expect(is_file($planFile))->toBeTrue();
-    rename($planFile, $backup);
+    app(HorizonConfiguration::class)->contribute();
+
+    expect(config('horizon.defaults.supervisor-ai'))->toBeNull()
+        ->and(config('horizon.environments.production.supervisor-ai'))->toBeNull();
+});
+
+test('a partial plan file is read from the configured path', function (): void {
+    $planFile = sys_get_temp_dir().'/ogamex-horizon-plan-'.uniqid().'.php';
+    file_put_contents($planFile, "<?php\n\nreturn ['enabled' => true, 'supervisors' => ['supervisor-ai-tmp' => ['queue' => ['ai-tmp']]], 'processes' => ['supervisor-ai-tmp' => 2]];\n");
+
+    config([
+        'ai.horizon' => null,
+        'ai.horizon_plan_path' => $planFile,
+        'horizon.environments' => ['production' => []],
+    ]);
 
     try {
-        config(['ai.horizon' => null, 'horizon.environments' => ['production' => []]]);
-
         app(HorizonConfiguration::class)->contribute();
 
-        expect(config('horizon.defaults.supervisor-ai'))->toBeNull()
-            ->and(config('horizon.environments.production.supervisor-ai'))->toBeNull();
+        expect(config('horizon.defaults.supervisor-ai-tmp.queue'))->toBe(['ai-tmp'])
+            ->and(config('horizon.environments.production.supervisor-ai-tmp'))->toBe(['maxProcesses' => 2]);
     } finally {
-        rename($backup, $planFile);
+        unlink($planFile);
     }
 });

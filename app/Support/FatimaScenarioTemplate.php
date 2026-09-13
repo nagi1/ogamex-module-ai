@@ -31,11 +31,7 @@ class FatimaScenarioTemplate
 
     private function read(string $file): string
     {
-        $directory = rtrim((string) config(
-            'ai.cognition.fatima.scenario_path',
-            dirname(__DIR__, 2) . '/docker/cognition/fatima/scenarios',
-        ), '/');
-        $path = $directory . '/' . $file;
+        $path = $this->directory() . '/' . $file;
         $contents = @file_get_contents($path);
 
         if ($contents === false) {
@@ -43,5 +39,24 @@ class FatimaScenarioTemplate
         }
 
         return $contents;
+    }
+
+    /**
+     * An unset or blank setting means the fixture the module ships.
+     *
+     * This cannot lean on config()'s default argument. The key exists in the module
+     * configuration with a null value when no override is set, and a stored null wins over a
+     * default, so the module's own scenario would resolve to the filesystem root and the
+     * driver would silently degrade to native in every enabled installation.
+     */
+    private function directory(): string
+    {
+        $configured = trim((string) config('ai.cognition.fatima.scenario_path', ''));
+
+        if ($configured === '') {
+            return dirname(__DIR__, 2) . '/docker/cognition/fatima/scenarios';
+        }
+
+        return rtrim($configured, '/');
     }
 }

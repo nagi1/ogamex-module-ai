@@ -352,6 +352,41 @@ test('a missing scenario fixture aborts loudly instead of appraising nothing', f
         ->toThrow(RuntimeException::class, 'The FAtiMA scenario fixture is missing');
 });
 
+test('an unset scenario path resolves to the fixture the module ships', function (): void {
+    // With the module enabled the key exists holding null, and a stored null beats
+    // config()'s default argument. Relying on that default resolved the scenario to the
+    // filesystem root, so every appraisal silently degraded to native in an enabled
+    // installation while the suite stayed green against an absent key.
+    config(['ai.cognition.fatima.scenario_path' => null]);
+
+    $template = app(FatimaScenarioTemplate::class);
+
+    expect(strlen($template->assetsJson()))->toBeGreaterThan(0)
+        ->and(json_decode($template->scenarioJson(), true))->toBeArray();
+});
+
+test('a blank scenario path resolves to the fixture the module ships', function (): void {
+    config(['ai.cognition.fatima.scenario_path' => '   ']);
+
+    expect(strlen(app(FatimaScenarioTemplate::class)->assetsJson()))->toBeGreaterThan(0);
+});
+
+test('a configured scenario path overrides the fixture the module ships', function (): void {
+    $directory = sys_get_temp_dir() . '/ogamex-fatima-scenario-' . uniqid();
+    mkdir($directory);
+    file_put_contents($directory . '/ogame-cognition-assets.json', '{"characters":[]}');
+
+    config(['ai.cognition.fatima.scenario_path' => $directory . '/']);
+
+    try {
+        // The trailing separator is tolerated, and the override wins over the fixture.
+        expect(app(FatimaScenarioTemplate::class)->assetsJson())->toBe('{"characters":[]}');
+    } finally {
+        unlink($directory . '/ogame-cognition-assets.json');
+        rmdir($directory);
+    }
+});
+
 test('the module owned scenario fixture supplies the character that the archetype names', function (): void {
     $template = app(FatimaScenarioTemplate::class);
     $scenario = json_decode($template->scenarioJson(), true);
