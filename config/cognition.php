@@ -34,6 +34,14 @@ return [
         'driver' => env('AI_MEMORY_DRIVER', 'native'),
     ],
 
+    'affect' => [
+        // Whether appraisal turns an observation into an emotional episode and advances the
+        // transient affect state. Disabling it keeps every observation and every recorded
+        // episode, so an ablation can compare a baseline without affect enrichment against one
+        // with it without deleting state.
+        'enrichment' => (bool) env('AI_AFFECT_ENRICHMENT', true),
+    ],
+
     'experience' => [
         'driver' => env('AI_EXPERIENCE_DRIVER', 'native'),
         // How far a finalized, matching outcome may move a decision score. Setting this

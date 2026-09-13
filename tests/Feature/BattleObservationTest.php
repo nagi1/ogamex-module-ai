@@ -9,6 +9,7 @@ use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiEmotionalEpisode;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
@@ -347,6 +348,134 @@ test('a trusted attacker is read with less anger than an untrusted one', functio
 
     // The same 0.8 harm is discounted by an established trust of 0.5.
     expect((float) AiEmotionalEpisode::query()->where('player_id', $defender->id)->sole()->intensity)->toBe(0.4);
+});
+
+test('appraisal advances the running affect state alongside the episode', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $report = battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0);
+
+    app(RecordObservedBattleReportAction::class)->handle($report->id);
+
+    // The episode records that something significant happened; the state is the running
+    // intensity a later decision reads as "current anger".
+    $state = AiAffectState::query()->where('player_id', $defender->id)->sole();
+
+    expect($state->emotion)->toBe(AiAffectEmotion::Anger)
+        ->and((float) $state->intensity)->toBe(0.8)
+        ->and($state->revision)->toBe(1)
+        ->and(CarbonImmutable::instance($state->updated_for)->timestamp)->toBe($report->created_at->timestamp);
+});
+
+test('appraising the same observation again adds no second episode or intensity', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $report = battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0);
+    app(RecordObservedBattleReportAction::class)->handle($report->id);
+
+    $observation = AiObservation::query()->where('player_id', $defender->id)->sole();
+
+    // A second pass over the same observation is a replay, not a second feeling.
+    app(AppraiseObservedBattleReportAction::class)->handle($observation->id);
+
+    expect(AiEmotionalEpisode::query()->where('player_id', $defender->id)->count())->toBe(1)
+        ->and((float) AiAffectState::query()->where('player_id', $defender->id)->sole()->intensity)->toBe(0.8)
+        ->and(AiAffectState::query()->where('player_id', $defender->id)->sole()->revision)->toBe(1);
+});
+
+test('a later appraisal adds to the decayed intensity and stays bounded', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-11 12:00:00 UTC'));
+    app(RecordObservedBattleReportAction::class)
+        ->handle(battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0)->id);
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-13 12:00:00 UTC'));
+    app(RecordObservedBattleReportAction::class)
+        ->handle(battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0)->id);
+
+    // Two elapsed days fade 0.5 of the first 0.8, so the second 0.8 starts from 0.3 and
+    // lands on the ceiling rather than on 1.6.
+    expect((float) AiAffectState::query()->where('player_id', $defender->id)->sole()->intensity)->toBe(1.0);
+});
+
+test('a quiet period fades the affect state on its own', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-11 12:00:00 UTC'));
+    app(RecordObservedBattleReportAction::class)
+        ->handle(battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0)->id);
+
+    // Nothing happens for four days, then a much smaller slight arrives: 0.8 has faded to
+    // zero, so the surviving intensity is the new event alone.
+    $this->travelTo(CarbonImmutable::parse('2026-09-15 12:00:00 UTC'));
+    app(RecordObservedBattleReportAction::class)
+        ->handle(battleReportRow($defender->id, battleSide($attacker->id, 700.0), 800.0)->id);
+
+    expect((float) AiAffectState::query()->where('player_id', $defender->id)->sole()->intensity)
+        ->toBeLessThan(0.8);
+});
+
+test('a late event never rewinds the affect state', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-13 12:00:00 UTC'));
+    $newer = battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0);
+    app(RecordObservedBattleReportAction::class)->handle($newer->id);
+
+    // An older report is reduced afterwards. It must not move the stamp backwards: the next
+    // decay would then read a negative elapsed period and raise the intensity instead.
+    $this->travelTo(CarbonImmutable::parse('2026-09-11 12:00:00 UTC'));
+    app(RecordObservedBattleReportAction::class)
+        ->handle(battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0)->id);
+
+    $state = AiAffectState::query()->where('player_id', $defender->id)->sole();
+
+    expect(CarbonImmutable::instance($state->updated_for)->timestamp)->toBe($newer->created_at->timestamp);
+});
+
+test('a battle the AI did not come off worse in never advances the affect state', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($attacker->id, AiArchetype::Fleeter);
+
+    $report = battleReportRow($defender->id, battleSide($attacker->id, 50.0), 400.0);
+
+    app(RecordObservedBattleReportAction::class)->handle($report->id);
+
+    expect(AiObservation::query()->where('player_id', $attacker->id)->exists())->toBeTrue()
+        ->and(AiAffectState::query()->where('player_id', $attacker->id)->exists())->toBeFalse();
+});
+
+test('disabling affect enrichment keeps the observation and records no feeling', function (): void {
+    config(['ai.cognition.affect.enrichment' => false]);
+
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $report = battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0);
+
+    expect(app(RecordObservedBattleReportAction::class)->handle($report->id))->toBe(1)
+        ->and(AiEmotionalEpisode::query()->count())->toBe(0)
+        ->and(AiAffectState::query()->count())->toBe(0);
+
+    // Nothing was deleted, so the same observation appraises normally once it is back on.
+    config(['ai.cognition.affect.enrichment' => true]);
+    $observation = AiObservation::query()->where('player_id', $defender->id)->sole();
+
+    expect(app(AppraiseObservedBattleReportAction::class)->handle($observation->id))->not->toBeNull()
+        ->and((float) AiAffectState::query()->where('player_id', $defender->id)->sole()->intensity)->toBe(0.8);
 });
 
 // The observer itself is covered by CommittedBattleReportObservationTest: the module's

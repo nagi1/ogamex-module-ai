@@ -21,6 +21,13 @@ class AppraiseObservedBattleReportAction
 {
     public function handle(int $observationId): AiEmotionalEpisode|null
     {
+        // Ablation seam: an enrichment-off baseline keeps the observation and every persisted
+        // affect record, and simply does not turn an observation into a new emotion or advance
+        // the running state. Nothing is deleted, so re-enabling resumes from the same records.
+        if (!(bool) config('ai.cognition.affect.enrichment', true)) {
+            return null;
+        }
+
         /** @var AiObservation|null $observation */
         $observation = AiObservation::query()->find($observationId);
 
@@ -55,12 +62,28 @@ class AppraiseObservedBattleReportAction
 
         $appraisal = app(AffectEngine::class)->appraiseObservedEvent($stimulus);
 
-        return app(RecordAiEmotionalEpisodeAction::class)->handle(
+        $occurredAt = CarbonImmutable::instance($observation->source_time);
+
+        $episode = app(RecordAiEmotionalEpisodeAction::class)->handle(
             $observation->player_id,
             $observation->id,
             $appraisal->emotion,
             $appraisal->intensity,
-            CarbonImmutable::instance($observation->source_time),
+            $occurredAt,
         );
+
+        // The running state advances in event time, so a replayed observation lands where it
+        // belongs. A repeated reduction of the same observation must not intensify it twice,
+        // and the episode is keyed on the observation, so its creation is that signal.
+        if ($episode->wasRecentlyCreated) {
+            app(UpdateAiAffectStateAction::class)->handle(
+                $observation->player_id,
+                $appraisal->emotion,
+                $appraisal->intensity,
+                $occurredAt,
+            );
+        }
+
+        return $episode;
     }
 }
