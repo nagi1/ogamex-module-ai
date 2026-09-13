@@ -182,8 +182,7 @@ can exist with nothing in the module actually calling it.
 
 | State | Components |
 | --- | --- |
-| **Live and driven** | Native affect, appraised from a committed battle report the AI took part in. Native social cognition, evaluated when an exchange is answered. Native long-term memory, read when conversation context is built. These are the shipped behavior and the fallback for every seam. |
-| **Implemented, not yet driven** | The native experience engine ranks compatible cases, but nothing calls it: outcomes are recorded and never yet consulted when a decision is made. |
+| **Live and driven** | Native affect, appraised from a committed battle report the AI took part in. Native social cognition, evaluated when an exchange is answered. Native long-term memory, read when conversation context is built. Native experience, ranked when the AI chooses which building to upgrade: a settled success on an object raises its score and a settled failure lowers it, bounded so a remembered outcome settles a near-tie without outvoting the persona's own preference. These are the shipped behavior and the fallback for every seam. |
 | **Wired, opt-in** (real adapters, disabled by default) | CBRKit behind `ExperienceEngine`; FAtiMA/CiF behind `AffectEngine` and `SocialCognition`. Selecting one requires an explicit setting and a running sidecar. |
 | **Unwired** (contract only) | `Embedder` and `SemanticRetriever` are deliberately not scaffolded. Semantic recall and ML compression are not implemented. |
 | **Deferred** | AgentOS long-term memory; PsychSim; provider batch enrichment. |
@@ -206,6 +205,21 @@ Driver selection is one setting per seam, read through a selector that reports a
 unrecognised value and falls back to native instead of failing. Because the module's
 own bindings are not active in the test suite, each test wires the seam it exercises
 rather than relying on the provider.
+
+Every optional driver is bounded by the module rather than trusted to bound itself: connect
+and request timeouts, a casebase bound, a response-size bound, a per-driver circuit breaker and
+a tested native fallback. The response bound is module policy rather than a driver property,
+so no driver can enlarge the input surface the module agreed to read. The module also keeps
+owning the outcome: it re-applies its own ordering after a driver answers, and it decides how
+much weight ranked evidence carries.
+
+`ai:cognition-conformance` is the opt-in measurement run. It is the only module code that may
+contact a real cognition sidecar, it refuses to run without `--confirm`, it records p50/p95
+latency, request and response bytes and observed failure modes against the pinned sidecars, and
+it never runs in CI. Its artifacts sit in `storage/app/ai-cognition-conformance/`, and the
+reviewed numbers are kept in the
+[driver decision record](../plan/details/research/phase-3-driver-decisions.md) rather than
+restated here.
 
 The [assessment](../plan/details/research/phase-3-current-state.md) records that
 these features do not yet exist after Phase 2. It also explains why ordinary

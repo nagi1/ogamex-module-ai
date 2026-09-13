@@ -47,7 +47,7 @@ Work order: land the module action adapter; add owned-state reduction; add sessi
 
 ## Phase 3: social cognition, experience and bounded language
 
-The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Slices 3A–3G and the optional 3H language slice are implemented; 3I driver experiments and 3J acceptance/measurement remain. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
+The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J. Slices 3A–3H are implemented, and 3I is implemented and measured; 3J acceptance/measurement remains. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
 
 | Proposed module area/files | Records | Responsibility |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ Integration tests: two humans cannot attack, spy-counterattack, missile or ACS e
 1. Module: profile/work/receipt migrations, module-owned queue action, first decision and processing job.
 2. Module: session planner, perception reduction, candidates, traces and deterministic profiles.
 3. Module: Phase 3 milestones 3A–3G, one concern per PR: observed sources, native facts/obligations, affect, social protocols, experience, authored delivery and context/budgets.
-4. Host + module: 3H installs a pinned compatible `laravel/ai` release in the host Composer root and adds the module's optional Laravel AI adapter; then complete separate 3I driver spikes and 3J evidence/acceptance. Do not bundle sidecar adoption with the baseline.
+4. Host + module: 3H installs a pinned compatible `laravel/ai` release in the host Composer root and adds the module's optional Laravel AI adapter; then complete separate 3J evidence and acceptance. The 3I driver spikes are complete and stay opt-in; adopting a sidecar must not be bundled with the baseline.
 5. Module: pilot tools, caps and operational metrics.
 6. Host + module: only if a future cooperative mode cannot use an existing generic boundary, add a narrow generic safety policy and pair it with the campaign director tests.
 

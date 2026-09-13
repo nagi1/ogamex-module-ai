@@ -192,6 +192,50 @@ as accepted. The command collects evidence; it does not score believability, pro
 quality or cost, and the reviewed thresholds stay the human gate from the validation
 plan.
 
+## Cognition operations
+
+The optional cognition sidecars stay absent until they are started explicitly, and nothing in
+Phase 3 requires them:
+
+```bash
+docker compose -f Modules/AI/docker/cognition/docker-compose.yml up -d
+```
+
+```bash
+AI_EXPERIENCE_DRIVER=cbrkit AI_COGNITION_DRIVER=fatima \
+  bash scripts/ogamex artisan ai:cognition-conformance --confirm --iterations=30
+```
+
+`ai:cognition-conformance` is the opt-in measurement run for the driver acceptance gates. It is
+the only module code that may contact a real cognition sidecar and it refuses to run without
+`--confirm`. It measures each selected driver over a fixture casebase written inside a
+transaction that is rolled back, so the operator's own records are untouched, and writes a JSON
+artifact to `storage/app/ai-cognition-conformance/<timestamp>.json` holding per-driver
+p50/p95/min/max latency, request and response bytes, the HTTP call count and the observed
+failure modes.
+
+Three details make its figures worth trusting, and each exists because the obvious version was
+wrong:
+
+- The byte and call counters come from Laravel's global request/response middleware, so they
+  count the module's own traffic instead of repeating what a driver claims about itself.
+- `http_calls` must reach the requested iteration count, and for FAtiMA the observed figure
+  must differ from the native engine's. An equivalent ranking or the same emotion cannot
+  distinguish a driver that answered from one that silently degraded to native, so a run where
+  the driver never contributed fails even when the result looks right.
+- The measurement selects the driver explicitly. With the module enabled,
+  `config('ai.cognition.fatima.scenario_path', $default)` returned the stored `null` and ignored
+  the default argument, which made the FAtiMA fixture resolve to the filesystem root and every
+  appraisal degrade to native. That is what a measured run caught and a green suite did not.
+
+CPU and memory are deliberately absent from the artifact: the application container cannot read
+the sidecar's cgroup. Capture them on the host next to the run and record both together.
+
+```bash
+docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}' \
+  ogamex-ai-cognition-cbrkit-1 ogamex-ai-cognition-fatima-1
+```
+
 ## Composer and autoloading
 
 The module's `composer.json` supplies its PSR-4 namespace. OGameX merges the
@@ -265,10 +309,16 @@ by the runner rather than left to discipline:
    inside the container (`TEST_TIMEOUT`, default 120; `COVERAGE_TIMEOUT`, default 600)
    and reaps leftover sessions with `scripts/ogamex reap` before `test`, `test-all`,
    `quality` and `coverage`.
+3. **The module's status file is not part of the suite's contract.** These tests wire every
+   module binding themselves, so they assume the AI module is not enabled in the host
+   workspace. Enable it and the module's providers boot first: `HorizonServiceProvider` has
+   already contributed `horizon.defaults`, which is why `AiHorizonConfigurationTest` then fails
+   on a value it expects to have cleared. That is a status-file mismatch rather than a broken
+   test, and it cuts both ways — no test may depend on the workspace status file to pass.
 
 The application container ships neither `ps` nor `pkill`, so leftover workers are
 cleared by database session instead of by process listing. A healthy full suite is
-about 250 tests in ten seconds with four workers; a run that does not finish is a bug in
+about 300 tests in thirteen seconds with four workers; a run that does not finish is a bug in
 a test, not a capacity problem.
 
 Before pushing a meaningful change, run the OGameX quality chain:

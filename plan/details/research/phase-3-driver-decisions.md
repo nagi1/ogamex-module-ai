@@ -15,6 +15,22 @@ Gate 1 is satisfied for all three evaluated drivers. Gate 2 (demonstrated value)
 **not** met for any of them, so every driver remains opt-in and disabled by default,
 and the native path stays the shipped behavior.
 
+**Global gates A1–A8, for the evaluated drivers:** A1 by `DriverAbsenceTest`, which shows
+every optional contract resolving to its native implementation with nothing configured and no
+request attempted; A2 and A5 by `DriverSwapAuthorityTest`, which shows a swapped driver changing
+its answer while changing no module record and refusing to surface a case the module never sent;
+A3 by the pinned images, which carry no provider or embedding library; A4 by the module-owned
+response bound, the casebase bound and their oversized-payload tests; A6 by the module
+re-applying its own ordering after the driver answers; A7 by the measured run recorded below;
+A8 by the 100% module PCOV gate running with every driver absent. A2 has a second, stronger
+form: because Appraisal writes nothing, the whole `ai_` table set is compared before and after
+— it is not merely the four named families that stay untouched.
+
+**Standing rule for all driver work:** integration and swap evidence only. Do not write PHP
+that duplicates a capability a supported driver already provides, and do not add a parallel
+native implementation to compare against one. See
+[no duplicated driver capability](../specs/phase-3-cognition.md#no-duplicated-driver-capability).
+
 ## CBRKit — pass
 
 - **Equivalence.** Five fixtures, including a null query feature, no shared keys,
@@ -39,6 +55,14 @@ Remaining risk: gate C (demonstrated value) is **not** met. Because the driver
 reproduces the module's formula, equivalence is expected and is not evidence of
 value. The driver stays opt-in and disabled by default until a held-out-outcome
 measurement shows a gain.
+
+**Consequence of the standing rule.** The pinned retriever mirrors the module's own
+similarity formula in Python, which is the duplication the rule now forbids and is also
+the reason equivalence is the only result. Any further CBRKit work must let the driver use
+its own measures — per-feature weighted similarity, `cbrkit.eval` over held-out real
+outcomes — instead of reproducing the module's arithmetic. If it cannot show a gain the
+module's uniform mean cannot express, it keeps earning a network hop for nothing and stays
+disabled. No native reimplementation is to be written to close that gap either.
 
 ## FAtiMA/CiF affect — pass, after patching the vendored server
 
@@ -196,6 +220,67 @@ The decorator therefore has a deliberately narrow authority: it can only **withh
 an acceptance that the native rules already granted. It never overrides a native
 non-acceptance, and it declines to answer at all without a persona and a
 counterparty, because the driver needs a concrete target bound per counterparty.
+
+### Measured adapter cost (13 September 2026)
+
+`php artisan ai:cognition-conformance --confirm --iterations=120` against the running pinned
+sidecars, module enabled, both drivers selected. The command installs Laravel's
+`globalRequestMiddleware`/`globalResponseMiddleware`, so these are the module's own counts of
+its own traffic rather than anything a driver reports about itself.
+
+| | CBRKit 1.6.0 → `ExperienceEngine` | FAtiMA/CiF → `AffectEngine` |
+| --- | --- | --- |
+| Calls measured | 120 | 120 |
+| HTTP requests | 120 (1 per call) | 600 (5 per call) |
+| p50 / p95 latency | 176 ms / 183 ms | 404 ms / 412 ms |
+| Latency range | 175–184 ms | 395–455 ms |
+| Request bytes | 281 B per call | ~25.7 KB per call |
+| Response bytes | ~2.5 KB per call | ~296 B per call |
+| Conformance | ranking identical to native | `Anger` at the driver's clamp, distinct from the native `0.08` |
+| Idle / under-load CPU | ~0.1% / 1.2–1.4% (25% peak) | 0% / 8–15% |
+| Steady memory | ~142 MiB | ~108 MiB |
+
+CPU and memory come from `docker stats --no-stream` sampled on the host during a longer run,
+because the application container cannot read the sidecar's cgroup.
+
+Two things this measurement makes plain that no amount of documentation could establish:
+
+1. **FAtiMA's cost is the scenario re-send.** Five round trips per appraisal, of which ~25.6 KB
+   is the authored scenario re-posted every time. Reloading the scenario is exactly what makes
+   the driver deterministic — it discards accumulated mood — so the cost is the mechanism
+   rather than a defect, but it is a real ~400 ms on the appraisal path.
+2. **A native fallback is invisible in the answer.** CBRKit's ranking is identical to the native
+   one whether it answered or degraded. FAtiMA is worse: the module's own engine answers the
+   fixture stimulus with the *same emotion*, so the pre-fix run also returned `Anger` — at the
+   native `0.08`. A run is therefore only credited when the request count reaches the iteration
+   count **and** the observed figure differs from the native engine's, which is the only way an
+   operator can tell a driver answer from a silent fallback.
+
+Observed failure modes, re-measured rather than restated: CBRKit answers **500** for a casebase
+whose values are not objects. FAtiMA answers **200** for an emotions read taken before any
+perception and returns an empty pool, so a status code carries no meaning for that driver —
+which is why its adapter inspects the payload shape instead.
+
+### Defect found while measuring: the scenario path never resolved
+
+`config('ai.cognition.fatima.scenario_path', $default)` did not do what it appeared to do.
+Laravel's `Arr::get` returns a stored `null` and never falls back to the default argument, and
+`config/cognition.php` set that key from a bare `env('AI_COGNITION_FATIMA_SCENARIO_PATH')`.
+With the module enabled the key exists holding `null`, the module-relative default never
+applied, and the fixture path collapsed to `/ogame-cognition.json`.
+
+`FatimaScenarioTemplate` then threw, `FatimaCognitionSession` degraded to the native engine, and
+**every** appraisal returned a native result. The driver was unreachable in an enabled
+installation while appearing correctly bound and configured.
+
+The module's own suite could not see this. With the module disabled the key is absent, so
+`config()`'s default argument *does* apply and the tests pass against a path that production
+never uses. It surfaced only because the measured run reported `intensity = 0.08` — the native
+value — alongside `http_calls = 0`.
+
+Fixed by treating an unset or blank setting as the module's own fixture inside
+`FatimaScenarioTemplate`, which keeps one authority for that default, with tests for the unset,
+blank and overridden cases.
 
 ## AgentOS — deferred
 

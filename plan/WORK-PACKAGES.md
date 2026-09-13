@@ -38,7 +38,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 3 — social cognition, experience and bounded conversation
 
-**Status:** slices 3A–3H implemented and committed; 3I driver experiments and 3J acceptance/measurement remain. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
+**Status:** slices 3A–3H implemented and committed, 3I implemented and measured; 3J acceptance/measurement remains. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
 
 **Goal:** believable, persistent social behavior and outcome-based learning with no generative calls for ordinary gameplay; authored dialogue handles known exchanges and optional language handles unrestricted human conversation.
 
