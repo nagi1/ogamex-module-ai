@@ -304,6 +304,48 @@ right-hand column has no caller outside the tests, so an AI currently never answ
 Wiring that path is the first thing the acceptance slice must not assume is already done: no
 ablation configuration can show conversational behaviour until a conversation can start.
 
+### Reply path design and capacity (1000 AI players, small server)
+
+The trigger for the conversation path is chosen on capacity, because chat rhythm in this game is
+slow and the module runs one worker per lane by default.
+
+Load at 1000 AI players with the configured defaults (45-minute session gap, one worker per lane,
+100 dispatches per minute):
+
+| Source | Rate | Share of the dispatch cap |
+| --- | --- | --- |
+| Session work items | 1000 x 60/45 = **22/min** | 22% |
+| Inbound direct messages, at one per player per hour | **17/min** | 17% |
+| Both | **39/min** | 39% |
+
+Neither lane is near saturation for deterministic work, and an authored reply is milliseconds of
+database work. The provider is the only step that does not scale: at 20 seconds a call, 17
+escalated replies a minute need roughly six language workers, which is why config G is off by
+default and why `AI_HORIZON_LANGUAGE_PROCESSES` is the knob that matters.
+
+The design therefore splits by **cost**, not by feature:
+
+1. **The session composes the conversation cycle.** It already holds the per-player lease and the
+   `ai:player:{id}` lock, so draining observed messages, reducing them, evaluating a structured
+   exchange and delivering an authored reply costs no extra work item, no extra job and no extra
+   lock contention. That is the cheapest correct home for deterministic work, and it is what makes
+   1000 players unremarkable.
+2. **Generation is dispatched, never run inline.** A reply that needs the provider goes to the
+   `ai-language` lane, whose 60-second timeout is sized for a 20-second call and whose worker count
+   is independent. Running it inside the session would place a 20-second call inside a 25-second
+   `ai`-lane job on a single worker, which is the failure that rules out the alternatives.
+
+Rejected, with the reason recorded so it is not re-proposed:
+
+- **A work kind per reply.** It adds a work-item row and a dispatch slot per reply lifecycle to buy
+  isolation the session already has, and it consumes the same lane and timeout that make an inline
+  provider call unsafe.
+- **A job for every reply, including authored ones.** It adds a failure mode (a job lost before
+  delivery) to the path that currently has none.
+
+Still undecided, and deliberately not guessed here: what an inbound message must look like before
+the AI answers it at all. That is a policy question about reply content, not a capacity one.
+
 Complete Phase 3 when the required native/social/experience/conversation slices and their behavioral tests pass, enabled drivers meet their conformance gates, and optional failures/deferments are recorded. Do not claim completion because interfaces exist, line coverage is high, or a sidecar starts. Persist provider-off evidence that normal gameplay, structured memory, known social exchanges and authored replies remain useful.
 
 Use native Pest 5 datasets across personas, skill levels, relationships, exchange types and failure conditions; PAO and PCOV, never Xdebug or Mockery. Contract replacement tests complement real module/host paths. [Validation](validation.md) defines the concrete matrix and separation between reproducible tests and model-quality evaluations.
