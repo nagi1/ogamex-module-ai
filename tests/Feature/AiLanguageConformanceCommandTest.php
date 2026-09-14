@@ -34,6 +34,21 @@ beforeEach(function (): void {
     app()->bind(LanguageGateway::class, LaravelAiLanguageGateway::class);
 });
 
+test('a run with no available credential refuses before contacting a provider', function (): void {
+    config([
+        'ai.routing.enabled' => true,
+        'ai.language.provider' => 'deepseek',
+        'ai.providers.deepseek.key' => null,
+    ]);
+    OgameConversationReplyAgent::fake()->preventStrayPrompts();
+
+    $this->artisan('ai:language-conformance', ['--confirm' => true])
+        ->expectsOutputToContain('No provider rung is available')
+        ->assertExitCode(1);
+
+    expect(Storage::disk('local')->allFiles('ai-language-conformance'))->toBeEmpty();
+});
+
 /** @return array{path: string, report: array<string, mixed>} */
 function conformanceEvidence(): array
 {

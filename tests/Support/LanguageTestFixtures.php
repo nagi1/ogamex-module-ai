@@ -9,6 +9,7 @@ use Modules\AI\Domain\Conversation\ConversationContext;
 use Modules\AI\Domain\Conversation\LanguageProposal;
 use Modules\AI\Domain\Conversation\LanguageRequest;
 use Modules\AI\Domain\Conversation\LanguageResult;
+use Modules\AI\Domain\Language\AiProviderLadder;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiLanguageProposalType;
 use Modules\AI\Enums\AiLanguageRequestState;
@@ -32,11 +33,19 @@ function languageRequest(): LanguageRequest
         'requestKey' => 'language-test',
         'context' => app()->makeWith(ConversationContext::class, ['sections' => [], 'serialized' => '{"safe":true}', 'protectedContentFits' => true]),
         'authorizedSourceMessageIds' => [1],
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
+        'ladder' => languageLadder(),
         'timeoutSeconds' => 17,
         'maximumReplyCharacters' => 1_200,
     ]);
+}
+
+/**
+ * A fixture names its rung outright, so no gateway test depends on which vendors this environment
+ * happens to hold a key for.
+ */
+function languageLadder(string $provider = 'openai', string $model = 'gpt-5-mini'): AiProviderLadder
+{
+    return app()->makeWith(AiProviderLadder::class, ['rungs' => [['provider' => $provider, 'model' => $model]]]);
 }
 
 function languageResult(AiLanguageResultStatus $status, string|null $text, int $inputTokens, int $outputTokens): LanguageResult

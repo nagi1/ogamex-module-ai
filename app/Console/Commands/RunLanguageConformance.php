@@ -6,13 +6,16 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
+use Modules\AI\Actions\ResolveAiProviderRouteAction;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\LanguageGateway;
 use Modules\AI\Domain\Conversation\ConversationContextSection;
 use Modules\AI\Domain\Conversation\LanguageRequest;
+use Modules\AI\Domain\Language\AiProviderLadder;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiLanguageInterpretation;
 use Modules\AI\Enums\AiLanguageResultStatus;
+use Modules\AI\Enums\AiLanguageTaskKind;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Support\AiClock;
 
@@ -44,10 +47,18 @@ class RunLanguageConformance extends Command
         }
 
         $cases = (bool) $this->option('corpus') ? $this->corpus() : array_slice($this->corpus(), 0, 1);
+        $ladder = app(ResolveAiProviderRouteAction::class)->handle(AiLanguageTaskKind::Conformance, app(AiClock::class)->now());
+
+        if ($ladder->isEmpty()) {
+            $this->error('No provider rung is available for this run: configure a credential for at least one vendor in the conformance ladder.');
+
+            return self::FAILURE;
+        }
+
         $results = [];
 
         foreach ($cases as $case) {
-            $results[] = $this->runCase($case);
+            $results[] = $this->runCase($case, $ladder);
         }
 
         $completed = count(array_filter($results, fn (array $result): bool => $result['status'] === AiLanguageResultStatus::Completed->value));
@@ -128,9 +139,9 @@ class RunLanguageConformance extends Command
      * @param array{name: string, locale: string, message: string, expected_interpretation: string, expected_proposal: string} $case
      * @return array{case: string, locale: string, expected_interpretation: string, expected_proposal: string, status: string, interpretation: string|null, text: string|null, characters: int|null, proposals: int, input_tokens: int, output_tokens: int, provider: string|null, model: string|null, provider_request_id: string|null, latency_milliseconds: int}
      */
-    private function runCase(array $case): array
+    private function runCase(array $case, AiProviderLadder $ladder): array
     {
-        $request = $this->request($case);
+        $request = $this->request($case, $ladder);
         $startedAt = hrtime(true);
         $result = app(LanguageGateway::class)->generateConversationReply($request);
         $latencyMilliseconds = intdiv(hrtime(true) - $startedAt, 1_000_000);
@@ -155,7 +166,7 @@ class RunLanguageConformance extends Command
     }
 
     /** @param array{name: string, locale: string, message: string, expected_interpretation: string, expected_proposal: string} $case */
-    private function request(array $case): LanguageRequest
+    private function request(array $case, AiProviderLadder $ladder): LanguageRequest
     {
         $sourceMessageId = 1;
         $context = app(ContextBuilder::class)->buildConversationContext([
@@ -188,8 +199,7 @@ class RunLanguageConformance extends Command
             'requestKey' => 'language-conformance:' . $case['name'],
             'context' => $context,
             'authorizedSourceMessageIds' => [$sourceMessageId],
-            'provider' => (string) config('ai.language.provider', 'openai'),
-            'model' => (string) config('ai.language.model', 'gpt-5-mini'),
+            'ladder' => $ladder,
             'timeoutSeconds' => (int) config('ai.language.timeout_seconds', 20),
             'maximumReplyCharacters' => (int) config('ai.language.maximum_reply_characters', 1_200),
         ]);

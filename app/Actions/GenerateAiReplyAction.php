@@ -14,6 +14,7 @@ use Modules\AI\Domain\Conversation\UsageReservationRequest;
 use Modules\AI\Enums\AiConversationReplyState;
 use Modules\AI\Enums\AiLanguageRequestState;
 use Modules\AI\Enums\AiLanguageResultStatus;
+use Modules\AI\Enums\AiLanguageTaskKind;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiProfile;
@@ -125,6 +126,14 @@ class GenerateAiReplyAction
             return null;
         }
 
+        $ladder = app(ResolveAiProviderRouteAction::class)->handle(AiLanguageTaskKind::ConversationReply, $this->clock->now());
+
+        if ($ladder->isEmpty()) {
+            // No usable vendor is a configuration answer rather than a failure: answer with the
+            // authored text and touch no reservation, so a missing key cannot spend an attempt.
+            return null;
+        }
+
         return app()->makeWith(LanguageRequest::class, [
             'replyId' => $reply->id,
             'playerId' => $reply->player_id,
@@ -132,8 +141,7 @@ class GenerateAiReplyAction
             'requestKey' => 'language-reply:' . $reply->id . ':' . $reply->revision,
             'context' => $context,
             'authorizedSourceMessageIds' => $messages->pluck('id')->all(),
-            'provider' => (string) config('ai.language.provider', 'openai'),
-            'model' => (string) config('ai.language.model', 'gpt-5-mini'),
+            'ladder' => $ladder,
             'timeoutSeconds' => (int) config('ai.language.timeout_seconds', 20),
             'maximumReplyCharacters' => (int) config('ai.language.maximum_reply_characters', 1_200),
         ]);
@@ -173,8 +181,8 @@ class GenerateAiReplyAction
                 'usage_reservation_id' => $reservation->id,
                 'request_key' => $request->requestKey,
                 'state' => AiLanguageRequestState::Generating,
-                'provider' => $request->provider,
-                'model' => $request->model,
+                'provider' => $request->ladder->firstOrFail()['provider'],
+                'model' => $request->ladder->firstOrFail()['model'],
                 'context_hash' => hash('sha256', $request->context->serialized),
             ]);
         });

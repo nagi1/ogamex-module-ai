@@ -13,15 +13,23 @@ use Modules\AI\Enums\AiLanguageInterpretation;
 use Modules\AI\Enums\AiLanguageProposalType;
 use Modules\AI\Enums\AiLanguageResultStatus;
 use Modules\AI\Enums\AiSocialResource;
+use RuntimeException;
 use Throwable;
 
 class LaravelAiLanguageGateway implements LanguageGateway
 {
     public function generateConversationReply(LanguageRequest $request): LanguageResult
     {
+        if ($request->ladder->isEmpty()) {
+            // No credential is a configuration state rather than a provider fault, so refuse before
+            // spending a round trip and let the caller deliver the authored text it already holds.
+            return $this->failedResult(new RuntimeException('No provider rung is available for this language request.'), $request);
+        }
+
         try {
+            // The ladder is the SDK's own ordered provider list, so its failover is what walks it.
             $response = app()->makeWith(OgameConversationReplyAgent::class, ['request' => $request])
-                ->prompt($request->context->serialized, provider: $request->provider, model: $request->model, timeout: $request->timeoutSeconds);
+                ->prompt($request->context->serialized, provider: $request->ladder->toProviderMap(), timeout: $request->timeoutSeconds);
         } catch (Throwable $exception) {
             return $this->failedResult($exception, $request);
         }
@@ -138,6 +146,8 @@ class LaravelAiLanguageGateway implements LanguageGateway
 
     private function invalidResult(LanguageRequest $request, StructuredAgentResponse|null $response = null): LanguageResult
     {
+        $attribution = $this->attribution($request);
+
         return app()->makeWith(LanguageResult::class, [
             'status' => AiLanguageResultStatus::Invalid,
             'text' => null,
@@ -146,8 +156,8 @@ class LaravelAiLanguageGateway implements LanguageGateway
             'inputTokens' => $response?->usage->promptTokens ?? 0,
             'outputTokens' => $response?->usage->completionTokens ?? 0,
             'providerRequestId' => $response?->invocationId,
-            'provider' => $response?->meta->provider ?? $request->provider,
-            'model' => $response?->meta->model ?? $request->model,
+            'provider' => $response?->meta->provider ?? $attribution['provider'],
+            'model' => $response?->meta->model ?? $attribution['model'],
         ]);
     }
 
@@ -157,6 +167,7 @@ class LaravelAiLanguageGateway implements LanguageGateway
         $status = str_contains($failureDescription, 'timeout') || str_contains($failureDescription, 'timed out')
             ? AiLanguageResultStatus::TimedOut
             : AiLanguageResultStatus::Failed;
+        $attribution = $this->attribution($request);
 
         return app()->makeWith(LanguageResult::class, [
             'status' => $status,
@@ -166,8 +177,22 @@ class LaravelAiLanguageGateway implements LanguageGateway
             'inputTokens' => 0,
             'outputTokens' => 0,
             'providerRequestId' => null,
-            'provider' => $request->provider,
-            'model' => $request->model,
+            'provider' => $attribution['provider'],
+            'model' => $attribution['model'],
         ]);
+    }
+
+    /**
+     * The rung an attempt is attributed to when no provider answered it.
+     *
+     * The receipt records the provider that replied for a completed call; for a call that never
+     * got that far, naming the rung that was meant to answer is the difference between a receipt
+     * that explains the attempt and one that only says `failed`.
+     *
+     * @return array{provider: string, model: string}
+     */
+    private function attribution(LanguageRequest $request): array
+    {
+        return $request->ladder->primary() ?? ['provider' => '', 'model' => ''];
     }
 }
