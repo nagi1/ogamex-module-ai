@@ -340,7 +340,12 @@ unmeasured is the effect at pilot scale: the 10-account run above predates this 
 statement it could not make is now waiting on a re-run rather than on engineering. An in-situ probe
 of the live cohort confirms publication works on real accounts — every enabled pilot profile can now
 queue a building, and the choice varies by persona — while the scheduled sessions that would turn
-that ability into queued buildings were still pending when it was taken.
+that ability into queued buildings were still pending when it was taken. Those sessions have since
+run on their own, and two real accounts queued real buildings through the host action path: player
+29129 a solar plant, player 29132 a crystal mine, each the building its own planner published, with
+the pilot report reading `Accepted 1, Processing 1` where every earlier run read `none` and with
+zero provider attempts. Growth at pilot scale is therefore demonstrated for the first time; the
+*shape* of that growth over time is what the deferred capacity runs measure.
 
 ### Reply path design and capacity (1000 AI players, small server)
 

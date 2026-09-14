@@ -149,6 +149,18 @@ the worker did not. The worker was restarted, that one session is spent and is n
 way, and the runbook now says to restart it after a deploy: a pilot dispatched to a stale worker
 would otherwise read as "the population still does not act" and be believed.
 
+**Growth, measured (14 September 2026, 13:29).** The claim the probe withheld is now made with numbers, from the scheduled generation-2 sessions running on their own through the ordinary queue and the ordinary action path:
+
+| Measured | Value |
+| --- | --- |
+| Pilot report | `actions: Accepted 1, Processing 1` — every earlier run in this window read `none` |
+| Actions | Two accepted receipts, `intent:session:1666` and `intent:session:1667` |
+| Queued buildings | Player 29129 (`Astro Titan`), planet 45679 → object 4 `solar_plant` level 1, building. Player 29132 (`Pioneer Iapet`), planet 45682 → object 2 `crystal_mine` level 1, building |
+| Persona match | Each account queued exactly the building its own planner published, so the trace, the intent and the host queue agree on the same action |
+| Provider | 0 language attempts, 0 tokens: the whole path stayed deterministic |
+
+This is the population deciding *and* acting with no generative call anywhere, which is the minimum an observable-growth statement needs before the capacity runs. What it does not measure is the *shape* of that growth over time, which remains what the deferred 100/500/1,000-player runs are for.
+
 ## Phase 3L — provider escalation implemented (14 September 2026)
 
 | Topic | Decision |
