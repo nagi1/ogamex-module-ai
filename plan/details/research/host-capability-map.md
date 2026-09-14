@@ -127,6 +127,11 @@ merged revision.
 10. **`getBuildingObjectsWithStorage()` excludes stations**, so storage enumeration is blind to any
     station a mod adds — a gate-1 hole in the host's own catalogue, not in the module.
 
+Obligations 1, 2, 3, 6 and 10 are the asks in
+[**the host change request**](../specs/host-change-request.md), which adds the one genuine new extension
+point this survey found — a read-only, seedable battle question — and states the minimal shape of each
+item so host scope stays small.
+
 ## What this changes
 
 - **G8's premise is corrected.** The register says "the host already has `IncomingFleetIntelService`, so

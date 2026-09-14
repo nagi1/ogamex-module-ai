@@ -115,6 +115,10 @@ work is built on:
   obligations), and the two findings that changed the plan: the battle engine is neither seedable nor
   side-effect free, and the host's own bot detector publishes the cadence thresholds the routine must
   satisfy.
+- [What the module needs from the host](details/specs/host-change-request.md) — the other direction of the
+  same survey: eight asks ordered by what they unblock, each with the minimal shape that satisfies it,
+  what lands in the module when it does, and what happens if it never does. One of them (a read-only,
+  seedable battle question) is what makes the raid estimator executable at all.
 
 The [gate audit](details/GATE-AUDIT.md) is the pass over the existing module against the three gates, and
 it is what turns this research into slices.

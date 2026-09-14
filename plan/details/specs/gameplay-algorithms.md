@@ -951,9 +951,9 @@ with its acceptance evidence recorded.
 
 1. **3P — economy by host numbers** (E1, E2, E3, E5). Deletes `FirstBuildingTarget`, the scoring-policy
    layers and `BUILDING_WEIGHTS`.
-2. **Host obligations round 1** ([the capability map](../research/host-capability-map.md)): the
-   queue-upgrade predicate, vacation-mode on add, the recall ownership check, expedition hold bounds.
-   Module-side, these replace `AiBuildingMachineName`.
+2. **Host obligations round 1** ([the capability map](../research/host-capability-map.md),
+   [the change request](host-change-request.md)): the queue-upgrade predicate, vacation-mode on add, the
+   recall ownership check, expedition hold bounds. Module-side, these replace `AiBuildingMachineName`.
 3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
    single authenticity gain, because the host's own detector gives the acceptance test.
 4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
