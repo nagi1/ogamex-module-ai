@@ -55,6 +55,7 @@ use OGame\Events\Game\BuildingCompleted;
 use OGame\Models\AllianceMember;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Services\ModuleSlotService;
 
 class AIServiceProvider extends ModuleServiceProvider
 {
@@ -85,6 +86,12 @@ class AIServiceProvider extends ModuleServiceProvider
         ChatMessage::observe(RedactDeletedChatMemory::class);
         AllianceMember::observe(ObserveCommittedAllianceMembership::class);
         Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
+
+        // The module's operator page is reachable from the admin sidebar through the host's
+        // documented slot, so the module adds a link instead of replacing the menu template.
+        ModuleSlotService::register('admin.nav', static function (array $data): string {
+            return view('ai::partials.admin-nav')->render();
+        });
     }
 
     /**
