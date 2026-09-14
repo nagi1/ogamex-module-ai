@@ -149,6 +149,7 @@ Two owner decisions of the same day, which together set what the remaining evide
 | Scale runs | **2, 5 and 10 accounts, not 100/500/1,000.** The rescale is deliberate: a cohort small enough to read decision by decision is what the population's behaviour needs next. What the runs then prove is that behaviour, lateness and per-player cost hold as the population grows. What they **cannot** prove is a capacity ceiling on the 2 vCPU / 2 GB reference profile, and no capacity verdict is claimed from them. |
 | Sequencing | **Executors before the runs.** The runs measure whatever the executor set can do, so a population that can only build would produce evidence about building and nothing else. |
 | Why not leave the intents unexecuted | **Because a trace that claims an action nobody performs is the failure the first pilot measured.** An unexecuted intent reads in a report as a quiet population rather than as a missing executor, which is exactly the misreading 3M removed for `build`. |
+| Completeness audit | **Audit against the goal, not against the plan.** Finding the building chain by accident implied a class, so the eleven authenticity signals were audited against the mechanisms that produce them. That found eighteen gaps and four planning failures, recorded in the [gap register](GAP-REGISTER.md). A package is complete when that register is empty, not when its own checklist is ticked. |
 
 ### Executor coverage needs the building chain first (measured 14 September 2026)
 

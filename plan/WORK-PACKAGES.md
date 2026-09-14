@@ -79,7 +79,9 @@ Every agent begins by reading the assigned package and the named section of [det
 Package 5 does not start until Packages 1–4 are **fully and completely finished, with every gate
 closed** — not merely implemented, run and signed. Those are three different states and none of them
 is sufficient on its own. This is the checklist that separates them; every **open** item blocks
-Package 5.
+Package 5. Completeness is audited against the goal rather than against this list alone: the
+[gap register](details/GAP-REGISTER.md) holds the eighteen gaps that audit found, and an empty
+register is the evidence that Packages 1–4 are actually finished.
 
 | # | Item | Package | Status |
 | --- | --- | --- | --- |
