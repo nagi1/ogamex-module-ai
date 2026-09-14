@@ -34,11 +34,11 @@ line is the list of host answers it needs.
 | G5 | [N1](#n1-probe-sizing) [N2](#n2-target-lifecycle) | Probe enough to reveal, escalate when it does not, and let stale targets die | planned |
 | G6, S4 | [T1](#t1-the-profit-test-as-an-audit-trail) [T2](#t2-the-estimator) [T3](#t3-the-bashing-limit) | Loot − deuterium − expected losses must clear a tail threshold | planned |
 | G7 | [CL1](#cl1--slot-choice) [CL2](#cl2--the-colony-is-another-mine) | Choose the slot by the host's own position bonuses; treat the colony as a mine | planned |
-| G10, G11 | [H1](#h1-the-active-hours-constraint) [H2](#h2-session-shape) [H3](#h3-absence) | A real dark period under the host's own detector threshold, heavy-tailed sessions, planned absences | planned |
+| G10, G11 | [H1](#h1-the-active-hours-constraint) [H2](#h2-session-shape) [H3](#h3-absence) | A real dark period under the host's own detector threshold, heavy-tailed sessions, planned absences | **H1, H2 shipped**; H3 planned |
 | G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | planned |
 | G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | planned |
 | G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | scope decision first |
-| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | planned |
+| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **H6 shipped**; L1–L2 planned |
 | I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | planned |
 | A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | planned |
 
@@ -698,6 +698,8 @@ own numbers.
 
 ### H1 — The active-hours constraint
 
+**Shipped 14 September 2026** in `SessionPlanner`, with [H2](#h2-session-shape).
+
 **Gaps:** G10 · **Host:** the host's own detector (`ServerAdministrationController`, defaults
 `bot_detection_lookback_days = 7`) and the 15-minute per-planet activity marker.
 
@@ -719,10 +721,26 @@ at exactly 1 s and 5.5 s, its poll timers, while human intervals are Pareto-dist
 and on inter-action interval *standard deviation* (97% accuracy on one day of data from frequency, mean
 ATI and ATI SD — **measured**). Constant or periodic work, whatever its mean, is the signature.
 
-**Accept.** Run the admin page's three signals against the cohort weekly; a flagged account is a failing
-test.
+**As built.** Each account owns one waking window per local day, anchored to a **core wake time drawn
+over 05:30–09:30** so a cohort is early birds and night owls rather than one shift, with a **nine-hour
+core dark period** and up to thirty minutes of drift on either edge. The drift can only *extend* the
+dark period, so the nine-hour core is present every day: eight whole wall-clock hours, which is exactly
+what the host's `COUNT(DISTINCT FLOOR(time_departure % 86400 / 3600))` counts. Sessions are placed only
+inside the window, and a wait that runs into the dark period is spent there rather than shortened.
+
+**Measured, 21 simulated days per archetype** (`RoutineCadenceTest`): **16 distinct hours in the widest
+seven-day window** against the host's 18, and **14 for the casual persona**; every local day covered by
+a silence longer than six hours; overnight silences of 6–25 hours.
+
+**Accept.** `RoutineCadenceTest` runs the constraint against the module's own clock rather than against
+a live cohort, because the host's signals read *fleet departures* and this is the schedule that produces
+them: it is deterministic, needs no running pilot, and fails the moment the routine can span the hours
+the host flags. Re-run the admin page's three signals against the cohort once fleets exist ([G4](#gap--algorithm-index)),
+when there is something for them to count.
 
 ### H2 — Session shape
+
+**Shipped 14 September 2026** in `SessionPlanner`, with [H1](#h1-the-active-hours-constraint).
 
 **Gaps:** G10 · **Host:** the schedule (`ai:run-due-work` every minute) and the session runner.
 
@@ -741,6 +759,29 @@ median ≈ 0.65–0.80 (**measured**). A uniform or exponential gap distribution
 principle: it has bounded support and no long tail. Draw session lengths and inter-action gaps from a
 log-normal or Weibull with `k ≈ 0.7–0.9`, and **derive the next wake from state (S3), not from the last
 wake**.
+
+**As built.** The next wake needs no second mechanism: it is *now + a Weibull wait at shape 0.8*, and a
+session's length is the same draw at the session's own scale. The wait is what the persona's visits per
+day imply (`waking minutes ÷ visits − session minutes`), so the shape is a person's and the rate is the
+persona's. Two rules keep the tail from doing damage: a wait never skips a waking day, and the wait that
+runs into the dark period is **spent** — the account looks in again after waking, on a fresh draw, rather
+than after the overflowed one, which skipped the day it had just woken into.
+
+**Measured, 21 days per archetype** (`RoutineCadenceTest`): **2.76** visits a day for the casual
+persona, **4.62–6.90** for trader, turtle and miner, **12.05** for the fleeter — inside the benchmark's
+bands above; session length **median 5–8 min, p75 14–19, p90 21–32, longest 40–118 min**.
+
+**The persona targets are calibrated, not guessed.** A persona lands *above* its target visits, because
+the longest waits are spent asleep and never appear as a wait inside the day: with the benchmark's band
+centres as targets the measured rate came out 1.2–1.5× high, so the targets were set from the
+measurement (`RoutineProfile::sessionsPerDay` 2, 4, 5, 5, 11 for casual, trader, turtle, miner,
+fleeter). The band assertion in `RoutineCadenceTest` is the check, not the target.
+
+**What is deliberately not here.** The window is one block per day, not the benchmark's evening-plus-lunch
+shape: with two to twelve visits a day the gaps themselves place the visits across the day, and a second
+block would be a mechanism with nothing to do. Weekend drift and the occasional 03:00 login
+([H5](#h5-what-makes-a-schedule-look-worse) 4) are likewise not modelled yet; the day's drift is what
+keeps the boundary from being a square wave.
 
 ### H3 — Absence
 
@@ -978,12 +1019,13 @@ Every step ships with the module gate green — Rector, Pint, PHPStan level 8, f
 with its acceptance evidence recorded.
 
 1. **3P — economy by host numbers** (E1, E2, E3, E5). Deletes `FirstBuildingTarget`, the scoring-policy
-   layers and `BUILDING_WEIGHTS`.
+   layers and `BUILDING_WEIGHTS`. **Shipped.**
 2. **Host obligations round 1** ([the capability map](../research/host-capability-map.md),
    [the change request](host-change-request.md)): the queue-upgrade predicate, vacation-mode on add, the
    recall ownership check, expedition hold bounds. Module-side, these replace `AiBuildingMachineName`.
 3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
    single authenticity gain, because the host's own detector gives the acceptance test.
+   **H1, H2 and H6 shipped**; H3, H4, L2 and L3 remain.
 4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
 5. **Units and cargos** (U1, U2, U4, A1, A2(reg)) — military points stop being zero, the ledger exists.
 6. **Fleets and saving** (V1–V5, H3) — the fleet exists, so the save can exist, and the failed save is

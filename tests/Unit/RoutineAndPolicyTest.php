@@ -36,14 +36,31 @@ test('routine profile uses safe defaults for invalid or too small settings', fun
     $profile = aiRoutineProfile([
         AiProfileSettings::TIMEZONE => 'not/a-timezone',
         AiProfileSettings::SESSION_MINUTES => 0,
-        AiProfileSettings::SESSION_GAP_MINUTES => -1,
     ]);
 
     $routine = RoutineProfile::fromAiProfile($profile);
 
     expect($routine->timezone)->toBe(AiProfileSettings::DEFAULT_TIMEZONE);
     expect($routine->sessionMinutes)->toBe(1);
-    expect($routine->sessionGapMinutes)->toBe(1);
+});
+
+test('each archetype keeps a routine the others do not', function (AiArchetype $archetype) {
+    $routine = RoutineProfile::fromAiProfile(aiRoutineProfile([], $archetype));
+
+    expect($routine->sessionsPerDay)->toBeGreaterThanOrEqual(2);
+})->with([
+    'miner' => [AiArchetype::Miner],
+    'turtle' => [AiArchetype::Turtle],
+    'fleeter' => [AiArchetype::Fleeter],
+    'trader' => [AiArchetype::Trader],
+    'casual' => [AiArchetype::Casual],
+]);
+
+test('a casual player looks in less often than a fleeter', function () {
+    $casual = RoutineProfile::fromAiProfile(aiRoutineProfile([], AiArchetype::Casual));
+    $fleeter = RoutineProfile::fromAiProfile(aiRoutineProfile([], AiArchetype::Fleeter));
+
+    expect($casual->sessionsPerDay)->toBeLessThan($fleeter->sessionsPerDay);
 });
 
 test('session plans are seeded and keep due work in the future', function () {
@@ -51,7 +68,6 @@ test('session plans are seeded and keep due work in the future', function () {
     $profile = aiRoutineProfile([
         AiProfileSettings::TIMEZONE => 'Asia/Riyadh',
         AiProfileSettings::SESSION_MINUTES => 10,
-        AiProfileSettings::SESSION_GAP_MINUTES => 40,
     ]);
     $planner = app(SessionPlanner::class);
 
@@ -59,8 +75,8 @@ test('session plans are seeded and keep due work in the future', function () {
     $second = $planner->plan($profile, $now, 1);
 
     expect($second)->toEqual($first);
-    expect($first->sessionEndsAt->getTimestamp())->toBe($now->addMinutes(10)->getTimestamp());
     expect($first->nextDueAt->greaterThan($now))->toBeTrue();
+    expect($first->nextDueAt->greaterThanOrEqualTo($first->sessionEndsAt))->toBeTrue();
 });
 
 test('next due calculator handles future and elapsed session plans', function () {
@@ -112,12 +128,12 @@ test('registry fails closed when a profile policy is missing', function () {
 });
 
 /** @param array<string, mixed> $settings */
-function aiRoutineProfile(array $settings): AiProfile
+function aiRoutineProfile(array $settings, AiArchetype $archetype = AiArchetype::Miner): AiProfile
 {
     return app()->makeWith(AiProfile::class, ['attributes' => [
         'id' => 1,
         'player_id' => 1,
-        'archetype' => AiArchetype::Miner,
+        'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 42,
         'settings' => $settings,
