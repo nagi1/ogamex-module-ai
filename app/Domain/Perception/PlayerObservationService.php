@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Domain\Perception;
 
+use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
+use Modules\AI\Enums\AiCapability;
 use OGame\Factories\PlayerServiceFactory;
 
 /**
@@ -13,11 +15,13 @@ use OGame\Factories\PlayerServiceFactory;
  */
 class PlayerObservationService
 {
-    public function __construct(private PlayerServiceFactory $playerServiceFactory)
-    {
+    public function __construct(
+        private PlayerServiceFactory $playerServiceFactory,
+        private QueueableBuildingPlanner $queueableBuildingPlanner,
+    ) {
     }
 
-    /** @return array{player_id:int, observed_at:int, planets:array<int, array{id:int, resources:array<string, float|int>}>} */
+    /** @return array{player_id:int, observed_at:int, planets:array<int, array{id:int, resources:array<string, float|int>}>, available_actions:array<string, bool>} */
     public function ownedState(int $playerId): array
     {
         $player = $this->playerServiceFactory->make($playerId, true);
@@ -33,6 +37,25 @@ class PlayerObservationService
             ];
         }
 
-        return ['player_id' => $player->getId(), 'observed_at' => (int) now()->timestamp, 'planets' => $planets];
+        return [
+            'player_id' => $player->getId(),
+            'observed_at' => (int) now()->timestamp,
+            'planets' => $planets,
+            'available_actions' => $this->availableActions($playerId),
+        ];
+    }
+
+    /**
+     * Only a capability the module can actually carry out is published.
+     *
+     * Publishing one it cannot is how the population came to decide without ever acting: a trace
+     * would claim an action while the host was never touched, which reads as a quiet population
+     * rather than as the gap it is.
+     *
+     * @return array<string, bool>
+     */
+    private function availableActions(int $playerId): array
+    {
+        return [AiCapability::Build->value => $this->queueableBuildingPlanner->plan($playerId) !== null];
     }
 }

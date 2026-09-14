@@ -124,6 +124,21 @@ Run on `local-docker-dev`: module installed and enabled, the documented queue wo
 
 **Decision.** Publishing the abilities an account can actually use, and executing the intent the decision engine picks, is the evidenced next pre-LLM slice; it is not Package 4 work, because Package 4 is operability and it now holds the evidence it was built to collect. Until that slice lands no pilot can report anything about growth, and a population that never acts is what a human notices first.
 
+## Capability publication and intent execution, slice 3M (14 September 2026)
+
+Closes the gap the run above measured: the population decided without ever acting.
+
+| Topic | Decision |
+| --- | --- |
+| What may be published | **Only a capability the module can actually carry out.** `ownedState()` publishes `available_actions`, and a key appears there only when an executor exists for it. The pilot's failure was a trace claiming an action the host was never asked to perform, so publishing an ability the module cannot honour would replace a visible gap with an invisible one. `build` is the first such capability; the rest stay unpublished until they have an executor. |
+| Why publication and execution cannot drift | **Both ask the same chooser.** `QueueableBuildingPlanner` derives the building from `BuildFirstBuilding::choose()`, the same policy the executor runs later, so a published `build` is by construction one the executor will attempt. A second authority for "which building" would let the trace and the queue disagree. |
+| Where legality comes from | **The host, always.** The gates are the ones the host's own building page asks — `objectValidPlanetType`, `objectRequirementsMetWithQueue`, free queue space, and `hasResources` against the host price — read as a single predicate. The module restates no OGame rule, and the four module targets being planet-only and requirement-free is why those two gates are host calls rather than module constants. |
+| Why affordability is a gate | **Because the host cancels what it cannot pay for.** `BuildingQueueService::start()` cancels a queue item whose resources are missing, so publishing `build` while short of funds spends a queue slot and reports nothing — the same silence the pilot mistook for idleness. The balance is read live through an in-memory `updateResources(false)`, because stored amounts only advance when something touches the planet. |
+| Where the intent is scheduled | **In the composition point, after the decision is recorded.** `RunAiSessionAction` records the decision and then schedules from what it recorded, so a session whose choice cannot be carried out still leaves the trace of what it wanted. `SessionDecisionService` keeps its contract and still does not execute. |
+| How an intent is identified | **`intent:session:<session work item id>`.** A retried session converges on one action while a later session decides again, and the item inherits the session's generation. The action cap is still asked on the action path, so an account at its cap consumes the item and acts on nothing. |
+| What the account learns about itself | **Nothing is written.** The plan-time refresh is in memory and the observation persists nothing; the no-write behaviour is asserted rather than assumed. |
+| Known limitation | **One target per profile, for now.** The chooser is seeded per profile, so an account repeats its preferred building until a later policy slice varies it. Variety across targets is policy, not plumbing, and is not claimed here. |
+
 ## Phase 3L — provider escalation implemented (14 September 2026)
 
 | Topic | Decision |

@@ -287,7 +287,9 @@ test('a session answers a pending message before it decides anything else', func
 
     expect(deliveredReplies($this->currentUserId))->toBe(1)
         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->recipient_id)->toBe($human->id)
-        ->and(AiWorkItem::query()->where('player_id', $this->currentUserId)->offset(1)->sole()->kind)->toBe(AiWorkKind::RunSession);
+        // The successor is addressed by its deterministic key rather than by row order: a session
+        // that also acts on its decision writes another work item alongside it.
+        ->and(AiWorkItem::query()->where('idempotency_key', 'session:' . $this->currentUserId . ':2')->sole()->kind)->toBe(AiWorkKind::RunSession);
 });
 
 test('disabling the conversation switch leaves messages unanswered', function (): void {

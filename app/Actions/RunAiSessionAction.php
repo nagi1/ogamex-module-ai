@@ -20,6 +20,7 @@ class RunAiSessionAction implements RunAiSession
 {
     public function __construct(
         private SessionDecisionService $sessionDecisionService,
+        private ScheduleAiIntentAction $scheduleAiIntentAction,
         private AiClock $clock,
     ) {
     }
@@ -33,6 +34,9 @@ class RunAiSessionAction implements RunAiSession
             app(RunAiConversationCycleAction::class)->handle($profile->player_id, $this->clock->now());
         }
 
-        $this->sessionDecisionService->run($profile, $workItem);
+        // The decision is recorded first and the intent scheduled from what it recorded, so a
+        // session whose choice cannot be carried out still leaves the trace of what it wanted.
+        $trace = $this->sessionDecisionService->run($profile, $workItem);
+        $this->scheduleAiIntentAction->handle($profile, $workItem, $trace);
     }
 }
