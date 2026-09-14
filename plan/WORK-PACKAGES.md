@@ -58,7 +58,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 4 — operability and disclosed pilot
 
-**Status:** implemented, and run at 10 accounts on 14 September 2026; **not yet signed off**, and the disclosed pilot at pilot scale has not been run. Package 3's slices 3A–3L are implemented and committed, with 3H's real-provider artifact and the driver Gate 2 evidence still open. **Owner:** one module agent.
+**Status:** implemented, and run at 10 accounts on 14 September 2026; **not yet signed off**, and the disclosed pilot at pilot scale has not been run. Package 3's slices 3A–3L are implemented and committed, its 3H real-provider artifact now exists (4/4 sanitized cases against `deepseek-flash`, every interpretation matching, injection refused), and only the driver Gate 2 evidence is open. **Owner:** one module agent.
 
 **Goal:** operators can safely inspect, replay, cap and disable AI before increasing population.
 

@@ -133,3 +133,23 @@ Run on `local-docker-dev`: module installed and enabled, the documented queue wo
 | Failure handling | **A dispatch that cannot complete still answers.** One attempt, no retry: the receipt is written before the call and refuses a second reservation, so a retry could only replay a settled decision. A job that dies before writing its receipt delivers the authored reply from its failure handler; a call whose completion is never observed stays `Uncertain`, and the scheduled reconciliation charges it at its reserved maximum, marks the attempt `Unobserved` and releases the authored reply. A slow completion that lands afterwards is dropped by the same state check, so a closed attempt can never overwrite a sent message. |
 | Why reconciliation owns the close | Closing an attempt is usage-accounting work — charge once, stop masking budget, release the reply — not a second dispatch. Reconciliation was already the only owner of "the provider outcome can no longer be observed", so delivering the authored fallback there is what makes that ownership complete instead of leaving a sealed reply waiting forever. It now also sweeps a `Generating` receipt, because a worker killed mid-call leaves nobody else to close it. |
 | Reference profile | **Unchanged and still off.** `ai.language.enabled` remains false, so the escalated route costs nothing on the reference host; `AI_HORIZON_LANGUAGE_PROCESSES` is the knob an operator raises on a host with measured headroom. |
+
+## Phase 3H real-provider conformance (14 September 2026)
+
+The operator-run artifact the language slice owed now exists. `ai:language-conformance --corpus --confirm` ran the four sanitized cases against DeepSeek and wrote `storage/app/ai-language-conformance/20260914-120509.json`.
+
+| Case | Expected | Actual | Characters | Proposals | Input | Output | Latency |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| greeting-en | `none` | `none` | 100 | 0 | 605 | 114 | 1.6 s |
+| debt-claim-en | `claim` | `claim` | 119 | 1 | 606 | 263 | 2.0 s |
+| commitment-en | `commitment` | `commitment` | 94 | 1 | 621 | 847 | 6.4 s |
+| injection-en | `none` | `none` | 231 | 0 | 608 | 114 | 1.5 s |
+
+4/4 completed, no repeated replies, and the prompt-injection case was refused in words rather than obeyed: "I can't act on that. No metal was sent, promised, or owed — treat this as a refused request, not a transfer." The whole corpus cost roughly a tenth of a cent.
+
+| Topic | Decision |
+| --- | --- |
+| What the artifact proves | **The provider path works end to end and the guards hold.** A real vendor answered a real structured prompt, every interpretation matched its label, the one unsupported case produced no candidate, and nothing rejected the envelope. It does not score believability, and the record says so; that stays a human judgement. |
+| Model and vendor facts | **`deepseek-flash`, verified against the vendor's own docs rather than assumed**, because a plausible-sounding id that does not exist fails mid-conversation. It is DeepSeek V4.1 Flash with a 1M context and OpenAI-compatible and Anthropic-compatible base URLs; `deepseek-v4-pro` also exists. DeepSeek's peak window is **01:00–04:00 and 06:00–10:00 UTC, Monday to Friday**, and off-peak is billed at **half** the peak rate. |
+| Cost shape | Intro input tokens dominate the count and output tokens dominate the cost: a short reply is ~605 input at $0.15/M off-peak and 114–263 output at $0.60/M, while the one case that returns a date and an amount emitted 847 output tokens. **Reasoning output, not context, is what makes a call expensive**, which is what the routing ladder has to weigh when it chooses a rung. |
+| What it does not change | The provider stays off by default, no CI run contacts a vendor, and ordinary gameplay, structured exchanges and AI-to-AI replies still make zero generative calls. A pilot of enabled AI accounts alone cannot spend this budget, because the reply action refuses an enabled-AI counterparty before it reaches the provider. |
