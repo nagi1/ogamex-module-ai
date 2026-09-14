@@ -192,7 +192,11 @@ enabled (`bash scripts/ogamex install`), a queue worker actually running, and a 
 already has a human account, because seeding refuses to create the first account in a universe.
 `QUEUE_CONNECTION` is `database` in this stack, so Horizon is not provisioned and the AI lanes are
 served by the plain worker pools: start the documented `ogamex-queue-worker` service (it sits behind
-the `queue` profile) and its supervisor fragment picks the lanes up. Then seed, dispatch, and read
+the `queue` profile) and its supervisor fragment picks the lanes up. **Restart that worker after
+deploying module code** (`docker compose restart ogamex-queue-worker`): a worker that is already
+running holds the previous code in memory, so a window dispatched to it measures the behaviour you
+had before the deploy while every one-shot `artisan` command reports the behaviour you have now. A
+session that ran that way is spent and is not evidence either way. Then seed, dispatch, and read
 the window back:
 
 ```bash

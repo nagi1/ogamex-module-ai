@@ -141,6 +141,14 @@ Closes the gap the run above measured: the population decided without ever actin
 
 **In-situ probe against the existing cohort (14 September 2026).** Before the scheduled second generation became due, the planner was asked what each enabled profile can queue in the live database. All ten pilot accounts returned a build, and the choice varies by persona — players 29129/29133/29138 want the solar plant, 29130/29132/29137 the crystal mine, 29131/29134/29135/29136 the metal mine — which is the first time an enabled account has had any capability at all. The eleventh enabled profile, the orphaned `987654321` left by an old benchmark, returned nothing, which is the host-account guard behaving on real data. This is a probe of publication, not a pilot result: it says the accounts can act, not that they have. The scheduled generation-2 sessions were still pending, due between 12:57 and 13:43, so the growth measurement the report needs is what comes next, and it is not claimed here.
 
+**One session was lost to a stale worker (measured).** The first generation-2 session became due at
+12:57:49 and its trace contains `DoNothing` alone — not because the account lacked the ability, but
+because the queue worker had been running since before this slice and holds the previous code in its
+memory. One-shot `artisan` commands load fresh code, which is why the probe above saw capabilities
+the worker did not. The worker was restarted, that one session is spent and is not evidence either
+way, and the runbook now says to restart it after a deploy: a pilot dispatched to a stale worker
+would otherwise read as "the population still does not act" and be believed.
+
 ## Phase 3L — provider escalation implemented (14 September 2026)
 
 | Topic | Decision |
