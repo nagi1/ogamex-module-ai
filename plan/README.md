@@ -17,9 +17,9 @@ The goal is enjoyable play for humans. We increase the population only when the 
 
 ## Current implementation status
 
-**Phases 1–2 are recorded in module commit `e1c48a2`. Phase 3 slices 3A–3H are implemented and committed, 3I is implemented and measured, 3K wires the conversation path into the session so an account answers a real message in ordinary play, and 3J is complete apart from the 100/500/1,000-player load runs, which are deferred to the end of the phase by owner decision.** The module has profiles, leased/idempotent work, a normal validated building adapter, legal perception, seeded archetype policies, session schedules and decision traces.
+**Phases 1–2 are recorded in module commit `e1c48a2`. Phase 3 slices 3A–3L are implemented and committed: 3K wires the conversation path into the session so an account answers a real message in ordinary play, and 3L offers a substantive reply to the optional provider on its own lane. 3J is complete apart from the 100/500/1,000-player load runs, which are deferred to the end of the phase by owner decision.** The module has profiles, leased/idempotent work, a normal validated building adapter, legal perception, seeded archetype policies, session schedules and decision traces.
 
-Phase 3 adds source-backed facts, claims, relationships, commitments and affect, typed zero-LLM social protocols with authored replies, outcome-based experience cases, a sealed host delivery ledger, bounded context selection and atomic daily usage ledgers. The optional language slice is implemented behind `LanguageGateway` with a disabled default and the pinned `laravel/ai` SDK: normal gameplay, structured exchanges and AI-to-AI replies still make no generative call, and the only provider contact is the opt-in sanitized conformance command. FAtiMA/CiF behind `AffectEngine`/`SocialCognition` and CBRKit behind `ExperienceEngine` are implemented and opt-in but disabled by default, because neither has cleared Gate 2; AgentOS, PsychSim, embeddings and the 100/500/1,000-player measurements are not implemented, and session choices remain recorded intents rather than proof that an action executed. See the [current-state assessment](details/research/phase-3-current-state.md) for the pre-Phase-3 snapshot, integration limitations and corrections to older diagrams.
+Phase 3 adds source-backed facts, claims, relationships, commitments and affect, typed zero-LLM social protocols with authored replies, outcome-based experience cases, a sealed host delivery ledger, bounded context selection and atomic daily usage ledgers. The optional language slice is implemented behind `LanguageGateway` with a disabled default and the pinned `laravel/ai` SDK: normal gameplay, structured exchanges and AI-to-AI replies still make no generative call, and the provider is reached only by a substantive reply on an enabled lane or by the opt-in sanitized conformance command. FAtiMA/CiF behind `AffectEngine`/`SocialCognition`, CBRKit behind `ExperienceEngine` and AgentOS behind the memory driver are implemented and opt-in but disabled by default, because none of the three has cleared Gate 2; PsychSim, embeddings and the 100/500/1,000-player measurements are not implemented, and session choices remain recorded intents rather than proof that an action executed. See the [current-state assessment](details/research/phase-3-current-state.md) for the pre-Phase-3 snapshot, integration limitations and corrections to older diagrams.
 
 ## Decisions already made
 
@@ -28,7 +28,7 @@ Phase 3 adds source-backed facts, claims, relationships, commitments and affect,
 - Ordinary gameplay and game-event memory use algorithms and database records, with **zero language-model tokens**.
 - Use authored social dialogue before selectively escalating human language to an LLM through the first-party Laravel AI SDK. Include validated extraction proposals in the same request.
 - Add native affect/social cognition and structured experience behind small Laravel-bound module contracts. FAtiMA/CiF and CBRKit are candidates, not prerequisites.
-- Keep advanced recall optional. AgentOS memory-only is a candidate after native benchmarks; Mem0 is rejected. Embeddings, PsychSim and ML compression require their own evidence.
+- Keep advanced recall optional. AgentOS memory-only is implemented and opt-in behind the recall driver, still disabled pending Gate 2; Mem0 is rejected. Embeddings, PsychSim and ML compression require their own evidence.
 - Keep OGame-specific competence outside cognitive contracts. Prove real driver swaps in this module before considering a standalone framework.
 - Give accounts different skills, routines and priorities. They use legal information, suffer real losses and rebuild normally.
 - The goal is accounts a human player cannot distinguish from other humans in ordinary play, and authenticity is measured by what a player can observe: reaction latency and whether a save ever fails, the shape of the day, the public hourly growth curve, the self-similarity of the action sequence and the breadth of social contact. See [account authenticity](details/research/account-authenticity.md) and [player personas](details/research/player-personas.md).
@@ -49,7 +49,7 @@ First add growth, research, sessions and fleetsaving. Then add colonies, spying,
 
 **Done when:** a small group can play through a simulated month with sensible routines and real consequences, using no language model.
 
-### 3. Add social cognition, experience and conversation — planned
+### 3. Add social cognition, experience and conversation — deterministic slice complete
 
 Remember rivals, favors, claims and agreements. Add goal-aware affect, CiF-style social protocols, outcome-based CBR, authored dialogue, delayed/coalesced replies and optional human-language generation. The LLM remains a language specialist with no gameplay authority.
 
