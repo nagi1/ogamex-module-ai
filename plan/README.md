@@ -79,4 +79,6 @@ Use [WORK-PACKAGES.md](WORK-PACKAGES.md). It gives each agent an exclusive scope
 
 **Not started: Package 5.** It waits on Package 4 being complete *and signed* — acceptance criteria met with evidence, the 10-account pilot report reviewed and its findings accepted, and that acceptance recorded in [details/DECISIONS.md](details/DECISIONS.md).
 
+**Provider routing R1 is implemented:** one ordered vendor ladder per task kind, with rungs that can be gated to a vendor's peak or off-peak window, a vendor without a credential dropped before the call, and the SDK's own failover left to do the walking. R2-R5 (failover attribution, per-vendor budgets and cost accounting, operator visibility, a per-vendor conformance run) remain.
+
 The detailed [implementation map](details/IMPLEMENTATION.md) is the technical source for proposed files, migrations, services, event boundaries and tests. Open only the section named by the assigned package. Everything else under `details/` is reference material, not an entry point or a task list.

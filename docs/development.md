@@ -260,6 +260,36 @@ as accepted. The command collects evidence; it does not score believability, pro
 quality or cost, and the reviewed thresholds stay the human gate from the validation
 plan.
 
+## Provider routing
+
+Which vendor answers is module policy; the failover itself is the SDK's, because `laravel/ai`
+already walks an ordered provider list and reports which rung it fell over from. Routing is off
+until `AI_ROUTING_ENABLED=true`, and while it is off the single `ai.language.provider` / `model`
+pair behaves exactly as it did before ladders existed.
+
+`config/routing.php` holds three things: named peak `windows` in UTC, per-vendor `vendors`
+metadata that says which window applies, and one ordered `ladders` list per
+`AiLanguageTaskKind` (`conversation_reply`, `conformance`). A rung is a provider and a model and
+may carry `during` => `peak` | `off_peak` | `any`:
+
+```php
+'ladders' => [
+    'conversation_reply' => [
+        // A free or flat-priced vendor takes the expensive half of DeepSeek's day.
+        ['provider' => 'openrouter', 'model' => '<free-model>', 'during' => 'peak'],
+        ['provider' => 'deepseek', 'model' => 'deepseek-flash'],
+    ],
+],
+```
+
+Three rules decide what a ladder ends up holding. A vendor whose key is absent from `ai.providers`
+is dropped before the call, so a missing credential reads as that vendor switched off rather than
+a round trip that must fail. An unknown vendor or a malformed window throws, because a rung
+silently dropped for a typo is a vendor nobody can find out about. If nothing survives, the
+configured `ai.language.provider` pair is the last resort, and if that has no key either the
+ladder is empty: the reply action answers with the authored text and spends no attempt, and
+`ai:language-conformance` refuses to start instead of contacting anyone.
+
 ## Cognition operations
 
 The optional cognition sidecars stay absent until they are started explicitly, and nothing in
