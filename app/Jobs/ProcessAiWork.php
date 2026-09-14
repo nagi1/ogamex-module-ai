@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
+use Modules\AI\Domain\Decision\BuildCandidate;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
@@ -45,6 +46,10 @@ class ProcessAiWork implements ShouldQueue
     public int $timeout = 25;
 
     private const PAYLOAD_PLANET_ID = 'planet_id';
+
+    private const PAYLOAD_BUILDING_ID = 'building_id';
+
+    private const PAYLOAD_REASON = 'reason';
 
     public function __construct(public int $workItemId)
     {
@@ -186,18 +191,40 @@ class ProcessAiWork implements ShouldQueue
             return;
         }
 
-        $choice = $buildFirstBuilding->choose($profile);
-        $result = app(QueueAiBuilding::class)->handle($workItem->player_id, $planetId, $choice['building_id']);
+        $choice = $this->scheduledBuild($workItem, $buildFirstBuilding, $profile);
+        $result = app(QueueAiBuilding::class)->handle($workItem->player_id, $planetId, $choice->buildingId);
         $receipt->update([
             'state' => $result->successful ? AiReceiptState::Accepted : AiReceiptState::Rejected,
             'result' => [
                 AiActionReceiptResultKey::QueueId->value => $result->queueId,
                 AiActionReceiptResultKey::Reason->value => $result->reason,
-                AiActionReceiptResultKey::Decision->value => $choice,
+                AiActionReceiptResultKey::Decision->value => [
+                    'building_id' => $choice->buildingId,
+                    'build_reason' => $choice->reason,
+                ],
                 AiActionReceiptResultKey::PlanetId->value => $planetId,
             ],
         ]);
         $this->completeLease($workItem, $leaseToken);
+    }
+
+    /**
+     * The building this work item was scheduled to queue.
+     *
+     * A work item created before the intent carried its building still has a legal answer: the
+     * account's own ranking, which is what the session that scheduled it would have picked.
+     */
+    private function scheduledBuild(AiWorkItem $workItem, BuildFirstBuilding $buildFirstBuilding, AiProfile $profile): BuildCandidate
+    {
+        $buildingId = $workItem->payload[self::PAYLOAD_BUILDING_ID] ?? null;
+        if (!is_int($buildingId)) {
+            return $buildFirstBuilding->ranked($profile)[0];
+        }
+
+        return app()->makeWith(BuildCandidate::class, [
+            'buildingId' => $buildingId,
+            'reason' => (string) ($workItem->payload[self::PAYLOAD_REASON] ?? 'scheduled'),
+        ]);
     }
 
     private function ownedPlanetIdFor(AiWorkItem $workItem): int

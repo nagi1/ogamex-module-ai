@@ -13,11 +13,18 @@ use OGame\Services\PlanetService;
  * Answers one question about the account's own economy: is there a building it can legally queue
  * now, and on which planet?
  *
- * Every gate is the host's own -- planet type, free queue space, requirements met against what is
- * built *and* queued, and a price the planet can pay, which is the same set the building page shows
- * a human -- so the module never restates an OGame rule. Only *which* building the account wants is
- * module policy, and it comes from `BuildFirstBuilding`, the same chooser the executor runs later.
- * That is what stops a published capability and the queued intent from drifting apart.
+ * Two things want a building. The chain wants the facility a later capability cannot exist without
+ * -- an account with no research lab can never research, and one with no shipyard can never own a
+ * ship -- and the persona wants the mine or the plant it prefers. The chain is asked first because
+ * an economy that never reaches a facility produces an account that grows resources and nothing
+ * else; the persona's ranking follows, so once the facilities stand the account is back to its own
+ * taste.
+ *
+ * Both are only suggestions. Every gate is the host's own -- planet type, free queue space,
+ * requirements met against what is built *and* queued, and a price the planet can pay, which is the
+ * same set the building page shows a human -- so the module never restates an OGame rule. A target
+ * the host rejects is not an error but a fall-through: the planner tries the next one, which is what
+ * keeps a single impossible favourite from costing the account its whole build capability.
  *
  * Affordability is a real gate rather than a nicety: `BuildingQueueService::start()` cancels a queue
  * item it cannot pay for, so publishing `build` while short of resources spends a queue slot and
@@ -28,6 +35,7 @@ class QueueableBuildingPlanner
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private BuildFirstBuilding $buildFirstBuilding,
+        private FacilityChain $facilityChain,
         private BuildingQueueService $buildingQueueService,
     ) {
     }
@@ -47,27 +55,35 @@ class QueueableBuildingPlanner
             return null;
         }
 
-        $buildingId = (int) $this->buildFirstBuilding->choose($profile)['building_id'];
-        $machineName = ObjectService::getObjectById($buildingId)->machine_name;
+        // The persona's ranking does not depend on the planet, so it is computed once.
+        $persona = $this->buildFirstBuilding->ranked($profile);
 
         foreach ($this->playerServiceFactory->make($playerId, true)->planets->all() as $planet) {
-            $planetId = $this->queueablePlanetId($planet, $machineName);
-            if ($planetId === null) {
-                continue;
-            }
+            // Resources are read live: the stored amounts only advance when something touches the
+            // planet, and a balance read stale is exactly the balance the queue later cancels on.
+            // The refresh stays in memory -- the observation path must not write.
+            $planet->updateResources(false);
 
-            return app()->makeWith(QueueableBuilding::class, ['planetId' => $planetId, 'buildingId' => $buildingId]);
+            foreach ([...$this->facilityChain->pending($planet), ...$persona] as $candidate) {
+                $planetId = $this->queueablePlanetId($planet, $candidate);
+                if ($planetId === null) {
+                    continue;
+                }
+
+                return app()->makeWith(QueueableBuilding::class, [
+                    'planetId' => $planetId,
+                    'buildingId' => $candidate->buildingId,
+                    'reason' => $candidate->reason,
+                ]);
+            }
         }
 
         return null;
     }
 
-    private function queueablePlanetId(PlanetService $planet, string $machineName): ?int
+    private function queueablePlanetId(PlanetService $planet, BuildCandidate $candidate): ?int
     {
-        // Resources are read live: the stored amounts only advance when something touches the
-        // planet, and a balance read stale is exactly the balance the queue later cancels on. The
-        // refresh stays in memory -- the observation path must not write.
-        $planet->updateResources(false);
+        $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
 
         // The host's own gates for a legal queue request, asked in the order its building page asks
         // them: planet type, free queue space, met requirements and a balance it can pay. They read

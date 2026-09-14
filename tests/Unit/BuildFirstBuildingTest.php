@@ -16,21 +16,44 @@ beforeEach(function (): void {
     $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
 });
 
-test('it selects the highest weighted candidate deterministically', function () {
-    $profile = app()->makeWith(AiProfile::class, ['attributes' => [
-        'id' => 1,
+/** @param array<string, int> $weights */
+function rankedProfile(int $playerId, array $weights = []): AiProfile
+{
+    return AiProfile::create([
+        'player_id' => $playerId,
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 42,
-        'settings' => [
-            AiProfileSettings::BUILDING_WEIGHTS => [
-                FirstBuildingTarget::CrystalMine->name => 100,
-            ],
-        ],
-    ]]);
+        'enabled' => true,
+        'settings' => [AiProfileSettings::BUILDING_WEIGHTS => $weights],
+    ]);
+}
 
-    $decision = app(BuildFirstBuilding::class)->choose($profile);
+// The planner can only fall through a list it was given, so every economy target has to be on it:
+// a target missing from the ranking is a target this account can never build.
+test('it ranks every economy target exactly once, most wanted first, reproducibly', function (): void {
+    $profile = rankedProfile($this->currentUserId + 500_000);
 
-    expect($decision['building_id'])->toBe(FirstBuildingTarget::CrystalMine->value);
-    expect($decision['reason'])->toBe('first_building:' . FirstBuildingTarget::CrystalMine->name);
+    $ranked = app(BuildFirstBuilding::class)->ranked($profile);
+    $buildingIds = array_map(static fn ($candidate): int => $candidate->buildingId, $ranked);
+    $reasons = array_map(static fn ($candidate): string => $candidate->reason, $ranked);
+
+    expect($buildingIds)->toHaveCount(count(FirstBuildingTarget::cases()))
+        ->and(array_unique($buildingIds))->toBe($buildingIds)
+        ->and($reasons)->each->toStartWith('persona:')
+        ->and($buildingIds)->toBe(array_map(
+            static fn ($candidate): int => $candidate->buildingId,
+            app(BuildFirstBuilding::class)->ranked($profile),
+        ));
+});
+
+test('a persona preference puts its building at the front of the ranking', function (): void {
+    $profile = rankedProfile($this->currentUserId + 500_001, [
+        FirstBuildingTarget::CrystalMine->name => 100,
+    ]);
+
+    expect(app(BuildFirstBuilding::class)->ranked($profile)[0]->buildingId)
+        ->toBe(FirstBuildingTarget::CrystalMine->value)
+        ->and(app(BuildFirstBuilding::class)->ranked($profile)[0]->reason)
+        ->toBe('persona:' . FirstBuildingTarget::CrystalMine->name);
 });

@@ -31,6 +31,7 @@ use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiProfileSettings;
 use Modules\AI\Support\SystemAiClock;
 use Modules\AI\Tests\Support\ThrowingBuildFirstBuilding;
 use OGame\Events\Game\BuildingCompleted;
@@ -71,12 +72,76 @@ test('due building work is idempotent', function (): void {
         ->and(AiActionReceipt::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
 });
 
-test('a completed host building queue retains one correlated upgrade experience', function (): void {
+// The building a session approved travels with the intent. Re-deciding here would let the schedule
+// and the queued building name two different objectives -- an account that says it is reaching for
+// a shipyard while it quietly upgrades a mine.
+test('it queues the building its intent carries rather than re-deciding', function (): void {
     $this->planetAddResources(app()->makeWith(Resources::class, [
         'metal' => 1_000_000,
         'crystal' => 1_000_000,
         'deuterium' => 1_000_000,
     ]));
+    $profile = aiWorkProfile($this->currentUserId);
+    $profile->update(['settings' => [AiProfileSettings::BUILDING_WEIGHTS => [FirstBuildingTarget::CrystalMine->name => 100]]]);
+
+    $work = aiBuildingWork($this->currentUserId, 'scheduled-building', [
+        'planet_id' => $this->currentPlanetId,
+        'building_id' => FirstBuildingTarget::DeuteriumSynthesizer->value,
+        'reason' => 'chain:shipyard',
+    ]);
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+
+    $receipt = AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->sole();
+
+    expect(BuildingQueue::query()
+        ->where('planet_id', $this->currentPlanetId)
+        ->where('object_id', FirstBuildingTarget::DeuteriumSynthesizer->value)
+        ->count())->toBe(1)
+        ->and($receipt->fresh()?->state)->toBe(AiReceiptState::Accepted)
+        ->and($receipt->result[AiActionReceiptResultKey::Decision->value])->toBe([
+            'building_id' => FirstBuildingTarget::DeuteriumSynthesizer->value,
+            'build_reason' => 'chain:shipyard',
+        ])
+        // The ranking does prefer the crystal mine, which is what the executor ignored.
+        ->and(app(BuildFirstBuilding::class)->ranked($profile)[0]->buildingId)->toBe(FirstBuildingTarget::CrystalMine->value);
+});
+
+// An intent written without a label still says which building it wants; the label is for whoever
+// reads the receipt afterwards, not a precondition for the work.
+test('an intent without a build label still queues its building', function (): void {
+    $this->planetAddResources(app()->makeWith(Resources::class, [
+        'metal' => 1_000_000,
+        'crystal' => 1_000_000,
+        'deuterium' => 1_000_000,
+    ]));
+    aiWorkProfile($this->currentUserId);
+
+    $work = aiBuildingWork($this->currentUserId, 'unlabelled-binding', [
+        'planet_id' => $this->currentPlanetId,
+        'building_id' => FirstBuildingTarget::MetalMine->value,
+    ]);
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+
+    $receipt = AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->sole();
+
+    expect(BuildingQueue::query()
+        ->where('planet_id', $this->currentPlanetId)
+        ->where('object_id', FirstBuildingTarget::MetalMine->value)
+        ->count())->toBe(1)
+        ->and($receipt->result[AiActionReceiptResultKey::Decision->value])->toBe([
+            'building_id' => FirstBuildingTarget::MetalMine->value,
+            'build_reason' => 'scheduled',
+        ]);
+});
+
+test('a completed host building queue retains one correlated upgrade experience', function (): void {
+    $this->planetAddResources(app()->makeWith(Resources::class, [
+            'metal' => 1_000_000,
+            'crystal' => 1_000_000,
+            'deuterium' => 1_000_000,
+        ]));
     aiWorkProfile($this->currentUserId);
     $work = aiBuildingWork($this->currentUserId, 'completed-outcome');
 

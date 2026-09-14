@@ -44,8 +44,10 @@ test('it publishes the build capability when the account can queue its chosen bu
     $state = capabilityOwnedState($this->currentUserId);
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
+    // A funded account with nothing built reaches for the chain first: an economy that only ever
+    // upgrades mines never gets a research lab, and without one it can never research at all.
     expect($state['available_actions'][AiCapability::Build->value])->toBeTrue()
-        ->and($plan?->buildingId)->toBe((int) app(BuildFirstBuilding::class)->choose($profile)['building_id'])
+        ->and($plan?->reason)->toBe('chain:research_lab')
         ->and(capabilityOwnedPlanetIds($this->currentUserId))->toContain($plan?->planetId);
 });
 
@@ -107,10 +109,12 @@ test('it queues a real building when a session selects the build intent', functi
     // The intent runs through the ordinary action path: lease, admission, host queue, receipt.
     app()->makeWith(ProcessAiWork::class, ['workItemId' => $intent->id])->handle(app(BuildFirstBuilding::class));
 
-    $chosen = (int) app(BuildFirstBuilding::class)->choose($profile)['building_id'];
+    // The building the plan approved is the building that got queued; re-deciding at execution
+    // time is how an intent and its action drift apart.
+    $scheduled = (int) $intent->payload['building_id'];
 
     expect(AiActionReceipt::query()->where('idempotency_key', $intent->idempotency_key)->firstOrFail()->state)->toBe(AiReceiptState::Accepted)
-        ->and(BuildingQueue::query()->where('planet_id', $planetId)->where('object_id', $chosen)->count())->toBe(1)
+        ->and(BuildingQueue::query()->where('planet_id', $planetId)->where('object_id', $scheduled)->count())->toBe(1)
         ->and($intent->fresh()?->state)->toBe(AiWorkState::Completed);
 });
 

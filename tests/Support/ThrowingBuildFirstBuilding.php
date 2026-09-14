@@ -12,7 +12,7 @@ class ThrowingBuildFirstBuilding extends BuildFirstBuilding
     {
     }
 
-    public function choose(AiProfile $profile): array
+    public function ranked(AiProfile $profile): array
     {
         throw app()->makeWith(RuntimeException::class, ['message' => 'test decision failure']);
     }

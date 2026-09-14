@@ -22,6 +22,10 @@ class ScheduleAiIntentAction
 {
     private const PAYLOAD_PLANET_ID = 'planet_id';
 
+    private const PAYLOAD_BUILDING_ID = 'building_id';
+
+    private const PAYLOAD_REASON = 'reason';
+
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
         private AiClock $clock,
@@ -55,6 +59,11 @@ class ScheduleAiIntentAction
             return;
         }
 
+        // The building the plan verified travels with the intent. Re-deciding at execution time
+        // would let a published capability, the schedule and the queued building name three
+        // different objectives, which is exactly how an account ends up mining while it claims to
+        // be reaching for a shipyard.
+        //
         // The session's own id is the idempotency key: a retried session converges on one action,
         // while a later session decides again. The generation is inherited when the session knows
         // it and falls back to the column default when it does not.
@@ -66,7 +75,11 @@ class ScheduleAiIntentAction
                 'due_at' => $this->clock->now(),
                 'schedule_generation' => (int) ($sessionWorkItem->schedule_generation ?? 1),
                 'state' => AiWorkState::Pending,
-                'payload' => [self::PAYLOAD_PLANET_ID => $plan->planetId],
+                'payload' => [
+                    self::PAYLOAD_PLANET_ID => $plan->planetId,
+                    self::PAYLOAD_BUILDING_ID => $plan->buildingId,
+                    self::PAYLOAD_REASON => $plan->reason,
+                ],
             ],
         );
     }

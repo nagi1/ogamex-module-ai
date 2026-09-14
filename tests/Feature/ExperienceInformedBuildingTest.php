@@ -166,12 +166,12 @@ test('the enrichment ranks through the configured driver rather than the query a
 test('a remembered outcome can change which building the AI chooses', function (): void {
     $profile = informedProfile($this->currentUserId, [FirstBuildingTarget::MetalMine->name => 10]);
 
-    expect(app(BuildFirstBuilding::class)->choose($profile)['building_id'])
+    expect(app(BuildFirstBuilding::class)->ranked($profile)[0]->buildingId)
         ->toBe(FirstBuildingTarget::MetalMine->value);
 
     // A settled preference for the crystal mine outweighs the small seeded preference.
     seedInformedOutcome($this->currentUserId, 7007, FirstBuildingTarget::CrystalMine->value, 1.0, 0.0);
 
-    expect(app(BuildFirstBuilding::class)->choose($profile)['building_id'])
+    expect(app(BuildFirstBuilding::class)->ranked($profile)[0]->buildingId)
         ->toBe(FirstBuildingTarget::CrystalMine->value);
 });
