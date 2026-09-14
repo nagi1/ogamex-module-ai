@@ -6,6 +6,14 @@ Use this as the base operating contract for all work in `Modules/AI`.
 
 Write clean, maintainable, production-ready code. Keep changes module-first: reuse existing OGameX extension points and do not move AI policy, persistence, or orchestration into the host.
 
+## Decision baseline
+
+Check these two criteria before any material design choice. A choice that fails either is not made.
+
+- **The goal** is accounts a human player cannot distinguish from other humans in ordinary play. Authenticity is measured by what a player can observe — reaction latency to a probe or attack and whether a save ever fails, the shape of the uptime across the day, the public hourly growth curve, the self-similarity of the action sequence, and the breadth of social contact — never by message polish. Read `plan/details/research/account-authenticity.md` and `plan/details/research/player-personas.md` before designing anything behavioural.
+- **The reference deployment profile** is a small VPS: **2 vCPU, 2 GB RAM, no GPU**, already running the Laravel app, queue workers, the database and Redis. The native engines are the only cognition path that fits it; sidecar drivers are opt-in for hosts with measured headroom, and no driver is enabled there without a measured resident footprint. Read `plan/details/specs/budgets.md`.
+- **Memory is paid for with generative calls in every modern product.** Do not adopt one, and do not reimplement one: adopt the mechanisms (decay from last access, weighted retrieval, write-time importance from authored rules, citation pointers, validity windows, selective forgetting). Read `plan/details/research/agent-memory-tooling.md`.
+
 ## Nagi implementation baseline
 
 - Apply SOLID, DRY, KISS, YAGNI, composition over inheritance, high cohesion, and low coupling.

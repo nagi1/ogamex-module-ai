@@ -2,6 +2,42 @@
 
 Owner: runtime/cost. Every number below is a proposed starting limit or arithmetic example, not measured capacity. Provider prices are inputs, not frozen recommendations.
 
+## Reference deployment profile
+
+Stated by the owner on 14 September 2026, and now a decision criterion rather than a note:
+
+> **2 vCPU, 2 GB RAM, no GPU** — an ordinary small VPS that already runs the Laravel app, its
+> queue workers, the database and Redis.
+
+Any capability added to the baseline has to fit this machine. A capability that does not is
+opt-in for hosts with measured headroom, which is what the swap-ease rule exists to preserve.
+
+Measured in this workspace on 14 September 2026 (the development host, **not** the target
+profile — recorded as an order of magnitude, not as target capacity):
+
+| Service | Resident memory |
+| --- | ---:|
+| CBRKit sidecar | 142.1 MiB |
+| FAtiMA sidecar | 108.9 MiB |
+| Reverb | 59.4 MiB |
+| Laravel app container | 55.8 MiB |
+| Scheduler container | 3.1 MiB |
+
+Both sidecars are **shared services, not one process per player**, so the constraint is resident
+memory rather than per-account cost. After the application stack and the database, roughly
+**500–700 MB** remains for anything new — an estimate to be measured, not a claim.
+
+The per-candidate verdicts, the evidence behind them and the list of things that must never run
+on this profile are in [how modern AI tooling solves agent memory](../research/agent-memory-tooling.md#verdicts-against-the-reference-profile).
+Two rules follow directly:
+
+1. **The native engines are not a fallback on this profile; they are the only path that fits it.**
+   FAtiMA at 109 MiB and CBRKit at 142 MiB are ordinary candidates; a Node runtime with a 920 MB
+   dependency tree, a JVM graph database or a local language model are not.
+2. **No driver is enabled on the reference profile without a measured resident footprint and a
+   stated remaining-headroom figure.** The 100/500/1,000-player runs are what turn these verdicts
+   into numbers.
+
 ## Model-call policy
 
 - Normal decisions, scheduling, recovery, game-event reducers, native memory, appraisal, authored social exchanges and structured CBR: **0 generative calls**. Their baseline also needs no embeddings.
@@ -62,9 +98,9 @@ Initial per-session ceilings: 20 candidates, 12 galaxy observations, 6 probe dec
 
 Target fewer than 50 ms p95 CPU for a ordinary policy evaluation excluding core I/O and queued battle simulation. This is a profiling target, not permission to skip correctness. Scheduler SLOs must be tested against the universe's minimum meaningful response window.
 
-Give cognition, CBR and memory retrieval their own measured request deadlines, candidate limits and concurrency ceilings. A thousand registered AI accounts does not mean a thousand active sidecar sessions or continuously running cognitive loops. Profile cold and warm calls, memory per active character, serialization, database I/O and failure backlogs on a named ordinary Linux machine before making capacity claims.
+Give cognition, CBR and memory retrieval their own measured request deadlines, candidate limits and concurrency ceilings. A thousand registered AI accounts does not mean a thousand active sidecar sessions or continuously running cognitive loops. Profile cold and warm calls, memory per active character, serialization, database I/O and failure backlogs on the [reference deployment profile](#reference-deployment-profile) before making capacity claims.
 
-For optional PsychSim, start at self plus 1–3 relevant counterparts and depth 1; depth 2 requires measured benefit and capacity. Local embeddings run as bounded asynchronous projection work, not per-tick work. Compare input-token savings against embedder/compressor CPU, latency and memory cost; local compute is not free.
+For optional PsychSim, start at self plus 1–3 relevant counterparts and depth 1; depth 2 requires measured benefit and capacity. Local embeddings run as bounded asynchronous projection work, not per-tick work; on the reference profile an embedder competes directly with the database for the last few hundred megabytes. Compare input-token savings against embedder/compressor CPU, latency and memory cost; local compute is not free.
 
 Illustrative workload: 10,000 accounts × 8 sessions × 6 decision jobs = 480,000 jobs/day, or 5.56 jobs/s average. Test at least 10× burst load plus fleet returns/events. If measured mean CPU is 20 ms, policy compute alone averages about 0.11 cores; this excludes database, core progression, simulation and peak demand and is not a server-sizing claim.
 

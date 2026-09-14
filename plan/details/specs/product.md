@@ -12,6 +12,27 @@ Do not optimize for tricking humans into believing every account is human. Serve
 
 Normal accounts may fight other automated accounts and humans under the same rules. An AI account is not a loot dispenser, an invincible sentinel or a scheduled quest.
 
+## What "real" has to mean, and what it does not
+
+The bar for ordinary play is that a human observer cannot tell an account apart from another
+human. That is a behavioural claim, so it is defined by what a player can actually observe:
+reaction latency to a probe or attack and whether a save ever fails, the shape of the account's
+day, its publicly readable hourly growth curve, the repetitiveness of its action sequence, and
+the breadth of its social contact. The evidence for those signals — and for the one signal no
+design can hide, a request footprint that can stamp an activity star — is recorded in
+[account authenticity](../research/account-authenticity.md).
+
+Indistinguishability is not deception, and the two must not be blended:
+
+- **Behaviour** is the bar above, and it is ours to meet.
+- **Disclosure** is a server-policy choice. On official OGame this module is prohibited by
+  construction: playing without a human click and never emitting an activity star are mutually
+  exclusive, and the tolerated-tool whitelist has no disclosure path. OGameX is the operator, so
+  the rule there is ours to write, and the position above — server rules explain automation,
+  account information identifies it — is the honest one.
+- **Anonymity from an operator is not a goal.** No invented real-world biography, and no attempt
+  to defeat an operator who forbids automation.
+
 ## Population admission
 
 Start small, cluster some accounts near plausible interaction ranges, and mix economic roles. Avoid filling every empty coordinate or surrounding every newcomer with raiders. Position and starting state must follow the configured account-creation rules.

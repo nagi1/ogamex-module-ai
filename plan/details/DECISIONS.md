@@ -55,3 +55,23 @@ The detailed user brief requires planning only. It does not authorize Phase 3 im
 Rare major-event advice is a disabled post-baseline Phase 3+ option. No routine strategic calls, periodic reflection, per-event summarization or AI-to-AI LLM conversation is allowed. The budget document owns activation/accounting, avoiding the previous contradictory blanket prohibition versus unconditional advice allowance.
 
 Ordinary Linux capacity, cognition quality, CBR learning benefit, semantic recall benefit, PsychSim CPU cost, language route frequency and prompt size are open measurements. Proposed resource caps are protective configuration, not claims of capacity or achieved quality. Record experiment results and keep unsupported drivers disabled.
+
+## Decision criteria and memory mechanisms — 14 September 2026
+
+Two criteria are now checked before any material design choice: **the goal** (accounts a human
+player cannot distinguish from other humans in ordinary play) and **the
+[reference deployment profile](specs/budgets.md#reference-deployment-profile)** (2 vCPU, 2 GB
+RAM, no GPU). Evidence: [player personas](research/player-personas.md),
+[account authenticity](research/account-authenticity.md) and
+[agent memory tooling](research/agent-memory-tooling.md).
+
+| Topic | Decision and the evidence behind it |
+| --- | --- |
+| Memory write path | **Zero generative calls is a hard requirement, and it is also why the category is unusable.** Every surveyed product (Mem0, Letta, Zep/Graphiti, LangMem, Cognee, A-MEM, HippoRAG, Concordia) makes an LLM call on the ingestion path, and almost all require an embedder. Mem0 additionally concedes in its own issue tracker that its published benchmark came from the SaaS pipeline, not the open-source library. Mem0 stays rejected on evidence rather than preference. |
+| Driver hosting | **Native engines are the only cognition path that fits the reference profile** — 109 MiB and 142 MiB measured for the two sidecars against roughly 500–700 MB of headroom. Drivers stay opt-in for hosts with measured headroom, which is what the swap-ease rule protects. No driver is enabled on the reference profile without a measured resident footprint. |
+| AgentOS | **Still the advanced-recall candidate, still disabled.** It has not cleared Gate 2 and has no measured resident footprint; ~920 MB of `node_modules` is a disk fact, not a memory one. |
+| Mechanisms adopted | The module adopts *patterns* with multiple independent implementations, never a driver's code: recency decay computed from last access, weighted-sum retrieval with a lexical signal in place of an embedding, importance assigned at write time from **authored game-domain rules**, citation pointers on derived records, validity windows with invalidation instead of deletion, budget-pressure eviction, and state-dependent utility temperature. |
+| Memory acceptance criteria | **Knowledge updates, abstention and selective forgetting** become required memory tests — named benchmark competencies, and no shipped product has the third. |
+| Player taxonomy | **Motivations stay continuous scores, never fixed types.** Bartle's categories did not replicate (the Explorer type failed to validate) and the successors are dimensional with 81 blended combinations. The archetype table remains a design vocabulary and a test population. |
+| Authenticity | **Measured by observability, not by polish.** Reaction latency and whether a save ever fails, uptime shape, the public hourly growth curve, action-sequence self-similarity and social breadth are the ranked signals; message-style hypotheses are recorded as **not established**. |
+| Disclosure | **Unchanged, and now better grounded.** On official OGame automation is prohibited by construction and there is no disclosure channel, so this module targets OGameX as its own operator: server rules explain automation and account information identifies it. Nothing in the research licenses concealing automation from an operator who forbids it. |

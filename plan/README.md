@@ -31,6 +31,9 @@ Phase 3 adds source-backed facts, claims, relationships, commitments and affect,
 - Keep advanced recall optional. AgentOS memory-only is a candidate after native benchmarks; Mem0 is rejected. Embeddings, PsychSim and ML compression require their own evidence.
 - Keep OGame-specific competence outside cognitive contracts. Prove real driver swaps in this module before considering a standalone framework.
 - Give accounts different skills, routines and priorities. They use legal information, suffer real losses and rebuild normally.
+- The goal is accounts a human player cannot distinguish from other humans in ordinary play, and authenticity is measured by what a player can observe: reaction latency and whether a save ever fails, the shape of the day, the public hourly growth curve, the self-similarity of the action sequence and the breadth of social contact. See [account authenticity](details/research/account-authenticity.md) and [player personas](details/research/player-personas.md).
+- The reference deployment profile is a small VPS with **2 vCPU, 2 GB RAM and no GPU**, already running the app, workers and database. Native cognition is the only path that fits it; sidecar drivers are opt-in for hosts with measured headroom. See [operating budgets](details/specs/budgets.md#reference-deployment-profile).
+- Keep the memory write path **zero-generative**, and adopt mechanisms rather than products: every surveyed memory product needs an LLM on the ingestion path. See [agent memory tooling](details/research/agent-memory-tooling.md).
 
 ## Build it in five phases
 

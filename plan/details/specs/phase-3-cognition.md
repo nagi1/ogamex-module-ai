@@ -343,6 +343,30 @@ Rejected, with the reason recorded so it is not re-proposed:
 - **A job for every reply, including authored ones.** It adds a failure mode (a job lost before
   delivery) to the path that currently has none.
 
+### What the authenticity research changes here
+
+The trigger above is a capacity decision and it stays one. The behavioural requirements on this
+path come from [account authenticity](../research/account-authenticity.md) and
+[player personas](../research/player-personas.md), and they constrain the content rather than the
+transport:
+
+- **Reply latency is not a decision variable.** Both a prompt reply and a routine one sit inside
+  the observed human band, so nothing here should be tightened to look responsive.
+- **Never instant, never templated.** Message style is a medium-strength signal at best, but an
+  instantaneous or reuse-shaped reply is the form the sources name directly.
+- **Silence is the documented wrong answer after an ally is hit.** The alliance guide's stated
+  first response to a member's loss is a depot withdrawal and a conversation about what happened,
+  "not silence". That is a reason this cycle has to exist, and a scenario 3J must cover.
+- **Breadth beats volume.** The largest measured separation between automated and human players
+  is the diversity of social interaction, so the cycle must not be limited to task-shaped
+  exchanges.
+- **The cycle must not become self-similar.** Whatever cadence this path settles into has to be
+  measured against the self-similarity detector, in the same way the session schedule is.
+
+Still open, and still not guessed: **what an inbound message must look like before the AI answers
+it at all.** The research narrows it — silence after a loss is wrong, and an instant template is
+wrong — but it does not answer the policy question, which is the owner's.
+
 Still undecided, and deliberately not guessed here: what an inbound message must look like before
 the AI answers it at all. That is a policy question about reply content, not a capacity one.
 

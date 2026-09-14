@@ -29,6 +29,25 @@ An incoming fleet becomes actionable only when a permitted view or genuinely ava
 
 Predictable enough to learn; variable enough to feel alive. Keep the selected routine seed stable for replays and private from opponents. Avoid synchronized starts, identical login intervals and identical text.
 
+### The authenticity requirements on routine
+
+The observable signals that decide whether an account reads as human are recorded in
+[account authenticity](../research/account-authenticity.md), and they set three requirements here.
+
+- **Uptime needs a sleep window and week-to-week irregularity, not merely fewer hours.** A
+  documented human playing 16–17 hours a day was accused anyway, and what convinced the accusers
+  was uninterrupted coverage from universe launch. Variability is the signal; duration is not.
+- **The action sequence must not be self-similar across days.** Repeatability is the
+  best-validated automated-versus-human detector in the literature and the natural failure mode of
+  a fixed schedule.
+- **Social contact must be broader than the account's own goals.** The largest measured gap
+  between automated and human players is the *diversity* of interaction, not its volume, so a
+  policy that only ever talks to get something is the most detectable shape available.
+
+The community teaches the same lesson from its own side: the wiki instructs players to vary
+mission speeds and save times daily to defeat observation. Non-determinism is not a concealment
+trick added here; it is what the culture trains players to do.
+
 ## Goals and state changes
 
 Keep one primary medium-term goal and a few obligations. Examples: second colony, cargo capacity for nightly collection, a research prerequisite, a safer fleetsave route or replacement recyclers. Goal hysteresis prevents switching after every small score change.
