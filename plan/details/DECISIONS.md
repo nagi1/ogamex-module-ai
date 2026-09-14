@@ -101,7 +101,27 @@ RAM, no GPU). Evidence: [player personas](research/player-personas.md),
 | Replay | **A saved scenario through the real engine, never live state.** The scenario names the persona, the legal observation and the frozen time; the engine must then produce the same answer on every run, which is what makes a decision reproducible. It writes nothing — the persona is an unsaved profile — and the test asserts the module's row counts are unchanged instead of taking the claim on trust. The page replays shipped scenarios by name only, so a query string cannot become a read of an arbitrary host file. |
 | Synthetic seeding | **Refused in production with no override, and refused as the first account in a universe.** Accounts are created through the host's own registration path so a seeded account is an ordinary account, seeding is idempotent by account identity, and the first-account refusal exists because the host promotes the first registration to admin — not a role to hand an AI. |
 | Pilot measurement | **The module's own lateness, reported as such.** This host has no server tick to measure: resources progress lazily and fleet arrivals are queued jobs. The report gives action outcomes, worker failures and retries, stuck leases, scheduling lateness percentiles and provider tokens for one window, and the wording says which of those is the module's own. Human feedback is read from an operator-supplied file and reported as not recorded when absent, rather than filled in with an impression. |
-| What still blocks growth | **Evidence, not code.** The load runs, the real-provider conformance artifact, Gate 2 for the three drivers and a disclosed pilot are all still outstanding; Package 5 stays blocked behind them. |
+| Measurement scope | **10 accounts now; 100/500/1,000 at the very end.** Capacity tuning is not what the population needs next, and a cohort small enough to read decision by decision is. The large runs stay owner-deferred and are not claimed as done. |
+| Starting Package 5 | **Only once Package 4 is complete and signed.** Complete means every acceptance criterion is met with recorded evidence; signed means the 10-account pilot report has been reviewed and the owner's acceptance is written down in this file. The gate exists because the pilot is what says whether the accounts behave like players at all, and cooperative PvE puts a faction of them in front of humans. |
+| What still blocks growth | **Evidence, plus one measured gap.** The 10-account pilot of 14 September 2026 is recorded below: it measured the plumbing working and the population not acting. The real-provider conformance artifact, Gate 2 for the three drivers, the pilot's human-feedback loop and the capacity runs are all still outstanding; Package 5 stays blocked behind them. |
+
+## Phase 4 pilot run at 10 accounts (14 September 2026)
+
+Run on `local-docker-dev`: module installed and enabled, the documented queue worker started, ten accounts seeded through the host registration path, one dispatcher pass, then the report read back.
+
+| Measured | Value |
+| --- | --- |
+| Seeded accounts | 10, cyclic archetypes (Miner, Turtle, Fleeter, Trader, Casual), one first session each |
+| Work | 10 created by seeding, 10 completed, 10 successors scheduled for generation 2 about 47 minutes later |
+| Sessions | 10 decisions recorded; **all ten chose `DoNothing`**, one candidate each, no rejections |
+| Actions | **none** — no action receipt was written in the window |
+| Lateness | p50 0.8 minutes, p95 0.9 minutes over the 10 completed sessions |
+| Provider | 0 requests, 0 tokens; language stayed disabled for the run |
+| Worker failures | 0. The window's one retry belonged to a stale `bench-` work item whose player no longer exists in this database, which is why the report counts 11 enabled profiles for 10 seeded accounts |
+
+**Finding.** The population is awake and speaking but not playing. Every session recorded `DoNothing` because `PlayerObservationService::ownedState()` publishes `player_id`, `observed_at` and `planets` and nothing else: with no `available_actions`, `CandidateActionFactory` offers no capability candidate at all and `DoNothing` wins by being the only entry. The one executable path that does exist — `AiWorkKind::BuildFirstBuilding` through `QueueAiBuildingAction` — has no creator outside tests, and `SessionDecisionService` says in its own docblock that execution is deliberately outside it.
+
+**Decision.** Publishing the abilities an account can actually use, and executing the intent the decision engine picks, is the evidenced next pre-LLM slice; it is not Package 4 work, because Package 4 is operability and it now holds the evidence it was built to collect. Until that slice lands no pilot can report anything about growth, and a population that never acts is what a human notices first.
 
 ## Phase 3L — provider escalation implemented (14 September 2026)
 

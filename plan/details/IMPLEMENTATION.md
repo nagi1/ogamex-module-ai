@@ -1,6 +1,6 @@
 # Implementation map
 
-This is the practical work map for the five roadmap phases. The original map used host `350657a3` / module `45f8a276`; the Phase 3 revision uses the [actual baseline](research/phase-3-current-state.md), host `02e23c13` / module `e1c48a2`. Phase 1/2 rows retain delivery context. Phase 3 slices 3A–3L are implemented; 3J's harness and export/delete acceptance are done and only its 100/500/1,000-player load runs remain, deferred by the owner to the end of the phase, so treat the Phase 3 names below as delivered rather than proposed.
+This is the practical work map for the five roadmap phases. The original map used host `350657a3` / module `45f8a276`; the Phase 3 revision uses the [actual baseline](research/phase-3-current-state.md), host `02e23c13` / module `e1c48a2`. Phase 1/2 rows retain delivery context. Phase 3 slices 3A–3L are implemented; 3J's harness and export/delete acceptance are done and only its 100/500/1,000-player capacity runs remain, deferred by the owner to the very end of the phase, so a 10-account ordinary-play pilot stood in for them on 14 September 2026 and measured the population deciding but not acting. Treat the Phase 3 names below as delivered rather than proposed.
 
 The module repository owns AI policy, AI-only persistence, scheduling, decisions, legal-state reduction and test scenarios. The host repository owns ordinary game rules and services only. The host must not import `Modules\\AI`, contain AI strategy, or add AI-specific gateways, observations or events.
 
@@ -47,7 +47,7 @@ Work order: land the module action adapter; add owned-state reduction; add sessi
 
 ## Phase 3: social cognition, experience and bounded language
 
-The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J, extended by 3K (the deterministic conversation cycle) and 3L (provider escalation). Slices 3A–3H are implemented, 3I is implemented and measured, 3J's harness and acceptance are implemented with its load runs deferred, and 3K/3L are implemented with the provider still off by default. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
+The [detailed architecture](specs/phase-3-cognition.md) is the canonical Phase 3 design, with minimal contracts, eight end-to-end flows, failure behavior and PR-sized milestones 3A–3J, extended by 3K (the deterministic conversation cycle) and 3L (provider escalation). Slices 3A–3H are implemented, 3I is implemented and measured, 3J's harness and acceptance are implemented with its capacity runs owner-deferred to the very end and a 10-account pilot run instead, and 3K/3L are implemented with the provider still off by default. Use [memory/language](specs/memory-and-language.md) for persistence, source trust, context and delivery; [validation](specs/validation.md) for feature cases. The implementation map below ties those responsibilities to the current module structure.
 
 | Proposed module area/files | Records | Responsibility |
 | --- | --- | --- |

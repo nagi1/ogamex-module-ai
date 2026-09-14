@@ -38,7 +38,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 3 — social cognition, experience and bounded conversation
 
-**Status:** slices 3A–3L implemented and committed; 3J's scenario/ablation harness and export/delete acceptance are done, and its 100/500/1,000-player load runs remain deferred by the owner to the end of the phase. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
+**Status:** slices 3A–3L implemented and committed; 3J's scenario/ablation harness and export/delete acceptance are done. By owner decision of 14 September 2026 the 100/500/1,000-player capacity runs stay at the very end of the phase, and a 10-account pilot stands in for them until then; that pilot has run and its result is recorded in [details/DECISIONS.md](details/DECISIONS.md). Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
 
 **Goal:** believable, persistent social behavior and outcome-based learning with no generative calls for ordinary gameplay; authored dialogue handles known exchanges and optional language handles unrestricted human conversation.
 
@@ -58,7 +58,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 4 — operability and disclosed pilot
 
-**Status:** implemented; the disclosed pilot itself has not been run. Package 3's slices 3A–3L are implemented and committed, with 3J's load runs, 3H's real-provider artifact and the driver Gate 2 evidence still open. **Owner:** one module agent.
+**Status:** implemented, and run at 10 accounts on 14 September 2026; **not yet signed off**, and the disclosed pilot at pilot scale has not been run. Package 3's slices 3A–3L are implemented and committed, with 3H's real-provider artifact and the driver Gate 2 evidence still open. **Owner:** one module agent.
 
 **Goal:** operators can safely inspect, replay, cap and disable AI before increasing population.
 
@@ -70,9 +70,11 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Delivered:** `ai:seed-test-universe`, `ai:explain-decision`, `ai:replay-scenario` and `ai:pilot-report`, the admission caps with their recorded stop reasons, the staff switch, and the operator page that shows the switch, the caps, today's refusals and recent decisions and can replay a shipped scenario. Two acceptance wordings are met with narrower evidence and say so: replay is read-only over a saved scenario rather than over live state, and the report gives the module's own scheduling lateness because this host has no server tick to measure — resources progress lazily and fleet arrivals are queued jobs. Human feedback is read from an operator-supplied file and reported as not recorded when absent, because the module cannot measure it.
 
+**Ran at 10 accounts (14 September 2026):** ten accounts seeded through the host registration path, one dispatcher pass, ten sessions completed, ten successors scheduled, zero provider requests, zero worker failures, and lateness of p50 0.8 / p95 0.9 minutes. Every one of the ten sessions chose `DoNothing`, because the ordinary-play observation publishes no ability and nothing creates the one executable building work item — the finding and its evidence are in [details/DECISIONS.md](details/DECISIONS.md).
+
 ## Package 5 — cooperative PvE mode
 
-**Status:** blocked by Packages 1–4. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
+**Status:** blocked by Packages 1–4 **and gated by sign-off.** This package does not start until Package 4 is complete *and signed*: every acceptance criterion met with recorded evidence, the 10-account pilot report reviewed, and the owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md). Implemented is not signed — an operator who has not read the pilot report has not accepted it. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
 
 **Goal:** a dedicated cooperative universe lets humans fight an AI faction using normal game systems while human-on-human hostility stays blocked.
 

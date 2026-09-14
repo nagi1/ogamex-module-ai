@@ -187,7 +187,23 @@ Scenarios are JSON files under `resources/scenarios/`; the admin page can only r
 one, while the command also accepts a path to a file you wrote yourself. Every limit the module
 owns lives in `config/population.php` plus `ai.language.daily_limits`, and a refusal is counted
 per reason and day in `ai_stop_counters`, which is what the page and the pilot report read.
+A pilot run needs three things that the module cannot arrange for itself: the module installed and
+enabled (`bash scripts/ogamex install`), a queue worker actually running, and a universe that
+already has a human account, because seeding refuses to create the first account in a universe.
+`QUEUE_CONNECTION` is `database` in this stack, so Horizon is not provisioned and the AI lanes are
+served by the plain worker pools: start the documented `ogamex-queue-worker` service (it sits behind
+the `queue` profile) and its supervisor fragment picks the lanes up. Then seed, dispatch, and read
+the window back:
 
+```bash
+bash scripts/ogamex artisan ai:seed-test-universe --players=10 --confirm
+bash scripts/ogamex artisan ai:run-due-work
+bash scripts/ogamex artisan ai:pilot-report --days=1
+```
+
+Seeded accounts are ordinary accounts: the host registration path gives them their planet,
+resources and welcome message, so a fresh cohort pays the same early-game costs a human does and
+will legitimately choose nothing until production has accumulated.
 ## Conversation operations
 
 An account answers an inbound direct message when the session that already holds its lease
