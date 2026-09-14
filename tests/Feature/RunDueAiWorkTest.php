@@ -10,8 +10,16 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\AiClock;
+use Modules\AI\Support\SystemAiClock;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
+
+beforeEach(function (): void {
+    // The module's provider binds this in a real installation; this test drives the command
+    // directly, so it supplies the same clock the dispatcher's admission check resolves.
+    app()->bind(AiClock::class, SystemAiClock::class);
+});
 
 test('dispatcher limits to due pending or retry work', function () {
     $oldest = aiDueWork($this->currentUserId, AiWorkState::Pending, now()->subMinute(), 'oldest');

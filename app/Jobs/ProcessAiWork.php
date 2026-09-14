@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Modules\AI\Actions\ResolveAiAdmissionAction;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\BuildFirstBuilding;
@@ -70,6 +71,12 @@ class ProcessAiWork implements ShouldQueue
 
     public function handle(BuildFirstBuilding $buildFirstBuilding): void
     {
+        // A switch that is off stops new decisions without discarding the work: the item stays
+        // pending and the first pass after it is switched back on picks it up again.
+        if (!app(ResolveAiAdmissionAction::class)->forWorkItem()->allowed) {
+            return;
+        }
+
         $leaseToken = (string) Str::uuid();
         // Claim before side effects. Every terminal update checks this token so
         // a slow worker cannot complete work leased again by another worker.
@@ -152,6 +159,15 @@ class ProcessAiWork implements ShouldQueue
 
     private function queueClaimedBuilding(AiProfile $profile, AiWorkItem $workItem, BuildFirstBuilding $buildFirstBuilding, string $leaseToken): void
     {
+        // The action cap bounds what a session may touch, not what it may think: at zero the
+        // session already decided and scheduled, so this pass closes its lease and acts on
+        // nothing.
+        if (!app(ResolveAiAdmissionAction::class)->forAction()->allowed) {
+            $this->completeLease($workItem, $leaseToken);
+
+            return;
+        }
+
         $receipt = AiActionReceipt::query()->firstOrCreate(
             ['idempotency_key' => $workItem->idempotency_key],
             ['player_id' => $workItem->player_id, 'action_type' => AiActionType::QueueBuilding, 'state' => AiReceiptState::Processing],
