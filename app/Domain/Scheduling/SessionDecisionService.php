@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Scheduling;
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\DecisionTrace;
+use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Domain\Routine\RoutineProfile;
 use Modules\AI\Domain\Routine\SessionPlanner;
@@ -32,6 +33,7 @@ class SessionDecisionService
         private NextDueTimeCalculator $nextDueTimeCalculator,
         private DecisionEngine $decisionEngine,
         private AiClock $clock,
+        private AccountStateResolver $accountStateResolver,
     ) {
     }
 
@@ -43,11 +45,21 @@ class SessionDecisionService
         $perception = $this->playerPerceptionBuilder->build($profile->player_id);
         $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;
         $trace = $this->decisionEngine->decide($profile, $perception, $decisionKey);
+
+        $this->recordDecisionTrace($profile, $workItem, $trace, $now);
+
+        // An account with no planets, or one the host no longer has, has nothing
+        // to come back to. The session still records what it decided, and the
+        // chain stops instead of deciding nothing forever -- and stopping it is
+        // the whole difference between an idle account and a stated one.
+        if (!$this->accountStateResolver->resolve($profile->player_id)->schedules()) {
+            return $trace;
+        }
+
         $plan = $this->sessionPlanner->plan($profile, $now, $schedule->generation);
         $nextDueAt = $this->nextDueTimeCalculator->fromSession($plan, $now);
         $nextGeneration = $schedule->generation + 1;
 
-        $this->recordDecisionTrace($profile, $workItem, $trace, $now);
         $this->scheduleSuccessor($profile, $routine, $schedule, $plan->sessionEndsAt, $nextDueAt, $nextGeneration, $now);
 
         return $trace;

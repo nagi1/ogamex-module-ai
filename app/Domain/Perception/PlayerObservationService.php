@@ -3,6 +3,8 @@
 namespace Modules\AI\Domain\Perception;
 
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
+use Modules\AI\Domain\Lifecycle\AccountStateResolver;
+use Modules\AI\Enums\AiAccountState;
 use Modules\AI\Enums\AiCapability;
 use OGame\Factories\PlayerServiceFactory;
 
@@ -18,21 +20,35 @@ class PlayerObservationService
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private QueueableBuildingPlanner $queueableBuildingPlanner,
+        private AccountStateResolver $accountStateResolver,
     ) {
     }
 
-    /** @return array{player_id:int, observed_at:int, planets:array<int, array{id:int, resources:array<string, float|int>}>, available_actions:array<string, bool>} */
+    /** @return array{player_id:int, observed_at:int, account_state:string, planets:array<int, array{id:int, resources:array<string, float|int>}>, available_actions:array<string, bool>} */
     public function ownedState(int $playerId): array
     {
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $state = $this->accountStateResolver->resolve($playerId);
 
-        // A suspended account is not playing, and the host is the authority on that state: a banned or
-        // vacationing account is offered nothing rather than a capability it cannot act on, so its
-        // session records that it did nothing instead of recording a decision the host would refuse.
-        $suspended = $player->isBanned() || $player->isInVacationMode();
+        return [
+            'player_id' => $playerId,
+            'observed_at' => (int) now()->timestamp,
+            'account_state' => $state->value,
+            'planets' => $state === AiAccountState::Final ? [] : $this->planets($playerId),
+            // A suspended account is not playing, and the host is the authority
+            // on that state: a banned or vacationing account is offered nothing
+            // rather than a capability it cannot act on, so its session records
+            // that it did nothing instead of recording a decision the host
+            // would refuse. An account with no planets, and one the host no
+            // longer has, are offered nothing for the same reason.
+            'available_actions' => $state === AiAccountState::Active ? $this->availableActions($playerId) : [],
+        ];
+    }
 
+    /** @return array<int, array{id:int, resources:array<string, float|int>}> */
+    private function planets(int $playerId): array
+    {
         $planets = [];
-        foreach ($player->planets->all() as $planet) {
+        foreach ($this->playerServiceFactory->make($playerId, true)->planets->all() as $planet) {
             $planets[] = [
                 'id' => $planet->getPlanetId(),
                 'resources' => [
@@ -43,12 +59,7 @@ class PlayerObservationService
             ];
         }
 
-        return [
-            'player_id' => $player->getId(),
-            'observed_at' => (int) now()->timestamp,
-            'planets' => $planets,
-            'available_actions' => $suspended ? [] : $this->availableActions($playerId),
-        ];
+        return $planets;
     }
 
     /**

@@ -38,7 +38,7 @@ line is the list of host answers it needs.
 | G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | planned |
 | G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | planned |
 | G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | scope decision first |
-| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **H6 shipped**; L1–L2 planned |
+| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **L2, H6 shipped**; L1 planned |
 | I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | planned |
 | A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | planned |
 
@@ -877,12 +877,28 @@ Sizing is by rows-per-account-per-day measured in the pilot, not by a guess (the
 
 ### L2 — Account states
 
+**Shipped 14 September 2026** in `AiAccountState` and `AccountStateResolver`.
+
 **Gaps:** O3 · **Host:** planet enumeration, `isNewbie`/`isStrong`, the deletion scheduler.
 
 `active` / `suspended` (banned or vacation) / `empty` (no planets — a destroyed or never-provisioned
 account) / `final` (deleted or unreachable). `empty` is **not** "idle": it disables the account's
 scheduling and records the state, so an account with no planets does not sit in a loop deciding nothing.
 This is the change that turns a silent null return into a stated fact.
+
+**As built.** One enum of four states and one resolver that derives it from host facts alone, in this
+order: a player row the host no longer has is `final` — asked before the host service is loaded, which
+would throw — the host's own ban and vacation flags make an account `suspended`, an account with nothing
+to play is `empty`, and everything else is `active`. The observation publishes the state, so it is a
+stated fact rather than an exception or a null discovered deep inside a planner, and both states with
+nothing to come back to stop the chain: the session still records its decision, and no successor is
+scheduled.
+
+**Why `empty` stops and `suspended` does not.** Both mean "cannot act now", and only one of them ends by
+itself. A ban and a vacation have an expiry the host owns, so the chain must keep waking to notice it
+([H6](#h6--suspension-gate)); nothing in the module ever wakes an account that is gone for good, so
+stopping is the honest end of that account's chain and the published state is what tells an operator why
+the account went quiet.
 
 ### L3 — Budgets are enforced, not claimed
 
@@ -1045,7 +1061,7 @@ with its acceptance evidence recorded.
    recall ownership check, expedition hold bounds. Module-side, these replace `AiBuildingMachineName`.
 3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
    single authenticity gain, because the host's own detector gives the acceptance test.
-   **H1, H2, H3 and H6 shipped**; H4, L2 and L3 remain.
+   **H1, H2, H3, H6 and L2 shipped**; H4 and L3 remain.
 4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
 5. **Units and cargos** (U1, U2, U4, A1, A2(reg)) — military points stop being zero, the ledger exists.
 6. **Fleets and saving** (V1–V5, H3) — the fleet exists, so the save can exist, and the failed save is

@@ -27,7 +27,6 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiDecisionTrace;
 use Modules\AI\Models\AiProfile;
-use Modules\AI\Models\AiSchedule;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
@@ -102,8 +101,11 @@ function aiPersonaRun(Container $app, int $playerId, int $planetId, AiArchetype 
 
     $app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
-    expect($work->fresh()?->state)->toBe(AiWorkState::Completed)
-        ->and(AiSchedule::query()->where('player_id', $profile->player_id)->value('generation'))->toBe(2);
+    // No successor schedule is asserted here: these sessions belong to profile
+    // rows whose host account is a fixture, and an account the host does not
+    // have stops rather than scheduling (L2). `DeterministicSessionLoopTest`
+    // covers the successor on real accounts.
+    expect($work->fresh()?->state)->toBe(AiWorkState::Completed);
 
     return AiDecisionTrace::query()->where('work_item_id', $work->id)->firstOrFail();
 }

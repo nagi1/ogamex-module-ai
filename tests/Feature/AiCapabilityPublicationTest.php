@@ -9,6 +9,7 @@ use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerObservationService;
+use Modules\AI\Enums\AiAccountState;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCapability;
@@ -20,6 +21,7 @@ use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiDecisionTrace;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiSchedule;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
@@ -91,6 +93,61 @@ test('it publishes no capability for a profile whose host account does not exist
     expect(app(QueueableBuildingPlanner::class)->plan($orphanedPlayerId))->toBeNull();
 });
 
+// An account is one of four things and the host's own facts decide which, so the
+// module states it instead of discovering a null somewhere deeper. "Nothing to
+// do" and "nothing to do it with" are then different statements, and only the
+// second one stops the chain.
+test('it states what the account is from the host facts alone', function (): void {
+    $this->planetAddResources(capabilityPlenty());
+
+    expect(capabilityOwnedState($this->currentUserId)['account_state'])->toBe(AiAccountState::Active->value);
+
+    // Destroyed planets are what the host leaves behind, and the host itself
+    // stops listing them.
+    Planet::query()->where('user_id', $this->currentUserId)->update(['destroyed' => 1]);
+
+    $empty = capabilityOwnedState($this->currentUserId);
+
+    expect($empty['account_state'])->toBe(AiAccountState::Empty->value)
+        ->and($empty['planets'])->toBe([])
+        ->and($empty['available_actions'])->toBe([]);
+
+    $gone = capabilityOwnedState($this->currentUserId + 987_654);
+
+    expect($gone['account_state'])->toBe(AiAccountState::Final->value)
+        ->and($gone['planets'])->toBe([])
+        ->and($gone['available_actions'])->toBe([]);
+});
+
+test('an account with nothing to play stops scheduling', function (): void {
+    config(['ai.cognition.conversation.enabled' => false]);
+    $profile = capabilityProfile($this->currentUserId);
+    $this->planetAddResources(capabilityPlenty());
+    Planet::query()->where('user_id', $this->currentUserId)->update(['destroyed' => 1]);
+
+    $session = capabilitySession($profile, 'empty');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
+
+    // The session still records what it decided; what stops is the chain, so an
+    // account that cannot play does not wake forever deciding nothing.
+    expect(AiDecisionTrace::query()->where('work_item_id', $session->id)->exists())->toBeTrue()
+        ->and(AiSchedule::query()->where('player_id', $this->currentUserId)->value('generation'))->toBe(1)
+        ->and(AiWorkItem::query()->where('player_id', $this->currentUserId)->where('kind', AiWorkKind::RunSession)->where('state', AiWorkState::Pending)->count())->toBe(0);
+});
+
+test('an account the host no longer has stops scheduling', function (): void {
+    config(['ai.cognition.conversation.enabled' => false]);
+    $orphanedPlayerId = $this->currentUserId + 987_654;
+    $profile = capabilityProfile($orphanedPlayerId);
+
+    $session = capabilitySession($profile, 'final');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
+
+    expect(AiDecisionTrace::query()->where('work_item_id', $session->id)->firstOrFail()->selected_action)->toBe(AiCandidateActionType::DoNothing)
+        ->and(AiSchedule::query()->where('player_id', $orphanedPlayerId)->value('generation'))->toBe(1)
+        ->and(AiWorkItem::query()->where('player_id', $orphanedPlayerId)->where('kind', AiWorkKind::RunSession)->where('state', AiWorkState::Pending)->count())->toBe(0);
+});
+
 // A suspended account keeps waking, and that is fine -- what it must not do is keep deciding and
 // acting. The host's own state is asked before anything is published, so a banned or vacationing
 // account records that it did nothing and queues nothing until the host says it may play again.
@@ -100,7 +157,8 @@ test('it offers a banned account no capability and it decides nothing', function
     $this->planetAddResources(capabilityPlenty());
     Ban::create(['user_id' => $this->currentUserId, 'reason' => 'test ban', 'banned_until' => now()->addHour(), 'canceled' => false]);
 
-    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([]);
+    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([])
+        ->and(capabilityOwnedState($this->currentUserId)['account_state'])->toBe(AiAccountState::Suspended->value);
 
     $session = capabilitySession($profile, 'banned');
     app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
@@ -116,7 +174,8 @@ test('it offers a vacationing account no capability and it decides nothing', fun
     $this->planetAddResources(capabilityPlenty());
     User::query()->whereKey($this->currentUserId)->update(['vacation_mode' => true]);
 
-    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([]);
+    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([])
+        ->and(capabilityOwnedState($this->currentUserId)['account_state'])->toBe(AiAccountState::Suspended->value);
 
     $session = capabilitySession($profile, 'vacation');
     app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();

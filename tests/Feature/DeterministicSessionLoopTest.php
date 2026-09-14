@@ -101,8 +101,10 @@ test('every persona completes its session and receives one successor schedule', 
     $now = aiDeterministicNow();
     aiDeterministicInstallPerception($this->app, aiDeterministicSnapshot($this->currentUserId, $this->currentPlanetId, $now, [], true));
 
-    foreach (AiArchetype::cases() as $offset => $archetype) {
-        $playerId = $this->currentUserId + $offset;
+    foreach (AiArchetype::cases() as $archetype) {
+        // A real host account per persona: a profile whose account the host does
+        // not have is a final account, and a final account stops (L2).
+        $playerId = $this->createUser()->id;
         $work = aiDeterministicRun(aiDeterministicProfile($archetype, $playerId));
         $schedule = AiSchedule::query()->where('player_id', $playerId)->firstOrFail();
 
