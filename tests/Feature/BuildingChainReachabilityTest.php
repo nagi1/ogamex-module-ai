@@ -5,10 +5,10 @@ use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
-use Modules\AI\Enums\FirstBuildingTarget;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\BuildingQueue;
 use OGame\Models\Resources;
@@ -102,7 +102,9 @@ test('the chain empties once the host graph is satisfied', function (): void {
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
-    expect($plan?->reason)->toStartWith('persona:');
+    expect($plan)->not->toBeNull()
+        ->and($plan?->buildingId)->toBeIn(chainEconomyTargetIds())
+        ->and($plan?->reason)->toMatch('/^(economy|storage):/');
 });
 
 // A chain step the host refuses used to cost the account its whole build capability. A player who
@@ -117,8 +119,8 @@ test('a chain step the account cannot pay for falls through to what it can affor
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
     expect($plan)->not->toBeNull()
-        ->and($plan?->reason)->toStartWith('persona:')
-        ->and(chainBuildOnce($this->currentUserId, $this->currentPlanetId))->toStartWith('persona:');
+        ->and($plan?->reason)->toMatch('/^(economy|storage):/')
+        ->and(chainBuildOnce($this->currentUserId, $this->currentPlanetId))->toMatch('/^(economy|storage):/');
 });
 
 function chainProfile(int $playerId): AiProfile
@@ -170,10 +172,13 @@ function chainPlanet(int $playerId, int $planetId): PlanetService
     return app(PlanetServiceFactory::class)->makeForPlayer($player, $planetId, false);
 }
 
-/** @return list<int> */
+/** @return list<int> the ids the economy ranking can offer: everything the host produces or stores */
 function chainEconomyTargetIds(): array
 {
-    return array_map(static fn (FirstBuildingTarget $target): int => $target->value, FirstBuildingTarget::cases());
+    return array_map(
+        static fn (GameObject $object): int => (int) $object->id,
+        [...ObjectService::getGameObjectsWithProduction(), ...ObjectService::getBuildingObjectsWithStorage()],
+    );
 }
 
 /**

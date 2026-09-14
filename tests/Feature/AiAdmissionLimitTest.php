@@ -5,7 +5,6 @@ use Illuminate\Support\Facades\Bus;
 use Modules\AI\Actions\RecordAiStopReasonAction;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
 use Modules\AI\Actions\SetAiWorkSwitchAction;
-use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiStopReason;
@@ -123,7 +122,7 @@ test('a claimed session is left pending while the population is switched off', f
     expect(app(ResolveAiAdmissionAction::class)->forWorkItem()->allowed)->toBeFalse()
         ->and(app(ResolveAiAdmissionAction::class)->forAction()->allowed)->toBeFalse();
 
-    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle(app()->make(BuildFirstBuilding::class));
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     expect($work->refresh()->state)->toBe(AiWorkState::Pending)
         ->and(admissionStopCount(AiStopReason::StaffSwitch))->toBe(3);
@@ -200,7 +199,7 @@ test('a session action cap of zero lets a session decide and touch nothing', fun
     admissionProfile($this->currentUserId);
     $work = admissionWorkItem($this->currentUserId, AiWorkKind::BuildFirstBuilding, 'no-action');
 
-    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle(app()->make(BuildFirstBuilding::class));
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     expect($work->refresh()->state)->toBe(AiWorkState::Completed)
         ->and(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->count())->toBe(0)

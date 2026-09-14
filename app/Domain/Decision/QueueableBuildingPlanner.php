@@ -15,10 +15,10 @@ use OGame\Services\PlanetService;
  *
  * Two things want a building. The chain wants the facility a later capability cannot exist without
  * -- an account with no research lab can never research, and one with no shipyard can never own a
- * ship -- and the persona wants the mine or the plant it prefers. The chain is asked first because
- * an economy that never reaches a facility produces an account that grows resources and nothing
- * else; the persona's ranking follows, so once the facilities stand the account is back to its own
- * taste.
+ * ship -- and the economy wants the upgrade that repays itself fastest, or the storage that is about
+ * to overflow. The chain is asked first because an economy that never reaches a facility produces an
+ * account that grows resources and nothing else; the economy's own ranking follows, so once the
+ * facilities stand the account is back to its own arithmetic.
  *
  * Ahead of both sits a planet that cannot cover the energy its own buildings draw: the host throttles
  * everything it produces, and no player keeps mining their way through a deficit.
@@ -37,9 +37,9 @@ class QueueableBuildingPlanner
 {
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
-        private BuildFirstBuilding $buildFirstBuilding,
         private FacilityChain $facilityChain,
         private EnergyCapacity $energyCapacity,
+        private EconomyUpgrades $economyUpgrades,
         private BuildingQueueService $buildingQueueService,
     ) {
     }
@@ -59,20 +59,19 @@ class QueueableBuildingPlanner
             return null;
         }
 
-        // The persona's ranking does not depend on the planet, so it is computed once.
-        $persona = $this->buildFirstBuilding->ranked($profile);
-
         foreach ($this->playerServiceFactory->make($playerId, true)->planets->all() as $planet) {
             // Resources are read live: the stored amounts only advance when something touches the
             // planet, and a balance read stale is exactly the balance the queue later cancels on.
             // The refresh stays in memory -- the observation path must not write. The energy balance
-            // is a stored column the host recomputes when it touches a planet, so it is recomputed
-            // here the same way, in memory, or a planet that has just grown would be judged on the
-            // balance it had before its last mine finished.
+            // and the storage capacity are stored columns the host recomputes when it touches a
+            // planet, so they are recomputed here the same way, in memory, or a planet that has just
+            // grown would be judged on the balance and the warehouse it had before its last mine --
+            // or its last storage -- finished.
             $planet->updateResources(false);
             $planet->updateResourceProductionStats(false);
+            $planet->updateResourceStorageStats(false);
 
-            foreach ([...$this->energyCapacity->pending($planet), ...$this->facilityChain->pending($planet), ...$persona] as $candidate) {
+            foreach ([...$this->energyCapacity->pending($planet), ...$this->facilityChain->pending($planet), ...$this->economyUpgrades->pending($planet, $profile)] as $candidate) {
                 $planetId = $this->queueablePlanetId($planet, $candidate);
                 if ($planetId === null) {
                     continue;

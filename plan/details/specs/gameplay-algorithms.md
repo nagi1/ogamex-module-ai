@@ -26,7 +26,7 @@ line is the list of host answers it needs.
 
 | Gap | Algorithm | Mechanism in one line | Status |
 | --- | --- | --- | --- |
-| A2, A4, B3, C2, C5 (gate audit) | [E1](#e1-payback-ordering--the-next-mine) [E3](#e3-storage--the-fill-time-trigger) | Order the economy by production added over weighted price paid; storage by time-to-fill against time-to-spend | planned (3P) |
+| A2, A4, B3, C2, C5 (gate audit) | [E1](#e1-payback-ordering--the-next-mine) [E3](#e3-storage--the-fill-time-trigger) | Order the economy by production added over weighted price paid; storage by time-to-fill against time-to-spend | **shipped** |
 | C1 | [Y1](#y1-the-energy-interlock) | Capacity before the level that would outdraw the planet (shipped) | **shipped** |
 | G2 | [R1](#r1-the-research-hurdle) [R2](#r2-capability-research) | Research only when it out-pays the last purchase, and only when it unlocks something | planned |
 | G3, A2, G15 | [U1](#u1-role-derivation--what-units-are-for) [U2](#u2-cargo-sizing) [U3](#u3-defence--unprofitability-not-ratios) | Roles from host unit properties; cargo sized from host capacity; defence only when attacked | planned |
@@ -127,6 +127,8 @@ an input change.
 
 ### E1 — Payback ordering — the next mine
 
+**Shipped in slice 3P** as `EconomyUpgrades`.
+
 **Gaps:** A2, A4, B3, C2 (gate audit) · **Host:** the objects the host reports as producing resources
 (`getGameObjectsWithProduction()`), each one's price for the next level, its build time, and its raw
 production at `level` and `level + 1` (the raw form matters: the host scales production by the planet's
@@ -154,6 +156,12 @@ deletes `FirstBuildingTarget`, `BuildingScoringPolicy`, both of its implementati
 **Evidence.** Regression: the opening a fresh funded account produces must be the published opening
 (solar plant first, metal ahead of crystal, crystal ahead of deuterium) without any of those names
 appearing in module code.
+
+**What the slice measured.** On a planet with a position bonus the two cheapest mines came out **20%
+apart** in payback, so the persona's nudge — bounded at 4% — can resolve a near-tie and cannot reorder
+anything else. The tests therefore assert what is true on any planet (the same set of host objects, a
+reproducible order, and no candidate appearing or disappearing) rather than a flip that only exists
+where two upgrades happen to be close.
 
 **Accept.** Two accounts with different skill bands produce different-but-defensible orders from the
 same host data, and adding an object to the host makes it a candidate with no module edit.
@@ -183,6 +191,8 @@ same account, four weeks. Until that exists, the tie-break stands and the metric
 
 ### E3 — Storage — the fill-time trigger
 
+**Shipped in slice 3P.**
+
 **Gaps:** C5 (gate audit) · **Host:** current storage capacity per resource, current stored amount, the object
 enumeration that reports storage (`getBuildingObjectsWithStorage()` — note it excludes stations, so a
 mod-added station with storage is invisible; recorded as a host obligation).
@@ -193,9 +203,13 @@ mod-added station with storage is invisible; recorded as a host obligation).
 for each resource:
     remaining = capacity − stored
     fill_time = remaining / max(production_per_hour, ε)
-    if fill_time < time_until_next_planned_spend (or the persona's absence length):
-        queue the storage object that raises that resource's capacity, cheapest first
+    if fill_time < the storage horizon (48 h, from the guides' "hold 24–48 hours of production"):
+        queue the storage object that raises that resource's capacity, soonest to fill first
 ```
+
+The shipped form keeps the guides' horizon as a named constant rather than the "time until the next
+planned spend", because the absence model that would supply the second number is [H3](#h3-absence) and
+is not built yet; when it lands, the horizon becomes the absence length and the constant disappears.
 
 **Constants.** The guides state the trigger in words — storage "should hold at least 24–48 hours of mine
 production", and "always check your storage before logging off for a long period" (**documented**). The
@@ -205,7 +219,12 @@ Guide-based fill-time beats all three, and the numeric thresholds become persona
 
 **Gate.** Capacity and production are host answers; one comparison, no new layer; and it is the rule
 players state, not one we invented. Overflow is not cosmetic: above capacity the surplus is fully
-lootable (**documented**), so a full warehouse is a gift.
+lootable (**documented**), so a full warehouse is a gift. Two invariants the slice found by testing:
+capacity and production per hour are **stored columns**, so a planning pass must recompute them in
+memory (`updateResourceProductionStats`, `updateResourceStorageStats`) or it judges a planet on the
+warehouse it had before its last build; and they are **throttled by the energy factor**, so on a planet
+that cannot cover its mines nothing ever fills and storage is correctly not offered — which is also why
+this rule only makes sense after [Y1](#y1-the-energy-interlock).
 
 **Accept.** A planet left alone with a filling warehouse queues storage before the projected overflow,
 and a planet with an empty warehouse does not.

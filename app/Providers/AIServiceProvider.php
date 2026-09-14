@@ -24,8 +24,6 @@ use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
-use Modules\AI\Domain\Decision\BuildingScoringPolicy;
-use Modules\AI\Domain\Decision\ExperienceInformedBuildingScoringPolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -33,7 +31,6 @@ use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
-use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
 use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Infrastructure\Cognition\FatimaClient;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
@@ -137,13 +134,6 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->singleton(FatimaScenarioTemplate::class);
         $this->app->singleton(FatimaCognitionSession::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
-        // The seeded policy answers the persona preference; the decorator adds this AI's
-        // finalized outcomes, so experience evidence reaches a real decision instead of
-        // being ranked and never read.
-        $this->app->bind(BuildingScoringPolicy::class, fn (): BuildingScoringPolicy => $this->app->makeWith(
-            ExperienceInformedBuildingScoringPolicy::class,
-            ['seeded' => $this->app->make(SeededBuildingScoringPolicy::class)],
-        ));
         $this->app->bind(AiClock::class, SystemAiClock::class);
         $this->app->bind(RandomSource::class, SeededRandomSource::class);
         $this->app->tag([

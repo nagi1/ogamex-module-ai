@@ -8,8 +8,6 @@ use Illuminate\Support\Facades\Date;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\RunAiSession;
-use Modules\AI\Domain\Decision\BuildFirstBuilding;
-use Modules\AI\Domain\Decision\BuildingScoringPolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -17,7 +15,6 @@ use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
-use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Enums\AiArchetype;
@@ -45,7 +42,6 @@ beforeEach(function (): void {
     Date::setTestNow(aiPersonaNow());
     $this->app->bind(AiClock::class, SystemAiClock::class);
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
-    $this->app->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
     $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
     aiPersonaRegisterPolicies($this->app);
 });
@@ -104,7 +100,7 @@ function aiPersonaRun(Container $app, int $playerId, int $planetId, AiArchetype 
     $profile = AiProfile::create(['player_id' => $playerId, 'archetype' => $archetype, 'skill_band' => $skillBand, 'random_seed' => 7_171]);
     $work = AiWorkItem::create(['player_id' => $profile->player_id, 'kind' => AiWorkKind::RunSession, 'due_at' => now(), 'idempotency_key' => "persona:{$archetype->value}:{$skillBand->value}:{$playerId}", 'state' => AiWorkState::Pending]);
 
-    $app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($app->make(BuildFirstBuilding::class));
+    $app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     expect($work->fresh()?->state)->toBe(AiWorkState::Completed)
         ->and(AiSchedule::query()->where('player_id', $profile->player_id)->value('generation'))->toBe(2);

@@ -3,7 +3,6 @@
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Actions\ScheduleAiIntentAction;
-use Modules\AI\Domain\Decision\BuildFirstBuilding;
 use Modules\AI\Domain\Decision\CandidateAction;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
@@ -96,7 +95,7 @@ test('it queues a real building when a session selects the build intent', functi
     $this->planetAddResources(capabilityPlenty());
 
     $session = capabilitySession($profile, 'build');
-    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle(app(BuildFirstBuilding::class));
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
 
     $trace = AiDecisionTrace::query()->where('work_item_id', $session->id)->firstOrFail();
     $intent = AiWorkItem::query()
@@ -109,7 +108,7 @@ test('it queues a real building when a session selects the build intent', functi
         ->and(capabilityOwnedPlanetIds($this->currentUserId))->toContain($planetId);
 
     // The intent runs through the ordinary action path: lease, admission, host queue, receipt.
-    app()->makeWith(ProcessAiWork::class, ['workItemId' => $intent->id])->handle(app(BuildFirstBuilding::class));
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $intent->id])->handle();
 
     // The building the plan approved is the building that got queued; re-deciding at execution
     // time is how an intent and its action drift apart.
@@ -126,7 +125,7 @@ test('it leaves a session that cannot act with a trace and no work item', functi
     capabilityDrainPlanets($this->currentUserId);
 
     $session = capabilitySession($profile, 'idle');
-    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle(app(BuildFirstBuilding::class));
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
 
     expect(AiDecisionTrace::query()->where('work_item_id', $session->id)->firstOrFail()->selected_action)->toBe(AiCandidateActionType::DoNothing)
         ->and(AiWorkItem::query()->where('player_id', $profile->player_id)->where('kind', AiWorkKind::BuildFirstBuilding)->count())->toBe(0);

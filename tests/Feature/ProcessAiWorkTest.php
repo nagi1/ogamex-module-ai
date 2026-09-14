@@ -6,9 +6,7 @@ use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RecordAiBuildingCompletionExperienceAction;
 use Modules\AI\Contracts\QueueAiBuilding;
-use Modules\AI\Domain\Decision\BuildFirstBuilding;
-use Modules\AI\Domain\Decision\BuildingScoringPolicy;
-use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
+use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiArchetype;
@@ -22,7 +20,6 @@ use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
-use Modules\AI\Enums\FirstBuildingTarget;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Models\AiActionReceipt;
@@ -31,25 +28,25 @@ use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
-use Modules\AI\Support\AiProfileSettings;
 use Modules\AI\Support\SystemAiClock;
-use Modules\AI\Tests\Support\ThrowingBuildFirstBuilding;
+use Modules\AI\Tests\Support\ThrowingQueueableBuildingPlanner;
 use OGame\Events\Game\BuildingCompleted;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Models\Ban;
 use OGame\Models\BuildingQueue;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Models\User;
+use OGame\Services\ObjectService;
 use OGame\Services\PlayerGameStateService;
 use Tests\IsolatedAccountTestCase;
 
-require_once __DIR__ . '/../Support/ThrowingBuildFirstBuilding.php';
+require_once __DIR__ . '/../Support/ThrowingQueueableBuildingPlanner.php';
 
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
     app()->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
-    app()->bind(BuildingScoringPolicy::class, SeededBuildingScoringPolicy::class);
     app()->bind(AiClock::class, SystemAiClock::class);
 });
 
@@ -62,11 +59,10 @@ test('due building work is idempotent', function (): void {
     aiWorkProfile($this->currentUserId);
     $work = aiBuildingWork($this->currentUserId, 'idempotent');
     $job = $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id]);
-    $decision = $this->app->make(BuildFirstBuilding::class);
 
-    $job->handle($decision);
+    $job->handle();
     $work->update(['state' => AiWorkState::Pending]);
-    $job->handle($decision);
+    $job->handle();
 
     expect(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(1)
         ->and(AiActionReceipt::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
@@ -82,29 +78,26 @@ test('it queues the building its intent carries rather than re-deciding', functi
         'deuterium' => 1_000_000,
     ]));
     $profile = aiWorkProfile($this->currentUserId);
-    $profile->update(['settings' => [AiProfileSettings::BUILDING_WEIGHTS => [FirstBuildingTarget::CrystalMine->name => 100]]]);
 
     $work = aiBuildingWork($this->currentUserId, 'scheduled-building', [
         'planet_id' => $this->currentPlanetId,
-        'building_id' => FirstBuildingTarget::DeuteriumSynthesizer->value,
+        'building_id' => hostObjectId('deuterium_synthesizer'),
         'reason' => 'chain:shipyard',
     ]);
 
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     $receipt = AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->sole();
 
     expect(BuildingQueue::query()
         ->where('planet_id', $this->currentPlanetId)
-        ->where('object_id', FirstBuildingTarget::DeuteriumSynthesizer->value)
+        ->where('object_id', hostObjectId('deuterium_synthesizer'))
         ->count())->toBe(1)
         ->and($receipt->fresh()?->state)->toBe(AiReceiptState::Accepted)
         ->and($receipt->result[AiActionReceiptResultKey::Decision->value])->toBe([
-            'building_id' => FirstBuildingTarget::DeuteriumSynthesizer->value,
+            'building_id' => hostObjectId('deuterium_synthesizer'),
             'build_reason' => 'chain:shipyard',
-        ])
-        // The ranking does prefer the crystal mine, which is what the executor ignored.
-        ->and(app(BuildFirstBuilding::class)->ranked($profile)[0]->buildingId)->toBe(FirstBuildingTarget::CrystalMine->value);
+        ]);
 });
 
 // An intent written without a label still says which building it wants; the label is for whoever
@@ -119,19 +112,19 @@ test('an intent without a build label still queues its building', function (): v
 
     $work = aiBuildingWork($this->currentUserId, 'unlabelled-binding', [
         'planet_id' => $this->currentPlanetId,
-        'building_id' => FirstBuildingTarget::MetalMine->value,
+        'building_id' => hostObjectId('metal_mine'),
     ]);
 
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     $receipt = AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->sole();
 
     expect(BuildingQueue::query()
         ->where('planet_id', $this->currentPlanetId)
-        ->where('object_id', FirstBuildingTarget::MetalMine->value)
+        ->where('object_id', hostObjectId('metal_mine'))
         ->count())->toBe(1)
         ->and($receipt->result[AiActionReceiptResultKey::Decision->value])->toBe([
-            'building_id' => FirstBuildingTarget::MetalMine->value,
+            'building_id' => hostObjectId('metal_mine'),
             'build_reason' => 'scheduled',
         ]);
 });
@@ -145,7 +138,7 @@ test('a completed host building queue retains one correlated upgrade experience'
     aiWorkProfile($this->currentUserId);
     $work = aiBuildingWork($this->currentUserId, 'completed-outcome');
 
-    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle(app(BuildFirstBuilding::class));
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     $receipt = AiActionReceipt::query()->where('player_id', $this->currentUserId)->sole();
     $queue = BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->sole();
@@ -234,7 +227,7 @@ test('an invalid owned planet is recorded as a rejected real action', function (
     aiWorkProfile($this->currentUserId);
     $work = aiBuildingWork($this->currentUserId, 'invalid-planet', ['planet_id' => PHP_INT_MAX]);
 
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     expect(AiActionReceipt::query()
         ->where('idempotency_key', $work->idempotency_key)
@@ -242,10 +235,17 @@ test('an invalid owned planet is recorded as a rejected real action', function (
         ->exists())->toBeTrue();
 });
 
+test('the real queue action refuses a planet the account does not own', function (): void {
+    $result = app(QueueAiBuilding::class)->handle($this->currentUserId, PHP_INT_MAX, hostObjectId('metal_mine'));
+
+    expect($result->successful)->toBeFalse()
+        ->and($result->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value);
+});
+
 test('the real queue action rejects banned and vacation players', function (): void {
     Ban::create(['user_id' => $this->currentUserId, 'reason' => 'test ban', 'banned_until' => now()->addHour(), 'canceled' => false]);
 
-    $banned = app(QueueAiBuilding::class)->handle($this->currentUserId, $this->currentPlanetId, FirstBuildingTarget::MetalMine->value);
+    $banned = app(QueueAiBuilding::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('metal_mine'));
 
     expect($banned->successful)->toBeFalse()
         ->and($banned->reason)->toBe(AiQueueActionReason::PlayerBanned->value);
@@ -253,7 +253,7 @@ test('the real queue action rejects banned and vacation players', function (): v
     Ban::query()->where('user_id', $this->currentUserId)->update(['canceled' => true]);
     User::query()->whereKey($this->currentUserId)->update(['vacation_mode' => true]);
 
-    $vacation = app(QueueAiBuilding::class)->handle($this->currentUserId, $this->currentPlanetId, FirstBuildingTarget::MetalMine->value);
+    $vacation = app(QueueAiBuilding::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('metal_mine'));
 
     expect($vacation->successful)->toBeFalse()
         ->and($vacation->reason)->toBe(AiQueueActionReason::VacationMode->value);
@@ -292,7 +292,7 @@ test('lock contention retries work without an action', function (): void {
     $lock->get();
 
     try {
-        $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+        $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
     } finally {
         $lock->release();
     }
@@ -305,7 +305,7 @@ test('a disabled profile completes work without a game action', function (): voi
     aiWorkProfile($this->currentUserId, false);
     $work = aiBuildingWork($this->currentUserId, 'disabled');
 
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     expect($work->fresh()?->state)->toBe(AiWorkState::Completed);
     expect(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->exists())->toBeFalse();
@@ -328,8 +328,8 @@ test('future work stays pending and terminal receipts prevent a second action', 
         'state' => AiReceiptState::Accepted,
     ]);
 
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $future->id])->handle($this->app->make(BuildFirstBuilding::class));
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $terminal->id])->handle($this->app->make(BuildFirstBuilding::class));
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $future->id])->handle();
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $terminal->id])->handle();
 
     expect($future->fresh()?->state)->toBe(AiWorkState::Pending)
         ->and($terminal->fresh()?->state)->toBe(AiWorkState::Completed)
@@ -352,7 +352,7 @@ test('an expired lease is reclaimed so a queue retry can finish the work', funct
     ]);
 
     $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])
-        ->handle($this->app->make(BuildFirstBuilding::class));
+        ->handle();
 
     expect($work->fresh()?->state)->toBe(AiWorkState::Completed)
         ->and(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->count())->toBe(1);
@@ -368,7 +368,7 @@ test('a live lease is not reclaimed by another worker', function (): void {
     ]);
 
     $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])
-        ->handle($this->app->make(BuildFirstBuilding::class));
+        ->handle();
 
     expect($work->fresh()?->state)->toBe(AiWorkState::Leased)
         ->and($work->fresh()?->lease_token)->toBe('live-worker')
@@ -380,7 +380,7 @@ test('a profile without a planet receives a safe rejection', function (): void {
     aiWorkProfile($playerId);
     $work = aiBuildingWork($playerId, 'no-planet');
 
-    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle($this->app->make(BuildFirstBuilding::class));
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
 
     expect(AiActionReceipt::query()
         ->where('idempotency_key', $work->idempotency_key)
@@ -393,13 +393,12 @@ test('a thrown decision retries and then fails at the configured attempt limit',
     aiWorkProfile($this->currentUserId);
     $retry = aiBuildingWork($this->currentUserId, 'throw-retry');
     $failed = aiBuildingWork($this->currentUserId, 'throw-failed', attempts: 2);
-    // This container-bound failure seam isolates retry limits; normal tests use
-    // the production decision.
-    $this->app->bind(BuildFirstBuilding::class, ThrowingBuildFirstBuilding::class);
-    $decision = $this->app->make(BuildFirstBuilding::class);
+    // This container-bound failure seam isolates retry limits; normal tests use the
+    // production planner, which the job consults when an intent carries no building.
+    $this->app->bind(QueueableBuildingPlanner::class, ThrowingQueueableBuildingPlanner::class);
 
-    expect(fn () => $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $retry->id])->handle($decision))->toThrow(RuntimeException::class, 'test decision failure');
-    expect(fn () => $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $failed->id])->handle($decision))->toThrow(RuntimeException::class, 'test decision failure');
+    expect(fn () => $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $retry->id])->handle())->toThrow(RuntimeException::class, 'test decision failure');
+    expect(fn () => $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $failed->id])->handle())->toThrow(RuntimeException::class, 'test decision failure');
 
     expect($retry->fresh()?->state)->toBe(AiWorkState::Retry)
         ->and($failed->fresh()?->state)->toBe(AiWorkState::Failed);
@@ -415,6 +414,34 @@ test('a job that exhausted its attempts leaves the work item for lease reclaim',
     expect($unchanged?->state)->toBe(AiWorkState::Pending)
         ->and($unchanged?->attempts)->toBe(2)
         ->and($unchanged?->lease_token)->toBeNull();
+});
+
+/** The host's own identifier for an object, so a test never states an id itself. */
+function hostObjectId(string $machineName): int
+{
+    return (int) ObjectService::getObjectByMachineName($machineName)->id;
+}
+
+// An account that cannot afford anything decides nothing, and says so in the receipt rather than
+// inventing a building it cannot pay for: the same outcome a player has while saving. The planet is
+// left with nothing to spend and nothing accrued, so the planner has no legal answer at all.
+test('an intent with nothing affordable is refused with a reason', function (): void {
+    Planet::query()->where('user_id', $this->currentUserId)->update([
+        'metal' => 0,
+        'crystal' => 0,
+        'deuterium' => 0,
+        'time_last_update' => now()->getTimestamp(),
+    ]);
+    aiWorkProfile($this->currentUserId);
+    $work = aiBuildingWork($this->currentUserId, 'nothing-affordable');
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
+
+    $receipt = AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->sole();
+
+    expect($receipt->state)->toBe(AiReceiptState::Rejected)
+        ->and($receipt->result[AiActionReceiptResultKey::Reason->value])->toBe(AiQueueActionReason::NothingQueueable->value)
+        ->and(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(0);
 });
 
 function aiWorkProfile(int $playerId, bool $enabled = true): AiProfile

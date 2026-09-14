@@ -15,9 +15,8 @@ use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Domain\Conversation\NativeSocialCognition;
-use Modules\AI\Domain\Decision\BuildingScoringPolicy;
-use Modules\AI\Domain\Decision\ExperienceInformedBuildingScoringPolicy;
-use Modules\AI\Domain\Decision\SeededBuildingScoringPolicy;
+use Modules\AI\Domain\Decision\BuildCandidate;
+use Modules\AI\Domain\Decision\EconomyUpgrades;
 use Modules\AI\Domain\Experience\NativeExperienceEngine;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
@@ -30,7 +29,6 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialTerm;
-use Modules\AI\Enums\FirstBuildingTarget;
 use Modules\AI\Models\AiEmotionalEpisode;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
@@ -192,24 +190,22 @@ test('configuration b feels the same harm and the same apology now needs compens
         ->and($result['response'])->toBe(AiSocialResponse::Counter);
 });
 
-test('configuration c leaves the persona score untouched when the enrichment is zero', function (): void {
-    $profile = AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Fleeter, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 42, 'enabled' => true]);
-    $seeded = app(SeededBuildingScoringPolicy::class);
-    $informed = fn (): BuildingScoringPolicy => app()->makeWith(ExperienceInformedBuildingScoringPolicy::class, [
-        'seeded' => $seeded,
-        'experience' => app(ExperienceEngine::class),
-    ]);
+test('configuration c leaves the economy order untouched when the enrichment is zero', function (): void {
+    $profile = AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 42, 'enabled' => true]);
+    $upgrades = app(EconomyUpgrades::class);
+    $order = fn (): array => array_map(
+        static fn (BuildCandidate $candidate): int => $candidate->buildingId,
+        $upgrades->pending($this->planetService, $profile),
+    );
 
+    // Weight zero is the ablation switch: no remembered outcome may move the order, and with no
+    // evidence at all the enriched rule must also agree with itself exactly.
     config(['ai.cognition.experience.decision_weight' => 0]);
-    $withoutEvidence = $informed()->score($profile, FirstBuildingTarget::MetalMine);
+    $withoutEvidence = $order();
 
-    // Weight zero is the ablation switch: no remembered outcome may move a score, and with no
-    // evidence at all the enriched policy must also agree with the persona exactly.
     config(['ai.cognition.experience.decision_weight' => 20]);
 
-    expect($withoutEvidence)->toBe($seeded->score($profile, FirstBuildingTarget::MetalMine))
-        ->and($informed()->score($profile, FirstBuildingTarget::MetalMine))
-        ->toBe($seeded->score($profile, FirstBuildingTarget::MetalMine));
+    expect($withoutEvidence)->toBe($order());
 });
 
 test('configuration d reorders recall only when the recall driver is selected', function (): void {

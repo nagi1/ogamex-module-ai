@@ -13,4 +13,5 @@ enum AiQueueActionReason: string
     case NotABuilding = 'not_a_building';
     case ShipyardBusy = 'shipyard_busy';
     case QueueNotCreated = 'queue_not_created';
+    case NothingQueueable = 'nothing_queueable';
 }
