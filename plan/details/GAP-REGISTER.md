@@ -17,7 +17,17 @@ the plan rather than auditing the plan against itself.
 
 An absence is only a gap if it is **observable**. Where a missing mechanism is invisible to a player
 it is recorded as deliberate rather than as a defect.
+### The four audit axes
 
+The first pass covered one axis and treated it as the whole. Authenticity has four surfaces, and an
+audit of one is not an audit:
+
+| Axis | Question | Status |
+| --- | --- | --- |
+| **Behaviour over time** | Does the account *do* what the eleven signals require? | Audited — wave 1 |
+| **Identity at rest** | What does an account look like the first time anyone sees it? | Audited — wave 2 |
+| **Aggregate statistics** | What does the *population* look like, where uniformity is itself the signal? | Partly — wave 2 covers starting state; the rest is listed below |
+| **Operational failure** | What happens when it breaks, and what does breaking look like? | Not audited |
 ## Gaps
 
 | # | Gap | Signal it breaks | Evidence | Established | Closing it needs |
@@ -41,6 +51,22 @@ it is recorded as deliberate rather than as a defect.
 | G17 | **No transfers and no trade.** Nothing dispatches a transport or touches the market. | 9 | No transport or trade path in the module | code-read | A dispatch executor plus trade |
 | G18 | **No alliance life of its own.** Membership changes are observed but the account never joins, leaves or acts on them. | 5 | The module observes `ObserveCommittedAllianceMembership`; nothing initiates | code-read, intent unconfirmed | Confirm whether joining an alliance is in scope, then an executor if it is |
 
+## Wave 2 — identity at rest and the shape of a cohort
+
+Wave 1 asked what the account does. Nobody asked what it *looks like*, and a seeded account carries
+markers that no behavioural improvement can hide.
+
+| # | Gap | Who can see it | Evidence | Established | Closing it needs |
+| --- | --- | --- | --- | --- | --- |
+| I1 | **The email address announces the account.** `ai-pilot-N@ai-pilot.invalid`, on a reserved TLD that can never receive mail. | An operator immediately; any player who ever sees the address | `SeedAiTestUniverseAction::EMAIL_DOMAIN` and `email()`; read back from the live row for player 29129 | measured | A provisioning identity rule: plausible, unique, deliverable-looking addresses |
+| I2 | **Every account starts with exactly the same dark matter** (8000). | Aggregate views and admin statistics | one distinct `dark_matter` value across the whole cohort | measured | Per-account variation consistent with the persona |
+| I3 | **The whole cohort is created within seconds.** | Join dates, highscore entry order, "newest players" | ten distinct `created_at` values inside a single minute | measured | Stagger provisioning across days, the way a real population arrives |
+| I4 | **Seeds are sequential** — `SEED_BASE + index`. | Predictable, correlated variation between accounts | seeder source | code-read | Uncorrelated per-account randomness |
+| I5 | **Nothing is ever renamed.** Every planet stays at the host default `Homeworld` and no player name ever changes. The default is shared with humans, so the tell is the *never* renaming, and it is visible in the galaxy view at a glance. | Any player browsing the galaxy | ten planets named `Homeworld`; `username_updated_at` null on every row | measured | Naming at provisioning, plus occasional renaming as behaviour |
+| I6 | **`NAME_PREFIX = 'AIPilot'` is dead code** — declared, never referenced. | Nothing today; a latent player-visible marker the moment anyone wires it | grep finds the declaration only | measured | Delete it, or gate it behind the test-universe flag |
+| I7 | **No address diversity.** `last_ip` is the loopback address on every account and `register_ip` is null. | Operator and abuse tooling | live rows | measured | Decide whether synthetic accounts ever present an address at all |
+| I8 | **No social paperwork, ever**: no character class, no alliance, no notes, no buddy contacts. | Player-visible social surfaces | live rows; nothing in the module forms them | measured | Social provisioning, and the behaviour that sustains it |
+
 ## Root causes
 
 The gaps are not eighteen separate mistakes. They come from four planning failures, and fixing the
@@ -56,6 +82,10 @@ failures is what stops the nineteenth:
 4. **Observables were assumed rather than owned.** Nothing in the plan had to name the mechanism
    producing a signal, so signals 1, 2 and 5 could be listed as goals while having no implementation
    at all.
+5. **The plan audited behaviour and never audited identity.** All eleven signals describe what an
+   account *does*. None of them says what an account looks like when someone first sees it, and
+   nothing covers the population in aggregate, where sameness is itself the signal. That is why
+   wave 2 found eight more gaps without touching a single behavioural requirement.
 
 ## Rules that follow
 
@@ -66,6 +96,28 @@ failures is what stops the nineteenth:
   with no named mechanism is a gap, not an aspiration.
 - **Audit against the goal, not against the plan.** This register is the artifact; re-run it whenever
   a slice closes, and treat an empty list as the evidence that a package is complete.
+- **Authenticity has four surfaces — what the account does, what it looks like, how the population
+  looks in aggregate, and how it fails — and auditing one is not auditing the others.**
+
+## Axes still to audit
+
+Recorded so this register is trusted for what it covers rather than for what it implies. None of these
+has been examined yet:
+
+- **Operational failure**: queue or database outage, repeated retries, vacation mode, a ban, a
+destroyed planet, an abandoned account, restart behaviour, and what a *broken* AI account looks like
+from outside.
+- **Host social surfaces**: alliance invitations and internal alliance chat (as distinct from direct
+chat), buddy requests, notes, marketplace offers and trade requests — and whether the account ever
+appears in them.
+- **Aggregate statistics beyond starting state**: whether espionage reports on two AI planets would
+show indistinguishable resource and building levels, military points staying at zero, colony counts,
+and queue-timing patterns across the cohort.
+- **Rank trajectory**: the shape of the highscore path — entry rank, slope and any suspiciously clean
+monotonic climb.
+- **Request footprint**: authenticity signal 8 claims a cadence "indistinguishable from a human
+opening pages", and the module's scheduled work is server-side, so what an operator sees in request
+logs has never been checked against that claim.
 
 ## Deliberate, and not gaps
 
