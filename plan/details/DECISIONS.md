@@ -75,3 +75,24 @@ RAM, no GPU). Evidence: [player personas](research/player-personas.md),
 | Player taxonomy | **Motivations stay continuous scores, never fixed types.** Bartle's categories did not replicate (the Explorer type failed to validate) and the successors are dimensional with 81 blended combinations. The archetype table remains a design vocabulary and a test population. |
 | Authenticity | **Measured by observability, not by polish.** Reaction latency and whether a save ever fails, uptime shape, the public hourly growth curve, action-sequence self-similarity and social breadth are the ranked signals; message-style hypotheses are recorded as **not established**. |
 | Disclosure | **Unchanged, and now better grounded.** On official OGame automation is prohibited by construction and there is no disclosure channel, so this module targets OGameX as its own operator: server rules explain automation and account information identifies it. Nothing in the research licenses concealing automation from an operator who forbids it. |
+
+## Phase 3K — the conversation cycle and the reply policy (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Who composes the cycle | **The session.** It already holds the per-player lease and the `ai:player:{id}` lock, so an authored reply adds no work item, no job and no lock contention. Provider generation stays off this path and is dispatched on its own lane (3L). |
+| What gets answered | **Only a message the classifier places as a known exchange.** Silence is the default for anything else, which is both the narrowest policy that needs no interpretation of intent and the normal human response to a stranger's odd message. The owner can widen it; answering everything with a template stays unacceptable. |
+| Why classification is in PHP | CiF decides whether an authored exchange *should start*; it has no HTTP surface and never reads free text. Mapping an inbound OGame message onto the module's own exchange vocabulary is module authority over its own domain text, not a reimplementation of a driver's algorithm. |
+| The classifier's shape | A bounded, ordered matcher with authored cues, most specific first, and a length guard so a stray greeting inside a longer message is not mistaken for the message. It is a matcher for known exchanges, never an interpreter of arbitrary prose: free-form understanding is the provider's job and is never required. |
+| Relationship writes | **Contact is now the first writer of `ai_relationships`**, which every evaluation already read and nothing had ever written. Affinity and social importance move slightly for ordinary contact, threat and trust move for coercion, and **no exchange type grants trust**, because an honoured agreement is what earns it. |
+| Protocol bound | **Two response turns, then quiet.** The bound is what lets two automated neighbours greet each other without exchanging messages forever. |
+| Transfer-dependent exchanges | **Help requests and compensation offers are deliberately not classified yet.** They depend on a truthful available amount and a parsable due time, and accepting a help request creates an obligation the module cannot discharge. They are enabled when a transfer capability exists, not before. |
+
+## Phase 3L — provider escalation, recorded and not yet implemented (14 September 2026)
+
+The path from a sealed reply to the optional provider is still unwired, and it is deliberately
+not half-wired: dispatching a generation job needs the reconciliation step to also terminate a
+request whose provider completion can no longer be observed and deliver the authored fallback,
+which is a change to the usage-accounting semantics rather than a job class. Until then
+`ai.language.enabled` changes nothing on the conversation path, and the authored reply is what
+always goes out.

@@ -269,6 +269,7 @@ This ordering is intentional: delivery receipts establish social-message reality
 | 3H — optional language | **Implemented:** the pinned `laravel/ai` 0.8.1 adapter resolves a fresh `OgameConversationReplyAgent` per sealed reply behind `LanguageGateway`, with a typed disabled result as the default binding. One foreground structured prompt returns the reply plus at most two typed, source-attributed candidates; deterministic validation rejects SDK-valid but unsupported, unauthorized, unobserved or non-explicit terms, and only a validated candidate becomes a fact or commitment. `ai_language_requests` receipts record state, context hash, provider/model/request id, tokens and latency; settlement releases unused tokens but never the counted attempt, a definite failure settles at reported usage, an invalid envelope settles and delivers the authored fallback, and a timeout stays `Uncertain` until the scheduled `ai:reconcile-language-requests` charges it once at its reserved maximum. `ai:language-conformance` is the opt-in sanitized real-provider run; CI uses the SDK agent fake with stray prompts prevented. | SDK fake assertions for provider/model/timeout and prompt content, malformed-envelope and unsafe-proposal rejection, failure settlement and consumed-attempt accounting, concurrent shared-cap contention, timeout non-resend and idempotent reconciliation, plus one operator-run sanitized real-provider artifact with its review recorded outside CI. |
 | 3I — external experiments | **Implemented:** FAtiMA/CiF behind `AffectEngine` and `SocialCognition`, CBRKit behind `ExperienceEngine`, each opt-in through its own module setting with native retained as the default and the fallback. Measured against the pinned sidecars by the opt-in `ai:cognition-conformance` run. | Real headless driver conformance, disable/swap and measured comparison; record fallback/gaps if a candidate fails. No mandatory sidecar to finish the native slice. Gate 2 is unmet for both drivers, so both stay disabled by default and their capability gaps are recorded in the [driver decisions](../research/phase-3-driver-decisions.md). |
 | 3J — acceptance and measurement | Complete scenario/ablation harness, export/delete tests, 100/500/1,000 registered-player load experiments and driver decision records | Required baseline works with all optional services absent; every enabled real driver has supported-operation and replacement evidence. |
+| 3K — deterministic conversation cycle | **Implemented:** a session recognises a known exchange in an incoming message, records it, evaluates it in native social cognition, answers with an authored English variant, seals it and delivers it through the host chat path. The classifier is a bounded matcher for exchanges the module can answer, so an unrecognised message is not an exchange and is answered with nothing. Contact from another player now moves a relationship, which was previously read everywhere and written nowhere. Two automated neighbours exchange at most one response turn each and then stop. | Real end-to-end reply from a committed message, silence on unrecognised text, coercive warning refused and remembered, an unanswered message retried and an answered one never reconsidered, bounded AI-to-AI protocol, and the session-composition proof. |
 
 ### Ablation switches available to 3J
 
@@ -283,6 +284,7 @@ switchable without a code change and without deleting state. These exist today:
 | Experience driver | `ai.cognition.experience.driver` | `native` | Selects CBRKit. |
 | Recall driver | `ai.cognition.memory.driver` | `native` | Recall is a swap point with one implementation today. |
 | Language provider (G) | `ai.language.enabled` | off | The single generative path in the module; G varies only the provider against a fixed cognition configuration. |
+| Conversation cycle (A) | `ai.cognition.conversation.enabled` | on | Off answers no message and writes no exchange or relationship change, while keeping every observation. An ablation can therefore compare a population that talks against one that does not, without deleting evidence. |
 
 Configurations D, E and F have no switch because the capability does not exist yet, and that
 absence is what those configurations are for. A driver substitution is a separate comparison
@@ -297,12 +299,12 @@ are the post-commit observers for chat, battle reports and alliance membership, 
 
 | Reached by a trigger | Implemented, no trigger |
 | --- | --- |
-| Observation reduction after commit; affect appraisal and the running affect state; building-completion experience; the session's building decision and its successor schedule. | Social-exchange evaluation and recording, relationship interaction reduction, commitment fulfilment, reply planning, sealed authored delivery, chat-observation reconciliation, conversation context building, scoped long-term memory recall and the language gateway. |
+| Observation reduction after commit; affect appraisal and the running affect state; building-completion experience; the session's building decision and its successor schedule; chat-observation catch-up, social-exchange classification, relationship reduction, evaluation, authored reply planning, sealing and delivery, all composed by the session. | Commitment fulfilment, conversation context building for the provider, scoped long-term memory recall and the language gateway. |
 
-`AiWorkKind` declares only `BuildFirstBuilding` and `RunSession`, and each action in the
-right-hand column has no caller outside the tests, so an AI currently never answers a message.
-Wiring that path is the first thing the acceptance slice must not assume is already done: no
-ablation configuration can show conversational behaviour until a conversation can start.
+`AiWorkKind` declares only `BuildFirstBuilding` and `RunSession`. The session work item now
+composes the conversation cycle, so an AI answers a real message in ordinary play; the actions
+that remain unreachable are the provider path and the two record consumers of 3B/3G, and each of
+them is still proven only by tests that compose it directly.
 
 ### Reply path design and capacity (1000 AI players, small server)
 
@@ -363,9 +365,14 @@ transport:
 - **The cycle must not become self-similar.** Whatever cadence this path settles into has to be
   measured against the self-similarity detector, in the same way the session schedule is.
 
-Still open, and still not guessed: **what an inbound message must look like before the AI answers
-it at all.** The research narrows it — silence after a loss is wrong, and an instant template is
-wrong — but it does not answer the policy question, which is the owner's.
+**The reply policy, decided for now and reversible:** an inbound message is answered only when
+the classifier places it as a known exchange, and anything else is answered with nothing. It is
+the narrowest policy that needs no interpretation of intent, it keeps the module's promise that
+authored text precedes any provider, and it makes silence — the normal human response to a
+stranger's odd message — the default instead of a guess. Two corrections from the research are
+built in rather than open: nothing is answered instantly or from a reuse-shaped template, and the
+answer to an ally's loss is never silence. The owner can widen this policy; what stays
+unacceptable is answering everything with a template.
 
 Still undecided, and deliberately not guessed here: what an inbound message must look like before
 the AI answers it at all. That is a policy question about reply content, not a capacity one.

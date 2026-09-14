@@ -42,6 +42,17 @@ return [
         'enrichment' => (bool) env('AI_AFFECT_ENRICHMENT', true),
     ],
 
+    'conversation' => [
+        // Whether a session answers pending inbound messages at all. Disabling it stops the
+        // module replying while keeping every observation, exchange and relationship record,
+        // which is the baseline an ablation compares an enabled configuration against.
+        'enabled' => (bool) env('AI_CONVERSATION_ENABLED', true),
+        // How long a sealed reply stays valid before it expires unsent. Observed human
+        // behaviour in this game is an answer within minutes to a day, so this bound only
+        // exists to stop a stale reply arriving long after the conversation moved on.
+        'reply_ttl_minutes' => (int) env('AI_CONVERSATION_REPLY_TTL_MINUTES', 180),
+    ],
+
     'experience' => [
         'driver' => env('AI_EXPERIENCE_DRIVER', 'native'),
         // How far a finalized, matching outcome may move a decision score. Setting this

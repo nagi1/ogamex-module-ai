@@ -152,6 +152,22 @@ Because the module checkout is physically inside the OGameX directory, the
 existing OGameX Docker bind mount includes the module without an additional
 mount or synchronization step.
 
+## Conversation operations
+
+An account answers an inbound direct message when the session that already holds its lease
+recognises the message as a known social exchange: a greeting, thanks, an apology, a warning, a
+ceasefire or cooperation approach, or a trade offer. Anything the matcher cannot place is
+answered with nothing, which is the intended default rather than a gap: the module never guesses
+at intent, and none of this needs a provider.
+
+`AI_CONVERSATION_ENABLED=false` stops the module answering at all while keeping every
+observation, exchange and relationship record, so an ablation can compare a population that
+talks against one that does not. `AI_CONVERSATION_REPLY_TTL_MINUTES` (default 180) bounds how
+late a composed reply may still be sent.
+
+A conversation is bounded at one response turn: after the account has answered twice in the same
+conversation it goes quiet, so two automated neighbours cannot exchange messages indefinitely.
+
 ## Language operations
 
 The language slice stays provider-off until `AI_LANGUAGE_ENABLED=true`. Two operator
