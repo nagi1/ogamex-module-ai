@@ -1,0 +1,48 @@
+{
+    "name": "miner-under-visible-raid",
+    "description": "A miner with a published report of an approaching fleet and a fleetsave available. The report also yields a raid candidate, which this persona's policy does not allow, so a replay shows the safety boundary instead of assuming it.",
+    "decision_key": "replay:miner-under-visible-raid",
+    "persona": {
+        "archetype": "Miner",
+        "skill_band": "Standard",
+        "random_seed": 7
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T06:00:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 2500000,
+                    "crystal": 1200000,
+                    "deuterium": 400000
+                }
+            }
+        ],
+        "target_reports": [
+            {
+                "report_id": 77,
+                "attack_permitted": true,
+                "confidence": 0.8,
+                "travel_cost": 0.2,
+                "observed_at": 1789364400,
+                "expires_at": 1789372800
+            }
+        ],
+        "available_actions": {
+            "save_resources": false,
+            "build": true,
+            "research": false,
+            "queue_units": false,
+            "spy": true,
+            "colonize": false
+        },
+        "fleetsave_eligible": true,
+        "recovery_factor": 0.0,
+        "source_timestamps": {
+            "resources": "2026-09-14T05:55:00+00:00",
+            "report:77": "2026-09-14T05:40:00+00:00"
+        }
+    }
+}

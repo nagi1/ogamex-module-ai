@@ -122,6 +122,85 @@
                     </div>
                 @endif
             </div>
+            <div class="header"><h2>{{ __('t_ai.decisions_heading') }}</h2></div>
+            <div class="content">
+                @if ($decisions === [])
+                    <p>{{ __('t_ai.no_decisions') }}</p>
+                @endif
+                @if ($decisions !== [])
+                    <div class="group bborder">
+                        <table class="defaultTable">
+                            <tr>
+                                <th>{{ __('t_ai.decision_trace') }}</th>
+                                <th>{{ __('t_ai.decision_chosen') }}</th>
+                                <th>{{ __('t_ai.decision_decided_by') }}</th>
+                                <th>{{ __('t_ai.decision_ranked') }}</th>
+                            </tr>
+                            @foreach ($decisions as $decision)
+                                <tr>
+                                    <td>{{ $decision->traceId }} · {{ $decision->playerId }}</td>
+                                    <td>{{ $decision->selectedAction }} ({{ $decision->selectedReason }})</td>
+                                    <td>
+                                        @foreach ($decision->components as $name => $value)
+                                            <div>{{ $name }}: {{ number_format($value, 2) }}</div>
+                                        @endforeach
+                                    </td>
+                                    <td>
+                                        @foreach ($decision->alternatives as $alternative)
+                                            <div>{{ $alternative['action'] }}: {{ number_format($alternative['score'], 2) }}</div>
+                                        @endforeach
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </table>
+                    </div>
+                @endif
+            </div>
+
+            <div class="header"><h2>{{ __('t_ai.replay_heading') }}</h2></div>
+            <div class="content">
+                <p>{{ __('t_ai.replay_note') }}</p>
+                @if ($replayError !== null)
+                    <p class="box_highlight">{{ __('t_ai.replay_error', ['error' => $replayError]) }}</p>
+                @endif
+                <form method="get" action="{{ route('ai.index') }}">
+                    <p>
+                        <label for="ai-replay-scenario">{{ __('t_ai.replay_scenario') }}</label>
+                        <select id="ai-replay-scenario" name="replay">
+                            @foreach ($scenarios as $scenario)
+                                <option value="{{ $scenario }}" @selected($scenario === $replayName)>{{ $scenario }}</option>
+                            @endforeach
+                        </select>
+                        <input type="submit" class="btn_blue" value="{{ __('t_ai.replay_run') }}">
+                    </p>
+                </form>
+                @if ($replay !== null)
+                    <div class="group bborder">
+                        <table class="defaultTable">
+                            <tr>
+                                <td>{{ __('t_ai.replay_scenario') }}</td>
+                                <td>{{ $replay->name }} · {{ $replay->persona }}</td>
+                            </tr>
+                            <tr>
+                                <td>{{ __('t_ai.replay_frozen_at') }}</td>
+                                <td>{{ $replay->observedAt?->toDateTimeString() }}</td>
+                            </tr>
+                            <tr>
+                                <td>{{ __('t_ai.decision_chosen') }}</td>
+                                <td>{{ $replay->selectedAction }} ({{ $replay->selectedReason }}) {{ number_format($replay->selectedScore, 2) }}</td>
+                            </tr>
+                            <tr>
+                                <td>{{ __('t_ai.decision_ranked') }}</td>
+                                <td>
+                                    @foreach ($replay->alternatives as $alternative)
+                                        <div>{{ $alternative['action'] }}: {{ number_format($alternative['score'], 2) }}</div>
+                                    @endforeach
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                @endif
+            </div>
         </div>
     </div>
 @endsection

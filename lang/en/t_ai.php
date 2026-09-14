@@ -51,4 +51,18 @@ return [
     'stop_active_session_cap' => 'Sessions in flight reached the cap',
     'stop_dispatch_limit' => 'The dispatch pass reached its batch size',
     'stop_session_action_cap' => 'The session action cap is zero',
+
+    'decisions_heading' => 'Recent decisions',
+    'decision_trace' => 'Trace · player',
+    'decision_chosen' => 'Chosen',
+    'decision_decided_by' => 'Decided by',
+    'decision_ranked' => 'Ranked',
+    'no_decisions' => 'No decision has been recorded yet.',
+
+    'replay_heading' => 'Replay a saved scenario',
+    'replay_note' => 'A replay runs the real decision engine over a written scenario at a frozen time. It reads only the scenario file and writes nothing.',
+    'replay_scenario' => 'Scenario',
+    'replay_run' => 'Replay',
+    'replay_frozen_at' => 'Frozen at',
+    'replay_error' => 'That scenario could not be replayed: :error',
 ];

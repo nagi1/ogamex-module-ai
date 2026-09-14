@@ -6,7 +6,9 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
+use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
+use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\RunCognitionConformance;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Console\Commands\RunLanguageConformance;
@@ -69,7 +71,9 @@ class AIServiceProvider extends ModuleServiceProvider
     ];
 
     protected array $commands = [
+        ExplainAiDecision::class,
         ReconcileLanguageRequests::class,
+        ReplayAiScenario::class,
         RunCognitionConformance::class,
         RunDueAiWork::class,
         RunLanguageConformance::class,
