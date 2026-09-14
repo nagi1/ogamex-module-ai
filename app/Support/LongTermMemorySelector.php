@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Log;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\NativeLongTermMemory;
 use Modules\AI\Enums\AiMemoryDriver;
+use Modules\AI\Infrastructure\Memory\AgentOsClient;
+use Modules\AI\Infrastructure\Memory\AgentOsLongTermMemory;
 
 /**
  * Chooses the long-term recall implementation from module configuration.
@@ -33,6 +35,12 @@ class LongTermMemorySelector
 
         return match ($driver) {
             AiMemoryDriver::Native => app(NativeLongTermMemory::class),
+            AiMemoryDriver::AgentOs => app()->makeWith(AgentOsLongTermMemory::class, [
+                'fallback' => app(NativeLongTermMemory::class),
+                'client' => app()->makeWith(AgentOsClient::class, [
+                    'circuit' => app()->makeWith(DriverCircuitBreaker::class, ['driver' => AiMemoryDriver::AgentOs->value]),
+                ]),
+            ]),
         };
     }
 }

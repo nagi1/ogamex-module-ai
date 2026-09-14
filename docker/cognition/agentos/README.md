@@ -17,9 +17,36 @@ failing, the module uses `NativeLongTermMemory`.
 
 ## Verified: memory-only cycle with zero provider calls
 
-`verify.mjs` completes an encode/retrieve cycle with **no provider credentials
-present** and no model download. It asserts trace identity, provenance survival,
-encoding strength, decay stability and the tip-of-the-tongue bucket, and exits
+`server.mjs` exposes the driver as a sidecar in the same shape as CBRKit:
+
+| Route | Body | Answer |
+| --- | --- | --- |
+| `POST /recall` | `{scopeId, query, limit, memories:[{id, text, tags}]}` | `{ranking:[{id, …numeric evidence}], considered, discarded, partiallyRetrieved}` |
+| `GET /health` | — | `{status}` |
+
+**The driver stores nothing.** Each request carries the memories the module authorised for that
+recall, exactly as the CBRKit request carries its casebase, and the module keeps the canonical
+records. That is what makes the substitution safe in both directions: there is no second copy of
+a memory to keep in step or to delete, a restart cannot lose or resurrect one, and the module's
+soft-delete limitation below stops mattering.
+
+Measured against the built image on 14 September 2026:
+
+```
+$ curl -X POST http://127.0.0.1:8093/recall -d '{"scopeId":"player-1","query":"attack on my colony with fighters", ...}'
+{"ranking":[{"id":11,"encodingStrength":0.2875,"stability":9809999.999999998,"retrievalCount":0},
+            {"id":13,...},{"id":12,...}],"considered":3,"discarded":0,"partiallyRetrieved":0}
+```
+
+The attack memory ranked first for the attack query, an empty candidate set answers
+`{ranking:[], considered:0}` without touching the graph, malformed JSON answers `400` and
+`/health` answers `{"status":"ok"}`. The driver reports order and the trace's own numeric
+evidence; it never invents a score, so the module ranks by the returned order and re-applies its
+own deterministic tie-break.
+
+`verify.mjs` completes the same encode/retrieve cycle directly against the library with **no
+provider credentials present** and no model download. It asserts trace identity, provenance
+survival, encoding strength, decay stability and the tip-of-the-tongue bucket, and exits
 non-zero on any failure.
 
 ```

@@ -11,4 +11,10 @@ namespace Modules\AI\Enums;
 enum AiMemoryDriver: string
 {
     case Native = 'native';
+
+    /**
+     * Ranked recall from the module's AgentOS memory sidecar. The driver stores nothing: the
+     * module sends the authorised candidate set with every request and keeps the facts.
+     */
+    case AgentOs = 'agentos';
 }

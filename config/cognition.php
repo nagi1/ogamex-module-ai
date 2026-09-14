@@ -27,11 +27,19 @@ return [
 
     'memory' => [
         // Recall is a swap point, so the long-term memory implementation is chosen by
-        // configuration rather than a fixed binding. Native scoped recall is the only
-        // implementation today: an external engine is adopted by adding a case to
-        // AiMemoryDriver and an arm to LongTermMemorySelector. The module's facts table
-        // stays authoritative whichever driver answers.
+        // configuration rather than a fixed binding. Native scoped recall is the default and
+        // the fallback; the AgentOS sidecar is the optional ranking implementation. The
+        // module's facts table stays authoritative whichever driver answers.
         'driver' => env('AI_MEMORY_DRIVER', 'native'),
+        'agentos' => [
+            'base_url' => env('AI_MEMORY_AGENTOS_URL', 'http://host.docker.internal:8093'),
+            'connect_timeout_seconds' => (int) env('AI_MEMORY_AGENTOS_CONNECT_TIMEOUT_SECONDS', 2),
+            'timeout_seconds' => (int) env('AI_MEMORY_AGENTOS_TIMEOUT_SECONDS', 5),
+            // Bounds the candidate set a single recall may send to the driver. The module,
+            // not the driver, decides how much evidence a ranking may consider, and the
+            // recall then returns at most the caller's own limit from that set.
+            'maximum_memories' => (int) env('AI_MEMORY_AGENTOS_MAXIMUM_MEMORIES', 50),
+        ],
     ],
 
     'affect' => [

@@ -45,3 +45,19 @@ services:
       start_period: 10s
       retries: 3
     restart: unless-stopped
+
+  # Ranked older-memory recall behind Modules\AI\Contracts\LongTermMemory. The driver keeps no
+  # store of its own: every request carries the memories the module authorises for that recall.
+  agentos:
+    build:
+      context: ./agentos
+    image: ogamex-ai-cognition-agentos:0.10.16
+    ports:
+      - "${AI_AGENTOS_BIND:-0.0.0.0}:${AI_AGENTOS_PORT:-8093}:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
