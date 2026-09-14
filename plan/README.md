@@ -83,3 +83,24 @@ Use [WORK-PACKAGES.md](WORK-PACKAGES.md). It gives each agent an exclusive scope
 **Provider routing R1 is implemented:** one ordered vendor ladder per task kind, with rungs that can be gated to a vendor's peak or off-peak window, a vendor without a credential dropped before the call, and the SDK's own failover left to do the walking. R2-R5 (failover attribution, per-vendor budgets and cost accounting, operator visibility, a per-vendor conformance run) remain.
 
 The detailed [implementation map](details/IMPLEMENTATION.md) is the technical source for proposed files, migrations, services, event boundaries and tests. Open only the section named by the assigned package. Everything else under `details/` is reference material, not an entry point or a task list.
+
+## Strategy and simulation research
+
+The source-backed [experienced-player strategy and deterministic simulation](details/research/strategy-simulation-and-bot-patterns.md) note translates fleet safety, ROI, intelligence, raids and event timing into a low-dependency implementation plan. It examines public bot code only as engineering evidence for the OGameX in-product AI and offline simulator; it must never be used to automate official OGame accounts.
+
+Three further research notes were taken on 14 September 2026 and are the evidence behind the plan's
+opening behaviour:
+
+- [How experienced players actually play](details/research/veteran-play.md) — the opening and how it is
+  really decided, the contested energy doctrine, storage, research priorities, the daily routine, fleet
+  saving, raiding, colonisation, trade, plus the activity parameters a persona needs (sessions, window,
+  latency, absence, mistake rate).
+- [What automation tools already solved](details/research/ogame-automation-algorithms.md) — eleven public
+  projects read for eight recurring algorithms, with the warning that they all hardcode the object and
+  requirement tables gate 1 forbids.
+- [Which decision technique to use, and which not to build](details/specs/decision-techniques.md) — the
+  answer to "least dependence on language models": utility scoring, marginal payback, threshold rules,
+  hysteresis and a routine distribution; no solver, no planner subprocess, no learned model.
+
+The [gate audit](details/GATE-AUDIT.md) is the pass over the existing module against the three gates, and
+it is what turns this research into slices.
