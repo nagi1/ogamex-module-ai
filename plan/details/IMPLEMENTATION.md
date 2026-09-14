@@ -71,9 +71,9 @@ Reuse existing actor-scoped host records and module extension points first. `Cha
 
 ## Phase 4: pilot, tools and population control
 
-Use the existing `admin.nav` slot for the first module page: create/disable profile, inspect redacted decision trace and replay a saved synthetic scenario at frozen time. Do not request a general UI extension until a player-facing design needs it.
+Use the existing `admin.nav` slot for the first module page: create/disable profile, inspect redacted decision trace and replay a saved synthetic scenario at frozen time. Do not request a general UI extension until a player-facing design needs it. **Implemented:** the page shows the staff switch, the configured caps, today's refusals and the newest decisions, and replays a scenario shipped with the module; a trace explanation prints the action, the reason, the components and the ranking, never the parameters a candidate carried.
 
-Add `ExplainAiDecision.php`, `ReplayAiScenario.php` and `SeedAiTestUniverse.php` commands. Replay is read-only. Seeding refuses production by default. Add `ai_population_limits`: universe profile cap, active-session cap, dispatch batch size, action cap/session and language budget. The dispatcher stops at a cap and records why.
+Add `ExplainAiDecision.php`, `ReplayAiScenario.php` and `SeedAiTestUniverse.php` commands. Replay is read-only. Seeding refuses production by default. Add `ai_population_limits`: universe profile cap, active-session cap, dispatch batch size, action cap/session and language budget. The dispatcher stops at a cap and records why. **Implemented:** the caps live in one admission check (`ResolveAiAdmissionAction`) that both the scheduler and the session job ask, every refusal is counted per reason and day in `ai_stop_counters`, seeding also refuses to be the first account in a universe, and `ai:pilot-report` reports the outcomes, failures, lateness and tokens of one window.
 
 Pilot gates: disclosed AI presence, staff kill switch, model-free core play, worker/action success metrics, server-tick latency, cost per active AI and human feedback on pressure, recovery and alliance value. Expand only after a fixed cohort meets limits for a full play cycle.
 

@@ -133,8 +133,56 @@ provider, and it sends sanitized fixtures only. It exists to record real status,
 usage, latency and failure behavior for the conformance gate; it never runs in CI and
 it cannot execute a game action.
 
-### Install and uninstall
+### Operability
 
+A population that quietly stops working looks exactly like a population with nothing to do, so
+every limit the module owns answers with a reason when it refuses.
+
+`ResolveAiAdmissionAction` is the one admission check. The scheduler asks it what it may
+dispatch, the session job asks it whether it may start, and the action path asks it whether a
+session may touch the game. Keeping the caps in one place is the point: a limit one caller
+enforced while another forgot would read in a pilot report as an idle population instead of a
+capped one. The caps are `ai.population.profile_cap` (a universe with more enabled AI profiles
+than this stops new work rather than deleting anything), `active_session_cap` (sessions in
+flight), `dispatch_batch_size` (what one scheduler pass may enqueue) and `session_action_cap`
+(what a session may touch; zero lets an account keep deciding, recording and scheduling while it
+acts on nothing). The provider budget stays in `ai.language.daily_limits`.
+
+A refusal is recorded as a per-reason, per-day counter in `ai_stop_counters` — one growing row
+rather than a log line per pass — because "why is the population quiet today" is the question an
+operator actually asks. The staff switch is appended to `ai_operability_switches` rather than
+overwritten, so the newest row says whether new work starts and the rows before it say who
+stopped it, when and why. Stopping work never abandons work in flight: a claim that is refused
+leaves the work item pending for the first pass after the switch returns.
+
+The operator page is `admin/ai`, reachable from the admin sidebar through the host's documented
+`admin.nav` slot. It shows the switch, the configured limits, the population and provider
+counters for today, today's refusals and the newest recorded decisions, and it can replay a
+scenario shipped with the module. Replay is a GET that writes nothing.
+
+Three commands back it. `ai:explain-decision` reads a recorded decision back — action, reason,
+deciding components, ranking and evidence ages — and deliberately omits the parameters a
+candidate carried, because an operator does not need a coordinate to judge whether a policy
+behaved sensibly. `ai:replay-scenario` runs a written scenario through the real decision engine
+at the frozen time and persona seed the scenario declares, so the same file gives the same
+answer, and it saves nothing: the persona is an unsaved profile. `ai:seed-test-universe` creates
+pilot accounts through the host's own registration path, refuses production, needs `--confirm`,
+reuses accounts it already created and refuses to be the first account in a universe, because
+the host promotes the first registration to admin.
+
+`ai:pilot-report` reads one window: action outcomes, worker failures and retries, stuck leases,
+how late the module acted on work it had decided was due, and the provider tokens the optional
+language path spent. Lateness is the module's own, not a server tick — this host progresses
+resources lazily and delivers fleet arrivals as queued jobs, so there is no tick to measure
+against. Human feedback is the one part the module cannot measure, so it is read from an
+operator-supplied file and reported as not recorded when it is missing.
+
+Any module migration added outside the host's normal install path also has to be applied to the
+serial test database: the parallel runner rebuilds and clones its own template, while
+`scripts/ogamex coverage` runs against the base database the module's migrations were last
+applied to.
+
+### Install and uninstall
 `Modules/AI/app/Hooks/InstallModule` and `UninstallModule` are discovered by the
 host lifecycle commands (`php artisan ogamex:module:install AI`,
 `php artisan ogamex:module:uninstall AI`). The install hook reports Horizon and

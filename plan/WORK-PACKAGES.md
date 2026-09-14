@@ -58,7 +58,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 4 — operability and disclosed pilot
 
-**Status:** unblocked; Package 3's slices 3A–3L are implemented and committed, with 3J's load runs and the driver Gate 2 evidence still open. **Owner:** one module agent.
+**Status:** implemented; the disclosed pilot itself has not been run. Package 3's slices 3A–3L are implemented and committed, with 3J's load runs, 3H's real-provider artifact and the driver Gate 2 evidence still open. **Owner:** one module agent.
 
 **Goal:** operators can safely inspect, replay, cap and disable AI before increasing population.
 
@@ -67,6 +67,8 @@ Every agent begins by reading the assigned package and the named section of [det
 **Do not modify:** host UI extension system, game mechanics, action contracts or PvE behavior.
 
 **Acceptance:** staff kill switch stops new work; replay writes nothing; production seed refusal is tested; dispatcher respects every cap; pilot report contains action success, worker failure, tick latency, cost and human feedback.
+
+**Delivered:** `ai:seed-test-universe`, `ai:explain-decision`, `ai:replay-scenario` and `ai:pilot-report`, the admission caps with their recorded stop reasons, the staff switch, and the operator page that shows the switch, the caps, today's refusals and recent decisions and can replay a shipped scenario. Two acceptance wordings are met with narrower evidence and say so: replay is read-only over a saved scenario rather than over live state, and the report gives the module's own scheduling lateness because this host has no server tick to measure — resources progress lazily and fleet arrivals are queued jobs. Human feedback is read from an operator-supplied file and reported as not recorded when absent, because the module cannot measure it.
 
 ## Package 5 — cooperative PvE mode
 

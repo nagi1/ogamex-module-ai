@@ -7,8 +7,22 @@ rules, legal state, validation, and execution.
 The module includes the Phase 1 building adapter and Phase 2 deterministic
 profiles, perception, session scheduling and recorded decision intents. Broader
 gameplay capabilities remain conditional on validated action adapters.
-Phase 3 social cognition, experience, memory and conversation are planned;
-external cognition/memory/language drivers are not yet implemented.
+
+Phase 3 is implemented: source-backed facts, claims, relationships, commitments
+and affect, typed zero-LLM social protocols with authored replies, outcome-based
+experience, a sealed host delivery ledger, bounded context and atomic usage
+ledgers, a deterministic conversation cycle, and an optional provider escalation
+that is off by default. FAtiMA/CiF, CBRKit and AgentOS are implemented and opt-in
+behind module configuration, with the native path as the default and the fallback;
+none of them has cleared its activation gate yet. Ordinary gameplay, structured
+exchanges and AI-to-AI replies make no generative call.
+
+Phase 4 operability is implemented: admission caps with recorded stop reasons, a
+staff switch, redacted decision inspection, a read-only scenario replay,
+production-refusing test-universe seeding and a pilot report, all on the module's
+`admin/ai` page and its commands. What remains before a population grows is
+evidence, not code: the load measurements, the real-provider conformance artifact,
+the driver activation gates and a disclosed pilot. See [`plan/`](plan/README.md).
 
 ## OGameX integration
 

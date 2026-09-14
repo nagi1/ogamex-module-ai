@@ -129,6 +129,21 @@ already known to be red.
   runner cannot merge PCOV coverage across workers, and PCOV needs the CLI opcode
   cache off.
 
+A new module migration reaches the parallel run by itself: adding a migration file changes
+`ParallelTestSchemaServiceProvider`'s schema version, so the next parallel run rebuilds its
+`*_parallel_template` database and every worker clones it. The **serial** coverage run uses the
+base database instead, so apply the module's migrations there once with the same command the
+template builder uses:
+
+```bash
+cd local-docker-dev
+docker compose exec -T ogamex-app php artisan migrate \
+    --path=/var/www/Modules/AI/database/migrations --realpath --force
+```
+
+`php artisan migrate` and `php artisan module:migrate AI` both report "Nothing to migrate",
+because the module does not register its migration path with the console.
+
 Use a different OGameX checkout by setting `OGAMEX_ROOT`:
 
 ```bash
@@ -151,6 +166,27 @@ environment setup.
 Because the module checkout is physically inside the OGameX directory, the
 existing OGameX Docker bind mount includes the module without an additional
 mount or synchronization step.
+
+## Operator tooling
+
+The module's operator page lives at `admin/ai` and is reachable from the admin sidebar through
+the host's `admin.nav` slot. It shows the staff switch, the configured limits, today's counters,
+today's refusals and the newest recorded decisions, and it can replay a scenario shipped with
+the module — a read that writes nothing.
+
+```bash
+php artisan ai:seed-test-universe --players=6 --confirm   # test/pilot accounts; refuses production
+php artisan ai:explain-decision --player=42               # redacted decision explanation
+php artisan ai:explain-decision --trace=118
+php artisan ai:replay-scenario miner-under-visible-raid   # read-only, frozen time and seed
+php artisan ai:pilot-report --days=1                      # outcomes, failures, lateness, tokens
+php artisan ai:run-due-work                               # dispatches what the caps allow
+```
+
+Scenarios are JSON files under `resources/scenarios/`; the admin page can only replay a shipped
+one, while the command also accepts a path to a file you wrote yourself. Every limit the module
+owns lives in `config/population.php` plus `ai.language.daily_limits`, and a refusal is counted
+per reason and day in `ai_stop_counters`, which is what the page and the pilot report read.
 
 ## Conversation operations
 
