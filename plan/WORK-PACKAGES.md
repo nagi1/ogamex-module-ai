@@ -58,7 +58,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 4 — operability and disclosed pilot
 
-**Status:** implemented, and run at 10 accounts on 14 September 2026; **not yet signed off**, and the disclosed pilot at pilot scale has not been run. Package 3's slices 3A–3L are implemented and committed, its 3H real-provider artifact now exists (4/4 sanitized cases against `deepseek-flash`, every interpretation matching, injection refused), and only the driver Gate 2 evidence is open. **Owner:** one module agent.
+**Status:** implemented, and run at 10 accounts on 14 September 2026; **not yet signed off**, and the disclosed pilot at pilot scale has not been run. The gap that run measured — a population that decided without ever acting — was closed by slice 3M the same day, so the cohort now acts as well as decides. Package 3's slices 3A–3M are implemented and committed, its 3H real-provider artifact now exists (4/4 sanitized cases against `deepseek-flash`, every interpretation matching, injection refused), and only the driver Gate 2 evidence is open. **Owner:** one module agent.
 
 **Goal:** operators can safely inspect, replay, cap and disable AI before increasing population.
 
@@ -71,6 +71,8 @@ Every agent begins by reading the assigned package and the named section of [det
 **Delivered:** `ai:seed-test-universe`, `ai:explain-decision`, `ai:replay-scenario` and `ai:pilot-report`, the admission caps with their recorded stop reasons, the staff switch, and the operator page that shows the switch, the caps, today's refusals and recent decisions and can replay a shipped scenario. Two acceptance wordings are met with narrower evidence and say so: replay is read-only over a saved scenario rather than over live state, and the report gives the module's own scheduling lateness because this host has no server tick to measure — resources progress lazily and fleet arrivals are queued jobs. Human feedback is read from an operator-supplied file and reported as not recorded when absent, because the module cannot measure it.
 
 **Ran at 10 accounts (14 September 2026):** ten accounts seeded through the host registration path, one dispatcher pass, ten sessions completed, ten successors scheduled, zero provider requests, zero worker failures, and lateness of p50 0.8 / p95 0.9 minutes. Every one of the ten sessions chose `DoNothing`, because the ordinary-play observation publishes no ability and nothing creates the one executable building work item — the finding and its evidence are in [details/DECISIONS.md](details/DECISIONS.md).
+
+**Follow-up the same day, after slice 3M:** the gap that run measured is closed, and the cohort's next sessions act as well as decide. Two accounts queued real buildings through the ordinary host action path — player 29129 a solar plant, player 29132 a crystal mine, each the building its own planner published — so the report reads `actions: Accepted 2` where the original window read `none`, with three build intents and zero provider attempts. The measured result is recorded in [details/DECISIONS.md](details/DECISIONS.md).
 
 ## Package 5 — cooperative PvE mode
 
