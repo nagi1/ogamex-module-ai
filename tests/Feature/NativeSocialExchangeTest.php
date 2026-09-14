@@ -481,10 +481,14 @@ test('greeting and thanks exchanges use their authored reply lines', function (A
 
 function socialExchangeObservation(int $playerId, int $counterpartyId, int $sourceId): AiObservation
 {
-    return AiObservation::create([
+    // An enabled module's committed-message observer records the row for a real message, while
+    // most of these fixtures name a synthetic source id no message backs; converging on the
+    // unique source identity keeps both cases working instead of inserting a duplicate.
+    return AiObservation::query()->firstOrCreate([
         'player_id' => $playerId,
         'source_type' => AiObservationSource::ChatMessage,
         'source_id' => $sourceId,
+    ], [
         'kind' => AiObservationKind::DirectChatMessageReceived,
         'subject_player_id' => $counterpartyId,
         'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),

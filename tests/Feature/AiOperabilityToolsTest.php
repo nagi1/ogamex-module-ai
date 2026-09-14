@@ -84,23 +84,48 @@ function pilotLanguageRequest(int $tokens): void
 
 test('seeding refuses production without any override', function (): void {
     $this->app->instance('env', 'production');
+    // A cohort an operator already seeded into this database must not make a refusal look like a
+    // success, so the claim is that the attempt created nothing rather than that none exist.
+    $before = User::query()->where('email', 'like', '%@ai-pilot.invalid')->count();
 
     $this->artisan('ai:seed-test-universe', ['--confirm' => true])
         ->expectsOutputToContain('Refusing to seed synthetic accounts in production.')
         ->assertExitCode(1);
 
-    expect(User::query()->where('email', 'like', '%ai-pilot.invalid')->count())->toBe(0);
+    expect(User::query()->where('email', 'like', '%@ai-pilot.invalid')->count())->toBe($before);
 });
 
 test('seeding requires an explicit confirmation', function (): void {
+    $before = User::query()->where('email', 'like', '%@ai-pilot.invalid')->count();
+
     $this->artisan('ai:seed-test-universe')
         ->expectsOutputToContain('Re-run with --confirm.')
         ->assertExitCode(1);
 
-    expect(User::query()->where('email', 'like', '%@ai-pilot.invalid')->count())->toBe(0);
+    expect(User::query()->where('email', 'like', '%@ai-pilot.invalid')->count())->toBe($before);
 });
 
+/**
+ * Removes a pilot cohort an earlier run or an operator left in this shared database, so the counts
+ * below describe what this test caused rather than what it inherited. The test transaction rolls
+ * the deletion back, and the checks come off because a planet and its owner reference each other.
+ */
+function clearSeededPilotAccounts(): void
+{
+    $ids = User::query()->where('email', 'like', '%@ai-pilot.invalid')->pluck('id');
+
+    if ($ids->isEmpty()) {
+        return;
+    }
+
+    DB::statement('SET FOREIGN_KEY_CHECKS = 0');
+    DB::table('users')->whereIn('id', $ids)->delete();
+    DB::statement('SET FOREIGN_KEY_CHECKS = 1');
+}
+
 test('seeding creates ordinary accounts with an enabled profile and a first session', function (): void {
+    clearSeededPilotAccounts();
+
     $this->artisan('ai:seed-test-universe', ['--players' => 2, '--confirm' => true])
         ->expectsOutputToContain('Their first session is due now')
         ->assertExitCode(0);
@@ -139,6 +164,8 @@ test('seeding refuses to be the first account in a universe', function (): void 
 });
 
 test('seeding twice reuses the same accounts instead of adding more', function (): void {
+    clearSeededPilotAccounts();
+
     $this->artisan('ai:seed-test-universe', ['--players' => 1, '--confirm' => true])->assertExitCode(0);
     $seeded = User::query()->where('email', 'like', '%@ai-pilot.invalid')->sole();
     $accounts = User::query()->count();

@@ -78,10 +78,13 @@ function recallQueryFor(int $playerId, int $subjectPlayerId, string|null $queryT
 function deletedSourceFixture(int $playerId, int $subjectPlayerId, string $message): array
 {
     $chatMessage = ChatMessage::create(['sender_id' => $subjectPlayerId, 'recipient_id' => $playerId, 'message' => $message]);
-    $observation = AiObservation::create([
+    // An enabled module's committed-message observer records this row itself, so the fixture
+    // converges on the unique source identity rather than inserting a second one.
+    $observation = AiObservation::query()->firstOrCreate([
         'player_id' => $playerId,
         'source_type' => AiObservationSource::ChatMessage,
         'source_id' => $chatMessage->id,
+    ], [
         'kind' => AiObservationKind::DirectChatMessageReceived,
         'subject_player_id' => $subjectPlayerId,
         'source_time' => CarbonImmutable::parse(DELETE_ACCEPTANCE_NOW),

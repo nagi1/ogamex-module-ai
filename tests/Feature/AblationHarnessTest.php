@@ -141,10 +141,13 @@ function runAblationScenario(int $ai, int $counterpartyPlayerId): array
     app(AppraiseObservedBattleReportAction::class)->handle($observation->id);
 
     $message = ChatMessage::create(['sender_id' => $counterpartyPlayerId, 'recipient_id' => $ai, 'message' => 'sorry about the hit']);
-    $chat = AiObservation::create([
+    // An enabled module's committed-message observer records this row itself, so the fixture
+    // converges on the unique source identity rather than inserting a second one.
+    $chat = AiObservation::query()->firstOrCreate([
         'player_id' => $ai,
         'source_type' => AiObservationSource::ChatMessage,
         'source_id' => $message->id,
+    ], [
         'kind' => AiObservationKind::DirectChatMessageReceived,
         'subject_player_id' => $counterpartyPlayerId,
         'source_time' => $now,

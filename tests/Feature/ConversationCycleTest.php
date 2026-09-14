@@ -73,15 +73,18 @@ function enabledAiProfile(int $playerId, int $randomSeed = 42): AiProfile
 }
 
 /**
- * Writes the observation a committed message would produce, without depending on the
- * observer firing inside the test transaction.
+ * Writes the observation a committed message produces.
+ *
+ * The enabled module's observer writes this row itself, so the fixture converges on the unique
+ * source identity instead of inserting a duplicate that the database would reject.
  */
 function observedChatMessage(int $playerId, int $subjectPlayerId, int $sourceId): AiObservation
 {
-    return AiObservation::create([
+    return AiObservation::query()->firstOrCreate([
         'player_id' => $playerId,
         'source_type' => AiObservationSource::ChatMessage,
         'source_id' => $sourceId,
+    ], [
         'kind' => AiObservationKind::DirectChatMessageReceived,
         'subject_player_id' => $subjectPlayerId,
         'source_time' => CarbonImmutable::parse(CONVERSATION_NOW),
@@ -163,10 +166,12 @@ test('an observation addressed to the player itself produces no exchange', funct
     $messageId = inboundMessage($this->currentUserId, $human->id, 'hello');
 
     // An observation is identified by its player, source type and source id, so this row is the
-    // one the cycle sees for that message. A self-addressed subject is refused by the exchange
-    // recorder, and the message must stay open rather than look answered by a record that was
-    // never written.
-    observedChatMessage($this->currentUserId, $this->currentUserId, $messageId);
+    // one the cycle sees for that message. The subject is forced onto it because the committed
+    // message's own observation carries the real sender: a self-addressed subject is refused by
+    // the exchange recorder, and the message must stay open rather than look answered by a record
+    // that was never written.
+    observedChatMessage($this->currentUserId, $this->currentUserId, $messageId)
+        ->update(['subject_player_id' => $this->currentUserId]);
 
     expect(runConversationCycle($this->currentUserId))->toBe(0)
         ->and(AiSocialExchange::query()->count())->toBe(0)

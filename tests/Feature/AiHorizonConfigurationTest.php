@@ -78,11 +78,15 @@ test('a missing plan file registers no lanes instead of failing the boot', funct
         'ai.horizon_plan_path' => sys_get_temp_dir().'/ogamex-missing-horizon-'.uniqid().'.php',
         'horizon.environments' => ['production' => []],
     ]);
+    // An enabled module has already contributed its own lanes at boot, so the claim under test is
+    // "this call adds nothing", not "no such lane exists anywhere".
+    $defaultsBefore = config('horizon.defaults');
+    $environmentsBefore = config('horizon.environments');
 
     app(HorizonConfiguration::class)->contribute();
 
-    expect(config('horizon.defaults.supervisor-ai'))->toBeNull()
-        ->and(config('horizon.environments.production.supervisor-ai'))->toBeNull();
+    expect(config('horizon.defaults'))->toEqual($defaultsBefore)
+        ->and(config('horizon.environments'))->toEqual($environmentsBefore);
 });
 
 test('a partial plan file is read from the configured path', function (): void {
