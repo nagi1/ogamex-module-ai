@@ -10,6 +10,7 @@ use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Models\ChatMessage;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -25,7 +26,7 @@ beforeEach(function (): void {
     ]));
 });
 
-test('a stale uncertain attempt is charged at its reserved maximum exactly once', function (): void {
+test('a stale uncertain attempt is charged at its reserved maximum and released as authored text', function (): void {
     [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I will send 500 metal.');
     $request = languageRequestRecord($reply, AiLanguageRequestState::Uncertain);
     $request->update(['created_at' => CarbonImmutable::parse('2023-12-31 22:00:00 UTC')]);
@@ -37,13 +38,42 @@ test('a stale uncertain attempt is charged at its reserved maximum exactly once'
         ->and($reservation->state)->toBe(AiUsageReservationState::Settled)
         ->and($reservation->actual_input_tokens)->toBe(2_000)
         ->and($reservation->actual_output_tokens)->toBe(320)
-        ->and($request->refresh()->state)->toBe(AiLanguageRequestState::Uncertain)
+        ->and($request->refresh()->state)->toBe(AiLanguageRequestState::Unobserved)
+        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)->toBe('Authored fallback.')
         ->and(app(ReconcileAiLanguageRequestsAction::class)->handle())->toBe(0);
+});
+
+test('a worker killed between its receipt and its settlement is closed the same way', function (): void {
+    [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I will send 500 metal.');
+    $request = languageRequestRecord($reply, AiLanguageRequestState::Generating);
+    $request->update(['created_at' => CarbonImmutable::parse('2023-12-31 22:00:00 UTC')]);
+
+    expect(app(ReconcileAiLanguageRequestsAction::class)->handle())->toBe(1)
+        ->and($request->refresh()->state)->toBe(AiLanguageRequestState::Unobserved)
+        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)->toBe('Authored fallback.');
+});
+
+test('an attempt whose reservation was settled elsewhere is closed without being charged twice', function (): void {
+    [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I will send 500 metal.');
+    $request = languageRequestRecord($reply, AiLanguageRequestState::Uncertain);
+    $request->update(['created_at' => CarbonImmutable::parse('2023-12-31 22:00:00 UTC')]);
+    AiUsageReservation::query()->sole()->update([
+        'state' => AiUsageReservationState::Settled,
+        'actual_input_tokens' => 10,
+        'actual_output_tokens' => 5,
+    ]);
+
+    expect(app(ReconcileAiLanguageRequestsAction::class)->handle())->toBe(0)
+        ->and($request->refresh()->state)->toBe(AiLanguageRequestState::Unobserved)
+        ->and(AiUsageReservation::query()->sole()->actual_input_tokens)->toBe(10);
 });
 
 test('a recent uncertain attempt and already settled attempts keep their accounting', function (): void {
     [$recentReply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I will send 500 metal.');
     languageRequestRecord($recentReply, AiLanguageRequestState::Uncertain);
+
+    [$runningReply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I will send 500 metal.');
+    languageRequestRecord($runningReply, AiLanguageRequestState::Generating);
 
     [$completedReply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I will send 500 metal.');
     $completed = languageRequestRecord($completedReply, AiLanguageRequestState::Completed);
@@ -54,7 +84,8 @@ test('a recent uncertain attempt and already settled attempts keep their account
     $failed->update(['created_at' => CarbonImmutable::parse('2023-12-31 22:00:00 UTC')]);
 
     expect(app(ReconcileAiLanguageRequestsAction::class)->handle())->toBe(0)
-        ->and(AiUsageReservation::query()->where('state', AiUsageReservationState::Reserved)->count())->toBe(3);
+        ->and(AiUsageReservation::query()->where('state', AiUsageReservationState::Reserved)->count())->toBe(4)
+        ->and(AiLanguageRequest::query()->whereIn('state', [AiLanguageRequestState::Uncertain, AiLanguageRequestState::Generating])->count())->toBe(2);
 });
 
 test('the reconciliation command reports the attempts it settled', function (): void {
@@ -66,7 +97,7 @@ test('the reconciliation command reports the attempts it settled', function (): 
         ->expectsOutputToContain('1 AI language reservation(s) reconciled.')
         ->assertExitCode(0);
 
-    expect(AiLanguageRequest::query()->sole()->state)->toBe(AiLanguageRequestState::Uncertain);
+    expect(AiLanguageRequest::query()->sole()->state)->toBe(AiLanguageRequestState::Unobserved);
 });
 
 test('the module schedules the reconciliation command', function (): void {

@@ -118,6 +118,24 @@ test('an inbound greeting is answered once through the authored delivery path', 
         ->and((float) AiRelationship::query()->where('player_id', $this->currentUserId)->sole()->affinity)->toBeGreaterThan(0.0);
 });
 
+/**
+ * An account staff disabled after the message was observed has no reply to seal: the
+ * exchange is still evaluated, and the cycle then composes nothing rather than sending
+ * from an account that is switched off.
+ */
+test('a message observed before the account was disabled is evaluated but never answered', function (): void {
+    $human = $this->createUser();
+    $profile = enabledAiProfile($this->currentUserId);
+    $sourceMessageId = inboundMessage($this->currentUserId, $human->id, 'hello');
+    observedChatMessage($this->currentUserId, $human->id, $sourceMessageId);
+    $profile->update(['enabled' => false]);
+
+    expect(runConversationCycle($this->currentUserId))->toBe(1)
+        ->and(AiSocialExchange::query()->where('player_id', $this->currentUserId)->count())->toBe(1)
+        ->and(AiConversationReply::query()->where('player_id', $this->currentUserId)->count())->toBe(0)
+        ->and(deliveredReplies($this->currentUserId))->toBe(0);
+});
+
 test('an unrecognised message stays unanswered and records nothing', function (): void {
     $human = $this->createUser();
     enabledAiProfile($this->currentUserId);

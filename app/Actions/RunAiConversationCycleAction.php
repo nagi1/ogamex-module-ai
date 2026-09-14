@@ -5,10 +5,13 @@ namespace Modules\AI\Actions;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Modules\AI\Domain\Conversation\ContactImpactPolicy;
+use Modules\AI\Domain\Conversation\ConversationRoutePolicy;
 use Modules\AI\Enums\AiConversationReplyState;
+use Modules\AI\Enums\AiConversationRoute;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSocialExchangeType;
+use Modules\AI\Jobs\GenerateAiReply;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiSocialExchange;
@@ -19,9 +22,10 @@ use OGame\Models\ChatMessage;
  *
  * The cycle is composed by the session, which already holds the player lease and the
  * per-player lock, so a bounded conversation costs no extra work item, no extra job and no
- * extra lock contention. It makes no generative call: a message is answered only when the
- * classifier places it as a known exchange, and the decision, the wording and the delivery
- * are all authored.
+ * extra lock contention. It makes no generative call of its own: a message is answered only
+ * when the classifier places it as a known exchange, and the decision and the wording are
+ * authored. A substantive exchange may hand its sealed reply to the language lane, which is
+ * off by default and never dispatches a request this action would refuse.
  *
  * The protocol is bounded by turns rather than by interest, so two automated neighbours can
  * greet each other without exchanging messages forever.
@@ -164,7 +168,37 @@ class RunAiConversationCycleAction
         $reply = app(QueueAiSocialExchangeReplyAction::class)->handle($exchange->id, $this->replyExpiresAt($now));
         $sealed = app(SealAiAuthoredReplyAction::class)->handle($reply?->id ?? 0);
 
-        app(DeliverAiSealedReplyAction::class)->handle($sealed?->id ?? 0);
+        if ($sealed === null) {
+            return;
+        }
+
+        $this->deliver($exchange, $sealed);
+    }
+
+    /**
+     * An authored send costs a database write, which the session can afford while it already
+     * holds this player's lock. A realization costs a network call, so it belongs on the
+     * language lane where a slow provider delays one reply instead of the session, and where
+     * the sealed authored text remains the fallback.
+     */
+    private function deliver(AiSocialExchange $exchange, AiConversationReply $sealed): void
+    {
+        if (!$this->mayReachProvider($exchange)) {
+            app(DeliverAiSealedReplyAction::class)->handle($sealed->id);
+
+            return;
+        }
+
+        GenerateAiReply::dispatch($sealed->id);
+    }
+
+    private function mayReachProvider(AiSocialExchange $exchange): bool
+    {
+        if (!(bool) config('ai.language.enabled', false)) {
+            return false;
+        }
+
+        return app(ConversationRoutePolicy::class)->routeFor($exchange->type) === AiConversationRoute::Realization;
     }
 
     /**

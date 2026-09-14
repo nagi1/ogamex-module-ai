@@ -96,6 +96,13 @@ only consumes redis, so module jobs would sit on an unconsumed database queue.
 
 ### Language receipt lifecycle
 
+A reply is composed by the conversation cycle and sealed as authored text. Only a
+substantive exchange addressed by a counterparty that is not itself an AI is offered to
+the language lane, and only while the provider is enabled; a greeting, a thank-you, a
+disabled provider and an automated counterparty stay on the authored route and make no
+request at all. `GenerateAiReply` runs the offer on the `ai-language` lane, so a slow
+provider delays one reply instead of the session that composed it.
+
 `GenerateAiReplyAction` is the only path that may call `LanguageGateway`. It resolves
 an already sealed reply, reserves one attempt through the module ledger, writes the
 `ai_language_requests` receipt while it is `Generating`, calls the gateway, and then
@@ -107,14 +114,19 @@ settles the receipt and the reservation in one transaction:
 | Schema-invalid envelope | `Invalid` | settled at reported usage | authored fallback |
 | Definite transport failure | `Failed` | settled at reported usage | authored fallback |
 | Timeout | `Uncertain` | stays `Reserved` until reconciliation | authored fallback |
+| Charged once its completion could no longer be observed | `Unobserved` | charged at the reserved maximum | authored fallback |
 
 An attempted request always consumes one unit of daily capacity: settling releases
 unused tokens but never the attempt, `request_key` is unique, and an existing receipt
 prevents a second reservation for the same reply. A timed-out attempt is never resent;
-the scheduled `ai:reconcile-language-requests` command charges it at its reserved
-maximum once the provider can no longer complete it. `AiUsageBudgetScope` rows are
-locked for the universe, player and conversation before a reservation, so concurrent
-requests cannot exceed a shared cap.
+the scheduled `ai:reconcile-language-requests` command closes it — and a `Generating`
+receipt left behind by a killed worker — at its reserved maximum once the completion can
+no longer be observed, then releases the sealed authored reply, so an attempt that was
+never answered never leaves the message unanswered either. A completion that arrives
+afterwards is dropped by the same state check, and a job that dies before writing its
+receipt delivers the authored reply from its own failure handler. `AiUsageBudgetScope`
+rows are locked for the universe, player and conversation before a reservation, so
+concurrent requests cannot exceed a shared cap.
 
 The opt-in `ai:language-conformance` command is the only caller that may reach a real
 provider, and it sends sanitized fixtures only. It exists to record real status,
@@ -182,11 +194,11 @@ can exist with nothing in the module actually calling it.
 
 | State | Components |
 | --- | --- |
-| **Live and driven** | Native affect, appraised from a committed battle report the AI took part in, which also advances its running anger and lets that fade with elapsed time. Native experience, ranked when the AI chooses which building to upgrade: a settled success on an object raises its score and a settled failure lowers it, bounded so a remembered outcome settles a near-tie without outvoting the persona's own preference. Chat, battle and alliance observations are reduced after commit, and a session arbitrates one building decision and schedules its successor. These are the shipped behavior and the fallback for every seam. |
-| **Implemented, no runtime trigger** | Native social cognition and everything that feeds it: social-exchange evaluation and recording, relationship interaction reduction, commitment fulfilment, reply planning, sealed authored delivery, chat-observation reconciliation, conversation context building, scoped long-term memory recall and the language gateway. Each is implemented and each is covered by tests that compose it by hand, and none is started by a work kind, a session step or a schedule — so an AI currently never answers a message. The evidence is `AiWorkKind`, which declares only `BuildFirstBuilding` and `RunSession`, and the actions below that have no caller outside the tests. |
-| **Wired, opt-in** (real adapters, disabled by default) | CBRKit behind `ExperienceEngine`; FAtiMA/CiF behind `AffectEngine` and `SocialCognition`. Selecting one requires an explicit setting and a running sidecar. |
+| **Live and driven** | Native affect, appraised from a committed battle report the AI took part in, which also advances its running anger and lets that fade with elapsed time. Native experience, ranked when the AI chooses which building to upgrade: a settled success on an object raises its score and a settled failure lowers it, bounded so a remembered outcome settles a near-tie without outvoting the persona's own preference. Chat, battle and alliance observations are reduced after commit, and a session arbitrates one building decision, answers the messages waiting for it with authored social protocol and schedules its successor. These are the shipped behavior and the fallback for every seam. |
+| **Implemented, no runtime trigger** | Scoped long-term memory recall, native or through a selected driver, has no caller on a live path: it is implemented and covered by tests that compose it by hand, and nothing reads it until a context needs older evidence than the recent window. |
+| **Wired, opt-in** (real adapters, disabled by default) | CBRKit behind `ExperienceEngine`; FAtiMA/CiF behind `AffectEngine` and `SocialCognition`; the Laravel AI provider behind `LanguageGateway`, which the conversation cycle offers a substantive sealed reply to on the `ai-language` lane. All are off by default, and the provider also costs a lane of its own, so it stays off on the reference profile. Selecting one requires an explicit setting and any sidecar it needs. |
 | **Unwired** (contract only) | `Embedder` and `SemanticRetriever` are deliberately not scaffolded. Semantic recall and ML compression are not implemented. |
-| **Deferred** | AgentOS long-term memory; PsychSim; provider batch enrichment. |
+| **Deferred** | PsychSim; provider batch enrichment. |
 
 ### What an AI can legally observe
 

@@ -88,11 +88,12 @@ RAM, no GPU). Evidence: [player personas](research/player-personas.md),
 | Protocol bound | **Two response turns, then quiet.** The bound is what lets two automated neighbours greet each other without exchanging messages forever. |
 | Transfer-dependent exchanges | **Help requests and compensation offers are deliberately not classified yet.** They depend on a truthful available amount and a parsable due time, and accepting a help request creates an obligation the module cannot discharge. They are enabled when a transfer capability exists, not before. |
 
-## Phase 3L — provider escalation, recorded and not yet implemented (14 September 2026)
+## Phase 3L — provider escalation implemented (14 September 2026)
 
-The path from a sealed reply to the optional provider is still unwired, and it is deliberately
-not half-wired: dispatching a generation job needs the reconciliation step to also terminate a
-request whose provider completion can no longer be observed and deliver the authored fallback,
-which is a change to the usage-accounting semantics rather than a job class. Until then
-`ai.language.enabled` changes nothing on the conversation path, and the authored reply is what
-always goes out.
+| Topic | Decision |
+| --- | --- |
+| What is escalated | **Only a substantive exchange with a human counterparty.** A greeting or a thank-you is the routine case the plan keeps on authored text, so the route policy never offers it; the reply action independently refuses an enabled-AI counterparty, a missing persona, protected-context overflow and exhausted capacity. Interpretation of unrecognised free-form text stays unimplemented, so an unclassified message is still answered with nothing. |
+| Who carries the request | **The `ai-language` lane, in a job that owns both outcomes.** A session seals the authored reply and dispatches `GenerateAiReply`; the job either replaces that text with validated prose or delivers the authored text it already holds. The session never waits on a provider, which is what "do not hold the player worker" requires. |
+| Failure handling | **A dispatch that cannot complete still answers.** One attempt, no retry: the receipt is written before the call and refuses a second reservation, so a retry could only replay a settled decision. A job that dies before writing its receipt delivers the authored reply from its failure handler; a call whose completion is never observed stays `Uncertain`, and the scheduled reconciliation charges it at its reserved maximum, marks the attempt `Unobserved` and releases the authored reply. A slow completion that lands afterwards is dropped by the same state check, so a closed attempt can never overwrite a sent message. |
+| Why reconciliation owns the close | Closing an attempt is usage-accounting work — charge once, stop masking budget, release the reply — not a second dispatch. Reconciliation was already the only owner of "the provider outcome can no longer be observed", so delivering the authored fallback there is what makes that ownership complete instead of leaving a sealed reply waiting forever. It now also sweeps a `Generating` receipt, because a worker killed mid-call leaves nobody else to close it. |
+| Reference profile | **Unchanged and still off.** `ai.language.enabled` remains false, so the escalated route costs nothing on the reference host; `AI_HORIZON_LANGUAGE_PROCESSES` is the knob an operator raises on a host with measured headroom. |
