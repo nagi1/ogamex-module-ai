@@ -24,9 +24,11 @@ use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\Models\Ban;
 use OGame\Models\BuildingQueue;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
+use OGame\Models\User;
 use OGame\Services\BuildingQueueService;
 use Tests\IsolatedAccountTestCase;
 
@@ -87,6 +89,40 @@ test('it publishes no capability for a profile whose host account does not exist
     capabilityProfile($orphanedPlayerId);
 
     expect(app(QueueableBuildingPlanner::class)->plan($orphanedPlayerId))->toBeNull();
+});
+
+// A suspended account keeps waking, and that is fine -- what it must not do is keep deciding and
+// acting. The host's own state is asked before anything is published, so a banned or vacationing
+// account records that it did nothing and queues nothing until the host says it may play again.
+test('it offers a banned account no capability and it decides nothing', function (): void {
+    config(['ai.cognition.conversation.enabled' => false]);
+    $profile = capabilityProfile($this->currentUserId);
+    $this->planetAddResources(capabilityPlenty());
+    Ban::create(['user_id' => $this->currentUserId, 'reason' => 'test ban', 'banned_until' => now()->addHour(), 'canceled' => false]);
+
+    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([]);
+
+    $session = capabilitySession($profile, 'banned');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
+
+    expect(AiDecisionTrace::query()->where('work_item_id', $session->id)->firstOrFail()->selected_action)->toBe(AiCandidateActionType::DoNothing)
+        ->and(AiWorkItem::query()->where('player_id', $profile->player_id)->where('kind', AiWorkKind::BuildFirstBuilding)->count())->toBe(0)
+        ->and(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(0);
+});
+
+test('it offers a vacationing account no capability and it decides nothing', function (): void {
+    config(['ai.cognition.conversation.enabled' => false]);
+    $profile = capabilityProfile($this->currentUserId);
+    $this->planetAddResources(capabilityPlenty());
+    User::query()->whereKey($this->currentUserId)->update(['vacation_mode' => true]);
+
+    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([]);
+
+    $session = capabilitySession($profile, 'vacation');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
+
+    expect(AiDecisionTrace::query()->where('work_item_id', $session->id)->firstOrFail()->selected_action)->toBe(AiCandidateActionType::DoNothing)
+        ->and(AiWorkItem::query()->where('player_id', $profile->player_id)->where('kind', AiWorkKind::BuildFirstBuilding)->count())->toBe(0);
 });
 
 test('it queues a real building when a session selects the build intent', function (): void {

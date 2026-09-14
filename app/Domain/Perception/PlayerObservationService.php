@@ -25,6 +25,12 @@ class PlayerObservationService
     public function ownedState(int $playerId): array
     {
         $player = $this->playerServiceFactory->make($playerId, true);
+
+        // A suspended account is not playing, and the host is the authority on that state: a banned or
+        // vacationing account is offered nothing rather than a capability it cannot act on, so its
+        // session records that it did nothing instead of recording a decision the host would refuse.
+        $suspended = $player->isBanned() || $player->isInVacationMode();
+
         $planets = [];
         foreach ($player->planets->all() as $planet) {
             $planets[] = [
@@ -41,7 +47,7 @@ class PlayerObservationService
             'player_id' => $player->getId(),
             'observed_at' => (int) now()->timestamp,
             'planets' => $planets,
-            'available_actions' => $this->availableActions($playerId),
+            'available_actions' => $suspended ? [] : $this->availableActions($playerId),
         ];
     }
 

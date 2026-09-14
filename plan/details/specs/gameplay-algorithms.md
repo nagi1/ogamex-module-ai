@@ -782,12 +782,21 @@ and the marker's own 15/60-minute thresholds make a uniform pattern readable at 
 
 ### H6 — Suspension gate
 
+**Shipped 14 September 2026** in `PlayerObservationService`.
+
 **Gaps:** O2 · **Host:** `PlayerService::isBanned()` and `isInVacationMode()`; today only the building
 action asks, and the session path does not.
 
-**Rule.** A session asks both before it decides, and stops scheduling successors while it is suspended.
-This is the smallest possible gate — two host calls and an early return — and without it a banned
-account keeps deciding forever.
+**Rule.** The observation path asks both before it publishes anything, so a suspended account offers no
+capability, records `DoNothing` and touches nothing — the smallest possible gate, one host call and an
+empty capability map, reusing the "no capability published" behaviour the first pilot already proved.
+
+**The deliberate difference from the register's wording.** The register asked for the account to *stop
+scheduling* while suspended. It does not: the successor session is still scheduled, because nothing else
+would wake the chain when a three-day ban expires, and the register's version would have turned a
+temporary ban into permanent dormancy. What a player can observe — an account that decides nothing and
+actions nothing while suspended — is fixed; the bookkeeping churn of a *permanently* suspended account
+is O3/L2's problem, where account states are named.
 
 ---
 
