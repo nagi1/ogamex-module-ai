@@ -823,10 +823,26 @@ account does not announce a holiday, it simply is not there, which is what a pla
 
 ### H4 — The activity marker is a side effect, never a ping
 
+**Shipped 14 September 2026** as a constraint with its acceptance test, and it is the answer to
+[AG3](#ag3--request-and-activity-footprint) as well.
+
 The 15-minute per-planet marker is refreshed by *any* planet-context request, including another
 player's probe on that body (**host**). **Rule:** the module never writes activity to make an account
 look alive; the marker moves because real work happened on that planet. A "keep-alive" ping is a tell,
 and the marker's own 15/60-minute thresholds make a uniform pattern readable at a glance.
+
+**As built, and why no code had to change.** The module has exactly one path to the host's activity
+state: `QueueAiBuildingAction` calling `PlayerGameStateService::advance()`, which is the same page-load
+path a human's own click takes. A marker that moves therefore always means work was done, and a session
+that decides nothing leaves it alone — which is now stated as a test rather than as an intention
+(`AiActivityMarkerTest`): a session with nothing to queue leaves `users.time` exactly where it was, and
+a session that queues a building moves it, through the host. There is no keep-alive in the module, and
+that test is what makes adding one fail.
+
+**The AG3 decision this settles.** The stamp is *accepted* rather than bypassed. It rides real work
+inside the routine's waking window, so `isInactive`, the inactive-deletion scheduler and the galaxy
+marker keep reflecting the account, and the account cannot show activity while doing nothing — which is
+the mirror of the rule, from the other side.
 
 ### H5 — What makes a schedule look worse
 
@@ -1087,8 +1103,8 @@ with its acceptance evidence recorded.
    [the change request](host-change-request.md)): the queue-upgrade predicate, vacation-mode on add, the
    recall ownership check, expedition hold bounds. Module-side, these replace `AiBuildingMachineName`.
 3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
-   single authenticity gain, because the host's own detector gives the acceptance test.
-   **H1, H2, H3, H6, L2 and L3 shipped**; H4 remains.
+   single authenticity gain, because the host's own detector gives the acceptance test. **Complete**:
+   H1, H2, H3, H4 and H6 shipped as themselves, L2 as account states, L3 as L1.
 4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
 5. **Units and cargos** (U1, U2, U4, A1, A2(reg)) — military points stop being zero, the ledger exists.
 6. **Fleets and saving** (V1–V5, H3) — the fleet exists, so the save can exist, and the failed save is
