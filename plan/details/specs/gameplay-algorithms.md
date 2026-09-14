@@ -34,7 +34,7 @@ line is the list of host answers it needs.
 | G5 | [N1](#n1-probe-sizing) [N2](#n2-target-lifecycle) | Probe enough to reveal, escalate when it does not, and let stale targets die | planned |
 | G6, S4 | [T1](#t1-the-profit-test-as-an-audit-trail) [T2](#t2-the-estimator) [T3](#t3-the-bashing-limit) | Loot − deuterium − expected losses must clear a tail threshold | planned |
 | G7 | [CL1](#cl1--slot-choice) [CL2](#cl2--the-colony-is-another-mine) | Choose the slot by the host's own position bonuses; treat the colony as a mine | planned |
-| G10, G11 | [H1](#h1-the-active-hours-constraint) [H2](#h2-session-shape) [H3](#h3-absence) | A real dark period under the host's own detector threshold, heavy-tailed sessions, planned absences | **H1, H2 shipped**; H3 planned |
+| G10, G11 | [H1](#h1-the-active-hours-constraint) [H2](#h2-session-shape) [H3](#h3-absence) | A real dark period under the host's own detector threshold, heavy-tailed sessions, planned absences | **shipped** |
 | G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | planned |
 | G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | planned |
 | G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | scope decision first |
@@ -785,6 +785,8 @@ keeps the boundary from being a square wave.
 
 ### H3 — Absence
 
+**Shipped 14 September 2026** in `SessionPlanner`, with H1 and H2.
+
 **Gaps:** G11 · **Host:** the inactivity thresholds (`isInactive()` = 7 days, `isLongInactive()` = 28
 days, both computed from the last-activity stamp) and the vacation rules (48-hour minimum, and nothing
 can be in flight).
@@ -800,6 +802,24 @@ never:       more than ~28 days without a decision, because that is where neighb
 the storage trigger ([E3](#e3-storage--the-fill-time-trigger)) and the reservation ([SP5](#sp5--reservation-before-spending)).
 Vacation mode is *not* a cover for an absence: it freezes production and is visible, so an account that
 plans to play does not enter it.
+
+**As built.** An absence is decided where the account decides whether to come back at all: once per
+waking day, as the night ends, one draw picks between coming back, a single day away, a three-to-seven-day
+gap, or a week or more. The plan states its bands per month, quarter and year, so they arrive as per-day
+rates — 8% of nights for the single day, 1.4% for the multi-day gap, 0.27% for the week — and nothing is
+drawn above ten days, well inside the four weeks that writes an account off. Vacation mode is not used,
+for the reason above.
+
+**Measured, five years of one account** (`RoutineCadenceTest`): **106 single days, 1.8 a month** against
+the band's 1–3; five or more three-to-seven-day gaps; at least one gap of a week or more; **no two-day
+gap at all**, because the bands have none; longest absence ten days against the ceiling of twenty-eight.
+
+**The absence lives in the schedule, not in a second model.** `AiSchedule::next_due_at` already holds the
+return, so the save duration, the storage trigger and the reservation read the account's own plan instead
+of a parallel record of it that can drift from the schedule.
+
+**What is deliberately not here.** Absences are not planned in advance and are not visible as intent: an
+account does not announce a holiday, it simply is not there, which is what a player sees.
 
 ### H4 — The activity marker is a side effect, never a ping
 
@@ -1025,7 +1045,7 @@ with its acceptance evidence recorded.
    recall ownership check, expedition hold bounds. Module-side, these replace `AiBuildingMachineName`.
 3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
    single authenticity gain, because the host's own detector gives the acceptance test.
-   **H1, H2 and H6 shipped**; H3, H4, L2 and L3 remain.
+   **H1, H2, H3 and H6 shipped**; H4, L2 and L3 remain.
 4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
 5. **Units and cargos** (U1, U2, U4, A1, A2(reg)) — military points stop being zero, the ledger exists.
 6. **Fleets and saving** (V1–V5, H3) — the fleet exists, so the save can exist, and the failed save is

@@ -41,6 +41,25 @@ class SessionPlanner
     /** Keeps the drawn unit away from zero, where its logarithm diverges. */
     private const MINIMUM_UNIT = 1.0E-9;
 
+    /*
+     * Absences (H3). The plan states the bands per month, per quarter and per
+     * year, so they arrive here as per-day rates: one to three single days a
+     * month is about two days in thirty, one three-to-seven-day gap a quarter is
+     * one night in ninety, and one gap of a week or more a year is one in three
+     * hundred and sixty-five. Nothing reaches four weeks, which is where
+     * neighbours write an account off.
+     */
+    private const YEARLY_ABSENCE_RATE = 0.0027;
+
+    private const QUARTERLY_ABSENCE_RATE = 0.0137;
+
+    private const MONTHLY_ABSENCE_RATE = 0.0807;
+
+    /** Days added to the three-day gap and to the week-long one. */
+    private const MID_ABSENCE_SPREAD_DAYS = 3;
+
+    private const LONG_ABSENCE_SPREAD_DAYS = 3;
+
     public function __construct(private RandomSource $randomSource)
     {
     }
@@ -63,12 +82,15 @@ class SessionPlanner
         $wait = min($this->wait($profile, $waitBase, 'wait:' . $generation), $wakingMinutes);
         $candidate = $sessionEndsAt->addMinutes($wait);
         [$wake, $bed] = $this->wakingWindow($profile, $candidate);
+        $nextDueAt = $candidate;
+
         // The account looks in again when it wakes up, so the wait that ran into
         // the dark period is spent: reusing it would skip the day it just woke
         // into, and an absence nobody planned reads as an abandoned account.
-        $nextDueAt = $candidate->lessThan($wake)
-            ? $this->firstSessionOf($wake, $bed, min($this->wait($profile, $waitBase, 'wake:' . $generation), $step))
-            : $candidate;
+        if ($candidate->lessThan($wake)) {
+            [$wake, $bed] = $this->wakingAfterAbsence($profile, $wake);
+            $nextDueAt = $this->firstSessionOf($wake, $bed, min($this->wait($profile, $waitBase, 'wake:' . $generation), $step));
+        }
 
         return app()->makeWith(SessionPlan::class, [
             'sessionEndsAt' => $sessionEndsAt,
@@ -118,6 +140,36 @@ class SessionPlanner
         $start = $wake->addMinutes($wait);
 
         return $start->lessThan($bed) ? $start : $bed->subMinute();
+    }
+
+    /**
+     * The day the account comes back to, which is not always the next one.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    private function wakingAfterAbsence(AiProfile $profile, CarbonImmutable $wake): array
+    {
+        return $this->wakingWindow($profile, $wake->addDays($this->absenceDays($profile, $wake)));
+    }
+
+    /**
+     * How many waking days the account is away for, decided once a night.
+     *
+     * A night away is a person's ordinary absence; a few days away is a trip;
+     * a week or more is the holiday that also sets the host's inactive marker,
+     * which humans do set.
+     */
+    private function absenceDays(AiProfile $profile, CarbonImmutable $day): int
+    {
+        $date = $day->toDateString();
+        $unit = $this->randomSource->unitInterval($profile->random_seed, 'routine:absence:' . $date);
+
+        return match (true) {
+            $unit < self::YEARLY_ABSENCE_RATE => 7 + $this->scaled($profile, 'routine:away-long:' . $date, self::LONG_ABSENCE_SPREAD_DAYS),
+            $unit < self::QUARTERLY_ABSENCE_RATE => 3 + $this->scaled($profile, 'routine:away-mid:' . $date, self::MID_ABSENCE_SPREAD_DAYS),
+            $unit < self::MONTHLY_ABSENCE_RATE => 1,
+            default => 0,
+        };
     }
 
     private function coreWakeMinute(AiProfile $profile): int

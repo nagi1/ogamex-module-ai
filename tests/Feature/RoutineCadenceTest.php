@@ -24,6 +24,16 @@ const AI_CADENCE_TIMEZONE = 'Europe/Berlin';
 
 const AI_CADENCE_DAYS = 21;
 
+/** Four weeks is where neighbours write an account off (H3). */
+const AI_CADENCE_MAXIMUM_ABSENCE_DAYS = 28;
+
+/**
+ * Absences are yearly phenomena, so a single account-year can hold none: the
+ * bands are rates over a population, and five years of one account is the
+ * shortest run in which every band is expected to appear.
+ */
+const AI_CADENCE_ABSENCE_DAYS = 1825;
+
 test('a persona never reaches the hours the host flags', function (AiArchetype $archetype) {
     $windows = aiCadenceWindows($archetype);
     $hours = aiCadenceWindowHours($windows);
@@ -53,6 +63,22 @@ test('a fleeter looks in more often than a casual player', function () {
     expect(aiCadenceAverage($fleeter))->toBeGreaterThan(aiCadenceAverage($casual) * 1.5);
 });
 
+test('the account is away the way a person is away', function () {
+    $days = aiCadenceDailyOccurrences(aiCadenceWindows(AiArchetype::Miner, AI_CADENCE_ABSENCE_DAYS));
+    $absences = aiCadenceAbsences($days);
+    $single = array_count_values($absences)[1] ?? 0;
+
+    // H3's bands: one to three single days a month, one three-to-seven-day gap a
+    // quarter, one gap of a week or more a year, and nothing in between and
+    // nothing anywhere near the four weeks that writes an account off.
+    expect(max($absences))->toBeLessThanOrEqual(AI_CADENCE_MAXIMUM_ABSENCE_DAYS)
+        ->and($single / AI_CADENCE_ABSENCE_DAYS)->toBeGreaterThanOrEqual(1 / 30)
+        ->and($single / AI_CADENCE_ABSENCE_DAYS)->toBeLessThanOrEqual(3 / 30)
+        ->and(aiCadenceAbsencesBetween($absences, 3, 7))->toBeGreaterThanOrEqual(5)
+        ->and(aiCadenceAbsencesBetween($absences, 7, 365))->toBeGreaterThanOrEqual(1)
+        ->and(aiCadenceAbsencesBetween($absences, 2, 2))->toBe(0);
+});
+
 test('session length is heavy-tailed, not a constant', function () {
     $lengths = aiCadenceSessionMinutes(aiCadenceWindows(AiArchetype::Miner));
     sort($lengths);
@@ -66,12 +92,12 @@ test('session length is heavy-tailed, not a constant', function () {
 });
 
 /** @return array<int, array{0: CarbonImmutable, 1: CarbonImmutable}> */
-function aiCadenceWindows(AiArchetype $archetype): array
+function aiCadenceWindows(AiArchetype $archetype, int $days = AI_CADENCE_DAYS): array
 {
     $profile = aiCadenceProfile($archetype);
     $planner = app(SessionPlanner::class);
     $start = CarbonImmutable::create(2026, 9, 1, 0, 0, 0, 'UTC');
-    $end = $start->addDays(AI_CADENCE_DAYS);
+    $end = $start->addDays($days);
     // The session starts when the previous plan said it would, which is exactly
     // the chain the schedule runs in production.
     $now = $planner->plan($profile, $start, 1)->nextDueAt;
@@ -216,6 +242,39 @@ function aiCadenceDatesWithoutDarkPeriod(array $windows): array
 function aiCadenceSessionMinutes(array $windows): array
 {
     return array_map(static fn (array $window): int => (int) $window[0]->diffInMinutes($window[1]), $windows);
+}
+
+/**
+ * The runs of days the account was away for, one entry per run.
+ *
+ * A run is the number of local days between two days that have a session, so a
+ * single absent day is one entry of one day.
+ *
+ * @param array<string, int> $occurrences
+ * @return array<int, int>
+ */
+function aiCadenceAbsences(array $occurrences): array
+{
+    $dates = array_map(
+        static fn (string $date): CarbonImmutable => CarbonImmutable::parse($date, AI_CADENCE_TIMEZONE)->startOfDay(),
+        array_keys($occurrences),
+    );
+    $absences = [];
+    for ($index = 1; $index < count($dates); $index++) {
+        $away = (int) $dates[$index - 1]->diffInDays($dates[$index]) - 1;
+        if ($away === 0) {
+            continue;
+        }
+        $absences[] = $away;
+    }
+
+    return $absences;
+}
+
+/** @param array<int, int> $absences */
+function aiCadenceAbsencesBetween(array $absences, int $fewest, int $most): int
+{
+    return count(array_filter($absences, static fn (int $days): bool => $days >= $fewest && $days <= $most));
 }
 
 function aiCadenceAverage(array $values): float
