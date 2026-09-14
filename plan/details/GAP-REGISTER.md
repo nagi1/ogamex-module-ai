@@ -32,7 +32,7 @@ audit of one is not an audit:
 
 | # | Gap | Signal it breaks | Evidence | Established | Closing it needs |
 | --- | --- | --- | --- | --- | --- |
-| G1 | **No enabler buildings.** The buildable set is four requirement-free buildings, so a research lab or shipyard can never be built. | 1, 3, 5, 6, 9, 10 | Player 29129 owns no buildings and no research; `robot_factory` (14) and `research_lab` (31) have no host requirements and `shipyard` (21) needs `robot_factory` 2 | measured + code-read | Widen the target set to the enablers, and choose among targets the host already accepts |
+| G1 | **No enabler buildings.** The buildable set is four requirement-free buildings, so a research lab or shipyard can never be built. | 1, 3, 5, 6, 9, 10 | Player 29129 owns no buildings and no research; `robot_factory` (14) and `research_lab` (31) have no host requirements and `shipyard` (21) needs `robot_factory` 2 | measured + code-read | **Closed 14 September 2026, slice 3N.** Nothing names a facility. `FacilityChain` takes the ambitions from the host catalogue (`getResearchObjects()`, `getUnitObjects()`), their requirements from the host's own graph (`getRecursiveRequirements()`) and their kinds from the host's object types, and orders the steps by the level the host asks for. `QueueableBuildingPlanner` walks those steps before the persona's ranking and returns the first target the host accepts, so a refused favourite falls through instead of costing the account its whole build capability. Measured: a seeded account reaches `research_lab` 1, `robot_factory` 2 and `shipyard` 1, and then returns to its own taste. The first attempt was rejected by gate 1 — it declared the three facilities in an enum, so a mod-added facility would have been invisible to it — and the enum was deleted rather than kept |
 | G2 | **No research.** No executor; the research capability is unpublished. | 3 | No research queue path in the module | code-read | A research executor |
 | G3 | **No units.** No executor, so no ships and no defence, ever. | 1, 3, 6, 9 | No unit queue path in the module | code-read | A units executor |
 | G4 | **No fleets, so no fleetsave.** Nothing can be saved because nothing exists to save. | 1 | No dispatch path in the module | code-read | A dispatch executor |
@@ -92,6 +92,9 @@ failures is what stops the nineteenth:
 
 ## Rules that follow
 
+- **The three cognition gates are the acceptance criteria these rules come from**: no static hardcoded
+  AI, relatively simple, and what a good professional OGame player does. See
+  [`specs/cognition-gates.md`](specs/cognition-gates.md).
 - **A capability set is complete against a goal, never against a list.**
 - **A slice that adds abilities must show the account reaching the next stage of the chain**, not
   merely performing one action.
@@ -101,6 +104,8 @@ failures is what stops the nineteenth:
   a slice closes, and treat an empty list as the evidence that a package is complete.
 - **Authenticity has four surfaces — what the account does, what it looks like, how the population
   looks in aggregate, and how it fails — and auditing one is not auditing the others.**
+- **A gate must not depend on what else is running.** A measurement that can change because a live
+  pilot wrote a row is not evidence about the code, whether it goes red or green.
 
 ## Waves 3–5 — the axes that had not been examined
 
@@ -139,6 +144,7 @@ logs has never been checked against that claim.
 | O3 | **No lifecycle for an empty account.** A player with no planets makes the planner return null, so the account goes silently idle forever instead of being disabled. Nothing handles a destroyed planet, an abandoned account or a deleted one. | `ownedState()` and the planner return null rather than reporting a state | inferred | Explicit account states, and a decision about what each one means for scheduling |
 | O4 | **"Bounded" is claimed in the plan and enforced only for stop counters.** The counters really are bounded per reason and day; work items, traces, observations and receipts are not bounded by anything. | `budgets.md` and the decision record describe bounded bookkeeping | code-read | Either bound the other tables or correct the claim |
 | O5 | **Nothing alerts.** A population that goes quiet is visible only to whoever reads the pilot report. | no alerting path in the module | code-read | Optional, and an operator decision rather than a defect |
+| O6 | **The serial gate shared a database with the running application**, so an account finishing a building in that database could fail a test that counts rows: a red gate with no code change behind it, and a green one that was green only because nothing else happened to be running. | Measured 14 September 2026: `coverage` failed in `CommittedChatObservationTest` with "2 records were found" while the pilot's nine committed observations sat in `ogamex-test`; the same run passed with the pilot stopped, and passed again with the pilot running once the gate owned a database. | measured | **Closed 14 September 2026.** `scripts/ogamex coverage` creates and migrates `ogamex-test-ai-coverage` (`AI_COVERAGE_DATABASE`) and runs the serial gate there, so the gate no longer depends on what else is running |
 
 Recorded as **not** gaps, with evidence, so the register shows what passed: retry behaviour (`tries` 3,
 `maxExceptions` 3), lease reclaim after a killed worker, the per-player lock, the fail-closed HTTP
@@ -165,5 +171,11 @@ boundary, and provider failure falling back to authored text.
 
 ## Sequencing
 
-G1 is the prerequisite for G2–G7, G13–G17. G8, G10 and G11 are independent mechanisms and do not wait
-on the chain. G12 is independent of the chain but needs a social policy decision first.
+G1 is the prerequisite for G2–G7, G13–G17, and it is closed as of slice 3N: the account can now
+reach the facilities those capabilities need, so the remaining work is the executors themselves.
+G8, G10 and G11 are independent mechanisms and do not wait on the chain. G12 is independent of the
+chain but needs a social policy decision first. O6 was found while closing G1 and is closed with it;
+it is kept in the register because the failure mode — a gate that measures the environment instead
+of the code — is the one to look for again. The three cognition gates recorded on 14 September 2026
+([`specs/cognition-gates.md`](specs/cognition-gates.md)) are what changed G1's first implementation:
+it worked, and it failed gate 1, so it was replaced rather than shipped.

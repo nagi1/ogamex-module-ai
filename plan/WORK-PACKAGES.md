@@ -81,7 +81,10 @@ closed** — not merely implemented, run and signed. Those are three different s
 is sufficient on its own. This is the checklist that separates them; every **open** item blocks
 Package 5. Completeness is audited against the goal rather than against this list alone: the
 [gap register](details/GAP-REGISTER.md) holds the eighteen gaps that audit found, and an empty
-register is the evidence that Packages 1–4 are actually finished.
+register is the evidence that Packages 1–4 are actually finished. Every item is also checked against
+the three [cognition gates](details/specs/cognition-gates.md) — no static hardcoded AI, relatively
+simple, and what a good professional OGame player does — because an item can satisfy its own wording
+and still fail the game.
 
 | # | Item | Package | Status |
 | --- | --- | --- | --- |
@@ -92,7 +95,7 @@ register is the evidence that Packages 1–4 are actually finished.
 | 5 | Two acceptance wordings met only with narrower evidence: replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick to measure | 4 | **Open** — either close them or record the owner's acceptance that they are permanently narrower |
 | 6 | The owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md) | 4 | **Open** — the 10-account pilot report is reviewable now that its evidence includes real queued buildings |
 | 7 | Executor coverage for what the decision engine can select: `build` executes, while `save_resources`, `research`, `queue_units`, `spy`, `colonize`, `fleet_save` and `raid` remain traceable intents with no executor | 2/3 | **Approved to complete** by owner decision of 14 September 2026 — each selection either gains a host-executed intent or stays unpublished. **One enabler was measured while starting it and needs approval (see 8)** |
-| 8 | The building chain the executors depend on: the target set must include `robot_factory`, `research_lab` and `shipyard`, and the chooser must pick among targets the host already accepts rather than the best target overall | 2/3 | **Awaiting approval** — measured 14 September 2026: a seeded account owns no buildings and no research, so without this every fleet, unit and research capability is permanently unavailable on that account |
+| 8 | The building chain the executors depend on: the planner must reach the facilities the later capabilities are gated behind, and must pick among targets the host already accepts rather than the best target overall | 2/3 | **Implemented (14 September 2026)** — measured: a seeded account owns no buildings and no research, so without this every fleet, unit and research capability stays permanently unavailable on that account. `FacilityChain` derives the steps from the host catalogue rather than naming them (gate 1), and `QueueableBuildingPlanner` walks those steps plus the persona ranking until the host accepts one, so a refused favourite no longer costs the account its whole build capability. Covered by `BuildingChainReachabilityTest`, whose expectations are computed from the same catalogue |
 
 Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for all three drivers.
 

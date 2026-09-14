@@ -23,6 +23,7 @@ Phase 3 adds source-backed facts, claims, relationships, commitments and affect,
 
 ## Decisions already made
 
+- **The three cognition gates are non-negotiable, and they outrank every other decision on this page.** (1) **No static, hardcoded AI** — the object universe, its kinds, prices and requirements are read from the host at planning time, because mods, modules and future extensions add buildings, ships, defence, technologies and premium officers; an object id, machine name or requirement may not be a source of truth in module code or config, and adding an object to the host must make it usable with no module edit. (2) **Relatively simple, never over-engineered** — the smallest mechanism that closes the gap, and a slice deletes what it makes dead. (3) **What a good professional OGame player does** — fifteen years of ordinary play is the reference, not an efficient game of our own, and every mechanism must be nameable as something an experienced player does. Gate 3 decides what the account does, gate 1 decides how it is derived, gate 2 decides how much machinery is allowed in between. Full statement: [cognition gates](details/specs/cognition-gates.md).
 - Use the existing OGameX Next module system. AI behavior stays in the AI module.
 - The game remains responsible for rules, costs and execution. Add small shared extension points where the module needs them.
 - Ordinary gameplay and game-event memory use algorithms and database records, with **zero language-model tokens**.

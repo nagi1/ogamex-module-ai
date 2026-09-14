@@ -2,6 +2,31 @@
 
 Use this as the base operating contract for all work in `Modules/AI`.
 
+## The three gates — non-negotiable
+
+Every AI slice is checked against these before it is accepted. They are design constraints, not
+preferences. The full statement, including what each gate forbids and how a reviewer checks it, is in
+`plan/details/specs/cognition-gates.md`.
+
+- **Gate 1 — no static, hardcoded AI.** Mods, modules and future extensions add buildings, ships,
+  defence, technologies and premium officers, so the object universe, its kinds, prices and
+  requirements are read from the host at planning time and are never encoded as a source of truth in
+  module code or config. Adding an object to the host must make it usable by the existing module code
+  with no module edit. Module policy may express *taste* over host data; it must never be the reason a
+  capability is reachable or unreachable.
+- **Gate 2 — relatively simple, never over-engineered.** Take the smallest mechanism that closes the
+  gap: one class, one loop, one sort key. No abstraction with a single implementation, no config for a
+  value that never varies, no optimisation without a measurement, no layer that only forwards, and no
+  design that needs a paragraph to justify each of its parts. Delete what a slice makes dead.
+- **Gate 3 — what a good professional OGame player does.** Fifteen years of ordinary play is the
+  reference behaviour, not an efficient game of our own: the opening economy and the facilities that
+  unlock the rest, prerequisites before the thing they unlock, the easiest unlock before the largest
+  one reachable, mining while short, and a fleet save that can also fail. Every mechanism must be
+  nameable as something an experienced player does; if it cannot be named, it is not ready.
+
+When they conflict: gate 3 decides what the account does, gate 1 decides how it is derived, and gate 2
+decides how much machinery is allowed in between.
+
 ## Outcome
 
 Write clean, maintainable, production-ready code. Keep changes module-first: reuse existing OGameX extension points and do not move AI policy, persistence, or orchestration into the host.

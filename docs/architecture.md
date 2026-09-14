@@ -17,6 +17,24 @@ not deduct resources, create queues, or reproduce game rules itself.
 
 ## Implementation conventions
 
+### Cognition gates
+
+Three gates constrain every AI slice, and they outrank style preferences:
+
+1. **No static, hardcoded AI.** Objects, their kinds, prices and requirements are read from the host
+   at planning time. Mods, modules and future extensions add buildings, ships, defence, technologies
+   and premium officers, and the AI must be able to act on one it has never seen without a module
+   edit. No object id, machine name or requirement is a source of truth in module code or config.
+2. **Relatively simple, never over-engineered.** The smallest mechanism that closes the gap; no
+   abstraction with a single implementation and no unmeasured optimisation.
+3. **What a good professional OGame player does.** Ordinary play from fifteen years of OGame is the
+   reference, not an efficient game of our own. Every mechanism must be nameable as something an
+   experienced player does.
+
+`plan/details/specs/cognition-gates.md` states each gate in full. `AGENTS.md` states the short form,
+and [`../plan/details/GAP-REGISTER.md`](../plan/details/GAP-REGISTER.md) is the audit that produced
+them.
+
 ### Nagi agent baseline
 
 [`AGENTS.md`](../AGENTS.md) is the module's persistent Codex agent definition
