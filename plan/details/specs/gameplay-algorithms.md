@@ -38,7 +38,7 @@ line is the list of host answers it needs.
 | G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | planned |
 | G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | planned |
 | G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | scope decision first |
-| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **L2, H6 shipped**; L1 planned |
+| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **L1, L2, H6 shipped** |
 | I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | planned |
 | A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | planned |
 
@@ -865,6 +865,8 @@ is O3/L2's problem, where account states are named.
 
 ### L1 — Retention
 
+**Shipped 14 September 2026** in `PruneAiRecordsAction` and the nightly `ai:prune`.
+
 **Gaps:** O1, O4 · **Host:** the host prunes only inbox messages and chat messages (7 days) and has a
 weekly debris reset; **nothing** prunes `espionage_reports`, queues, traces or work items.
 
@@ -874,6 +876,25 @@ reports whatever the persona's intel age allows (nothing longer than the host's 
 sealed replies at 30 days, memory fact validity handled by the `expires_at` filter that already exists.
 Sizing is by rows-per-account-per-day measured in the pilot, not by a guess (the pilot already showed
 76 work items, 48 traces and 18 receipts in about seven hours for eleven accounts — **measured**).
+
+**As built.** One command, one nightly entry, and one sweep per table, over a single
+model-to-window map: work items and receipts at ninety days, traces, observations and sealed replies at
+thirty. The window is checked against `created_at` rather than `expires_at`, because every one of those
+rows already carries its own `expires_at` for *validity* — a trace stops being evidence after thirty
+days — and a validity filter keeps a row out of every query while leaving it on disk for good.
+
+**What is not pruned, on purpose.** The account's memory: relationships, commitments, memory facts,
+emotional episodes, social exchanges and experience cases. Facts keep the `expires_at` filter the plan
+assigns them; the rest are what the account knows rather than what it logged. Usage reservations,
+language requests and the score samples AG2 records are also left alone, and **that is the correction
+[O4](GAP-REGISTER.md) asked for**: the claim is no longer "bookkeeping is bounded" but "these five
+tables are bounded by time, and these others are bounded by nothing yet".
+
+**Sized from the pilot, and stated as a steady state.** The pilot's 76 work items, 48 traces and 18
+receipts in seven hours for eleven accounts are about one work item, two thirds of a trace and a
+quarter of a receipt per account per hour. At the ninety- and thirty-day windows that is a steady state
+of roughly **2,100 work items, 500 receipts and 450 traces per account**, and a nightly sweep that is
+one indexed delete per table rather than a job per row.
 
 ### L2 — Account states
 
@@ -907,6 +928,12 @@ the account went quiet.
 The plan claims "bounded" bookkeeping; only the stop counters are actually bounded. Either the other
 tables get a bound or the claim is corrected; the register records this as open, and the honest reading
 is that [L1](#l1-retention) is the bound.
+
+**Closed 14 September 2026 by [L1](#l1-retention), in the form the sentence above already chose: the
+claim was corrected.** Work items, receipts, traces, observations and sealed replies are now bounded by
+time, and nothing claims the rest are — usage reservations, language requests and the score samples
+AG2 records stay unbounded until a measurement says otherwise, which is a smaller and truer statement
+than "bookkeeping is bounded".
 
 ### L4 — Alerting is optional and an operator decision
 
@@ -1061,7 +1088,7 @@ with its acceptance evidence recorded.
    recall ownership check, expedition hold bounds. Module-side, these replace `AiBuildingMachineName`.
 3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
    single authenticity gain, because the host's own detector gives the acceptance test.
-   **H1, H2, H3, H6 and L2 shipped**; H4 and L3 remain.
+   **H1, H2, H3, H6, L2 and L3 shipped**; H4 remains.
 4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
 5. **Units and cargos** (U1, U2, U4, A1, A2(reg)) — military points stop being zero, the ledger exists.
 6. **Fleets and saving** (V1–V5, H3) — the fleet exists, so the save can exist, and the failed save is

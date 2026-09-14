@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\ExplainAiDecision;
+use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
@@ -71,6 +72,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
     protected array $commands = [
         ExplainAiDecision::class,
+        PruneAiRecords::class,
         ReconcileLanguageRequests::class,
         ReplayAiScenario::class,
         ReportAiPilot::class,
@@ -107,6 +109,10 @@ class AIServiceProvider extends ModuleServiceProvider
     {
         $schedule->command('ai:run-due-work')->everyMinute()->withoutOverlapping(5);
         $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
+        // Retention is enforced on a quiet hour rather than at the moment a row
+        // expires: a nightly sweep is one delete per table instead of a job per
+        // row, and the windows are measured in days.
+        $schedule->command('ai:prune')->dailyAt('03:30')->withoutOverlapping(30);
     }
 
     public function register(): void
