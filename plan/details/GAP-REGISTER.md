@@ -39,7 +39,7 @@ audit of one is not an audit:
 | G5 | **No probes.** Nothing scouts, and no target intel is published. | 5, 10 | No spy executor; `ownedState()` never publishes target reports | code-read | A spy executor plus legal target selection |
 | G6 | **No raids.** `Raid` candidates are built only from published target reports, which ordinary play never publishes, so a raid cannot even be chosen. | 4, 5, 6, 10 | `CandidateActionFactory` builds raid candidates from `targetReports`; `ownedState()` publishes none | code-read | A raid executor plus legal target intel |
 | G7 | **No colonies.** The account stays on its starting planets forever. | 3, 4 | No colonise path in the module | code-read | A colonise executor |
-| G8 | **The account cannot notice being probed or attacked.** The only observations are chat, alliance membership, battle reports and building completion; nothing observes incoming fleets. | **1 — the highest-ranked signal, and the only one a player can *test*** | `app/Observers/` holds those four and no fleet observer; only Install/Uninstall hooks exist | code-read | An observation of own incoming fleets plus a reaction path. The host already has `IncomingFleetIntelService`, so the data exists |
+| G8 | **The account cannot notice being probed or attacked.** The only observations are chat, alliance membership, battle reports and building completion; nothing observes incoming fleets. | **1 — the highest-ranked signal, and the only one a player can *test*** | `app/Observers/` holds those four and no fleet observer; only Install/Uninstall hooks exist | code-read | An observation of own incoming fleets plus a reaction path. **Corrected 14 September 2026:** `IncomingFleetIntelService` is a *redactor*, not an intel API — it reports no origin, ETA or composition — so the inbound picture is assembled from the active fleet missions, as the fleet controller does. See [the capability map](research/host-capability-map.md) |
 | G9 | **No save ever fails.** A 100% save rate over months is itself the outlier, and with no fleet there is nothing to fail. | 1, 6 | Follows from G4 and G8 | inferred | Same as G4 and G8, plus deliberate imperfect judgement |
 | G10 | **No sleep window and no diurnal shape.** The account is active at every hour of every day. | **2** | `AiProfileSettings` exposes only `timezone`, `session_minutes`, `session_gap_minutes`; `SessionPlanner::plan()` takes no active-hours input | code-read | An active-hours model the planner honours |
 | G11 | **Never absent.** Nothing models a day off or a multi-day gap, and the plan asks for "genuine week-to-week irregularity". | 2 | No absence modelling anywhere in the routine domain | code-read | Irregularity design, including absence |
@@ -95,6 +95,11 @@ failures is what stops the nineteenth:
 - **The three cognition gates are the acceptance criteria these rules come from**: no static hardcoded
   AI, relatively simple, and what a good professional OGame player does. See
   [`specs/cognition-gates.md`](specs/cognition-gates.md).
+- **Every open gap has a named algorithm, a set of host inputs and an acceptance test.** That is
+  [`specs/gameplay-algorithms.md`](specs/gameplay-algorithms.md), written on 14 September 2026 after the
+  deep source pass; its [gap index](specs/gameplay-algorithms.md#gap--algorithm-index) is the entry point
+  when closing anything on this page, and its corrections section records where this register had to be
+  amended.
 - **A capability set is complete against a goal, never against a list.**
 - **A slice that adds abilities must show the account reaching the next stage of the chain**, not
   merely performing one action.
@@ -167,7 +172,7 @@ boundary, and provider failure falling back to authored text.
 | A2 | **Military points are pinned at zero and the ranking is public.** | follows from G3 | inferred | Units |
 | A3 | **Rank trajectory has never been measured**, and a population that grows in lockstep would climb in lockstep. | nothing measures it | measured | Record entry rank, slope and spread when the runs happen |
 | A4 | **The claim in signal 8 is unsupported as written.** It requires a cadence "indistinguishable from a human opening pages"; the module makes no HTTP requests at all, because its work is scheduled and server-side. Zero footprint may well be better than a fabricated one, but the requirement and the design disagree. | module makes no page requests; signal 8 as written | code-read | An owner decision: keep zero footprint and correct the requirement, or design a page-like cadence |
-| A5 | **Last-activity is never written by the module.** Nothing in `app/` touches `users.time`, so an account can act without its last-seen moving, and when it does move the cadence is incidental rather than designed. | grep for `users` writes finds none | code-read | Decide whether activity stamps belong to the design |
+| A5 | **Last-activity is written accidentally, not by design.** ~~Nothing in `app/` touches `users.time`~~ — **corrected 14 September 2026:** `PlayerGameStateService::advance()` stamps `users.time` and `last_ip` from the ambient request, and the module already calls it from `QueueAiBuildingAction`, so the account does act while its last-seen moves, with a queue-context address. The register's original claim was true of direct writes and false transitively. | host source read 14 September 2026; the building action already calls `advance()` | measured (host) | Make it a deliberate decision: accept the stamp and shape it like the routine, or bypass it and accept that `isInactive`, the deletion scheduler and the galaxy marker stop reflecting the account ([A3](specs/gameplay-algorithms.md#ag3--request-and-activity-footprint)) |
 
 ## Sequencing
 

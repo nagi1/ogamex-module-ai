@@ -1,0 +1,1044 @@
+# The gameplay algorithms — execution strategy
+
+Written 14 September 2026, after a deep source pass over the public automation corpus, the published
+guides and the OGameX host code itself. It is the **execution strategy**: for every gap in the
+[register](../GAP-REGISTER.md), the concrete algorithm that closes it, its inputs, its constants and
+where those constants come from, how it fails, and what evidence accepts it.
+
+[`decision-policies.md`](decision-policies.md) remains the normative description of *what* the module
+decides. This file is the *how*: it names each rule, its arithmetic and its provenance. Where the two
+differ, this file is the later reading and says so in [Corrections](#corrections-to-earlier-docs).
+
+The three [cognition gates](cognition-gates.md) are the acceptance criteria for every block below, not
+a preamble: gate 1 means the object universe is read, never written, gate 2 means the smallest
+mechanism is chosen and measured before it is optimised, gate 3 means the mechanism is namable as
+ordinary experienced play.
+
+Provenance markers used throughout: **host** (verified in OGameX source), **verified** (read in a
+project's source), **documented** (guide, wiki or official rules), **contested** (sources disagree),
+**placeholder** (no source exists and the number must come from our own telemetry), **synthesis** (our
+combination of the above, stated as such).
+
+## Gap → algorithm index
+
+Use this when closing a gap: the section named here is the algorithm, and the section's *Host inputs*
+line is the list of host answers it needs.
+
+| Gap | Algorithm | Mechanism in one line | Status |
+| --- | --- | --- | --- |
+| A2, A4, B3, C2, C5 (gate audit) | [E1](#e1-payback-ordering--the-next-mine) [E3](#e3-storage--the-fill-time-trigger) | Order the economy by production added over weighted price paid; storage by time-to-fill against time-to-spend | planned (3P) |
+| C1 | [Y1](#y1-the-energy-interlock) | Capacity before the level that would outdraw the planet (shipped) | **shipped** |
+| G2 | [R1](#r1-the-research-hurdle) [R2](#r2-capability-research) | Research only when it out-pays the last purchase, and only when it unlocks something | planned |
+| G3, A2, G15 | [U1](#u1-role-derivation--what-units-are-for) [U2](#u2-cargo-sizing) [U3](#u3-defence--unprofitability-not-ratios) | Roles from host unit properties; cargo sized from host capacity; defence only when attacked | planned |
+| G4, G8, G9 | [V1](#v1-the-save-state-machine) [V2](#v2-the-reaction-window) [V3](#v3-the-save-that-fails) | Save to a duration derived from the absence, react inside a window, and let one fail | planned |
+| G5 | [N1](#n1-probe-sizing) [N2](#n2-target-lifecycle) | Probe enough to reveal, escalate when it does not, and let stale targets die | planned |
+| G6, S4 | [T1](#t1-the-profit-test-as-an-audit-trail) [T2](#t2-the-estimator) [T3](#t3-the-bashing-limit) | Loot − deuterium − expected losses must clear a tail threshold | planned |
+| G7 | [CL1](#cl1--slot-choice) [CL2](#cl2--the-colony-is-another-mine) | Choose the slot by the host's own position bonuses; treat the colony as a mine | planned |
+| G10, G11 | [H1](#h1-the-active-hours-constraint) [H2](#h2-session-shape) [H3](#h3-absence) | A real dark period under the host's own detector threshold, heavy-tailed sessions, planned absences | planned |
+| G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | planned |
+| G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | planned |
+| G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | scope decision first |
+| O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | planned |
+| I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | planned |
+| A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | planned |
+
+## How to read an algorithm block
+
+```
+Gaps:      which register entries it closes
+Host:      the host answers it reads (see ../research/host-capability-map.md for the exact methods)
+Rule:      the algorithm, with real constants
+Constants: where each number comes from — persona policy, published play, or the host
+Gate:      why it is not a hardcoded AI, not over-engineered, and namable as play
+Evidence:  what backs it
+Accept:    the observation that proves it works
+```
+
+---
+
+## Shared spine
+
+These six mechanisms are used by everything below; they are written once so no later block restates
+them.
+
+### SP1 — One bounded candidate set per decision
+
+Every decision builds a small list of legal candidates from **host-quoted** facts (price, build time,
+production, requirement graph, unit properties, mission catalogue, queue and slot state), scores them,
+and takes one. There is no search over subsets, no planner and no solver: the corpus converged on
+lists and ratios, the [techniques note](decision-techniques.md) measured the alternatives as worse,
+and gate 2 forbids the machinery.
+
+### SP2 — The score is normalised against the account, not against absolute numbers
+
+`utility = goal progress + discounted economic gain + expected profit + information value + schedule fit
+− loss risk − fuel and recycler cost − queue and slot opportunity − exposure − broken commitment −
+attention cost`, with every term expressed per account-day (a million resources is a different decision
+for a three-week account than for a two-year one). This is the shape the plan already commits to.
+
+### SP3 — Wake at the next material event, never on a fixed period
+
+**Verified** in three independent projects and it is the single most valuable scheduling idea in the
+corpus: compute the next moment at which something could change and sleep until then.
+
+```
+next_wake = min over open work of:
+    resource_eta(cheapest ambition)         # missing resources / production per second
+    building_finish, research_finish        # the queue countdown
+    fleet_arrival, fleet_return             # including an inbound attack's real ETA
+    slot_free, storage_threshold, session_window_start
+plus a heavy-tailed jitter
+```
+
+PHPOgameBot computes exactly `max(now, resource_eta, build_slot_free, fleet_slot_free, ship_return)`
+(**verified**); TBot computes `min(production_time, transport_arrival, returning_expedition) + jitter(SomeSeconds)`
+(**verified**); Cruiser pushes an absolute wake at `hostile_arrival − randint(120, 180)` s
+(**verified**). The three agree, so this is not taste — it is the mechanism. The jitter must be
+heavy-tailed, not uniform: see [H2](#h2-session-shape) and the traps in [H5](#h5-what-makes-a-schedule-look-worse).
+
+### SP4 — One mutating action at a time per contended resource
+
+A planet has one building slot, a player has one research slot and a bounded number of fleet slots.
+The corpus's cleanest expression is PHPOgameBot's dependency typing: pending work is grouped by the
+thing it contends for and one head per group runs (**verified**) — but its `break` on failure is a
+defect we do not copy, because one unaffordable entry freezes its whole group. Our form: skip an
+unaffordable candidate rather than blocking on it, and keep the account's own queue-occupancy guard
+(*trilogi77* backs a live "is something building" flag with a cached finish time so a stale read cannot
+double-enqueue — **verified**, and it is the only project that defends against that).
+
+### SP5 — Reservation before spending
+
+A build that consumes the last resources will prevent the next save, the next commitment and the next
+research step. Reserve first: a per-resource floor that survives the purchase, reduced by the
+production expected to arrive during the wait, so "saving deuterium for a drive" does not freeze the
+surplus metal and crystal (*trilogi77*'s `savings_reserve` — **verified**, and the most elegant
+mechanism in the corpus). `keep_resources_buffer 0.10`, `max_saving_hours_economy 4.0`,
+`max_saving_hours_research 6.0` are its published defaults.
+
+### SP6 — Record the decision, its rejected candidates and the next due event
+
+Already module policy. What the corpus adds: the record must name the **estimator version** and the
+**observation age** (see [T2](#t2-the-estimator)), so a calibration pass can tell a policy change from
+an input change.
+
+---
+
+## Economy
+
+### E1 — Payback ordering — the next mine
+
+**Gaps:** A2, A4, B3, C2 (gate audit) · **Host:** the objects the host reports as producing resources
+(`getGameObjectsWithProduction()`), each one's price for the next level, its build time, and its raw
+production at `level` and `level + 1` (the raw form matters: the host scales production by the planet's
+current energy factor unless asked otherwise — **host**).
+
+```
+for each production object the building queue accepts:
+    cost  = host price(next level) in the accepted trade band
+    gain  = host raw production(level + 1) − raw production(level), per hour
+    score = gain / cost
+take the best affordable; stop when the best payback exceeds the persona's horizon
+```
+
+**Constants.** The trade band is published play: `M + 1.5 C + 2 D` (halfguru — **verified**), and the
+guides' `3:2:1` and `2:1:1` are the same idea in words (**documented**). The stop rule is published
+play too: a horizon of 2–3 real days at any speed (**documented**), expressed as an adaptive cap by
+*trilogi77*: `threshold = min(168 h, 24 h × (1 + average mine level / 20))` (**verified**). The
+per-account spread comes from the persona's skill band and the seeded variation, which already exist.
+
+**Gate.** Candidate list and every number come from the host (gate 1); it is one sort key, and it
+deletes `FirstBuildingTarget`, `BuildingScoringPolicy`, both of its implementations and
+`AiProfileSettings::BUILDING_WEIGHTS` (gate 2); and it is the rule veterans state in their own words,
+"prioritize mines with lowest amortization first" (**documented**), which gate 3 asks for.
+
+**Evidence.** Regression: the opening a fresh funded account produces must be the published opening
+(solar plant first, metal ahead of crystal, crystal ahead of deuterium) without any of those names
+appearing in module code.
+
+**Accept.** Two accounts with different skill bands produce different-but-defensible orders from the
+same host data, and adding an object to the host makes it a candidate with no module edit.
+
+### E2 — Queue occupancy: honest about what is not proven
+
+**Gaps:** C2, B3 (gate audit) · **Host:** build time for the next level (the host quotes it; the queue-occupancy
+guard reads the live queue).
+
+**Finding.** Not one of the eleven surveyed projects discounts payback by the queue time a build
+occupies. Five read the queue, but only as a boolean "is something building" guard; *halfguru* computes
+the construction time and never feeds it back into its ordering key (**verified**). So
+"return per hour of queue" would be a mechanism with no precedent, which is exactly what gate 2 asks
+us to justify rather than assume.
+
+**Rule.** Payback orders the candidates. Queue time is used twice and only twice: as the **tie-break**
+between candidates whose paybacks are within the persona's switch margin, and as an **input to the next
+wake time** (a 6-hour upgrade is a reason to sleep, not a reason to reject a good upgrade). A long build
+must never be chosen while a short one with a better hourly return is available *only* when the persona
+is about to be absent for less than the long build's duration.
+
+**Gate.** It is the smallest form that keeps the account from starting a six-hour upgrade twenty minutes
+before it wants to spend; adding a per-hour discount would be an unmeasured optimisation.
+
+**Accept.** A measured comparison in the pilot: payback order versus payback × queue-hour, same seed,
+same account, four weeks. Until that exists, the tie-break stands and the metric is not claimed.
+
+### E3 — Storage — the fill-time trigger
+
+**Gaps:** C5 (gate audit) · **Host:** current storage capacity per resource, current stored amount, the object
+enumeration that reports storage (`getBuildingObjectsWithStorage()` — note it excludes stations, so a
+mod-added station with storage is invisible; recorded as a host obligation).
+
+**Rule.**
+
+```
+for each resource:
+    remaining = capacity − stored
+    fill_time = remaining / max(production_per_hour, ε)
+    if fill_time < time_until_next_planned_spend (or the persona's absence length):
+        queue the storage object that raises that resource's capacity, cheapest first
+```
+
+**Constants.** The guides state the trigger in words — storage "should hold at least 24–48 hours of mine
+production", and "always check your storage before logging off for a long period" (**documented**). The
+corpus implements it as a threshold, and disagrees on the number: 0.8 of capacity (halfguru), 0.9 with a
+0.5 floor below a minimum-capacity target (trilogi77), at-capacity (ogame-ninja) (**all verified**).
+Guide-based fill-time beats all three, and the numeric thresholds become persona flavour.
+
+**Gate.** Capacity and production are host answers; one comparison, no new layer; and it is the rule
+players state, not one we invented. Overflow is not cosmetic: above capacity the surplus is fully
+lootable (**documented**), so a full warehouse is a gift.
+
+**Accept.** A planet left alone with a filling warehouse queues storage before the projected overflow,
+and a planet with an empty warehouse does not.
+
+### E4 — Ferrying resources between own planets
+
+**Gaps:** G17, A1 · **Host:** `TransportMission` (own planets are legal), the fleet's total cargo
+capacity, the fleet-save margin, and the queue state of both planets.
+
+```
+need(resource) = max(target_level_cost(resource) − on_planet − in_flight_to_this_planet, 0)
+send only if need exceeds the persona's minimum shipment and the source keeps its S5 reserve
+```
+
+**Finding.** The cleanest formulation in the corpus nets off **in-flight** resources rather than
+on-hand alone (ogame-infinity: `need = max(target − onHand − inFlight, 0)`, with each mission deciding
+whether it debits the origin, credits the destination, or neither — **verified**). Without that netting,
+two shipments are dispatched for one hole. *r4fek* transports only when the empire total covers the
+cost and skips shipments below 50,000 combined metal and crystal (**verified**).
+
+**Gate.** It is what any player with two planets does; the numbers are persona policy; the capacity and
+fuel come from host quotes.
+
+**Accept.** Two queued transports cannot be sent to fund one building level.
+
+### E5 — The opening, and where taste is allowed
+
+The published opening is a step table, not a rule, and the sources diverge after roughly ten steps
+(**documented**, and *contested* — Sidian's research entry point differs from OGames'). The module keeps
+**no** step table. What it keeps is the payback rule (E1), the energy interlock (Y1) and a persona's
+**taste** expressed as a band: how long a payback the account will accept, how far behind the metal mine
+it lets the crystal mine fall, and how much crystal it is willing to hold. Published offsets exist
+(`crystal = metal − 3`, `deuterium = metal − 7` in pyogame; `−2 / −5` in r4fek — **both verified**) and
+they disagree, which is the point: offsets are preference, payback is not.
+
+---
+
+## Energy
+
+### Y1 — The energy interlock
+
+**Gaps:** C1 (gate audit) · **Host:** the planet's energy balance (a stored column needing a refresh call), the
+energy each object produces at the next level (raw, unscaled), and the object catalogue.
+
+```
+if the planet's energy balance is negative: build the cheapest capacity the host offers
+for each production object: if balance + gain(next level) < 0: build capacity first
+```
+
+**Shipped** as slice 3O. Deliberately *predictive*: the guides are split on purpose-built deficits
+(one guide prints "−6 but improvement, produce at 90%" as acceptable; the other says plan one or two mine
+levels ahead — **documented and contested**), and the module takes the planning form because an
+unrepaired deficit is the one thing ordinary play never looks like.
+
+**Accept.** A fresh funded account queues `energy:*` before the mine that would outdraw it, and a planet
+that covers its next upgrade never does.
+
+### Y2 — Fusion, satellites and where the sources give up
+
+Both alternatives are conditional and the conditions are the host's: fusion needs energy technology 3
+and a deuterium synthesizer 5 (**documented**, and the objects' own requirement graph already says so),
+and satellites are units — destructible, unrepairable, better on cold planets (**documented**). The
+switch point, by contrast, is *contested* in the strongest form: 16, 18, 20–26, "high twenties", 30 and
+32 all appear, each with a calculation attached. **Rule:** the switch is a persona band over the
+host-quoted cost of the next plant level against the host-quoted output of the satellites it would take
+to match it, and the module never asserts a canonical level. Fusion appears only when deuterium is a
+surplus, which is what the sources actually agree on.
+
+---
+
+## Research
+
+### R1 — The research hurdle
+
+**Gaps:** G2 · **Host:** the research queue (`ResearchQueueService::add`, with the affordability
+pre-check the service omits), the requirement graph (`objectRequirementsMetWithQueue`), prices, research
+time, and the last purchase's payback.
+
+**Finding.** TBot's rule is the best in the corpus and it is one comparison: a research is taken only
+when its payback beats the payback of the last mine actually started (`lastDOIR`), capped at the
+persona's horizon; otherwise the account keeps mining (**verified**). It is namable as play — "do not
+research what pays back slower than the mine you just built" — and it needs no per-object cap table,
+which is what the same project's 16 research names and 14 caps are.
+
+**Rule.**
+
+```
+hurdle = payback of the last economy purchase (14-day decay, so an old purchase stops gating)
+for each research the host says is available and affordable:
+    if payback(research) <= min(hurdle, persona horizon): queue the best
+otherwise: mine (E1)
+```
+
+**Gate.** One number carried forward; no cap table; the availability answer is the host's own graph.
+
+**Accept.** An account that just built a cheap mine does not immediately queue an expensive research,
+and an account whose last purchase is stale returns to mining.
+
+### R2 — Capability research
+
+**Gaps:** G2, G7, G3 · **Host:** the same requirement graph.
+
+**Rule.** A research with no income of its own scores through what it unlocks — the **capability** it
+makes reachable, priced by the cheapest object that capability then allows. This is what TBot does for
+astrophysics and, in a derived form, for drives and the research lab (**verified**), and it is what the
+guides describe for astrophysics, "treat them like they are mines — build whatever has the shortest
+return on investment" (**documented**). The mine-level↔astrophysics roadmap in the miner guide is a
+*relation between two things the host prices*, so it is a derived consequence, not a table.
+
+**Gate.** Nothing names astrophysics or a drive; the numbers come from the host graph, so a mod-added
+technology that unlocks something is scored the same way.
+
+**Accept.** A colony becomes reachable because the account computed it, not because a name is listed;
+and the same code scores a mod-added technology.
+
+### R3 — Saving for an expensive step
+
+**Gaps:** G2, SP5 · **Host:** resources, production, queue state.
+
+**Rule.** When the chosen step is unaffordable, the account does not idle: it continues cheaper work
+whose cost fits **outside** the reserved amount, and the reservation is reduced by the production
+expected during the wait (*trilogi77* — **verified**). The wake time is the resource ETA (S3), not a
+fixed poll.
+
+---
+
+## Units, defence and fleets
+
+### U1 — Role derivation — what units are for
+
+**Gaps:** G3, G4, G15, A2 · **Host:** unit objects with their properties (`capacity`, `fuel_capacity`,
+`speed`, `structural_integrity`, `shield`, `attack`, drive type and level), their requirement graph, and
+the unit queue (`UnitQueueService::add` — which **silently returns** when unaffordable, so the module
+must pre-check).
+
+**Rule.** A fleet is assembled from **roles**, and every role is computed from host properties, never
+from a ship name:
+
+```
+cargo        = the unit with the largest capacity per unit of resource cost that the account can build
+escort       = units whose attack-per-cost clears the observed defence (see T2)
+recycler      = the unit the host's recycle mission requires
+probe         = the unit the espionage mission requires
+colony ship   = the unit the colonisation mission requires
+```
+
+**Finding.** Published doctrine gives roles and quantities but no ratios — Gameforge's raider table is
+"Battleship 20–50+, Cruiser 10–30, Recycler 5–20, Large Cargo 10–30, Espionage Probe 10+", labelled
+"recommended quantity" (**documented**) — while the corpus's *counter map* (light fighter → cruiser,
+battleship → reaper, destroyer → deathstar) is a hardcoded table with 20% random mutation inside a
+genetic search (ogame-fleet-optimizer — **verified**). **The counter map is exactly what gate 1
+forbids**, so ranking comes from the host's own reported outcome or the host's rapid-fire data, and the
+initial composition is a role split, not a table.
+
+**Accept.** A mod-added ship with better capacity-per-cost becomes the cargo unit with no module edit.
+
+### U2 — Cargo sizing
+
+**Gaps:** G3, G6 · **Host:** `UnitCollection::getTotalCargoCapacity()`.
+
+```
+cargos = ceil(expected_payload / host_capacity(cargo unit)) × (1 + persona.cargo_surplus)
+```
+
+**Finding.** Every project sizes cargo from capacity rather than guessing, and halfguru's surplus of
+10% is representative (**verified**). TBot reserves a minimum fleet of cargos before raiding and a
+minimum free-slot count before launching (**verified**) — the "keep a fleet at home" habit.
+
+### U3 — Defence — unprofitability, not ratios
+
+**Gaps:** G3, A2 · **Host:** defence unit prices and properties, the unit queue, and the same
+observation path as raids.
+
+**Rule.** Defence exists to make an attack unprofitable, which is the doctrine verbatim — "the goal of
+defense is not to survive a battle with the attacker, but rather to inflict maximum possible damage,
+making the attack unprofitable" (**documented**) — and no source anywhere publishes a defence-to-value
+ratio (**finding**, after checking the defence tutorial, the miner guide and every other recovered
+page). So the module computes it: cost of defence ≈ the loss an attacker of the observed size would take
+(host-priced), bought when an attack of that value is plausible from legal observations, and never
+bought to match a number in a table. TBot builds anti-ballistic missiles only when a missile attack is
+actually incoming (**verified**) — the same trigger.
+
+### U4 — The fleet ledger
+
+**Gaps:** U1, G4, A4 (register) · **Host:** own fleets with their missions, cargo and ETAs.
+
+**Rule.** Own resources are always `on planet + in flight`, never just on planet; a ship under
+construction is not available; a fleet in flight is not a fleet at home. This is
+[E4](#e4-ferrying-resources-between-own-planets)'s netting applied to the whole account, and it is what
+prevents the two classic errors: raiding with the fleet that is already flying, and spending resources
+that a transport is about to deliver.
+
+---
+
+## Saving and reaction
+
+### V1 — The save state machine
+
+**Gaps:** G4, G9 · **Host:** the mission catalogue (`GameMissionFactory::getAllMissions()` — there is no
+mission enum, so a mod-added mission is reachable), fleet slots, fuel quote, distance and duration
+quotes, deployment's non-recallable self-relocation rule, and `cancelMission` (which has **no ownership
+check** — the module must do it).
+
+```
+on entering an absence of length T:
+    target_duration = max(T + persona.buffer, inbound_eta × 1.3 if a fleet is inbound)
+    enumerate legal own destinations × speed steps
+    discard: unaffordable fuel, no free slot, no cargo room for the resources we want to lift
+    rank by exposure (distance, planet-versus-moon, phalanx risk), then fuel
+    take the first route whose flight time covers target_duration
+    optionally schedule a recall at half the flight (see V3)
+```
+
+**Constants.** TBot's `minFlightTime = inbound arrival × 1.30 + jitter` for a defensive save and
+`wake − departure` for a sleep save, recall registered at **half** the required duration, and a
+deliberate deuterium leftover of 200,000 so the save does not look like an emptied account (**all
+verified**). The guides add the landing rule: "ALWAYS time your fleet to land AFTER you expect to be
+online", the "+30–60 minutes" buffer (Gameforge) and "10–20 minutes after you log in" (a single
+non-Gameforge source — **documented, single-source**), and the hard rule "never save to the same landing
+time every day" (**documented**). Cruise enumerates speed 1–10 as a first-class axis and subtracts fuel
+before loading cargo (**verified**), which is the difference between a save that flies and one that is
+refused at the pad.
+
+**Gate.** All destinations, costs and durations are host quotes; the ranking is a tuple, not a model;
+and it is exactly what a player does before logging off.
+
+**Accept.** No save is ever planned to land inside the sleep window; two consecutive saves to the same
+destination do not share a landing time.
+
+### V2 — The reaction window
+
+**Gaps:** G8, G9 · **Host:** own active fleet missions (origin, ETA, composition — assembled from
+`getActiveFleetMissionsForCurrentPlayer()` plus the unit collections, which is what the fleet controller
+does; `IncomingFleetIntelService` is a **redactor, not an intel API** and reports nothing), and the
+planet's last-update stamp.
+
+```
+if the earliest inbound fleet lands in more than the reaction window:
+    schedule a wake at (arrival − randint(min, max))
+if it already lands inside the window: do not attempt a doomed save; check after impact
+```
+
+**Constants.** `min = 120 s`, `max = 180 s` before impact (Cruiser — **verified**), with the host's own
+bot detector naming **10 seconds** as the floor below which a reaction is flagged as scripted
+(**host**). So the module's latency band is `> 10 s` and inside the window, right-skewed, never constant.
+
+**Finding.** No project models a reaction it *missed*; every one is best-effort with a generous window.
+That is the blindness [V3](#v3-the-save-that-fails) corrects.
+
+### V3 — The save that fails
+
+**Gaps:** G9 · **Host:** none beyond V1's — this is a persona parameter.
+
+**Finding, stated as a finding.** Not one of the eleven projects implements a deliberate failure, a
+save-success probability or a mistake rate; the only concession anywhere is halfguru skipping a speed it
+cannot fuel, and a reaction abandoned when the window is too small (**all verified**). No source
+quantifies how often real players fail either: the widely repeated "80% of fleets are lost while
+offline" has **no source at all** and must be deleted wherever it still appears. The named failure modes
+are documented and qualitative: the "just this once" overnight gamble, forgetting to relaunch after
+landing, saving to a planet instead of a moon, a predictable return time, landing with a full cargo
+(**documented**).
+
+**Rule.** One persona parameter set: a save-failure rate of `1 per 20–50 attempts` and one lost fleet
+per `1–3 months` (**placeholder**), realised as a small set of *named* ordinary mistakes — the overnight
+gamble, the forgotten relaunch, the same landing time twice. The realisation is a skip, not a coin flip
+on the whole path: the account must still take a legal action, and the loss must be recoverable through
+the ordinary recovery behaviour. This is the only mechanism in this file that deliberately reduces the
+account's performance, and it exists because a 100% save rate is the observable that would otherwise
+give the cohort away.
+
+**Accept.** Over a four-week pilot, at least one deliberate failure occurs per account, each one is
+named in the record, and every one is followed by the recovery path — with the loss visible in the
+public military-lost column, which is what a human account's history looks like.
+
+### V4 — Recall, and the return window
+
+**Rule.** A save may be recalled only if the return would land **inside the safe window** — otherwise
+the fleet comes home into the danger it was sent away from. Cruiser's implementation of this rule is
+documented as comparing a *remaining* return time but actually compares elapsed time (**verified
+discrepancy**), so we take the intent and not the code: the predicate is over `now + return_duration`
+against the window, derived from the persona's obligation bounds rather than from a second constant.
+
+### V5 — The save is a plan, and the plan is visible
+
+The save's duration comes from the same absence model the routine uses ([H3](#h3-absence)), so a
+planned week away produces a week-long save and a 40-minute gap produces a 45-minute one. The two
+mechanisms read one parameter, not two.
+
+---
+
+## Intelligence
+
+### N1 — Probe sizing
+
+**Gaps:** G5 · **Host:** the espionage mission, the observer's espionage technology, and the visibility
+thresholds the host enforces (`EspionageMission::canRevealData`: ships 2/1, defence 3/2, buildings 5/3,
+research 7/4, plus the quadratic gap when the defender is ahead).
+
+**Rule, in order of preference.**
+
+1. **Solve the host's own counter** for the probes that reveal ships and defence:
+   PHPOgameBot's closed form computes the minimum probes for a desired result set instead of sending a
+   fixed number (**verified**); the thresholds must come from the host's table, not from a copy.
+2. **Escalate** when the report is incomplete: TBot re-probes at ×3 then ×9 the original count and marks
+   the target unsuitable after that (**verified**). The escalation is cheapest-first and bounded.
+3. **Give up** on a target that still does not reveal, rather than paying forever.
+
+**Constants.** Published play is 5–10 probes (Sidian) and "10+" (Gameforge) — **documented and mildly
+contested** — so the count is a persona habit consistent with the host's requirement, not a constant in
+code.
+
+### N2 — Target lifecycle
+
+**Gaps:** G5, G6, S4 · **Host:** galaxy views, own reports (with their timestamps), the inactive and
+long-inactive flags, and the host's attack log for the bashing limit.
+
+**Finding.** TBot's target state machine is the most complete artefact in the corpus and it is directly
+reusable as a *shape*: states `Idle → ProbesPending → ProbesSent → AttackPending → AttackSent`, with
+`ProbesRequired` and `FailedProbesRequired` as escalation states and `NotSuitable` as the terminal one;
+dedupe by coordinates keeping the first; a report kept for `KeepReportFor 180` minutes; reports deleted
+after every pass; a loot floor (`MinimumResources 1,000,000`); `TargetsProbedBeforeAttack 30`; a maximum
+of 18 concurrent attack missions leaving one slot free; and a five-iteration retry loop for a slot
+(**all verified**, values from its shipped settings file). The state names are policy; the filter's
+"inactive and defenceless" becomes a **legal observation** in our module, never a column list (its
+seven defence plus fourteen ship columns are a gate-1 violation and are the reason its filter silently
+breaks when a ship is added — **verified**).
+
+**Constants to keep as persona bands, not constants:** report age before re-probing (180 min),
+blacklist duration after a bad outcome (7 days), maximum concurrent missions per cycle (3–8 in the
+corpus), minimum rank to attack (`MinimumPlayerRank 500` in TBot, 3,000 in ogame-ninja), minimum loot
+(50,000 in trilogi77, 1,000,000 in TBot — a 20× spread, which is exactly why it is persona policy).
+
+### N3 — Freshness, and refusing to guess
+
+Every fact carries `{source, observed_at, expires_at, confidence}`. Resources decay fast, coordinates and
+past losses slowly. A report that has aged past its persona band is **stale**, and a stale report may
+support a probe or a rejection but never an attack ([T2](#t2-the-estimator) lowers the claim instead of
+assuming). Unknown defence is never zero defence.
+
+---
+
+## Raiding and estimation
+
+### T1 — The profit test as an audit trail
+
+**Gaps:** G6, G9, S4 · **Host:** the observation's resource and defence fields, the fuel quote for the
+round trip, the fleet's cargo capacity, the host's debris percentage, recycler capacity, the 24-hour
+attack count for that planet, and free fleet slots.
+
+The publisher's formula is the audit trail, quoted rather than paraphrased: *"Profit = Loot − Deuterium
+consumption − expected ship losses"*, *"the stolen resources should be at least triple the deuterium
+consumption"*, *"expected ship losses may account for maximum 20–30% of the loot"*, *"a raid with a
+negative result is not a raid — it's a donation to the opponent"* (**documented**, Gameforge raider
+guide). Every term is a host quote or a sum of host quotes. Loot is the host's own plunder rule, 50% of
+stored resources (75% for one class) — **documented**; note the multi-wave "loot split" that our earlier
+draft described is **not** on any page and is retracted in
+[Corrections](#corrections-to-earlier-docs).
+
+### T2 — The estimator
+
+**Gaps:** G6 · **Host:** the battle engine (`BattleEngine::simulateBattle()`), the fuel quote, unit
+properties. The engine is authoritative and **not seedable**, and there is **no side-effect-free
+simulation entry point** — this is the single most load-bearing host fact in the whole design
+(**host**; see [the capability map](../research/host-capability-map.md)).
+
+**Findings that constrain the design.**
+
+* **Mean profit is dangerous, and there is a documented casualty.** TrashSim's own changelog adds
+  "subtract fuel costs from profit" and a bounce fix, and a player in the same thread reports "using this
+  sim saying profit 30kk in fact I lost 30kk" (**verified quotes**). A single mean that omitted one rule
+  produced a sign-flipped answer.
+* **Nobody models defender uncertainty.** Every surveyed simulator takes the defender as a point
+  estimate (**verified by inspection of each tool's inputs**), so treating the report as truth is the
+  industry default and is exactly what our intel ages are meant to correct.
+* **Common random numbers are the one methodological idea worth taking.** ogame-fleet-optimizer gives
+  every individual in a generation the **same seed** so that fitness differences come from composition
+  and not from luck, with a wall-clock deadline checked mid-evaluation and a screening-then-confirmation
+  ladder (10 → 50 → 100 sims, 200–1,000 to validate) (**verified**).
+* **Its hard constraint is wrong for us.** "-inf if win probability < 0.95" cannot be certified from 10
+  or 50 runs, and fires on noise (**verified** — the same source's own ladder is the contradiction).
+* **Expected-value engines exist** (opbe computes one deterministic expected-value pass in O(1); its own
+  README tells you to check accuracy against "3k" simulations) — **verified**, and not adopted: it is a
+  modelling choice, not a measurement of variance.
+* **Nobody prices fleet slots or warship payback.** Damage-per-cost as an ordering key is the only
+  cost-effectiveness metric with a source (**verified**).
+
+**Rule — the smallest bounded estimator.**
+
+```
+candidates:  the fleet we own + up to 4 variants that shift one role up or down          # no subset search
+states:      the observation, plus 2–5 plausible defender states built from it
+             (defence within the observed band; a fleet the report may have hidden)      # decayed by age
+seeds:       seed = hash(decision_key) + candidate_index * n + run_index                # CRN
+sampling:    n = 50 screening, shared seed stream across candidates;
+             n = 200 on the winner before committing
+deadline:    wall clock, checked between candidate batches; unevaluated candidates are dropped
+report:      losing_runs/n, P20 net profit, mean net profit, mean loss value, debris value,
+             loot value, fuel deuterium, observation age, 24-hour attack count, estimator version
+decision:    reject any candidate with any losing run at n = 50 unless the persona accepts risk;
+             order the survivors by P20 net profit
+```
+
+**Gate.** Bounded (gate 2): one loop, five candidates, two sample sizes, one deadline — not the genetic
+search the source uses. Host-quoted (gate 1): every money term is a host quote, and no ship name or
+counter table appears. Namable (gate 3): a player reads a simulator's win rate and worst case and then
+decides; "not losing is the first question" is how the sources put it themselves.
+
+**Accept.** Same seed and same snapshot produce a byte-stable decision; a candidate that wins 50/50 runs
+but loses 10% of its value in the worst decile is refused by a cautious persona and taken by an
+aggressive one.
+
+### T3 — The bashing limit
+
+**Gaps:** G6 · **Host:** the host's own attack records for the target body.
+
+The rule is quoted, not paraphrased: no more than **six attacks per planet or moon per 24 hours**,
+moon-destruction missions count, probe attacks and interplanetary missiles do not, and a fleet that was
+completely destroyed does not count either (**documented**, rules §4; the wiki adds per-universe variants
+for U30/35/40/42). **Rule:** the module reads the count from the host's own records rather than keeping a
+tally, because "destroyed fleets do not count" means a module-side counter would drift out of step with
+the rule that is actually enforced.
+
+### T4 — Debris and the second trip
+
+Debris is usually 30% of the destroyed ships' value, metal and crystal only; a recycler lifts 20,000
+units; a debris field of 100,000 gives a 1%-per-100,000 moon chance to a maximum of 20%; and probes sent
+on an attack mission create a small field deliberately (**documented**). It is **never** guaranteed
+income — someone else may collect it first (**documented**) — so it enters the estimator as a value
+discounted by the recycler's travel time and the account's own prior success at collecting, and the
+recycle mission is only queued when the field survives the trip estimate.
+
+### T5 — Report sharing
+
+Signal 5 counts shared reports as social evidence, and the module already has the delivery ledger.
+Sharing a report is the same authored, permission-checked path as any other social action
+([SOC1](#soc1--speaking-first)); it never carries an observation the sender could not legally make.
+
+---
+
+## Colonies
+
+### CL1 — Slot choice
+
+**Gaps:** G7 · **Host:** the colonisation mission, `canColonizePosition()` (with its astrophysics
+requirements per position), `getMaxPlanetAmount()`, and the per-position production bonuses the host
+publishes (`getProductionForPositionBonuses()`).
+
+**Finding.** The corpus's slot tables are hardcoded lists (`preferPositions [4..12]`, `maxColonies = 1 +
+Astrophysics` in halfguru; `[4,5,6,7,8]` scored by list index in the same author's colonizer — **verified**),
+and the guides are *contested* on what each slot is good for (crystal bonus "slots 1–5" versus "only 1–3";
+position 8 "the classic deuterium slot" versus "slot 12–15 for deut") — **documented and contested**. So
+the module ranks a **bounded** set of legal slots by the host's own published position bonus, weighted by
+the persona's preference for the resource it is short of, discounted by travel cost and by the risk of
+the region. There is no slot list in module code.
+
+**Accept.** A host that changes its position bonuses changes the preference with no module edit.
+
+### CL2 — The colony is another mine
+
+**Gaps:** G7, G16 · **Host:** the new planet's own production, cost and queue state.
+
+A colonisation is only worth it when the cheapest thing the colony could build out-pays the cheapest
+thing the empire could build at home — which is how the miner guide describes it ("treat them like they
+are mines … build whatever has the shortest return on investment") and how the memoir roadmap is
+*derived* rather than tabulated. The colony then runs [E1](#e1-payback-ordering--the-next-mine) with its
+own numbers.
+
+---
+
+## Routine, cadence and absence
+
+### H1 — The active-hours constraint
+
+**Gaps:** G10 · **Host:** the host's own detector (`ServerAdministrationController`, defaults
+`bot_detection_lookback_days = 7`) and the 15-minute per-planet activity marker.
+
+**This is a hard constraint, not a preference.** The host's signal 1 flags an account with **18 or more
+distinct hours-of-day containing a mission departure in a 7-day window**, plus **18+ missions per fleet
+slot per day** and a **50-mission floor**; signal 2 flags an expedition re-dispatched within **10 s** of
+its return, 5 or more times; signal 3 flags a fleet departing within **10 s** of an attack departing
+(**host**, verified in source with the defaults at their lines). So:
+
+```
+every rolling 7-day window must contain at most 17 distinct active hours
+every day must contain a dark period of at least 6 consecutive hours
+no reaction is faster than 10 s; no expedition re-dispatch is faster than ~60 s
+```
+
+**Finding.** The general literature agrees with the host's thresholds for the wrong reason and the right
+conclusion: bot detection in MMO traces keys on **periodic peaks** (a WoW bot's keystroke intervals spike
+at exactly 1 s and 5.5 s, its poll timers, while human intervals are Pareto-distributed — **measured**)
+and on inter-action interval *standard deviation* (97% accuracy on one day of data from frequency, mean
+ATI and ATI SD — **measured**). Constant or periodic work, whatever its mean, is the signature.
+
+**Accept.** Run the admin page's three signals against the cohort weekly; a flagged account is a failing
+test.
+
+### H2 — Session shape
+
+**Gaps:** G10 · **Host:** the schedule (`ai:run-due-work` every minute) and the session runner.
+
+```
+sessions per day:  casual 2–3, active 4–8, one hardcore persona 10–16    (analogue benchmark)
+session length:    heavy-tailed, median 4–8 min, p75 ≈ 15 min,
+                   plus one 45–90 min evening block, never constant      (measured analogue)
+window:            primary 18:00–23:00 local, secondary 12:00–14:00,
+                   sleep 01:00–08:00 local, weekend starts earlier, ends later
+```
+
+**Finding, and the reason the shape matters more than the numbers.** Human inter-event times are
+**heavy-tailed, not Poisson** — email inter-event times follow a power law with exponent ≈ 1
+(**measured**), and web dwell times fit a Weibull with shape `k < 1` on 98.5% of pages, per-category
+median ≈ 0.65–0.80 (**measured**). A uniform or exponential gap distribution is therefore wrong in
+principle: it has bounded support and no long tail. Draw session lengths and inter-action gaps from a
+log-normal or Weibull with `k ≈ 0.7–0.9`, and **derive the next wake from state (S3), not from the last
+wake**.
+
+### H3 — Absence
+
+**Gaps:** G11 · **Host:** the inactivity thresholds (`isInactive()` = 7 days, `isLongInactive()` = 28
+days, both computed from the last-activity stamp) and the vacation rules (48-hour minimum, and nothing
+can be in flight).
+
+```
+per month:   1–3 single-day gaps
+per quarter: one 3–7 day gap
+per year:    at least one gap of 7 days or more (this does set the inactive marker — humans do this)
+never:       more than ~28 days without a decision, because that is where neighbours write an account off
+```
+
+**Rule.** The absence model feeds the save duration ([V5](#v5-the-save-is-a-plan-and-the-plan-is-visible)),
+the storage trigger ([E3](#e3-storage--the-fill-time-trigger)) and the reservation ([SP5](#sp5--reservation-before-spending)).
+Vacation mode is *not* a cover for an absence: it freezes production and is visible, so an account that
+plans to play does not enter it.
+
+### H4 — The activity marker is a side effect, never a ping
+
+The 15-minute per-planet marker is refreshed by *any* planet-context request, including another
+player's probe on that body (**host**). **Rule:** the module never writes activity to make an account
+look alive; the marker moves because real work happened on that planet. A "keep-alive" ping is a tell,
+and the marker's own 15/60-minute thresholds make a uniform pattern readable at a glance.
+
+### H5 — What makes a schedule look worse
+
+1. **Jitter on a fixed base.** `sleep(base + rand(0, base/2))` — the pattern in several surveyed bots —
+   leaves a spectral peak at `base`, which is the Botcraft failure mode exactly.
+2. **Uniform jitter where humans are heavy-tailed.**
+3. **The same first action in the same order every session.** Sequence self-similarity is the largest
+   unclosed authenticity gap in the register (G14) and it will not be fixed by timing.
+4. **A crisp sleep window.** 01:00:00–08:00:00 every day is a square wave; bed and wake times drift, and
+   an occasional 03:00 login is *more* human, not less.
+5. **Answering everything.** A 100% reaction rate is the aggregate version of the fixed period, and the
+   host's own signal-3 threshold assumes humans miss things.
+6. **Concentrated departure hours**, which is precisely what the host's `active_hours` count aggregates.
+
+### H6 — Suspension gate
+
+**Gaps:** O2 · **Host:** `PlayerService::isBanned()` and `isInVacationMode()`; today only the building
+action asks, and the session path does not.
+
+**Rule.** A session asks both before it decides, and stops scheduling successors while it is suspended.
+This is the smallest possible gate — two host calls and an early return — and without it a banned
+account keeps deciding forever.
+
+---
+
+## Lifecycle and retention
+
+### L1 — Retention
+
+**Gaps:** O1, O4 · **Host:** the host prunes only inbox messages and chat messages (7 days) and has a
+weekly debris reset; **nothing** prunes `espionage_reports`, queues, traces or work items.
+
+**Rule.** One prune command, one schedule entry, and a declared retention per table sized for the
+2 vCPU / 2 GB profile: work items and receipts at 90 days, traces at 30 days, observations at 30 days,
+reports whatever the persona's intel age allows (nothing longer than the host's own message window),
+sealed replies at 30 days, memory fact validity handled by the `expires_at` filter that already exists.
+Sizing is by rows-per-account-per-day measured in the pilot, not by a guess (the pilot already showed
+76 work items, 48 traces and 18 receipts in about seven hours for eleven accounts — **measured**).
+
+### L2 — Account states
+
+**Gaps:** O3 · **Host:** planet enumeration, `isNewbie`/`isStrong`, the deletion scheduler.
+
+`active` / `suspended` (banned or vacation) / `empty` (no planets — a destroyed or never-provisioned
+account) / `final` (deleted or unreachable). `empty` is **not** "idle": it disables the account's
+scheduling and records the state, so an account with no planets does not sit in a loop deciding nothing.
+This is the change that turns a silent null return into a stated fact.
+
+### L3 — Budgets are enforced, not claimed
+
+**Gaps:** O4 · **Host:** none.
+
+The plan claims "bounded" bookkeeping; only the stop counters are actually bounded. Either the other
+tables get a bound or the claim is corrected; the register records this as open, and the honest reading
+is that [L1](#l1-retention) is the bound.
+
+### L4 — Alerting is optional and an operator decision
+
+**Gaps:** O5 · **Host:** none. A population that goes quiet is otherwise visible only in the pilot
+report. Recommend: one summary line per day in the existing report, no new subsystem.
+
+---
+
+## Identity at provisioning
+
+### P1 — Provisioning identity
+
+**Gaps:** I1–I8 · **Host:** the seeder, the users table, the naming surfaces.
+
+**Rule.** One provisioning path that produces per-account identity rather than cohort identity: a
+plausible unique address (no reserved TLD), per-account dark matter inside the persona's band, creation
+dates staggered across days rather than seconds, **uncorrelated** seeds (not `SEED_BASE + index`),
+planet and player names from a name pool assigned at provisioning with occasional renaming later, the
+`NAME_PREFIX` constant deleted or gated behind the test flag, and an explicit decision on `last_ip`
+(see [AG3](#ag3--request-and-activity-footprint)). The point is not cosmetic: a spy report on two identical
+planets is the view that reveals a cohort, and the register's wave-2 findings were all visible at rest.
+
+---
+
+## Social
+
+### SOC1 — Speaking first
+
+**Gaps:** G12 · **Host:** `ChatService::sendDirectMessage` (permission is only "not ignored"; the
+length, self-send and existence checks live in the controller), the authored-dialogue path, the delivery
+ledger.
+
+**Rule.** Initiation is rare, contextual and sourced: a report share after a raid, a thank-you after a
+received transport, a greeting to a neighbour who probed us, an alliance application. Every initiation
+goes through the same authored-dialogue-first path as a reply and carries the reason it was sent. The
+aggregate constraint matters more than any single message: the module's **social action entropy** must
+be spread over the kinds a human uses — measured bot-versus-human entropy in Aion was 0.43 versus 0.84
+over seven interaction types, with bot party degree 1.4 versus human 25.4 (**measured**) — and a
+"contact only when task-shaped" account has an entropy near zero.
+
+### SOC2 — Alliance life
+
+**Gaps:** G18, S1, S2 · **Host:** `AllianceService`, `AllianceApplication`, `ChatService::sendAllianceMessage`
+/ `getAllianceMessages`, and the existing membership observer.
+
+**Rule.** Apply (talking to a member first, as the alliance FAQ describes — **documented**), and then
+behave like a member: answer alliance chat, which the observer currently skips entirely, and act on
+committed alliance context. Entering an alliance while answering nobody is worse than never joining,
+which is why S1 and S2 are one algorithm and not two. The joining decision itself is a scope question
+for the owner, recorded in the register and not assumed here.
+
+### SOC3 — The social surfaces that are ignored today
+
+**Gaps:** S3 · **Host:** `BuddyService` (requests, ignored players), `NoteService`, the alliance
+application, and the Dark-Matter merchant.
+
+**Rule.** Decide per surface, then handle only the decided ones: an alliance application is worth
+answering, a buddy request is worth accepting from a contact who already exists, a note is private and
+needs no answer, and the merchant has no offers to answer. Silence on an invitation is a tell only if
+the account is otherwise social; the register's rule is to decide, not to instrument everything.
+
+### SOC4 — Delivery stays the host's
+
+Nothing here generates text on the ordinary path; the authored-dialogue library and the
+permission-checked delivery ledger already own this, and the plan's "provider off by default" decision
+is unchanged.
+
+---
+
+## Transports and trade
+
+### X1 — Transfers between own planets
+
+See [E4](#e4-ferrying-resources-between-own-planets); the same transport mission serves it, and the
+reservation in [SP5](#sp5--reservation-before-spending) is what keeps a transfer from starving the account.
+
+### X2 — Trade
+
+**Gaps:** G17 · **Host:** **there is no marketplace, no trade request and no resource exchange**
+(**host**, stated plainly). The only exchange in OGameX is the Dark-Matter merchant
+(`MerchantService::callMerchant()`, 3,500 dark matter) with its generated rates.
+
+**Consequences, stated as decisions.**
+
+1. "Trade" in this game is a **transport** at an agreed ratio, so the trader persona expresses itself
+   through transport volume and timing, not through a market.
+2. The rules constrain it: trades, recycling help and ACS splits must complete within **72 hours**, and
+   manipulation of trade ratios for a higher-ranked account is pushing and can be banned
+   (**documented**, rules §5). Note the honest limit: no page states an explicit legal ratio window
+   (e.g. "2:1:1 to 3:2:1"), so the module uses the accepted band as a *self-imposed* constraint and says
+   so.
+3. No dedicated trader playstyle source exists (**finding**), so the trader persona is module-defined
+   taste over transport behaviour and must not claim a source it does not have.
+
+---
+
+## Aggregate shape and footprint
+
+### AG1 — Per-account divergence
+
+**Gaps:** A1(reg), G13, G14 · **Host:** the persona seed and the host numbers.
+
+Two accounts on the same host data must not converge. The mechanisms that produce divergence are the
+skill band (E1's horizon), the risk band (T2's tolerance), the reaction band (V2), the cadence
+parameters (H2) and the opening taste (E5). This is why the persona work is not cosmetic: with one
+executable action every account queued the same thing (**measured, in the pilot**).
+
+### AG2 — The growth curve is ours to record
+
+**Gaps:** A2(reg), A3 · **Host:** `highscores` carries *current* points only — **there is no history
+table** (**host**), so "the public hourly growth curve" cannot be read from the schema.
+
+**Rule.** The module records its own hourly points series (economy, research, military built, military
+lost, general) per account from the host's score service, and the register's rank-trajectory question
+(entry rank, slope, spread; the coefficient of variation of daily growth) is answered from that series.
+Without it, signals 3 and 4 are unmeasurable, and "the plan audits a signal it cannot see" is exactly the
+failure the register's root causes name.
+
+### AG3 — Request and activity footprint
+
+**Gaps:** A4(reg), A5 · **Host:** `users.time` is written by `PlayerGameStateService::advance()`, which
+the module **already calls** — and it stamps `last_ip` from the ambient request context, which for a
+queue or CLI run is empty or loopback (**host**).
+
+**Correction to the register.** A5's claim that "nothing in `app/` touches `users.time`" is false
+transitively: the module's own action path already stamps last-activity. **Rule:** make it a decision.
+Either accept the stamp (in which case it must be *shaped* like H2's session model rather than
+incidental) or bypass it (in which case `isInactive`, the inactive-deletion scheduler and the galaxy
+marker all stop reflecting the account). The recommendation in this file is to accept it and derive it
+from the routine, because an account that acts while showing no activity is the anomaly.
+
+### AG4 — Footprint honesty
+
+**Gaps:** A4(reg) · The module makes no HTTP requests: its work is scheduled server-side. Either signal 8
+is corrected to "no fabricated page cadence; the observable footprint is the activity marker and the
+schedule", or a page-like cadence is designed. The evidence points at correcting the signal: the host's
+own detector reads *departures and hours*, not page loads (**host**), so a fabricated cadence would add
+risk without addressing a measured signal.
+
+---
+
+## Delivery order
+
+The order below is the gap register's sequence, with each step naming the algorithm sections it lands.
+Every step ships with the module gate green — Rector, Pint, PHPStan level 8, full Pest, 100% PCOV — and
+with its acceptance evidence recorded.
+
+1. **3P — economy by host numbers** (E1, E2, E3, E5). Deletes `FirstBuildingTarget`, the scoring-policy
+   layers and `BUILDING_WEIGHTS`.
+2. **Host obligations round 1** ([the capability map](../research/host-capability-map.md)): the
+   queue-upgrade predicate, vacation-mode on add, the recall ownership check, expedition hold bounds.
+   Module-side, these replace `AiBuildingMachineName`.
+3. **Routine and absence** (H1, H2, H3, H4, H6, L2, L3) — independent of the executors and the largest
+   single authenticity gain, because the host's own detector gives the acceptance test.
+4. **Research** (R1, R2, R3) — unlocks every later capability and needs no new host support.
+5. **Units and cargos** (U1, U2, U4, A1, A2(reg)) — military points stop being zero, the ledger exists.
+6. **Fleets and saving** (V1–V5, H3) — the fleet exists, so the save can exist, and the failed save is
+   finally expressible.
+7. **Intelligence** (N1–N3) — probes, target lifecycle, staleness.
+8. **Raiding and estimation** (T1–T5) — needs the host's battle entry point decision first; until a
+   read-only simulation path exists, raids remain recorded intents with a stated reason.
+9. **Colonies** (CL1, CL2) — astro-driven, one more mine.
+10. **Social** (SOC1–SOC4, X1, X2) — after there is something to talk about.
+11. **Identity** (P1) and **aggregate shape** (AG1–AG4) — provisioning and measurement.
+12. **Lifecycle** (L1, L4) with the pilot's measured volumes.
+
+## What we refuse to build
+
+Each refusal is a finding from this pass, not a preference.
+
+- **A combat implementation, in PHP or borrowed.** A Rust/WASM re-statement of OGameX's own formulas
+  exists publicly (**found**); writing its PHP twin would create a second authority that drifts from the
+  host, which is the duplication [AGENTS.md](../../../AGENTS.md) forbids.
+- **Fleet-composition search.** The one project that optimises compositions does it with a genetic
+  algorithm over a hardcoded universe and a hardcoded counter table (**verified**); our universe is
+  host-supplied and unbounded, so subset search is both a gate-1 violation and combinatorially
+  unbounded.
+- **A mean-profit simulator output.** Documented to invert a real decision by 60 M resources.
+- **A 0.95 win-probability constraint at n = 50.** Not measurable at that sample size; count losing runs.
+- **Uncapped simulation counts.** "Uncapped — it is your CPU" is the opposite of a 2 vCPU budget.
+- **A Bayesian defender model.** No surveyed tool does it and gate 3's answer is re-scouting.
+- **Porting opbe's expected-value engine.** It is a modelling choice, not a measurement, and its author
+  says to validate against thousands of runs.
+- **A fixed-tick scheduler.** It is the single best-validated signature of automation in the literature
+  and the first signal in the host's own detector.
+- **A keep-alive activity ping.** The marker is per body and is refreshed by real work; a ping makes a
+  uniform pattern (H4).
+- **An "80% of fleets are lost offline" statistic.** No source; delete it wherever it appears.
+- **Any object or requirement table, in any project's form.** Every project in the corpus with an
+  object universe has one, and it is the one thing the survey proves we must not do; the single exception
+  is a pure formula library whose costs are function parameters.
+
+## Corrections to earlier docs
+
+This pass verified earlier claims and found several that must be changed or retracted. They are listed
+here so the older notes can be trusted where they were right and not trusted where they were not.
+
+| Earlier claim | Verdict | Now |
+| --- | --- | --- |
+| "Compare return per hour of queue" as the economy's comparison | **Unproven.** No project in the corpus computes it; five read the queue only as a boolean guard | [E2](#e2-queue-occupancy-honest-about-what-is-not-proven): tie-break, and a measured comparison before it is claimed |
+| The raid "loot split" as a multi-wave fraction | **Not on any page.** Only "50% of stored resources, 75% for one class" | Retracted in [T1](#t1-the-profit-test-as-an-audit-trail) |
+| "An explicit legal trade ratio band" | **Not stated.** §5 bans ratio manipulation, an explicit window is nowhere | [X2](#x2--trade): self-imposed band, labelled as ours |
+| "Defence-to-value ratio" targets | **No source** | [U3](#u3-defence--unprofitability-not-ratios): computed from the observed attacker |
+| A single solar-plant-to-satellite switch point | **Contested**: 16, 18, 20–26, "high twenties", 30, 32 | [Y2](#y2-fusion-satellites-and-where-the-sources-give-up): a persona band, never a constant |
+| Storage "protects" resources | **Three incompatible statements** (50% lootable / 10% of daily production / warehouses immune) | [E3](#e3-storage--the-fill-time-trigger): the actionable half — above capacity is fully lootable |
+| "Return 10–20 minutes after waking" | Single non-Gameforge source; Gameforge says +30–60 min | [V1](#v1-the-save-state-machine): cited as one source among three |
+| `ogame.fandom.com` pages as citations | **Unreachable** (302 to an ad server) | Cite `?action=raw` or replace with Sidian/the EN board |
+| `board.origin.ogame.gameforge.com` tutorials (06, 08, 09, 10, 12, 13, 15, Guide 06, Guide 10, Tactic 05a) | **Dead board**; only Tutorials 01–04 were recovered on the archived EN board | Cite the recovered URLs only |
+| Register A5: "nothing touches `users.time`" | **False transitively** — `PlayerGameStateService::advance()` stamps it, and the module calls it | [AG3](#ag3--request-and-activity-footprint) |
+| "No fleet observer, and the host data exists" (G8) | **Partly wrong**: `IncomingFleetIntelService` is a redactor, not an intel API | [V2](#v2-the-reaction-window), [capability map](../research/host-capability-map.md) |
+| Storage enumeration covers all storage objects | `getBuildingObjectsWithStorage()` excludes stations | Recorded as a host obligation |
+| "Bots have no failure model" | **Confirmed**, and no source quantifies human failure either | [V3](#v3-the-save-that-fails) keeps the placeholder honest |
+
+## Sources
+
+Algorithms and constants: [what automation tools already solved](../research/ogame-automation-algorithms.md)
+(eleven projects, with the per-project file paths); [experienced-player strategy and deterministic
+simulation](../research/strategy-simulation-and-bot-patterns.md); [how experienced players actually
+play](../research/veteran-play.md); [which decision technique to use](decision-techniques.md);
+[the host capability map](../research/host-capability-map.md).
+
+Published play: Gameforge's [raider guide](https://gameforge.com/en-GB/games/ogame-raider-guide.html),
+[fleetsave guide](https://gameforge.com/en-GB/games/ogame-fleetsave.html) and
+[happy hour](https://gameforge.com/en-GB/games/ogame-happy-hour.html); the
+[official rules](https://en.ogame.gameforge.com/ajax/main/rules) (§4 bashing, §5 pushing and the 72-hour
+rule, §6 scripts); the
+[miner guide](https://board.en.ogame.gameforge.com/index.php?thread/821043-updated-the-ultimate-miner-guide-v-2/);
+the [ratios thread](https://board.en.ogame.gameforge.com/index.php?thread/715961-metal-crystal-mine-ratios/);
+[OGames payback](https://ogames.net/blog/ogame-mine-ratios-payback-times) and
+[energy](https://ogames.net/blog/ogame-energy-management-guide); Sidian's
+[getting started](https://sidian.app/s/ogame-wiki/guides/getting-started),
+[farming](https://sidian.app/s/ogame-wiki/guides/farming) and
+[fleet saving](https://sidian.app/s/ogame-wiki/guides/fleet-saving); the archived EN board
+[Tutorial 01](https://board.en.ogame.gameforge.com/index.php?thread/813416-tutorial-01-basic-economy/).
+
+Timing research: Kang & Kim 2022, *Quick and easy game bot detection based on action time interval
+estimation*, ETRI J. 45(4); Gianvecchio et al., *Battle of Botcraft*, CCS'09; Barabási, *The origin of
+bursts and heavy tails in human dynamics*, Nature 435 (2005); Liu, White & Dumais, *Understanding web
+browsing behaviours through Weibull analysis of dwell time*, SIGIR'10; Kang et al., SpringerPlus 5:523
+(2016) and the Aion dataset.

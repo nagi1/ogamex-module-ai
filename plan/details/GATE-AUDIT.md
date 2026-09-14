@@ -78,17 +78,53 @@ Four research notes were taken after this audit, and they changed three disposit
 Two corrections to this audit came out of it:
 
 - **C2 is no longer only "arbitrary" — the replacement is specified.** Order the economy by the
-  production a level adds against the weighted price it costs, and compare **return per hour of queue**
-  when two candidates are close, because a long build occupies the only slot the account has.
+  production a level adds against the weighted price it costs. A **second, deeper source pass corrected
+  the second half of this sentence**: the first version said to compare "return per hour of queue" when
+  two candidates are close, and no project in the corpus computes that metric — the one that computes a
+  construction time never feeds it back into its ordering key. It is now a tie-break, and the comparison
+  that would justify promoting it is recorded in
+  [`specs/gameplay-algorithms.md`](specs/gameplay-algorithms.md#e2-queue-occupancy-honest-about-what-is-not-proven).
 - **C5 (storage) is promoted from "deliberate for now" to planned**, since the sources agree on the
   trigger: upgrade storage when the time to fill the remaining capacity is shorter than the time until
   the next planned spend.
 
+## What the second research round settled
+
+A deeper pass on 14 September 2026 re-read sixteen automation projects at source level, re-fetched every
+guide link and surveyed the host itself. It changed four things in this audit and produced two new
+documents — [`specs/gameplay-algorithms.md`](specs/gameplay-algorithms.md), which is now the execution
+strategy for every open finding, and
+[`research/host-capability-map.md`](research/host-capability-map.md), the host survey behind it. What it
+changed here:
+
+- **A3 and B2 are now a two-part host obligation.** The queue rule is not the only thing the module
+  restates: vacation mode blocks queue *additions* in the controllers only, the fleet-recall ownership
+  check lives in the fleet controller, and the expedition holding-hours and fleet-speed bounds are
+  controller-only too. The capability map lists all ten, and the module's `AiBuildingMachineName` argument
+  now sits inside a general pattern rather than being a lone exception.
+- **A new, harder gate-3 constraint was found that this audit had not considered**: the host's own admin
+  detector flags an account with 18 or more distinct active hours in a 7-day window, a sub-10-second
+  reaction to an attack, or an expedition re-dispatched within 10 seconds. That is a measurable
+  acceptance test for C1's neighbourhood — the routine — and it is what G10 and G11 are now built
+  against ([H1](specs/gameplay-algorithms.md#h1--the-active-hours-constraint)). It also means the audit's
+  C-series had no entry for the *shape of the day*, which is now recorded rather than assumed.
+- **The raid finding gains teeth.** The literature and the tools agree that a mean is not an answer (a
+  documented 60 M inversion), that nobody models defender uncertainty, and that the host's battle entry
+  point is neither seedable nor side-effect free — so the estimator's parameters are fixed in the
+  algorithms spec and the "leave raids recorded" disposition stands until the host changes.
+- **The "one measurement the environment can change" rule paid off again.** Every claim in the new
+  research documents was re-fetched rather than trusted, and seven earlier claims had to be retracted or
+  corrected, including two in this audit's own supporting notes. The retractions are listed in
+  [`research/veteran-play.md` §11](research/veteran-play.md#11-verification-status) and in the corrections
+  section of the algorithms spec.
+
 ## Order of work
 
 1. **Slice 3O — energy becomes a rule (C1, B1).** The dead `energy_blocker` feature is deleted, and a planet that cannot cover its consumption wants capacity before anything else, derived from the host's own production numbers and ordered by price. That is the first thing a player fixes and the last thing this module knew about.
-2. **Slice 3P — economy by host numbers (A2, A4, B3, C2, C5).** The economy candidates come from the host catalogue, the order comes from the production a level adds against the weighted price it costs (and against the queue hours it occupies), the persona keeps its identity through the seeded variation and skill band that already exist, and storage joins the same ranking with the fill-time trigger the guides describe.
-3. **Host obligation — the queue rule predicate (A3, B2, C3).** The host owns the rule that a shipyard or nanite factory may not be upgraded while units are being built; it should publish it as a service-level answer so the module can ask instead of naming objects. The module keeps its check until then.
+2. **Slice 3P — economy by host numbers (A2, A4, B3, C2, C5).** The economy candidates come from the host catalogue, the order comes from the production a level adds against the weighted price it costs, the queue time is a tie-break rather than an assumed discount, the persona keeps its identity through the seeded variation and skill band that already exist, and storage joins the same ranking with the fill-time trigger the guides describe. The algorithm, its constants and its acceptance evidence are in [`specs/gameplay-algorithms.md` E1–E3](specs/gameplay-algorithms.md#economy).
+3. **Host obligations — ten rules that live only in controllers (A3, B2, C3 and seven more).** The queue-upgrade predicate is the one this audit found; the capability map found nine others, including vacation mode blocking queue *additions*, the recall ownership check, and the expedition and fleet-speed bounds. The module keeps its restatement of the queue rule until the host publishes a predicate.
+
+**The full sequence after 3P is set out in [`specs/gameplay-algorithms.md`](specs/gameplay-algorithms.md#delivery-order)**: routine and absence first (the host's own detector is the acceptance test), then research, units, saving, intelligence, raiding, colonies, social, identity and lifecycle — each step naming the algorithm sections it lands and the register gaps it closes.
 
 Each slice lands with the module gate green — Rector, Pint, PHPStan level 8, the full Pest suite and
 100% PCOV coverage — and this file is updated as findings close. A host obligation is not closed by a

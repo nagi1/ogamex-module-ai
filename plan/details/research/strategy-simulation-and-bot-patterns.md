@@ -60,6 +60,16 @@ GOAP framework or a behaviour-tree library:
 * A pure forward forecaster provides event timing and resource/slot consequences;
   it never competes with core production or combat truth.
 
+**Reconciliation after the deeper pass.** Read the paragraph above as a description of *information and
+goals*, not as new machinery to build. The host survey found that every input these names describe is
+already available from host services — prices, raw production, requirement-with-queue, storage capacity,
+position bonuses, fleet fuel/distance/duration/slots — so `GameConfigSnapshot`, `StrategicState` and
+`IntelBelief` are *views* the perception layer already assembles, not three new classes, and
+`ProtectAssets` / `GrowCapability` / `ExploitIntel` are goal labels over the existing candidate set rather
+than an HTN planner. Gate 2 forbids the alternative: a second data model beside `PerceptionSnapshot`, or a
+planner over it, would be two authorities for the same facts. The concrete algorithms are in
+[the gameplay algorithms](../specs/gameplay-algorithms.md).
+
 ### Inputs and candidate previews
 
 `GameConfigSnapshot` is a versioned, host-published view of object descriptors,
@@ -115,6 +125,16 @@ A conservative raid threshold can be:
 
 `P20(loot + recoverable debris - combat loss) - fuel - recycler cost - fleet-slot/time cost - risk premium > profile threshold`.
 
+The estimator behind that threshold is deliberately bounded, and the second pass fixed its parameters
+rather than leaving them to taste: at most **five** candidates (the fleet the account owns plus a few role
+variants), **n = 50** simulations for screening with **one shared seed stream** so a difference is the
+candidate's rather than the sampler's, **n = 200** on the winner before committing, a **wall-clock deadline
+checked between candidate batches**, and a reported pair — the count of losing runs and a lower-quantile net
+profit — rather than a mean. A single mean is not an acceptable output: the corpus contains a documented
+case where a mean-profit reading inverted a 60 M decision. Note also that the seed is never the engine's
+real seed: a simulated battle only estimates uncertainty, and the host's engine remains the authority
+([T2](../specs/gameplay-algorithms.md#t2-the-estimator)).
+
 The offline simulator takes a snapshot and emits hypothetical events; it has no
 database, network or executor. Use a min-heap key `(at, eventTypePriority,
 sequence)` so replay is deterministic. Advance known production analytically,
@@ -129,12 +149,14 @@ never share across actors or hidden observations.
 Do not copy client login, scraping, CAPTCHA/proxy/rate-evasion or dispatch code.
 The following are architectural observations only:
 
-| Source | Useful in-product lesson | Do not adopt |
+| Source | Useful in-product lesson (verified at source level) | Do not adopt |
 | --- | --- | --- |
-| [TBot](https://github.com/ogame-tbot/TBot) | `AutoFarmWorker` has an explicit target lifecycle, report expiry/deduplication, probe escalation and fleet-slot reservation. Its calculation service uses days-of-investment-return and its scheduler enumerates route × speed. | Its live-game controller and fixed build chains; its README itself says botting is forbidden. |
-| [Cruiser](https://github.com/kweimann/cruiser) | Separates short-lived per-wakeup state cache, mechanics engine, hostile-event priority, route search and retry backoff. | The external game client/action loop. |
-| [PHPOgameBot](https://github.com/racinmat/PHPOgameBot) | Persistent prerequisite-aware queues block dependent work and schedule earliest availability; its farm model projects resources from old intel. | Its simplified target ranking lacks fuel, timing, uncertainty and risk. |
-| [ogame-fleet-optimizer](https://github.com/peterradzisz/ogame-fleet-optimizer) | Staged candidate search/refinement supports evaluating top-K compositions rather than all ship subsets. | Anything other than offline benchmarking; OGameX core combat stays authoritative. |
+| [TBot](https://github.com/ogame-tbot/TBot) | `AutoFarmWorker` has an explicit target lifecycle with re-probe escalation at **×3** then **×9**, a report age of **180 min**, a loot floor of **1,000,000**, and **18** concurrent attack missions leaving one slot free. Its scheduler sleeps to the next arriving fleet plus a 20–50 s jitter, and its fleet save derives its duration from the attack (`inbound × 1.30`) or the sleep window, recalls at **half** that duration, leaves 200,000 deuterium behind, and has a real give-up branch. | Its live-game controller, its fixed build chains, its 199-entry object enum and its price table; its README itself says botting is forbidden. |
+| [Cruiser](https://github.com/kweimann/cruiser) | One state snapshot per wakeup with forced invalidation after every mutation; hostile-fleet detection that ignores probe-only fleets; a reaction wake at **arrival − 120…180 s**; route enumeration over destination × speed with fuel subtracted before cargo is loaded; a bounded retry ladder of 5/10/15/30/60 s. | The external game client, and two defects: a backoff that ignores hostile events for up to 60 s, and a recall predicate documented as remaining-time but implemented as elapsed-time. |
+| [PHPOgameBot](https://github.com/racinmat/PHPOgameBot) | Pending work grouped by the resource it contends for, with the next wake computed as the **max** of resource ETA (including in-flight), building slot, fleet and expedition slots and ship returns; storage auto-inserted as a prerequisite, cheapest first; a closed-form probe-count solver; projected resources from stale intel with an explicit age parameter. | Its head-of-line block (one unaffordable command freezes its whole group), its literal 21-column "defenceless" filter, and the absence of any fuel or travel-time arithmetic. |
+| [Trilogi77/OgameBot](https://github.com/trilogi77/OgameBot) | Marginal payback in metal-equivalent hours against an **adaptive capped threshold** `min(168 h, 24 h × (1 + avg level/20))`; a per-resource **savings reserve** netted against production; storage at 0.90 of capacity with a 0.50 floor; the only single-build guard that survives a stale read (live flag plus cached finish epoch). | Its two literal start orders (~40 and ~19 steps), its cost and prerequisite tables, and its object-name string literals. |
+| [ogame-fleet-optimizer](https://github.com/peterradzisz/ogame-fleet-optimizer) | Paired seeds per generation, a screening→confirmation ladder (10 → 50 → 100, validate at 200–1,000), a wall-clock deadline checked mid-batch, and a published nearest-rank percentile method. | Anything other than offline benchmarking, its hardcoded counter map, and its `-inf` win-probability gate; OGameX core combat stays authoritative. |
+| [klaasvp/trashsim-public](https://github.com/klaasvp/trashsim-public) | `N` full simulations with fresh state per run and per-run records, aggregated upstream — and the documented case where a mean-profit reading inverted a 60 M decision. | Reporting a mean as the answer. |
 
 The common reusable pattern is state snapshot -> threat priority -> pure mechanics
 calculation -> finite reservation -> idempotent/reconcilable work -> event-based
@@ -146,14 +168,23 @@ observations, ordinary execution, leases/receipts and decision traces.
 1. **Capability preview:** host-publish a versioned side-effect-free legal action
    descriptor/quote, starting with executable building actions. Prove that a
    host-added object can participate without module-side object IDs.
+   *Host status: no read-only action-quote entry point exists today, and the battle engine in particular has
+   neither a seed nor a dry run, so this is a host change rather than a module slice*
+   ([capability map](host-capability-map.md)).
 2. **Safety/event state:** publish own fleet/slot/fuel/queue deadlines and legal
    alerts. Add pure save-route/next-due logic. Cover no fuel, no slot, no route,
    valid route and late-alert fixtures.
+   *Host status: fuel, distance, duration, slots and arrivals all exist and are quoted per fleet; the
+   "incoming fleet intel" service is a redactor, so the module assembles its own inbound picture*
+   ([V2](../specs/gameplay-algorithms.md#v2-the-reaction-window)).
 3. **Economic frontier:** generate quoted build/research/unit/colony candidates;
    rank marginal value with energy, storage, queues and reserves.
+   *Host status: every input exists — prices, raw production with `force_factor`, build times,
+   requirement-with-queue, storage capacity and position bonuses.*
 4. **Intel/raid evaluator:** persist report fingerprints/confidence; add bounded
    compositions and lower-tail host-engine value. Leave raids recorded until the
    ordinary executor proves integration and revalidation.
+   *Host status: blocked on the seedless, side-effecting battle entry point above.*
 5. **Offline replay corpus:** virtual-clock cases for safe absence, overflow,
    fuel-starved save, fresh profitable raid, stale rejection, recovery and
    disabled capability. Same seed + snapshot must give byte-stable trace/intent.

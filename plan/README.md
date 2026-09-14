@@ -102,5 +102,19 @@ opening behaviour:
   answer to "least dependence on language models": utility scoring, marginal payback, threshold rules,
   hysteresis and a routine distribution; no solver, no planner subprocess, no learned model.
 
+A second, deeper pass on 14 September 2026 re-read all sixteen automation projects at source level,
+re-fetched every guide link and read the host itself. It produced two documents that the remaining gap
+work is built on:
+
+- [The gameplay algorithms](details/specs/gameplay-algorithms.md) — **the execution strategy**: for every
+  gap in the register, the concrete algorithm that closes it, its host inputs, its constants and where they
+  come from, how it fails, its acceptance evidence, and the corrections this pass made to earlier notes.
+  Start here when closing a gap.
+- [What the host already answers, and what it does not](details/research/host-capability-map.md) — the
+  exact host methods behind each algorithm, the ten rules that live only in controllers (the host
+  obligations), and the two findings that changed the plan: the battle engine is neither seedable nor
+  side-effect free, and the host's own bot detector publishes the cadence thresholds the routine must
+  satisfy.
+
 The [gate audit](details/GATE-AUDIT.md) is the pass over the existing module against the three gates, and
 it is what turns this research into slices.
