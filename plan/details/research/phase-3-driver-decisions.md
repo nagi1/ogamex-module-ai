@@ -9,7 +9,7 @@ from a product's wording.
 | CBRKit `1.6.0` | `ExperienceEngine` | **Pass** | Wired opt-in; native retained as fallback |
 | FAtiMA/CiF affect | `AffectEngine` | **Pass** (after a vendored patch) | Wired opt-in; native retained as fallback |
 | FAtiMA/CiF social | `SocialCognition` | **Pass** (after a vendored patch) | Wired opt-in; native retained as fallback |
-| AgentOS `0.10.16` | `LongTermMemory` | **Deferred** | Not adopted; recall stays native plus a projection |
+| AgentOS `0.10.16` | `LongTermMemory` | **Pass** | Wired opt-in over HTTP; native retained as fallback |
 
 Gate 1 is satisfied for all three evaluated drivers. Gate 2 (demonstrated value) is
 **not** met for any of them, so every driver remains opt-in and disabled by default,
@@ -25,6 +25,52 @@ re-applying its own ordering after the driver answers; A7 by the measured run re
 A8 by the 100% module PCOV gate running with every driver absent. A2 has a second, stronger
 form: because Appraisal writes nothing, the whole `ai_` table set is compared before and after
 — it is not merely the four named families that stay untouched.
+
+### AgentOS — `LongTermMemory` (14 September 2026)
+
+The driver is no longer deferred. It is served as a sidecar in the same shape as CBRKit and
+reached over the module's own HTTP contract:
+
+| Route | Request | Answer |
+| --- | --- | --- |
+| `POST /recall` | `{scopeId, query, limit, memories:[{id,text,tags}]}` | `{ranking:[{id, …numeric evidence}], considered, discarded, partiallyRetrieved}` |
+| `GET /health` | — | `{status}` |
+
+**It stores nothing.** Each request carries the memories the module authorised for that recall,
+so A2 holds by construction rather than by assertion: there is no second copy of a memory to
+keep in step, and swapping the driver back cannot strand state in the sidecar.
+
+| Gate | Evidence |
+| --- | --- |
+| A1 absence is free | `DriverAbsenceTest` and `LongTermMemoryDriverTest` resolve the native implementation with the sidecar absent, and a recall with the driver selected makes no request at all when the candidate set is empty |
+| A2 one authority | `ExportDeleteAcceptanceTest` compares the whole canonical table set before and after a driver swap and after a failed driver call; both are identical, while the returned *order* changes |
+| A3 zero generative calls | the image installs no provider SDK and no model runtime; the embedder is the module's own `local-embedding-manager.mjs`; the A7 run recorded zero outbound requests beyond the driver itself |
+| A4 bounded | module-owned connect/read timeouts, the shared response-byte cap, the candidate cap and the circuit breaker, each with its own test |
+| A5 no truth widening | `AgentOsClient` discards any answer naming an id the module never sent, or repeating one |
+| A6 module determinism | the module ranks only by the driver's returned order and keeps its own scope, validity, redaction and limit |
+| A7 measured | below |
+| A8 coverage | 100% module PCOV with the driver absent; the real sidecar is an opt-in operator run |
+
+Measured on 14 September 2026 against the built image:
+
+| Observation | Value |
+| --- | --- |
+| Resident memory, idle | **113.9 MiB** (CBRKit 142.1 MiB, FAtiMA 108.9 MiB) |
+| Image size | **1.69 GB** (FAtiMA 295 MB, CBRKit 878 MB) |
+| Attack memory ranked first for an attack query | yes, with `considered: 3` |
+| Empty candidate set | `{ranking:[], considered:0}` and no graph work |
+| Malformed JSON / unknown route / health | `400` / `404` / `{"status":"ok"}` |
+
+**Gate 2 is still unmet.** The driver demonstrably *changes* which memory is surfaced first, and
+the module's own recency order remains the fallback; nothing yet shows that the driver's order
+is better in a way that beats the native path on held-out outcomes, which is the 5-percentage-point
+recall or 20%-cost target. Enabling it by default would add a network hop for no measured gain,
+so it stays opt-in and disabled.
+
+**Deletion is complete by construction.** Because the module sends the candidate set per request
+and the sidecar persists nothing, there is no provider index to tombstone or delete: the driver's
+soft-delete-only limitation stops being a limitation, and `ExportDeleteAcceptanceTest` proves a
+deleted source produces no driver request at all.
 
 **Standing rule for all driver work:** integration and swap evidence only. Do not write PHP
 that duplicates a capability a supported driver already provides, and do not add a parallel

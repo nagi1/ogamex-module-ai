@@ -169,7 +169,7 @@ at **108.9 MiB** and the CBRKit sidecar at **142.1 MiB**.
 | Any local LLM on the box | **Infeasible** | GPU-class or unusably slow; a multi-GB download |
 | FAtiMA/CiF sidecar | **Feasible but not free** | ~109 MiB resident; measured, already integrated, still disabled pending Gate 2 |
 | CBRKit sidecar | **Feasible but not free** | ~142 MiB resident; measured, already integrated, still disabled pending Gate 2 |
-| AgentOS memory subset | **Unproven, and the heaviest** | ~920 MB of `node_modules`; needs a custom embedding manager to avoid provider calls; no measured resident footprint |
+| AgentOS memory subset | **Measured, opt-in, still disabled** | Served as a stateless HTTP sidecar; 113.9 MiB resident, 1.69 GB image, no provider SDK and no model runtime in the image |
 | Native engines in PHP | **Feasible and the only baseline** | Arithmetic and indexed rows; no extra process |
 
 Two consequences worth recording as decisions rather than observations:
@@ -218,7 +218,7 @@ This research does not license a PHP reimplementation of any driver.
 
 | # | Question | Status |
 | --- | --- | --- |
-| G1 | Resident footprint of the AgentOS memory subset | **Not measured.** ~920 MB of dependencies is disk, not RSS, and the two are not interchangeable. |
-| G2 | Whether AgentOS cognitive memory needs embeddings for its core operations | **Unverified.** The verified zero-provider run used our own deterministic 256-dim lexical manager, which is not semantic. |
+| G1 | Resident footprint of the AgentOS memory subset | **Measured: 113.9 MiB idle**, in the same range as the other two sidecars. The image is 1.69 GB, which is disk rather than memory. |
+| G2 | Whether AgentOS cognitive memory needs embeddings for its core operations | **Settled for our use:** the served driver supplies its own deterministic hashing embedder and installs no model runtime, so recall works with no external call. That embedder is lexical, not semantic. |
 | G3 | Cost of the reference profile under real Phase 3 load | **Not measured.** The 100/500/1,000-player runs in 3J are what turn this document's verdicts into figures. |
 | G4 | Whether a measured, useful capability exists that only a driver provides | **Open, and it is Gate 2.** Until it does, every driver stays disabled. |
