@@ -99,21 +99,20 @@ test('the corpus run records repetition and fails when a provider attempt does n
         $repeated,
         $repeated,
         ['text' => 'A different reply.', 'interpretation' => 'none', 'candidates' => []],
-        ['text' => 'Another reply.', 'interpretation' => 'none', 'candidates' => []],
         fn () => throw app()->makeWith(RuntimeException::class, ['message' => 'Provider unavailable.']),
     ])->preventStrayPrompts();
 
     $this->artisan('ai:language-conformance --corpus --confirm')
-        ->expectsOutputToContain('4/5 case(s) completed')
+        ->expectsOutputToContain('3/4 case(s) completed')
         ->assertExitCode(1);
 
     $report = conformanceEvidence()['report'];
 
-    expect($report['completed_cases'])->toBe(4)
+    expect($report['completed_cases'])->toBe(3)
         ->and($report['repeated_reply_count'])->toBe(1)
-        ->and($report['cases'])->toHaveCount(5)
-        ->and(array_column($report['cases'], 'status'))->toBe(['completed', 'completed', 'completed', 'completed', 'failed'])
-        ->and(array_column($report['cases'], 'locale'))->toBe(['en', 'en', 'en', 'ar', 'mixed'])
-        ->and($report['cases'][3]['text'])->toBe('Another reply.')
-        ->and($report['cases'][4]['characters'])->toBeNull();
+        ->and($report['cases'])->toHaveCount(4)
+        ->and(array_column($report['cases'], 'status'))->toBe(['completed', 'completed', 'completed', 'failed'])
+        ->and(array_column($report['cases'], 'locale'))->toBe(['en', 'en', 'en', 'en'])
+        ->and($report['cases'][2]['text'])->toBe('A different reply.')
+        ->and($report['cases'][3]['characters'])->toBeNull();
 });

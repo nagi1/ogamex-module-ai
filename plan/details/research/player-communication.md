@@ -100,9 +100,10 @@ expect conversation latency. Nobody is surprised by a reply the next time they l
 5. **In-game text is moderated, reportable and staff-visible.** This supports the plan's
    existing "authored before LLM" stance: authored variants stay inside the rules, and an
    escalated generation is riskier than it looks.
-6. **Locale variants need a decision.** The module ships English and Arabic authored
-   variants; official OGame requires English in messages. That is a server-owner policy
-   question for OGameX, and it should be recorded rather than inherited by accident.
+6. **Locale is decided: English only.** The owner chose English on 14 September 2026, so the
+   Arabic authored variants and the Arabic evaluation cases are removed rather than left
+   dormant. That matches the official English-in-messages rule above, and it deletes a
+   configuration value that could only ever hold one.
 
 ## Confidence and gaps
 

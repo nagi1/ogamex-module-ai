@@ -176,7 +176,7 @@ is scheduled every ten minutes while the module is enabled.
 `ai:language-conformance` is the opt-in external run: it is the only module code that
 may contact a real provider, it refuses to run without `--confirm`, and it sends
 sanitized fixtures only — no player data, no private chat, no production identifiers.
-`--corpus` sends all five labelled cases (English, Arabic, mixed language and a
+`--corpus` sends all four labelled cases (three English interpretation cases plus a
 prompt-injection case) instead of the first smoke case. Every run writes a JSON
 artifact to `storage/app/ai-language-conformance/<timestamp>.json` holding the
 selected provider/model/timeout, and per case: status, interpretation, character

@@ -23,7 +23,6 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialRepair;
-use Modules\AI\Enums\AiSocialReplyLocale;
 use Modules\AI\Enums\AiSocialResource;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
@@ -36,7 +35,6 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\AiClock;
-use Modules\AI\Support\AiProfileSettings;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
@@ -343,9 +341,9 @@ test('two enabled AI players deliver exactly one bounded typed response each', f
         ->and(app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, $secondSource->id, AiSocialExchangeType::Thanks, [], null, 3))->toBeNull();
 });
 
-test('authored replies honor locale and skip a recently delivered variant when possible', function (): void {
+test('authored replies skip a recently delivered variant when one remains', function (): void {
     $counterparty = $this->createUser();
-    $profile = socialReplyProfile($this->currentUserId, 42, [AiProfileSettings::SOCIAL_REPLY_LOCALE => AiSocialReplyLocale::Arabic->value]);
+    $profile = socialReplyProfile($this->currentUserId, 42);
     $firstExchange = app()->makeWith(AiSocialExchange::class, ['attributes' => [
         'player_id' => $this->currentUserId,
         'counterparty_player_id' => $counterparty->id,
@@ -366,8 +364,8 @@ test('authored replies honor locale and skip a recently delivered variant when p
     $secondExchange->id = 2;
     $secondReply = app(BuildAuthoredSocialReplyAction::class)->handle($secondExchange, $profile);
 
-    expect($firstReply)->toBeIn(['تحياتي.', 'مرحباً.'])
-        ->and($secondReply)->toBeIn(['تحياتي.', 'مرحباً.'])
+    expect($firstReply)->toBeIn(['Greetings.', 'Hello.'])
+        ->and($secondReply)->toBeIn(['Greetings.', 'Hello.'])
         ->and($secondReply)->not->toBe($firstReply);
 });
 
@@ -392,11 +390,6 @@ test('authored replies are bounded to known response variants and never invent t
 
     expect($reply)->toBeString()->not->toBeEmpty();
 
-    expect(app(BuildAuthoredSocialReplyAction::class)->handle(
-        $exchange,
-        socialReplyProfile($this->currentUserId, settings: [AiProfileSettings::SOCIAL_REPLY_LOCALE => AiSocialReplyLocale::Arabic->value]),
-    ))->toBeString()->not->toBeEmpty();
-
     if ($response === AiSocialResponse::Counter) {
         expect($reply)->toContain('20');
     }
@@ -413,11 +406,7 @@ test('authored protocol replies remain within their typed response families', fu
     ]]);
     $exchange->id = 2;
 
-    expect(app(BuildAuthoredSocialReplyAction::class)->handle($exchange, socialReplyProfile($this->currentUserId)))->toBeString()->not->toBeEmpty()
-        ->and(app(BuildAuthoredSocialReplyAction::class)->handle(
-            $exchange,
-            socialReplyProfile($this->currentUserId, settings: [AiProfileSettings::SOCIAL_REPLY_LOCALE => AiSocialReplyLocale::Arabic->value]),
-        ))->toBeString()->not->toBeEmpty();
+    expect(app(BuildAuthoredSocialReplyAction::class)->handle($exchange, socialReplyProfile($this->currentUserId)))->toBeString()->not->toBeEmpty();
 })->with('authored protocol reply cases');
 
 dataset('native social response cases', [
