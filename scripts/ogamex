@@ -15,9 +15,18 @@ if [ -z "$OGAMEX_ROOT" ] || [ ! -f "$OGAMEX_ROOT/artisan" ]; then
 fi
 
 run_core() {
+    # A command that must not share a database with the running application passes one through
+    # AI_DB_OVERRIDE; every other command uses the container's own configuration.
+    db_pair=()
+    db_flag=()
+    if [ -n "${AI_DB_OVERRIDE:-}" ]; then
+        db_pair=("DB_DATABASE=${AI_DB_OVERRIDE}")
+        db_flag=(-e "DB_DATABASE=${AI_DB_OVERRIDE}")
+    fi
+
     case "${OGAMEX_RUNNER:-host}" in
         host)
-            (cd "$OGAMEX_ROOT" && "$@")
+            (cd "$OGAMEX_ROOT" && env "${db_pair[@]}" "$@")
             ;;
         local-docker-dev)
             # PAO formats output for an agent and decides that from the environment. The
@@ -33,7 +42,7 @@ run_core() {
 
             # local-docker-dev already runs the application, so commands execute in that
             # container instead of a one-off container from the default stack.
-            (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose exec -T "${pao_env[@]}" ogamex-app "$@")
+            (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose exec -T "${pao_env[@]}" "${db_flag[@]}" ogamex-app "$@")
             ;;
         *)
             echo "Unknown OGAMEX_RUNNER '${OGAMEX_RUNNER}'. Use 'host' or 'local-docker-dev'." >&2
@@ -72,6 +81,34 @@ reap_stale_test_sessions() {
     run_core php Modules/AI/scripts/reap-test-sessions.php
 }
 
+# The database the serial gate owns, created on first use and kept current afterwards.
+#
+# The gate is the one run that cannot have Laravel's per-worker database clones, and its test cases
+# roll back instead of starting from a fresh schema. Any row another process committed while it runs
+# is therefore visible to it: a pilot account finishing a building in the same database is enough to
+# fail a test that counts rows, and a failing gate then looks like a code defect that is not there.
+# Sharing a database with the running application is not a test environment, so the gate takes one
+# of its own and no longer depends on what else is running. The name has to read as a test database:
+# the stale-session reaper only ever touches one of those.
+COVERAGE_DATABASE="${AI_COVERAGE_DATABASE:-ogamex-test-ai-coverage}"
+
+prepare_coverage_database() {
+    # Creating the database needs a connection without one selected, so it is done with a raw
+    # client rather than through the application, which could not connect to a missing database.
+    run_core php -r '
+$pdo = new PDO(
+    sprintf("mysql:host=%s;port=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "3306"),
+    (string) getenv("DB_USERNAME"),
+    (string) getenv("DB_PASSWORD"),
+);
+$pdo->exec(sprintf(
+    "CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+    getenv("DB_DATABASE"),
+));
+'
+    run_core php artisan migrate --force --no-interaction
+}
+
 usage() {
     cat <<'TEXT'
 Usage: bash scripts/ogamex <command> [args...]
@@ -97,6 +134,7 @@ Environment:
   PARALLEL_PROCESSES   pin the number of test workers
   TEST_TIMEOUT         seconds before a test run is killed in-container (default: 120)
   COVERAGE_TIMEOUT     seconds before the serial coverage run is killed (default: 600)
+  AI_COVERAGE_DATABASE database the serial coverage gate owns (default: ogamex-test-ai-coverage)
 TEXT
 }
 
@@ -152,8 +190,11 @@ case "$command_name" in
         # Coverage is the one serial run: Laravel's parallel runner cannot merge PCOV
         # coverage across workers, and PCOV cannot instrument opcodes that the CLI
         # opcode cache interned before it was enabled. The report is then reduced to
-        # this module's own source, which is the scope its 100% gate applies to.
+        # this module's own source, which is the scope its 100% gate applies to. It runs
+        # in the gate's own database so a live pilot cannot decide the result.
+        export AI_DB_OVERRIDE="$COVERAGE_DATABASE"
         reap_stale_test_sessions
+        prepare_coverage_database
         run_core timeout -k 5 "${COVERAGE_TIMEOUT:-600}" php -d opcache.enable_cli=0 -d pcov.enabled=1 ./vendor/bin/pest --testsuite=Modules --filter=AI --bail --coverage-clover=/tmp/ogamex-ai-coverage.xml
         run_core php Modules/AI/scripts/coverage-summary.php /tmp/ogamex-ai-coverage.xml
         ;;
