@@ -260,6 +260,14 @@ as accepted. The command collects evidence; it does not score believability, pro
 quality or cost, and the reviewed thresholds stay the human gate from the validation
 plan.
 
+Tests fake the boundary rather than the switch. The shared base test case applies
+`Http::preventStrayRequests()`, so an unmocked provider call throws instead of spending tokens,
+and a test that wants a response uses the SDK's agent fake (`OgameConversationReplyAgent::fake()`,
+with `preventStrayPrompts()` where a stray call should be an error). The language switch itself
+is left exactly as an environment sets it, so the provider path under test is the one production
+runs; a test that covers the authored path states that configuration in its own setup, because
+the reference profile ships with the provider off.
+
 ## Provider routing
 
 Which vendor answers is module policy; the failover itself is the SDK's, because `laravel/ai`

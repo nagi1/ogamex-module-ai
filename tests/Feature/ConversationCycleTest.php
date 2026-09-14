@@ -48,6 +48,10 @@ uses(IsolatedAccountTestCase::class);
 const CONVERSATION_NOW = '2026-09-11 12:00:00';
 
 beforeEach(function (): void {
+    // This file covers the authored conversation cycle: the reference profile ships with the
+    // generative path off, so the cycle's own contract is asserted here and the escalated route
+    // is asserted in ConversationEscalationTest, where the agent is faked.
+    config(['ai.language.enabled' => false]);
     $this->app->bind(AiClock::class, fn (): FixtureAiClock => $this->app->makeWith(FixtureAiClock::class, ['now' => CarbonImmutable::parse(CONVERSATION_NOW)]));
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
     $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
