@@ -169,6 +169,17 @@ Two consequences, and both are material scope rather than mechanics:
 
 Both are recorded here for owner approval because they widen an approved item rather than implement it. The executor work itself stays as approved; this is what makes it reachable.
 
+#### Why the chain was missing from the plan
+
+A planning defect worth naming rather than quietly fixing, because the instance matters less than the cause.
+
+| Question | Answer |
+| --- | --- |
+| Did the plan know growth mattered? | **Yes.** [Account authenticity](research/account-authenticity.md) ranks the growth curve as signal 3 with HIGH observability and requires that growth be explicable by visible behaviour. Signals 1, 5 and 6 equally need a fleet to exist. |
+| Then why was the buildable set four mines and a plant? | Because it was never a growth decision. `FirstBuildingTarget` was introduced in Package 1 as "the limited Package 1 building candidate set" — the minimum needed to prove one building through the validated host path — and no later slice owned widening it, because no acceptance criterion anywhere mentioned growth. |
+| Why did the pilot not catch it? | Its finding was "the population decides but never acts", and the slice that answered it was accepted as "the cohort acts". Acting was demonstrated with one building type, so **a criterion weaker than the goal passed**, and the dead end stayed invisible behind a satisfied checkbox. |
+| What changes | The capability chain is now written down in [account authenticity](research/account-authenticity.md), a capability set is judged against a goal rather than a list, and a slice that adds abilities must show the account reaching the **next stage of the chain** rather than performing one action. |
+
 **In-situ probe against the existing cohort (14 September 2026).** Before the scheduled second generation became due, the planner was asked what each enabled profile can queue in the live database. All ten pilot accounts returned a build, and the choice varies by persona — players 29129/29133/29138 want the solar plant, 29130/29132/29137 the crystal mine, 29131/29134/29135/29136 the metal mine — which is the first time an enabled account has had any capability at all. The eleventh enabled profile, the orphaned `987654321` left by an old benchmark, returned nothing, which is the host-account guard behaving on real data. This is a probe of publication, not a pilot result: it says the accounts can act, not that they have. The scheduled generation-2 sessions were still pending, due between 12:57 and 13:43, so the growth measurement the report needs is what comes next, and it is not claimed here.
 
 **One session was lost to a stale worker (measured).** The first generation-2 session became due at

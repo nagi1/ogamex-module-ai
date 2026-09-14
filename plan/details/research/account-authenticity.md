@@ -190,6 +190,38 @@ much it actually implies.
 | 10 | Report rate | HIGH — reports are free | HIGH as a trigger, low as proof | Authenticity's real job is to keep the report rate at human-background levels. |
 | 11 | "Always-exact resources for moonshot attempts" | — | — | **Not established.** No source describes this as a player observation. Do not build a rule on it. |
 
+### The capability chain these signals require
+
+Every signal above is produced by *playing*, and playing is a chain rather than a set of independent
+actions. It is written down here because it was not recorded anywhere, and the cost was a capability
+set that could produce none of the top-ranked signals:
+
+```
+metal / crystal / deuterium mine, solar plant
+        → robot factory
+        → shipyard            → units
+        → research lab        → research
+        → fleets              → fleetsave, probes, raids, colonies
+```
+
+| Signal | The gameplay it needs | How the chain was broken |
+| --- | --- | --- |
+| 1 — saves, and saves that sometimes fail | a fleet worth saving, and the judgement not to always | no shipyard could be built |
+| 3 — growth curve | buildings *and* research *and* units, in that order | the buildable set was four requirement-free mines and a plant |
+| 5 — social breadth | probes, messages, contact outside the alliance | no probes, because no shipyard |
+| 6 — deliberate survivable losses | a fleet to risk | no fleet |
+
+The rules that follow, so this cannot recur silently:
+
+- **A capability set is complete against a goal, never against a list.** An account that can build
+  mines but never a shipyard cannot produce a growth curve, a save metric or a fleet loss, so no
+  pilot run can report on signals 1, 3, 5 or 6 at all.
+- **A slice that adds abilities must show the account reaching the next stage of the chain.**
+  "The cohort acts" was satisfied by one building type, which is exactly how a dead end passed
+  acceptance.
+- **The chain is a fact of this game, not a policy choice.** Widening the buildable set to reach the
+  enablers is correctness work, not new scope.
+
 ### Signals we cannot fake, and what follows
 
 1. **There is no client-side input stream.** Nobody can fingerprint our input, and we cannot
