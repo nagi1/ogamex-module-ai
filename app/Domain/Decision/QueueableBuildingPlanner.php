@@ -20,6 +20,9 @@ use OGame\Services\PlanetService;
  * else; the persona's ranking follows, so once the facilities stand the account is back to its own
  * taste.
  *
+ * Ahead of both sits a planet that cannot cover the energy its own buildings draw: the host throttles
+ * everything it produces, and no player keeps mining their way through a deficit.
+ *
  * Both are only suggestions. Every gate is the host's own -- planet type, free queue space,
  * requirements met against what is built *and* queued, and a price the planet can pay, which is the
  * same set the building page shows a human -- so the module never restates an OGame rule. A target
@@ -36,6 +39,7 @@ class QueueableBuildingPlanner
         private PlayerServiceFactory $playerServiceFactory,
         private BuildFirstBuilding $buildFirstBuilding,
         private FacilityChain $facilityChain,
+        private EnergyCapacity $energyCapacity,
         private BuildingQueueService $buildingQueueService,
     ) {
     }
@@ -61,10 +65,14 @@ class QueueableBuildingPlanner
         foreach ($this->playerServiceFactory->make($playerId, true)->planets->all() as $planet) {
             // Resources are read live: the stored amounts only advance when something touches the
             // planet, and a balance read stale is exactly the balance the queue later cancels on.
-            // The refresh stays in memory -- the observation path must not write.
+            // The refresh stays in memory -- the observation path must not write. The energy balance
+            // is a stored column the host recomputes when it touches a planet, so it is recomputed
+            // here the same way, in memory, or a planet that has just grown would be judged on the
+            // balance it had before its last mine finished.
             $planet->updateResources(false);
+            $planet->updateResourceProductionStats(false);
 
-            foreach ([...$this->facilityChain->pending($planet), ...$persona] as $candidate) {
+            foreach ([...$this->energyCapacity->pending($planet), ...$this->facilityChain->pending($planet), ...$persona] as $candidate) {
                 $planetId = $this->queueablePlanetId($planet, $candidate);
                 if ($planetId === null) {
                     continue;

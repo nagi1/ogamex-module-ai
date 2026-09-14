@@ -3,7 +3,6 @@
 namespace Modules\AI\Domain\Decision;
 
 use OGame\GameObjects\Models\Abstracts\GameObject;
-use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 
@@ -39,7 +38,7 @@ class FacilityChain
                 // Technologies gate research and units, and a technology this module cannot research
                 // yet is not a step it can take -- that belongs to the research executor, not to the
                 // building queue this plan feeds.
-                if (!$this->isQueuedAsBuilding($machineName)) {
+                if (!BuildingQueueObject::accepts($machineName)) {
                     continue;
                 }
 
@@ -72,13 +71,5 @@ class FacilityChain
         );
 
         return array_values($objects);
-    }
-
-    /** Asks the host what kind of object this is rather than keeping a list of names of its own. */
-    private function isQueuedAsBuilding(string $machineName): bool
-    {
-        $type = ObjectService::getObjectByMachineName($machineName)->type;
-
-        return in_array($type, [GameObjectType::Building, GameObjectType::Station], true);
     }
 }

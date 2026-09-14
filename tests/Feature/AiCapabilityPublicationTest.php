@@ -44,10 +44,12 @@ test('it publishes the build capability when the account can queue its chosen bu
     $state = capabilityOwnedState($this->currentUserId);
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
-    // A funded account with nothing built reaches for the chain first: an economy that only ever
-    // upgrades mines never gets a research lab, and without one it can never research at all.
+    // A funded account with nothing built plays the opening every guide publishes: the solar plant
+    // first, because the host throttles a planet that cannot cover its own mines, and then the
+    // facilities the rest of the game is gated behind. Without them an economy that only upgrades
+    // mines never gets a research lab, and without one it can never research at all.
     expect($state['available_actions'][AiCapability::Build->value])->toBeTrue()
-        ->and($plan?->reason)->toBe('chain:research_lab')
+        ->and($plan?->reason)->toBe('energy:solar_plant')
         ->and(capabilityOwnedPlanetIds($this->currentUserId))->toContain($plan?->planetId);
 });
 
@@ -237,7 +239,7 @@ function capabilityTrace(int $playerId, int $planetId, AiCandidateActionType $ty
         'type' => $type,
         'reason' => 'capability-fixture',
         'parameters' => [],
-        'features' => ['resource_need' => 0.0, 'energy_blocker' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0],
+        'features' => ['resource_need' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0],
         'sourceTimestamps' => [],
     ]);
     $selected = app()->makeWith(ScoredCandidate::class, ['candidate' => $candidate, 'score' => 1.0, 'components' => []]);

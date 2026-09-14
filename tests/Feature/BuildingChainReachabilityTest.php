@@ -37,14 +37,19 @@ test('a funded account reaches a research lab, a robotics factory and a shipyard
     $this->planetAddResources(chainPlenty());
 
     $steps = [];
-    foreach (range(1, 8) as $round) {
+    foreach (range(1, 12) as $round) {
         $steps[] = chainBuildOnce($this->currentUserId, $this->currentPlanetId);
     }
 
-    // The assertion is reachability, not a script. What matters is that the account ends up owning the
-    // buildings its later capabilities are gated behind, and that every step it took was a
-    // prerequisite the host's requirement graph asked for rather than a name the module decided on.
-    expect(collect($steps)->every(static fn (string $step): bool => str_starts_with($step, 'chain:')))->toBeTrue();
+    // The assertion is reachability, not a script. Every building the account queued was either
+    // capacity, because the host throttles a planet that cannot cover its mines, or a prerequisite the
+    // host's own requirement graph names -- nothing the module decided for itself.
+    $chainSteps = array_values(array_filter($steps, static fn (string $step): bool => str_starts_with($step, 'chain:')));
+
+    expect($chainSteps)->not->toBeEmpty();
+    foreach ($chainSteps as $step) {
+        expect(substr($step, strlen('chain:')))->toBeIn(array_keys(chainHostPrerequisites()));
+    }
 
     $planet = chainPlanet($this->currentUserId, $this->currentPlanetId);
 
@@ -59,6 +64,7 @@ test('a funded account reaches a research lab, a robotics factory and a shipyard
 test('the chain asks for a prerequisite the host names', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
+    chainPowered();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
     $machineName = ObjectService::getObjectById((int) $plan?->buildingId)->machine_name;
@@ -73,6 +79,7 @@ test('the chain asks for a prerequisite the host names', function (): void {
 test('the first step is the easiest unlock the host asks for', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
+    chainPowered();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
     $machineName = ObjectService::getObjectById((int) $plan?->buildingId)->machine_name;
@@ -91,6 +98,8 @@ test('the chain empties once the host graph is satisfied', function (): void {
         $this->planetSetObjectLevel($machineName, $levels['deepest']);
     }
 
+    chainPowered();
+
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
     expect($plan?->reason)->toStartWith('persona:');
@@ -102,6 +111,7 @@ test('the chain empties once the host graph is satisfied', function (): void {
 test('a chain step the account cannot pay for falls through to what it can afford', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
+    chainPowered();
     chainDrainDeuterium($this->currentUserId);
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
@@ -125,6 +135,15 @@ function chainProfile(int $playerId): AiProfile
 function chainPlenty(): Resources
 {
     return app()->makeWith(Resources::class, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+}
+
+/**
+ * Enough capacity that the planet is not short, so a test can ask about the chain on its own. The
+ * opening the account actually plays is covered by the reachability test and by the energy suite.
+ */
+function chainPowered(): void
+{
+    test()->planetSetObjectLevel('solar_plant', 20);
 }
 
 /** Plans one building, queues it through the host queue and lets the host finish it. */

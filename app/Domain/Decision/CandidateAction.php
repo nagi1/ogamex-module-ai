@@ -4,7 +4,7 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Enums\AiCandidateActionType;
 
-/** @phpstan-type ScoreFeature array{resource_need:float,energy_blocker:float,safety:float,target_confidence:float,travel_cost:float,recovery:float} */
+/** @phpstan-type ScoreFeature array{resource_need:float,safety:float,target_confidence:float,travel_cost:float,recovery:float} */
 readonly class CandidateAction
 {
     /**

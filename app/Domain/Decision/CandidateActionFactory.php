@@ -114,12 +114,11 @@ class CandidateActionFactory
         ]);
     }
 
-    /** @return array{resource_need:float,energy_blocker:float,safety:float,target_confidence:float,travel_cost:float,recovery:float} */
+    /** @return array{resource_need:float,safety:float,target_confidence:float,travel_cost:float,recovery:float} */
     private function features(float $resourceNeed, float $safety, float $targetConfidence, float $travelCost, float $recovery): array
     {
         return [
             'resource_need' => $resourceNeed,
-            'energy_blocker' => 0.0,
             'safety' => $safety,
             'target_confidence' => $targetConfidence,
             'travel_cost' => $travelCost,

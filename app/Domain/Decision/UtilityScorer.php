@@ -10,8 +10,6 @@ class UtilityScorer
 {
     private const RESOURCE_NEED_WEIGHT = 30.0;
 
-    private const ENERGY_BLOCKER_WEIGHT = 20.0;
-
     private const SAFETY_WEIGHT = 50.0;
 
     private const TARGET_CONFIDENCE_WEIGHT = 30.0;
@@ -42,7 +40,6 @@ class UtilityScorer
             $variation = ($this->randomSource->unitInterval($profile->random_seed, $decisionKey . ':' . $candidate->type->value) - 0.5) * $profile->skill_band->variationWeight();
             $components = [
                 'resource_need' => $features['resource_need'] * self::RESOURCE_NEED_WEIGHT,
-                'energy_blocker' => $features['energy_blocker'] * self::ENERGY_BLOCKER_WEIGHT,
                 'safety' => $features['safety'] * self::SAFETY_WEIGHT,
                 'target_confidence' => $features['target_confidence'] * self::TARGET_CONFIDENCE_WEIGHT,
                 'travel_cost' => -$features['travel_cost'] * self::TRAVEL_COST_WEIGHT,

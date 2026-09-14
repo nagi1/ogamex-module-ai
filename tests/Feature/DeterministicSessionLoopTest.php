@@ -80,7 +80,7 @@ test('a full published candidate set is traced without unpublished target state'
         AiCandidateActionType::Colonize->name,
     ]);
     expect($trace->score_components)->toHaveKeys([
-        'resource_need', 'energy_blocker', 'safety', 'target_confidence', 'travel_cost', 'recovery', 'archetype_preference', 'seeded_variation',
+        'resource_need', 'safety', 'target_confidence', 'travel_cost', 'recovery', 'archetype_preference', 'seeded_variation',
     ]);
     expect(json_encode($trace->candidates, JSON_THROW_ON_ERROR))->not->toContain('unpublished_defender_fleet');
 });
