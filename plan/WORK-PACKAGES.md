@@ -74,9 +74,28 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Follow-up the same day, after slice 3M:** the gap that run measured is closed, and the cohort's next sessions act as well as decide. Two accounts queued real buildings through the ordinary host action path — player 29129 a solar plant, player 29132 a crystal mine, each the building its own planner published — so the report reads `actions: Accepted 2` where the original window read `none`, with three build intents and zero provider attempts. The measured result is recorded in [details/DECISIONS.md](details/DECISIONS.md).
 
+## Packages 1–4 completion gate (owner rule, 14 September 2026)
+
+Package 5 does not start until Packages 1–4 are **fully and completely finished, with every gate
+closed** — not merely implemented, run and signed. Those are three different states and none of them
+is sufficient on its own. This is the checklist that separates them; every **open** item blocks
+Package 5.
+
+| # | Item | Package | Status |
+| --- | --- | --- | --- |
+| 1 | 3J capacity runs at 100, 500 and 1,000 AI players, recorded as figures (memory gate G3) | 3 | **Open** — parked at the very end by owner decision, with a 10-account pilot standing in until they run |
+| 2 | A Gate 2 verdict for each of CBRKit, FAtiMA/CiF and AgentOS. A driver that fails Gate 2 closes this item by being recorded as disabled on evidence: the gate asks for a measured verdict, not for adoption | 3 | **Open** — Gate 1 passes for all three, and none has a Gate 2 measurement |
+| 3 | The disclosed pilot at pilot scale, run with real humans | 4 | **Open** — never run |
+| 4 | Human feedback present in the pilot report, read from an operator-supplied file | 4 | **Open** — the report currently reads "not recorded" |
+| 5 | Two acceptance wordings met only with narrower evidence: replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick to measure | 4 | **Open** — either close them or record the owner's acceptance that they are permanently narrower |
+| 6 | The owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md) | 4 | **Open** — the 10-account pilot report is reviewable now that its evidence includes real queued buildings |
+| 7 | Executor coverage for what the decision engine can select: `build` executes, while `save_resources`, `research`, `queue_units`, `spy`, `colonize`, `fleet_save` and `raid` remain traceable intents with no executor | 2/3 | **Open by interpretation** — Package 2's acceptance explicitly scopes execution out, so this is complete *as written*; it is a gap only if "fully complete" means an account can execute what it can decide |
+
+Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for all three drivers.
+
 ## Package 5 — cooperative PvE mode
 
-**Status:** blocked by Packages 1–4 **and gated by sign-off.** This package does not start until Package 4 is complete *and signed*: every acceptance criterion met with recorded evidence, the 10-account pilot report reviewed, and the owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md). Implemented is not signed — an operator who has not read the pilot report has not accepted it. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
+**Status:** blocked by Packages 1–4, blocked by every open item in the [completion gate](#packages-14-completion-gate-owner-rule-14-september-2026) above, **and gated by sign-off.** This package does not start until Package 4 is complete *and signed*: every acceptance criterion met with recorded evidence, the 10-account pilot report reviewed, and the owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md). Implemented is not signed — an operator who has not read the pilot report has not accepted it — and by owner rule of 14 September 2026 neither is finished: Packages 1–4 are done only when the checklist above has no open items left. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
 
 **Goal:** a dedicated cooperative universe lets humans fight an AI faction using normal game systems while human-on-human hostility stays blocked.
 
