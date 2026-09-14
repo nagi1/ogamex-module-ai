@@ -31,6 +31,16 @@ The [official game overview](https://gameforge.com/en-GB/games/ogame.html) ancho
 
 The [OGameX README](https://github.com/lanedirt/OGameX) describes a pre-Lifeforms target and lists fleets, moons, alliances and battle-engine support. The target OGameX Next deployment is now [inspected locally](repository-inspection.md); use that baseline rather than generic upstream assumptions. Record the actual fork's classes, speeds, protections, trade rules, visibility, ACS and mission semantics before enabling matching behaviors. Community references to current monetization or Lifeforms do not belong in the module unless explicitly supported.
 
+## Communication channels
+
+How players actually talk to each other, and how fast they answer, is recorded separately in
+[player communication](player-communication.md). It is worth reading before designing
+anything conversational, because the conversation slices rested on two assumptions that
+public sources do not support: that the in-game chat is where players talk, and that a
+plausible reply arrives within seconds. Discord is the norm for alliance society and is
+officially recommended, while in-game private messages remain the only channel that reaches
+a player outside your alliance and your Discord — and observed cadence is hours to days.
+
 ## Research to validation
 
 Convert qualitative findings into hypotheses: varied opponents improve perceived activity; visible consequences make identities memorable; excessive pressure harms recovery. Test these in a disclosed pilot. Ask casual miners and quiet players as well as veterans to review traces. Collect volunteered/aggregate telemetry rather than reproducing real people's identities, messages or precise routines.
