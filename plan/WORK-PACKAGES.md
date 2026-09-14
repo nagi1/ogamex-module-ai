@@ -38,7 +38,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 3 — social cognition, experience and bounded conversation
 
-**Status:** slices 3A–3L implemented and committed; 3J's scenario/ablation harness and export/delete acceptance are done. By owner decision of 14 September 2026 the 100/500/1,000-player capacity runs stay at the very end of the phase, and a 10-account pilot stands in for them until then; that pilot has run and its result is recorded in [details/DECISIONS.md](details/DECISIONS.md), and the gap that pilot measured is closed by slice 3M, which publishes only executable capabilities and queues a real building through the existing action path. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
+**Status:** slices 3A–3L implemented and committed; 3J's scenario/ablation harness and export/delete acceptance are done. By owner decision of 14 September 2026 the capacity runs stay at the very end of the phase, rescaled from 100/500/1,000 players to 2/5/10 accounts, and a 10-account pilot stands in for them until then; that pilot has run and its result is recorded in [details/DECISIONS.md](details/DECISIONS.md), and the gap that pilot measured is closed by slice 3M, which publishes only executable capabilities and queues a real building through the existing action path. Package 2 is the existing baseline. Source durability, schema and chat permissions are resolved by the first Phase 3 slice, not an indefinite dependency on a future Phase 2 rewrite. **Owner:** one module agent per non-overlapping milestone, integrated in order.
 
 **Goal:** believable, persistent social behavior and outcome-based learning with no generative calls for ordinary gameplay; authored dialogue handles known exchanges and optional language handles unrestricted human conversation.
 
@@ -83,13 +83,13 @@ Package 5.
 
 | # | Item | Package | Status |
 | --- | --- | --- | --- |
-| 1 | 3J capacity runs at 100, 500 and 1,000 AI players, recorded as figures (memory gate G3) | 3 | **Open** — parked at the very end by owner decision, with a 10-account pilot standing in until they run |
+| 1 | 3J runs at **2, 5 and 10** AI accounts, recorded as figures (memory gate G3). Rescaled by owner decision of 14 September 2026 from 100/500/1,000 players: at this size they show that behaviour, lateness and per-player cost hold as the population grows rather than measuring capacity at reference-profile scale | 3 | **Open** — parked at the very end by owner decision, with the 10-account pilot standing in until they run |
 | 2 | A Gate 2 verdict for each of CBRKit, FAtiMA/CiF and AgentOS. A driver that fails Gate 2 closes this item by being recorded as disabled on evidence: the gate asks for a measured verdict, not for adoption | 3 | **Open** — Gate 1 passes for all three, and none has a Gate 2 measurement |
 | 3 | The disclosed pilot at pilot scale, run with real humans | 4 | **Open** — never run |
 | 4 | Human feedback present in the pilot report, read from an operator-supplied file | 4 | **Open** — the report currently reads "not recorded" |
 | 5 | Two acceptance wordings met only with narrower evidence: replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick to measure | 4 | **Open** — either close them or record the owner's acceptance that they are permanently narrower |
 | 6 | The owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md) | 4 | **Open** — the 10-account pilot report is reviewable now that its evidence includes real queued buildings |
-| 7 | Executor coverage for what the decision engine can select: `build` executes, while `save_resources`, `research`, `queue_units`, `spy`, `colonize`, `fleet_save` and `raid` remain traceable intents with no executor | 2/3 | **Open by interpretation** — Package 2's acceptance explicitly scopes execution out, so this is complete *as written*; it is a gap only if "fully complete" means an account can execute what it can decide |
+| 7 | Executor coverage for what the decision engine can select: `build` executes, while `save_resources`, `research`, `queue_units`, `spy`, `colonize`, `fleet_save` and `raid` remain traceable intents with no executor | 2/3 | **Approved to complete** by owner decision of 14 September 2026 — each selection either gains a host-executed intent or stays unpublished |
 
 Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for all three drivers.
 

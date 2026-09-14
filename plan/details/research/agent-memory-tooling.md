@@ -220,5 +220,5 @@ This research does not license a PHP reimplementation of any driver.
 | --- | --- | --- |
 | G1 | Resident footprint of the AgentOS memory subset | **Measured: 113.9 MiB idle**, in the same range as the other two sidecars. The image is 1.69 GB, which is disk rather than memory. |
 | G2 | Whether AgentOS cognitive memory needs embeddings for its core operations | **Settled for our use:** the served driver supplies its own deterministic hashing embedder and installs no model runtime, so recall works with no external call. That embedder is lexical, not semantic. |
-| G3 | Cost of the reference profile under real Phase 3 load | **Not measured.** The 100/500/1,000-player runs in 3J are what turn this document's verdicts into figures. |
+| G3 | Cost of the reference profile under real Phase 3 load | **Not measured.** The 2/5/10-account runs in 3J are what turn this document's verdicts into figures; at 10 accounts they show per-player cost holding, not a stress-tested capacity ceiling. |
 | G4 | Whether a measured, useful capability exists that only a driver provides | **Open, and it is Gate 2.** Until it does, every driver stays disabled. |

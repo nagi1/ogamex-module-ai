@@ -35,7 +35,7 @@ Two rules follow directly:
    FAtiMA at 109 MiB and CBRKit at 142 MiB are ordinary candidates; a Node runtime with a 920 MB
    dependency tree, a JVM graph database or a local language model are not.
 2. **No driver is enabled on the reference profile without a measured resident footprint and a
-   stated remaining-headroom figure.** The 100/500/1,000-player runs are what turn these verdicts
+   stated remaining-headroom figure.** The 2/5/10-account runs are what turn these verdicts
    into numbers.
 
 ## Model-call policy
