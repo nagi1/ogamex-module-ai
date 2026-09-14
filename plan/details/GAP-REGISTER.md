@@ -86,6 +86,9 @@ failures is what stops the nineteenth:
    account *does*. None of them says what an account looks like when someone first sees it, and
    nothing covers the population in aggregate, where sameness is itself the signal. That is why
    wave 2 found eight more gaps without touching a single behavioural requirement.
+6. **The plan described the happy path.** There is no design for a suspended account, a deleted one,
+   an account with no planets, or a table that grows forever — so the lifecycle has no owner, and the
+   failure modes were never a deliverable.
 
 ## Rules that follow
 
@@ -99,10 +102,10 @@ failures is what stops the nineteenth:
 - **Authenticity has four surfaces — what the account does, what it looks like, how the population
   looks in aggregate, and how it fails — and auditing one is not auditing the others.**
 
-## Axes still to audit
+## Waves 3–5 — the axes that had not been examined
 
-Recorded so this register is trusted for what it covers rather than for what it implies. None of these
-has been examined yet:
+The list below was written when these axes were still unaudited. All three waves examined every item
+in it; the findings follow the list.
 
 - **Operational failure**: queue or database outage, repeated retries, vacation mode, a ban, a
 destroyed planet, an abandoned account, restart behaviour, and what a *broken* AI account looks like
@@ -126,6 +129,39 @@ logs has never been checked against that claim.
 - Unrecognised free-form text answered with nothing.
 - Sidecar drivers disabled until a Gate 2 verdict; embeddings and PsychSim behind measurement gates.
 - No second player runtime, no generic game planner.
+
+## Wave 3 — operational failure and lifecycle
+
+| # | Gap | Evidence | Established | Closing it needs |
+| --- | --- | --- | --- | --- |
+| O1 | **Nothing is ever deleted.** `expires_at` is written in several places — traces at 30 days, sealed replies, memory facts — and is only ever read as a validity filter. No command and no schedule prunes anything. | `expires_at` appears only in queries and inserts; the `ai:` command list has no prune. Measured: 76 work items, 48 traces and 18 receipts accumulated in about seven hours for eleven accounts, while a work item is created per session per account forever. | measured | Retention that is enforced, not merely declared, and sized for the 2 vCPU / 2 GB profile |
+| O2 | **A suspended account keeps waking.** Only the action path checks `isBanned()` and `isInVacationMode()`; the session path does not, so a banned or vacationing account keeps deciding and scheduling successors indefinitely. | ban/vacation checks exist only in `QueueAiBuildingAction` | code-read | Ask the account's own state before a session runs, and stop scheduling while it is suspended |
+| O3 | **No lifecycle for an empty account.** A player with no planets makes the planner return null, so the account goes silently idle forever instead of being disabled. Nothing handles a destroyed planet, an abandoned account or a deleted one. | `ownedState()` and the planner return null rather than reporting a state | inferred | Explicit account states, and a decision about what each one means for scheduling |
+| O4 | **"Bounded" is claimed in the plan and enforced only for stop counters.** The counters really are bounded per reason and day; work items, traces, observations and receipts are not bounded by anything. | `budgets.md` and the decision record describe bounded bookkeeping | code-read | Either bound the other tables or correct the claim |
+| O5 | **Nothing alerts.** A population that goes quiet is visible only to whoever reads the pilot report. | no alerting path in the module | code-read | Optional, and an operator decision rather than a defect |
+
+Recorded as **not** gaps, with evidence, so the register shows what passed: retry behaviour (`tries` 3,
+`maxExceptions` 3), lease reclaim after a killed worker, the per-player lock, the fail-closed HTTP
+boundary, and provider failure falling back to authored text.
+
+## Wave 4 — host social surfaces
+
+| # | Gap | Evidence | Established | Closing it needs |
+| --- | --- | --- | --- | --- |
+| S1 | **Alliance chat is deliberately invisible.** The observer returns immediately when a message carries an `alliance_id`, so only direct chat is observed. | `RecordObservedChatMessageAction` line 27 | measured | Observe alliance chat, or accept that alliance membership can never be sustained |
+| S2 | **Silence is the loudest possible tell.** With S1 and G18, an account in an alliance would never answer its alliance — worse than never joining. | follows from S1 and G18 | inferred | Social behaviour inside an alliance |
+| S3 | **Invitations and requests are never seen or answered**: alliance invitations, buddy requests, notes, marketplace and trade offers. | no observer or action touches any of them | code-read | Decide which of these a plausible player answers, then handle those |
+| S4 | **No report is ever shared.** Signal 5 lists report sharing as social evidence; nothing sends an espionage report to anyone. | follows from G5 and G17 | inferred | Probes plus a sharing path |
+
+## Wave 5 — aggregate shape, rank and request footprint
+
+| # | Gap | Evidence | Established | Closing it needs |
+| --- | --- | --- | --- | --- |
+| A1 | **Two AI planets look the same to a spy.** Uniform starting state plus one buildable chain means resource and building levels converge, and an espionage report is exactly the view that reveals it. | follows from I2 and G1–G7 | inferred | Per-account variation, and behaviour that diverges |
+| A2 | **Military points are pinned at zero and the ranking is public.** | follows from G3 | inferred | Units |
+| A3 | **Rank trajectory has never been measured**, and a population that grows in lockstep would climb in lockstep. | nothing measures it | measured | Record entry rank, slope and spread when the runs happen |
+| A4 | **The claim in signal 8 is unsupported as written.** It requires a cadence "indistinguishable from a human opening pages"; the module makes no HTTP requests at all, because its work is scheduled and server-side. Zero footprint may well be better than a fabricated one, but the requirement and the design disagree. | module makes no page requests; signal 8 as written | code-read | An owner decision: keep zero footprint and correct the requirement, or design a page-like cadence |
+| A5 | **Last-activity is never written by the module.** Nothing in `app/` touches `users.time`, so an account can act without its last-seen moving, and when it does move the cadence is incidental rather than designed. | grep for `users` writes finds none | code-read | Decide whether activity stamps belong to the design |
 
 ## Sequencing
 
