@@ -13,11 +13,11 @@ use OGame\Services\PlanetService;
  * Answers one question about the account's own economy: is there a building it can legally queue
  * now, and on which planet?
  *
- * Every gate is the host's own -- planet type, requirements including the queue, affordability and
- * free queue space, which is what the building page shows a human -- so the module never restates
- * an OGame rule. Only *which* building the account wants is module policy, and it comes from
- * `BuildFirstBuilding`, the same chooser the executor runs later. That is what stops a published
- * capability and the queued intent from drifting apart.
+ * Every gate is the host's own -- planet type, free queue space, requirements met against what is
+ * built *and* queued, and a price the planet can pay, which is the same set the building page shows
+ * a human -- so the module never restates an OGame rule. Only *which* building the account wants is
+ * module policy, and it comes from `BuildFirstBuilding`, the same chooser the executor runs later.
+ * That is what stops a published capability and the queued intent from drifting apart.
  *
  * Affordability is a real gate rather than a nicety: `BuildingQueueService::start()` cancels a queue
  * item it cannot pay for, so publishing `build` while short of resources spends a queue slot and
