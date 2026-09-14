@@ -139,6 +139,8 @@ Closes the gap the run above measured: the population decided without ever actin
 | What the account learns about itself | **Nothing is written.** The plan-time refresh is in memory and the observation persists nothing; the no-write behaviour is asserted rather than assumed. |
 | Known limitation | **One target per profile, for now.** The chooser is seeded per profile, so an account repeats its preferred building until a later policy slice varies it. Variety across targets is policy, not plumbing, and is not claimed here. |
 
+**In-situ probe against the existing cohort (14 September 2026).** Before the scheduled second generation became due, the planner was asked what each enabled profile can queue in the live database. All ten pilot accounts returned a build, and the choice varies by persona — players 29129/29133/29138 want the solar plant, 29130/29132/29137 the crystal mine, 29131/29134/29135/29136 the metal mine — which is the first time an enabled account has had any capability at all. The eleventh enabled profile, the orphaned `987654321` left by an old benchmark, returned nothing, which is the host-account guard behaving on real data. This is a probe of publication, not a pilot result: it says the accounts can act, not that they have. The scheduled generation-2 sessions were still pending, due between 12:57 and 13:43, so the growth measurement the report needs is what comes next, and it is not claimed here.
+
 ## Phase 3L — provider escalation implemented (14 September 2026)
 
 | Topic | Decision |

@@ -337,7 +337,10 @@ item that queues a real building through the existing action path. An account th
 whose queue is full, publishes no capability and writes no work item — so a quiet population stays
 visible as a gap rather than becoming a trace that claims an action nobody performed. What is still
 unmeasured is the effect at pilot scale: the 10-account run above predates this slice, so the growth
-statement it could not make is now waiting on a re-run rather than on engineering.
+statement it could not make is now waiting on a re-run rather than on engineering. An in-situ probe
+of the live cohort confirms publication works on real accounts — every enabled pilot profile can now
+queue a building, and the choice varies by persona — while the scheduled sessions that would turn
+that ability into queued buildings were still pending when it was taken.
 
 ### Reply path design and capacity (1000 AI players, small server)
 
