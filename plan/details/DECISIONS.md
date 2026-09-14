@@ -150,6 +150,25 @@ Two owner decisions of the same day, which together set what the remaining evide
 | Sequencing | **Executors before the runs.** The runs measure whatever the executor set can do, so a population that can only build would produce evidence about building and nothing else. |
 | Why not leave the intents unexecuted | **Because a trace that claims an action nobody performs is the failure the first pilot measured.** An unexecuted intent reads in a report as a quiet population rather than as a missing executor, which is exactly the misreading 3M removed for `build`. |
 
+### Executor coverage needs the building chain first (measured 14 September 2026)
+
+Writing the executors exposed a dependency that the approval did not cover, and it is a measurement rather than a guess: a real seeded account (player 29129) owns **no buildings at all and no research**, and the building chooser's target set is `metal_mine`, `crystal_mine`, `deuterium_synthesizer` and `solar_plant` — none of which is an enabler. The host's own definitions say what that costs:
+
+| Enabler | Host id | Host requirements |
+| --- | --- | --- |
+| `robot_factory` | 14 | none |
+| `research_lab` | 31 | none |
+| `shipyard` | 21 | `robot_factory` 2 |
+
+So with today's target set an account can never build a research lab or a shipyard, and `research`, `queue_units`, `spy`, `colonize`, `fleet_save` and `raid` cannot become available however well their executors are written. They would be published as abilities that are permanently false, which is the same defect as publishing one the module cannot honour, only harder to see.
+
+Two consequences, and both are material scope rather than mechanics:
+
+1. **The building target set has to include the enablers**, or the population can only ever mine.
+2. **The chooser has to select among targets the host already accepts**, not the best target overall. Today the single chosen target is handed to the planner and, if the host refuses it, the account publishes no building ability at all — harmless while every target is requirement-free, and a starvation bug the moment one is not.
+
+Both are recorded here for owner approval because they widen an approved item rather than implement it. The executor work itself stays as approved; this is what makes it reachable.
+
 **In-situ probe against the existing cohort (14 September 2026).** Before the scheduled second generation became due, the planner was asked what each enabled profile can queue in the live database. All ten pilot accounts returned a build, and the choice varies by persona — players 29129/29133/29138 want the solar plant, 29130/29132/29137 the crystal mine, 29131/29134/29135/29136 the metal mine — which is the first time an enabled account has had any capability at all. The eleventh enabled profile, the orphaned `987654321` left by an old benchmark, returned nothing, which is the host-account guard behaving on real data. This is a probe of publication, not a pilot result: it says the accounts can act, not that they have. The scheduled generation-2 sessions were still pending, due between 12:57 and 13:43, so the growth measurement the report needs is what comes next, and it is not claimed here.
 
 **One session was lost to a stale worker (measured).** The first generation-2 session became due at
