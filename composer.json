@@ -17,6 +17,7 @@
         "ogamex:disable": "bash scripts/ogamex disable"
     },
     "require-dev": {
+        "laravel/pao": "^1.1",
         "pestphp/pest": "^5.1"
     },
     "config": {

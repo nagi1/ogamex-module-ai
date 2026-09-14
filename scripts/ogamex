@@ -20,9 +20,20 @@ run_core() {
             (cd "$OGAMEX_ROOT" && "$@")
             ;;
         local-docker-dev)
+            # PAO formats output for an agent and decides that from the environment. The
+            # editor sets an agent marker in this shell, but `docker compose exec` starts the
+            # container with the service environment only, so the marker has to be passed
+            # through explicitly; the PAO switches ride along for the operator.
+            pao_env=()
+            for name in AI_AGENT PAO_FORCE PAO_DISABLE; do
+                if [ -n "${!name:-}" ]; then
+                    pao_env+=(-e "$name=${!name}")
+                fi
+            done
+
             # local-docker-dev already runs the application, so commands execute in that
             # container instead of a one-off container from the default stack.
-            (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose exec -T ogamex-app "$@")
+            (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose exec -T "${pao_env[@]}" ogamex-app "$@")
             ;;
         *)
             echo "Unknown OGAMEX_RUNNER '${OGAMEX_RUNNER}'. Use 'host' or 'local-docker-dev'." >&2

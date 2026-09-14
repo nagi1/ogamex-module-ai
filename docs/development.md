@@ -445,7 +445,14 @@ avoids host-wide suppression rules so the module gate remains independent of
 unrelated host diagnostics.
 
 Run agent-facing verification through Laravel PAO's compact result format and
-PCOV—not Xdebug. Coverage is the one serial run: Laravel's parallel runner cannot
+PCOV—not Xdebug. PAO decides from the environment whether the process is an agent, and
+`docker compose exec` does not inherit this shell's environment, so the runner passes
+`AI_AGENT` through to the container (and `PAO_FORCE`/`PAO_DISABLE` when they are set).
+A container command run by hand needs the same `-e AI_AGENT=...` or `-e PAO_FORCE=1`.
+PAO is declared in this module's `composer.json` as well as the host's, so the module
+owns its own test tooling; only the host install is on the test path today, because the
+runner boots the suite through the host's Pest. Coverage is the one serial run: Laravel's
+parallel runner cannot
 merge PCOV coverage across workers. The runner owns the whole recipe, including the
 module-scoped 100% gate:
 
