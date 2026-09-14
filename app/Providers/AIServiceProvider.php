@@ -9,9 +9,11 @@ use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
 use Modules\AI\Console\Commands\ReplayAiScenario;
+use Modules\AI\Console\Commands\ReportAiPilot;
 use Modules\AI\Console\Commands\RunCognitionConformance;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Console\Commands\RunLanguageConformance;
+use Modules\AI\Console\Commands\SeedAiTestUniverse;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\ContextBuilder;
@@ -74,9 +76,11 @@ class AIServiceProvider extends ModuleServiceProvider
         ExplainAiDecision::class,
         ReconcileLanguageRequests::class,
         ReplayAiScenario::class,
+        ReportAiPilot::class,
         RunCognitionConformance::class,
         RunDueAiWork::class,
         RunLanguageConformance::class,
+        SeedAiTestUniverse::class,
     ];
 
     public function boot(): void

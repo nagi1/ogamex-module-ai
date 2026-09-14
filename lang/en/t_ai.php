@@ -36,10 +36,10 @@ return [
 
     'actions_heading' => 'Recorded actions',
     'action_state' => 'Receipt state',
-    'action_state_1' => 'Processing',
-    'action_state_2' => 'Completed',
-    'action_state_3' => 'Rejected',
-    'action_state_4' => 'Accepted',
+    'action_state_Processing' => 'Processing',
+    'action_state_Completed' => 'Completed',
+    'action_state_Rejected' => 'Rejected',
+    'action_state_Accepted' => 'Accepted',
 
     'stop_reasons_heading' => 'Why work stopped today',
     'stop_reason' => 'Reason',

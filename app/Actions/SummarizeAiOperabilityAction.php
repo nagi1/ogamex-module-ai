@@ -108,7 +108,7 @@ class SummarizeAiOperabilityAction
         return AiActionReceipt::query()
             ->where('created_at', '>=', $now->startOfDay())
             ->pluck('state')
-            ->countBy(static fn (AiReceiptState $state): string => $state->value)
+            ->countBy(static fn (AiReceiptState $state): string => $state->name)
             ->all();
     }
 
