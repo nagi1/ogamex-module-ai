@@ -376,7 +376,7 @@ implicit.
 | **Chosen** | OpenAI embeddings behind the module's `Embedder` contract, pinned to a dated snapshot |
 | **Dimensions** | 1536. **Storage form is still open:** the module runs on MySQL, which has no `halfvec`, so the pgvector sizing this record originally assumed does not apply. At 4 bytes per dimension a float32 vector costs roughly 614 MB at 100k memories; a packed float16 column (2 bytes per dimension, ~307 MB) or an external vector store are the realistic options. Not chosen yet, and nothing is stored until stage 3 has a caller. |
 | **Accepted** | A network call on the recall path. A provider outage degrades recall to the lexical path; it never fails a request |
-| **Deferred** | A local embedder, for simplicity |
+| **Excluded** | A local embedder. The owner's standing rule is hosted providers with no local model runtime, so this is ruled out rather than deferred, and the 2 vCPU / 2 GB reference profile is why the rule exists. |
 | **Out of scope by decision** | Arabic and mixed-language recall. The owner chose English-only on 14 September 2026, so this is a decision rather than a silent narrowing, and reinstating it is a feature with its own content and tests rather than a configuration value |
 
 The snapshot is pinned because an embedding model can change silently underneath a
