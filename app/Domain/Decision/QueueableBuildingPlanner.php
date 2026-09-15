@@ -18,15 +18,11 @@ use OGame\Services\ResearchQueueService;
  * Two things want a building. The chain wants the facility a later capability cannot exist without
  * -- an account with no research lab can never research, and one with no shipyard can never own a
  * ship -- and the economy wants the upgrade that repays itself fastest, or the storage that is about
- * to overflow. Ahead of the chain sits a warehouse that is about to overflow: a full warehouse
- * stops the planet producing, so covering it is more urgent than any facility, and unlike the chain
- * it resolves in a level or two and hands the slot back. The chain is asked before the economy's
- * production ranking, because an economy that never reaches a facility produces an account that
- * grows resources and nothing else; once the facilities stand the account is back to its own
- * arithmetic.
- *
- * Ahead of both sits a planet that cannot cover the energy its own buildings draw: the host throttles
- * everything it produces, and no player keeps mining their way through a deficit.
+ * to overflow. The plan runs in two passes across the account's planets: first a warehouse that is
+ * about to overflow anywhere (it stops that planet producing, so it outranks every routine step on
+ * every other planet), then the routine economy planet by planet -- the energy a planet needs before
+ * it throttles, the chain's facilities, then the fastest-paying mine. The cross-planet storage pass
+ * is what keeps a full warehouse on one colony from waiting behind a routine mine on the homeworld.
  *
  * Both are only suggestions. Every gate is the host's own -- planet type, free queue space,
  * requirements met against what is built *and* queued, and a price the planet can pay, which is the
@@ -65,41 +61,72 @@ class QueueableBuildingPlanner
             return null;
         }
 
-        foreach ($this->playerServiceFactory->make($playerId, true)->planets->all() as $planet) {
-            // Resources are read live: the stored amounts only advance when something touches the
-            // planet, and a balance read stale is exactly the balance the queue later cancels on.
-            // The refresh stays in memory -- the observation path must not write. The energy balance
-            // and the storage capacity are stored columns the host recomputes when it touches a
-            // planet, so they are recomputed here the same way, in memory, or a planet that has just
-            // grown would be judged on the balance and the warehouse it had before its last mine --
-            // or its last storage -- finished.
+        // Refresh every planet's live balance once: the candidate pass reads stored amounts and
+        // energy, and a balance read stale is exactly the balance the queue later cancels on. The
+        // refresh stays in memory -- the observation path must not write.
+        $planets = $this->playerServiceFactory->make($playerId, true)->planets->all();
+        foreach ($planets as $planet) {
             $planet->updateResources(false);
             $planet->updateResourceProductionStats(false);
             $planet->updateResourceStorageStats(false);
+        }
 
-            foreach ([...$this->energyCapacity->pending($planet), ...$this->economyUpgrades->storage($planet, $profile), ...$this->facilityChain->pending($planet), ...$this->economyUpgrades->production($planet, $profile)] as $candidate) {
-                // Which queue takes a step is the host's object type, not this module's opinion: the
-                // chain hands over prerequisites, and a technology among them is research.
-                if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {
-                    $research = $this->queueableResearch($planet, $candidate);
-                    if ($research === null) {
-                        continue;
-                    }
+        // A warehouse about to overflow stops that planet producing wherever it sits, so it outranks
+        // every routine step on every other planet. Without this pass the first planet always won:
+        // it always has a queueable step, and the newest colonies filled to the cap while the
+        // homeworld kept buying.
+        foreach ($planets as $planet) {
+            $step = $this->firstQueueable($planet, $profile, $this->economyUpgrades->storage($planet, $profile));
+            if ($step !== null) {
+                return $step;
+            }
+        }
 
-                    return $research;
-                }
+        // The routine economy, planet by planet in the account's own order: the energy a planet
+        // needs before it throttles, the chain's facilities, then the fastest-paying mine.
+        foreach ($planets as $planet) {
+            $step = $this->firstQueueable($planet, $profile, [
+                ...$this->energyCapacity->pending($planet),
+                ...$this->facilityChain->pending($planet),
+                ...$this->economyUpgrades->production($planet, $profile),
+            ]);
+            if ($step !== null) {
+                return $step;
+            }
+        }
 
-                $planetId = $this->queueablePlanetId($planet, $candidate);
-                if ($planetId === null) {
+        return null;
+    }
+
+    /**
+     * The first candidate this planet can actually queue, or null when none of them is legal.
+     *
+     * @param list<BuildCandidate> $candidates
+     */
+    private function firstQueueable(PlanetService $planet, AiProfile $profile, array $candidates): QueueableBuilding|QueueableResearch|null
+    {
+        foreach ($candidates as $candidate) {
+            // Which queue takes a step is the host's object type, not this module's opinion: the
+            // chain hands over prerequisites, and a technology among them is research.
+            if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {
+                $research = $this->queueableResearch($planet, $candidate);
+                if ($research === null) {
                     continue;
                 }
 
-                return app()->makeWith(QueueableBuilding::class, [
-                    'planetId' => $planetId,
-                    'buildingId' => $candidate->buildingId,
-                    'reason' => $candidate->reason,
-                ]);
+                return $research;
             }
+
+            $planetId = $this->queueablePlanetId($planet, $candidate);
+            if ($planetId === null) {
+                continue;
+            }
+
+            return app()->makeWith(QueueableBuilding::class, [
+                'planetId' => $planetId,
+                'buildingId' => $candidate->buildingId,
+                'reason' => $candidate->reason,
+            ]);
         }
 
         return null;
@@ -108,7 +135,6 @@ class QueueableBuildingPlanner
     private function queueablePlanetId(PlanetService $planet, BuildCandidate $candidate): ?int
     {
         $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
-
         // The host's own gates for a legal queue request, asked in the order its building page asks
         // them: planet type, free queue space, met requirements and a balance it can pay. They read
         // as one predicate because one planet either accepts the building or does not; the rejected

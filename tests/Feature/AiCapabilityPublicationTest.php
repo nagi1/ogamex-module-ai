@@ -47,6 +47,9 @@ beforeEach(function (): void {
 test('it publishes the build capability when the account can queue its chosen building', function (): void {
     $profile = capabilityProfile($this->currentUserId);
     $this->planetAddResources(capabilityPlenty());
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
 
     $state = capabilityOwnedState($this->currentUserId);
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);

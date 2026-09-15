@@ -23,6 +23,7 @@ uses(IsolatedAccountTestCase::class);
 test('a fresh account builds capacity before the mine that would outdraw it', function (): void {
     energyProfile($this->currentUserId);
     $this->planetAddResources(energyPlenty());
+    energyStoraged();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
     $machineName = ObjectService::getObjectById((int) $plan?->buildingId)->machine_name;
@@ -34,6 +35,7 @@ test('a fresh account builds capacity before the mine that would outdraw it', fu
 test('a planet that covers its next upgrade plans its own way', function (): void {
     energyProfile($this->currentUserId);
     $this->planetAddResources(energyPlenty());
+    energyStoraged();
     $this->planetSetObjectLevel('solar_plant', 20);
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
@@ -46,6 +48,7 @@ test('a planet that covers its next upgrade plans its own way', function (): voi
 test('a planet already in deficit wants capacity', function (): void {
     energyProfile($this->currentUserId);
     $this->planetAddResources(energyPlenty());
+    energyStoraged();
     $this->planetSetObjectLevel('metal_mine', 20);
     $this->planetSetObjectLevel('crystal_mine', 18);
 
@@ -57,6 +60,7 @@ test('a planet already in deficit wants capacity', function (): void {
 test('the capacity offered is the cheapest the host has, so a solar plant comes before a fusion reactor', function (): void {
     energyProfile($this->currentUserId);
     $this->planetAddResources(energyPlenty());
+    energyStoraged();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
@@ -77,6 +81,14 @@ function energyProfile(int $playerId): AiProfile
 function energyPlenty(): Resources
 {
     return app()->makeWith(Resources::class, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+}
+
+/** Enough warehouse that a funded balance is not "about to overflow", so a test can ask about energy alone. */
+function energyStoraged(): void
+{
+    test()->planetSetObjectLevel('metal_store', 10);
+    test()->planetSetObjectLevel('crystal_store', 10);
+    test()->planetSetObjectLevel('deuterium_store', 10);
 }
 
 /** What the host's own production calculation says a building puts out at its next level. */

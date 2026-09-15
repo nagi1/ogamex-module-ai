@@ -195,6 +195,24 @@ test('an overflowing warehouse preempts the chain', function (): void {
         ->and($plan?->reason)->toStartWith('storage:');
 });
 
+// Storage is the one answer checked across every planet before any routine step: a full warehouse on
+// the newest colony stops that colony producing, so it outranks a mine or facility on the homeworld.
+test('an overflowing warehouse on one planet preempts a routine step on another', function (): void {
+    chainProfile($this->currentUserId);
+    $this->planetAddResources(chainPlenty());
+    chainStoraged();
+    chainPowered();
+
+    expect($this->secondPlanetService)->not->toBeNull();
+    $this->secondPlanetService->addResources(new Resources(1_000_000, 0, 0));
+
+    $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->not->toBeNull()
+        ->and($plan->planetId)->toBe($this->secondPlanetService->getPlanetId())
+        ->and($plan?->reason)->toStartWith('storage:');
+});
+
 /**
  * The cheapest host ambition this planet cannot produce yet -- the same reading the chain itself
  * takes, restated from the host catalogue so the expectation is never the implementation.

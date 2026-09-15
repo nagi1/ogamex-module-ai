@@ -66,6 +66,8 @@ test('a full published candidate set is traced without unpublished target state'
     $work = aiDeterministicRun(aiDeterministicProfile(AiArchetype::Casual, $this->currentUserId));
     $trace = AiDecisionTrace::query()->where('work_item_id', $work->id)->firstOrFail();
 
+    // Raid is absent: the fixture report points at a report the host never issued, so the raid
+    // planner declines it as not viable -- the same gate the stale/forbidden test below asserts.
     expect(array_column($trace->candidates, 'action'))->toEqualCanonicalizing([
         AiCandidateActionType::DoNothing->name,
         AiCandidateActionType::SaveResources->name,
@@ -74,7 +76,6 @@ test('a full published candidate set is traced without unpublished target state'
         AiCandidateActionType::QueueUnits->name,
         AiCandidateActionType::FleetSave->name,
         AiCandidateActionType::Spy->name,
-        AiCandidateActionType::Raid->name,
         AiCandidateActionType::Colonize->name,
     ]);
     expect($trace->score_components)->toHaveKeys([
