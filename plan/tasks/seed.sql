@@ -149,7 +149,11 @@ INSERT OR REPLACE INTO tasks
   NULL,NULL,'specs/gameplay-algorithms.md',
   'Modules/AI/scripts/coverage-summary.php (100% gate)',
   'tests/Feature/ExecuteIntentTest.php',
-  'Coverage gate red. Gaps: ExecuteAiIntentAction transfer() arm, QueueAiTransferAction guard/fleet branches, ScheduleAiIntentAction::scheduleTransfer, CandidateActionFactory transfer candidate + raid candidate creation, QueueableFleetSavePlanner 63/119, QueueableTransferPlanner branches, RaidPlanner storageReady capacity<=0, UtilityScorer policy-denied continue, PlayerObservationService, AiCandidateReason::reportSource, ProcessAiWork no-schedule row, AIServiceProvider 10s interval. Shared helpers must be require_once-ed from tests/Pest.php (parallel workers isolate test files).');
+  'Coverage gate red. Gaps: ExecuteAiIntentAction transfer() arm, QueueAiTransferAction guard/fleet branches, ScheduleAiIntentAction::scheduleTransfer, CandidateActionFactory transfer candidate + raid candidate creation, QueueableFleetSavePlanner 63/119, QueueableTransferPlanner branches, RaidPlanner storageReady capacity<=0, UtilityScorer policy-denied continue, PlayerObservationService, AiCandidateReason::reportSource, ProcessAiWork no-schedule row, AIServiceProvider 10s interval. Shared helpers must be require_once-ed from tests/Pest.php (parallel workers isolate test files).'),
+ (25,'IMPL-024','Spend a windfall before warehousing it (W7-1/W7-2)','impl','todo','P2','W7-1,W7-2',NULL,'E6',
+  'specs/gameplay-algorithms.md (E6)',
+  'app/Domain/Decision/EconomyUpgrades.php; app/Domain/Decision/Policies/FleeterPolicy.php',
+  'Planned, not sliced. Measured on the grand run: fleeters 30x behind, warehousing loot instead of spending it. Two hypotheses recorded in E6 (storage precedence vs scarcity-weighted resource_need); neither ships without a frozen-clock before/after.');
 
 -- ── dependencies ────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES

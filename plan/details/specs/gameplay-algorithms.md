@@ -48,6 +48,7 @@ line is the list of host answers it needs.
 | W6-5 | [F1](#f1-phalanx-coverage) [F2](#f2-deploy-recall-interception) [F3](#f3-the-moon-as-geography) [F4](#f4-the-recycle-trip) [F5](#f5-blind-lanx-via-the-debris-field) [F6](#f6-moon-destruction) | Phalanx, deploy-recall, moon geography, recycle trip, blind lanx, moon destruction — host-supported, module-unwired | **partially shipped** (F2 recall executor + F3 moon-destination save; F1/F4 ride the deferred crash executor, F5 P2, F6 last-priority) |
 | Ninja (pass-6) | [NN1](#nn1-anti-ninja-checks-on-the-raid-path) [NN2](#nn2-the-ninja-trap-defender-counter-crash) | Anti-ninja staging checks on the raid path; the defender's timed counter-landing | **partially shipped** (NN1 moon-staging check at dispatch; NN2 trap deferred — gated behind a reviewed cluster) |
 | Expeditions (pass-6) | [EX1](#ex1-slot-16-outcomes-and-never-a-save) | Slot-16 only, host-returned outcomes, never a fleetsave | **shipped** (slot-16 executor over the host mission, one disposable civil cargo ship; host surface verified — DISC-004 closed) |
+| W7-1 / W7-2 (economy) | [E6](#e6-spend-a-windfall-before-warehousing-it) | Spend a surplus before warehousing it | **planned** — the smallest slice is not chosen; two hypotheses recorded, both needing a frozen-clock before/after |
 
 ## How to read an algorithm block
 
@@ -262,6 +263,55 @@ this rule only makes sense after [Y1](#y1-the-energy-interlock).
 
 **Accept.** A planet left alone with a filling warehouse queues storage before the projected overflow,
 and a planet with an empty warehouse does not.
+
+### E6 — Spend a windfall before warehousing it
+
+**Planned** — recorded from the grand-test live-verification pass (16 September 2026); not yet sliced.
+
+**Gaps:** W7-1, W7-2 · **Host:** current storage capacity and stored amount per resource, production
+per hour (the same stored columns E3 reads), and the production objects' payback (E1).
+
+**Finding (measured).** The grand run's two fleeters finished 30× behind the leading miner with ~880k
+and 1.8M metal against ~1.5k crystal, and had queued `storage:metal_store` 15× and
+`storage:crystal_store` 10×. A raid windfall lands in one tick and fills the warehouse instantly; E3's
+fill-time trigger read that instant fill as "about to overflow" and queued a bigger warehouse, which the
+next windfall filled again — a ratchet that left the account warehousing loot instead of spending it.
+The fleeter's `FleeterPolicy` also carries no `Build` preference, so its sessions rank ships 15 points
+above mines and the loot is never reinvested.
+
+**Rule.**
+
+```
+a warehouse upgrade is queued only while its fill lies in the future:
+    0 < time_to_fill < absence
+an already-full warehouse (time_to_fill = 0) is a spend signal, not a warehouse signal:
+    the surplus is answered by E1 / Y1 / R1, never by a bigger warehouse
+```
+
+**Constants.** The split "future fill → warehouse, present overflow → spend" is the corpus's own
+distinction: the guides say storage "should hold 24–48 hours of production" and "always check your
+storage before logging off" (a future fill), while *ogame-ninja* grows storage only "at capacity" and
+every veteran spends a surplus before buying storage (**documented**). No new constant: the threshold
+is zero and the horizon is E3's.
+
+**Gate.** One comparison, no new layer, no new host input (gate 2); the numbers are all the host's
+(gate 1); and the rule players state in their own words, "a player spends a surplus before warehousing
+it" (gate 3).
+
+**What the attempt found (16 September 2026).** Skipping a full warehouse in `EconomyUpgrades::storage`
+looks like the smallest slice, but it collides with the shipped E3 precedence the live run and its tests
+already pin: `BuildingChainReachabilityTest` asserts that an overflowing warehouse preempts the chain
+— the same "grow storage at capacity" the corpus records as a valid variant. The deeper cause is the
+fleeter's missing `Build` preference, and the preference axis is too coarse to make a fleeter build
+mines *occasionally* without also making it build them constantly. Two hypotheses therefore remain, and
+neither is set without a frozen-clock before/after: (a) keep the storage precedence and give the fleeter
+a scarcity-weighted `resource_need` so Build wins exactly when a resource is the binding constraint, or
+(b) change the storage trigger to "grow only when no mine repays", re-pinning the two chain-precedence
+tests to the new contract.
+
+**Accept.** A planet whose warehouse is full queues the mine that spends the surplus, and a planet
+whose warehouse will fill during the absence queues the warehouse — measured on a frozen-clock replay
+before it touches the holy universe.
 
 ### E4 — Ferrying resources between own planets
 

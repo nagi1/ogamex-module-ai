@@ -944,3 +944,25 @@ fleeters are the lowest scorers, 30× behind the leading miner); W7-2 the wareho
 a windfall from production, so it builds the store for the resource that is not the constraint; W7-3
 in-flight spy intents are not counted against available probes (32 refusals). Rows in
 [`GAP-REGISTER.md`](GAP-REGISTER.md#wave-7--grand-test-live-verification-16-september-2026).
+
+### IMPL-023 closed and the W7 economy attempt — 16 September 2026
+
+**IMPL-023 closed (`29eaabb`).** The 39 remaining coverage branches each got a pinning test, and one
+provably-dead guard was deleted rather than tested: `QueueAiTransferAction::transportFleet` reads
+`getShipUnits()`, which never yields a zero-amount entry, so the `amount <= 0` guard could not be
+reached. Coverage 99.34% → **100.00%** (5872/5872), suite 710 tests, Rector 0, Pint clean, PHPStan 0.
+A fast session interval now also has its scheduler branch pinned (`everyTenSeconds`), which the coverage
+run had flagged since the module's own tests never exercise the schedule.
+
+**The W7 economy fix was attempted and reverted.** The obvious slice — skip a warehouse that is already
+full in `EconomyUpgrades::storage` — passed its own test but broke the shipped E3 precedence the live
+run pins: `BuildingChainReachabilityTest` asserts that an overflowing warehouse preempts the chain, the
+same "grow storage at capacity" the corpus records as a valid variant. The attempt is reverted and E6
+records the finding as **planned** with two hypotheses, because the deeper cause is the fleeter's missing
+`Build` preference and the preference axis is too coarse to make a fleeter build mines *occasionally*
+without making it build them constantly. Neither hypothesis ships without a frozen-clock before/after
+on the grand universe's own numbers. This is the discipline working: a measured finding exposed a
+collision between two shipped rules rather than being papered over.
+
+**Task DB:** `IMPL-023` → done. `IMPL-024` added for the W7 economy slice, blocked on the frozen-clock
+measurement that chooses between the two E6 hypotheses.

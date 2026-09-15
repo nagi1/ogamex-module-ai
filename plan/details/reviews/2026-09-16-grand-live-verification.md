@@ -96,3 +96,18 @@ the pilot report reads `language tokens 0`.
 Two tests were corrected rather than added: `AiAdmissionLimitTest` documented the reclaim in a comment
 while asserting the old behaviour, and the `ReserveFloorTest` fixture set 210 fields on a 163-field
 planet so its "accepts it" half only held while the gate was missing.
+
+## Follow-up — IMPL-023 closed and the W7 economy attempt (same day)
+
+- **IMPL-023 closed** (`29eaabb`): the 39 remaining coverage branches each got a pinning test; one
+  provably-dead guard (`QueueAiTransferAction`'s `amount <= 0`) was deleted rather than tested.
+  Coverage 99.34% → **100.00%** (5872/5872), suite 710 tests, Rector 0, Pint clean, PHPStan 0.
+- **W7 economy fix attempted and reverted.** Skipping an already-full warehouse in
+  `EconomyUpgrades::storage` passed its own test but broke `BuildingChainReachabilityTest`'s shipped
+  E3 precedence ("an overflowing warehouse preempts the chain" — the corpus's "grow storage at
+  capacity" variant). The deeper cause is the fleeter's missing `Build` preference, and the preference
+  axis is too coarse to set it without a measured choice. The finding stays open as planned E6 with
+  two hypotheses; the attempt is the evidence that the two shipped rules collide, which a papered-over
+  patch would have hidden.
+- **Task DB:** `IMPL-023` → done; `IMPL-024` added (W7 economy, blocked on the frozen-clock
+  before/after).
