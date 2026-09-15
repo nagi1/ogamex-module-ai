@@ -27,6 +27,8 @@ readonly class PerceptionSnapshot
         public float $recoveryFactor,
         public array $sourceTimestamps,
         public array $inboundFleets = [],
+        public bool $recallEligible = false,
+        public ?int $upcomingAbsenceMinutes = null,
     ) {
     }
 
@@ -53,6 +55,8 @@ readonly class PerceptionSnapshot
             'available_actions' => $this->availableActions,
             'fleetsave_eligible' => $this->fleetsaveEligible,
             'inbound_fleets' => $this->inboundFleets,
+            'recall_eligible' => $this->recallEligible,
+            'upcoming_absence_minutes' => $this->upcomingAbsenceMinutes,
             'recovery_factor' => $this->recoveryFactor,
             'source_timestamps' => $this->sourceTimestamps,
         ];

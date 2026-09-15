@@ -4,10 +4,13 @@ namespace Modules\AI\Actions;
 
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\QueueAiColony;
+use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Contracts\QueueAiRaid;
+use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiResearch;
 use Modules\AI\Contracts\QueueAiSpy;
+use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Contracts\QueueAiUnits;
 use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
@@ -19,6 +22,8 @@ use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
+use Modules\AI\Domain\Decision\QueueableTransfer;
+use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Enums\AiWorkKind;
@@ -54,6 +59,8 @@ class ExecuteAiIntentAction
 
     private const PAYLOAD_DESTINATION_PLANET_ID = 'destination_planet_id';
 
+    private const PAYLOAD_SHADOW_DESTINATION_PLANET_ID = 'shadow_destination_planet_id';
+
     private const PAYLOAD_TARGET_GALAXY = 'target_galaxy';
 
     private const PAYLOAD_TARGET_SYSTEM = 'target_system';
@@ -61,6 +68,16 @@ class ExecuteAiIntentAction
     private const PAYLOAD_TARGET_POSITION = 'target_position';
 
     private const PAYLOAD_TARGET_TYPE = 'target_type';
+
+    private const PAYLOAD_SOURCE_PLANET_ID = 'source_planet_id';
+
+    private const PAYLOAD_TARGET_PLANET_ID = 'target_planet_id';
+
+    private const PAYLOAD_METAL = 'metal';
+
+    private const PAYLOAD_CRYSTAL = 'crystal';
+
+    private const PAYLOAD_DEUTERIUM = 'deuterium';
 
     private const PAYLOAD_REASON = 'reason';
 
@@ -73,7 +90,10 @@ class ExecuteAiIntentAction
             AiWorkKind::QueueResearch => $this->research($workItem, $planetId),
             AiWorkKind::QueueUnits => $this->units($workItem, $planetId),
             AiWorkKind::Colonize => $this->colony($workItem, $planetId),
+            AiWorkKind::Expedition => $this->expedition($workItem, $planetId),
+            AiWorkKind::Transfer => $this->transfer($workItem, $planetId),
             AiWorkKind::FleetSave => $this->fleetSave($workItem, $planetId),
+            AiWorkKind::Recall => $this->recall($workItem, $planetId),
             AiWorkKind::Spy => $this->spy($workItem, $planetId),
             AiWorkKind::Raid => $this->raid($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
@@ -184,12 +204,65 @@ class ExecuteAiIntentAction
     /**
      * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
      */
+    private function transfer(AiWorkItem $workItem, int $planetId): array
+    {
+        $step = $this->fromPayload(QueueableTransfer::class, [
+            'sourcePlanetId' => $workItem->payload[self::PAYLOAD_SOURCE_PLANET_ID] ?? null,
+            'targetPlanetId' => $workItem->payload[self::PAYLOAD_TARGET_PLANET_ID] ?? null,
+            'metal' => $workItem->payload[self::PAYLOAD_METAL] ?? null,
+            'crystal' => $workItem->payload[self::PAYLOAD_CRYSTAL] ?? null,
+            'deuterium' => $workItem->payload[self::PAYLOAD_DEUTERIUM] ?? null,
+        ]) ?? app(QueueableTransferPlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueableTransfer) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiTransfer::class)->handle(
+                $workItem->player_id,
+                $step->sourcePlanetId,
+                $step->targetPlanetId,
+                $step->metal,
+                $step->crystal,
+                $step->deuterium,
+            ),
+            [
+                'source_planet_id' => $step->sourcePlanetId,
+                'target_planet_id' => $step->targetPlanetId,
+                'metal' => $step->metal,
+                'crystal' => $step->crystal,
+                'deuterium' => $step->deuterium,
+            ],
+            $step->sourcePlanetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function expedition(AiWorkItem $workItem, int $planetId): array
+    {
+        $result = app(QueueAiExpedition::class)->handle(
+            $workItem->player_id,
+            $planetId,
+            (int) ($workItem->payload[self::PAYLOAD_GALAXY] ?? 0),
+            (int) ($workItem->payload[self::PAYLOAD_SYSTEM] ?? 0),
+        );
+
+        return [$result, [], $planetId];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
     private function fleetSave(AiWorkItem $workItem, int $planetId): array
     {
         $step = $this->fromPayload(QueueableFleetSave::class, [
             'originPlanetId' => $planetId,
             'destinationPlanetId' => $workItem->payload[self::PAYLOAD_DESTINATION_PLANET_ID] ?? null,
             'missionType' => $workItem->payload[self::PAYLOAD_MISSION_TYPE] ?? null,
+            'shadowDestinationPlanetId' => (int) ($workItem->payload[self::PAYLOAD_SHADOW_DESTINATION_PLANET_ID] ?? 0),
         ]) ?? app(QueueableFleetSavePlanner::class)->plan($workItem->player_id);
 
         if (!$step instanceof QueueableFleetSave) {
@@ -197,9 +270,24 @@ class ExecuteAiIntentAction
         }
 
         return [
-            app(QueueAiFleetSave::class)->handle($workItem->player_id, $step->originPlanetId, $step->destinationPlanetId),
+            app(QueueAiFleetSave::class)->handle($workItem->player_id, $step->originPlanetId, $step->destinationPlanetId, $step->shadowDestinationPlanetId),
             ['destination_planet_id' => $step->destinationPlanetId, 'mission_type' => $step->missionType],
             $step->originPlanetId,
+        ];
+    }
+
+    /**
+     * A recall names no target: the parked deployment is found and recalled by
+     * the adapter, which owns the ownership check the host's cancel path lacks.
+     *
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function recall(AiWorkItem $workItem, int $planetId): array
+    {
+        return [
+            app(QueueAiRecall::class)->handle($workItem->player_id, $planetId),
+            [],
+            $planetId,
         ];
     }
 

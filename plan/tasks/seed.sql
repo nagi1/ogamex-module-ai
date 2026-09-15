@@ -107,8 +107,8 @@ INSERT OR REPLACE INTO tasks
   'Host expedition surface NOT re-verified — blocked on DISC-004.'),
  (10,'DEF-001','V2 reaction wake','deferred','deferred','P2','G8','FS-004','V2',
   'specs/gameplay-algorithms.md (V2)',NULL,'Deferred to the capacity runs.'),
- (11,'DEF-002','X1 transfer executor','deferred','deferred','P2','G17',NULL,'X1',
-  'specs/gameplay-algorithms.md (X1)',NULL,'Trigger decided; executor next slice.'),
+ (11,'DEF-002','X1 transfer executor','deferred','todo','P2','G17',NULL,'X1',
+  'specs/gameplay-algorithms.md (X1)',NULL,'Trigger decided; executor next slice. Depends on IMPL-021 (SP5 reserve).'),
  (12,'DEF-003','Social / ACS / alliance life (Package 6)','deferred','deferred','P3','G12,G18,S1-S4',
   'SOC-001,SOC-002,ACS-001..014','SOC1,SOC2','plan/WORK-PACKAGES.md (Package 6)',NULL,
   'Alliance-gated; deferred to Package 6.'),
@@ -132,7 +132,15 @@ INSERT OR REPLACE INTO tasks
  (19,'DOC-003','Write expedition algorithm block','doc','todo','P2','pass-6 (new)','EXP-001,EXP-002','E-series (new)',
   'research/strategy-principles.md (Expeditions)',
   'plan/details/specs/gameplay-algorithms.md',
-  'Slot-16 outcomes, never-fleetsave rule. Documentation only; host surface unverified; unblocks IMPL-020.');
+  'Slot-16 outcomes, never-fleetsave rule. Documentation only; host surface unverified; unblocks IMPL-020.'),
+ (21,'IMPL-021','SP5 — reservation before spending','impl','todo','P2','W6',
+  'SP5','SP5','specs/gameplay-algorithms.md (SP5)',
+  'app/Domain/Decision/QueueableBuildingPlanner.php',
+  'Per-resource floor that survives a build/research purchase, reduced by production over the saving horizon. keep_resources_buffer 0.10, max_saving_hours_economy 4.0, max_saving_hours_research 6.0. Unblocks DEF-002 X1.'),
+ (22,'DOC-004','Close T6/V7 residuals — mark clustering + route×speed shipped, defer relationship/contest','doc','todo','P2','W6-1,W6-3',NULL,'T6,V7',
+  'plan/details/specs/gameplay-algorithms.md',
+  'plan/details/specs/gameplay-algorithms.md',
+  'Doc-only accuracy pass: proximity clustering is already shipped via travel_cost; V7 route x speed is resolved for deployment saves. Relationship (RAID-007) and contest (RAID-013) recorded as deferred.');
 
 -- ── dependencies ────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
@@ -149,4 +157,6 @@ INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
  (8, 18, 'needs the ninja block written first'),
  (9, 16, 'needs a verified expedition host surface'),
  (9, 19, 'needs the expedition block written first'),
- (9, 1, 'review');
+ (9, 1, 'review'),
+ (21, 1, 'all impl gated on review'),
+ (11, 21, 'X1 transport keeps the SP5 reserve on the source');

@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Perception\ActivityIntelReader;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
@@ -13,8 +14,11 @@ use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Message;
 use OGame\Models\Planet;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
+use OGame\Services\FleetMissionService;
 use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 
 /**
  * Answers whether this account can probe a neighbour now, and which one.
@@ -43,6 +47,7 @@ class QueueableSpyPlanner
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
+        private ActivityIntelReader $activityIntelReader,
     ) {
     }
 
@@ -57,7 +62,8 @@ class QueueableSpyPlanner
             return null;
         }
 
-        $origin = $this->origin($playerId);
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $origin = $this->origin($player);
         if ($origin === null) {
             return null;
         }
@@ -65,7 +71,7 @@ class QueueableSpyPlanner
         $skip = $this->freshIntelCoordinates($playerId)
             + $this->inFlightCoordinates($playerId)
             + $this->openSpyIntentCoordinates($playerId);
-        $target = $this->target($playerId, $skip);
+        $target = $this->target($player, $origin, $skip);
         if ($target === null) {
             return null;
         }
@@ -83,10 +89,8 @@ class QueueableSpyPlanner
     /**
      * The first planet carrying an idle probe.
      */
-    private function origin(int $playerId): ?PlanetService
+    private function origin(PlayerService $player): ?PlanetService
     {
-        $player = $this->playerServiceFactory->make($playerId, true);
-
         foreach ($player->planets->all() as $planet) {
             if ($planet->getShipUnits()->getAmountByMachineName(EspionageMission::getRequiredShipMachineNames()[0]) > 0) {
                 return $planet;
@@ -97,34 +101,38 @@ class QueueableSpyPlanner
     }
 
     /**
-     * A legal foreign target the account has no fresh intel on yet, walking the
-     * host's planets in id order.
+     * The best legal foreign target, scored instead of the first one in id order.
      *
      * Own, destroyed, vacationing and administrator-protected planets are all
      * skipped — the module restates no rule, it only declines candidates the
      * host's own mission would refuse. A planet the account already knows, or
-     * already has a probe travelling toward, is skipped too: re-probing before
-     * the last probe has even returned is how the population came to scout
-     * without ever gaining anything.
+     * already has a probe travelling toward, is skipped too. Among what remains,
+     * a just-touched target is skipped (INT-009) and the rest are ranked by
+     * known yield and closeness (INT-003): the closest known-rich neighbour, not
+     * the lowest id.
      *
      * @param array<string, true> $skipCoordinates
      */
-    private function target(int $playerId, array $skipCoordinates): ?Planet
+    private function target(PlayerService $player, PlanetService $origin, array $skipCoordinates): ?Planet
     {
         $candidates = Planet::query()
-            ->where('user_id', '!=', $playerId)
+            ->where('user_id', '!=', $player->getId())
             ->where('destroyed', 0)
             ->orderBy('id')
             ->limit(self::MAX_CANDIDATES)
             ->get();
 
+        $knownYield = $this->knownYieldByCoordinate($candidates);
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+        $scored = [];
+
         foreach ($candidates as $planet) {
-            if (isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"])) {
+            $coordinateKey = "{$planet->galaxy}:{$planet->system}:{$planet->planet}";
+            if (isset($skipCoordinates[$coordinateKey])) {
                 continue;
             }
 
             $target = $this->planetServiceFactory->make($planet->id, true);
-
             $owner = $target->getPlayer();
 
             if ($owner->isInVacationMode()) {
@@ -133,11 +141,52 @@ class QueueableSpyPlanner
             if ($owner->getUsername(false) === 'Legor') {
                 continue;
             }
+            if ($this->activityIntelReader->activityAt($target)) {
+                continue;
+            }
 
-            return $planet;
+            $distance = $fleetMissions->calculateFleetMissionDistance($origin, new Coordinate((int) $planet->galaxy, (int) $planet->system, (int) $planet->planet));
+            $scored[] = ['planet' => $planet, 'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance];
         }
 
-        return null;
+        if ($scored === []) {
+            return null;
+        }
+
+        usort($scored, static fn (array $left, array $right): int => $right['score'] <=> $left['score']);
+
+        return $scored[0]['planet'];
+    }
+
+    /**
+     * The last-known loot of each candidate, as metal-equivalent, from its most
+     * recent report of any age. A never-probed planet scores zero here and is
+     * ranked by closeness alone.
+     *
+     * @param iterable<int, Planet> $candidates
+     * @return array<string, float>
+     */
+    private function knownYieldByCoordinate(iterable $candidates): array
+    {
+        $yield = [];
+        foreach ($candidates as $planet) {
+            $report = EspionageReport::query()
+                ->where('planet_galaxy', $planet->galaxy)
+                ->where('planet_system', $planet->system)
+                ->where('planet_position', $planet->planet)
+                ->orderByDesc('id')
+                ->first(['resources']);
+            if ($report === null) {
+                continue;
+            }
+
+            $resources = $report->resources ?? [];
+            $yield["{$planet->galaxy}:{$planet->system}:{$planet->planet}"] = (int) ($resources['metal'] ?? 0)
+                + 1.5 * (int) ($resources['crystal'] ?? 0)
+                + 2.0 * (int) ($resources['deuterium'] ?? 0);
+        }
+
+        return $yield;
     }
 
     /**

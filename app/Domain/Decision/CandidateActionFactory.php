@@ -12,8 +12,12 @@ class CandidateActionFactory
 {
     private const RESOURCE_RESERVE = 1_000;
 
-    public function __construct(private readonly RaidPlanner $raidPlanner)
-    {
+    public function __construct(
+        private readonly RaidPlanner $raidPlanner,
+        private readonly QueueableExpeditionPlanner $queueableExpeditionPlanner,
+        private readonly QueueableTransferPlanner $queueableTransferPlanner,
+        private readonly QueueableFleetSavePlanner $queueableFleetSavePlanner,
+    ) {
     }
 
     public function create(PerceptionSnapshot $perception): CandidateGeneration
@@ -27,6 +31,9 @@ class CandidateActionFactory
                 $this->doNothing($perception),
                 ...$this->publishedCapabilityCandidates($perception),
                 ...$this->eligibleFleetSaveCandidates($perception),
+                ...$this->eligibleRecallCandidates($perception),
+                ...$this->eligibleExpeditionCandidates($perception),
+                ...$this->eligibleTransferCandidates($perception),
                 ...$raidGeneration->candidates,
             ],
             'rejections' => $raidGeneration->rejections,
@@ -60,15 +67,80 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleFleetSaveCandidates(PerceptionSnapshot $perception): array
     {
-        if (!$perception->fleetsaveEligible) {
+        if ($perception->fleetsaveEligible) {
+            return [app()->makeWith(CandidateAction::class, [
+                'type' => AiCandidateActionType::FleetSave,
+                'reason' => AiCandidateReason::EligibleFleetSave->value,
+                'parameters' => [],
+                'features' => $this->features(0, 1, 0, 0, $perception->recoveryFactor),
+                'sourceTimestamps' => $perception->sourceTimestamps,
+            ])];
+        }
+
+        // The proactive save (V6) is the other half: no hostile inbound, but an
+        // absence ahead and a fleet worth losing. The reactive branch above
+        // already owns the inbound case, so the two never compete.
+        if ($perception->upcomingAbsenceMinutes === null) {
+            return [];
+        }
+
+        if ($this->queueableFleetSavePlanner->proactivePlan($perception->playerId, $perception->upcomingAbsenceMinutes) === null) {
             return [];
         }
 
         return [app()->makeWith(CandidateAction::class, [
             'type' => AiCandidateActionType::FleetSave,
-            'reason' => AiCandidateReason::EligibleFleetSave->value,
+            'reason' => AiCandidateReason::ProactiveSave->value,
             'parameters' => [],
             'features' => $this->features(0, 1, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> */
+    private function eligibleRecallCandidates(PerceptionSnapshot $perception): array
+    {
+        if (!$perception->recallEligible) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Recall,
+            'reason' => AiCandidateReason::EligibleRecall->value,
+            'parameters' => [],
+            'features' => $this->features(0, 0.7, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> */
+    private function eligibleExpeditionCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($this->queueableExpeditionPlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Expedition,
+            'reason' => AiCandidateReason::EligibleExpedition->value,
+            'parameters' => [],
+            'features' => $this->features(0.3, 0.6, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> */
+    private function eligibleTransferCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($this->queueableTransferPlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Transfer,
+            'reason' => AiCandidateReason::EligibleTransfer->value,
+            'parameters' => [],
+            'features' => $this->features(0.4, 0.3, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -77,6 +149,10 @@ class CandidateActionFactory
     {
         $candidates = [];
         $rejections = [];
+
+        // The fleet raids on the storage-fill schedule, not ad hoc every
+        // session (RAID-009): computed once, it gates every visible target.
+        $storageReady = $this->raidPlanner->storageReady($perception->playerId);
 
         // Raid candidates are assembled solely from the published report
         // projection. The scorer never receives unseen defender information.
@@ -89,6 +165,19 @@ class CandidateActionFactory
 
             if ($report['expires_at'] <= $perception->observedAt->getTimestamp()) {
                 $rejections[$reportKey] = AiCandidateRejectionReason::StaleTargetIntel->value;
+                continue;
+            }
+
+            // A target scoring under ~⅕ of ours cannot defend its loot, so it is
+            // dropped before the estimator runs (RAID-008). Fixtures built
+            // without the field stay viable rather than silently disappearing.
+            if (!($report['score_viable'] ?? true)) {
+                $rejections[$reportKey] = AiCandidateRejectionReason::ScoreBelowViability->value;
+                continue;
+            }
+
+            if (!$storageReady) {
+                $rejections[$reportKey] = AiCandidateRejectionReason::StorageNotFull->value;
                 continue;
             }
 

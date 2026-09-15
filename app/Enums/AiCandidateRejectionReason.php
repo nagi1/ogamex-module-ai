@@ -7,5 +7,7 @@ enum AiCandidateRejectionReason: string
 {
     case AttackNotPermitted = 'attack_not_permitted';
     case StaleTargetIntel = 'stale_target_intel';
+    case ScoreBelowViability = 'score_below_viability';
+    case StorageNotFull = 'storage_not_full';
     case RaidNotViable = 'raid_not_viable';
 }

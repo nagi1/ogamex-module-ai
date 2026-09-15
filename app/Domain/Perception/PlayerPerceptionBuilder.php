@@ -14,9 +14,9 @@ class PlayerPerceptionBuilder
     ) {
     }
 
-    public function build(int $playerId): PerceptionSnapshot
+    public function build(int $playerId, ?int $upcomingAbsenceMinutes = null): PerceptionSnapshot
     {
-        return $this->fromObservation($this->playerObservationService->ownedState($playerId));
+        return $this->fromObservation($this->playerObservationService->ownedState($playerId), $upcomingAbsenceMinutes);
     }
 
     /**
@@ -25,7 +25,7 @@ class PlayerPerceptionBuilder
      *
      * @param array<string, mixed> $observation
      */
-    public function fromObservation(array $observation): PerceptionSnapshot
+    public function fromObservation(array $observation, ?int $upcomingAbsenceMinutes = null): PerceptionSnapshot
     {
         $observedAt = $this->observedAt($observation);
 
@@ -37,8 +37,10 @@ class PlayerPerceptionBuilder
             'availableActions' => $this->availableActions((array) ($observation['available_actions'] ?? [])),
             'fleetsaveEligible' => (bool) ($observation['fleetsave_eligible'] ?? false),
             'inboundFleets' => $this->inboundFleets((array) ($observation['inbound_fleets'] ?? [])),
+            'recallEligible' => (bool) ($observation['recall_eligible'] ?? false),
             'recoveryFactor' => max(0.0, min(1.0, (float) ($observation['recovery_factor'] ?? 0))),
             'sourceTimestamps' => $this->sourceTimestamps((array) ($observation['source_timestamps'] ?? []), $observedAt),
+            'upcomingAbsenceMinutes' => $upcomingAbsenceMinutes,
         ]);
     }
 
@@ -92,6 +94,7 @@ class PlayerPerceptionBuilder
                 'expires_at' => (int) ($report['expires_at'] ?? 0),
                 'confidence' => max(0.0, min(1.0, (float) ($report['confidence'] ?? 0))),
                 'travel_cost' => max(0.0, min(1.0, (float) ($report['travel_cost'] ?? 1))),
+                'activity' => isset($report['activity']) && is_bool($report['activity']) ? $report['activity'] : null,
                 'attack_permitted' => (bool) ($report['attack_permitted'] ?? false),
             ];
         }

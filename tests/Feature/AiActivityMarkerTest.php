@@ -69,6 +69,12 @@ test('the next AI session applies a finished host queue before deciding', functi
         'crystal' => 1_000_000,
         'deuterium' => 1_000_000,
     ]));
+    // A funded account must hold its balance, or the warehouse-first pass queues
+    // a store instead of the solar plant this test is about (the same fixture the
+    // chain, energy and publication tests already give their funded accounts).
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
 
     $firstSession = aiMarkerSession($profile, 'queue-building');
     app()->makeWith(ProcessAiWork::class, ['workItemId' => $firstSession->id])->handle();

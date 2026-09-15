@@ -8,10 +8,14 @@ use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\DeploymentMission;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
+use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
+use OGame\Services\PlayerService;
 
 /**
  * Module-owned adapter over the host's deployment path, used as a fleetsave.
@@ -32,7 +36,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
     ) {
     }
 
-    public function handle(int $playerId, int $originPlanetId, int $destinationPlanetId): AiActionResult
+    public function handle(int $playerId, int $originPlanetId, int $destinationPlanetId, int $shadowDestinationPlanetId = 0): AiActionResult
     {
         if (!Planet::query()->whereKey($originPlanetId)->where('user_id', $playerId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
@@ -54,6 +58,25 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
             $destination = $this->planetServiceFactory->makeForPlayer($player, $destinationPlanetId, false);
 
+            // V8: a large fleet is split across two own bodies so a
+            // phalanx-timed crash catches only part (FS-009). The split is
+            // decided at planning time; it is re-checked here because the fleet
+            // may have changed since.
+            if ($shadowDestinationPlanetId > 0
+                && Planet::query()->whereKey($shadowDestinationPlanetId)->where('user_id', $playerId)->exists()) {
+                $shadow = $this->planetServiceFactory->makeForPlayer($player, $shadowDestinationPlanetId, false);
+                [$military, $civil] = $this->splitFleet($origin);
+                if ($military->units !== [] && $civil->units !== []) {
+                    return $this->dispatchShadowWaves($player, $origin, $destination, $shadow, $military, $civil);
+                }
+            }
+
+            // A save is incomplete unless cargo is loaded too: in-flight
+            // resources cannot be raided, and a stripped planet is unprofitable
+            // to hit (FS-006). Lift the planet's stock up to what the fleet can
+            // carry.
+            $cargo = $this->liftableStock($player, $origin, $origin->getShipUnits());
+
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
@@ -61,7 +84,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 $destination->getPlanetType(),
                 DeploymentMission::getTypeId(),
                 $origin->getShipUnits(),
-                new Resources(),
+                $cargo,
                 self::SAVE_SPEED,
             );
 
@@ -69,5 +92,80 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * Two save waves: the combat hulls to the safer body and the civil hulls,
+     * which carry the stock, to the other (FS-009). The combat wave leaves
+     * first, so a refusal on the second still leaves the valuable half parked.
+     */
+    private function dispatchShadowWaves(PlayerService $player, PlanetService $origin, PlanetService $destination, PlanetService $shadow, UnitCollection $military, UnitCollection $civil): AiActionResult
+    {
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
+        $mission = $fleetMissions->createNewFromPlanet(
+            $origin,
+            $destination->getPlanetCoordinates(),
+            $destination->getPlanetType(),
+            DeploymentMission::getTypeId(),
+            $military,
+            new Resources(),
+            self::SAVE_SPEED,
+        );
+
+        $fleetMissions->createNewFromPlanet(
+            $origin,
+            $shadow->getPlanetCoordinates(),
+            $shadow->getPlanetType(),
+            DeploymentMission::getTypeId(),
+            $civil,
+            $this->liftableStock($player, $origin, $civil),
+            self::SAVE_SPEED,
+        );
+
+        return AiActionResult::queued($mission->id);
+    }
+
+    /**
+     * The origin's hulls separated by the host's own military/civil
+     * classification (FS-009).
+     *
+     * @return array{0: UnitCollection, 1: UnitCollection}
+     */
+    private function splitFleet(PlanetService $origin): array
+    {
+        $militaryNames = array_map(static fn ($object): string => $object->machine_name, ObjectService::getMilitaryShipObjects());
+        $civilNames = array_map(static fn ($object): string => $object->machine_name, ObjectService::getCivilShipObjects());
+
+        $military = new UnitCollection();
+        $civil = new UnitCollection();
+
+        foreach ($origin->getShipUnits()->units as $entry) {
+            $name = $entry->unitObject->machine_name;
+            if (in_array($name, $militaryNames, true)) {
+                $military->addUnit($entry->unitObject, $entry->amount);
+            }
+
+            if (in_array($name, $civilNames, true)) {
+                $civil->addUnit($entry->unitObject, $entry->amount);
+            }
+        }
+
+        return [$military, $civil];
+    }
+
+    /**
+     * The planet's stock, scaled to the fleet's cargo hold (FS-006).
+     */
+    private function liftableStock(PlayerService $player, PlanetService $origin, UnitCollection $fleet): Resources
+    {
+        $stock = new Resources($origin->metal()->get(), $origin->crystal()->get(), $origin->deuterium()->get());
+        $capacity = $fleet->getTotalCargoCapacity($player);
+
+        if ($stock->sum() <= $capacity) {
+            return $stock;
+        }
+
+        return $capacity > 0 ? $stock->multiply($capacity / $stock->sum()) : new Resources();
     }
 }

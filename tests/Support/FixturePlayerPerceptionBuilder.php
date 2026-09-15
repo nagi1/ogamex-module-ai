@@ -16,7 +16,7 @@ final class FixturePlayerPerceptionBuilder extends PlayerPerceptionBuilder
     {
     }
 
-    public function build(int $playerId): PerceptionSnapshot
+    public function build(int $playerId, ?int $upcomingAbsenceMinutes = null): PerceptionSnapshot
     {
         return $this->snapshot;
     }

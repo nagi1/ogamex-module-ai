@@ -7,12 +7,17 @@ use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableColony;
 use Modules\AI\Domain\Decision\QueueableColonyPlanner;
+use Modules\AI\Domain\Decision\QueueableExpedition;
+use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
+use Modules\AI\Domain\Decision\QueueableRecall;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
+use Modules\AI\Domain\Decision\QueueableTransfer;
+use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
@@ -52,6 +57,8 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_DESTINATION_PLANET_ID = 'destination_planet_id';
 
+    private const PAYLOAD_SHADOW_DESTINATION_PLANET_ID = 'shadow_destination_planet_id';
+
     private const PAYLOAD_TARGET_GALAXY = 'target_galaxy';
 
     private const PAYLOAD_TARGET_SYSTEM = 'target_system';
@@ -60,14 +67,26 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_TARGET_TYPE = 'target_type';
 
+    private const PAYLOAD_SOURCE_PLANET_ID = 'source_planet_id';
+
+    private const PAYLOAD_TARGET_PLANET_ID = 'target_planet_id';
+
+    private const PAYLOAD_METAL = 'metal';
+
+    private const PAYLOAD_CRYSTAL = 'crystal';
+
+    private const PAYLOAD_DEUTERIUM = 'deuterium';
+
     private const PAYLOAD_REASON = 'reason';
 
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
         private QueueableUnitPlanner $queueableUnitPlanner,
         private QueueableColonyPlanner $queueableColonyPlanner,
+        private QueueableExpeditionPlanner $queueableExpeditionPlanner,
         private QueueableFleetSavePlanner $queueableFleetSavePlanner,
         private QueueableSpyPlanner $queueableSpyPlanner,
+        private QueueableTransferPlanner $queueableTransferPlanner,
         private RaidPlanner $raidPlanner,
         private AiClock $clock,
     ) {
@@ -105,7 +124,10 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Research => $this->scheduleResearch($profile, $sessionWorkItem),
             AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
+            AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
+            AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem),
             AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem),
+            AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
             AiCandidateActionType::DoNothing,
@@ -204,6 +226,48 @@ class ScheduleAiIntentAction
     }
 
     /**
+     * The same for an expedition the plan approved: the origin body and the
+     * slot-16 coordinate travel with the intent, re-planned so a full slot or a
+     * missing disposable ship never becomes work.
+     */
+    private function scheduleExpedition(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableExpeditionPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableExpedition) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Expedition, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_GALAXY => $plan->galaxy,
+            self::PAYLOAD_SYSTEM => $plan->system,
+            self::PAYLOAD_POSITION => $plan->position,
+            self::PAYLOAD_REASON => 'expedition:' . $plan->galaxy . ':' . $plan->system . ':' . $plan->position,
+        ]);
+    }
+
+    /**
+     * The same for a transfer the plan approved: source, target and the shipment travel with the
+     * intent, so the ferry funds the body the session saw rather than a re-decided shortfall.
+     */
+    private function scheduleTransfer(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableTransferPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableTransfer) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Transfer, [
+            self::PAYLOAD_SOURCE_PLANET_ID => $plan->sourcePlanetId,
+            self::PAYLOAD_TARGET_PLANET_ID => $plan->targetPlanetId,
+            self::PAYLOAD_METAL => $plan->metal,
+            self::PAYLOAD_CRYSTAL => $plan->crystal,
+            self::PAYLOAD_DEUTERIUM => $plan->deuterium,
+            self::PAYLOAD_REASON => 'transfer:' . $plan->sourcePlanetId . ':' . $plan->targetPlanetId,
+        ]);
+    }
+
+    /**
      * The same for a fleetsave the plan approved: the threatened planet and the
      * destination travel with the intent, so the save moves the fleet to the
      * planet the session saw rather than a re-decided one.
@@ -218,8 +282,27 @@ class ScheduleAiIntentAction
         $this->enqueue($profile, $sessionWorkItem, AiWorkKind::FleetSave, [
             self::PAYLOAD_PLANET_ID => $plan->originPlanetId,
             self::PAYLOAD_DESTINATION_PLANET_ID => $plan->destinationPlanetId,
+            self::PAYLOAD_SHADOW_DESTINATION_PLANET_ID => $plan->shadowDestinationPlanetId,
             self::PAYLOAD_MISSION_TYPE => $plan->missionType,
             self::PAYLOAD_REASON => 'fleetsave',
+        ]);
+    }
+
+    /**
+     * A recall names no target: the parked deployment is re-planned here, and
+     * only a real in-flight save becomes work. The planet travels with the
+     * intent so the dispatch advances the body the deployment left from.
+     */
+    private function scheduleRecall(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableFleetSavePlanner->recallPlan($profile->player_id);
+        if (!$plan instanceof QueueableRecall) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Recall, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_REASON => 'recall',
         ]);
     }
 

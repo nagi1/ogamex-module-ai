@@ -655,3 +655,134 @@ To run the task index natively from the editor:
 - **Three `doc` tasks added** (DOC-001 U-series block, DOC-002 ninja block, DOC-003 expedition block)
   and their dependencies wired: `IMPL-018 ← DOC-001`, `IMPL-019 ← DOC-002`, `IMPL-020 ← DOC-003`.
   These are the only `ready` work until `REV-001` (catalog review) is cleared.
+
+### Fleetcrash slice — recall executor + moon geography (15 September 2026)
+
+IMPL-017 shipped the two smallest, host-verified F-cluster pieces and deferred the rest:
+
+- **F2 (shipped)** — `QueueAiRecallAction` recalls the account's own in-flight save over the host's
+  `cancelMission`, adding the ownership check the host lacks (host R5). A deployment parks the fleet;
+  the recall is the other half of the save, so this closes a real gap rather than a niche one.
+- **F3 (shipped)** — the save planner parks on a moon when one exists (phalanx-invisible, CRASH-006);
+  building a moon stays an economy decision.
+- **F1, F4 (deferred)** — both ride the crash-timing executor: F1's only consumer is the phalanx scan
+  of an enemy return, and F4 needs the attack→debris→recycle chain plus debris-field awareness.
+  A module phalanx range table would violate gate 1 and a forward over `canScanTarget` gate 2, so F1
+  has no standalone code.
+- **F5, F6 (deferred)** — F5 is P2 awareness-first per plan; F6 is last in priority, most niche and
+  most expensive (redirect consequence now code-verified via `redirectFleetsFromMoon`).
+
+Host surfaces verified read-only before writing: `PhalanxService` (range/cost/scan),
+`JumpGateService::calculateCooldown`, `DebrisFieldService::calculateRequiredRecyclers`,
+`cancelMission` guards, `RecycleMission` type 8, `MoonDestructionMission` type 9.
+
+### Expedition executor + ninja gated (15 September 2026)
+
+- **DISC-004 closed.** The host expedition surface is verified read-only: `ExpeditionMission` type 15
+  with `hasReturnMission`, the slot-16 position gate, the astrophysics >= 1 gate, the slot budget
+  (`getExpeditionSlotsInUse`/`getExpeditionSlotsMax`), the 1..astrophysics holding-hours bound, and the
+  configurable outcome weights (dark matter, ships, resources, delay, speedup, nothing, black hole,
+  pirates, aliens, merchant) with the Discoverer combat-reduction bonus.
+- **IMPL-020 shipped.** `QueueAiExpeditionAction` dispatches one disposable civil cargo ship (host-classified
+  via `getCivilShipObjects`, smallest cargo, probe and colony ship excluded) to slot 16 of the origin
+  system. The never-fleetsave refusal is the single-hull fleet (EXP-001); the outcome table is the host's,
+  never a module constant.
+- **IMPL-019 blocked.** NN2 (the ninja trap) is gated behind a reviewed cluster per `gameplay-algorithms.md`
+  ("advanced tactic gated behind a reviewed cluster, never silent"), and NN1's phalanx staging check needs
+  a moon plus sensor phalanx that no account yet builds (F3 leaves moon-building open) — its no-moon
+  fallback is the already-shipped T8 activity re-check.
+
+### Ninja NN1 shipped, NN2 stays gated (15 September 2026)
+
+- **NN1 (shipped)** — the raid dispatch now drops a target whose moon is active while its planet is
+  quiet (`ActivityIntelReader::moonOnlyActivity` over the host's moon-coordinate lookup). This is the
+  anti-ninja staging check (NIN-005) and it needs no own moon: it reads the *target's* moon. My earlier
+  block note over-stated this as needing a module-owned moon and phalanx; corrected.
+- **NN2 (deferred)** — the defender's timed counter-landing stays gated behind a reviewed cluster:
+  timing-critical, and a wrong landing loses the fleet ("never silent").
+
+### SP5 reservation + X1 transfer shipped (15 September 2026)
+- **SP5 (IMPL-021)** — `ReserveFloor`: a build or research spend must leave a per-resource floor
+  (10% of storage reduced by production over the saving horizon; 4h economy, 6h research). A resource
+  the price does not spend keeps no floor, so a deuterium reserve never freezes surplus metal and
+  crystal.
+- **X1 (DEF-002)** — `QueueableTransferPlanner` + `QueueAiTransferAction`: a colony short of its next
+  level's cost is funded from the body that can spare it, netting in-flight transports (E4) and keeping
+  the source's SP5 reserve. Shipments below 50k combined metal+crystal are skipped (r4fek); the ferry
+  carries just enough owned cargo hulls, never the combat fleet.
+
+### V6 proactive save — investigated and re-deferred (15 September 2026)
+- Tried and reverted. The trigger is not a scored candidate under the current one-action-per-session
+  model: a proactive `FleetSave` candidate with any safety weight outranks `Build`/`Research` on every
+  session gap (a Miner's 4-hour gap > the 30-minute FS-001 threshold, so it would save instead of
+  building every session). The session's single selected action cannot express "build, then save before
+  leaving".
+- The fix is the persona **exposure band** — save only when the host's fleet value plus lootable stock
+  clears a persona threshold — which is a persona-parameter design decision over the host's fleet value,
+  not a constant. Deferred with that precise note in `gameplay-algorithms.md` V6; the session-plan
+  reorder (compute the plan before the decision) is the other half and is itself safe but dead code
+  without the band, so it was not kept.
+
+### V6 proactive save shipped (15 September 2026)
+- The trigger now has two halves: the reactive save (inbound hostile) and the proactive save
+  (logging off for a real absence with a fleet worth losing). `SessionDecisionService` computes the
+  session plan before the decision and passes the upcoming absence into the perception;
+  `QueueableFleetSavePlanner::proactivePlan()` offers the save only past 120 minutes of absence and
+  only when the fleet left behind clears the persona's exposure band.
+- Exposure band (persona parameter, raw-price sum of the ships on the origin planet, defence
+  excluded): fleeter 5,000, trader 25,000, miner/turtle/casual 50,000. The 120-minute absence
+  threshold sits above the fleeter's ~70-minute inter-session gap and below the dark period, so the
+  save fires at the last session before bed, never every session — which is what lets the
+  one-action-per-session model express "build during the day, save before leaving".
+- Supersedes the earlier "investigated and re-deferred" note: the exposure band resolves the
+  every-session outrank, and the session-plan reorder is kept because it now has a consumer.
+
+### V8 shadow waves shipped (15 September 2026)
+- A save now splits a large fleet across two own bodies: combat hulls to the safer body (moon first,
+  then farthest) and civil hulls — which lift the planet stock (FS-006) — to the next-ranked body.
+- The split needs four things at once: a second own body, a free second fleet slot, both hull roles
+  present, and a fleet at least twice the persona's exposure band (each wave stays worth the trip).
+  A small or single-role fleet stays on one body, so "a small fleet is never split" holds without a
+  second constant.
+- Full top-k route × speed enumeration (V7) and staggered landing times stay open; V8 is the two-body
+  shadow, not the whole V1 enumeration.
+
+### RAID-008 score-ratio pre-filter shipped (15 September 2026)
+- A target scoring under ~⅕ of the account's own public score is dropped before the profit test
+  (a pre-profit filter, not a substitute): `targetReports()` publishes `score_viable` from the host's
+  public highscore (`general`), and the candidate factory rejects it as `score_below_viability`.
+- An unknown own score (zeroed highscore row in a young universe) filters nothing — skipping
+  everything is worse than skipping nothing. The target's player id comes from the report's
+  `planet_user_id`, so a report against a no-owner coordinate simply scores zero and is dropped once
+  the account has a score.
+- Remaining T6 target-choice terms stay open: relationship (RAID-007), proximity clustering
+  (RAID-009), contest (RAID-013).
+
+### RAID-009 storage-fill raid schedule shipped (15 September 2026)
+- A fleeter raids on the storage-fill schedule (8-12h), not ad hoc every session: `RaidPlanner::storageReady()`
+  gates the raid on the fleet planet's warehouse being near full (0.8 of capacity, the corpus' own
+  near-full threshold from E3), and the candidate factory rejects each visible target as
+  `storage_not_full` until it is. The account with an empty warehouse builds instead of raiding.
+- The gate is checked once per decision, not per target, and only after staleness/legality, so the
+  existing per-report rejection reasons are unchanged. A no-fleet or no-account player defers to the
+  per-target planner rather than the gate.
+- Proximity clustering (cross-galaxy ≈ 5× deuterium) and the relationship/contest terms stay open.
+
+### T6/V7 residuals closed — clustering + route×speed shipped, relationship/contest deferred (15 September 2026)
+- **Proximity clustering (RAID-009) is already shipped, not open.** `travel_cost` is the host-quoted
+  distance normalised over the universe, and the host's own distance quote prices a cross-galaxy hop
+  (`diffGalaxy × 20000`) against a within-galaxy hop (`deltaSystem × 95 + 2700`) — roughly the
+  documented 5× deuterium — so the scorer already clusters raids near the fleet. Pinned by the
+  existing test `owned state prices a distant target higher than a near one`. The earlier "stays open"
+  note was stale and is retracted.
+- **V7 route × speed is resolved for the deployment save.** The host's slowest speed (10%) is also the
+  minimum-fuel speed, and a parked deployment has no arrival schedule to fit, so the two route axes
+  collapse to the shipped destination ranking (moon-first, farthest) at the fixed slowest speed.
+  Two residuals are recorded, not built: "discard unaffordable fuel" (the host already refuses an
+  unfuelable save at dispatch and the receipt records it — a planner-side filter is polish, not
+  correctness) and "never the same landing time" (departure rides the routine's session spread H2).
+- **Relationship (RAID-007) deferred.** `AiRelationship` rows are only written by the social
+  observation path, which ships with Package 6; until that state is populated a raid policy over it
+  would be dead code.
+- **Contest (RAID-013) deferred.** The module observes no other player's raid schedule, so a contest
+  model would be an unmeasured guess; proximity is already the shipped edge.

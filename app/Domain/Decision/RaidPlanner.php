@@ -12,7 +12,10 @@ use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
+use OGame\Services\CharacterClassService;
+use OGame\Services\FleetMissionService;
 use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 
 /**
  * Decides whether an espionage report is worth acting on, and how.
@@ -31,11 +34,55 @@ class RaidPlanner
 
     private const BASHING_WINDOW_HOURS = 24;
 
+    /** RAID-011: loot-to-fuel ratio a raid must clear before it flies (metal-equivalent loot : deuterium). */
+    private const LOOT_TIER_FARM = 3.0;
+
+    private const LOOT_TIER_DEFENDED = 2.0;
+
+    /** The metal-equivalent trade band the economy already prices in (M + 1.5C + 2D). */
+    private const CRYSTAL_WEIGHT = 1.5;
+
+    private const DEUTERIUM_WEIGHT = 2.0;
+
+    /** RAID-009: the fleet raids on the storage-fill schedule, so the warehouse must be near full. */
+    private const RAID_STORAGE_FILL_RATIO = 0.8;
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
         private NativeRaidEstimator $raidEstimator,
     ) {
+    }
+
+    /**
+     * Whether the account's fleet planet has a warehouse worth flying for.
+     *
+     * A fleeter raids on the storage-fill schedule (8-12h), not ad hoc every
+     * session: the fleet flies when the mines have filled the warehouse
+     * (RAID-009). The ratio is the corpus' own near-full threshold (E3); the
+     * exact number is persona flavour.
+     */
+    public function storageReady(int $playerId): bool
+    {
+        if (!User::query()->whereKey($playerId)->exists()) {
+            return true;
+        }
+
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $origin = $this->origin($player);
+        if ($origin === null) {
+            return true;
+        }
+
+        $origin = $this->planetServiceFactory->makeForPlayer($player, $origin->getPlanetId(), false);
+        $stored = $origin->metal()->get() + $origin->crystal()->get() + $origin->deuterium()->get();
+        $capacity = $origin->metalStorage()->get() + $origin->crystalStorage()->get() + $origin->deuteriumStorage()->get();
+
+        if ($capacity <= 0) {
+            return false;
+        }
+
+        return $stored / $capacity >= self::RAID_STORAGE_FILL_RATIO;
     }
 
     public function plan(int $playerId, int $reportId): ?QueueableRaid
@@ -54,10 +101,15 @@ class RaidPlanner
             return null;
         }
 
-        $origin = $this->origin($playerId);
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $origin = $this->origin($player);
         if ($origin === null) {
             return null;
         }
+
+        // The fuel and loot quotes need the origin's owner context, which the
+        // planets collection does not carry by itself.
+        $origin = $this->planetServiceFactory->makeForPlayer($player, $origin->getPlanetId(), false);
 
         $target = $this->target($report);
         if ($target === null) {
@@ -70,6 +122,16 @@ class RaidPlanner
 
         $estimate = $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
         if ($estimate->samples === 0 || $estimate->p20NetProfit <= 0.0) {
+            return null;
+        }
+
+        // The sampled profit is loot minus losses only. A raid also burns
+        // deuterium to fly there and back, so a distant farm that spends more
+        // fuel than the tier allows is refused even when it would "profit"
+        // (RAID-006, RAID-011).
+        $fuel = $this->roundTripFuel($player, $origin, $target);
+        $defended = $target->getDefenseUnits()->units !== [];
+        if (!$this->clearsLootTier($this->expectedLoot($player, $origin, $report), $fuel, $defended)) {
             return null;
         }
 
@@ -86,10 +148,8 @@ class RaidPlanner
     /**
      * The first planet carrying a fleet.
      */
-    private function origin(int $playerId): ?PlanetService
+    private function origin(PlayerService $player): ?PlanetService
     {
-        $player = $this->playerServiceFactory->make($playerId, true);
-
         foreach ($player->planets->all() as $planet) {
             if ($planet->getShipUnits()->units !== []) {
                 return $planet;
@@ -97,6 +157,48 @@ class RaidPlanner
         }
 
         return null;
+    }
+
+    /**
+     * The deuterium a raid burns flying there and back, host-quoted for the
+     * origin's own fleet at the slowest speed (RAID-006).
+     */
+    private function roundTripFuel(PlayerService $player, PlanetService $origin, PlanetService $target): int
+    {
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+        $oneWay = $fleetMissions->calculateConsumption($origin, $origin->getShipUnits(), $target->getPlanetCoordinates(), 0, 10.0);
+
+        return 2 * (int) $oneWay;
+    }
+
+    /**
+     * The loot the host would allow, as metal-equivalent: the report's visible
+     * resources at the host's own class loot fraction, capped by what the
+     * origin's fleet can actually carry back (RAID-012).
+     */
+    private function expectedLoot(PlayerService $player, PlanetService $origin, EspionageReport $report): float
+    {
+        $resources = $report->resources ?? [];
+        $metalEquivalent = (int) ($resources['metal'] ?? 0)
+            + self::CRYSTAL_WEIGHT * (int) ($resources['crystal'] ?? 0)
+            + self::DEUTERIUM_WEIGHT * (int) ($resources['deuterium'] ?? 0);
+
+        $lootFraction = app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
+        $cargoCapacity = $origin->getShipUnits()->getTotalCargoCapacity($player);
+
+        return min($metalEquivalent * $lootFraction, (float) $cargoCapacity);
+    }
+
+    /**
+     * A routine farm must carry three metal-equivalent for each deuterium spent;
+     * a defended run is allowed two because the debris subsidises it. Nothing
+     * under the floor flies (RAID-011).
+     */
+    private function clearsLootTier(float $loot, int $fuel, bool $defended): bool
+    {
+        $tier = $defended ? self::LOOT_TIER_DEFENDED : self::LOOT_TIER_FARM;
+
+        return $loot / max(1, $fuel) >= $tier;
     }
 
     /**

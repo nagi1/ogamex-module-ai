@@ -20,6 +20,7 @@ use OGame\Models\FleetMission;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\MessageService;
+use OGame\Services\PlanetService;
 use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
@@ -83,6 +84,7 @@ test('the spy planner picks a legal foreign target', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
     $foreign = $this->createForeignPlanet();
+    spyQuiet($foreign);
 
     $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
 
@@ -97,6 +99,8 @@ test('the spy planner skips a target it already holds fresh intel on', function 
 
     $probed = $this->createForeignPlanet();
     $unprobed = $this->createForeignPlanet();
+    spyQuiet($probed);
+    spyQuiet($unprobed);
 
     $probedCoordinates = $probed->getPlanetCoordinates();
     $unprobedCoordinates = $unprobed->getPlanetCoordinates();
@@ -117,6 +121,8 @@ test('the spy planner skips a target it already has a probe in flight toward', f
 
     $inFlight = $this->createForeignPlanet();
     $open = $this->createForeignPlanet();
+    spyQuiet($inFlight);
+    spyQuiet($open);
 
     $inFlightCoordinates = $inFlight->getPlanetCoordinates();
     $openCoordinates = $open->getPlanetCoordinates();
@@ -137,6 +143,8 @@ test('the spy planner skips a target it already has a queued intent toward', fun
 
     $queued = $this->createForeignPlanet();
     $open = $this->createForeignPlanet();
+    spyQuiet($queued);
+    spyQuiet($open);
 
     $queuedCoordinates = $queued->getPlanetCoordinates();
     $openCoordinates = $open->getPlanetCoordinates();
@@ -166,7 +174,8 @@ test('the spy action launches the host espionage mission', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetAddUnit('espionage_probe', 1);
-    $this->createForeignPlanet();
+    $foreign = $this->createForeignPlanet();
+    spyQuiet($foreign);
 
     $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
     expect($plan)->not->toBeNull();
@@ -186,6 +195,12 @@ function colonyProfile(int $playerId): AiProfile
         'random_seed' => 10_000 + $playerId,
         'enabled' => true,
     ]);
+}
+
+/** Age a fresh fixture target so its activity star is off, as a real scouting target's would be. */
+function spyQuiet(PlanetService $planet): void
+{
+    Planet::query()->whereKey($planet->getPlanetId())->update(['time_last_update' => now()->subMinutes(30)->getTimestamp()]);
 }
 
 /** A fresh espionage report delivered to the account as the host would after a probe. */

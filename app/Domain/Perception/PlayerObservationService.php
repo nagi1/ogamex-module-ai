@@ -14,9 +14,18 @@ use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Enums\AiAccountState;
 use Modules\AI\Enums\AiCapability;
 use Modules\AI\Models\AiProfile;
+use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\DeploymentMission;
+use OGame\Models\Enums\PlanetType;
+use OGame\Models\EspionageReport;
+use OGame\Models\FleetMission;
+use OGame\Models\Highscore;
 use OGame\Models\Message;
+use OGame\Models\Planet\Coordinate;
 use OGame\Services\FleetMissionService;
+use OGame\Services\PlayerService;
+use OGame\Services\SettingsService;
 
 /**
  * Reduces only the AI account's own current state into a transport-safe input.
@@ -34,8 +43,14 @@ class PlayerObservationService
      */
     private const INTEL_TTL_HOURS = 24;
 
+    /** RAID-008: a target scoring under this fraction of ours is not worth the fleet. */
+    private const VIABILITY_SCORE_DIVISOR = 5;
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
+        private PlanetServiceFactory $planetServiceFactory,
+        private ActivityIntelReader $activityIntelReader,
+        private SettingsService $settings,
         private QueueableBuildingPlanner $queueableBuildingPlanner,
         private QueueableUnitPlanner $queueableUnitPlanner,
         private QueueableColonyPlanner $queueableColonyPlanner,
@@ -56,7 +71,8 @@ class PlayerObservationService
      *     target_reports:array<int, array<string, mixed>>,
      *     fleetsave_eligible:bool,
      *     fleetsave_skip_reason:string|null,
-     *     inbound_fleets:list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}>
+     *     inbound_fleets:list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}>,
+     *     recall_eligible:bool
      * }
      */
     public function ownedState(int $playerId): array
@@ -83,6 +99,7 @@ class PlayerObservationService
             // the fleet movement page does. IncomingFleetIntelService only redacts a row that
             // already exists; it is not the source of the inbound picture.
             ...$this->inboundThreat($playerId, $active),
+            ...$this->recallState($playerId, $active),
         ];
     }
 
@@ -94,34 +111,122 @@ class PlayerObservationService
      * what the account has been told. The actual target state stays with the
      * report and the estimator — no target model reaches a policy from here.
      *
-     * @return array<int, array{report_id:int, observed_at:int, expires_at:int, confidence:float, travel_cost:float, attack_permitted:bool}>
+     * @return array<int, array{report_id:int, observed_at:int, expires_at:int, confidence:float, travel_cost:float, activity:bool|null, attack_permitted:bool, score_viable:bool}>
      */
     private function targetReports(int $playerId): array
     {
-        $cutoff = now()->subHours(self::INTEL_TTL_HOURS);
+        $now = now();
+        $cutoff = $now->copy()->subHours(self::INTEL_TTL_HOURS);
 
-        return Message::query()
+        $messages = Message::query()
             ->where('user_id', $playerId)
             ->whereNotNull('espionage_report_id')
             ->where('created_at', '>=', $cutoff)
             ->orderByDesc('id')
             ->limit(10)
-            ->get(['espionage_report_id', 'created_at'])
-            ->map(fn (Message $message): array => [
-                'report_id' => (int) $message->espionage_report_id,
-                'observed_at' => (int) ($message->created_at->timestamp ?? 0),
-                'expires_at' => (int) ($message->created_at?->addHours(self::INTEL_TTL_HOURS)->timestamp ?? 0),
-                // The report is the host's own picture at probe time; how much
-                // it reveals is already redacted by the host's espionage level.
-                'confidence' => 1.0,
-                // Travel cost is the estimator's number, not a perception fact;
-                // the candidate scorer treats this as unknown until then.
-                'travel_cost' => 0.0,
-                // Bashing and target legality are re-checked by the raid planner
-                // at decision time, so the intel itself is simply attackable.
-                'attack_permitted' => true,
-            ])
+            ->get(['espionage_report_id', 'created_at']);
+
+        if ($messages->isEmpty()) {
+            return [];
+        }
+
+        $reports = EspionageReport::query()
+            ->whereIn('id', $messages->pluck('espionage_report_id')->all())
+            ->get()
+            ->keyBy('id');
+
+        $nowTimestamp = (int) $now->timestamp;
+        $player = $this->playerServiceFactory->make($playerId, true);
+
+        // The public highscore is the one score both sides can see: a target
+        // under ~⅕ of ours cannot defend its loot economically, so it is
+        // dropped before the profit test runs (RAID-008).
+        $ownScore = (int) (Highscore::query()->where('player_id', $playerId)->value('general') ?? 0);
+        $targetUserIds = $reports->pluck('planet_user_id')->unique()->filter()->all();
+        $targetScores = $targetUserIds === []
+            ? collect()
+            : Highscore::query()->whereIn('player_id', $targetUserIds)->get()->keyBy('player_id');
+
+        return $messages
+            ->map(function (Message $message) use ($reports, $nowTimestamp, $player, $ownScore, $targetScores): array {
+                // The messages column is a foreign key to espionage_reports with
+                // no cascade, so every message here has a report by construction.
+                /** @var EspionageReport $report */
+                $report = $reports->get((int) $message->espionage_report_id);
+
+                return [
+                    'report_id' => (int) $message->espionage_report_id,
+                    'observed_at' => (int) ($message->created_at->timestamp ?? 0),
+                    'expires_at' => (int) ($message->created_at?->addHours(self::INTEL_TTL_HOURS)->timestamp ?? 0),
+                    // The profit test reads loot, fleet and defence, all of which go
+                    // stale fast; confidence is that fast-type freshness (RAID-005).
+                    'confidence' => $this->activityIntelReader->intelConfidence(
+                        (int) ($message->created_at->timestamp ?? 0),
+                        $nowTimestamp,
+                        self::INTEL_TTL_HOURS,
+                        'resources',
+                    ),
+                    // A normalized host distance: the planner enforces the exact
+                    // fuel cost in its gate, and this lets the scorer prefer the
+                    // closer target among what remains (RAID-006).
+                    'travel_cost' => $this->travelCost($player, $report),
+                    // The 15-minute activity star is galaxy-visible, so publishing
+                    // it here is a legal observation, not a reach into target state.
+                    'activity' => $this->targetActivity($report),
+                    // Bashing and target legality are re-checked by the raid planner
+                    // at decision time, so the intel itself is simply attackable.
+                    'attack_permitted' => true,
+                    'score_viable' => $this->scoreViable($ownScore, (int) ($targetScores->get((int) $report->planet_user_id)?->general ?? 0)),
+                ];
+            })
             ->all();
+    }
+
+    /**
+     * A target scoring under ~⅕ of ours cannot defend economically, so the
+     * account does not farm newbies (RAID-008). An unknown own score filters
+     * nothing: a young universe has no score row yet, and skipping everything
+     * is worse than skipping nothing.
+     */
+    private function scoreViable(int $ownScore, int $targetScore): bool
+    {
+        if ($ownScore === 0) {
+            return true;
+        }
+
+        return $targetScore >= intdiv($ownScore, self::VIABILITY_SCORE_DIVISOR);
+    }
+
+    /**
+     * The distance from the account's nearest planet to the report's target,
+     * normalized by the host's own galaxy span, as a 0..1 cost (RAID-006).
+     */
+    private function travelCost(PlayerService $player, EspionageReport $report): float
+    {
+        $target = new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position);
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
+        $minDistance = null;
+        foreach ($player->planets->all() as $planet) {
+            $distance = $fleetMissions->calculateFleetMissionDistance($planet, $target);
+            $minDistance = $minDistance === null ? $distance : min($minDistance, $distance);
+        }
+
+        $maxDistance = (int) $this->settings->numberOfGalaxies() * 20_000;
+
+        return $maxDistance > 0 ? min(1.0, (float) ($minDistance ?? 0) / $maxDistance) : 0.0;
+    }
+
+    /** @return bool|null the target body's activity star, or null when the body no longer exists */
+    private function targetActivity(EspionageReport $report): ?bool
+    {
+        $target = $this->planetServiceFactory->makeForCoordinate(
+            new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position),
+            false,
+            PlanetType::from((int) $report->planet_type),
+        );
+
+        return $target === null ? null : $this->activityIntelReader->activityAt($target);
     }
 
     /** @return array<int, array{id:int, resources:array<string, float|int>}> */
@@ -235,5 +340,33 @@ class PlayerObservationService
             'fleetsave_skip_reason' => null,
             'inbound_fleets' => $inbound,
         ];
+    }
+
+    /**
+     * The recall is the other half of a save: the parked deployment comes home
+     * once the hostile that sent it away is gone. A deployment between two own
+     * bodies only, and never while the host still reports an attack.
+     *
+     * @return array{recall_eligible:bool}
+     */
+    private function recallState(int $playerId, bool $active): array
+    {
+        if (!$active) {
+            return ['recall_eligible' => false];
+        }
+
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $deploymentInFlight = FleetMission::query()
+            ->where('user_id', $playerId)
+            ->where('mission_type', DeploymentMission::getTypeId())
+            ->where('canceled', 0)
+            ->where('processed', 0)
+            ->where('time_arrival', '>=', now()->timestamp)
+            ->whereColumn('planet_id_from', '!=', 'planet_id_to')
+            ->exists();
+
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
+        return ['recall_eligible' => $deploymentInFlight && !$fleetMissions->currentPlayerUnderAttack()];
     }
 }

@@ -107,6 +107,7 @@ test('it does not queue an escort the account already matches', function (): voi
     $this->planetAddResources(unitPlenty());
     $this->planetSetObjectLevel('shipyard', 1);
     $this->playerSetResearchLevel('combustion_drive', 1);
+    $this->planetAddUnit('small_cargo', 1);
     $this->planetAddUnit('light_fighter', 1);
     $this->planetAddUnit('colony_ship', 1);
     $this->planetAddUnit('espionage_probe', 1);

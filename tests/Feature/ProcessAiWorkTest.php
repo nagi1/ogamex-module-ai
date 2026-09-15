@@ -7,6 +7,7 @@ use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RecordAiBuildingCompletionExperienceAction;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\QueueAiResearch;
+use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
@@ -21,7 +22,6 @@ use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
-use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Models\AiActionReceipt;
@@ -540,8 +540,7 @@ test('an exhausted session recovers when the job itself marks the work failed', 
         'state' => AiWorkState::Pending,
         'attempts' => 2,
     ]);
-    $this->app->bind(RunAiSession::class, static fn (): RunAiSession => new class implements RunAiSession
-    {
+    $this->app->bind(RunAiSession::class, static fn (): RunAiSession => new class () implements RunAiSession {
         public function handle(AiProfile $profile, AiWorkItem $workItem): void
         {
             throw new RuntimeException('session failure');

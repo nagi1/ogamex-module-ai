@@ -15,6 +15,7 @@ readonly class QueueableFleetSave
         public int $originPlanetId,
         public int $destinationPlanetId,
         public int $missionType,
+        public int $shadowDestinationPlanetId = 0,
     ) {
     }
 }

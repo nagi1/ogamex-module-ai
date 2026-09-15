@@ -1,13 +1,17 @@
 <?php
 
 use Modules\AI\Actions\QueueAiColonyAction;
+use Modules\AI\Actions\QueueAiExpeditionAction;
 use Modules\AI\Actions\QueueAiFleetSaveAction;
 use Modules\AI\Actions\QueueAiRaidAction;
+use Modules\AI\Actions\QueueAiRecallAction;
 use Modules\AI\Actions\QueueAiSpyAction;
 use Modules\AI\Actions\QueueAiUnitsAction;
 use Modules\AI\Contracts\QueueAiColony;
+use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Contracts\QueueAiRaid;
+use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiSpy;
 use Modules\AI\Contracts\QueueAiUnits;
 use Modules\AI\Enums\AiArchetype;
@@ -24,8 +28,10 @@ uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
     app()->bind(QueueAiColony::class, QueueAiColonyAction::class);
+    app()->bind(QueueAiExpedition::class, QueueAiExpeditionAction::class);
     app()->bind(QueueAiFleetSave::class, QueueAiFleetSaveAction::class);
     app()->bind(QueueAiRaid::class, QueueAiRaidAction::class);
+    app()->bind(QueueAiRecall::class, QueueAiRecallAction::class);
     app()->bind(QueueAiSpy::class, QueueAiSpyAction::class);
     app()->bind(QueueAiUnits::class, QueueAiUnitsAction::class);
 });
@@ -39,9 +45,11 @@ test('a banned account is refused by every fleet and queue adapter', function ()
 
     expect(app(QueueAiUnits::class)->handle($this->currentUserId, $this->currentPlanetId, $cargoId, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
         ->and(app(QueueAiColony::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
+        ->and(app(QueueAiExpedition::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
         ->and(app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
         ->and(app(QueueAiSpy::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
-        ->and(app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value);
+        ->and(app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
+        ->and(app(QueueAiRecall::class)->handle($this->currentUserId, $this->currentPlanetId)->reason)->toBe(AiQueueActionReason::PlayerBanned->value);
 });
 
 test('a vacationing account is refused by every fleet and queue adapter', function (): void {
@@ -53,9 +61,11 @@ test('a vacationing account is refused by every fleet and queue adapter', functi
 
     expect(app(QueueAiUnits::class)->handle($this->currentUserId, $this->currentPlanetId, $cargoId, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value)
         ->and(app(QueueAiColony::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4)->reason)->toBe(AiQueueActionReason::VacationMode->value)
+        ->and(app(QueueAiExpedition::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value)
         ->and(app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId)->reason)->toBe(AiQueueActionReason::VacationMode->value)
         ->and(app(QueueAiSpy::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value)
-        ->and(app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value);
+        ->and(app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value)
+        ->and(app(QueueAiRecall::class)->handle($this->currentUserId, $this->currentPlanetId)->reason)->toBe(AiQueueActionReason::VacationMode->value);
 });
 
 test('the units adapter validates its input and the unit kind', function (): void {
@@ -106,6 +116,10 @@ test('an adapter reports a rejection when the host dispatch fails', function ():
     $this->planetAddUnit('small_cargo', 1);
     $raid = app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1);
     expect($raid->successful)->toBeFalse();
+
+    // An expedition with a disposable ship but no deuterium is refused the same way.
+    $expedition = app(QueueAiExpedition::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1);
+    expect($expedition->successful)->toBeFalse();
 
     $secondPlanetId = guardSecondPlanetId($this->currentUserId);
     $fleetSave = app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId);

@@ -17,4 +17,7 @@ enum AiCandidateActionType: int
     case Spy = 7;
     case Raid = 8;
     case Colonize = 9;
+    case Recall = 10;
+    case Expedition = 11;
+    case Transfer = 12;
 }

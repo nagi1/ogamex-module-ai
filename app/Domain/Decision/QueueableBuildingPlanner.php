@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\BuildingQueueService;
 use OGame\Services\ObjectService;
@@ -41,6 +42,7 @@ class QueueableBuildingPlanner
         private FacilityChain $facilityChain,
         private EnergyCapacity $energyCapacity,
         private EconomyUpgrades $economyUpgrades,
+        private ReserveFloor $reserveFloor,
         private BuildingQueueService $buildingQueueService,
         private ResearchQueueService $researchQueueService,
     ) {
@@ -142,7 +144,7 @@ class QueueableBuildingPlanner
         $queueable = ObjectService::objectValidPlanetType($machineName, $planet)
             && !$this->buildingQueueService->retrieveQueue($planet)->isQueueFull()
             && ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)
-            && $planet->hasResources(ObjectService::getObjectPrice($machineName, $planet));
+            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS));
 
         if (!$queueable) {
             return null;
@@ -164,7 +166,7 @@ class QueueableBuildingPlanner
 
         $queueable = !$this->researchQueueService->retrieveQueue($planet)->isQueueFull()
             && ObjectService::objectRequirementsMetWithQueue($machineName, ($planet->getPlayer()?->getResearchLevel($machineName) ?? 0) + 1, $planet)
-            && $planet->hasResources(ObjectService::getObjectPrice($machineName, $planet));
+            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::RESEARCH_HOURS));
 
         if (!$queueable) {
             return null;
@@ -175,5 +177,24 @@ class QueueableBuildingPlanner
             'researchId' => $candidate->buildingId,
             'reason' => $candidate->reason,
         ]);
+    }
+
+    /**
+     * The price plus the floor the purchase must leave behind, so affordability stays one host call.
+     *
+     * A resource the price does not spend keeps no floor: the floor is what must survive spending that
+     * resource, so a purchase that costs no deuterium is not blocked by a deuterium reserve (SP5 --
+     * saving for a drive must not freeze surplus metal and crystal).
+     */
+    private function withReserve(PlanetService $planet, Resources $price, float $savingHours): Resources
+    {
+        $floor = $this->reserveFloor->floor($planet, $savingHours);
+
+        return new Resources(
+            $price->metal->get() > 0 ? $price->metal->get() + $floor->metal->get() : 0,
+            $price->crystal->get() > 0 ? $price->crystal->get() + $floor->crystal->get() : 0,
+            $price->deuterium->get() > 0 ? $price->deuterium->get() + $floor->deuterium->get() : 0,
+            $price->energy->get(),
+        );
     }
 }

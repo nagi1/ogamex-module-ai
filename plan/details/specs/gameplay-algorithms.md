@@ -41,10 +41,13 @@ line is the list of host answers it needs.
 | O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **L1, L2, H6 shipped** |
 | I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | **I1–I8 shipped** (I7 decided, I8 class provisioned) |
 | A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | **AG1/AG2/AG3 shipped**; A4 decided (correct signal 8) and AG4 closes it |
-| W6-1 | [T6](#t6-the-raid-target-score) [T7](#t7-tiered-profit-gate-and-cargo-sizing) [T8](#t8-launch-time-re-check) | Activity risk, per-type intel decay, fuel + slot cost, tiered profit gate, cargo sizing, dispatch re-check | **planned** (validated principles; blocked on catalog review) |
-| W6-2 | [N4](#n4-spy-target-prioritisation) [N5](#n5-own-signature-control) | Score spy targets (distance/novelty/yield) instead of id-order first-fit; dispatch and disappear | **planned** |
-| W6-3 | [V6](#v6-the-proactive-save) [V7](#v7-variation-route-scoring-and-dispatch-masking) [V8](#v8-shadow-waves) | Proactive offline-gap save, route × speed scoring, dispatch masking, shadow waves | **planned** |
-| W6-5 | [F1](#f1-phalanx-coverage) [F2](#f2-deploy-recall-interception) [F3](#f3-the-moon-as-geography) [F4](#f4-the-recycle-trip) [F5](#f5-blind-lanx-via-the-debris-field) [F6](#f6-moon-destruction) | Phalanx, deploy-recall, moon geography, recycle trip, blind lanx, moon destruction — host-supported, module-unwired | **planned** |
+| W6-1 | [T6](#t6-the-raid-target-score) [T7](#t7-tiered-profit-gate-and-cargo-sizing) [T8](#t8-launch-time-re-check) | Activity risk, per-type intel decay, fuel + slot cost, tiered profit gate, cargo sizing, dispatch re-check | **partially shipped** (fuel + tiered gate, cargo-capped loot, dispatch re-check, travel cost + the score-ratio pre-filter + the storage-fill raid schedule + proximity clustering; relationship and contest deferred — see T6) |
+| W6-2 | [N4](#n4-spy-target-prioritisation) [N5](#n5-own-signature-control) | Score spy targets (distance/novelty/yield) instead of id-order first-fit; dispatch and disappear | **shipped** (scored target choice + active-target skip; dispatch-and-disappear already held) |
+| W6-3 | [V6](#v6-the-proactive-save) [V7](#v7-variation-route-scoring-and-dispatch-masking) [V8](#v8-shadow-waves) | Proactive offline-gap save, route × speed scoring, dispatch masking, shadow waves | **shipped** (farthest-destination scoring + cargo lift + the proactive offline-gap save + the two-body shadow split; route × speed resolved for deployment saves — see V7) |
+| W6-4 | [U5](#u5-stage-composition--the-production-stock) [U6](#u6-the-launch-subset--counters-not-the-whole-stock) | Stage-sized production stock (fodder, workhorse, recycler, cargo), launch as the counter-selected subset, simulated before dispatch | **partially shipped** (payload-sized cargo in `QueueableUnitPlanner`; stage workhorse and recycler sizing deferred) |
+| W6-5 | [F1](#f1-phalanx-coverage) [F2](#f2-deploy-recall-interception) [F3](#f3-the-moon-as-geography) [F4](#f4-the-recycle-trip) [F5](#f5-blind-lanx-via-the-debris-field) [F6](#f6-moon-destruction) | Phalanx, deploy-recall, moon geography, recycle trip, blind lanx, moon destruction — host-supported, module-unwired | **partially shipped** (F2 recall executor + F3 moon-destination save; F1/F4 ride the deferred crash executor, F5 P2, F6 last-priority) |
+| Ninja (pass-6) | [NN1](#nn1-anti-ninja-checks-on-the-raid-path) [NN2](#nn2-the-ninja-trap-defender-counter-crash) | Anti-ninja staging checks on the raid path; the defender's timed counter-landing | **partially shipped** (NN1 moon-staging check at dispatch; NN2 trap deferred — gated behind a reviewed cluster) |
+| Expeditions (pass-6) | [EX1](#ex1-slot-16-outcomes-and-never-a-save) | Slot-16 only, host-returned outcomes, never a fleetsave | **shipped** (slot-16 executor over the host mission, one disposable civil cargo ship; host surface verified — DISC-004 closed) |
 
 ## How to read an algorithm block
 
@@ -112,6 +115,10 @@ double-enqueue — **verified**, and it is the only project that defends against
 
 ### SP5 — Reservation before spending
 
+**Shipped as `ReserveFloor`** — the build and research affordability gates now require the price plus
+a per-resource floor, and a resource the price does not spend keeps no floor (so a deuterium reserve
+never freezes surplus metal and crystal).
+
 A build that consumes the last resources will prevent the next save, the next commitment and the next
 research step. Reserve first: a per-resource floor that survives the purchase, reduced by the
 production expected to arrive during the wait, so "saving deuterium for a drive" does not freeze the
@@ -126,6 +133,9 @@ Already module policy. What the corpus adds: the record must name the **estimato
 an input change.
 
 ### SP7 — The activity and intel reader
+
+**Shipped as `ActivityIntelReader`** (read-only; published from `PlayerObservationService::targetReports()`
+as per-report `confidence` and `activity`).
 
 Derived signals are computed once and consumed by the tactical planners, never re-derived per
 planner. The host gives every body a `Planet.time_last_update` — the 15-minute activity marker, set
@@ -254,6 +264,8 @@ this rule only makes sense after [Y1](#y1-the-energy-interlock).
 and a planet with an empty warehouse does not.
 
 ### E4 — Ferrying resources between own planets
+
+**Shipped in `QueueableTransferPlanner`** (X1).
 
 **Gaps:** G17, A1 · **Host:** `TransportMission` (own planets are legal), the fleet's total cargo
 capacity, the fleet-save margin, and the queue state of both planets.
@@ -441,6 +453,73 @@ construction is not available; a fleet in flight is not a fleet at home. This is
 prevents the two classic errors: raiding with the fleet that is already flying, and spending resources
 that a transport is about to deliver.
 
+### U5 — Stage composition — the production stock
+
+**Partially shipped** — cargo is sized to the raid payload (FLE-010) in `QueueableUnitPlanner`; the
+stage workhorse (FLE-014) and recycler sizing (FLE-009) stay open.
+
+**Gaps:** W6-4 · **Host:** unit objects with their properties (`capacity`, `fuel_capacity`, `speed`,
+`structural_integrity`, `shield`, `attack`, rapid-fire), their requirement graph, the unit queue
+(`UnitQueueService::add`), and the universe's stage (age, typical target defence).
+
+`QueueableUnitPlanner` owns roles but no composition: cargo is fixed at one and there is no fodder,
+counter or recycler sizing. The published fix is a **stage-sized stock** — production builds the hulls
+the account owns, in the quantities its stage of the universe makes useful, and a launch picks the
+subset it sends ([U6](#u6-the-launch-subset)).
+
+**Rule.** Production sizes each [U1](#u1-role-derivation--what-units-are-for) role against the
+account's stage, never against a remembered table:
+
+- **fodder** — the light fighter is the cost-effective hull; the heavy fighter is early-only and ages
+  out once gauss/plasma appear (FLE-006, **documented**);
+- **workhorse** — the cruiser has the best damage-per-resource of the mid-game ships; the battleship
+  (standard at 100–1,000) ages out as battlecruisers and reapers (rapid-fire ×7 vs battleship) become
+  common (FLE-014, **documented**);
+- **recyclers** — sized to clear the account's own solo debris, tracking heavies and expected debris,
+  never a constant (FLE-009, **documented**);
+- **cargo** — sized to payload, not fixed at one: small cargo scales with raid follow-up, large cargo
+  with held resources (FLE-010, **documented**); the first cargo while no fleet exists stays the one
+  exception.
+
+**Constants.** Gameforge's raider table — "Battleship 20–50+, Cruiser 10–30, Recycler 5–20, Large
+Cargo 10–30, Espionage Probe 10+" — is a **shape** for a stage band, not a table to encode
+(FLE-004, **documented**). Stage bands are persona policy; the hulls they name are host objects.
+
+**Gate.** The stock is a quantity per host-derived role; the stage is read from host state, and a
+mod-added hull with better damage-per-resource becomes the workhorse with no module edit.
+
+**Accept.** A mod-added rapid-fire pair changes the counter selection, and a mod-added cargo hull
+with more capacity changes the cargo sizing, both without a module edit.
+
+### U6 — The launch subset — counters, not the whole stock
+
+**Gaps:** W6-4 · **Host:** the target's hull mix and defence from its espionage report, the rapid-fire
+graph, and the battle engine for simulation.
+
+Production and launch are two decisions (FLE-012): the stock is what the account owns, the launch is
+the minimum hulls that win against *this* target. Sending the whole stock every time is the error the
+split exists to prevent.
+
+**Rule.** Launch is counter-selected per target from the host's own rapid-fire graph — pick hulls with
+rapid fire against the target's mix and deny it against your own (FLE-007, FLE-013, **documented**):
+cruisers against light-fighter swarms, destroyers against battlecruisers, mixed hulls to dilute
+Deathstar rapid fire. Fodder rides along only when the target can threaten the heavies; an undefended
+target collapses to kill ships plus cargo. Every attack is simulated against the target's actual
+fleet and defence before dispatch, because one simulation is a probability average and close fights
+vary (FLE-015, **documented**). The debris path is a separate trip, never folded into the raid
+(FLE-011, **host**).
+
+**Constants.** Rapid fire is `P_repeat = (r − 1) / r` from the host's own unit data; the counter pairs
+(light fighter → cruiser, battleship → reaper, destroyer → deathstar) are host data, never module
+memory — a hardcoded counter map is exactly the gate-1 violation the corpus's genetic search commits
+(FLE-007, **verified**).
+
+**Gate.** The split is one extra decision between `QueueableUnitPlanner` (production) and the raid
+dispatch (launch); the counter graph and the simulator are host capabilities, not module reimplementations.
+
+**Accept.** A target with a light-fighter swarm draws cruisers as the launch subset; the same stock,
+presented an undefended farm, sends kill ships plus cargo instead of the whole fleet.
+
 ---
 
 ## Saving and reaction
@@ -546,26 +625,50 @@ mechanisms read one parameter, not two.
 
 ### V6 — The proactive save
 
-**Gaps:** W6-3 · **Host:** fleet value from the [fleet ledger](#u4-the-fleet-ledger), the absence
-model (H3), cargo capacity, planet stock, free fleet slots.
+**Shipped** — the save fires on two triggers: the reactive one (an inbound hostile) and the
+proactive one (logging off for a real absence with a fleet worth losing). The session plan is
+computed before the decision, so the decision sees the absence this session is about to enter as
+`upcomingAbsenceMinutes`; `QueueableFleetSavePlanner::proactivePlan()` offers the save only when
+that gap clears the routine's own inter-session wait and the fleet left behind clears the persona's
+exposure band.
 
-The save today fires only on `currentPlayerUnderAttack()` — reactive. Experienced play saves before
-the gap exists: "if you go offline > 30 minutes with a valuable fleet, fleetsave it" (FS-001,
-**documented**). A save is also incomplete unless cargo is loaded: in-flight resources cannot be
-raided, and a stripped planet is unprofitable to hit (FS-006, **documented** — the module currently
-lifts an empty `Resources()` cargo).
+**Gaps:** W6-3 · **Host:** ship objects and their raw prices (`ObjectService::getObjectRawPrice`),
+the session plan (H3), cargo capacity, planet stock, free fleet slots.
 
-**Rule.** On entering an absence longer than the persona's threshold, save when the exposed fleet
-value plus the planet's lootable stock clears the persona's exposure band for that absence length,
-and lift the lootable stock into cargo up to capacity.
+The save today fires on `currentPlayerUnderAttack()` — reactive — and now also before a real
+absence: "if you go offline > 30 minutes with a valuable fleet, fleetsave it" (FS-001,
+**documented**). The save is complete because cargo is loaded: in-flight resources cannot be raided
+and a stripped planet is unprofitable to hit (FS-006, **documented**).
 
-**Constants.** "> 30 minutes" is the published trigger (FS-001, **documented**); the exposure band
-is a persona parameter, never a constant.
+**Rule.** On entering an absence longer than the routine's inter-session gap, save when the fleet
+left exposed clears the persona's exposure band, and lift the planet's stock into cargo up to
+capacity (FS-006).
+
+**Constants.** The absence threshold is 120 minutes — above the densest persona's routine gap (a
+fleeter's ~70 minutes between sessions) and below the dark period, so a save fires at the last
+session before bed, not every session (FS-001, **documented**). The exposure band is a persona
+parameter over fleet value: 5,000 resources for a fleeter, 25,000 for a trader, 50,000 for a miner,
+turtle or casual player. Fleet value is the raw-price sum of the ships parked on the origin planet,
+defence excluded — a save moves ships, never a planet's built defences (FS-001).
 
 **Gate.** The trigger is a tuple over host quotes (fleet value, stock, capacity, duration) and it
-is exactly what a player checks before logging off.
+is exactly what a player checks before logging off. The band is persona taste over host data, never
+a gate-1 object list.
+
+**Accept.** A fleeter's last session before bed saves the fleet; its daytime sessions still build.
+A miner with no ships, or a fleet below its bar, never saves proactively.
 
 ### V7 — Variation, route scoring and dispatch masking
+
+**Shipped** — the save destination is scored to the farthest own planet (FS-005); dispatch masking
+is satisfied by the routine cadence, never a ping. The `destination × speed` enumeration collapses
+for a deployment save: the host's slowest speed (10%) is also the minimum-fuel speed, and a parked
+deployment has no arrival schedule to fit, so the two route axes reduce to the shipped destination
+ranking at the fixed slowest speed. Two residuals are recorded, not built: (1) discard unaffordable
+fuel — the host already refuses an unfuelable save at dispatch and the receipt records the refusal,
+so a planner-side fuel filter is observability polish, not correctness; (2) never the same landing
+time every day — the save's departure rides the routine's own session spread (H2), which already
+varies the landing time, never a fixed tick.
 
 **Gaps:** W6-3 · **Host:** owned destinations, speeds, fuel quotes, distance and duration quotes.
 
@@ -577,11 +680,28 @@ is the same real work the routine would do next, never a keep-alive ping ([H4](#
 
 ### V8 — Shadow waves
 
-**Gaps:** W6-3 · **Host:** fleet slot count, fleet size.
+**Shipped** — a large fleet is split across two own bodies so a phalanx-timed crash catches only
+part. The split is decided in `QueueableFleetSavePlanner` and carried as a second destination; the
+dispatch action sends the combat hulls to the safer body and the civil hulls, which lift the stock,
+to the other.
+
+**Gaps:** W6-3 · **Host:** fleet slot count (`getFleetSlotsMax` − `getFleetSlotsInUse`), the host's
+military/civil ship classification, fleet size, own destinations ranked by safety.
 
 **Rule.** A large fleet is split across saves so a phalanx-timed crash catches only part (FS-009,
-**documented**); the ceiling is the slot count, and a small fleet is never split. This is the
-[V1](#v1-the-save-state-machine) enumeration taking the top *k* routes instead of the top one.
+**documented**); the ceiling is the slot count, and a small fleet is never split. The split needs
+four things at once: a second own body, a free second fleet slot, both hull roles present, and a
+fleet at least twice what the persona bothers to save — each wave is still worth the trip. This is
+the [V1](#v1-the-save-state-machine) enumeration narrowed to its top two routes; the full
+`destination × speed` enumeration is resolved under [V7](#v7-variation-route-scoring-and-dispatch-masking)
+— the slowest speed is the minimum-fuel speed and a parked deployment has no schedule to fit, so the
+speed axis never changes the chosen route.
+
+**Gate.** The split is a tuple over host quotes (slots, hull classification, fleet value) and it is
+exactly what a player does with a fleet too large to park in one place.
+
+**Accept.** A fleeter with combat and cargo hulls parks the combat wave on its moon and the cargo
+wave on a planet; a single-role or small fleet stays on one body.
 
 ---
 
@@ -636,6 +756,9 @@ assuming). Unknown defence is never zero defence.
 
 ### N4 — Spy target prioritisation
 
+**Shipped** — `QueueableSpyPlanner::target()` ranks the bounded unknown set by known yield minus
+host distance and skips a just-touched target.
+
 **Gaps:** W6-2 · **Host:** galaxy positions, distance and fuel quotes, own reports and their
 timestamps, the [activity reader](#sp7-the-activity-and-intel-reader).
 
@@ -646,6 +769,9 @@ active target — probing an active target repeatedly is itself a tell; INT-003/
 The score slots into the existing candidate/trace mechanism; it adds no second decision path.
 
 ### N5 — Own signature control
+
+**Shipped by construction** — `QueueAiSpyAction` dispatches and returns, doing no further
+planet-context work on the launch body.
 
 **Gaps:** W6-2 · **Host:** the activity reader over our own bodies.
 
@@ -755,14 +881,18 @@ Sharing a report is the same authored, permission-checked path as any other soci
 
 ### T6 — The raid target score
 
+**Partially shipped** — activity risk, intel freshness, travel cost, the score-ratio pre-filter, the
+storage-fill raid schedule and proximity clustering are wired in; relationship (RAID-007) and contest
+(RAID-013) are recorded here and deferred.
+
 **Gaps:** W6-1 · **Host:** target `Planet.time_last_update` and galaxy activity via the
 [activity reader](#sp7-the-activity-and-intel-reader), per-type report freshness, distance and fuel
 quotes, fleet-slot occupancy, target and own public scores, the relationship state.
 
-The estimator answers "is this raid profitable"; it never asks *which* profitable target, or
-*whether the target is awake*. `PlayerObservationService::targetReports()` publishes
-`confidence = 1.0` and `travel_cost = 0.0` as placeholders, so every target looks equally certain
-and equally cheap.
+The estimator answers "is this raid profitable"; the *choice* among profitable reports comes from
+the published signals: `PlayerObservationService::targetReports()` publishes a per-type intel
+`confidence` and a normalised host-distance `travel_cost`, so a fresh, nearby target outranks a
+stale, distant one.
 
 **Rule.** Order raid candidates by the estimator's P20 net profit plus the missing signals, each a
 host quote or a read of existing state:
@@ -772,18 +902,30 @@ touched close to flight raises interception risk (RAID-004);
 - **intel freshness** — per-type confidence decay replaces the flat `1.0` (RAID-005);
 - **travel and slot cost** — the round-trip fuel and an occupied fleet slot, replacing the `0.0`
 placeholder (RAID-006);
-- **proximity** — cluster candidates by galaxy distance (cross-galaxy ≈ 5× deuterium) and raid a
-cluster on a storage-fill schedule, not ad hoc (RAID-009);
+- **proximity** — the storage-fill schedule is shipped: `RaidPlanner::storageReady()` gates the raid
+on the fleet planet's warehouse being near full (0.8 of capacity), so the account raids on the
+8–12h fill cycle rather than ad hoc (RAID-009); clustering by galaxy distance is also shipped:
+`travel_cost` is the host-quoted distance normalised over the universe, and the host's own distance
+quote prices a cross-galaxy hop at `diffGalaxy × 20000` against `deltaSystem × 95 + 2700` inside a
+galaxy — roughly the documented 5× deuterium — so the scorer already clusters raids near the fleet.
+Pinned by `owned state prices a distant target higher than a near one`;
 - **contest** — popular farms are cleaned out fast; the edge is proximity or a schedule others miss
-(RAID-013);
-- **relationship and archetype** — a past ally or debtor is raided differently; the archetype gate
-reaches target choice, not only action type (RAID-007).
+(RAID-013, **deferred** — the module observes no other player's raid schedule, so a contest model
+would be an unmeasured guess; proximity is already the shipped edge);
+- **relationship and archetype** — a past ally or debtor is raided differently (RAID-007,
+**deferred** — `AiRelationship` rows are only written by the social observation path, which ships
+with Package 6; until that state is populated a raid policy over it would be dead code).
 
 A pre-filter drops a target whose public score is under ~⅕ of ours — it cannot defend economically
-against the fleet class (RAID-008). The score exposes its components in the existing trace, so
+against the fleet class (RAID-008, **shipped**): `targetReports()` publishes `score_viable` from the
+host's public highscore (`general`), and the factory rejects a non-viable target as
+`score_below_viability` before the estimator runs. An unknown own score filters nothing, so a young
+universe does not skip everything. The score exposes its components in the existing trace, so
 "why this target" stays answerable deterministically.
 
 ### T7 — Tiered profit gate and cargo sizing
+
+**Shipped** — the tiered loot-to-fuel gate and cargo-capped expected loot in `RaidPlanner::plan()`.
 
 **Gaps:** W6-1, W6-4 · **Host:** loot, fuel and debris quotes, target defence, the report's visible
 resources, the class loot multiplier, cargo capacity.
@@ -796,6 +938,8 @@ visible resources, 75% for the looter class) ÷ cargo capacity, plus a 20% buffe
 did not need.
 
 ### T8 — Launch-time re-check
+
+**Shipped** — `QueueAiRaidAction::handle()` refuses a target whose activity star is lit at dispatch.
 
 **Gaps:** W6-1 · **Host:** the target's last-update stamp at dispatch.
 
@@ -816,6 +960,8 @@ these are mechanisms an experienced fleeter names, not inventions.
 
 ### F1 — Phalanx coverage
 
+**Status:** deferred — the scan is the host's `canScanTarget`/`getScanCost`; a module range table would violate gate 1 and a forward over it gate 2. Its only consumer is the crash-timing executor.
+
 **Gaps:** W6-5 · **Host:** `PhalanxService::calculatePhalanxRange` (level²−1, Discoverer +20%) and
 `getScanCost` (5,000 deuterium), the planet/moon distinction.
 
@@ -828,6 +974,8 @@ is the reason a planet-launched save is unsafe (CRASH-007). A moon is outside ev
 
 ### F2 — Deploy-recall interception
 
+**Status:** shipped (defensive side) — `QueueAiRecallAction` recalls the account's own in-flight save over `cancelMission` with the ownership check the host lacks; the offensive half-flight crash timing rides the deferred crash executor.
+
 **Gaps:** W6-5 · **Host:** `cancelMission` → `startReturn` (no ownership check — the module adds
 it), the flight-time quote.
 
@@ -839,6 +987,8 @@ only — a same-planet relocation is not recallable (**host**).
 
 ### F3 — The moon as geography
 
+**Status:** shipped — the save planner parks on a moon when one exists (phalanx-invisible); building one stays an economy decision, left open.
+
 **Gaps:** W6-5 · **Host:** `PlanetType::Moon`, `JumpGateService::calculateCooldown`
 (60 / fleetSpeedWar minutes, −10% per level, minimum 1 minute).
 
@@ -848,6 +998,8 @@ lower-exposure route; *when* to build one (Lunar Base) is an economy decision sc
 investment, left open until a cluster justifies a block.
 
 ### F4 — The recycle trip
+
+**Status:** deferred — the host seam is verified (`DebrisFieldService::calculateRequiredRecyclers`, `RecycleMission` type 8) but the trip needs debris-field awareness plus the attack→debris→recycle chain of the crash executor.
 
 **Gaps:** W6-5 · **Host:** `DebrisFieldService::calculateRequiredRecyclers`
 (ceil(debris ÷ recycler capacity)), `RecycleMission` (type 8, has a return mission; requires a
@@ -862,6 +1014,8 @@ LLM-coordinated loop.
 
 ### F5 — Blind lanx via the debris field
 
+**Status:** deferred — P2 awareness-first per plan; the observer-side executor waits for the crash cluster.
+
 **Gaps:** W6-5 · **Host:** debris-field visibility (> 300 units — **documented**), recycler arrival
 timing.
 
@@ -872,6 +1026,8 @@ knows its *own* harvest save is visible the same way. P2 — awareness first, ex
 
 ### F6 — Moon destruction
 
+**Status:** deferred — last in priority, most niche and expensive; the host's redirect (`redirectFleetsFromMoon`) is now code-verified but the plan keeps it behind owning a deathstar and the strategic judgement.
+
 **Gaps:** W6-5 · **Host:** `MoonDestructionMission` (type 9), deathstar availability.
 
 Destroying a moon redirects its returning fleets to the planet (phalanx-visible) and auto-recalls
@@ -879,6 +1035,77 @@ foreign fleets en route; no debris field results (CRASH-005, **documented**; the
 consequence is **not re-verified** against the host). This is an offensive planner over the type-9
 mission, gated on owning a deathstar and on the strategic judgement that the moon's loss is worth
 more than the fleet it guards. Last in priority — the most niche and the most expensive.
+
+---
+
+## Ninja and baiting
+
+The ninja is the defender's counter-crash: a raid that flies into a staged trap dies as the attacker.
+It is one mechanism with two sides — the account executes it when *it* is the defender, and checks
+against it on every raid it launches. The host supports both (fleet movement, moon staging, the
+combat second); the module reaches neither today. `NN1` rides the existing raid path; `NN2` is an
+advanced tactic gated behind a reviewed cluster, never silent.
+
+### NN1 — Anti-ninja checks on the raid path
+
+**Status:** shipped (moon staging) — the dispatch drops a raid whose target moon is active while its
+planet is quiet, the defender moving a trap fleet on the moon. The phalanx scan and last-second probe
+stay habits: the phalanx needs a sensor phalanx no account yet builds (F1 deferred), and the probe is
+the existing spy cadence.
+
+**Gaps:** pass-6 (new) · **Host:** phalanx coverage (`PhalanxService`), probe timing, the target's
+fleet-movement signals, the activity reader.
+
+An attacker defends against a ninja by checking for staging, not by hoping (NIN-005, **documented**):
+phalanx the target's nearby planets for staged fleets, probe when no moon is available, abort when a
+defensive fleet movement appears, and send a last-second probe to confirm the defender's fleet is
+still on the planet before impact.
+
+**Rule.** Extend [T8](#t8-launch-time-re-check) from an activity re-check to a staging re-check: a
+raid candidate is dropped when the defender shows fleet movement toward the bait, or when the
+last-second probe no longer confirms the defence the profit math assumed. This is a check in
+`QueueAiRaidAction::handle()`, not a new planner.
+
+**Constants.** The last-second probe is a habit, not a new cost centre; phalanx cost and range are
+host quotes ([F1](#f1-phalanx-coverage)).
+
+**Gate.** The check reuses the phalanx seam and the probe path the module already owns; no new
+simulation, no new planner.
+
+**Accept.** A target whose defender launches a staged fleet after planning is dropped before impact,
+not raided into a trap.
+
+### NN2 — The ninja trap (defender counter-crash)
+
+**Status:** deferred — gated behind a reviewed cluster (advanced tactic, never silent); the
+same-second landing is timing-critical, and a wrong landing loses the fleet. The save stays the
+default.
+
+**Gaps:** pass-6 (new) · **Host:** own moons, the deployment/return mission and its timing, the
+combat second, the espionage report the attacker reads.
+
+A ninja keeps the real defensive fleet away from the bait planet — hidden on a nearby moon or away on
+a mission timed to return before impact — and lands it on the combat second, so it fights as defender
+and kills the attacker (NIN-001, NIN-004, **documented**). The bait must read as a soft farm: a
+resource pile large enough to make the raider's profit math positive while stationary defence stays
+light (NIN-003, **documented**). A fortress deters; the trap lures.
+
+**Rule.** When the account holds a fleet and a moon (or a timed-return seam) and an inbound attack is
+observed ([V1](#v1-the-save-state-machine)), it may choose the ninja
+instead of the save: stage the defensive fleet off-planet, leave a bait pile, and land it on the
+attacker's impact second. The landing is the same-second server-tick buffer, never seconds early —
+early exposes the fleet to a recall, late misses the battle (NIN-002, **documented**).
+
+**Constants.** The landing buffer is ~1 s (server-tick), reconciled from WIK-005 and TP-011
+(`CLAIM-NIN-ARRIVAL` — **contested, reconciled**); the bait pile is sized by the attacker's own
+profit test, so it is host-derived rather than a stored number.
+
+**Gate.** The ninja is the experienced-player name for "defend with a timed counter-landing"; it is
+an executor behind a reviewed cluster, and the save ([V1](#v1-the-save-state-machine)) stays the
+default, so a failed ninja is a failed save, not a silent kill.
+
+**Accept.** An observed inbound raid is met by a staged fleet landing on the combat second, and the
+account falls back to the save when it holds no moon and no timed-return seam.
 
 ---
 
@@ -909,6 +1136,41 @@ thing the empire could build at home — which is how the miner guide describes 
 are mines … build whatever has the shortest return on investment") and how the memoir roadmap is
 *derived* rather than tabulated. The colony then runs [E1](#e1-payback-ordering--the-next-mine) with its
 own numbers.
+
+---
+
+## Expeditions
+
+The host carries an expedition mission (type 15) with its own slot budget
+(`getExpeditionSlotsInUse` / `getExpeditionSlotsMax`). The slot-16 coordinate requirement, the
+astrophysics gate, the 1..astrophysics holding-hours bound and the configurable outcome weights were
+verified against the host on 15 September 2026 (DISC-004 closed), so the executor reads the host
+mission directly and never invents an outcome table.
+
+### EX1 — Slot-16 outcomes, and never a save
+
+**Status:** shipped — `QueueAiExpeditionAction` dispatches one disposable civil cargo ship to slot 16; the never-fleetsave refusal is the single-hull fleet.
+
+**Gaps:** pass-6 (new) · **Host:** the expedition mission (type 15), the expedition slot count, the
+holding-hours bounds, and — once verified — the slot-16 position requirement.
+
+**Rule.** Two rules, both nameable as ordinary play. First, an expedition is **never a fleetsave**:
+there is a small chance the whole fleet vanishes, so the expedition fleet is a small disposable set,
+never the fleet the account depends on (EXP-001, **documented**). Second, expeditions target **slot
+16** only, and the outcome is bounded and host-returned: found ships (never Death Stars), antimatter,
+resources capped at cargo capacity, traders, an empty return, a pirate/alien attack, a rare total
+fleet loss, and a navigation error that shifts the return time (EXP-002, **documented**). The module
+never invents an outcome table — it reads whatever the host mission returns.
+
+**Constants.** Resource rewards are capped at the expedition fleet's cargo capacity (**documented**);
+the fleet size is a persona band, not a constant.
+
+**Gate.** It is the host's mission with the host's slot budget; the module adds the never-fleetsave
+refusal and a small disposable fleet, and nothing else.
+
+**Accept.** The account dispatches an expedition to slot 16 with a small fleet while its save
+([V1](#v1-the-save-state-machine)) still covers the real fleet, and a long absence never turns the
+expedition into the save.
 
 ---
 
@@ -1240,6 +1502,10 @@ is unchanged.
 ## Transports and trade
 
 ### X1 — Transfers between own planets
+
+**Shipped as `QueueableTransferPlanner` / `QueueAiTransferAction`** — a colony short of its next
+level's cost is funded from the body that can spare it, netting in-flight transports and keeping the
+source's SP5 reserve.
 
 See [E4](#e4-ferrying-resources-between-own-planets); the same transport mission serves it, and the
 reservation in [SP5](#sp5--reservation-before-spending) is what keeps a transfer from starving the account.

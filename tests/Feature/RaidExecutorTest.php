@@ -11,6 +11,7 @@ use Modules\AI\Models\AiProfile;
 use OGame\GameMissions\AttackMission;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\MessageService;
 use Tests\IsolatedAccountTestCase;
@@ -85,6 +86,11 @@ test('the raid action launches the host attack mission', function (): void {
 
     $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
     expect($plan)->not->toBeNull();
+
+    // A raid flies at a quiet target; the just-created fixture is touched now,
+    // so age its activity star before dispatch (the active-target refusal is
+    // its own test in RaidDepthTest).
+    Planet::query()->whereKey($foreign->getPlanetId())->update(['time_last_update' => now()->subMinutes(30)->getTimestamp()]);
 
     $result = app(QueueAiRaid::class)->handle($this->currentUserId, $plan->originPlanetId, $plan->targetGalaxy, $plan->targetSystem, $plan->targetPosition, $plan->targetType);
 

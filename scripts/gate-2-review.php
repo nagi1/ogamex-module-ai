@@ -26,9 +26,12 @@ const ALLOWED_SINGLE_IMPLEMENTATION = [
     'QueueAiResearch',
     'QueueAiUnits',
     'QueueAiColony',
+    'QueueAiExpedition',
     'QueueAiFleetSave',
+    'QueueAiRecall',
     'QueueAiRaid',
     'QueueAiSpy',
+    'QueueAiTransfer',
 ];
 
 $moduleFiles = modulePhpFiles($moduleRoot);

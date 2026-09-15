@@ -42,7 +42,14 @@ class SessionDecisionService
         $now = $this->clock->now();
         $routine = RoutineProfile::fromAiProfile($profile);
         $schedule = $this->scheduleFor($profile, $routine, $now);
-        $perception = $this->playerPerceptionBuilder->build($profile->player_id);
+
+        // The session plan is computed before the decision so the decision can
+        // see the absence this session is about to enter (V6): a proactive save
+        // is offered only when the gap until the next session is a real one.
+        $plan = $this->sessionPlanner->plan($profile, $now, $schedule->generation);
+        $upcomingAbsenceMinutes = (int) $plan->nextDueAt->diffInMinutes($plan->sessionEndsAt);
+
+        $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
         $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;
         $trace = $this->decisionEngine->decide($profile, $perception, $decisionKey);
 
@@ -56,7 +63,6 @@ class SessionDecisionService
             return $trace;
         }
 
-        $plan = $this->sessionPlanner->plan($profile, $now, $schedule->generation);
         $nextDueAt = $this->nextDueTimeCalculator->fromSession($plan, $now);
         $nextGeneration = $schedule->generation + 1;
 

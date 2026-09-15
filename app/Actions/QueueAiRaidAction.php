@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiRaid;
+use Modules\AI\Domain\Perception\ActivityIntelReader;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -27,6 +28,7 @@ class QueueAiRaidAction implements QueueAiRaid
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
         private PlanetServiceFactory $planetServiceFactory,
+        private ActivityIntelReader $activityIntelReader,
     ) {
     }
 
@@ -48,10 +50,28 @@ class QueueAiRaidAction implements QueueAiRaid
 
             $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
 
+            $targetCoordinate = new Coordinate($targetGalaxy, $targetSystem, $targetPosition);
+
+            // Between planning and dispatch the target may have logged in. The
+            // activity star is galaxy-visible, so flying into a just-touched
+            // target is a recall or a ninja, not a raid (RAID-010).
+            $target = $this->planetServiceFactory->makeForCoordinate($targetCoordinate, false, PlanetType::from($targetType));
+            if ($target !== null && $this->activityIntelReader->activityAt($target)) {
+                return AiActionResult::rejected(AiQueueActionReason::TargetActiveAtDispatch);
+            }
+
+            // A moon active while its planet is quiet is the defender moving a
+            // fleet on the moon — staging the trap a raid would fly into
+            // (NIN-005). Flying into it is a ninja, not a raid.
+            $moon = $this->planetServiceFactory->makeMoonForCoordinate($targetCoordinate);
+            if ($moon !== null && $target !== null && $this->activityIntelReader->moonOnlyActivity($moon, $target)) {
+                return AiActionResult::rejected(AiQueueActionReason::TargetStagingAtDispatch);
+            }
+
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
-                new Coordinate($targetGalaxy, $targetSystem, $targetPosition),
+                $targetCoordinate,
                 PlanetType::from($targetType),
                 AttackMission::getTypeId(),
                 $origin->getShipUnits(),

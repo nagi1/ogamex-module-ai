@@ -15,6 +15,7 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Models\EspionageReport;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\MessageService;
 use Tests\IsolatedAccountTestCase;
@@ -40,6 +41,11 @@ test('a research selection schedules and executes a technology', function (): vo
     $this->planetAddResources(intentPlenty());
     intentFacilities();
     $this->planetSetObjectLevel('solar_plant', 20);
+    // Enough warehouse that the funded balance is not "about to overflow", so the
+    // plan's next step is the technology the facilities unlock, not a store.
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
 
     $intent = intentSchedule($profile, AiCandidateActionType::Research, $this->currentPlanetId);
 
@@ -102,7 +108,9 @@ test('a spy selection schedules and executes an espionage mission', function ():
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());
     $this->planetAddUnit('espionage_probe', 1);
-    $this->createForeignPlanet();
+    $foreign = $this->createForeignPlanet();
+    // The spy planner scouts quiet targets; age the fixture's activity star.
+    Planet::query()->whereKey($foreign->getPlanetId())->update(['time_last_update' => now()->subMinutes(30)->getTimestamp()]);
 
     $intent = intentSchedule($profile, AiCandidateActionType::Spy, $this->currentPlanetId);
 
@@ -121,6 +129,9 @@ test('a raid selection schedules and executes an attack', function (): void {
     $foreign = $this->createForeignPlanet();
     $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $reportId = intentReport($this->currentUserId, $foreign);
+    // The dispatch re-check refuses a just-touched target, so age the fixture's
+    // activity star: a raid flies at a quiet target.
+    Planet::query()->whereKey($foreign->getPlanetId())->update(['time_last_update' => now()->subMinutes(30)->getTimestamp()]);
 
     $trace = intentTrace($this->currentUserId, $this->currentPlanetId, AiCandidateActionType::Raid, ['report_id' => $reportId]);
     $session = intentSession($profile, 'raid');

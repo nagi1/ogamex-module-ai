@@ -224,10 +224,10 @@ enrichment gaps, not blockers; implementation stays blocked until the catalog is
 
 Each open row has a named principle in the catalog and a host input (from
 [`host-capability-map.md`](research/host-capability-map.md)). Algorithm blocks now exist for
-W6-1/2/3/5 in [`gameplay-algorithms.md`](specs/gameplay-algorithms.md) — SP7 (activity/intel reader),
-T6–T8 (raid depth), N4/N5 (intelligence depth), V6–V8 (save depth), F1–F6
-(fleetcrash/phalanx/moon) — all **planned**, blocked on catalog review. W6-4 (fleet composition) is
-the next increment's U-series block; W6-6 (next-wake) rides SP3 and stays partial. The classical-AI
+W6-1/2/3/4/5 in [`gameplay-algorithms.md`](specs/gameplay-algorithms.md) — SP7 (activity/intel reader),
+T6–T8 (raid depth), N4/N5 (intelligence depth), V6–V8 (save depth), U5/U6 (fleet composition),
+F1–F6 (fleetcrash/phalanx/moon) — plus the pass-6 ninja (NN1/NN2) and expedition (EX1) blocks — all
+**planned**, blocked on catalog review. W6-6 (next-wake) rides SP3 and stays partial. The classical-AI
 pass ([`classical-ai-patterns.md`](research/classical-ai-patterns.md)) confirms these are
 experienced-play mechanisms, not inventions. No row is closed by this pass — the executors do not
 exist yet.

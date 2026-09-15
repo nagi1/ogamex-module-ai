@@ -11,6 +11,7 @@ use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Resources;
 use OGame\Models\User;
+use OGame\Services\CharacterClassService;
 use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -118,19 +119,83 @@ class QueueableUnitPlanner
                     return $this->unit($planet, $escort, 'role:escort:' . $escort->machine_name);
                 }
             }
+
+            // Cargo sizing: once the opening fleet exists, grow the cargo to the
+            // raid payload the freshest report promises, not a fixed one (FLE-010).
+            $cargoPlan = $this->cargoForPayload($player, $planet, $playerId);
+            if ($cargoPlan !== null) {
+                return $cargoPlan;
+            }
         }
 
         return null;
     }
 
-    private function unit(PlanetService $planet, UnitObject $ship, string $reason): QueueableUnit
+    private function unit(PlanetService $planet, UnitObject $ship, string $reason, int $amount = self::FIRST_CARGO_AMOUNT): QueueableUnit
     {
         return app()->makeWith(QueueableUnit::class, [
             'planetId' => $planet->getPlanetId(),
             'unitId' => $ship->id,
-            'amount' => self::FIRST_CARGO_AMOUNT,
+            'amount' => $amount,
             'reason' => $reason,
         ]);
+    }
+
+    /**
+     * The cargo batch a raidable fresh report asks for, once the opening fleet
+     * exists: expected loot (the host's class loot fraction of the largest
+     * visible pile) plus a 20% buffer, minus what the fleet already carries.
+     */
+    private function cargoForPayload(PlayerService $player, PlanetService $planet, int $playerId): ?QueueableUnit
+    {
+        $cargo = $this->bestCargo($player, $planet);
+        if ($cargo === null) {
+            return null;
+        }
+
+        $loot = $this->expectedRaidLoot($player, $playerId);
+        if ($loot <= 0) {
+            return null;
+        }
+
+        // The cargo role is chosen for a positive capacity, so the capacity is
+        // non-zero by the time it is sized.
+        $capacity = $cargo->properties->capacity->calculate($player)->totalValue;
+        $needed = (int) ceil($loot * 1.2 / $capacity);
+        $owned = (int) floor($planet->getShipUnits()->getTotalCargoCapacity($player) / $capacity);
+        $missing = min($needed - $owned, ObjectService::getObjectMaxBuildAmount($cargo->machine_name, $planet, true));
+
+        if ($missing <= 0) {
+            return null;
+        }
+
+        return $this->unit($planet, $cargo, 'role:cargo:payload', $missing);
+    }
+
+    /**
+     * The metal-equivalent loot the account's largest fresh report promises,
+     * at the host's own class loot fraction (FLE-002).
+     */
+    private function expectedRaidLoot(PlayerService $player, int $playerId): float
+    {
+        $reportIds = Message::query()
+            ->where('user_id', $playerId)
+            ->whereNotNull('espionage_report_id')
+            ->where('created_at', '>=', now()->subHours(self::INTEL_TTL_HOURS))
+            ->latest('id')
+            ->limit(10)
+            ->pluck('espionage_report_id');
+
+        $loot = 0.0;
+        foreach (EspionageReport::query()->whereIn('id', $reportIds)->get(['resources']) as $report) {
+            $resources = $report->resources ?? [];
+            $pile = (int) ($resources['metal'] ?? 0)
+                + self::CRYSTAL_WEIGHT * (int) ($resources['crystal'] ?? 0)
+                + self::DEUTERIUM_WEIGHT * (int) ($resources['deuterium'] ?? 0);
+            $loot = max($loot, $pile);
+        }
+
+        return $loot * app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
     }
 
     private function ownsNoShip(PlanetService $planet): bool
@@ -251,8 +316,11 @@ class QueueableUnitPlanner
             ->limit(10)
             ->pluck('espionage_report_id');
 
+        // defence is a nullable host column: a probe that revealed no defence
+        // (an empty or unowned target) stores null, not [], so it must be
+        // guarded exactly like resources above.
         foreach (EspionageReport::query()->whereIn('id', $reportIds)->get(['defense']) as $report) {
-            foreach ($report->defense as $count) {
+            foreach ($report->defense ?? [] as $count) {
                 if ((int) $count > 0) {
                     return true;
                 }

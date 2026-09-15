@@ -112,8 +112,9 @@ verified in the pass-3 map; the planner code was not re-read for these.
 | ACS-013/014 | none (alliance-gated) | ACS planner (Package 6) | medium | P3 |
 | INT-011/012 | `QueueableSpyPlanner` ignores origin + time-of-day | `QueueableSpyPlanner::target()` + dispatch origin | low | P2 |
 | FS-011 | `QueueableFleetSavePlanner` deployment only | harvest/hold mission routes in the save enumeration | medium | P2 |
-| EXP-001/002 | none | new expedition executor — host expedition surface **not re-verified** (ORG-012 only) | medium | P2 |
+| EXP-001/002 | none | `QueueAiExpeditionAction` over `ExpeditionMission` (slot 16, host-returned outcomes, one disposable civil cargo ship) — host surface verified 15 Sep 2026 | medium | P2 |
 
-The **ninja** and **expedition** domains have no current executor at all — they are new integration
-points, not wiring of an existing seam (unlike phalanx/recycle/recall, which are host-supported and
-unwired). Expedition host support is not re-verified; mark unsupported-until-verified, never discard.
+The **ninja** domain has no current executor — it is a new integration point over the host's fleet
+timing (verified above) and is gated behind a reviewed cluster per `gameplay-algorithms.md` NN2. The
+**expedition** domain is now wired (`QueueAiExpeditionAction`); its host surface (slot 16, slot budget,
+holding-hours bounds, outcome weights) is verified, not unsupported.
