@@ -5,6 +5,7 @@ namespace Modules\AI\Console\Commands;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Builder;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
@@ -27,8 +28,18 @@ class RunDueAiWork extends Command
             return self::SUCCESS;
         }
 
+        // This pass is the only thing that ever admits work, so a lease left behind by a worker the
+        // queue killed mid-handle (a timeout, an OOM) has to be admitted here too: with its job gone
+        // no retry will arrive, and ProcessAiWork's own reclaim would never be reached, stranding the
+        // item Leased forever. A live lease cannot match, because a worker cannot outlive its lease.
         $work = AiWorkItem::query()
-            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Retry])
+            ->where(function (Builder $query): void {
+                $query->whereIn('state', [AiWorkState::Pending, AiWorkState::Retry])
+                    ->orWhere(function (Builder $stranded): void {
+                        $stranded->where('state', AiWorkState::Leased)
+                            ->where('lease_until', '<', now());
+                    });
+            })
             ->oldest('due_at')
             ->limit($admission->limit);
 

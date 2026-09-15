@@ -40,6 +40,43 @@ test('dispatcher limits to due pending or retry work', function () {
     Bus::assertDispatchedTimes(ProcessAiWork::class, 1);
 });
 
+// A worker the queue kills mid-handle (a timeout, an OOM) leaves its item Leased with the job gone,
+// so no retry will ever arrive and the item would stay stuck forever. This pass is the only thing
+// that admits work, so it has to reclaim the lease itself. A live lease must still be left alone.
+test('dispatcher reclaims a lease a killed worker left behind', function (): void {
+    $stranded = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now()->subHour(),
+        'idempotency_key' => 'stranded-lease',
+        'state' => AiWorkState::Leased,
+        'attempts' => 3,
+        'lease_token' => '1b4e28ba-2fa1-11d2-883f-0016d3cca427',
+        'lease_until' => now()->subMinutes(30),
+    ]);
+    $live = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now()->subHour(),
+        'idempotency_key' => 'live-lease',
+        'state' => AiWorkState::Leased,
+        'attempts' => 1,
+        'lease_token' => '2b4e28ba-2fa1-11d2-883f-0016d3cca428',
+        'lease_until' => now()->addMinutes(5),
+    ]);
+    Bus::fake();
+    $command = app(RunDueAiWork::class);
+    $command->setLaravel($this->app);
+
+    $command->run(
+        app()->makeWith(ArrayInput::class, ['parameters' => ['--limit' => 10]]),
+        app(NullOutput::class),
+    );
+
+    Bus::assertDispatched(ProcessAiWork::class, static fn (ProcessAiWork $job): bool => $job->workItemId === $stranded->id);
+    Bus::assertNotDispatched(ProcessAiWork::class, static fn (ProcessAiWork $job): bool => $job->workItemId === $live->id);
+});
+
 test('accelerated dispatch admits a future pending session', function (): void {
     config(['ai.population.session_interval_seconds' => 5]);
     $work = AiWorkItem::create([

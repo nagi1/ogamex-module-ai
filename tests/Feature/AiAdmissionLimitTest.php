@@ -186,12 +186,14 @@ test('sessions in flight stop dispatch until their lease expires', function (): 
         ->and(admissionStopContext(AiStopReason::ActiveSessionCap))
         ->toEqual(['active_sessions' => 1, 'cap' => 1]);
 
-    // A lease that already expired is work the scheduler will retry, not a session running now.
+    // A lease that already expired is work the scheduler will retry, not a session running now, so
+    // the stranded item is admitted again alongside the one that was waiting all along.
     $leased->update(['lease_until' => CarbonImmutable::parse(ADMISSION_NOW)->subMinute()]);
 
     $this->artisan('ai:run-due-work')->assertExitCode(0);
 
-    Bus::assertDispatchedTimes(ProcessAiWork::class, 1);
+    Bus::assertDispatched(ProcessAiWork::class, static fn (ProcessAiWork $job): bool => $job->workItemId === $leased->id);
+    Bus::assertDispatchedTimes(ProcessAiWork::class, 2);
 });
 
 test('a session action cap of zero lets a session decide and touch nothing', function (): void {

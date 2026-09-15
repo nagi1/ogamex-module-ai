@@ -136,15 +136,22 @@ class QueueableBuildingPlanner
 
     private function queueablePlanetId(PlanetService $planet, BuildCandidate $candidate): ?int
     {
-        $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+        $object = ObjectService::getObjectById($candidate->buildingId);
+        $machineName = $object->machine_name;
         // The host's own gates for a legal queue request, asked in the order its building page asks
-        // them: planet type, free queue space, met requirements and a balance it can pay. They read
-        // as one predicate because one planet either accepts the building or does not; the rejected
-        // reason is the host's to report when an intent is actually attempted.
+        // them: planet type, free queue space, met requirements, a balance it can pay and a field the
+        // building still fits in. They read as one predicate because one planet either accepts the
+        // building or does not; the rejected reason is the host's to report when an intent is
+        // actually attempted.
         $queueable = ObjectService::objectValidPlanetType($machineName, $planet)
             && !$this->buildingQueueService->retrieveQueue($planet)->isQueueFull()
             && ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)
-            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS));
+            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS))
+            // `BuildingQueueService::start()` refuses a field-consuming building once the planet's
+            // fields are used up, so a planet with no field left is not a place to build: the
+            // question is the host's two numbers, and terraformer cannot rescue it because a
+            // terraformer consumes a field too.
+            && (!$object->consumesPlanetField || $planet->getBuildingCount() < $planet->getPlanetFieldMax());
 
         if (!$queueable) {
             return null;

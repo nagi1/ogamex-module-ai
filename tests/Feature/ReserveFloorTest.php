@@ -93,13 +93,16 @@ function reserveProfile(int $playerId): AiProfile
 /**
  * Deep mines and a full warehouse with no solar plant: production throttles to nothing so the economy
  * has no candidate, and the planet is energy-short so the cheapest capacity is the only answer.
+ *
+ * The levels stay inside the planet's own field cap (the host refuses any building once a planet's
+ * fields are used up, so a deeper fixture would not be a planet the game could be in).
  */
 function reserveDeepPlanet(): void
 {
-    foreach (['metal_mine' => 45, 'crystal_mine' => 45, 'deuterium_synthesizer' => 45] as $machineName => $level) {
+    foreach (['metal_mine' => 35, 'crystal_mine' => 30, 'deuterium_synthesizer' => 25] as $machineName => $level) {
         test()->planetSetObjectLevel($machineName, $level);
     }
-    foreach (['metal_store' => 25, 'crystal_store' => 25, 'deuterium_store' => 25] as $machineName => $level) {
+    foreach (['metal_store' => 20, 'crystal_store' => 20, 'deuterium_store' => 20] as $machineName => $level) {
         test()->planetSetObjectLevel($machineName, $level);
     }
 }

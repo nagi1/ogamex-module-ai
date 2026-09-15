@@ -82,6 +82,19 @@ test('it withholds the build capability when the building queue is full', functi
         ->and(app(QueueableBuildingPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
+// A planet out of fields is the host's own answer, not a module opinion: `BuildingQueueService`
+// refuses a field-consuming building once the planet's fields are used up, and a terraformer cannot
+// rescue it because a terraformer consumes a field of its own. Publishing `build` there spends the
+// session's one action on a request the host must reject.
+test('it withholds the build capability when the planet has no field left', function (): void {
+    capabilityProfile($this->currentUserId);
+    $this->planetAddResources(capabilityPlenty());
+    capabilityExhaustFields($this->currentUserId);
+
+    expect(capabilityOwnedState($this->currentUserId)['available_actions'][AiCapability::Build->value])->toBeFalse()
+        ->and(app(QueueableBuildingPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
 test('it publishes no capability for an account the module does not manage', function (): void {
     $this->planetAddResources(capabilityPlenty());
 
@@ -356,6 +369,14 @@ function capabilityFillBuildingQueues(int $playerId): void
             // A metal mine has no requirements, so the host queues it while the queue has room.
             $queue->add($planet, 1);
         }
+    }
+}
+
+/** Every planet exactly full, which is the state the host refuses any further building in. */
+function capabilityExhaustFields(int $playerId): void
+{
+    foreach (app(PlayerServiceFactory::class)->make($playerId, true)->planets->all() as $planet) {
+        Planet::query()->whereKey($planet->getPlanetId())->update(['field_max' => $planet->getBuildingCount()]);
     }
 }
 
