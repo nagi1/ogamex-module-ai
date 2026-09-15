@@ -202,3 +202,32 @@ items that are operational rather than code — the 2/5/10 runs, the disclosed h
 feedback file — are run after sign-off; the gate-2 verdicts for the three drivers and the two
 narrower acceptance wordings are recorded as evidence rather than left open. An empty register is
 the evidence Packages 1–4 are finished, and this re-run leaves it empty.
+
+## Wave 6 — strategy-mining gap scan (15 September 2026)
+
+This wave is **not** a capability re-run: waves 1–5 closed the capability gaps. It is the
+[`strategy mining`](specs/strategy-mining.md) mapping of the validated principle catalog
+([`strategy-principles.md`](research/strategy-principles.md)) against current code. Each row is a
+*strategy-depth* gap — the mechanism is nameable as ordinary experienced play, the host supports it,
+and the module either does not reach it or reaches it thinner than the principle. Evidence class:
+**code-read** (absent in the code as written) or **measured** (seen in the grand test). These are
+enrichment gaps, not blockers; implementation stays blocked until the catalog is reviewed.
+
+| # | Gap | Signal it weakens | Evidence | Closing it needs |
+| --- | --- | --- | --- | --- |
+| W6-1 | **No activity risk in raid.** `RaidPlanner` gates on bashing + P20 profit only; `PlayerObservationService::targetReports` publishes `confidence = 1.0` and `travel_cost = 0.0` as placeholders. | 4, 5, 6 (target choice looks uniform) | code-read; `RaidPlanner::plan` | RAID-004/005/006: activity from `Planet.time_last_update`, per-type intel decay, fuel + slot cost in the profit test |
+| W6-2 | **Spy target selection is first-fit.** `QueueableSpyPlanner::target` walks planets in `id` order and returns the first legal unknown; no score, distance or yield. | 5, 10 (scouting looks mechanical) | code-read | INT-003: a target score (distance, novelty, likely yield) inside the existing candidate/trace mechanism |
+| W6-3 | **Fleetsave is reactive only.** The save fires only on `currentPlayerUnderAttack()`; there is no proactive exposure/fleet-value trigger and the destination is the first other own planet. | 1 (the one signal a player can *test*) | code-read; `QueueableFleetSavePlanner`, `inboundThreat` | FS-001/FS-005: proactive offline-gap save + destination×speed route scoring |
+| W6-4 | **No fleet composition strategy.** `QueueableUnitPlanner` is a fixed role order with a single ratio; cargo is fixed at 1, no counters, fodder or recycler sizing. | 3, 4, 9 | code-read | FLE-002/FLE-004: payload-sized cargo and stage-based composition |
+| W6-5 | **Debris, phalanx, moon, ACS and recall are host-supported but module-unwired.** `DebrisFieldService`/`RecycleMission`, `PhalanxService`, `JumpGateService`, `FleetUnionService`/`AcsDefendMission`, `cancelMission`/`startReturn` all exist in the host; no module planner/action references them. | 3, 4, 6 (a fleeter that never crashes, phalanxes or saves by moon) | code-read, host scan | CRASH-001..004: recycler trips, phalanx coverage, deploy-recall timing, moon/jump-gate value — as unsupported-until-verified, never silently |
+| W6-6 | **No full next-wake scheduling.** `SessionPlanner` schedules sessions, but SP3's `min(eta…)` wake at the next material event is only partial. | 4 (self-similar cadence) | code-read | AUTH-004/SP3: next-wake = min of resource/build/fleet/slot/storage ETAs |
+
+Each open row has a named principle in the catalog and a host input (from
+[`host-capability-map.md`](research/host-capability-map.md)). Algorithm blocks now exist for
+W6-1/2/3/5 in [`gameplay-algorithms.md`](specs/gameplay-algorithms.md) — SP7 (activity/intel reader),
+T6–T8 (raid depth), N4/N5 (intelligence depth), V6–V8 (save depth), F1–F6
+(fleetcrash/phalanx/moon) — all **planned**, blocked on catalog review. W6-4 (fleet composition) is
+the next increment's U-series block; W6-6 (next-wake) rides SP3 and stays partial. The classical-AI
+pass ([`classical-ai-patterns.md`](research/classical-ai-patterns.md)) confirms these are
+experienced-play mechanisms, not inventions. No row is closed by this pass — the executors do not
+exist yet.

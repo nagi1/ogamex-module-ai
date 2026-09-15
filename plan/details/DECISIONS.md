@@ -505,3 +505,124 @@ rest are decided and recorded, not left open. The dispositions are on the
 | R8 — suppress `last_ip` on scheduled `advance()` | **No host change.** The queue-context address is the truthful stamp for a scheduled account (I7/AG3), already decided 14 September 2026. |
 
 Nothing in this audit changes the reference profile, the completion gate, or Package 6's blockers.
+
+## Strategy knowledge mining — started (15 September 2026)
+
+After the GoRules audit (DO NOT USE) and the seam-vs-consumer review, the next major work is **strategy
+knowledge mining**: turn sourced OGame strategy into an atomic, mapped knowledge base. Decisions recorded
+here so the split is explicit and not rediscovered:
+
+- **Formalize, don't rediscover.** Economy, research, basic raiding, basic fleetsave, colonisation and
+  routine are already deeply sourced in `veteran-play.md` + `gameplay-algorithms.md` + the 16-bot survey.
+  The new catalog extracts them into atomic principles; no new web research for those domains.
+- **New research is scoped to the thin domains**, in priority order: raid/target richness, espionage
+  prioritization, proactive fleetsave, fleet composition, then fleetcrash/phalanx (Pass-4 niche).
+  Alliance/diplomacy stays deferred to Package 6.
+- **Confidence letters derive from existing provenance markers** (MEASURED/DOCUMENTED/CONTESTED/…), never
+  a parallel taxonomy.
+- **No code changes in this phase.** No new scorers until a validated principle cluster requires one, and
+  then they slot into the existing `DecisionTrace` component mechanism. No GoRules, no learning, no new
+  infrastructure.
+- **Host surface scan result:** phalanx (`PhalanxService`), moon + jump gate, ACS attack/defend,
+  debris/recyclers (`DebrisFieldService` + `RecycleMission`), planet activity (`time_last_update`) and
+  recall (`cancelMission`→`startReturn`) are all **supported by the host and unwired by the module**. The
+  fleetcrash/phalanx gap is therefore a module-wiring gap, not a host-capability gap — recorded as wave 6
+  in the register.
+
+Artifacts created: [`specs/strategy-mining.md`](specs/strategy-mining.md),
+[`research/source-registry.md`](research/source-registry.md),
+[`research/strategy-principles.md`](research/strategy-principles.md) (42 principles: 22 shipped, 6 partial,
+9 researched, 3 deferred, 2 gap), and the wave-6 register rows.
+
+### Strategy research pass 2 — multi-agent (15 September 2026)
+
+Three parallel research agents mined the gap domains against fetched sources and returned 25 new
+principles (FLE-005..011, FS-006..010, INT-005..010, CRASH-005..008, RAID-008..014). Sources that loaded
+and were deep-read: Gameforge fleetsave + raider guides, Sidian fleet-saving + farming, ogames.net
+activity-tracking + raiding, the `fleetsaving v2` board thread, Fandom `Ships` and `Rapid_Fire`
+(via `?action=raw`), and the Wayback recoveries of `Tactic 05a — Fleet composition` (2024-04-20) and
+`Tutorial 15 — Moon` (2024-05-19). The catalog now holds **67 principles** (22 shipped, 6 partial,
+36 researched, 3 deferred, 0 gap) — the gap domains are now *sourced*, which is what unblocks later
+architecture mapping and implementation.
+
+Corrections and contradictions recorded this pass, not silently resolved:
+- **Recall seam:** a same-planet relocation is **not** recallable — `cancelMission` returns early for a
+  deployment with `planet_id_from === planet_id_to`; deploy between two own planets **is** recallable.
+  `CRASH-003`/`FS-010` corrected accordingly.
+- **Debris in profit (RAID-014):** ogames.net publishes `Loot + Debris − Fuel − Losses`; the module
+  deliberately keeps debris out of the single-raid gate (two missions, two capacities). Recorded as
+  contested, module doctrine unchanged.
+- **Landing buffer (FS-007):** 10–20 min vs +30–60 min — stays a persona band.
+- **ACS still unsourced:** the ACS tutorial/guide anchors (ORG-009/010) still redirect; re-sourcing them
+  is the remaining Stage-1 discovery item.
+
+### Strategy research pass 3 — architecture mapping + ACS (15 September 2026)
+
+Three more parallel agents completed the two remaining review passes:
+- **ACS re-sourcing:** Wayback captures of ORG-009/010 failed; the Gameforge alliance guide (GF-003) is
+  the verified anchor and sourced **12 ACS principles** (ACS-001..012). ACS is alliance-gated
+  (`allianceCombatSystemOn`), host-supported (types 2/5) and module-unwired — execution stays deferred
+  to Package 6, knowledge recorded now.
+- **Architecture mapper:** every researched principle mapped to current code in
+  [`research/architecture-mapping.md`](research/architecture-mapping.md). The conclusion is that the
+  host supports phalanx/moon/jump-gate/debris/recycle/ACS/recall but **zero module callers** exist — the
+  gap is wiring, not capability. Highest-leverage P1 cluster: `PlayerObservationService::targetReports()`
+  (one change unblocks RAID-004/005/006 + INT-004).
+
+### Strategy research pass 4 — classical AI patterns + algorithm blocks (15 September 2026)
+
+The final research pass closed the brief's third workstream and wrote the algorithm blocks the
+earlier passes only mapped:
+
+- **Classical game AI catalogue**
+  [`research/classical-ai-patterns.md`](research/classical-ai-patterns.md): 23 patterns across Zero
+  Hour (ZH-1..10), Freelancer (FL-1..6), OpenRA (OA-1/2), Cobra (CB-1) and Wesnoth (WE-1..4),
+  formalized from the brief's confirmed findings, not rediscovered. Three takeaways:
+  state→parameter→behaviour is the one reusable shape and needs no class hierarchy;
+  difficulty-as-quality and variety-as-seeded-choice are already in the design; the corpus adds
+  *confidence* to mechanisms the strategy catalog already named, not new ones.
+- **Algorithm blocks** in [`specs/gameplay-algorithms.md`](specs/gameplay-algorithms.md): SP7 (the
+  activity/intel reader), T6–T8 (raid target score, tiered gate + cargo sizing, launch re-check),
+  N4/N5 (spy target score, own signature control), V6–V8 (proactive save, variation/masking, shadow
+  waves), F1–F6 (phalanx, deploy-recall, moon, recycle, blind lanx, moon destruction). All
+  **planned**, blocked on catalog review; the executors do not exist yet.
+- **Hypotheses H1–H10** recorded with evidence status in
+  [`specs/strategy-mining.md`](specs/strategy-mining.md): H1/H2/H3/H5/H6/H7/H9/H10 hold, H8
+  plausible, H4 open (no third axis over `ArchetypePolicy` + `AiSkillBand` justified yet).
+
+### Strategy research pass 5 — claims layer + canonical fold-back (15 September 2026)
+
+The final closes:
+- **Claims layer** [`research/strategy-claims.md`](research/strategy-claims.md): the eight claim types
+  (`DOMAIN_FACT`, `HARD_SAFETY_POLICY`, `SCORING_FACTOR`, `STRATEGIC_HEURISTIC`,
+  `BEHAVIOR_PROFILE_PARAMETER`, `POSSIBLE_STRATEGIC_POSTURE_TRIGGER`, `ADVANCED_TACTIC`,
+  `REJECTED/UNSUPPORTED`) with the disposition of each, the classification of all **83** principles,
+  and seven contested/rejected atomic claims preserved verbatim.
+- **Count correction:** the catalog holds **83 principles** (21 shipped, 7 partial, 52 researched,
+  3 deferred, 0 gap) — the earlier 79 (67 + 12 ACS) undercounted.
+- **Canonical fold-back:** `decision-policies.md` and `WORK-PACKAGES.md` now reference the mining
+  workstream and the wave-6 blocks as post-Package-4 depth, not a new package.
+- **Integration gates:** the ten-item per-cluster review checklist is written into
+  `strategy-mining.md`.
+- **M6/M7 scope:** the Zero Hour and Freelancer case studies are pattern-level; the actual
+  vanilla-vs-mod file diffs are recorded as a deferred follow-up, not a blocker.
+
+### Strategy research pass 6 — gap domains closed (15 September 2026)
+
+Three parallel gap-research agents closed the domains the prior passes left open. 26 new sources
+(`GF-006`, `TP-011..020`, `WIK-005..012`, `PLW-001..005`, `DEW-001`, `DEF-001`) and 24 new
+principles, including two new domains:
+- **Ninja / baiting** (NIN-001..005): the defender's counter-crash — hidden trap fleet landing on
+  the combat second, soft-farm bait, moon staging, and anti-ninja checks.
+- **Expeditions** (EXP-001/002): slot-16 outcomes and the never-fleetsave-via-expedition rule.
+- **Fleetcrash depth** (CRASH-009..014): phalanx return-second, speed-slider timing, precision
+  tiers, blind phalanx, recall-disappearance tell, and the crash EV formula with host-read debris %.
+- **Fleet composition** (FLE-012..015): the production-vs-launch split, counter-selected launch
+  subsets, cruiser workhorse, simulate-before-dispatch.
+- **Non-English confirmations** (PLW): FS-010 and CRASH-006 upgraded to multi-source (A); ECO-006
+  fusion timing contested; ACS 30%-join-cap and debris-split conventions (ACS-013/014); opsec
+  INT-011/012; colonization COL-003/004 and the slot-bonus correction to COL-001 (now A).
+
+Catalog now **107 principles** (21 shipped, 7 partial, 76 researched, 3 deferred). Remaining open
+(recorded, non-blocking): ACS tutorials ORG-009/010, the French board guide library URLs, and
+`ogamewiki.de`.

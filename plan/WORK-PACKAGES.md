@@ -165,3 +165,11 @@ page and the pilot report are made of.
 ## Integration order
 
 Merge packages strictly 1 → 2 → 3 → 4 → 5 → 6. A package first uses existing OGameX services, models and module extension points. Only a proven missing generic capability may produce a separate host pull request; the next module agent then works only from that merged revision, recorded in its handoff.
+
+The [strategy mining](details/specs/strategy-mining.md) workstream is **not a package**: it is a
+research/planning pass over Packages 1–5 that enriches the existing algorithms. Its implementation
+slices (wave-6 blocks T6–T8, N4/N5, V6–V8, F1–F6, and the U-series fleet-composition block) merge in
+the order 13–18 recorded in
+[gameplay-algorithms.md](details/specs/gameplay-algorithms.md#delivery-order), gated per reviewed
+cluster by the integration gates in the mining spec — they never precede the package they depend on,
+and none is executable until its cluster passes review.
