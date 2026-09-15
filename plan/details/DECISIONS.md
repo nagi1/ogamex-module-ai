@@ -806,3 +806,25 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   stand. A leaf research that no unit requires (astrophysics) therefore has its prerequisites climbed
   and is then skipped forever. R2 says such a research must score through the capability it unlocks;
   today nothing does.
+
+### Runtime AI YAML config — asked, declined on gate 2 (15 September 2026)
+- Asked for the "YAML files that control the AI, like the `.ini` files in Generals and Freelancer".
+  Honest answer: **it does not exist**, and the module has no YAML loader and no `symfony/yaml`.
+- What exists instead: the five profiles are
+  `app/Domain/Decision/Policies/{Miner,Turtle,Fleeter,Trader,Casual}Policy.php` (`$preferences`
+  weights + `$allowed` gates); per-account settings are `AiProfile` rows (archetype, skill_band,
+  random_seed, enabled); operator knobs are env-driven `config/*.php` (`AI_COGNITION_MODE`,
+  `AI_HORIZON_WORK_PROCESSES`, population/budget/cognition).
+- **Declined because gate 2 forbids exactly this shape:** "config for a value that never varies".
+  The archetype weights, the allowed-action gates, the exposure bands (5k/25k/50k) and the raid
+  ratios are fixed constants. Moving them to YAML is a lateral move that adds a loader, a validator
+  and a second authority to drift against, while changing no behaviour — and it needs a dependency
+  the rules say to avoid. The earlier proposal already separated the two things: research knowledge
+  storage (built, as Markdown — `strategy-principles.md`, `source-registry.md`,
+  `classical-ai-patterns.md`, `strategy-claims.md`) and a runtime profile representation
+  ("only later, if justified").
+- **What would change the verdict:** a demonstrated need for profiles to change without a code
+  deploy (operator/modder tuning), or for the *set* of archetypes to be extensible by data. Then the
+  smallest gate-clean mechanism is one `config/profiles.php` — the repo's own config convention, no
+  new dependency — loaded once at boot. Gate 1 still holds: profile data may carry persona taste,
+  never an object id, name, price or requirement.
