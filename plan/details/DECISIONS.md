@@ -861,3 +861,17 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   (b) The spec's `claims/*.yaml` atomic-claims layer has **no extracted data** — the repo goes
   sources → principles directly; the only claim layer that exists is the classification, carried as
   `claim_type`.
+
+### IMPL-022 — the capability research is reached (15 September 2026)
+- The gap the grand run measured is closed: astrophysics was never researched, so **colonise and
+  expedition stayed unreachable**. `FacilityChain` queued only the *prerequisites* of a non-producible
+  ambition, so a leaf technology no unit needs was skipped forever once its own prerequisites stood.
+- A host mission now declares the research it waits on (`GameMission::$requiredResearch` +
+  `getRequiredResearch()`, declared by colonisation and expedition as `astrophysics => 1`), and the
+  chain queues that technology **and its prerequisites** as steps. No object name enters module code
+  (gate 1): a mission a mod adds is climbed the moment the host knows it. Recorded as host change R10.
+- Duplicate steps are collapsed by machine name — the ambition and a mission can name the same
+  prerequisite — and the two fixtures that read the chain's next step (`chainHostPrerequisites`,
+  `transferPrerequisites`) satisfy the mission research the same way.
+- Gates: `quality` green (687 tests, Pint/PHPStan/Rector/Gate 2 all clean); coverage unchanged at
+  98.79% — the additions are covered, the remaining gaps are IMPL-023's.

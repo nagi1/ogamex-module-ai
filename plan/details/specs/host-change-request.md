@@ -22,6 +22,7 @@ Ordered by what it unblocks, not by size.
 | R7 | *(optional)* hourly `highscores` snapshot | small | Measuring the growth curve against human accounts on the same universe, not only against ourselves | **Decided 15 September 2026: not needed.** The module already records its own `ai_score_samples` series (AG2); a host snapshot would only add a second series |
 | R8 | *(optional)* a way to stop `advance()` stamping `last_ip` from a queue context | trivial | `last_ip` honesty for scheduled work (`A3`/`A5`) | **Decided 15 September 2026: no host change.** The queue-context address is the truthful stamp for a scheduled account (I7/AG3) |
 | R9 | A mission-required-ship query: "which unit does this mission type consume?" | small | Removes `colony_ship` / `espionage_probe` references from module code (gate 1) | **Implemented 15 September 2026** — `GameMission::getRequiredShipMachineNames()`; the module's role keys are deleted |
+| R10 | A mission-required-**research** query: "which technology does this mission wait on?" | small | Makes a capability a leaf technology gates reachable, without naming it in module code (gate 1, `R2`) | **Implemented 15 September 2026** — `GameMission::getRequiredResearch()`; the module's chain climbs it |
 
 ## R1 — A read-only, seedable battle question
 
@@ -207,6 +208,28 @@ base class, backed by a per-mission `$requiredShipMachineNames` property (`colon
 `espionage_probe` for espionage). The module's four role-key constants are deleted and replaced with the
 mission's own answer. Missions whose required ship is position-dependent (recycle) leave the list empty
 rather than declare a fixed set that misstates the rule.
+
+## R10 — A mission-required-research query
+
+**Where.** `ColonisationMission::isMissionPossible()` and `ExpeditionMission::isMissionPossible()` each
+check `getResearchLevel('astrophysics')` inline, so the requirement exists only as a hardcoded name.
+
+**Why the module needs it.** The chain is the module's only research source, and it queues the
+*prerequisites* of an ambition. A leaf technology no unit needs is therefore skipped forever once its
+own prerequisites stand — the grand run left all ten accounts at astrophysics 0 and left colonise and
+expedition permanently unreachable. To climb it the chain must know which technology a mission waits on,
+and hardcoding `astrophysics` in module code is exactly the object-name-in-module-code gate 1 forbids.
+
+**Minimal shape.** `GameMission::getRequiredResearch(): array` — machine name => minimum level, empty for
+a mission with no research gate.
+
+**If it never lands.** Colonise and expedition stay unreachable; the module keeps no name and no second
+list, so the gap stays visible rather than papered over with a hardcoded string.
+
+**Implemented 15 September 2026.** `GameMission::$requiredResearch` (machine name => level) plus the
+accessor, declared by colonisation and expedition as `astrophysics => 1`. The declaration is additive: no
+mission's own `isMissionPossible` check changes. `FacilityChain` reads it and queues the technology and
+its prerequisites as chain steps.
 
 ## Not requested — keep the host scope small
 

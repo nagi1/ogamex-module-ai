@@ -191,6 +191,18 @@ runtime cost: this pass read existing research and code only.
     "recorded_not_built": ["discard unaffordable fuel — the host already refuses an unfuelable save at dispatch and the receipt records it; a planner-side filter is observability polish, not correctness", "never the same landing time — departure rides the routine's session spread (H2), never a fixed tick"],
     "deferred": ["relationship (RAID-007) — AiRelationship rows are only written by the social observation path (Package 6); a raid policy over empty state would be dead code", "contest (RAID-013) — the module observes no other player's raid schedule, so a contest model would be an unmeasured guess; proximity is the shipped edge"],
     "verification": "no code changed; doc consistency re-checked (gap index W6-1/W6-3, T6 and V7 blocks); no gate run (doc-only)"
+  },
+  "impl_022": {
+    "date": "2026-09-15",
+    "slice": "Capability research — reach a leaf technology a mission gates on (R2)",
+    "found": "the grand-test live run left all 10 accounts at astrophysics 0 with 7 meeting every prerequisite, so colonise and expedition were permanently unreachable",
+    "root_cause": "FacilityChain is the only research source and queues only the unmet prerequisites of a non-producible ambition; nextAmbition() skips an ambition whose prerequisites all stand, so a leaf technology no unit requires is skipped forever",
+    "host_change": "R10 — GameMission::$requiredResearch (machine name => level) + getRequiredResearch(), declared by colonisation and expedition as astrophysics => 1; additive, no isMissionPossible change",
+    "code": ["app/Domain/Decision/FacilityChain.php", "app/GameMissions/Abstracts/GameMission.php", "app/GameMissions/ColonisationMission.php", "app/GameMissions/ExpeditionMission.php"],
+    "shipped": ["the chain queues the research a host mission waits on and its prerequisites as steps ('capability:<name>' reason)", "no object name enters module code; a mission a mod adds is climbed once the host knows it", "duplicate steps collapsed by machine name keeping the highest level"],
+    "tests": ["tests/Feature/BuildingChainReachabilityTest.php", "tests/Feature/TransferDepthTest.php"],
+    "fixture_fixes": ["chainHostPrerequisites and transferPrerequisites now satisfy the mission research too, since both read the chain's next step"],
+    "verification": "quality green (687 tests, Gate 2/Pint/PHPStan/Rector clean); coverage unchanged at 98.79%"
   }
 }
 ```
