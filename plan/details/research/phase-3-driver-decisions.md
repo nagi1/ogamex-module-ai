@@ -68,15 +68,29 @@ inside the application container; it writes only rows it then deletes). Each tri
 counterparty 30 facts and moves the debt fact one recency position, so 30 trials walk the whole
 corpus:
 
-| Observation | Native | AgentOS |
-| --- | --- | --- |
-| Required-fact (live `ResourceDebt`) recall at the module's 20-fact cut | **66.7 %** (20/30) | **100 %** (30/30) |
-| Newest fact about the counterparty kept in the cut | **30/30** | **1/30** |
-| Order differs from native | — | 30/30 |
-| Scope leaks (an id the module never sent) | 0 | 0 |
-| Recall latency p50 | 88.4 ms | 223.4 ms |
-| `HelpRequest` answer, production amount | `Counter: insufficient_available_amount` | identical, 30/30 |
-| `HelpRequest` answer with a caller-supplied query text | `Clarify` | `Reject`, 10/30 differ |
+| Observation | Native | AgentOS | Same ranking, promotion bounded to the native cut |
+| --- | --- | --- | --- |
+| Required-fact (live `ResourceDebt`) recall at the module's 20-fact cut | **66.7 %** (20/30) | **100 %** (30/30) | **66.7 %** (20/30) |
+| Newest fact about the counterparty kept in the cut | **30/30** | **1/30** | **30/30** |
+| Order differs from native | — | 30/30 | 30/30 |
+| Scope leaks (an id the module never sent) | 0 | 0 | 0 |
+| Recall latency p50 | 88.4 ms | 223.4 ms | n/a |
+| `HelpRequest` answer, production amount | `Counter: insufficient_available_amount` | identical, 30/30 | identical |
+| `HelpRequest` answer with a caller-supplied query text | `Clarify` | `Reject`, 10/30 differ | identical to native |
+
+**The gain and the eviction are the same act.** Replaying the driver's own real ranking with the
+promotion bounded — the ranked memories move to the front of the *same* cut instead of ahead of the
+native floor — returns native's 66.7 % and keeps the newest fact 30/30. So the driver does not widen
+what the consumer can see; it decides which 20 of 30 facts survive a fixed budget, and the +33.3 pp
+is what it buys by dropping the newest facts. Value here is *substitution*, not addition, which is
+why the "no worsened current-fact correctness" clause is not a caveat beside the gain but its price.
+
+**The value is also confined to the truncating regime.** Below 20 live facts the native recall
+returns everything, so ordering cannot change what the consumer sees — and the module's own fact
+universe is two predicates, so a counterparty only exceeds the cut after a long relationship (live
+`ResourceDebt` facts never expire and dedupe per source observation, so they accumulate). The
+driver's ordering is worth something only to a consumer that needs *relevance* rather than presence,
+and the module has one consumer, which tests presence.
 
 The numeric target is met and the verdict is still **disabled**, for three recorded reasons:
 

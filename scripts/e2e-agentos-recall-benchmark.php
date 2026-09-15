@@ -137,6 +137,9 @@ function measureTrial(int $trial, array $corpus, int $debtPosition): array
         'debt_fact_id' => $corpus[$debtPosition] ?? null,
         'native' => summary($native, $corpus),
         'agentos' => summary($driven, $corpus),
+        // The module-policy counterfactual: the driver's real ranking applied as a reorder of the
+        // native cut rather than as a replacement of it.
+        'bounded' => summary(['recalled' => boundedPromotion($native, $driven), 'milliseconds' => 0.0], $corpus),
         'unwired_matches_native' => ids($unwired) === ids($native),
         'production' => decide($exchange, PRODUCTION_AVAILABLE_AMOUNT, $now),
         'reachable' => decide($exchange, REACHABLE_AVAILABLE_AMOUNT, $now),
@@ -164,6 +167,34 @@ function measureTrial(int $trial, array $corpus, int $debtPosition): array
     );
 
     return $measured;
+}
+
+/**
+ * The driver's ranking applied inside the native cut: the ranked memories move to the front, the rest
+ * keep native order, and nothing is evicted.
+ *
+ * `AgentOsLongTermMemory::ranked()` promotes every driver-ranked id ahead of the native floor, so a
+ * full driver answer replaces the cut. Replaying the same real ranking with that promotion bounded is
+ * how much of the measured recall gain survives without the eviction, which is the module-policy
+ * question behind the Gate 2 verdict.
+ *
+ * @param  array{recalled: array<int, array<string, mixed>>}  $native
+ * @param  array{recalled: array<int, array<string, mixed>>}  $driven
+ * @return list<array<string, mixed>>
+ */
+function boundedPromotion(array $native, array $driven): array
+{
+    $rank = array_flip(ids($driven));
+    $cut = $native['recalled'];
+
+    usort($cut, static function (array $left, array $right) use ($rank): int {
+        $leftRank = $rank[(int) $left['id']] ?? PHP_INT_MAX;
+        $rightRank = $rank[(int) $right['id']] ?? PHP_INT_MAX;
+
+        return $leftRank <=> $rightRank ?: (int) $left['id'] <=> (int) $right['id'];
+    });
+
+    return $cut;
 }
 
 /**
@@ -372,6 +403,8 @@ function report(array $results, int $facts): void
     $unwired = count(array_filter($results, static fn (array $trial): bool => $trial['unwired_matches_native']));
     $newestNative = count(array_filter($results, static fn (array $trial): bool => $trial['native']['newest_in_cut']));
     $newestDriven = count(array_filter($results, static fn (array $trial): bool => $trial['agentos']['newest_in_cut']));
+    $boundedDebt = count(array_filter($results, static fn (array $trial): bool => $trial['bounded']['debt_in_cut']));
+    $boundedNewest = count(array_filter($results, static fn (array $trial): bool => $trial['bounded']['newest_in_cut']));
     $leaks = count(array_filter($results, static fn (array $trial): bool => $trial['agentos']['leaked'] || $trial['native']['leaked']));
 
     $productionSame = count(array_filter($results, static fn (array $trial): bool => $trial['production']['same'] === 'yes'));
@@ -406,15 +439,16 @@ function report(array $results, int $facts): void
     printf("decision parity at a reachable amount: %d/%d identical (%s)\n", $reachableSame, $trials, implode(' | ', array_unique($reachableAnswers)));
     printf("decision parity with a caller-supplied query text (experiment override): %d/%d identical (%s)\n", $wiredSame, $trials, implode(' | ', array_unique($wiredAnswers)));
     printf("order promotion replaces the whole cut: the driver returns a full topK, so the newest fact survives %d/%d under agentos vs %d/%d under native\n", $newestDriven, $trials, $newestNative, $trials);
+    printf("same ranking with the promotion bounded to the native cut: required-fact recall %5.1f%% (%d/%d), newest fact kept %d/%d -> the gain and the eviction are the same act\n", percentage($boundedDebt, $trials), $boundedDebt, $trials, $boundedNewest, $trials);
     printf("corpus: %d facts per counterparty (the cut only bites above %d)\n", $facts, RECALL_LIMIT);
 
     printf("\njson:%s\n", json_encode([
         'trials' => $trials,
         'facts_per_counterparty' => $facts,
         'recall_limit' => RECALL_LIMIT,
-        'required_fact_recall' => ['native' => percentage($nativeDebt, $trials), 'agentos' => percentage($drivenDebt, $trials), 'delta_pp' => $delta],
+        'required_fact_recall' => ['native' => percentage($nativeDebt, $trials), 'agentos' => percentage($drivenDebt, $trials), 'bounded_promotion' => percentage($boundedDebt, $trials), 'delta_pp' => $delta],
         'order_changed_trials' => $orderChanged,
-        'newest_fact_kept' => ['native' => $newestNative, 'agentos' => $newestDriven],
+        'newest_fact_kept' => ['native' => $newestNative, 'agentos' => $newestDriven, 'bounded_promotion' => $boundedNewest],
         'scope_leaks' => $leaks,
         'latency_ms_p50' => ['native' => round($latencyNative, 3), 'agentos' => round($latencyDriven, 3)],
         'unwired_matches_native_trials' => $unwired,
