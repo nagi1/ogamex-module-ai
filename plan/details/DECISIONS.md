@@ -485,3 +485,23 @@ signed off yet; the owner reviews the report before acceptance.
 | Gates | Rector 0 changes, Pint clean, PHPStan level 8 0 errors, **614 Pest tests / 2,051 assertions**, PCOV **100.00%** (5,018/5,018). |
 | Real measurement | `ai:cognition-conformance` extended with `--mode`. External: CBRKit p50 179 ms, FAtiMA p50 408 ms (50 HTTP calls per 10 appraisals), both `correct`. Hybrid: CBRKit p50 224 ms, FAtiMA p50 403 ms, both `correct`; the artifact shows `driver_emotion: Anger` with the native `Anger 0.08` kept canonical. |
 | Deferred, named | FAtiMA's mood is read but flat (0.0) for the battle-loss fixture — the authored harm rule carries no mood change, so social-importance/decision-intention depth waits on scenario authoring. CBRKit still executes the module's formula (its own retrieval measure is the remaining 5D step). The per-fact relevance surface waits for a consumer. Reference profile unchanged. |
+
+## Host obligations — extension points landed, the rest decided (15 September 2026)
+
+The audit of Packages 1–5 asked which of the [host obligations](specs/host-change-request.md) are still
+open. Two are pure extension points and are now implemented in the host and consumed by the module; the
+rest are decided and recorded, not left open. The dispositions are on the
+[host change request](specs/host-change-request.md) table.
+
+| Ask | Decision and evidence |
+| --- | --- |
+| R2 — queue-upgrade predicate | **Implemented.** `PlayerService::isObjectUpgradeBlocked(int $object_id)` publishes the controller's own rule; the controller reuses it and the module's `AiBuildingMachineName` enum (the last machine-name list in module code) is deleted. Gate 1. |
+| R9 — mission-required-ship query | **Implemented.** `GameMission::getRequiredShipMachineNames()` answers which ship a mission refuses to run without; the module's `colony_ship` / `espionage_probe` role keys are deleted. Gate 1. |
+| R3 — vacation/ban refusal inside the queue services | **Keep the module-side re-check.** Every module queue action already refuses banned/vacationing players under its own lock — the documented "if it never lands" fallback, already shipped. Moving the refusal into the host services changes host behaviour for every caller and is not forced now; it stays a host ask. |
+| R4 — storage enumeration including stations | **Closed by evidence.** `StationObject` has no `storage` field, so no station can carry storage in this host and the building-only enumeration is already complete. Adding a method whose output cannot differ is the speculative machinery gate 2 forbids. |
+| R5 — recall ownership in the service | **Deferred.** The module has no recall executor (fleetsave is a deployment), so there is no caller; the ownership check lands with the first recall path. |
+| R6 — the five controller-only rules | **Not now.** The module's copies are currently correct and four of the five have no active drift; publishing five predicates with no consuming need is over-engineering. Reopen on a demonstrated drift. |
+| R7 — hourly host highscore snapshot | **Not needed.** The module already records its own `ai_score_samples` series (AG2); a host snapshot would add a second series with no consumer. |
+| R8 — suppress `last_ip` on scheduled `advance()` | **No host change.** The queue-context address is the truthful stamp for a scheduled account (I7/AG3), already decided 14 September 2026. |
+
+Nothing in this audit changes the reference profile, the completion gate, or Package 6's blockers.

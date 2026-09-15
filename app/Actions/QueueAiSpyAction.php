@@ -26,8 +26,6 @@ use OGame\Services\PlayerGameStateService;
  */
 class QueueAiSpyAction implements QueueAiSpy
 {
-    private const PROBE = 'espionage_probe';
-
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
         private PlanetServiceFactory $planetServiceFactory,
@@ -52,7 +50,10 @@ class QueueAiSpyAction implements QueueAiSpy
 
             $planet = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
             $units = new UnitCollection();
-            $units->addUnit(ObjectService::getUnitObjectByMachineName(self::PROBE), 1);
+            // The ship the host's own espionage mission consumes; the name comes from the mission,
+            // never from a module constant.
+            $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
+            $units->addUnit($probe, 1);
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(

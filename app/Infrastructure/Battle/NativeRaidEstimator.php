@@ -2,7 +2,6 @@
 
 namespace Modules\AI\Infrastructure\Battle;
 
-use Modules\AI\Contracts\RaidEstimator;
 use Modules\AI\Domain\Raid\RaidEstimate;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -26,7 +25,7 @@ use OGame\Services\SettingsService;
  * the host's stationary picture of the target planet, so no unit, price or
  * defence figure is named here.
  */
-class NativeRaidEstimator implements RaidEstimator
+class NativeRaidEstimator
 {
     private const SCREEN_SAMPLES = 50;
 

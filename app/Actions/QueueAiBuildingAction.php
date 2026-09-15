@@ -4,7 +4,6 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiBuilding;
-use Modules\AI\Enums\AiBuildingMachineName;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -51,7 +50,9 @@ class QueueAiBuildingAction implements QueueAiBuilding
             if ($building->type !== GameObjectType::Building && $building->type !== GameObjectType::Station) {
                 return AiActionResult::rejected(AiQueueActionReason::NotABuilding);
             }
-            if (in_array($building->machine_name, AiBuildingMachineName::unitQueueBlockers(), true) && $player->isBuildingShipsOrDefense()) {
+            // The host's own predicate: the two unit-producing stations cannot be upgraded while
+            // ships or defence are in production. The module names no object here.
+            if ($player->isObjectUpgradeBlocked($buildingId)) {
                 return AiActionResult::rejected(AiQueueActionReason::ShipyardBusy);
             }
 

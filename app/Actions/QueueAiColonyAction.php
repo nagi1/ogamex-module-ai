@@ -27,8 +27,6 @@ use OGame\Services\PlayerGameStateService;
  */
 class QueueAiColonyAction implements QueueAiColony
 {
-    private const COLONY_SHIP = 'colony_ship';
-
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
         private PlanetServiceFactory $planetServiceFactory,
@@ -53,7 +51,10 @@ class QueueAiColonyAction implements QueueAiColony
 
             $planet = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
             $units = new UnitCollection();
-            $units->addUnit(ObjectService::getUnitObjectByMachineName(self::COLONY_SHIP), 1);
+            // The ship the host's own colonisation mission consumes; the name comes from the
+            // mission, never from a module constant.
+            $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
+            $units->addUnit($colonyShip, 1);
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(

@@ -31,9 +31,6 @@ use OGame\Services\SettingsService;
  */
 class QueueableColonyPlanner
 {
-    /** The ship the host's colonisation mission consumes, referenced by the key the host checks. */
-    private const COLONY_SHIP = 'colony_ship';
-
     /** Hard ceiling on coordinate checks per decision, so a full universe can never stall a session. */
     private const MAX_SCANS = 600;
 
@@ -83,7 +80,7 @@ class QueueableColonyPlanner
     private function colonyShipPlanet(array $planets): ?PlanetService
     {
         foreach ($planets as $planet) {
-            if ($planet->getShipUnits()->getAmountByMachineName(self::COLONY_SHIP) > 0) {
+            if ($planet->getShipUnits()->getAmountByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]) > 0) {
                 return $planet;
             }
         }

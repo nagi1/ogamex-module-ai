@@ -11,17 +11,17 @@ here is a silent blocker.
 
 Ordered by what it unblocks, not by size.
 
-| # | Ask | Size | Unblocks | If it never lands |
+| # | Ask | Size | Unblocks | Disposition |
 | --- | --- | --- | --- | --- |
 | R1 | A read-only, seedable battle question on the battle engine | medium | Raids and any estimator (`G6`), plus byte-stable replay for the offline corpus | **Implemented 14 September 2026** — `simulateBattle(?int $seed, bool $pure)` |
-| R2 | Queue-upgrade predicate: "may this object be upgraded now?" | small | Deletes `AiBuildingMachineName`, the last object-name list in module code (gate 1, `A3`/`B2`/`C3`) | The module keeps restating two machine names |
-| R3 | Vacation/ban refusal inside the queue **services**, not only the controllers | small | Correctness of every module-issued queue entry (`O2`) | The module re-checks under its own lock and accepts a small race window |
-| R4 | `getGameObjectsWithStorage()` covering stations, not only buildings | trivial | Storage enumeration stays honest for a mod-added station (`C5`, gate 1) | A mod-added station's storage is invisible to the planner |
-| R5 | Ownership check inside `FleetMissionService::cancelMission()` | trivial | Recall safety once fleets exist (`G4`, `G8`) | The module re-does the check before every recall |
-| R6 | The five remaining controller-only rules, published together | small | Removes five more places where module code restates host rules | The module keeps its own copies, each of which can drift |
-| R7 | *(optional)* hourly `highscores` snapshot | small | Measuring the growth curve against human accounts on the same universe, not only against ourselves | The module records its own series and can only compare cohorts to each other |
-| R8 | *(optional)* a way to stop `advance()` stamping `last_ip` from a queue context | trivial | `last_ip` honesty for scheduled work (`A3`/`A5`) | Accounts appear to log in from an empty address |
-| R9 | A mission-required-ship query: "which unit does this mission type consume?" | small | Removes `colony_ship` / `espionage_probe` references from module code (gate 1) | The module keeps one host-contract key per role |
+| R2 | Queue-upgrade predicate: "may this object be upgraded now?" | small | Deletes `AiBuildingMachineName`, the last object-name list in module code (gate 1, `A3`/`B2`/`C3`) | **Implemented 15 September 2026** — `PlayerService::isObjectUpgradeBlocked(int $object_id)`; the controller reuses it and the module enum is deleted |
+| R3 | Vacation/ban refusal inside the queue **services**, not only the controllers | small | Correctness of every module-issued queue entry (`O2`) | **Decided 15 September 2026: keep the module-side re-check.** Every module queue action already refuses banned/vacationing players under its own lock; the host service change stays a future ask, not forced now |
+| R4 | `getGameObjectsWithStorage()` covering stations, not only buildings | trivial | Storage enumeration stays honest for a mod-added station (`C5`, gate 1) | **Closed by evidence 15 September 2026.** `StationObject` has no `storage` field, so no station can carry storage in this host; the enumeration over buildings is already complete |
+| R5 | Ownership check inside `FleetMissionService::cancelMission()` | trivial | Recall safety once fleets exist (`G4`, `G8`) | **Deferred 15 September 2026.** The module has no recall executor (fleetsave is a deployment), so there is no caller yet; the check lands when a recall path ships |
+| R6 | The five remaining controller-only rules, published together | small | Removes five more places where module code restates host rules | **Decided 15 September 2026: not now.** The module's copies are currently correct and four of the five have no active drift; extracting five predicates with no consuming need is the over-engineering gate 2 forbids. Reopen on a demonstrated drift |
+| R7 | *(optional)* hourly `highscores` snapshot | small | Measuring the growth curve against human accounts on the same universe, not only against ourselves | **Decided 15 September 2026: not needed.** The module already records its own `ai_score_samples` series (AG2); a host snapshot would only add a second series |
+| R8 | *(optional)* a way to stop `advance()` stamping `last_ip` from a queue context | trivial | `last_ip` honesty for scheduled work (`A3`/`A5`) | **Decided 15 September 2026: no host change.** The queue-context address is the truthful stamp for a scheduled account (I7/AG3) |
+| R9 | A mission-required-ship query: "which unit does this mission type consume?" | small | Removes `colony_ship` / `espionage_probe` references from module code (gate 1) | **Implemented 15 September 2026** — `GameMission::getRequiredShipMachineNames()`; the module's role keys are deleted |
 
 ## R1 — A read-only, seedable battle question
 
@@ -101,6 +101,12 @@ later: the account would spend a queue slot and receive a receipt for an action 
 
 **Verification when it lands.** The module deletes the enum and asks; a test asserts the module's answer
 matches the controller's for a busy shipyard.
+
+**Implemented 15 September 2026.** `PlayerService::isObjectUpgradeBlocked(int $object_id): bool` answers
+the controller's exact rule — the two unit-producing stations (ids 21 and 15) cannot be upgraded while
+ships or defence are in production. `AbstractBuildingsController` now calls the predicate instead of
+repeating the id pair, and the module deleted `AiBuildingMachineName` and asks the host. The module test
+`ProcessAiWorkTest` (the shipyard-safety rule) now exercises the host predicate end to end.
 
 ## R3 — Vacation and ban refusal inside the queue services
 
@@ -195,6 +201,12 @@ returning the machine names the mission refuses to run without.
 **If it never lands.** The module keeps the role key behind a single documented
 constant each, and the object itself always comes from `ObjectService`, so the
 catalogue stays the source of truth and only the role key drifts.
+
+**Implemented 15 September 2026.** `GameMission::getRequiredShipMachineNames(): array` is a static on the
+base class, backed by a per-mission `$requiredShipMachineNames` property (`colony_ship` for colonisation,
+`espionage_probe` for espionage). The module's four role-key constants are deleted and replaced with the
+mission's own answer. Missions whose required ship is position-dependent (recycle) leave the list empty
+rather than declare a fixed set that misstates the rule.
 
 ## Not requested — keep the host scope small
 

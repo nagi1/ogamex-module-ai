@@ -23,8 +23,6 @@ use OGame\Services\PlanetService;
  */
 class QueueableSpyPlanner
 {
-    private const PROBE = 'espionage_probe';
-
     /** Bounded: only this many candidate targets are inspected per decision. */
     private const MAX_CANDIDATES = 20;
 
@@ -73,7 +71,7 @@ class QueueableSpyPlanner
         $player = $this->playerServiceFactory->make($playerId, true);
 
         foreach ($player->planets->all() as $planet) {
-            if ($planet->getShipUnits()->getAmountByMachineName(self::PROBE) > 0) {
+            if ($planet->getShipUnits()->getAmountByMachineName(EspionageMission::getRequiredShipMachineNames()[0]) > 0) {
                 return $planet;
             }
         }

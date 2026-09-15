@@ -4,6 +4,8 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\ColonisationMission;
+use OGame\GameMissions\EspionageMission;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
@@ -41,19 +43,6 @@ class QueueableUnitPlanner
 
     /** The same 24 h staleness window the observation publishes target reports with. */
     private const INTEL_TTL_HOURS = 24;
-
-    /**
-     * The ship the host's colonisation mission consumes, referenced by the key that host mission
-     * checks rather than by id; the object always comes from ObjectService. (Host-ask R9 would move
-     * even this key to the host.)
-     */
-    private const COLONY_SHIP = 'colony_ship';
-
-    /**
-     * The ship the host's espionage mission consumes; same host-contract-key reasoning as the
-     * colony ship, same R9 ask.
-     */
-    private const PROBE = 'espionage_probe';
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -106,7 +95,7 @@ class QueueableUnitPlanner
             // Expansion: a colony ship once a fleet exists, the account has room, and none is
             // already owned. One colony ship is the second planet every later fleet move needs.
             if (!$this->ownsColonyShip($planet) && $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
-                $colonyShip = ObjectService::getUnitObjectByMachineName(self::COLONY_SHIP);
+                $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $colonyShip)) {
                     return $this->unit($planet, $colonyShip, 'role:colony');
                 }
@@ -114,7 +103,7 @@ class QueueableUnitPlanner
 
             // Scouting: a probe once a fleet exists, so the account can start seeing neighbours.
             if (!$this->ownsProbe($planet)) {
-                $probe = ObjectService::getUnitObjectByMachineName(self::PROBE);
+                $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $probe)) {
                     return $this->unit($planet, $probe, 'role:probe');
                 }
@@ -151,12 +140,12 @@ class QueueableUnitPlanner
 
     private function ownsColonyShip(PlanetService $planet): bool
     {
-        return $planet->getShipUnits()->getAmountByMachineName(self::COLONY_SHIP) > 0;
+        return $planet->getShipUnits()->getAmountByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]) > 0;
     }
 
     private function ownsProbe(PlanetService $planet): bool
     {
-        return $planet->getShipUnits()->getAmountByMachineName(self::PROBE) > 0;
+        return $planet->getShipUnits()->getAmountByMachineName(EspionageMission::getRequiredShipMachineNames()[0]) > 0;
     }
 
     /**

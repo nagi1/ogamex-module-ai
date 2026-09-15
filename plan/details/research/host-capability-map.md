@@ -24,7 +24,7 @@ plain host `app/` code. The host's module system is `app/Modules/`, with a close
 | Building enqueue | yes | `BuildingQueueService::add(PlanetService, int)`, `addDowngrade(PlanetService, int)` | |
 | Building processing and cancellation | yes | `PlanetService::updateBuildingQueue(bool)`; `BuildingQueueService::start()` / `cancel()` | cancels on target-level mismatch, requirements, resources, lab-while-researching, downgrade with dependents, missile silo loaded, shipyard busy |
 | Storage capacity read | yes | `PlanetService::metalStorage()/crystalStorage()/deuteriumStorage(): Resource` | stored `*_max` columns |
-| Storage objects | **partly** | `ObjectService::getBuildingObjectsWithStorage(): array<BuildingObject>` | **excludes stations**, so a mod-added station with storage is invisible to the enumeration — recorded as a host obligation |
+| Storage objects | yes | `ObjectService::getBuildingObjectsWithStorage(): array<BuildingObject>` | complete for this host: `StationObject` has no `storage` field, so no station can carry storage (R4 closed by evidence) |
 | Storage computation | yes | `PlanetService::updateResourceStorageStats(bool)`, `getBuildingMaxStorage(string, int\|bool)` | formulas are `eval`'d strings: call them, never copy them |
 | Energy balance | yes | `PlanetService::energy()`, `energyProduction()`, `energyConsumption(): Resource` | stored `energy_max` / `energy_used` columns |
 | Production-efficiency factor | yes | `PlanetService::getResourceProductionFactor(): int` | `floor(production/consumption*100)` clamped 0–100, from the stored columns |
@@ -38,7 +38,7 @@ plain host `app/` code. The host's module system is `app/Modules/`, with a close
 | Capability | Exists | Exact call | Note |
 | --- | --- | --- | --- |
 | Fleet dispatch | yes | `FleetMissionService::createNewFromPlanet(PlanetService, Coordinate, PlanetType, int $missionType, UnitCollection, Resources, float $speedPercent, int $holdingHours = 0, int $parent_id = 0, bool $retreatAfterDefenderRetreat = false): FleetMission` → `GameMission::start()` | |
-| Mission catalogue | yes, **no enum** | `GameMissionFactory::getAllMissions()`, `getMissionById(int)` | 1 attack, 2 ACS attack, 3 transport, 4 deployment, 5 ACS defend, 6 espionage, 7 colonisation, 8 recycle, 9 moon destruction, 10 missile, 15 expedition; per-class `getTypeId/getName/hasReturnMission/getFleetSpeedType/getFriendlyStatus/isBlockedByServerAttackBlock`. Read the catalogue — an enum in module code would be gate 1 |
+| Mission catalogue | yes, **no enum** | `GameMissionFactory::getAllMissions()`, `getMissionById(int)`, `GameMission::getRequiredShipMachineNames()` (R9, 15 Sep 2026) | 1 attack, 2 ACS attack, 3 transport, 4 deployment, 5 ACS defend, 6 espionage, 7 colonisation, 8 recycle, 9 moon destruction, 10 missile, 15 expedition; per-class `getTypeId/getName/hasReturnMission/getFleetSpeedType/getFriendlyStatus/isBlockedByServerAttackBlock/getRequiredShipMachineNames`. Read the catalogue — an enum in module code would be gate 1 |
 | Fuel | yes | `FleetMissionService::calculateConsumption(PlanetService, UnitCollection, Coordinate, int $holdingHours, float $speedPercent): int` | **per ship entry**, base `fuel->rawValue × amount × distance/35000 × (shipSpeedValue/10+1)²`, plus holding, then class and universe multipliers |
 | Distance and duration | yes | `calculateFleetMissionDistance()`, `calculateFleetMissionDuration(...)` | duration honours the mission's `FleetSpeedType` |
 | Slots | yes | `PlayerService::getFleetSlotsInUse/getFleetSlotsMax/getExpeditionSlotsInUse/getExpeditionSlotsMax(): int` | enforced in `startMissionSanityChecks()` by throw |
@@ -103,15 +103,14 @@ merged revision.
 
 1. **The queue-upgrade predicate (A3, B2, C3).** "A shipyard or nanite factory may not be upgraded while
    units are building" exists only in `AbstractBuildingsController::addBuildRequest()`, keyed on the raw
-   ids `21` and `15`. `PlayerService::isBuildingShipsOrDefense()` exists but does not say *which* object
-   is blocked. Until a service publishes the pair, the module's `AiBuildingMachineName` stays — deleting
-   it would let the account take a fleet-slot queue entry for an upgrade the game then cancels.
+   ids `21` and `15`. **Closed 15 September 2026:** `PlayerService::isObjectUpgradeBlocked(int $object_id)`
+   publishes that rule; the controller reuses it and the module's `AiBuildingMachineName` is deleted.
 2. **Vacation mode blocks queue additions in controllers only.** `AbstractBuildingsController`,
    `AbstractUnitsController` and `ResearchController` each refuse on `isInVacationMode()`; the services
-   check it only while *processing*. A module that queues directly can therefore add work that will never
-   run — already noted in O2's neighbourhood, and it applies to all three queues.
+   check it only while *processing*. **Decided 15 September 2026:** the module keeps its own re-check
+   under its lock (already shipped); the host service change is not forced now.
 3. **Fleet-recall ownership is controller-only.** `FleetMissionService::cancelMission()` performs no
-   owner comparison.
+   owner comparison. **Deferred 15 September 2026:** no recall executor exists yet, so no caller.
 4. **The attack-block response is controller-only.** Only the per-mission `static
    $blockedByServerAttackBlock` reaches the service; `SettingsService::missionBlockedByAttackBlock()` is
    called by `FleetController::dispatchSendFleet()`.
@@ -124,13 +123,14 @@ merged revision.
    2,000-character limit live in `ChatController` and are re-implemented in the module.
 9. **Nothing prunes `espionage_reports`.** The only retention is `delete-old-messages` (7 days) for
    inbox `messages` and `chat_messages`. Reports grow forever, which affects gap O1's sizing.
-10. **`getBuildingObjectsWithStorage()` excludes stations**, so storage enumeration is blind to any
-    station a mod adds — a gate-1 hole in the host's own catalogue, not in the module.
+10. **`getBuildingObjectsWithStorage()` excludes stations.** **Closed by evidence 15 September 2026:**
+    `StationObject` has no `storage` field, so no station can carry storage in this host and the
+    building-only enumeration is already complete.
 
-Obligations 1, 2, 3, 6 and 10 are the asks in
-[**the host change request**](../specs/host-change-request.md), which adds the one genuine new extension
-point this survey found — a read-only, seedable battle question — and states the minimal shape of each
-item so host scope stays small.
+Obligations 2, 3, 6, 7 and 8 remain open asks in
+[**the host change request**](../specs/host-change-request.md); obligations 1 and 9 are closed (the
+predicate and the read-only seedable battle question), 3 and 10 are disposed of by decision/evidence.
+Each item states the minimal shape so host scope stays small.
 
 ## What this changes
 

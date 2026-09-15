@@ -2,7 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
-use Modules\AI\Contracts\RaidEstimator;
+use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -34,7 +34,7 @@ class RaidPlanner
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
-        private RaidEstimator $raidEstimator,
+        private NativeRaidEstimator $raidEstimator,
     ) {
     }
 
