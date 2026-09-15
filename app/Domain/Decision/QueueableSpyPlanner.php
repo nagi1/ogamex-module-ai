@@ -2,11 +2,15 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\EspionageMission;
 use OGame\Models\EspionageReport;
+use OGame\Models\FleetMission;
 use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\User;
@@ -23,10 +27,10 @@ use OGame\Services\PlanetService;
  * mission consumes is the ship the host requires. The candidate list is the
  * host's own planets table, so no target is named here.
  *
- * A target the account already holds fresh intel on is skipped, so scouting is
- * bounded: each neighbour is probed once per intel window, and the account
- * stops probing once it knows the neighbourhood instead of re-probing the same
- * planets it cannot act on.
+ * A target the account already holds fresh intel on, or already has a probe in
+ * flight toward, is skipped. Scouting is bounded: each neighbour is probed once
+ * per intel window, and the account waits for its own probe to come back before
+ * sending another instead of re-probing the same planets it cannot act on.
  */
 class QueueableSpyPlanner
 {
@@ -58,7 +62,10 @@ class QueueableSpyPlanner
             return null;
         }
 
-        $target = $this->target($playerId, $this->freshIntelCoordinates($playerId));
+        $skip = $this->freshIntelCoordinates($playerId)
+            + $this->inFlightCoordinates($playerId)
+            + $this->openSpyIntentCoordinates($playerId);
+        $target = $this->target($playerId, $skip);
         if ($target === null) {
             return null;
         }
@@ -95,13 +102,14 @@ class QueueableSpyPlanner
      *
      * Own, destroyed, vacationing and administrator-protected planets are all
      * skipped — the module restates no rule, it only declines candidates the
-     * host's own mission would refuse. A planet already inside the intel window
-     * is skipped too: re-probing what the account already knows is how the
-     * population came to scout without ever gaining anything.
+     * host's own mission would refuse. A planet the account already knows, or
+     * already has a probe travelling toward, is skipped too: re-probing before
+     * the last probe has even returned is how the population came to scout
+     * without ever gaining anything.
      *
-     * @param array<string, true> $freshCoordinates
+     * @param array<string, true> $skipCoordinates
      */
-    private function target(int $playerId, array $freshCoordinates): ?Planet
+    private function target(int $playerId, array $skipCoordinates): ?Planet
     {
         $candidates = Planet::query()
             ->where('user_id', '!=', $playerId)
@@ -111,7 +119,7 @@ class QueueableSpyPlanner
             ->get();
 
         foreach ($candidates as $planet) {
-            if (isset($freshCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"])) {
+            if (isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"])) {
                 continue;
             }
 
@@ -153,6 +161,58 @@ class QueueableSpyPlanner
         $coordinates = [];
         foreach (EspionageReport::query()->whereIn('id', $reportIds)->get(['planet_galaxy', 'planet_system', 'planet_position']) as $report) {
             $coordinates["{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}"] = true;
+        }
+
+        return $coordinates;
+    }
+
+    /**
+     * The coordinates this account already has an espionage probe travelling to,
+     * keyed g:s:p. A probe that has not returned yet yields no report, so it has
+     * to be skipped on its own signal rather than through fresh intel: firing a
+     * second probe at the same planet before the first is back is the other half
+     * of the re-probing loop the freshness guard alone cannot stop.
+     *
+     * @return array<string, true>
+     */
+    private function inFlightCoordinates(int $playerId): array
+    {
+        $coordinates = [];
+        foreach (FleetMission::query()
+            ->where('user_id', $playerId)
+            ->where('mission_type', EspionageMission::getTypeId())
+            ->where('processed', 0)
+            ->where('canceled', 0)
+            ->get(['galaxy_to', 'system_to', 'position_to']) as $mission) {
+            $coordinates["{$mission->galaxy_to}:{$mission->system_to}:{$mission->position_to}"] = true;
+        }
+
+        return $coordinates;
+    }
+
+    /**
+     * The coordinates this account has already decided to probe but not yet
+     * dispatched, keyed g:s:p. A queued or retried intent sits between the
+     * decision and the mission, and a report does not exist for it yet, so it
+     * has to be skipped on its own signal: deciding to probe the same target
+     * again every session while the earlier intent is still waiting is the
+     * third leg of the re-probing loop, after fresh intel and the in-flight
+     * mission.
+     *
+     * @return array<string, true>
+     */
+    private function openSpyIntentCoordinates(int $playerId): array
+    {
+        $coordinates = [];
+        foreach (AiWorkItem::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiWorkKind::Spy)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Leased, AiWorkState::Retry])
+            ->get(['payload']) as $item) {
+            $payload = $item->payload ?? [];
+            if (isset($payload['target_galaxy'], $payload['target_system'], $payload['target_position'])) {
+                $coordinates["{$payload['target_galaxy']}:{$payload['target_system']}:{$payload['target_position']}"] = true;
+            }
         }
 
         return $coordinates;

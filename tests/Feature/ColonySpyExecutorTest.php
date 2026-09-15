@@ -10,8 +10,13 @@ use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
+use OGame\GameMissions\EspionageMission;
 use OGame\Models\EspionageReport;
+use OGame\Models\FleetMission;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\MessageService;
@@ -106,6 +111,46 @@ test('the spy planner skips a target it already holds fresh intel on', function 
         ->and($plan->targetPosition)->toBe($unprobedCoordinates->position);
 });
 
+test('the spy planner skips a target it already has a probe in flight toward', function (): void {
+    colonyProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+
+    $inFlight = $this->createForeignPlanet();
+    $open = $this->createForeignPlanet();
+
+    $inFlightCoordinates = $inFlight->getPlanetCoordinates();
+    $openCoordinates = $open->getPlanetCoordinates();
+
+    spyFleetMission($this->currentUserId, $inFlightCoordinates->galaxy, $inFlightCoordinates->system, $inFlightCoordinates->position);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->targetGalaxy)->toBe($openCoordinates->galaxy)
+        ->and($plan->targetSystem)->toBe($openCoordinates->system)
+        ->and($plan->targetPosition)->toBe($openCoordinates->position);
+});
+
+test('the spy planner skips a target it already has a queued intent toward', function (): void {
+    colonyProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+
+    $queued = $this->createForeignPlanet();
+    $open = $this->createForeignPlanet();
+
+    $queuedCoordinates = $queued->getPlanetCoordinates();
+    $openCoordinates = $open->getPlanetCoordinates();
+
+    openSpyIntent($this->currentUserId, $queuedCoordinates->galaxy, $queuedCoordinates->system, $queuedCoordinates->position);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->targetGalaxy)->toBe($openCoordinates->galaxy)
+        ->and($plan->targetSystem)->toBe($openCoordinates->system)
+        ->and($plan->targetPosition)->toBe($openCoordinates->position);
+});
+
 test('the spy planner plans nothing without a probe or a legal target', function (): void {
     $profile = colonyProfile($this->currentUserId);
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
@@ -165,6 +210,43 @@ function spyReport(int $playerId, int $galaxy, int $system, int $position): int
     app(MessageService::class)->sendEspionageReportMessageToPlayer($player, $report->id);
 
     return $report->id;
+}
+
+/** A queued spy intent the account has decided on but not yet dispatched. */
+function openSpyIntent(int $playerId, int $galaxy, int $system, int $position): void
+{
+    AiWorkItem::query()->create([
+        'player_id' => $playerId,
+        'kind' => AiWorkKind::Spy,
+        'state' => AiWorkState::Pending,
+        'due_at' => now(),
+        'schedule_generation' => 1,
+        'idempotency_key' => 'spy-test:' . $playerId . ':' . $galaxy . ':' . $system . ':' . $position,
+        'payload' => [
+            'target_galaxy' => $galaxy,
+            'target_system' => $system,
+            'target_position' => $position,
+        ],
+    ]);
+}
+
+/** An espionage mission still travelling to its target, as the host records one. */
+function spyFleetMission(int $playerId, int $galaxy, int $system, int $position): void
+{
+    $mission = new FleetMission();
+    $mission->user_id = $playerId;
+    $mission->planet_id_from = null;
+    $mission->planet_id_to = null;
+    $mission->mission_type = EspionageMission::getTypeId();
+    $mission->galaxy_to = $galaxy;
+    $mission->system_to = $system;
+    $mission->position_to = $position;
+    $mission->time_departure = now()->subMinute()->timestamp;
+    $mission->time_arrival = now()->addMinute()->timestamp;
+    $mission->time_arrival_ms = 0;
+    $mission->processed = 0;
+    $mission->canceled = 0;
+    $mission->save();
 }
 
 /** Fill every colonisable position of a single-system universe so no empty slot remains. */
