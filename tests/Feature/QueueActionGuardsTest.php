@@ -6,6 +6,7 @@ use Modules\AI\Actions\QueueAiFleetSaveAction;
 use Modules\AI\Actions\QueueAiRaidAction;
 use Modules\AI\Actions\QueueAiRecallAction;
 use Modules\AI\Actions\QueueAiSpyAction;
+use Modules\AI\Actions\QueueAiTransferAction;
 use Modules\AI\Actions\QueueAiUnitsAction;
 use Modules\AI\Contracts\QueueAiColony;
 use Modules\AI\Contracts\QueueAiExpedition;
@@ -13,6 +14,7 @@ use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiSpy;
+use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Contracts\QueueAiUnits;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiQueueActionReason;
@@ -33,6 +35,7 @@ beforeEach(function (): void {
     app()->bind(QueueAiRaid::class, QueueAiRaidAction::class);
     app()->bind(QueueAiRecall::class, QueueAiRecallAction::class);
     app()->bind(QueueAiSpy::class, QueueAiSpyAction::class);
+    app()->bind(QueueAiTransfer::class, QueueAiTransferAction::class);
     app()->bind(QueueAiUnits::class, QueueAiUnitsAction::class);
 });
 
@@ -49,7 +52,8 @@ test('a banned account is refused by every fleet and queue adapter', function ()
         ->and(app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
         ->and(app(QueueAiSpy::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
         ->and(app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
-        ->and(app(QueueAiRecall::class)->handle($this->currentUserId, $this->currentPlanetId)->reason)->toBe(AiQueueActionReason::PlayerBanned->value);
+        ->and(app(QueueAiRecall::class)->handle($this->currentUserId, $this->currentPlanetId)->reason)->toBe(AiQueueActionReason::PlayerBanned->value)
+        ->and(app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId, 1_000, 1_000, 0)->reason)->toBe(AiQueueActionReason::PlayerBanned->value);
 });
 
 test('a vacationing account is refused by every fleet and queue adapter', function (): void {
@@ -65,7 +69,8 @@ test('a vacationing account is refused by every fleet and queue adapter', functi
         ->and(app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId)->reason)->toBe(AiQueueActionReason::VacationMode->value)
         ->and(app(QueueAiSpy::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value)
         ->and(app(QueueAiRaid::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::VacationMode->value)
-        ->and(app(QueueAiRecall::class)->handle($this->currentUserId, $this->currentPlanetId)->reason)->toBe(AiQueueActionReason::VacationMode->value);
+        ->and(app(QueueAiRecall::class)->handle($this->currentUserId, $this->currentPlanetId)->reason)->toBe(AiQueueActionReason::VacationMode->value)
+        ->and(app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $secondPlanetId, 1_000, 1_000, 0)->reason)->toBe(AiQueueActionReason::VacationMode->value);
 });
 
 test('the units adapter validates its input and the unit kind', function (): void {
@@ -102,7 +107,9 @@ test('a fleet or queue adapter refuses a planet it does not own', function (): v
     expect(app(QueueAiColony::class)->handle($this->currentUserId, 999_999_999, 1, 1, 4)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value)
         ->and(app(QueueAiFleetSave::class)->handle($this->currentUserId, 999_999_999, $secondPlanetId)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value)
         ->and(app(QueueAiSpy::class)->handle($this->currentUserId, 999_999_999, 1, 1, 4, 1)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value)
-        ->and(app(QueueAiUnits::class)->handle($this->currentUserId, 999_999_999, $cargoId, 1)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value);
+        ->and(app(QueueAiUnits::class)->handle($this->currentUserId, 999_999_999, $cargoId, 1)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value)
+        ->and(app(QueueAiTransfer::class)->handle($this->currentUserId, 999_999_999, $secondPlanetId, 1_000, 1_000, 0)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value)
+        ->and(app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, 999_999_999, 1_000, 1_000, 0)->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value);
 });
 
 test('an adapter reports a rejection when the host dispatch fails', function (): void {

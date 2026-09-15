@@ -1,5 +1,6 @@
 <?php
 
+use Modules\AI\Actions\ExecuteAiIntentAction;
 use Modules\AI\Actions\QueueAiTransferAction;
 use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Domain\Decision\QueueableTransfer;
@@ -7,7 +8,10 @@ use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\FleetMission;
@@ -113,6 +117,96 @@ test('a source with no cargo hull cannot ferry', function (): void {
         ->and($result->reason)->toBe(AiQueueActionReason::NoTransportFleet->value);
 });
 
+// The intent arm: a scheduled transfer carries its source, target and shipment, and the executor
+// ferries them over the host's transport path. Without a payload it re-plans, and with nothing worth
+// ferrying it drops safely rather than queueing an empty mission.
+test('the transfer intent ferries the scheduled shipment', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    $workItem = transferWorkItem($this->currentUserId, [
+        'source_planet_id' => $plan->sourcePlanetId,
+        'target_planet_id' => $plan->targetPlanetId,
+        'metal' => $plan->metal,
+        'crystal' => $plan->crystal,
+        'deuterium' => $plan->deuterium,
+    ]);
+
+    $result = app(ExecuteAiIntentAction::class)->execute($workItem, $plan->sourcePlanetId);
+
+    expect($result[0]?->successful)->toBeTrue($result[0]?->reason)
+        ->and($result[1]['source_planet_id'])->toBe($plan->sourcePlanetId);
+});
+
+test('a transfer intent without a payload re-plans from the account', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $result = app(ExecuteAiIntentAction::class)->execute(transferWorkItem($this->currentUserId, []), $this->currentPlanetId);
+
+    expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
+});
+
+test('a transfer intent with nothing worth ferrying drops safely', function (): void {
+    transferProfile($this->currentUserId);
+
+    $result = app(ExecuteAiIntentAction::class)->execute(transferWorkItem($this->currentUserId, []), $this->currentPlanetId);
+
+    expect($result[0])->toBeNull()
+        ->and($result[1])->toBe([])
+        ->and($result[2])->toBe(0);
+});
+
+test('the ferry refuses an empty shipment and a fleet with no hold', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    // Nothing to carry is not a shipment.
+    expect(app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $plan->targetPlanetId, 0, 0, 0)->reason)
+        ->toBe(AiQueueActionReason::NoTransportFleet->value);
+});
+
+test('a combat-only fleet cannot ferry', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
+    // A hull with no cargo hold is never taken: the ferry never moves the combat fleet.
+    $this->planetAddUnit('light_fighter', 1);
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    expect(app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $plan->targetPlanetId, $plan->metal, $plan->crystal, $plan->deuterium)->reason)
+        ->toBe(AiQueueActionReason::NoTransportFleet->value);
+});
+
+test('a ferry the host refuses is reported, not thrown', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    // A shipment far past what the source owns or can carry: the host refuses it and the adapter
+    // reports the refusal rather than letting the exception escape.
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $plan->targetPlanetId, 9_000_000, 9_000_000, 0);
+
+    expect($result->successful)->toBeFalse();
+});
+
 function transferProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -121,6 +215,19 @@ function transferProfile(int $playerId): AiProfile
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 8_000 + $playerId,
         'enabled' => true,
+    ]);
+}
+
+/** @param array<string, mixed> $payload */
+function transferWorkItem(int $playerId, array $payload): AiWorkItem
+{
+    return AiWorkItem::create([
+        'player_id' => $playerId,
+        'kind' => AiWorkKind::Transfer,
+        'due_at' => now(),
+        'idempotency_key' => 'transfer-intent:' . $playerId . ':' . uniqid(),
+        'state' => AiWorkState::Pending,
+        'payload' => $payload,
     ]);
 }
 
