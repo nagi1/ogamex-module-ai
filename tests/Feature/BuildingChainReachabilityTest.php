@@ -12,8 +12,10 @@ use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
+use OGame\Factories\GameMissionFactory;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\ExpeditionMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\BuildingQueue;
@@ -130,12 +132,53 @@ test('the chain asks only for the ambition in hand, not every ambition at once',
     $planet = chainPlanet($this->currentUserId, $this->currentPlanetId);
     $goal = chainCheapestUnmetAmbition($planet);
 
-    $offered = array_map(
-        static fn (BuildCandidate $step): string => substr($step->reason, strlen('chain:')),
+    $reasons = array_map(
+        static fn (BuildCandidate $step): string => $step->reason,
         app(FacilityChain::class)->pending($planet),
     );
 
-    expect($offered)->toEqualCanonicalizing(array_keys(ObjectService::getRecursiveRequirements($goal->machine_name)));
+    // The ambition's own prerequisites ...
+    $expected = array_map(
+        static fn (string $machineName): string => 'chain:' . $machineName,
+        array_keys(ObjectService::getRecursiveRequirements($goal->machine_name)),
+    );
+
+    // ... plus the research the host's missions wait on and that research's own prerequisites. A leaf
+    // technology no unit needs becomes a step because a mission gates on it, and nothing outside this
+    // ambition and those missions leaks in.
+    foreach (GameMissionFactory::getAllMissions() as $mission) {
+        foreach ($mission::getRequiredResearch() as $machineName => $level) {
+            $expected[] = 'capability:' . $machineName;
+            foreach (array_keys(ObjectService::getRecursiveRequirements($machineName)) as $prerequisite) {
+                $expected[] = 'chain:' . $prerequisite;
+            }
+        }
+    }
+
+    expect(array_values(array_unique($reasons)))->toEqualCanonicalizing(array_values(array_unique($expected)));
+});
+
+// The gap the grand run measured: a technology no unit needs -- astrophysics -- was never reached,
+// so colonise and expedition stayed permanently unreachable however long the account played. A host
+// mission that waits on a technology makes that technology a chain step, so the account climbs it
+// like any other prerequisite and the capability opens.
+test('a research a host mission gates on is a chain step even when no unit needs it', function (): void {
+    chainProfile($this->currentUserId);
+    chainPowered();
+    chainStoraged();
+
+    $gated = ExpeditionMission::getRequiredResearch();
+    expect($gated)->not->toBeEmpty();
+
+    $planet = chainPlanet($this->currentUserId, $this->currentPlanetId);
+    $reasons = array_map(
+        static fn (BuildCandidate $step): string => $step->reason,
+        app(FacilityChain::class)->pending($planet),
+    );
+
+    foreach (array_keys($gated) as $machineName) {
+        expect($reasons)->toContain('capability:' . $machineName);
+    }
 });
 
 // The chain is bounded by the host's graph rather than by a list of facilities the module keeps: once
@@ -333,13 +376,28 @@ function chainHostPrerequisites(): array
 {
     $levels = [];
 
+    $merge = static function (string $machineName, int $level) use (&$levels): void {
+        $current = $levels[$machineName] ?? ['easiest' => $level, 'deepest' => $level];
+        $levels[$machineName] = [
+            'easiest' => min($current['easiest'], $level),
+            'deepest' => max($current['deepest'], $level),
+        ];
+    };
+
     foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()] as $object) {
         foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {
-            $current = $levels[$machineName] ?? ['easiest' => $level, 'deepest' => $level];
-            $levels[$machineName] = [
-                'easiest' => min($current['easiest'], $level),
-                'deepest' => max($current['deepest'], $level),
-            ];
+            $merge($machineName, $level);
+        }
+    }
+
+    // A host mission that waits on a research makes that research a chain step, so "the graph is
+    // satisfied" also has to reach the mission's own research and that research's prerequisites.
+    foreach (GameMissionFactory::getAllMissions() as $mission) {
+        foreach ($mission::getRequiredResearch() as $machineName => $level) {
+            $merge($machineName, $level);
+            foreach (ObjectService::getRecursiveRequirements($machineName) as $prerequisite => $prerequisiteLevel) {
+                $merge($prerequisite, $prerequisiteLevel);
+            }
         }
     }
 

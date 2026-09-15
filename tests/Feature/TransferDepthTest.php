@@ -8,6 +8,7 @@ use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
+use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\FleetMission;
 use OGame\Models\Resources;
@@ -175,6 +176,17 @@ function transferPrerequisites(): array
     foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()] as $object) {
         foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {
             $levels[$machineName] = max($levels[$machineName] ?? 0, $level);
+        }
+    }
+
+    // A host mission that waits on a research is a chain step too, so the target's next step only
+    // becomes an expensive mine once that research stands.
+    foreach (GameMissionFactory::getAllMissions() as $mission) {
+        foreach ($mission::getRequiredResearch() as $machineName => $level) {
+            $levels[$machineName] = max($levels[$machineName] ?? 0, $level);
+            foreach (ObjectService::getRecursiveRequirements($machineName) as $prerequisite => $prerequisiteLevel) {
+                $levels[$prerequisite] = max($levels[$prerequisite] ?? 0, $prerequisiteLevel);
+            }
         }
     }
 

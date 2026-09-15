@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Services\ObjectService;
@@ -51,27 +52,27 @@ class FacilityChain
     /** @return list<BuildCandidate> the unmet prerequisites of the one ambition in hand, easiest unlock first */
     public function pending(PlanetService $planet): array
     {
-        $ambition = $this->nextAmbition($planet);
-
-        if ($ambition === null) {
-            return [];
-        }
-
         $ordered = [];
         $producers = [];
 
-        foreach (ObjectService::getRecursiveRequirements($ambition->machine_name) as $machineName => $level) {
-            if ($this->currentLevel($planet, $machineName) >= $level) {
-                continue;
+        $ambition = $this->nextAmbition($planet);
+        if ($ambition !== null) {
+            foreach (ObjectService::getRecursiveRequirements($ambition->machine_name) as $machineName => $level) {
+                $this->addRequirement($planet, $machineName, $level, $ordered, $producers);
             }
+        }
 
-            $ordered[] = ['level' => $level, 'candidate' => app()->makeWith(BuildCandidate::class, [
-                'buildingId' => ObjectService::getObjectByMachineName($machineName)->id,
-                'reason' => 'chain:' . $machineName,
-            ])];
+        // Capability research (R2): a research a host mission waits on is a step in its own right,
+        // whether or not any unit needs it. The chain is the module's only research source, so
+        // without this a leaf technology that unlocks a mission -- astrophysics for colonise and
+        // expedition -- is never reached, and that mission's whole capability stays unreachable
+        // however long the account plays. The technology is never named here: it comes from the
+        // mission's own answer, so a mission a mod adds is climbed once the host knows it.
+        foreach ($this->missionRequiredResearch() as $machineName => $level) {
+            $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'capability');
 
-            foreach ($this->producersOfShortResources($machineName, $planet) as $object) {
-                $producers[$object->machine_name] = $object;
+            foreach (ObjectService::getRecursiveRequirements($machineName) as $prerequisite => $prerequisiteLevel) {
+                $this->addRequirement($planet, $prerequisite, $prerequisiteLevel, $ordered, $producers);
             }
         }
 
@@ -101,6 +102,61 @@ class FacilityChain
         // The producers come first: a step the planet cannot pay for is unreachable until its
         // producer stands, so the producer is the easier unlock by definition.
         return [...$this->producerSteps($producers, $planet), ...array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $ordered)];
+    }
+
+    /**
+     * The research every host mission waits on, merged: machine name => the highest level any mission
+     * asks for.
+     *
+     * The module names no technology. It asks the host's own mission catalogue what each mission
+     * requires, so a mission a mod or an expansion adds makes its technology a chain step the moment
+     * the host knows about it (gate 1). This is what makes a capability the account cannot yet run
+     * -- colonise, expedition -- reachable at all: the research gate is a step like any other.
+     *
+     * @return array<string, int>
+     */
+    private function missionRequiredResearch(): array
+    {
+        $required = [];
+
+        foreach (GameMissionFactory::getAllMissions() as $mission) {
+            foreach ($mission::getRequiredResearch() as $machineName => $level) {
+                $required[$machineName] = max($required[$machineName] ?? 0, $level);
+            }
+        }
+
+        return $required;
+    }
+
+    /**
+     * Add one unmet requirement as a chain step, and remember the producer of a resource the step
+     * cannot pay for.
+     *
+     * The same prerequisite can be named twice -- by the ambition in hand and by a mission's
+     * technology -- so the list is keyed by machine name and keeps the highest level asked for, and a
+     * step is never offered twice.
+     *
+     * @param array<string, array{level: int, candidate: BuildCandidate}> $ordered
+     * @param array<string, GameObject> $producers
+     */
+    private function addRequirement(PlanetService $planet, string $machineName, int $level, array &$ordered, array &$producers, string $reason = 'chain'): void
+    {
+        if ($this->currentLevel($planet, $machineName) >= $level) {
+            return;
+        }
+
+        if (($ordered[$machineName]['level'] ?? 0) >= $level) {
+            return;
+        }
+
+        $ordered[$machineName] = ['level' => $level, 'candidate' => app()->makeWith(BuildCandidate::class, [
+            'buildingId' => ObjectService::getObjectByMachineName($machineName)->id,
+            'reason' => $reason . ':' . $machineName,
+        ])];
+
+        foreach ($this->producersOfShortResources($machineName, $planet) as $object) {
+            $producers[$object->machine_name] = $object;
+        }
     }
 
     /**
