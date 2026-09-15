@@ -19,6 +19,7 @@ use Modules\AI\Enums\AiObservationSource;
  * @property int $source_id
  * @property AiObservationKind $kind
  * @property int|null $subject_player_id
+ * @property Carbon $source_time
  * @property Carbon $observed_at
  */
 #[Unguarded]

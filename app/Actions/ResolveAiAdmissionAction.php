@@ -115,7 +115,7 @@ class ResolveAiAdmissionAction
     {
         $latest = AiOperabilitySwitch::query()->orderByDesc('id')->first();
 
-        return $latest?->enabled ?? true;
+        return $latest->enabled ?? true;
     }
 
     /**

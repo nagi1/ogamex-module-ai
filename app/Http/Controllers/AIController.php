@@ -65,10 +65,12 @@ class AIController extends OGameController
             'reason' => ['required', 'string', 'max:255'],
         ]);
 
+        $actorId = Auth::id();
+
         app(SetAiWorkSwitchAction::class)->handle(
             (bool) $validated['enabled'],
             $validated['reason'],
-            Auth::id(),
+            $actorId === null ? null : (int) $actorId,
         );
 
         return redirect()->route('ai.index')->with(

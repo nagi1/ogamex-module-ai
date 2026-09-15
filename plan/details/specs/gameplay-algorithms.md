@@ -28,19 +28,19 @@ line is the list of host answers it needs.
 | --- | --- | --- | --- |
 | A2, A4, B3, C2, C5 (gate audit) | [E1](#e1-payback-ordering--the-next-mine) [E3](#e3-storage--the-fill-time-trigger) | Order the economy by production added over weighted price paid; storage by time-to-fill against time-to-spend | **shipped** |
 | C1 | [Y1](#y1-the-energy-interlock) | Capacity before the level that would outdraw the planet (shipped) | **shipped** |
-| G2 | [R1](#r1-the-research-hurdle) [R2](#r2-capability-research) | Research only when it out-pays the last purchase, and only when it unlocks something | planned |
-| G3, A2, G15 | [U1](#u1-role-derivation--what-units-are-for) [U2](#u2-cargo-sizing) [U3](#u3-defence--unprofitability-not-ratios) | Roles from host unit properties; cargo sized from host capacity; defence only when attacked | planned |
-| G4, G8, G9 | [V1](#v1-the-save-state-machine) [V2](#v2-the-reaction-window) [V3](#v3-the-save-that-fails) | Save to a duration derived from the absence, react inside a window, and let one fail | planned |
-| G5 | [N1](#n1-probe-sizing) [N2](#n2-target-lifecycle) | Probe enough to reveal, escalate when it does not, and let stale targets die | planned |
-| G6, S4 | [T1](#t1-the-profit-test-as-an-audit-trail) [T2](#t2-the-estimator) [T3](#t3-the-bashing-limit) | Loot − deuterium − expected losses must clear a tail threshold | planned |
-| G7 | [CL1](#cl1--slot-choice) [CL2](#cl2--the-colony-is-another-mine) | Choose the slot by the host's own position bonuses; treat the colony as a mine | planned |
+| G2 | [R1](#r1-the-research-hurdle) [R2](#r2-capability-research) | Research only when it out-pays the last purchase, and only when it unlocks something | **shipped** (executor + chain/capability research; R1 hurdle still rides the shared payback path) |
+| G3, A2, G15 | [U1](#u1-role-derivation--what-units-are-for) [U2](#u2-cargo-sizing) [U3](#u3-defence--unprofitability-not-ratios) | Roles from host unit properties; cargo sized from host capacity; defence only when attacked | **U1/U2/U3 shipped** (cargo, colony ship, probe, escort, defence); the two intel roles read the host's own attack and report answers |
+| G4, G8, G9 | [V1](#v1-the-save-state-machine) [V2](#v2-the-reaction-window) [V3](#v3-the-save-that-fails) | Save to a duration derived from the absence, react inside a window, and let one fail | **V1 and V3 shipped** (deploy between own planets under attack; a named skip at the blessed placeholder rate); V2 deferred to the capacity runs |
+| G5 | [N1](#n1-probe-sizing) [N2](#n2-target-lifecycle) | Probe enough to reveal, escalate when it does not, and let stale targets die | **N1/N2 shipped** (one probe, legal target, reports re-published as intel; 24 h staleness) |
+| G6, S4 | [T1](#t1-the-profit-test-as-an-audit-trail) [T2](#t2-the-estimator) [T3](#t3-the-bashing-limit) | Loot − deuterium − expected losses must clear a tail threshold | **T1/T2/T3 shipped** (P20 estimate, bashing limit, profit test, attack dispatch); S4 report-sharing still open |
+| G7 | [CL1](#cl1--slot-choice) [CL2](#cl2--the-colony-is-another-mine) | Choose the slot by the host's own position bonuses; treat the colony as a mine | **shipped** (executor + colony-ship role); CL2 treat-colony-as-mine is the next economy step |
 | G10, G11 | [H1](#h1-the-active-hours-constraint) [H2](#h2-session-shape) [H3](#h3-absence) | A real dark period under the host's own detector threshold, heavy-tailed sessions, planned absences | **shipped** |
-| G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | planned |
-| G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | planned |
-| G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | scope decision first |
+| G12, S1–S3 | [SOC1](#soc1--speaking-first) [SOC2](#soc2--alliance-life) | Initiate rarely and in context; answer the alliance | **deferred to Package 6 (scope decision)**; reaction answering stays shipped |
+| G17 | [X1](#x1-transfers-between-own-planets) [X2](#x2-trade) | Ferry with in-flight netting; there is no marketplace | **decided**: X2 closed by evidence (no marketplace), X1 trigger fixed, executor next slice |
+| G18 | [SOC2](#soc2--alliance-life) | Apply, then behave like a member | **scope decided**: not in Package 4 |
 | O1–O6 | [L1](#l1-retention) [L2](#l2-account-states) [H6](#h6--suspension-gate) | Enforce retention, name the states, ask before waking | **L1, L2, H6 shipped** |
-| I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | planned |
-| A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | planned |
+| I1–I8 | [P1](#p1-provisioning-identity) | Plausible identity, uncorrelated seeds, staggered arrival | **I1–I8 shipped** (I7 decided, I8 class provisioned) |
+| A1, A3–A5 (register wave 5) | [AG1](#ag1--per-account-divergence) [AG2](#ag2--the-growth-curve-is-ours-to-record) [AG3](#ag3--request-and-activity-footprint) | Diverge by construction; record our own curve; decide the last-activity stamp deliberately | **AG1/AG2/AG3 shipped**; A4 decided (correct signal 8) and AG4 closes it |
 
 ## How to read an algorithm block
 

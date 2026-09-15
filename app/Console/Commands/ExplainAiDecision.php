@@ -12,7 +12,8 @@ use Modules\AI\Domain\Operability\AiDecisionExplanation;
 #[Signature('ai:explain-decision
         {--trace= : Explain one recorded decision by id}
         {--player= : Explain the newest decisions of one account}
-        {--limit=5 : How many decisions to explain}')]
+        {--limit=5 : How many decisions to explain}
+        {--json : Print the same redacted fields as machine-readable JSON}')]
 class ExplainAiDecision extends Command
 {
     public function handle(): int
@@ -25,6 +26,17 @@ class ExplainAiDecision extends Command
             return self::FAILURE;
         }
 
+        // One read, two renderings: the JSON is the explanation's own shape, so a review can diff
+        // decisions mechanically instead of reading sentences back out of the console lines.
+        if ($this->option('json')) {
+            $this->line(json_encode(
+                array_map(static fn (AiDecisionExplanation $explanation): array => $explanation->toArray(), $explanations),
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR,
+            ));
+
+            return self::SUCCESS;
+        }
+
         foreach ($explanations as $explanation) {
             $this->explain($explanation);
         }
@@ -33,7 +45,7 @@ class ExplainAiDecision extends Command
     }
 
     /**
-     * @return list<AiDecisionExplanation>
+     * @return array<int, AiDecisionExplanation>
      */
     private function explanations(): array
     {

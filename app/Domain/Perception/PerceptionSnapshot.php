@@ -14,6 +14,7 @@ readonly class PerceptionSnapshot
      * @param array<int, array{id:int, resources:array<string, float|int>}> $planets
      * @param array<int, array<string, mixed>> $targetReports
      * @param array<string, bool> $availableActions
+     * @param list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}> $inboundFleets
      * @param array<string, string> $sourceTimestamps
      */
     public function __construct(
@@ -25,6 +26,7 @@ readonly class PerceptionSnapshot
         public bool $fleetsaveEligible,
         public float $recoveryFactor,
         public array $sourceTimestamps,
+        public array $inboundFleets = [],
     ) {
     }
 
@@ -50,6 +52,7 @@ readonly class PerceptionSnapshot
             'target_reports' => $this->targetReports,
             'available_actions' => $this->availableActions,
             'fleetsave_eligible' => $this->fleetsaveEligible,
+            'inbound_fleets' => $this->inboundFleets,
             'recovery_factor' => $this->recoveryFactor,
             'source_timestamps' => $this->sourceTimestamps,
         ];

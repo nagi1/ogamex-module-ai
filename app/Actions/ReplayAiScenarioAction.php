@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Decision\DecisionEngine;
+use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Domain\Operability\AiScenarioReplay;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Enums\AiArchetype;
@@ -179,8 +180,8 @@ class ReplayAiScenarioAction
     }
 
     /**
-     * @param list<\Modules\AI\Domain\Decision\ScoredCandidate> $scored
-     * @return list<array{action: string, score: float}>
+     * @param array<int, ScoredCandidate> $scored
+     * @return array<int, array{action: string, score: float}>
      */
     private function alternatives(array $scored): array
     {

@@ -23,9 +23,9 @@ class CbrKitClient
     }
 
     /**
-     * @param  array<string, array<string, int|float|string|null>>  $casebase
+     * @param  array<int, array<string, int|float|string|null>>  $casebase
      * @param  array<string, int|float|string|null>  $query
-     * @return array<string, float>|null
+     * @return array<int, float>|null
      */
     public function rank(array $casebase, array $query): array|null
     {
@@ -73,8 +73,8 @@ class CbrKitClient
      * dropped evidence the module owns, which is a contract deviation rather than a
      * low score.
      *
-     * @param  array<int>  $expected
-     * @return array<string, float>|null
+     * @param  list<int>  $expected
+     * @return array<int, float>|null
      */
     private function similarities(mixed $payload, array $expected): array|null
     {
@@ -91,13 +91,13 @@ class CbrKitClient
         $similarities = [];
 
         foreach ($expected as $key) {
-            $score = $scores[(string) $key] ?? null;
+            $score = $scores[$key] ?? null;
 
             if (!is_int($score) && !is_float($score)) {
                 return null;
             }
 
-            $similarities[(string) $key] = (float) $score;
+            $similarities[$key] = (float) $score;
         }
 
         return $similarities;

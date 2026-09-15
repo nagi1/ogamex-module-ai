@@ -98,6 +98,15 @@ Initial per-session ceilings: 20 candidates, 12 galaxy observations, 6 probe dec
 
 Target fewer than 50 ms p95 CPU for a ordinary policy evaluation excluding core I/O and queued battle simulation. This is a profiling target, not permission to skip correctness. Scheduler SLOs must be tested against the universe's minimum meaningful response window.
 
+## Review overhead
+
+The [review loop](improvement-loop.md) adds no work to a session: it reads on demand, off the request path,
+and its only write is AG2's hourly points sample, a scheduled batch pass that takes no lock and calls no
+service which would advance resources or stamp activity. That pass reports its query count and duration,
+the "no impact on play" claim is supported by a session-cost comparison with `ai.review.enabled` on and
+off, and the collection is best-effort so a lost sample costs a data point rather than a session. As with
+every number on this page, the cost is measured before it is claimed.
+
 Give cognition, CBR and memory retrieval their own measured request deadlines, candidate limits and concurrency ceilings. A thousand registered AI accounts does not mean a thousand active sidecar sessions or continuously running cognitive loops. Profile cold and warm calls, memory per active character, serialization, database I/O and failure backlogs on the [reference deployment profile](#reference-deployment-profile) before making capacity claims.
 
 For optional PsychSim, start at self plus 1–3 relevant counterparts and depth 1; depth 2 requires measured benefit and capacity. Embeddings come from a hosted provider, never a local runtime: the reference profile has no headroom to serve one, so an embedder costs provider tokens and a network round trip per item rather than resident memory. Run them as bounded asynchronous projection work, not per-tick work, and compare input-token savings against provider cost, write-path latency and failure rate; a hosted call is cheap per item and unbounded in aggregate.

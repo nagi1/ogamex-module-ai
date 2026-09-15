@@ -28,7 +28,7 @@ class ExplainAiDecisionAction
     }
 
     /**
-     * @return list<AiDecisionExplanation>
+     * @return array<int, AiDecisionExplanation>
      */
     public function forPlayer(int $playerId, int $limit = 5): array
     {
@@ -39,7 +39,7 @@ class ExplainAiDecisionAction
      * The universe view, which is what a pilot check starts from: the newest decisions across
      * every account, so an operator does not have to guess which account to look at.
      *
-     * @return list<AiDecisionExplanation>
+     * @return array<int, AiDecisionExplanation>
      */
     public function latest(int $limit = 5): array
     {
@@ -48,7 +48,7 @@ class ExplainAiDecisionAction
 
     /**
      * @param Builder<AiDecisionTrace> $query
-     * @return list<AiDecisionExplanation>
+     * @return array<int, AiDecisionExplanation>
      */
     private function recent(Builder $query, int $limit): array
     {
@@ -70,7 +70,7 @@ class ExplainAiDecisionAction
         return app()->makeWith(AiDecisionExplanation::class, [
             'traceId' => (int) $trace->id,
             'playerId' => (int) $trace->player_id,
-            'observedAt' => $trace->observed_at === null ? null : CarbonImmutable::instance($trace->observed_at),
+            'observedAt' => CarbonImmutable::instance($trace->observed_at),
             'selectedAction' => $trace->selected_action->name,
             'selectedReason' => (string) $trace->selected_reason,
             'selectedScore' => $this->scoreOf($trace, $trace->selected_action->name),
@@ -82,7 +82,7 @@ class ExplainAiDecisionAction
     }
 
     /**
-     * @return list<array{action: string, score: float}>
+     * @return array<int, array{action: string, score: float}>
      */
     private function alternatives(AiDecisionTrace $trace): array
     {

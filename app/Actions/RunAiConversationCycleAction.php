@@ -166,7 +166,7 @@ class RunAiConversationCycleAction
         app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, $now);
 
         $reply = app(QueueAiSocialExchangeReplyAction::class)->handle($exchange->id, $this->replyExpiresAt($now));
-        $sealed = app(SealAiAuthoredReplyAction::class)->handle($reply?->id ?? 0);
+        $sealed = app(SealAiAuthoredReplyAction::class)->handle($reply->id ?? 0);
 
         if ($sealed === null) {
             return;

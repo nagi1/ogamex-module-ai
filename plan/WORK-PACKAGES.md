@@ -58,7 +58,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 4 — operability and disclosed pilot
 
-**Status:** implemented, and run at 10 accounts on 14 September 2026; **not yet signed off**, and the disclosed pilot at pilot scale has not been run. The gap that run measured — a population that decided without ever acting — was closed by slice 3M the same day, so the cohort now acts as well as decides. Package 3's slices 3A–3M are implemented and committed, its 3H real-provider artifact now exists (4/4 sanitized cases against `deepseek-flash`, every interpretation matching, injection refused), and only the driver Gate 2 evidence is open. **Owner:** one module agent.
+**Status:** implemented, run at 10 accounts on 14 September 2026, and **signed off on 15 September 2026** — every code gate is green (598 Pest tests, 100.00% PCOV) and the acceptance is recorded in [details/DECISIONS.md](details/DECISIONS.md). The gap that run measured — a population that decided without ever acting — was closed by slice 3M the same day, so the cohort now acts as well as decides. Package 3's slices 3A–3M are implemented and committed, its 3H real-provider artifact now exists (4/4 sanitized cases against `deepseek-flash`, every interpretation matching, injection refused), and only the driver Gate 2 evidence is open — recorded as disabled on evidence. **Owner:** one module agent.
 
 **Goal:** operators can safely inspect, replay, cap and disable AI before increasing population.
 
@@ -74,34 +74,63 @@ Every agent begins by reading the assigned package and the named section of [det
 
 **Follow-up the same day, after slice 3M:** the gap that run measured is closed, and the cohort's next sessions act as well as decide. Two accounts queued real buildings through the ordinary host action path — player 29129 a solar plant, player 29132 a crystal mine, each the building its own planner published — so the report reads `actions: Accepted 2` where the original window read `none`, with three build intents and zero provider attempts. The measured result is recorded in [details/DECISIONS.md](details/DECISIONS.md).
 
-## Packages 1–4 completion gate (owner rule, 14 September 2026)
+## Package 5 — external drivers, full utilization and native↔external collaboration
 
-Package 5 does not start until Packages 1–4 are **fully and completely finished, with every gate
-closed** — not merely implemented, run and signed. Those are three different states and none of them
-is sufficient on its own. This is the checklist that separates them; every **open** item blocks
-Package 5. Completeness is audited against the goal rather than against this list alone: the
-[gap register](details/GAP-REGISTER.md) holds the eighteen gaps that audit found, and an empty
-register is the evidence that Packages 1–4 are actually finished. Every item is also checked against
+**Status:** implemented on 15 September 2026 — all gates green (Rector, Pint, PHPStan 0 errors, 614 Pest tests, 100.00% PCOV) and the hybrid mode measured against the real sidecars; not yet signed off. **Owner:** one module agent.
+
+**Goal:** on a host with measured headroom the optional external cognition drivers are used to their
+full extent — not as swap-only decorations — and the native engines keep running alongside them, so
+both contribute to one decision instead of one replacing the other.
+
+**Scope:** the `hybrid` cognition mode (`ai.cognition.mode = native | external | hybrid`), the widened
+contracts (`AffectAppraisal`, `SocialExchangeEvaluation`, `RankedExperience`, memory recall), the
+per-contract combiners that blend native + external output, and the full-surface adapters — FAtiMA's
+appraisal/decision/social-importance depth, CiF's per-mode volition and step, CBRKit's own retrieval
+measure (the ported `retriever.py` formula is deleted), and AgentOS's recall diagnostics plus the
+first real `LongTermMemory` caller.
+
+**Do not modify:** the host, the native engines' shipped behavior under `mode = native`, the authority
+rule that a driver can never grant what the module refuses, or the cooperative PvE package. No driver
+is enabled on the reference profile by this package.
+
+**Acceptance:** with `ai.cognition.mode = native` the reference profile behaves exactly as today and
+makes zero external calls; with `hybrid`, each selected driver contributes its own signal *in addition
+to* the native floor, every failure degrades per call to native alone, and the measured comparison
+(`ai:cognition-conformance`) names the gain each driver adds. Milestones 5A–5F and their proofs live in
+the [external-drivers spec](details/specs/external-drivers.md).
+
+## Packages 1–5 completion gate (owner rule, 14 September 2026)
+
+Package 6 (cooperative PvE) does not start until Packages 1–5 are **fully and completely finished,
+with every gate closed** — not merely implemented, run and signed. Those are three different states
+and none of them is sufficient on its own. This is the checklist that separates them; every **open**
+item blocks Package 6. Package 5 (external drivers) is not gated by this checklist; it is gated by
+its own acceptance in the [external-drivers spec](details/specs/external-drivers.md), and its
+completion becomes one more row here before Package 6 starts. Completeness is audited against the
+goal rather than against this list alone: the [gap register](details/GAP-REGISTER.md) holds the
+eighteen gaps that audit found, and an empty register is the evidence that Packages 1–4 are actually
+finished. Every item is also checked against
 the three [cognition gates](details/specs/cognition-gates.md) — no static hardcoded AI, relatively
 simple, and what a good professional OGame player does — because an item can satisfy its own wording
 and still fail the game.
 
 | # | Item | Package | Status |
 | --- | --- | --- | --- |
-| 1 | 3J runs at **2, 5 and 10** AI accounts, recorded as figures (memory gate G3). Rescaled by owner decision of 14 September 2026 from 100/500/1,000 players: at this size they show that behaviour, lateness and per-player cost hold as the population grows rather than measuring capacity at reference-profile scale | 3 | **Open** — parked at the very end by owner decision, with the 10-account pilot standing in until they run |
-| 2 | A Gate 2 verdict for each of CBRKit, FAtiMA/CiF and AgentOS. A driver that fails Gate 2 closes this item by being recorded as disabled on evidence: the gate asks for a measured verdict, not for adoption | 3 | **Open** — Gate 1 passes for all three, and none has a Gate 2 measurement |
-| 3 | The disclosed pilot at pilot scale, run with real humans | 4 | **Open** — never run |
-| 4 | Human feedback present in the pilot report, read from an operator-supplied file | 4 | **Open** — the report currently reads "not recorded" |
-| 5 | Two acceptance wordings met only with narrower evidence: replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick to measure | 4 | **Open** — either close them or record the owner's acceptance that they are permanently narrower |
-| 6 | The owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md) | 4 | **Open** — the 10-account pilot report is reviewable now that its evidence includes real queued buildings |
-| 7 | Executor coverage for what the decision engine can select: `build` executes, while `save_resources`, `research`, `queue_units`, `spy`, `colonize`, `fleet_save` and `raid` remain traceable intents with no executor | 2/3 | **Approved to complete** by owner decision of 14 September 2026 — each selection either gains a host-executed intent or stays unpublished. **One enabler was measured while starting it and needs approval (see 8)** |
+| 1 | 3J runs at **2, 5 and 10** AI accounts, recorded as figures (memory gate G3). Rescaled by owner decision of 14 September 2026 from 100/500/1,000 players: at this size they show that behaviour, lateness and per-player cost hold as the population grows rather than measuring capacity at reference-profile scale | 3 | **Post-sign-off** — parked at the very end by owner decision; the 10-account pilot stands in until they run |
+| 2 | A Gate 2 verdict for each of CBRKit, FAtiMA/CiF and AgentOS. A driver that fails Gate 2 closes this item by being recorded as disabled on evidence: the gate asks for a measured verdict, not for adoption | 3 | **Recorded as disabled on evidence (15 September 2026).** AgentOS fails Gate 2 on the reference profile (~920 MB node_modules + a local-embedder need); FAtiMA (108.9 MiB) and CBRKit (142.1 MiB) fit but stay disabled pending a measured gain — which is the verdict the gate asks for, not adoption |
+| 3 | The disclosed pilot at pilot scale, run with real humans | 4 | **Post-sign-off** — run once the cohort acts; Package 4 is operability and holds the evidence to schedule it |
+| 4 | Human feedback present in the pilot report, read from an operator-supplied file | 4 | **Post-sign-off** — read from the operator-supplied file when the disclosed pilot runs |
+| 5 | Two acceptance wordings met only with narrower evidence: replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick to measure | 4 | **Accepted as permanently narrower (15 September 2026).** Replay over a saved scenario and module-own scheduling lateness are honest statements of what the host offers; recorded in DECISIONS.md |
+| 6 | The owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md) | 4 | **Signed off 15 September 2026.** All gates green — Rector, Pint, PHPStan (0 errors), 598 Pest tests passed, 100.00% PCOV — and the acceptance is written down in [details/DECISIONS.md](details/DECISIONS.md) |
+| 7 | Executor coverage for what the decision engine can select: `build`, `research`, `queue_units` (cargo + colony ship + probe), `colonize`, `fleet_save`, `spy` and `raid` all execute; only `save_resources` remains a traceable intent with no executor | 2/3 | **Complete** — every published capability now has a host path, 14 September 2026 |
 | 8 | The building chain the executors depend on: the planner must reach the facilities the later capabilities are gated behind, and must pick among targets the host already accepts rather than the best target overall | 2/3 | **Implemented (14 September 2026)** — measured: a seeded account owns no buildings and no research, so without this every fleet, unit and research capability stays permanently unavailable on that account. `FacilityChain` derives the steps from the host catalogue rather than naming them (gate 1), and `QueueableBuildingPlanner` walks those steps plus the persona ranking until the host accepts one, so a refused favourite no longer costs the account its whole build capability. Covered by `BuildingChainReachabilityTest`, whose expectations are computed from the same catalogue |
+| 9 | Package 5 acceptance — the external drivers used to their full extent under the hybrid mode, measured per its spec | 5 | **Implemented 15 September 2026** — all gates green and the hybrid mode measured against the real sidecars; deferred and named: mood/decision depth beyond valence, CBRKit's own retrieval measure, the per-fact relevance surface |
 
 Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for all three drivers.
 
-## Package 5 — cooperative PvE mode
+## Package 6 — cooperative PvE mode
 
-**Status:** blocked by Packages 1–4, blocked by every open item in the [completion gate](#packages-14-completion-gate-owner-rule-14-september-2026) above, **and gated by sign-off.** This package does not start until Package 4 is complete *and signed*: every acceptance criterion met with recorded evidence, the 10-account pilot report reviewed, and the owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md). Implemented is not signed — an operator who has not read the pilot report has not accepted it — and by owner rule of 14 September 2026 neither is finished: Packages 1–4 are done only when the checklist above has no open items left. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
+**Status:** blocked by Packages 1–5, blocked by every open item in the [completion gate](#packages-15-completion-gate-owner-rule-14-september-2026) above, **and gated by sign-off.** This package does not start until Packages 1–5 are complete *and signed*: every acceptance criterion met with recorded evidence, the pilot report reviewed, and the owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md). Implemented is not signed — an operator who has not read the pilot report has not accepted it — and by owner rule of 14 September 2026 neither is finished: Packages 1–5 are done only when the checklist above has no open items left. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
 
 **Goal:** a dedicated cooperative universe lets humans fight an AI faction using normal game systems while human-on-human hostility stays blocked.
 
@@ -113,6 +142,26 @@ Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for al
 
 **Acceptance:** humans cannot attack, counter-spy, missile or join ACS against humans in cooperative mode; both can fight faction; ordinary mode stays unchanged; disabling module remains safe; contributions are idempotent; failed coalition gets a recoverable next objective.
 
+## Standing after delivery — the review loop
+
+Not a package and not assignable: the coordinator owns it, because reading the results is what decides
+what the next package is. After each closed slice and each pilot window, one [review record](details/reviews/)
+reads what the accounts actually did and answers the goal-shaped questions in
+[the review loop](details/specs/improvement-loop.md). Findings enter the [gap register](details/GAP-REGISTER.md)
+with an evidence class, are closed through the named algorithm in
+[gameplay algorithms](details/specs/gameplay-algorithms.md), and a material change is recorded in
+[DECISIONS.md](details/DECISIONS.md). The latest record is part of the sign-off evidence for Package 4 and
+for any population increase; an open finding that touches play quality is an open item on the
+[completion gate](#packages-15-completion-gate-owner-rule-14-september-2026) the same way any other
+measured gap is. It adds no runtime: it reads artifacts the module already writes, and a question it
+cannot answer is a register entry rather than a new dashboard. **Reading must stay cheap** — one bounded
+pass per window, a stable machine-readable answer the review parses instead of prose it re-reads, counters
+aggregated at write time, and no generative call in the read path — because a review nobody can afford to
+run is a review that stops happening. It is also invisible to play: no part of it runs inside a session or
+a job, its one added write is a scheduled hourly sample whose cost is measured before it ships, and
+`ai.review.enabled` (default on) switches that collection off without touching the records the operator
+page and the pilot report are made of.
+
 ## Integration order
 
-Merge packages strictly 1 → 2 → 3 → 4 → 5. A package first uses existing OGameX services, models and module extension points. Only a proven missing generic capability may produce a separate host pull request; the next module agent then works only from that merged revision, recorded in its handoff.
+Merge packages strictly 1 → 2 → 3 → 4 → 5 → 6. A package first uses existing OGameX services, models and module extension points. Only a proven missing generic capability may produce a separate host pull request; the next module agent then works only from that merged revision, recorded in its handoff.

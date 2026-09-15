@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RecordAiBuildingCompletionExperienceAction;
 use Modules\AI\Contracts\QueueAiBuilding;
+use Modules\AI\Contracts\QueueAiResearch;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
@@ -32,6 +33,7 @@ use Modules\AI\Support\SystemAiClock;
 use Modules\AI\Tests\Support\ThrowingQueueableBuildingPlanner;
 use OGame\Events\Game\BuildingCompleted;
 use OGame\Factories\PlanetServiceFactory;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Ban;
 use OGame\Models\BuildingQueue;
 use OGame\Models\Planet;
@@ -285,6 +287,79 @@ test('the real queue action preserves the shipyard safety rule while units are b
     expect($result->successful)->toBeFalse()
         ->and($result->reason)->toBe(AiQueueActionReason::ShipyardBusy->value);
 });
+
+test('the real research action queues a technology the host accepts and refuses what it must', function (): void {
+    $this->planetSetObjectLevel('research_lab', 1);
+    $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]));
+
+    $queued = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('energy_technology'));
+    $notResearch = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('metal_mine'));
+    $notOwned = app(QueueAiResearch::class)->handle($this->currentUserId, PHP_INT_MAX, hostObjectId('energy_technology'));
+    $invalidObject = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, PHP_INT_MAX);
+
+    expect($queued->successful)->toBeTrue()
+        ->and(DB::table('research_queues')->where('planet_id', $this->currentPlanetId)->where('object_id', hostObjectId('energy_technology'))->exists())->toBeTrue()
+        ->and($notResearch->reason)->toBe(AiQueueActionReason::NotAResearch->value)
+        ->and($notOwned->reason)->toBe(AiQueueActionReason::PlanetNotOwned->value)
+        ->and($invalidObject->successful)->toBeFalse()
+        ->and($invalidObject->reason)->toBeString()->not->toBeEmpty();
+});
+
+test('the real research action rejects banned and vacation players', function (): void {
+    Ban::create(['user_id' => $this->currentUserId, 'reason' => 'test ban', 'banned_until' => now()->addHour(), 'canceled' => false]);
+
+    $banned = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('energy_technology'));
+
+    expect($banned->reason)->toBe(AiQueueActionReason::PlayerBanned->value);
+
+    Ban::query()->where('user_id', $this->currentUserId)->update(['canceled' => true]);
+    User::query()->whereKey($this->currentUserId)->update(['vacation_mode' => true]);
+
+    $vacation = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('energy_technology'));
+
+    expect($vacation->reason)->toBe(AiQueueActionReason::VacationMode->value);
+});
+
+// An intent created before the payload carried its technology has no such binding, so the account
+// decides again -- which is what the session that scheduled it would have done.
+test('a research intent without a payload decides again', function (): void {
+    aiWorkProfile($this->currentUserId);
+    $this->planetSetObjectLevel('solar_plant', 20);
+    $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]));
+
+    foreach (aiResearchChainFacilities() as $machineName => $level) {
+        $this->planetSetObjectLevel($machineName, $level);
+    }
+
+    $work = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::QueueResearch,
+        'due_at' => now(),
+        'idempotency_key' => 'research-replan:' . $this->currentUserId,
+        'state' => AiWorkState::Pending,
+    ]);
+
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
+
+    expect(DB::table('research_queues')->where('planet_id', $this->currentPlanetId)->count())->toBe(1)
+        ->and(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->value('state'))->toBe(AiReceiptState::Accepted);
+});
+
+/** @return array<string, int> every facility the host's graph asks to stand on a planet */
+function aiResearchChainFacilities(): array
+{
+    $levels = [];
+    foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()] as $object) {
+        foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {
+            $type = ObjectService::getObjectByMachineName($machineName)->type;
+            if (in_array($type, [GameObjectType::Building, GameObjectType::Station], true)) {
+                $levels[$machineName] = max($levels[$machineName] ?? $level, $level);
+            }
+        }
+    }
+
+    return $levels;
+}
 
 test('lock contention retries work without an action', function (): void {
     $work = aiBuildingWork($this->currentUserId, 'locked');

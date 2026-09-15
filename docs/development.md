@@ -178,10 +178,31 @@ the module — a read that writes nothing.
 php artisan ai:seed-test-universe --players=6 --confirm   # test/pilot accounts; refuses production
 php artisan ai:explain-decision --player=42               # redacted decision explanation
 php artisan ai:explain-decision --trace=118
+php artisan ai:explain-decision --player=42 --json        # the same redacted fields, to parse
 php artisan ai:replay-scenario miner-under-visible-raid   # read-only, frozen time and seed
-php artisan ai:pilot-report --days=1                      # outcomes, failures, lateness, tokens
+php artisan ai:pilot-report --days=1                      # outcomes, failures, lateness, tokens, growth
+php artisan ai:pilot-report --days=7 --json               # the same window, for a script to parse
+php artisan ai:record-score-samples                       # one hour of the cohort's public score
 php artisan ai:run-due-work                               # dispatches what the caps allow
 ```
+
+### Reading the results
+
+The pilot report is the review's read: one bounded window, no model call anywhere in it, and the
+same figures in `--json` as in the printed lines, so a review parses fields and diffs two windows
+instead of reading prose back out. The JSON carries `read_cost` (milliseconds and query count for
+the read itself), which is where "reading stays cheap" is checked rather than assumed.
+`ai:explain-decision --json` answers the same way for individual decisions, and stays redacted: the
+fields an operator may see are the fields a script may parse, and neither carries the coordinates a
+candidate held.
+
+The host keeps current score points and no history, so the growth curve the authenticity signals
+are judged on only exists because `ai:record-score-samples` samples it: one row per enabled account
+per hour, copied from the host's own highscore row. The module's scheduler runs it hourly and it is
+safe to run by hand, because a rerun inside the same hour corrects that hour rather than adding a
+second observation. `ai.review.enabled` (default on) governs this collection only — with it off the
+module plays exactly as it does with it on, the sampling stops, and a report says so instead of
+reporting empty growth.
 
 Scenarios are JSON files under `resources/scenarios/`; the admin page can only replay a shipped
 one, while the command also accepts a path to a file you wrote yourself. Every limit the module

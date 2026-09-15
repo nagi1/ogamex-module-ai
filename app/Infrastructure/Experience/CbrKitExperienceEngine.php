@@ -62,14 +62,14 @@ class CbrKitExperienceEngine implements ExperienceEngine
 
     /**
      * @param  array<int, AiExperienceCase>  $cases
-     * @return array<string, array<string, int|float|string|null>>
+     * @return array<int, array<string, int|float|string|null>>
      */
     private function casebase(array $cases): array
     {
         $casebase = [];
 
         foreach ($cases as $id => $case) {
-            $casebase[(string) $id] = $case->features;
+            $casebase[$id] = $case->features;
         }
 
         return $casebase;
@@ -77,7 +77,7 @@ class CbrKitExperienceEngine implements ExperienceEngine
 
     /**
      * @param  array<int, AiExperienceCase>  $cases
-     * @param  array<string, float>  $similarities
+     * @param  array<int, float>  $similarities
      * @return list<RankedExperience>
      */
     private function rank(ExperienceQuery $query, array $cases, array $similarities): array
@@ -85,7 +85,7 @@ class CbrKitExperienceEngine implements ExperienceEngine
         $scored = [];
 
         foreach ($cases as $id => $case) {
-            $scored[] = ['case' => $case, 'similarity' => $similarities[(string) $id]];
+            $scored[] = ['case' => $case, 'similarity' => $similarities[$id]];
         }
 
         // The driver's own tie order is unspecified, so the module re-applies its
@@ -109,6 +109,7 @@ class CbrKitExperienceEngine implements ExperienceEngine
                 'similarity' => $entry['similarity'],
                 'utility' => (float) $entry['case']->utility,
                 'uncertainty' => (float) $entry['case']->uncertainty,
+                'driverSimilarity' => $entry['similarity'],
             ]);
         }
 

@@ -10,6 +10,7 @@ use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerObservationService;
 use Modules\AI\Enums\AiAccountState;
+use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCapability;
@@ -26,12 +27,15 @@ use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Ban;
 use OGame\Models\BuildingQueue;
 use OGame\Models\Planet;
+use OGame\Models\ResearchQueue;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\BuildingQueueService;
+use OGame\Services\ObjectService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -184,6 +188,45 @@ test('it offers a vacationing account no capability and it decides nothing', fun
         ->and(AiWorkItem::query()->where('player_id', $profile->player_id)->where('kind', AiWorkKind::BuildFirstBuilding)->count())->toBe(0);
 });
 
+// Research is the capability the building chain cannot reach by building: a technology never stands on
+// a planet, so the same plan hands it to the research queue instead -- and until it had one, six later
+// capabilities were permanently unreachable.
+test('it publishes the research capability and queues the technology the plan approved', function (): void {
+    config(['ai.cognition.conversation.enabled' => false]);
+    $profile = capabilityProfile($this->currentUserId);
+    $this->planetAddResources(capabilityPlenty());
+    capabilitySatisfyFacilities($this->currentUserId);
+    // Enough capacity that the account is not short: the opening step is the solar plant, and the
+    // capability that follows it is the technology the chain wants.
+    $this->planetSetObjectLevel('solar_plant', 20);
+
+    expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([
+        AiCapability::Build->value => false,
+        AiCapability::Research->value => true,
+        AiCapability::QueueUnits->value => false,
+        AiCapability::Colonize->value => false,
+        AiCapability::Spy->value => false,
+    ]);
+
+    $session = capabilitySession($profile, 'research');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $session->id])->handle();
+
+    $intent = AiWorkItem::query()
+        ->where('player_id', $profile->player_id)
+        ->where('kind', AiWorkKind::QueueResearch)
+        ->firstOrFail();
+
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $intent->id])->handle();
+
+    $receipt = AiActionReceipt::query()->where('idempotency_key', $intent->idempotency_key)->firstOrFail();
+
+    // The technology the plan approved is the one the host queue holds: a published capability, the
+    // scheduled intent and the queued research cannot describe three different actions.
+    expect($receipt->state)->toBe(AiReceiptState::Accepted)
+        ->and($receipt->result[AiActionReceiptResultKey::Decision->value]['research_id'])->toBe((int) $intent->payload['research_id'])
+        ->and(ResearchQueue::query()->where('planet_id', $this->currentPlanetId)->where('object_id', (int) $intent->payload['research_id'])->exists())->toBeTrue();
+});
+
 test('it queues a real building when a session selects the build intent', function (): void {
     config(['ai.cognition.conversation.enabled' => false]);
     $profile = capabilityProfile($this->currentUserId);
@@ -277,9 +320,36 @@ function capabilityProfile(int $playerId): AiProfile
     ]);
 }
 
-function capabilityPlenty(): Resources
+/**
+ * Everything the host's requirement graph asks to stand on a planet, at the deepest level any ambition
+ * asks for, so the next step the plan wants is a technology.
+ */
+function capabilitySatisfyFacilities(int $playerId): void
 {
-    return new Resources(1_000_000, 1_000_000, 1_000_000);
+    $levels = [];
+    foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()] as $object) {
+        foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {
+            $levels[$machineName] = max($levels[$machineName] ?? $level, $level);
+        }
+    }
+
+    foreach ($levels as $machineName => $level) {
+        $type = ObjectService::getObjectByMachineName($machineName)->type;
+        if (in_array($type, [GameObjectType::Building, GameObjectType::Station], true)) {
+            test()->planetSetObjectLevel($machineName, $level);
+        }
+    }
+}
+
+function capabilityFillBuildingQueues(int $playerId): void
+{
+    $queue = app(BuildingQueueService::class);
+    foreach (app(PlayerServiceFactory::class)->make($playerId, true)->planets->all() as $planet) {
+        for ($index = 0; $index < 5; $index++) {
+            // A metal mine has no requirements, so the host queues it while the queue has room.
+            $queue->add($planet, 1);
+        }
+    }
 }
 
 /** @return array<string, bool> */
@@ -304,15 +374,9 @@ function capabilityDrainPlanets(int $playerId): void
     }
 }
 
-function capabilityFillBuildingQueues(int $playerId): void
+function capabilityPlenty(): Resources
 {
-    $queue = app(BuildingQueueService::class);
-    foreach (app(PlayerServiceFactory::class)->make($playerId, true)->planets->all() as $planet) {
-        for ($index = 0; $index < 5; $index++) {
-            // A metal mine has no requirements, so the host queues it while the queue has room.
-            $queue->add($planet, 1);
-        }
-    }
+    return new Resources(1_000_000, 1_000_000, 1_000_000);
 }
 
 function capabilitySession(AiProfile $profile, string $suffix): AiWorkItem

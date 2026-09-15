@@ -166,6 +166,26 @@ test('a measured run records latency, bytes and failure modes for both drivers',
         ->and($cognition['observed']['emotion'])->toBe(AiAffectEmotion::Anger->name);
 });
 
+test('a hybrid run measures the driver contribution against the native floor', function (): void {
+    config(['ai.cognition.driver' => 'fatima']);
+    fakeCognitionSidecars();
+
+    $this->artisan('ai:cognition-conformance --confirm --only=fatima --iterations=1 --mode=hybrid')
+        ->expectsOutputToContain('Measured evidence written to')
+        ->assertExitCode(0);
+
+    $evidence = cognitionConformanceEvidence();
+
+    expect($evidence['report']['mode'])->toBe('hybrid');
+
+    $measurement = $evidence['report']['measurements'][0];
+
+    expect($measurement['correct'])->toBeTrue()
+        ->and($measurement['observed']['emotion'])->toBe($measurement['native']['emotion'])
+        ->and($measurement['observed']['driver_emotion'])->toBe(AiAffectEmotion::Anger->name)
+        ->and($measurement['observed']['mood'])->toEqual(0.0);
+});
+
 test('the iteration count defaults to twenty and is floored at one', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.driver' => 'native']);
     fakeRetrievalSidecar();

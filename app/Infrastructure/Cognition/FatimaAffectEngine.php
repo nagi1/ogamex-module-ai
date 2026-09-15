@@ -62,19 +62,19 @@ class FatimaAffectEngine implements AffectEngine
             $stimulus->archetype->name,
         );
 
-        $emotions = $this->session->appraise($stimulus->archetype, $event, [
+        $state = $this->session->appraise($stimulus->archetype, $event, [
             $this->belief('StimulusDesirability') => $this->format($branch->desirability),
             $this->belief('StimulusThreat') => $this->format($branch->threat),
         ]);
 
-        if ($emotions === null || $emotions === []) {
+        if ($state === null || $state['emotions'] === []) {
             return null;
         }
 
-        return $this->appraisal($emotions[0]);
+        return $this->appraisal($state['mood'], $state['emotions'][0]);
     }
 
-    private function appraisal(FatimaEmotion $emotion): AffectAppraisal|null
+    private function appraisal(float $mood, FatimaEmotion $emotion): AffectAppraisal|null
     {
         $mapped = self::EMOTIONS[$emotion->type] ?? null;
 
@@ -86,9 +86,14 @@ class FatimaAffectEngine implements AffectEngine
             return null;
         }
 
+        $intensity = $this->bounded($emotion->intensity);
+
         return app()->makeWith(AffectAppraisal::class, [
             'emotion' => $mapped,
-            'intensity' => $this->bounded($emotion->intensity),
+            'intensity' => $intensity,
+            'mood' => $mood,
+            'driverEmotion' => $mapped,
+            'driverIntensity' => $intensity,
         ]);
     }
 

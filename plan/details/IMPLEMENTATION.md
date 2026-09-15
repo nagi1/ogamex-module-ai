@@ -77,6 +77,18 @@ Add `ExplainAiDecision.php`, `ReplayAiScenario.php` and `SeedAiTestUniverse.php`
 
 Pilot gates: disclosed AI presence, staff kill switch, model-free core play, worker/action success metrics, server-tick latency, cost per active AI and human feedback on pressure, recovery and alliance value. Expand only after a fixed cohort meets limits for a full play cycle.
 
+A window is also read cheaply, because the review loop reads one every slice and every pilot window
+([the review loop](specs/improvement-loop.md)): reporting commands answer the same figures in a stable
+machine-readable shape (`--json`) as well as the human rendering, the read takes one bounded, indexed
+window over the traces' short retention, aggregation happens where the row is written rather than at read
+time, and the path is read-only — no locks, no queue work, no game service that advances resources or
+stamps activity — with no generative call anywhere in it. Read cost in seconds and query count is recorded
+with the window, so it is measured rather than assumed. Nothing in the review sits on the session path:
+the read is an explicit command, and the one write it adds — AG2's hourly points sample — is a scheduled
+batch pass whose query count and duration are measured and recorded. `ai.review.enabled` (`AI_REVIEW_ENABLED`,
+default on) governs that collection only; decision traces, work items, receipts and stop counters stay
+written, because the operator page and the pilot report are built on them.
+
 ## Phase 5: cooperative PvE universe
 
 This is a separate universe mode using the same AI accounts, action gateway, perceptions, schedules, combat estimate and event store. It adds no AI-only combat engine, ships or resource rules.
@@ -124,10 +136,10 @@ The untouched [raw plan](reference/raw-original-plan.md) remains the complete so
 | 23–27: scheduler, AI tick, game progression, queues/locks and event wakeups | Package 1 work lease/lock/receipt and scheduler command; Package 2 schedules and safe record-only intents. Future event wakeups consume only existing published events unless a generic host capability is separately justified. |
 | 28–31: Rust battle engine, human-like estimates, simulation budget and combat flow | Package 2 rejects stale intel and retains safe recorded intents. Pure estimation and autonomous combat execution are deferred capabilities; no implemented `BattleEstimateService` is claimed. |
 | 32–33: fleetsave/defence and normal-mode alliances | Package 2 fleetsave candidate and action validation; Package 3 commitments, relationships and alliance event handling. |
-| 34–38: Empire mode, mode comparison, coordination, strategy and relationships | Root separate-mode decision; Package 5 campaign director, objectives, contributions, reward allocation and policy safety. |
+| 34–38: Empire mode, mode comparison, coordination, strategy and relationships | Root separate-mode decision; Package 6 campaign director, objectives, contributions, reward allocation and policy safety. |
 | 39–40: scalability and Laravel/Rust division | Package 4 population caps/metrics; Package 2 keeps scheduling/policy in Laravel and battle calculation behind the existing engine adapter. |
 | 41–42: testing and determinism | Acceptance tests in every package; seeded randomness, injected clock, read-only replay and frozen-time trace tests. |
-| 43–44: suggested order and first MVP | The five merged packages and strict 1→5 integration order; Package 1 is the concrete first MVP. |
+| 43–44: suggested order and first MVP | The six merged packages and strict 1→6 integration order; Package 1 is the concrete first MVP. |
 | 45: avoid-perfect-bots, hidden knowledge, duplicated rules, unbounded combat, LLM gameplay, separate Empire engine and framework overbuild | Package constraints and acceptance criteria: shared validation through existing services, legal observations, bounded estimates, model-free core and module-owned action adapters. |
 | 46–47: architecture rules and long-term architecture | Repository boundary at the top of this document, module-first action/adapters and Package 4 operational controls. |
 

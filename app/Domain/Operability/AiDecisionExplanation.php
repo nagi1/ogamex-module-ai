@@ -39,4 +39,29 @@ readonly class AiDecisionExplanation
         public array $evidence = [],
     ) {
     }
+
+    /**
+     * The same redacted fields the console prints, in the shape a review parses and diffs. It stays
+     * redacted by construction: the explanation holds no candidate parameters, so the JSON cannot
+     * carry them either.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'trace_id' => $this->traceId,
+            'player_id' => $this->playerId,
+            'observed_at' => $this->observedAt?->toDateTimeString(),
+            'selected_action' => $this->selectedAction,
+            'selected_reason' => $this->selectedReason,
+            // Rounded to the two decimals the console prints, so the two renderings cannot disagree
+            // about the same decision.
+            'selected_score' => round($this->selectedScore, 2),
+            'components' => $this->components,
+            'alternatives' => $this->alternatives,
+            'refusals' => $this->refusals,
+            'evidence' => $this->evidence,
+        ];
+    }
 }

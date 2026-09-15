@@ -11,6 +11,12 @@ return [
      */
     'driver' => env('AI_COGNITION_DRIVER', 'native'),
 
+    // How the selected external drivers are used relative to the native engines:
+    // `native` ignores the driver settings, `external` swaps the driver in with native as
+    // the per-call fallback (the historical default), and `hybrid` runs native always with
+    // the selected driver contributing alongside it.
+    'mode' => env('AI_COGNITION_MODE', 'external'),
+
     'circuit' => [
         // Consecutive failures before the driver is skipped entirely.
         'failures' => (int) env('AI_COGNITION_CIRCUIT_FAILURES', 3),

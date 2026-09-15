@@ -3,6 +3,7 @@
 namespace Modules\AI\Infrastructure\Cognition;
 
 use Illuminate\Http\Client\Factory;
+use Illuminate\Http\Client\PendingRequest;
 use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\DriverResponseLimit;
 use Modules\AI\Support\FatimaScenarioTemplate;
@@ -58,7 +59,7 @@ class FatimaClient
     }
 
     /**
-     * @return list<FatimaEmotion>|null
+     * @return array{mood: float, emotions: list<FatimaEmotion>}|null
      */
     public function emotions(string $scenario, int $instance, string $character): array|null
     {
@@ -69,8 +70,11 @@ class FatimaClient
         }
 
         $emotions = $payload['Emotions'] ?? null;
+        $mood = $payload['Mood'] ?? 0.0;
 
-        if (!is_array($emotions)) {
+        // A malformed entry means the driver changed its contract, which must not be
+        // papered over by skipping the record or reading a neutral mood.
+        if (!is_array($emotions) || !is_numeric($mood)) {
             $this->circuit->recordFailure();
 
             return null;
@@ -100,7 +104,7 @@ class FatimaClient
 
         $this->circuit->recordSuccess();
 
-        return $parsed;
+        return ['mood' => (float) $mood, 'emotions' => $parsed];
     }
 
     /**
@@ -180,7 +184,7 @@ class FatimaClient
     }
 
     /**
-     * @return array<string, mixed>|null
+     * @return array<int|string, mixed>|null
      */
     private function structured(string $method, string $path, mixed $body = null): array|null
     {
@@ -218,7 +222,7 @@ class FatimaClient
         return $payload;
     }
 
-    private function pending(): \Illuminate\Http\Client\PendingRequest
+    private function pending(): PendingRequest
     {
         return $this->http
             ->baseUrl(rtrim((string) config('ai.cognition.fatima.base_url', 'http://host.docker.internal:8092'), '/'))

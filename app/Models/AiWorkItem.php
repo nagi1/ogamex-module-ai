@@ -19,6 +19,8 @@ use Modules\AI\Enums\AiWorkState;
  * @property AiWorkState $state
  * @property string|null $lease_token
  * @property Carbon|null $lease_until
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 #[Unguarded]
 class AiWorkItem extends Model

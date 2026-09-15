@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Decision;
 
 use OGame\GameObjects\Models\Abstracts\GameObject;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 
@@ -25,24 +26,21 @@ use OGame\Services\PlanetService;
  * while the account still has no laboratory. Only the level the host asks for counts, because level
  * one of a robotics factory never unlocks a shipyard and treating "something is built" as done would
  * stall the chain one step below its goal.
+ *
+ * A step is whatever queue accepts it: the host's catalogue holds buildings and technologies beside
+ * each other, and a technology gating a laboratory is as much a prerequisite as the laboratory
+ * itself. Which queue takes the step is the planner's question, answered from the host's object type.
  */
 class FacilityChain
 {
-    /** @return list<BuildCandidate> every unmet building prerequisite, easiest unlock first */
+    /** @return list<BuildCandidate> every unmet prerequisite, easiest unlock first */
     public function pending(PlanetService $planet): array
     {
         $ordered = [];
 
         foreach ($this->ambitions() as $ambition) {
             foreach (ObjectService::getRecursiveRequirements($ambition->machine_name) as $machineName => $level) {
-                // Technologies gate research and units, and a technology this module cannot research
-                // yet is not a step it can take -- that belongs to the research executor, not to the
-                // building queue this plan feeds.
-                if (!BuildingQueueObject::accepts($machineName)) {
-                    continue;
-                }
-
-                if ($planet->getObjectLevel($machineName) >= $level) {
+                if ($this->currentLevel($planet, $machineName) >= $level) {
                     continue;
                 }
 
@@ -60,6 +58,26 @@ class FacilityChain
         return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $ordered);
     }
 
+    /**
+     * How far this account already is with one prerequisite.
+     *
+     * The host keeps a planet's levels on the planet and a technology's on the player, so asking the
+     * planet for a technology answers zero every time and would offer the same step forever.
+     */
+    private function currentLevel(PlanetService $planet, string $machineName): int
+    {
+        $isResearch = ObjectService::getObjectByMachineName($machineName)->type === GameObjectType::Research;
+
+        if (!$isResearch) {
+            return $planet->getObjectLevel($machineName);
+        }
+
+        // A planet always has an owner on the host; the nullable signature is the
+        // host's, so a missing player reads as level zero rather than crashing a
+        // decision on data the host itself would not normally be without.
+        return $planet->getPlayer()?->getResearchLevel($machineName) ?? 0;
+    }
+
     /** @return list<GameObject> what this account could produce, cheapest first */
     private function ambitions(): array
     {
@@ -70,6 +88,6 @@ class FacilityChain
             static fn (GameObject $left, GameObject $right): int => $left->price->resources->sum() <=> $right->price->resources->sum(),
         );
 
-        return array_values($objects);
+        return $objects;
     }
 }

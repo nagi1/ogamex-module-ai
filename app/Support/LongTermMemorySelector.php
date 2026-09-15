@@ -5,6 +5,7 @@ namespace Modules\AI\Support;
 use Illuminate\Support\Facades\Log;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\NativeLongTermMemory;
+use Modules\AI\Enums\AiCognitionMode;
 use Modules\AI\Enums\AiMemoryDriver;
 use Modules\AI\Infrastructure\Memory\AgentOsClient;
 use Modules\AI\Infrastructure\Memory\AgentOsLongTermMemory;
@@ -26,6 +27,7 @@ class LongTermMemorySelector
     {
         $configured = (string) config('ai.cognition.memory.driver', AiMemoryDriver::Native->value);
         $driver = AiMemoryDriver::tryFrom($configured);
+        $mode = AiCognitionMode::tryFrom((string) config('ai.cognition.mode', AiCognitionMode::External->value));
 
         if ($driver === null) {
             Log::warning('Unrecognised AI memory driver; using native scoped recall.', ['driver' => $configured]);
@@ -33,14 +35,18 @@ class LongTermMemorySelector
             return app(NativeLongTermMemory::class);
         }
 
-        return match ($driver) {
-            AiMemoryDriver::Native => app(NativeLongTermMemory::class),
-            AiMemoryDriver::AgentOs => app()->makeWith(AgentOsLongTermMemory::class, [
-                'fallback' => app(NativeLongTermMemory::class),
-                'client' => app()->makeWith(AgentOsClient::class, [
-                    'circuit' => app()->makeWith(DriverCircuitBreaker::class, ['driver' => AiMemoryDriver::AgentOs->value]),
-                ]),
+        // The memory adapter already composes native candidates with the driver's ranking, so
+        // `external` and `hybrid` resolve to the same implementation; only `native` forces the
+        // driver off.
+        if ($mode === AiCognitionMode::Native || $driver === AiMemoryDriver::Native) {
+            return app(NativeLongTermMemory::class);
+        }
+
+        return app()->makeWith(AgentOsLongTermMemory::class, [
+            'fallback' => app(NativeLongTermMemory::class),
+            'client' => app()->makeWith(AgentOsClient::class, [
+                'circuit' => app()->makeWith(DriverCircuitBreaker::class, ['driver' => AiMemoryDriver::AgentOs->value]),
             ]),
-        };
+        ]);
     }
 }

@@ -1,6 +1,6 @@
 # Cooperative mode — human coalition versus AI Empire
 
-Owner: the same AI module. Delivery: [Package 5](../../WORK-PACKAGES.md). Evidence: [cooperative precedents](../research/pve-precedents.md). The mode below is a proposed adaptation of existing mechanics, not claimed official OGame lore.
+Owner: the same AI module. Delivery: [Package 6](../../WORK-PACKAGES.md). Evidence: [cooperative precedents](../research/pve-precedents.md). The mode below is a proposed adaptation of existing mechanics, not claimed official OGame lore.
 
 ## Separate mode, shared engine
 

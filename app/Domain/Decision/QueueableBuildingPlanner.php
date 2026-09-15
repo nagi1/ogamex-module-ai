@@ -4,14 +4,16 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\User;
 use OGame\Services\BuildingQueueService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\ResearchQueueService;
 
 /**
- * Answers one question about the account's own economy: is there a building it can legally queue
- * now, and on which planet?
+ * Answers one question about the account's own economy: is there a building or a technology it can
+ * legally queue now, and on which planet?
  *
  * Two things want a building. The chain wants the facility a later capability cannot exist without
  * -- an account with no research lab can never research, and one with no shipyard can never own a
@@ -41,10 +43,11 @@ class QueueableBuildingPlanner
         private EnergyCapacity $energyCapacity,
         private EconomyUpgrades $economyUpgrades,
         private BuildingQueueService $buildingQueueService,
+        private ResearchQueueService $researchQueueService,
     ) {
     }
 
-    public function plan(int $playerId): ?QueueableBuilding
+    public function plan(int $playerId): QueueableBuilding|QueueableResearch|null
     {
         // An account the module does not manage has no policy to apply, so it gets no capability.
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
@@ -72,6 +75,17 @@ class QueueableBuildingPlanner
             $planet->updateResourceStorageStats(false);
 
             foreach ([...$this->energyCapacity->pending($planet), ...$this->facilityChain->pending($planet), ...$this->economyUpgrades->pending($planet, $profile)] as $candidate) {
+                // Which queue takes a step is the host's object type, not this module's opinion: the
+                // chain hands over prerequisites, and a technology among them is research.
+                if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {
+                    $research = $this->queueableResearch($planet, $candidate);
+                    if ($research === null) {
+                        continue;
+                    }
+
+                    return $research;
+                }
+
                 $planetId = $this->queueablePlanetId($planet, $candidate);
                 if ($planetId === null) {
                     continue;
@@ -106,5 +120,31 @@ class QueueableBuildingPlanner
         }
 
         return $planet->getPlanetId();
+    }
+
+    /**
+     * The same question for a technology, asked the way the host's research page asks it.
+     *
+     * Research is account-wide on the host's screen while its queue and its requirements are per
+     * planet, so the planet that answers is the planet whose laboratory carries it. Nothing here
+     * names a technology: the price, the requirement graph and the queue are all the host's.
+     */
+    private function queueableResearch(PlanetService $planet, BuildCandidate $candidate): ?QueueableResearch
+    {
+        $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+
+        $queueable = !$this->researchQueueService->retrieveQueue($planet)->isQueueFull()
+            && ObjectService::objectRequirementsMetWithQueue($machineName, ($planet->getPlayer()?->getResearchLevel($machineName) ?? 0) + 1, $planet)
+            && $planet->hasResources(ObjectService::getObjectPrice($machineName, $planet));
+
+        if (!$queueable) {
+            return null;
+        }
+
+        return app()->makeWith(QueueableResearch::class, [
+            'planetId' => $planet->getPlanetId(),
+            'researchId' => $candidate->buildingId,
+            'reason' => $candidate->reason,
+        ]);
     }
 }

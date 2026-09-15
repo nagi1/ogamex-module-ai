@@ -33,6 +33,10 @@ readonly class SocialExchangeContext
         // needs neither, stays unaffected.
         public AiArchetype|null $archetype = null,
         public int|null $counterpartyPlayerId = null,
+        // Facts the module recalls about the counterparty before evaluating. Native social
+        // cognition reads a subset (an outstanding debt cools a new help request); a driver
+        // never receives raw memory, so this stays module-side.
+        public array $history = [],
     ) {
     }
 }

@@ -8,13 +8,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Modules\AI\Actions\ExecuteAiIntentAction;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
-use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\RunAiSession;
-use Modules\AI\Domain\Decision\QueueableBuilding;
-use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Enums\AiActionReceiptResultKey;
-use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiQueueName;
 use Modules\AI\Enums\AiReceiptState;
@@ -46,10 +43,6 @@ class ProcessAiWork implements ShouldQueue
     public int $timeout = 25;
 
     private const PAYLOAD_PLANET_ID = 'planet_id';
-
-    private const PAYLOAD_BUILDING_ID = 'building_id';
-
-    private const PAYLOAD_REASON = 'reason';
 
     public function __construct(public int $workItemId)
     {
@@ -112,7 +105,7 @@ class ProcessAiWork implements ShouldQueue
                 return;
             }
 
-            $this->queueClaimedBuilding($profile, $workItem, $leaseToken);
+            $this->queueClaimedIntent($profile, $workItem, $leaseToken);
         } catch (Throwable $exception) {
             $this->retryLease($workItem, $leaseToken);
 
@@ -162,7 +155,7 @@ class ProcessAiWork implements ShouldQueue
         $this->completeLease($workItem, $leaseToken);
     }
 
-    private function queueClaimedBuilding(AiProfile $profile, AiWorkItem $workItem, string $leaseToken): void
+    private function queueClaimedIntent(AiProfile $profile, AiWorkItem $workItem, string $leaseToken): void
     {
         // The action cap bounds what a session may touch, not what it may think: at zero the
         // session already decided and scheduled, so this pass closes its lease and acts on
@@ -175,7 +168,11 @@ class ProcessAiWork implements ShouldQueue
 
         $receipt = AiActionReceipt::query()->firstOrCreate(
             ['idempotency_key' => $workItem->idempotency_key],
-            ['player_id' => $workItem->player_id, 'action_type' => AiActionType::QueueBuilding, 'state' => AiReceiptState::Processing],
+            [
+                'player_id' => $workItem->player_id,
+                'action_type' => $workItem->kind->actionType(),
+                'state' => AiReceiptState::Processing,
+            ],
         );
         if (in_array($receipt->state, [AiReceiptState::Accepted, AiReceiptState::Completed, AiReceiptState::Rejected], true)) {
             $this->completeLease($workItem, $leaseToken);
@@ -200,50 +197,24 @@ class ProcessAiWork implements ShouldQueue
             return;
         }
 
-        $choice = $this->scheduledBuild($workItem, $planetId);
-        if ($choice === null) {
+        [$result, $decision, $actedPlanetId] = app(ExecuteAiIntentAction::class)->execute($workItem, $planetId);
+        if ($result === null) {
             $receipt->update(['state' => AiReceiptState::Rejected, 'result' => [AiActionReceiptResultKey::Reason->value => AiQueueActionReason::NothingQueueable->value]]);
             $this->completeLease($workItem, $leaseToken);
 
             return;
         }
 
-        $result = app(QueueAiBuilding::class)->handle($workItem->player_id, $choice->planetId, $choice->buildingId);
         $receipt->update([
             'state' => $result->successful ? AiReceiptState::Accepted : AiReceiptState::Rejected,
             'result' => [
                 AiActionReceiptResultKey::QueueId->value => $result->queueId,
                 AiActionReceiptResultKey::Reason->value => $result->reason,
-                AiActionReceiptResultKey::Decision->value => [
-                    'building_id' => $choice->buildingId,
-                    'build_reason' => $choice->reason,
-                ],
-                AiActionReceiptResultKey::PlanetId->value => $choice->planetId,
+                AiActionReceiptResultKey::Decision->value => $decision,
+                AiActionReceiptResultKey::PlanetId->value => $actedPlanetId,
             ],
         ]);
         $this->completeLease($workItem, $leaseToken);
-    }
-
-    /**
-     * The building this work item was scheduled to queue, and the planet it was scheduled for.
-     *
-     * An intent that carries its own building is acted on exactly as written, on the planet it names.
-     * A work item created before the intent carried its building has no such binding, so the account
-     * decides again -- planet included -- which is what the session that scheduled it would have done.
-     * When the planner has nothing to queue either, the receipt says so rather than guessing.
-     */
-    private function scheduledBuild(AiWorkItem $workItem, int $planetId): ?QueueableBuilding
-    {
-        $buildingId = $workItem->payload[self::PAYLOAD_BUILDING_ID] ?? null;
-        if (is_int($buildingId)) {
-            return app()->makeWith(QueueableBuilding::class, [
-                'planetId' => $planetId,
-                'buildingId' => $buildingId,
-                'reason' => (string) ($workItem->payload[self::PAYLOAD_REASON] ?? 'scheduled'),
-            ]);
-        }
-
-        return app(QueueableBuildingPlanner::class)->plan($workItem->player_id);
     }
 
     private function ownedPlanetIdFor(AiWorkItem $workItem): int

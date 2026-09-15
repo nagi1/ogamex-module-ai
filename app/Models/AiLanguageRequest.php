@@ -8,6 +8,7 @@ use Modules\AI\Enums\AiLanguageInterpretation;
 use Modules\AI\Enums\AiLanguageRequestState;
 
 /**
+ * @property int $conversation_reply_id
  * @property AiLanguageRequestState $state
  * @property int $usage_reservation_id
  */

@@ -11,6 +11,8 @@ enum AiQueueActionReason: string
     case PlayerBanned = 'player_banned';
     case VacationMode = 'vacation_mode';
     case NotABuilding = 'not_a_building';
+    case NotAResearch = 'not_a_research';
+    case NotAUnit = 'not_a_unit';
     case ShipyardBusy = 'shipyard_busy';
     case QueueNotCreated = 'queue_not_created';
     case NothingQueueable = 'nothing_queueable';

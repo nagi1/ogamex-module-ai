@@ -37,7 +37,7 @@ class SummarizeAiOperabilityAction
         $switch = AiOperabilitySwitch::query()->orderByDesc('id')->first();
 
         return app()->makeWith(AiOperabilityOverview::class, [
-            'workEnabled' => $switch?->enabled ?? true,
+            'workEnabled' => $switch->enabled ?? true,
             'switchReason' => $switch?->reason,
             'switchedAt' => $switch?->changed_at?->toDateTimeString(),
             'switchedByPlayerId' => $switch?->actor_player_id,
@@ -66,7 +66,7 @@ class SummarizeAiOperabilityAction
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return array<int, array<string, mixed>>
      */
     private function stopReasons(string $day): array
     {

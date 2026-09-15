@@ -36,6 +36,7 @@ class PlayerPerceptionBuilder
             'targetReports' => $this->targetReports((array) ($observation['target_reports'] ?? [])),
             'availableActions' => $this->availableActions((array) ($observation['available_actions'] ?? [])),
             'fleetsaveEligible' => (bool) ($observation['fleetsave_eligible'] ?? false),
+            'inboundFleets' => $this->inboundFleets((array) ($observation['inbound_fleets'] ?? [])),
             'recoveryFactor' => max(0.0, min(1.0, (float) ($observation['recovery_factor'] ?? 0))),
             'sourceTimestamps' => $this->sourceTimestamps((array) ($observation['source_timestamps'] ?? []), $observedAt),
         ]);
@@ -110,6 +111,29 @@ class PlayerPerceptionBuilder
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<int, mixed> $fleets
+     * @return list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}>
+     */
+    private function inboundFleets(array $fleets): array
+    {
+        $visible = [];
+        foreach ($fleets as $fleet) {
+            if (!is_array($fleet) || !isset($fleet['mission_id'], $fleet['time_arrival'], $fleet['planet_id_to'])) {
+                continue;
+            }
+
+            $visible[] = [
+                'mission_id' => (int) $fleet['mission_id'],
+                'mission_type' => (int) ($fleet['mission_type'] ?? 0),
+                'time_arrival' => (int) $fleet['time_arrival'],
+                'planet_id_to' => (int) $fleet['planet_id_to'],
+            ];
+        }
+
+        return $visible;
     }
 
     /**

@@ -24,6 +24,9 @@ class AgentOsLongTermMemory implements LongTermMemory
     {
     }
 
+    /**
+     * @return list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>
+     */
     public function recallRelevantMemories(MemoryRecallQuery $query): array
     {
         $candidates = $this->fallback->recallRelevantMemories($this->candidateQuery($query));
@@ -96,8 +99,13 @@ class AgentOsLongTermMemory implements LongTermMemory
     }
 
     /**
+     * The driver's order decides which memories surface first, and a memory it did not rank
+     * is not evidence the driver rejects — it simply had nothing to say. Native recency keeps
+     * it in the answer rather than dropping it.
+     *
      * @param  list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>  $candidates
      * @param  list<int>  $ranking
+     * @return list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>
      */
     private function ranked(array $candidates, array $ranking, int $limit): array
     {
@@ -108,18 +116,27 @@ class AgentOsLongTermMemory implements LongTermMemory
         }
 
         $ranked = [];
+        $seen = [];
 
-        foreach (array_slice($ranking, 0, max(0, $limit)) as $id) {
-            if (isset($byId[$id])) {
+        foreach ($ranking as $id) {
+            if (isset($byId[$id]) && !isset($seen[$id])) {
                 $ranked[] = $byId[$id];
+                $seen[$id] = true;
             }
         }
 
-        return $ranked;
+        foreach ($candidates as $candidate) {
+            if (!isset($seen[$candidate['id']])) {
+                $ranked[] = $candidate;
+            }
+        }
+
+        return array_slice($ranked, 0, max(0, $limit));
     }
 
     /**
      * @param  list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>  $candidates
+     * @return list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>
      */
     private function bounded(array $candidates, int $limit): array
     {

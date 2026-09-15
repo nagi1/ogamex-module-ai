@@ -13,7 +13,7 @@ Ordered by what it unblocks, not by size.
 
 | # | Ask | Size | Unblocks | If it never lands |
 | --- | --- | --- | --- | --- |
-| R1 | A read-only, seedable battle question on the battle engine | medium | Raids and any estimator (`G6`), plus byte-stable replay for the offline corpus | Raids stay recorded intents with a stated reason; the estimator has no deterministic replay |
+| R1 | A read-only, seedable battle question on the battle engine | medium | Raids and any estimator (`G6`), plus byte-stable replay for the offline corpus | **Implemented 14 September 2026** — `simulateBattle(?int $seed, bool $pure)` |
 | R2 | Queue-upgrade predicate: "may this object be upgraded now?" | small | Deletes `AiBuildingMachineName`, the last object-name list in module code (gate 1, `A3`/`B2`/`C3`) | The module keeps restating two machine names |
 | R3 | Vacation/ban refusal inside the queue **services**, not only the controllers | small | Correctness of every module-issued queue entry (`O2`) | The module re-checks under its own lock and accepts a small race window |
 | R4 | `getGameObjectsWithStorage()` covering stations, not only buildings | trivial | Storage enumeration stays honest for a mod-added station (`C5`, gate 1) | A mod-added station's storage is invisible to the planner |
@@ -21,6 +21,7 @@ Ordered by what it unblocks, not by size.
 | R6 | The five remaining controller-only rules, published together | small | Removes five more places where module code restates host rules | The module keeps its own copies, each of which can drift |
 | R7 | *(optional)* hourly `highscores` snapshot | small | Measuring the growth curve against human accounts on the same universe, not only against ourselves | The module records its own series and can only compare cohorts to each other |
 | R8 | *(optional)* a way to stop `advance()` stamping `last_ip` from a queue context | trivial | `last_ip` honesty for scheduled work (`A3`/`A5`) | Accounts appear to log in from an empty address |
+| R9 | A mission-required-ship query: "which unit does this mission type consume?" | small | Removes `colony_ship` / `espionage_probe` references from module code (gate 1) | The module keeps one host-contract key per role |
 
 ## R1 — A read-only, seedable battle question
 
@@ -57,6 +58,24 @@ this item.
 **Verification when it lands.** The module re-checks: two calls with the same seed and the same inputs
 return identical results; a pure call leaves `planets` resources, `fleet_missions`, debris fields and
 events unchanged; the hostile-fleet path still behaves identically with `$pure` at its default.
+
+**Implemented 14 September 2026 (shape 1).** `BattleEngine::simulateBattle(?int $seed = null, bool $pure = false)`:
+
+- `$pure` gates the only two side effects: `applyTacticalRetreat()`'s deuterium write to the defender
+  planet and the `BattleResolved` event. A pure run leaves the world exactly as it found it.
+- `$seed` seeds the global Mersenne Twister once at the top, and every draw the PHP engine makes —
+  `rollMoonCreation()`, both `checkHamillManoeuvre()` implementations, `UnitObject::didSuccessfulRapidfire()`
+  (now `mt_rand`), `BattleUnit::damagedHullExplosion()` (`rand`, the `mt_rand` alias) and `array_rand` target
+  selection — becomes reproducible. `DefenseRepairService` receives a distinct sub-seed (`seed ^ 0x9E3779B9`)
+  so its own re-seed does not replay the round stream. When `$seed` is null every draw falls back to
+  `random_int`, so the live path is unchanged.
+- **Rust limitation, as allowed above:** the Rust engine's round combat runs in the `libbattle_engine_ffi.so`
+  binary with its own RNG, so `$seed` does not seed the Rust rounds. Pure mode and the PHP-side Hamill roll
+  still apply; a seeded, replayable estimator must use the PHP engine until the Rust FFI exposes a seed.
+
+**What the module can now do.** `T2` (the raid estimator) is unblocked: sample the engine with one shared
+seed stream (CRN), screen at n = 50, confirm at n = 200, and report losing-run count plus P20 net profit,
+with a byte-stable replay test over the PHP engine.
 
 ## R2 — Queue-upgrade predicate
 
@@ -155,6 +174,27 @@ means "server-side work".
 Related decision on the module side (no host change needed): whether that stamp should be *shaped* like
 the routine or left incidental — recorded in
 [`gameplay-algorithms.md` AG3](gameplay-algorithms.md#ag3--request-and-activity-footprint).
+
+## R9 — A mission-required-ship query
+
+**Where.** The mission classes themselves are the only place the requirement
+lives today: `ColonisationMission::isMissionPossible()` checks
+`getAmountByMachineName('colony_ship')`, `EspionageMission` checks
+`espionage_probe`, `RecycleMission` checks `pathfinder`/`recycler`.
+
+**Why the module needs it.** The module's fleet executors must send the ship the
+host's own mission consumes, and there is no generic way to ask which ship that
+is — the machine name is the only marker, so the module keeps one host-contract
+key per role (`colony_ship`, later `espionage_probe`). That is exactly the
+object-name-in-module-code gate 1 forbids.
+
+**Minimal shape.** One service answer, e.g.
+`GameMissionFactory::getRequiredShipMachineNames(int $missionType): array`,
+returning the machine names the mission refuses to run without.
+
+**If it never lands.** The module keeps the role key behind a single documented
+constant each, and the object itself always comes from `ObjectService`, so the
+catalogue stays the source of truth and only the role key drifts.
 
 ## Not requested — keep the host scope small
 

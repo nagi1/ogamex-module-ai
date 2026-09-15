@@ -3,7 +3,19 @@
 namespace Modules\AI\Actions;
 
 use Modules\AI\Domain\Decision\DecisionTrace;
+use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
+use Modules\AI\Domain\Decision\QueueableColony;
+use Modules\AI\Domain\Decision\QueueableColonyPlanner;
+use Modules\AI\Domain\Decision\QueueableFleetSave;
+use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
+use Modules\AI\Domain\Decision\QueueableRaid;
+use Modules\AI\Domain\Decision\QueueableResearch;
+use Modules\AI\Domain\Decision\QueueableSpy;
+use Modules\AI\Domain\Decision\QueueableSpyPlanner;
+use Modules\AI\Domain\Decision\QueueableUnit;
+use Modules\AI\Domain\Decision\QueueableUnitPlanner;
+use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
@@ -24,12 +36,64 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_BUILDING_ID = 'building_id';
 
+    private const PAYLOAD_RESEARCH_ID = 'research_id';
+
+    private const PAYLOAD_UNIT_ID = 'unit_id';
+
+    private const PAYLOAD_AMOUNT = 'amount';
+
+    private const PAYLOAD_GALAXY = 'galaxy';
+
+    private const PAYLOAD_SYSTEM = 'system';
+
+    private const PAYLOAD_POSITION = 'position';
+
+    private const PAYLOAD_MISSION_TYPE = 'mission_type';
+
+    private const PAYLOAD_DESTINATION_PLANET_ID = 'destination_planet_id';
+
+    private const PAYLOAD_TARGET_GALAXY = 'target_galaxy';
+
+    private const PAYLOAD_TARGET_SYSTEM = 'target_system';
+
+    private const PAYLOAD_TARGET_POSITION = 'target_position';
+
+    private const PAYLOAD_TARGET_TYPE = 'target_type';
+
     private const PAYLOAD_REASON = 'reason';
 
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
+        private QueueableUnitPlanner $queueableUnitPlanner,
+        private QueueableColonyPlanner $queueableColonyPlanner,
+        private QueueableFleetSavePlanner $queueableFleetSavePlanner,
+        private QueueableSpyPlanner $queueableSpyPlanner,
+        private RaidPlanner $raidPlanner,
         private AiClock $clock,
     ) {
+    }
+
+    /**
+     * Writes the one work item that carries the intent out, keyed by the session's
+     * own id: a retried session converges on one action, a later session decides
+     * again. The payload is whatever the plan approved, so the schedule and the
+     * executor always name the same objective.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function enqueue(AiProfile $profile, AiWorkItem $sessionWorkItem, AiWorkKind $kind, array $payload): void
+    {
+        AiWorkItem::query()->firstOrCreate(
+            ['idempotency_key' => 'intent:session:' . $sessionWorkItem->id],
+            [
+                'player_id' => $profile->player_id,
+                'kind' => $kind,
+                'due_at' => $this->clock->now(),
+                'schedule_generation' => (int) ($sessionWorkItem->schedule_generation ?? 1),
+                'state' => AiWorkState::Pending,
+                'payload' => $payload,
+            ],
+        );
     }
 
     public function handle(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace): void
@@ -38,14 +102,14 @@ class ScheduleAiIntentAction
         // a capability with no executor must not be published to begin with.
         match ($trace->selected->candidate->type) {
             AiCandidateActionType::Build => $this->scheduleBuild($profile, $sessionWorkItem),
+            AiCandidateActionType::Research => $this->scheduleResearch($profile, $sessionWorkItem),
+            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem),
+            AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
+            AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem),
+            AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
+            AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
             AiCandidateActionType::DoNothing,
-            AiCandidateActionType::SaveResources,
-            AiCandidateActionType::Research,
-            AiCandidateActionType::QueueUnits,
-            AiCandidateActionType::FleetSave,
-            AiCandidateActionType::Spy,
-            AiCandidateActionType::Raid,
-            AiCandidateActionType::Colonize => null,
+            AiCandidateActionType::SaveResources => null,
         };
     }
 
@@ -55,7 +119,7 @@ class ScheduleAiIntentAction
         // authority, and a session that decided while the queue was free must not queue into a
         // full one.
         $plan = $this->queueableBuildingPlanner->plan($profile->player_id);
-        if ($plan === null) {
+        if (!$plan instanceof QueueableBuilding) {
             return;
         }
 
@@ -67,20 +131,145 @@ class ScheduleAiIntentAction
         // The session's own id is the idempotency key: a retried session converges on one action,
         // while a later session decides again. The generation is inherited when the session knows
         // it and falls back to the column default when it does not.
-        AiWorkItem::query()->firstOrCreate(
-            ['idempotency_key' => 'intent:session:' . $sessionWorkItem->id],
-            [
-                'player_id' => $profile->player_id,
-                'kind' => AiWorkKind::BuildFirstBuilding,
-                'due_at' => $this->clock->now(),
-                'schedule_generation' => (int) ($sessionWorkItem->schedule_generation ?? 1),
-                'state' => AiWorkState::Pending,
-                'payload' => [
-                    self::PAYLOAD_PLANET_ID => $plan->planetId,
-                    self::PAYLOAD_BUILDING_ID => $plan->buildingId,
-                    self::PAYLOAD_REASON => $plan->reason,
-                ],
-            ],
-        );
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::BuildFirstBuilding, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_BUILDING_ID => $plan->buildingId,
+            self::PAYLOAD_REASON => $plan->reason,
+        ]);
+    }
+
+    /**
+     * The same for a technology the plan approved, with the same guarantees.
+     *
+     * The step that reached the decision is re-asked, and the technology it approved travels with
+     * the intent, so a research capability that was published, the schedule that carries it and the
+     * queued technology cannot name three different objectives.
+     */
+    private function scheduleResearch(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableBuildingPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableResearch) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::QueueResearch, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_RESEARCH_ID => $plan->researchId,
+            self::PAYLOAD_REASON => $plan->reason,
+        ]);
+    }
+
+    /**
+     * The same for a unit the plan approved: the hull and the amount travel with the intent.
+     *
+     * Re-deciding at execution time would let a published capability, the schedule and the queued
+     * unit name three different objectives, which is how an account ends up building combat ships
+     * while it claims to be assembling cargo.
+     */
+    private function scheduleUnits(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableUnitPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableUnit) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::QueueUnits, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_UNIT_ID => $plan->unitId,
+            self::PAYLOAD_AMOUNT => $plan->amount,
+            self::PAYLOAD_REASON => $plan->reason,
+        ]);
+    }
+
+    /**
+     * The same for a colony the plan approved: the origin planet and the empty
+     * slot travel with the intent, so the published capability and the launched
+     * mission name the same destination.
+     */
+    private function scheduleColony(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableColonyPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableColony) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Colonize, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_GALAXY => $plan->galaxy,
+            self::PAYLOAD_SYSTEM => $plan->system,
+            self::PAYLOAD_POSITION => $plan->position,
+            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_REASON => 'colony:' . $plan->galaxy . ':' . $plan->system . ':' . $plan->position,
+        ]);
+    }
+
+    /**
+     * The same for a fleetsave the plan approved: the threatened planet and the
+     * destination travel with the intent, so the save moves the fleet to the
+     * planet the session saw rather than a re-decided one.
+     */
+    private function scheduleFleetSave(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableFleetSavePlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableFleetSave) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::FleetSave, [
+            self::PAYLOAD_PLANET_ID => $plan->originPlanetId,
+            self::PAYLOAD_DESTINATION_PLANET_ID => $plan->destinationPlanetId,
+            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_REASON => 'fleetsave',
+        ]);
+    }
+
+    /**
+     * The same for an espionage target the plan approved: the origin planet and
+     * the target travel with the intent, so the probe goes where the session saw.
+     */
+    private function scheduleSpy(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableSpyPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableSpy) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Spy, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_TARGET_GALAXY => $plan->targetGalaxy,
+            self::PAYLOAD_TARGET_SYSTEM => $plan->targetSystem,
+            self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
+            self::PAYLOAD_TARGET_TYPE => $plan->targetType,
+            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_REASON => 'spy:' . $plan->targetGalaxy . ':' . $plan->targetSystem . ':' . $plan->targetPosition,
+        ]);
+    }
+
+    /**
+     * The same for a raid the session selected: the report the decision named is
+     * re-planned through the profit test and bashing limit, and the target that
+     * passed travels with the intent.
+     */
+    private function scheduleRaid(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace): void
+    {
+        $reportId = (int) ($trace->selected->candidate->parameters['report_id'] ?? 0);
+        if ($reportId === 0) {
+            return;
+        }
+
+        $plan = $this->raidPlanner->plan($profile->player_id, $reportId);
+        if (!$plan instanceof QueueableRaid) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Raid, [
+            self::PAYLOAD_PLANET_ID => $plan->originPlanetId,
+            self::PAYLOAD_TARGET_GALAXY => $plan->targetGalaxy,
+            self::PAYLOAD_TARGET_SYSTEM => $plan->targetSystem,
+            self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
+            self::PAYLOAD_TARGET_TYPE => $plan->targetType,
+            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_REASON => 'raid:' . $reportId,
+        ]);
     }
 }

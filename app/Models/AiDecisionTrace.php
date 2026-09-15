@@ -4,9 +4,13 @@ namespace Modules\AI\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Modules\AI\Enums\AiCandidateActionType;
 
 /**
+ * @property int $player_id
+ * @property Carbon $observed_at
+ * @property string $selected_reason
  * @property AiCandidateActionType $selected_action
  * @property array<int, array<string, mixed>> $candidates
  * @property array<string, mixed> $score_components

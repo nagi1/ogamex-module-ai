@@ -86,23 +86,23 @@ test('seeding refuses production without any override', function (): void {
     $this->app->instance('env', 'production');
     // A cohort an operator already seeded into this database must not make a refusal look like a
     // success, so the claim is that the attempt created nothing rather than that none exist.
-    $before = User::query()->where('email', 'like', '%@ai-pilot.invalid')->count();
+    $before = AiProfile::query()->where('settings->pilot', true)->count();
 
     $this->artisan('ai:seed-test-universe', ['--confirm' => true])
         ->expectsOutputToContain('Refusing to seed synthetic accounts in production.')
         ->assertExitCode(1);
 
-    expect(User::query()->where('email', 'like', '%@ai-pilot.invalid')->count())->toBe($before);
+    expect(AiProfile::query()->where('settings->pilot', true)->count())->toBe($before);
 });
 
 test('seeding requires an explicit confirmation', function (): void {
-    $before = User::query()->where('email', 'like', '%@ai-pilot.invalid')->count();
+    $before = AiProfile::query()->where('settings->pilot', true)->count();
 
     $this->artisan('ai:seed-test-universe')
         ->expectsOutputToContain('Re-run with --confirm.')
         ->assertExitCode(1);
 
-    expect(User::query()->where('email', 'like', '%@ai-pilot.invalid')->count())->toBe($before);
+    expect(AiProfile::query()->where('settings->pilot', true)->count())->toBe($before);
 });
 
 /**
@@ -112,7 +112,9 @@ test('seeding requires an explicit confirmation', function (): void {
  */
 function clearSeededPilotAccounts(): void
 {
-    $ids = User::query()->where('email', 'like', '%@ai-pilot.invalid')->pluck('id');
+    $ids = AiProfile::query()
+        ->where('settings->pilot', true)
+        ->pluck('player_id');
 
     if ($ids->isEmpty()) {
         return;
@@ -120,7 +122,17 @@ function clearSeededPilotAccounts(): void
 
     DB::statement('SET FOREIGN_KEY_CHECKS = 0');
     DB::table('users')->whereIn('id', $ids)->delete();
+    DB::table('ai_profiles')->whereIn('player_id', $ids)->delete();
+    DB::table('ai_work_items')->whereIn('player_id', $ids)->delete();
     DB::statement('SET FOREIGN_KEY_CHECKS = 1');
+}
+
+/** @return \Illuminate\Support\Collection<int, User> */
+function seededPilotUsers()
+{
+    $ids = AiProfile::query()->where('settings->pilot', true)->pluck('player_id');
+
+    return User::query()->whereIn('id', $ids)->orderBy('id')->get();
 }
 
 test('seeding creates ordinary accounts with an enabled profile and a first session', function (): void {
@@ -130,7 +142,7 @@ test('seeding creates ordinary accounts with an enabled profile and a first sess
         ->expectsOutputToContain('Their first session is due now')
         ->assertExitCode(0);
 
-    $seeded = User::query()->where('email', 'like', '%@ai-pilot.invalid')->orderBy('id')->get();
+    $seeded = seededPilotUsers();
     $profiles = AiProfile::query()->whereIn('player_id', $seeded->pluck('id'))->orderBy('player_id')->get();
 
     expect($seeded)->toHaveCount(2)
@@ -139,7 +151,13 @@ test('seeding creates ordinary accounts with an enabled profile and a first sess
         ->and($profiles->first()->archetype)->toBe(AiArchetype::cases()[0])
         ->and($profiles->last()->archetype)->toBe(AiArchetype::cases()[1])
         ->and($profiles->first()->skill_band)->toBe(AiSkillBand::cases()[0])
-        ->and($profiles->first()->random_seed)->toBe(10_001);
+        ->and($profiles->first()->random_seed)->not->toBe(10_001)
+        ->and($profiles->first()->random_seed)->not->toBe($profiles->last()->random_seed + 1)
+        ->and($profiles->first()->settings['pilot'] ?? false)->toBeTrue()
+        ->and(str_contains((string) $seeded->first()->email, '.invalid'))->toBeFalse()
+        ->and($seeded->first()->username_updated_at)->not->toBeNull()
+        ->and($seeded->pluck('dark_matter')->unique()->count())->toBeGreaterThan(1)
+        ->and($seeded->pluck('created_at')->map(fn ($t) => $t->toDateString())->unique()->count())->toBeGreaterThan(1);
 
     foreach ($profiles as $profile) {
         $work = AiWorkItem::query()->where('player_id', $profile->player_id)->sole();
@@ -167,7 +185,7 @@ test('seeding twice reuses the same accounts instead of adding more', function (
     clearSeededPilotAccounts();
 
     $this->artisan('ai:seed-test-universe', ['--players' => 1, '--confirm' => true])->assertExitCode(0);
-    $seeded = User::query()->where('email', 'like', '%@ai-pilot.invalid')->sole();
+    $seeded = seededPilotUsers()->sole();
     $accounts = User::query()->count();
 
     $this->artisan('ai:seed-test-universe', ['--players' => 1, '--confirm' => true])
@@ -175,7 +193,7 @@ test('seeding twice reuses the same accounts instead of adding more', function (
         ->assertExitCode(0);
 
     expect(User::query()->count())->toBe($accounts)
-        ->and(User::query()->where('email', 'like', '%@ai-pilot.invalid')->count())->toBe(1)
+        ->and(AiProfile::query()->where('settings->pilot', true)->count())->toBe(1)
         ->and(AiProfile::query()->where('player_id', $seeded->id)->count())->toBe(1)
         ->and(AiWorkItem::query()->where('player_id', $seeded->id)->count())->toBe(1);
 });

@@ -112,8 +112,17 @@ Run a disclosed pilot for at least four weeks after Phase 3, starting with a sma
 
 ## Capacity and rollback
 
-For [Package 5](../../WORK-PACKAGES.md), separately test coalition restrictions across all hostile paths, provider disappearance, in-flight shutdown, objective/report deduplication, contribution abuse and private report visibility. Pilot both a successful campaign and a failed attempt followed by recovery. Count human coalition participation separately from enemy activity and normal-universe retention.
+For [Package 6](../../WORK-PACKAGES.md), separately test coalition restrictions across all hostile paths, provider disappearance, in-flight shutdown, objective/report deduplication, contribution abuse and private report visibility. Pilot both a successful campaign and a failed attempt followed by recovery. Count human coalition participation separately from enemy activity and normal-universe retention.
 
 Measure 50 → 500 → 5,000 → 10,000-account synthetic loads with realistic active fractions, crowded neighborhoods, synchronized returns, provider failures and combat sizes. Record hardware, p50/p95/p99 lag, CPU, database work, storage growth and cost. Admission stops at the first violated SLO even if the account target is unmet.
 
 Suggested pilot stop trigger: any correctness leak/duplication, or sustained queue lag beyond the ruleset's response SLO. Review pressure and complaint increases before adding accounts. Freeze new admissions and attacks when required, disable language independently, preserve existing core flights, and keep read-only decision traces for diagnosis. Operators can then resume at a smaller tested envelope.
+
+## After the pilot: read the results
+
+The pilot does not end with a report. Each window is read as a dated [review record](../reviews/), which
+answers the goal-shaped questions — capability chain, explicability of growth, cohort divergence,
+reaction to pressure and failing saves, human aliveness — from artifacts the module already writes, and
+feeds each finding into the [gap register](../GAP-REGISTER.md). The latest record is evidence for the
+sign-off and for any population increase, and it states what stayed unmeasured. Rules:
+[the review loop](improvement-loop.md).

@@ -14,6 +14,11 @@ readonly class SocialExchangeEvaluation
         public AiSocialResponse $response,
         public AiSocialResponseReason $reason,
         public array|null $counterTerms = null,
+        // CiF evidence, present only when the external social driver actually answered.
+        // The native stance stays on `response`/`reason`; these carry the driver's volition
+        // magnitude and protocol step for a hybrid consumer.
+        public float|null $volition = null,
+        public string|null $step = null,
     ) {
     }
 }

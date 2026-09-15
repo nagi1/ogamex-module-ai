@@ -1,8 +1,12 @@
 <?php
 
 use Modules\AI\Actions\QueueAiBuildingAction;
+use Modules\AI\Actions\QueueAiResearchAction;
 use Modules\AI\Contracts\QueueAiBuilding;
+use Modules\AI\Contracts\QueueAiResearch;
+use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
+use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
@@ -11,6 +15,7 @@ use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\BuildingQueue;
+use OGame\Models\ResearchQueue;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -21,34 +26,37 @@ uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
     app()->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
+    app()->bind(QueueAiResearch::class, QueueAiResearchAction::class);
 });
 
 /**
  * A capability the account can never reach is not a capability, so this suite follows the account
- * rather than the plan: each round it plans the next building, queues it through the real host queue,
- * lets the host finish it, and then reads what the account actually owns.
+ * rather than the plan: each round it plans the next step -- a building or a technology -- queues it
+ * through the real host queue that accepts it, lets the host finish it, and then reads what the
+ * account actually owns.
  *
  * Every expectation below is computed from the host's own catalogue, which is also the proof that the
  * module keeps no list of its own: a planning rule that named its own buildings would satisfy itself
  * here and drift the moment the catalogue changed.
  */
-test('a funded account reaches a research lab, a robotics factory and a shipyard', function (): void {
+test('a funded account reaches a research lab, a robotics factory, a shipyard and a technology', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
 
     $steps = [];
-    foreach (range(1, 12) as $round) {
-        $steps[] = chainBuildOnce($this->currentUserId, $this->currentPlanetId);
+    foreach (range(1, 20) as $round) {
+        $steps[] = chainQueueOnce($this->currentUserId, $this->currentPlanetId);
     }
 
-    // The assertion is reachability, not a script. Every building the account queued was either
+    // The assertion is reachability, not a script. Every step the account queued was either
     // capacity, because the host throttles a planet that cannot cover its mines, or a prerequisite the
     // host's own requirement graph names -- nothing the module decided for itself.
     $chainSteps = array_values(array_filter($steps, static fn (string $step): bool => str_starts_with($step, 'chain:')));
+    $prerequisites = chainHostPrerequisites();
 
     expect($chainSteps)->not->toBeEmpty();
     foreach ($chainSteps as $step) {
-        expect(substr($step, strlen('chain:')))->toBeIn(array_keys(chainHostPrerequisites()));
+        expect(chainHostPrerequisites())->toHaveKey(substr($step, strlen('chain:')));
     }
 
     $planet = chainPlanet($this->currentUserId, $this->currentPlanetId);
@@ -56,6 +64,19 @@ test('a funded account reaches a research lab, a robotics factory and a shipyard
     expect($planet->getObjectLevel('research_lab'))->toBeGreaterThanOrEqual(1)
         ->and($planet->getObjectLevel('robot_factory'))->toBeGreaterThanOrEqual(2)
         ->and($planet->getObjectLevel('shipyard'))->toBeGreaterThanOrEqual(1);
+
+    // A technology the host's graph asks for cannot stand on a planet, so the only proof it was
+    // reached is the level the host reports for it -- which is what makes research a capability the
+    // account actually has rather than one it merely published.
+    $researched = array_values(array_filter(
+        $chainSteps,
+        static fn (string $step): bool => ObjectService::getObjectByMachineName(substr($step, strlen('chain:')))->type === GameObjectType::Research,
+    ));
+
+    expect($researched)->not->toBeEmpty();
+    foreach ($researched as $step) {
+        expect(chainPlanet($this->currentUserId, $this->currentPlanetId)->getPlayer()->getResearchLevel(substr($step, strlen('chain:'))))->toBeGreaterThanOrEqual($prerequisites[substr($step, strlen('chain:'))]['easiest']);
+    }
 });
 
 // The chain is derived, not declared: the building the planner asks for is one the host's own
@@ -67,7 +88,7 @@ test('the chain asks for a prerequisite the host names', function (): void {
     chainPowered();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
-    $machineName = ObjectService::getObjectById((int) $plan?->buildingId)->machine_name;
+    $machineName = chainStepMachineName($plan);
 
     expect(chainHostPrerequisites())->toHaveKey($machineName)
         ->and($plan?->reason)->toBe('chain:' . $machineName);
@@ -82,7 +103,7 @@ test('the first step is the easiest unlock the host asks for', function (): void
     chainPowered();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
-    $machineName = ObjectService::getObjectById((int) $plan?->buildingId)->machine_name;
+    $machineName = chainStepMachineName($plan);
 
     expect(chainHostPrerequisites()[$machineName]['easiest'])->toBe(1);
 });
@@ -95,7 +116,10 @@ test('the chain empties once the host graph is satisfied', function (): void {
     $this->planetAddResources(chainPlenty());
 
     foreach (chainHostPrerequisites() as $machineName => $levels) {
-        $this->planetSetObjectLevel($machineName, $levels['deepest']);
+        $isResearch = ObjectService::getObjectByMachineName($machineName)->type === GameObjectType::Research;
+        $isResearch
+            ? $this->playerSetResearchLevel($machineName, $levels['deepest'])
+            : $this->planetSetObjectLevel($machineName, $levels['deepest']);
     }
 
     chainPowered();
@@ -103,7 +127,7 @@ test('the chain empties once the host graph is satisfied', function (): void {
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
     expect($plan)->not->toBeNull()
-        ->and($plan?->buildingId)->toBeIn(chainEconomyTargetIds())
+        ->and(chainStepId($plan))->toBeIn(chainEconomyTargetIds())
         ->and($plan?->reason)->toMatch('/^(economy|storage):/');
 });
 
@@ -118,9 +142,10 @@ test('a chain step the account cannot pay for falls through to what it can affor
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
+    // Whatever it fell through to, the host accepted it: the account kept a capability instead of
+    // losing the whole chain to one step it could not pay for.
     expect($plan)->not->toBeNull()
-        ->and($plan?->reason)->toMatch('/^(economy|storage):/')
-        ->and(chainBuildOnce($this->currentUserId, $this->currentPlanetId))->toMatch('/^(economy|storage):/');
+        ->and(chainQueueOnce($this->currentUserId, $this->currentPlanetId))->toBe($plan?->reason);
 });
 
 function chainProfile(int $playerId): AiProfile
@@ -148,21 +173,36 @@ function chainPowered(): void
     test()->planetSetObjectLevel('solar_plant', 20);
 }
 
-/** Plans one building, queues it through the host queue and lets the host finish it. */
-function chainBuildOnce(int $playerId, int $planetId): string
+/** Plans one step, queues it through the host queue that accepts it and lets the host finish it. */
+function chainQueueOnce(int $playerId, int $planetId): string
 {
     $plan = app(QueueableBuildingPlanner::class)->plan($playerId);
-    $buildingId = (int) $plan?->buildingId;
     expect($plan)->not->toBeNull();
 
-    $result = app(QueueAiBuilding::class)->handle($playerId, $planetId, $buildingId);
+    $stepId = chainStepId($plan);
+    $result = $plan instanceof QueueableResearch
+        ? app(QueueAiResearch::class)->handle($playerId, $planetId, $stepId)
+        : app(QueueAiBuilding::class)->handle($playerId, $planetId, $stepId);
     expect($result->successful)->toBeTrue($result->reason);
 
     BuildingQueue::query()->where('planet_id', $planetId)->update(['time_end' => now()->subSecond()->getTimestamp()]);
+    ResearchQueue::query()->where('planet_id', $planetId)->update(['time_end' => now()->subSecond()->getTimestamp()]);
     $player = app(PlayerGameStateService::class)->advance($playerId, $planetId);
+    $player->updateResearchQueue();
     app(PlanetServiceFactory::class)->makeForPlayer($player, $planetId, false)->updateBuildingQueue();
 
     return $plan->reason;
+}
+
+/** The host object id a planned step names, whichever queue it belongs to. */
+function chainStepId(QueueableBuilding|QueueableResearch|null $plan): int
+{
+    return $plan instanceof QueueableResearch ? $plan->researchId : (int) $plan?->buildingId;
+}
+
+function chainStepMachineName(QueueableBuilding|QueueableResearch|null $plan): string
+{
+    return ObjectService::getObjectById(chainStepId($plan))->machine_name;
 }
 
 function chainPlanet(int $playerId, int $planetId): PlanetService
@@ -182,9 +222,10 @@ function chainEconomyTargetIds(): array
 }
 
 /**
- * Every building the host's requirement graph asks for, at the easiest and the deepest level any
+ * Every prerequisite the host's requirement graph asks for, at the easiest and the deepest level any
  * ambition asks for. The deepest is what satisfies the whole graph; the easiest is the unlock the plan
- * starts with.
+ * starts with. Buildings and technologies are both in here, because a prerequisite is a prerequisite
+ * whichever queue ends up taking it.
  *
  * @return array<string, array{easiest: int, deepest: int}>
  */
@@ -194,13 +235,6 @@ function chainHostPrerequisites(): array
 
     foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()] as $object) {
         foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {
-            $type = ObjectService::getObjectByMachineName($machineName)->type;
-
-            // Technologies cannot stand on a planet, and they are not the building queue's step.
-            if (!in_array($type, [GameObjectType::Building, GameObjectType::Station], true)) {
-                continue;
-            }
-
             $current = $levels[$machineName] ?? ['easiest' => $level, 'deepest' => $level];
             $levels[$machineName] = [
                 'easiest' => min($current['easiest'], $level),

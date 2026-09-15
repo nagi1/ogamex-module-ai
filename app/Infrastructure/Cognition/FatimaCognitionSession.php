@@ -33,7 +33,7 @@ class FatimaCognitionSession
 
     /**
      * @param  array<string, string>  $beliefs
-     * @return list<FatimaEmotion>|null
+     * @return array{mood: float, emotions: list<FatimaEmotion>}|null
      */
     public function appraise(AiArchetype $archetype, string $event, array $beliefs): array|null
     {
@@ -45,17 +45,20 @@ class FatimaCognitionSession
             $this->writeBeliefs($scenario, $character, $beliefs);
             $this->client->perceive($scenario, $this->instance(), $character, $event);
 
-            $emotions = $this->client->emotions($scenario, $this->instance(), $character);
+            $state = $this->client->emotions($scenario, $this->instance(), $character);
 
-            if ($emotions === null) {
+            if ($state === null) {
                 return null;
             }
 
             // The pool spans recent appraisals, so only the event just perceived counts.
-            return array_values(array_filter(
-                $emotions,
-                static fn (FatimaEmotion $emotion): bool => $emotion->causeEvent === $event,
-            ));
+            return [
+                'mood' => $state['mood'],
+                'emotions' => array_values(array_filter(
+                    $state['emotions'],
+                    static fn (FatimaEmotion $emotion): bool => $emotion->causeEvent === $event,
+                )),
+            ];
         });
     }
 
@@ -91,7 +94,7 @@ class FatimaCognitionSession
      * perception must not interleave with another appraisal against the same character.
      *
      * @template TResult
-     * @param  Closure(): TResult|null  $operation
+     * @param  Closure(): (TResult|null)  $operation
      * @return TResult|null
      */
     private function sequential(Closure $operation): mixed
@@ -111,7 +114,7 @@ class FatimaCognitionSession
 
     /**
      * @template TResult
-     * @param  Closure(): TResult|null  $operation
+     * @param  Closure(): (TResult|null)  $operation
      * @return TResult|null
      */
     private function underLock(Closure $operation): mixed

@@ -40,7 +40,7 @@ use Modules\AI\Support\AiClock;
  * substitute would be a measured claim this process cannot make.
  */
 #[Description('Measure the real cognition drivers: latency percentiles, payload bytes and observed failure modes.')]
-#[Signature('ai:cognition-conformance {--only= : Measure only one driver (cbrkit or fatima).} {--iterations=20 : Measured calls per driver.} {--confirm : Confirm that this run contacts the real cognition sidecars.}')]
+#[Signature('ai:cognition-conformance {--only= : Measure only one driver (cbrkit or fatima).} {--iterations=20 : Measured calls per driver.} {--mode= : The cognition mode to measure under (native, external or hybrid).} {--confirm : Confirm that this run contacts the real cognition sidecars.}')]
 class RunCognitionConformance extends Command
 {
     private const ARTIFACT_DIRECTORY = 'ai-cognition-conformance';
@@ -70,6 +70,12 @@ class RunCognitionConformance extends Command
             return self::FAILURE;
         }
 
+        $mode = trim((string) ($this->option('mode') ?? ''));
+
+        if ($mode !== '') {
+            config(['ai.cognition.mode' => $mode]);
+        }
+
         $iterations = max(1, (int) ($this->option('iterations') ?? 20));
         $measurements = [];
 
@@ -90,6 +96,7 @@ class RunCognitionConformance extends Command
         $report = [
             'generated_at' => app(AiClock::class)->now()->toIso8601String(),
             'iterations' => $iterations,
+            'mode' => (string) config('ai.cognition.mode', 'external'),
             'payload_limit_bytes' => (int) config('ai.cognition.payload.maximum_response_bytes', 262_144),
             'measurements' => $measurements,
         ];
@@ -227,6 +234,8 @@ class RunCognitionConformance extends Command
         // observable at all.
         $native = app(NativeAffectEngine::class)->appraiseObservedEvent($stimulus);
 
+        $hybrid = (string) config('ai.cognition.mode', 'external') === 'hybrid';
+
         return [
             'driver' => 'fatima',
             'contract' => AffectEngine::class,
@@ -237,11 +246,25 @@ class RunCognitionConformance extends Command
             'latency_ms' => $this->percentiles($durations),
             'request_bytes' => $totals['request'],
             'response_bytes' => $totals['response'],
+            // In hybrid the native emotion stays canonical and the driver contributes its
+            // own mapped emotion, mood and intensity as evidence; in external the driver's
+            // emotion is the answer. Either way the driver must be distinguishable from a
+            // silent native fallback.
             'correct' => $totals['calls'] >= $iterations
                 && $appraisal !== null
-                && $appraisal->emotion === AiAffectEmotion::Anger
-                && $appraisal->intensity !== $native->intensity,
-            'observed' => ['emotion' => $appraisal?->emotion->name, 'intensity' => $appraisal?->intensity],
+                && ($hybrid
+                    ? $appraisal->emotion === $native->emotion
+                        && $appraisal->driverEmotion !== null
+                        && $appraisal->driverIntensity !== $native->intensity
+                        && $appraisal->mood !== null
+                    : $appraisal->emotion === AiAffectEmotion::Anger
+                        && $appraisal->intensity !== $native->intensity),
+            'observed' => [
+                'emotion' => $appraisal?->emotion->name,
+                'intensity' => $appraisal?->intensity,
+                'driver_emotion' => $appraisal?->driverEmotion?->name,
+                'mood' => $appraisal?->mood,
+            ],
             'native' => ['emotion' => $native->emotion->name, 'intensity' => $native->intensity],
             'observed_failure_modes' => [$this->fatimaFailureProbe()],
         ];

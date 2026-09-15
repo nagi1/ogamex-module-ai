@@ -83,6 +83,9 @@ rule forbids **new** duplication; it does not ask for already-shipped fallbacks 
 New driver work adds a contract implementation, a binding, bounded transport, conformance
 and swap evidence — not a parallel algorithm.
 
+The full-utilization and native↔external collaboration work is its own delivery package, Package 5;
+its mode, combiners, milestones and acceptance are in [external drivers](external-drivers.md).
+
 ### The OGame mapping remains concrete
 
 `MapObservedGameEventToStimulusAction` translates a legally delivered battle loss into harm, responsibility, loss relative to the observer's assets, surprise and goal impact. It retains the exact report reference. The external driver sees an observed stimulus, not unrestricted battle tables.

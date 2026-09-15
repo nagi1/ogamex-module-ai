@@ -5,7 +5,9 @@ namespace Modules\AI\Actions;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use LogicException;
+use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\SocialCognition;
+use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Domain\Conversation\SocialExchangeContext;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiCommitmentDirection;
@@ -20,6 +22,9 @@ use Modules\AI\Models\AiSocialExchange;
 
 class EvaluateAiSocialExchangeAction
 {
+    /** How many counterparty facts a help request recalls before weighing them. */
+    private const HISTORY_RECALL_LIMIT = 20;
+
     public function handle(int $exchangeId, float $availableAmount, CarbonImmutable $evaluatedAt): AiSocialExchange|null
     {
         return DB::transaction(function () use ($exchangeId, $availableAmount, $evaluatedAt): AiSocialExchange|null {
@@ -42,41 +47,7 @@ class EvaluateAiSocialExchangeAction
                 return $exchange->refresh();
             }
 
-            $relationship = AiRelationship::query()
-                ->where('player_id', $exchange->player_id)
-                ->where('other_player_id', $exchange->counterparty_player_id)
-                ->first();
-            $outstandingCommitments = AiCommitment::query()
-                ->where('player_id', $exchange->player_id)
-                ->where('counterparty_player_id', $exchange->counterparty_player_id)
-                ->where('state', AiCommitmentState::Accepted)
-                ->count();
-            $context = app()->makeWith(SocialExchangeContext::class, [
-                'exchangeId' => $exchange->id,
-                'type' => $exchange->type,
-                'terms' => $exchange->terms,
-                'trust' => (float) $relationship?->trust,
-                'affinity' => (float) $relationship?->affinity,
-                'threat' => (float) $relationship?->threat,
-                'outstandingCommitments' => $outstandingCommitments,
-                'availableAmount' => max(0, $availableAmount),
-                'evaluatedAt' => $evaluatedAt,
-                'dueAt' => $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
-                'respect' => (float) $relationship?->respect,
-                'socialImportance' => (float) $relationship?->social_importance,
-                // Transient state, read at the moment of evaluation and decayed on the way, so
-                // an apology is weighed against the anger the AI actually holds right now
-                // rather than against what it felt when the harm happened.
-                'anger' => app(CurrentAiAffectIntensityAction::class)->handle(
-                    $exchange->player_id,
-                    AiAffectEmotion::Anger,
-                    $evaluatedAt,
-                ),
-                // An external cognition driver addresses a specific character state and
-                // counterparty; the native engine ignores both.
-                'archetype' => AiProfile::query()->where('player_id', $exchange->player_id)->first()?->archetype,
-                'counterpartyPlayerId' => $exchange->counterparty_player_id,
-            ]);
+            $context = $this->context($exchange, $availableAmount, $evaluatedAt);
             $evaluation = app(SocialCognition::class)->evaluateSocialExchange($context);
 
             $exchange->update([
@@ -105,6 +76,72 @@ class EvaluateAiSocialExchangeAction
 
             return $exchange->refresh();
         });
+    }
+
+    /**
+     * Everything the evaluator reads, assembled in one place so the transaction stays a
+     * sequence of guards and a decision rather than a query sprawl.
+     */
+    private function context(AiSocialExchange $exchange, float $availableAmount, CarbonImmutable $evaluatedAt): SocialExchangeContext
+    {
+        $relationship = AiRelationship::query()
+            ->where('player_id', $exchange->player_id)
+            ->where('other_player_id', $exchange->counterparty_player_id)
+            ->first();
+        $outstandingCommitments = AiCommitment::query()
+            ->where('player_id', $exchange->player_id)
+            ->where('counterparty_player_id', $exchange->counterparty_player_id)
+            ->where('state', AiCommitmentState::Accepted)
+            ->count();
+
+        return app()->makeWith(SocialExchangeContext::class, [
+            'exchangeId' => $exchange->id,
+            'type' => $exchange->type,
+            'terms' => $exchange->terms,
+            'trust' => (float) $relationship?->trust,
+            'affinity' => (float) $relationship?->affinity,
+            'threat' => (float) $relationship?->threat,
+            'outstandingCommitments' => $outstandingCommitments,
+            'availableAmount' => max(0, $availableAmount),
+            'evaluatedAt' => $evaluatedAt,
+            'dueAt' => $exchange->due_at === null ? null : CarbonImmutable::instance($exchange->due_at),
+            'respect' => (float) $relationship?->respect,
+            'socialImportance' => (float) $relationship?->social_importance,
+            // Transient state, read at the moment of evaluation and decayed on the way, so
+            // an apology is weighed against the anger the AI actually holds right now
+            // rather than against what it felt when the harm happened.
+            'anger' => app(CurrentAiAffectIntensityAction::class)->handle(
+                $exchange->player_id,
+                AiAffectEmotion::Anger,
+                $evaluatedAt,
+            ),
+            // An external cognition driver addresses a specific character state and
+            // counterparty; the native engine ignores both.
+            'archetype' => AiProfile::query()->where('player_id', $exchange->player_id)->first()?->archetype,
+            'counterpartyPlayerId' => $exchange->counterparty_player_id,
+            'history' => $this->recalledHistory($exchange, $evaluatedAt),
+        ]);
+    }
+
+    /**
+     * What the AI already knows about the counterparty, recalled only for exchanges whose
+     * rule reads it. A help request is weighed against an outstanding debt; every other type
+     * stays a zero-recall path so greetings and thanks never touch the memory table.
+     *
+     * @return list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>
+     */
+    private function recalledHistory(AiSocialExchange $exchange, CarbonImmutable $evaluatedAt): array
+    {
+        if ($exchange->type !== AiSocialExchangeType::HelpRequest) {
+            return [];
+        }
+
+        return app(LongTermMemory::class)->recallRelevantMemories(app()->makeWith(MemoryRecallQuery::class, [
+            'playerId' => $exchange->player_id,
+            'subjectPlayerId' => $exchange->counterparty_player_id,
+            'now' => $evaluatedAt,
+            'limit' => self::HISTORY_RECALL_LIMIT,
+        ]));
     }
 
     private function responseCreatesCommitment(AiSocialExchange $exchange): bool

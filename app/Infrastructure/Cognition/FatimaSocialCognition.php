@@ -37,16 +37,14 @@ class FatimaSocialCognition implements SocialCognition
         return $this->withheld($exchange, $native) ?? $native;
     }
 
-    private function withheld(SocialExchangeContext $exchange, SocialExchangeEvaluation $native): SocialExchangeEvaluation|null
+    /**
+     * The raw CiF answer for this exchange, or null when the driver could not answer: no
+     * persona, no counterparty, an absent sidecar or an exchange the scenario does not author.
+     *
+     * @return array{name: string, step: string, volitions: array<string, float>}|null
+     */
+    public function evidence(SocialExchangeContext $exchange): array|null
     {
-        // Only an acceptance can be withheld. A native decline, counter or clarification
-        // already answers the exchange, and overriding it would widen the driver's say.
-        if ($native->response !== AiSocialResponse::Accept) {
-            return null;
-        }
-
-        // Without a persona and a counterparty the driver cannot address this exchange at
-        // all, so the module answers with its own evaluation instead of guessing.
         if ($exchange->archetype === null || $exchange->counterpartyPlayerId === null) {
             return null;
         }
@@ -61,11 +59,29 @@ class FatimaSocialCognition implements SocialCognition
             return null;
         }
 
-        $volitions = $this->volitionsFor($exchanges);
+        foreach ($exchanges as $authored) {
+            if ($authored['name'] === (string) config('ai.cognition.fatima.exchange', 'CooperativeMove')) {
+                return $authored;
+            }
+        }
 
-        // An absent exchange or an empty volition set means no mode is usable at the
-        // current step, so the counterparty's standing does not support the exchange.
-        if ($volitions === null || $volitions !== []) {
+        return null;
+    }
+
+    private function withheld(SocialExchangeContext $exchange, SocialExchangeEvaluation $native): SocialExchangeEvaluation|null
+    {
+        // Only an acceptance can be withheld. A native decline, counter or clarification
+        // already answers the exchange, and overriding it would widen the driver's say.
+        if ($native->response !== AiSocialResponse::Accept) {
+            return null;
+        }
+
+        $evidence = $this->evidence($exchange);
+
+        // An absent answer or a usable volition set leaves the native stance in place; only
+        // an authored exchange with an empty volition set means the counterparty's standing
+        // does not support starting it.
+        if ($evidence === null || $evidence['volitions'] !== []) {
             return null;
         }
 
@@ -77,24 +93,8 @@ class FatimaSocialCognition implements SocialCognition
         return app()->makeWith(SocialExchangeEvaluation::class, [
             'response' => AiSocialResponse::Reject,
             'reason' => AiSocialResponseReason::SocialExchangeVolition,
+            'step' => $evidence['step'],
         ]);
-    }
-
-    /**
-     * @param  list<array{name: string, step: string, volitions: array<string, float>}>  $exchanges
-     * @return array<string, float>|null
-     */
-    private function volitionsFor(array $exchanges): array|null
-    {
-        $authored = (string) config('ai.cognition.fatima.exchange', 'CooperativeMove');
-
-        foreach ($exchanges as $exchange) {
-            if ($exchange['name'] === $authored) {
-                return $exchange['volitions'];
-            }
-        }
-
-        return null;
     }
 
     /**

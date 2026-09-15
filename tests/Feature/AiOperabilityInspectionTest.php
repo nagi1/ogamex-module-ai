@@ -158,6 +158,34 @@ test('the explain command explains the newest decisions of the universe by defau
         ->assertExitCode(0);
 });
 
+// The human lines and the JSON are two renderings of one read, and the redaction survives both: a
+// review can parse a decision without being handed the coordinates a candidate carried.
+test('the explain command answers in the same redacted fields as JSON', function (): void {
+    $trace = aiRecordedDecision($this->currentUserId);
+
+    Artisan::call('ai:explain-decision', ['--trace' => $trace->id, '--json' => true]);
+
+    $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload)->toBe([
+        [
+            'trace_id' => $trace->id,
+            'player_id' => $this->currentUserId,
+            'observed_at' => INSPECTION_NOW,
+            'selected_action' => 'Build',
+            'selected_reason' => 'published_capability:build',
+            'selected_score' => 55.5,
+            'components' => ['resource_need' => 30.0, 'archetype_preference' => 25.0],
+            'alternatives' => [
+                ['action' => 'Build', 'score' => 55.5],
+                ['action' => 'DoNothing', 'score' => 5.0],
+            ],
+            'refusals' => ['report:12' => 'expired'],
+            'evidence' => ['resources' => '2026-09-14T05:55:00+00:00'],
+        ],
+    ])->and(json_encode($payload))->not->toContain(INSPECTION_COORDINATE);
+});
+
 test('a partial trace is explained without inventing a score or a component', function (): void {
     $trace = AiDecisionTrace::create([
         'player_id' => $this->currentUserId,

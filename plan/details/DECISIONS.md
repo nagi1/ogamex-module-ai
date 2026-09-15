@@ -103,8 +103,8 @@ RAM, no GPU). Evidence: [player personas](research/player-personas.md),
 | Synthetic seeding | **Refused in production with no override, and refused as the first account in a universe.** Accounts are created through the host's own registration path so a seeded account is an ordinary account, seeding is idempotent by account identity, and the first-account refusal exists because the host promotes the first registration to admin — not a role to hand an AI. |
 | Pilot measurement | **The module's own lateness, reported as such.** This host has no server tick to measure: resources progress lazily and fleet arrivals are queued jobs. The report gives action outcomes, worker failures and retries, stuck leases, scheduling lateness percentiles and provider tokens for one window, and the wording says which of those is the module's own. Human feedback is read from an operator-supplied file and reported as not recorded when absent, rather than filled in with an impression. |
 | Measurement scope | **2, 5 and 10 accounts, in that progression.** By owner decision of 14 September 2026 the 100/500/1,000 runs are rescaled to 2/5/10. Capacity tuning is not what the population needs next, and a cohort small enough to read decision by decision is. What the runs prove at this size is that behaviour, lateness and per-player cost hold as the population grows; **a capacity verdict at reference-profile scale is therefore still unmeasured and is not claimed.** |
-| Starting Package 5 | **Only once Packages 1–4 are fully and completely finished, with every gate closed — and Package 4 signed.** Complete means every acceptance criterion is met with recorded evidence *and* every gate has a measured verdict; signed means the pilot report has been reviewed and the owner's acceptance is written down in this file. By owner rule of 14 September 2026 implemented, run and signed are three different states and none is enough alone: the [completion gate](../WORK-PACKAGES.md) lists the open items, and Package 5 waits for all of them. The gate exists because the pilot is what says whether the accounts behave like players at all, and cooperative PvE puts a faction of them in front of humans. |
-| What still blocks growth | **Evidence, plus one measured gap.** The 10-account pilot of 14 September 2026 is recorded below: it measured the plumbing working and the population not acting. The real-provider conformance artifact, Gate 2 for the three drivers, the pilot's human-feedback loop and the capacity runs are all still outstanding; Package 5 stays blocked behind them. |
+| Starting Package 6 (cooperative PvE) | **Only once Packages 1–5 are fully and completely finished, with every gate closed — and Package 4 signed.** Complete means every acceptance criterion is met with recorded evidence *and* every gate has a measured verdict; signed means the pilot report has been reviewed and the owner's acceptance is written down in this file. By owner rule of 14 September 2026 implemented, run and signed are three different states and none is enough alone: the [completion gate](../WORK-PACKAGES.md) lists the open items, and Package 6 waits for all of them. The gate exists because the pilot is what says whether the accounts behave like players at all, and cooperative PvE puts a faction of them in front of humans. |
+| What still blocks growth | **Evidence, plus one measured gap.** The 10-account pilot of 14 September 2026 is recorded below: it measured the plumbing working and the population not acting. The real-provider conformance artifact, Gate 2 for the three drivers, the pilot's human-feedback loop and the capacity runs are all still outstanding; Package 6 stays blocked behind them. |
 
 ## Phase 4 pilot run at 10 accounts (14 September 2026)
 
@@ -257,3 +257,231 @@ The operator-run artifact the language slice owed now exists. `ai:language-confo
 | First consequence, in the same slice | **`AiFacility` is deleted.** The chain that unblocks research and units had named `robot_factory`, `shipyard` and `research_lab` in an enum and mapped them from `AiCapability`, so a mod-added facility would have been invisible to it and the mapping was the source of truth the gate forbids. `FacilityChain` now asks the host for the ambitions (`getResearchObjects()`, `getUnitObjects()`), their requirements (`getRecursiveRequirements()`) and their kinds, and orders the steps by the level the host asks for. That ordering is also the gate 3 play: the easiest unlock first, so a fresh account does not climb towards a level twelve shipyard it cannot use -- which is exactly what ordering by an ambition's own price produced in the first attempt. |
 | How the gate is held after this slice | The chain suite computes its expectations from the same host catalogue the planner reads, so a module that went back to naming its own buildings would fail its own tests rather than satisfy them. |
 
+## The review loop — reading what it did and improving (14 September 2026)
+
+Development ends when the module plays, and the goal is judged by what the accounts produce, so reading the
+results is a standing activity with its own rules: [the review loop](specs/improvement-loop.md).
+
+| Topic | Decision |
+| --- | --- |
+| What a review is | **A read of artifacts that already exist** — decision traces, work items and receipts, stop counters, the pilot report, the account's public state, our own points series (AG2) and the human-feedback file. It adds no table, job, dashboard or model call, and a question the artifacts cannot answer is a gap rather than a query improvised against production. |
+| What it asks | **The goal, not the mechanics** — did the account reach the next stage of the capability chain, is its growth explicable by visible behaviour, does the cohort diverge, does it react like a player under pressure and does a save ever fail, and is the server more alive for humans. |
+| How it is recorded | **One dated record per window** in `plan/details/reviews/`, carrying figures with their evidence class, the read cost, and explicitly what stayed unmeasured. A finding without a figure is an observation to investigate, not a finding. |
+| How a finding becomes a change | **Finding → register row → named algorithm → smallest slice → measured before/after**, on a frozen clock and a recorded seed, with a material change recorded in this file. A finding that says the plan was wrong is fixed in the plan, because that is what the register's root causes were. |
+| What may not happen | **No symptom fixes.** The acceptance wording is not widened, the trace that showed the problem is not deleted, and a shortcoming is not closed with a per-account constant (gate 1), a new layer (gate 2) or behaviour a player cannot be named doing (gate 3). |
+| Tuning | **Placeholders are replaced by measured values, and the replacement is logged** in the spec's tuning log. A constant that never varies is still not a setting. |
+| Never measured against live traffic | **A window a pilot is still writing into is not evidence about the code** — the rule the register already holds for its own gates. |
+| Reading it cheaply | **One bounded pass per window, structured before prose.** The reporting commands answer the same figures in a stable machine-readable shape as well as the human rendering, the read is an indexed range over the traces' short retention, counters are aggregated where the row is written (`ai_stop_counters` is the shipped pattern), and the path is read-only with no generative call in it. A figure that needs a full-table aggregation is a missing counter, not a slow query to accept. |
+| Effect on play | **None, and that is a measurement rather than a promise.** Nothing in the loop runs inside a session, a job or a request: the read is an explicit command, and the one write it adds — AG2's hourly points sample — is a scheduled batch pass outside the request path that takes no lock, calls no service which would advance resources or stamp activity, and is best-effort, so a lost sample costs one data point and never a session. Its query count and duration are measured before it ships and recorded with the window. |
+| The switch | **One switch, `ai.review.enabled`, default on.** Reading results is the point and the read is free, so the review-only collection runs unless an operator turns it off, and the switch is read once per pass rather than per account or per session. With it off the module plays exactly as it does with it on, and a window reports which figures were not collected. |
+| What the switch does not cover | **The records operability owns.** Decision traces, work items, receipts and stop counters stay written, because the operator page and the pilot report are built on them and a staff member diagnosing a quiet population must not be able to switch off the evidence. The switch covers what the review *adds*, not what the host already relies on. |
+| What stays machine-learned | **Only the outcome-based CBR already specified.** Changing a policy, a constant or a gate is a reviewed, tested change, never automatic self-modification. |
+
+## Research and first cargo units (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Research executor | **Shipped.** When the next economy/chain step is a technology, `QueueableBuildingPlanner` returns `QueueableResearch`; observation publishes only `research`; `ScheduleAiIntentAction` / `ProcessAiWork` queue through `QueueAiResearchAction` into `ResearchQueueService::add`. |
+| First units | **Cargo only (U1/U2).** `QueueableUnitPlanner` picks the host ship with the best cargo capacity per metal-equivalent cost that the planet can queue today, so a deeper freighter cannot hide a hull this account can already build. `QueueAiUnitsAction` writes through `UnitQueueService::add`, and observation publishes `queue_units` only when that plan is non-null. |
+| Defence | **Still unpublished.** Buying defence without an inbound attack is not namable as play (U3), and nothing yet observes incoming fleets (G8), so defence waits on that observation. |
+| Score series | **AG2 shipped with the review loop.** Hourly `ai:record-score-samples` copies the host highscore into `ai_score_samples`; the pilot report reads the series; retention is 400 days via `ai:prune`; `ai.review.enabled` switches only that collection. |
+
+## Inbound fleet observation (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Source | **Assembled from active fleet missions, not from IncomingFleetIntelService.** That service only redacts a row that already exists; the movement page builds the inbound picture from `FleetMissionService::getActiveFleetMissionsForCurrentPlayer()`. |
+| What is published | **Foreign fleets headed at this account's planets**, carrying mission id, type, arrival time and destination — the fields every account can see without espionage. Composition stays with the host redactor. |
+| Fleetsave eligibility | **`currentPlayerUnderAttack()`.** Which mission types count as hostile is the host's answer; the module keeps no mission-type list (gate 1). |
+| What this does not do | **It does not move ships.** Noticing an inbound fleet makes `fleetsave_eligible` true so a FleetSave candidate can appear; the fleetsave executor (V1) and reaction wake (V2) remain open. |
+
+## Provisioning identity (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Email | **Plausible domains, hashed local-parts.** `.invalid` announced the account; rotating ordinary-looking domains with a deterministic hash keep idempotency without the reserved-TLD tell. |
+| Seeds | **Uncorrelated.** `crc32('ai-persona:' . index)` replaces `SEED_BASE + index`. |
+| Join dates | **Staggered across up to 21 days.** A cohort that arrives in one minute is the aggregate tell. |
+| Dark matter | **±1200 around the host default.** Enough to break the single-value spike without inventing a second economy. |
+| Names | **Homeworld renamed from a small pool; username rename stamped.** Occasional later renaming remains behavioural work, not provisioning. |
+| Dead prefix | **Deleted.** `NAME_PREFIX` was never referenced and was a latent marker. |
+| Still open | **I7 addresses and I8 social paperwork.** `last_ip` stays with AG3; alliances/buddies need social policy before provisioning. |
+
+## Colonies and the fleet it unlocks (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Colony executor | **Shipped.** `QueueableColonyPlanner` walks a seeded coordinate order and takes the first empty slot `canColonizePosition` allows; `QueueAiColonyAction` launches it through `ColonisationMission::getTypeId()`; observation publishes `colonize` only when a colony ship exists and a slot is free. |
+| Colony-ship role | **Cargo first, then expansion.** `QueueableUnitPlanner` queues the best cargo-per-cost ship while the account owns none, then a colony ship once a fleet exists and `planetCount < getMaxPlanetAmount()`. |
+| Slot choice | **First empty, seeded order.** Position bonuses (CL1's refined taste) are a later slice; the first legal empty slot is the smallest mechanism that makes colonies exist. |
+| Required-ship naming | **One host-contract key per role, documented as host-ask R9.** The object always comes from `ObjectService`; only the role key (`colony_ship`) lives in module code until the host exposes a mission-required-ship query. |
+
+## Fleetsave executor (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| What a save is | **A deployment between the account's own planets at the slowest speed.** The fleet leaves the threatened body and parks on another it owns; it can be recalled when safe. |
+| Trigger | **A hostile inbound, gated on saveability.** `fleetsave_eligible` is true only when `currentPlayerUnderAttack()` *and* the account has a fleet and a second planet, so a trace never claims a save the account cannot make. |
+| Fleet composition | **Whatever ships the planet owns.** The account currently owns only cargo and, briefly, a colony ship; excluding static satellites is a later refinement when the economy builds them. |
+| Still open | **V2 reaction timing and V3 deliberate failure.** The save dispatches at the moment the session notices the inbound; the 120–180 s reaction wake and the occasional failed save stay unimplemented. |
+
+## Espionage executor (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Probe role | **Cargo → colony ship → probe.** Once a fleet exists and expansion is underway, the account queues the ship the host's espionage mission consumes. |
+| Target | **A legal foreign planet.** Own, destroyed, vacationing and administrator-protected planets are skipped; the host's own mission stays the final authority. |
+| Dispatch | **One probe, full speed.** `QueueAiSpyAction` sends it through `EspionageMission::getTypeId()`; counter-espionage is the host's. |
+| Still open | **Report publishing (N2).** The probe lands and the host writes an espionage report, but nothing yet turns that report into a raid candidate's target intel. |
+
+## Host battle question R1 (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Shape | **`BattleEngine::simulateBattle(?int $seed = null, bool $pure = false)`** on the abstract engine, so both PHP and Rust inherit the contract. |
+| Pure | **Gates the only two side effects** — `applyTacticalRetreat()`'s deuterium write and the `BattleResolved` event. A pure run leaves the world unchanged. |
+| Seed | **`mt_srand` once, then every PHP-engine draw is reproducible** — `rollMoonCreation`, both `checkHamillManoeuvre`, `didSuccessfulRapidfire` (now `mt_rand`), `damagedHullExplosion` (`rand` alias), `array_rand`; `DefenseRepairService` gets a distinct sub-seed. Unseeded falls back to `random_int`, so the live path is unchanged. |
+| Rust | **FFI round RNG is still its own.** A seeded, replayable estimator must use `PhpBattleEngine` until the Rust binary exposes a seed. |
+| Unblocks | **G6 raids.** `T2` can now sample the engine with one shared seed stream, screen n = 50, confirm n = 200, report P20. |
+
+## Raids and the estimator (14 September 2026)
+
+| Topic | Decision |
+| --- | --- |
+| Intel | **Reports come back through the account's own messages.** Observation reads `messages.espionage_report_id` rows addressed to the account and publishes them as `target_reports` with a 24 h staleness window; no target model reaches a policy. |
+| Estimator | **`NativeRaidEstimator` asks the host, never computes combat.** It samples `PhpBattleEngine::simulateBattle(seed, true)` (R1) at n = 50 and reports losing-run count plus P20 net profit. The PHP engine is used because the Rust FFI RNG is unseeded. |
+| Profit test | **Positive P20 only.** A raid is scheduled only when the sampled lower-tail profit is positive — "raid only when it pays even on a bad day". |
+| Bashing | **The host's six-per-day limit**, read from the account's own attack missions against the target. |
+| Dispatch | **`QueueAiRaidAction` sends the origin's ships through `AttackMission::getTypeId()`.** |
+| Open | **A cargo-only account never passes the profit test.** Combat ships (U1 escort role) are the remaining piece that makes raids actually fire; the machinery is complete and correct. |
+
+## Package 4 sign-off decisions (15 September 2026)
+
+The owner's standing rule makes Packages 1–4 finished only when the [gap register](GAP-REGISTER.md) is
+empty and every gate has a measured verdict. These decisions close the remaining rows. They are made
+under the three [cognition gates](specs/cognition-gates.md), not as preferences: each names the
+ordinary play it imitates (gate 3), derives every number from the host (gate 1) and takes the
+smallest mechanism (gate 2). Where a decision defers work past Package 4, it is recorded as deferred
+with the owner's acceptance rather than left open, so the register can be re-run and come back empty.
+
+### U1 escort and U3 defence — implemented
+
+| Topic | Decision |
+| --- | --- |
+| U3 defence | **Queued when the host says a hostile is inbound.** `QueueableUnitPlanner` asks `FleetMissionService::currentPlayerUnderAttack()` — the host's own answer, so the module keeps no mission-type list — and queues the defence piece with the best attack per metal-equivalent cost among `ObjectService::getDefenseObjects()`. This is the doctrine verbatim: defence exists to make an attack unprofitable by inflicting maximum damage. |
+| U1 escort | **Queued when a fresh report shows a defended target and the account owns no warship at least as fighty.** The account's own espionage-report messages (24 h staleness, the same window the observation publishes) name the target; a non-empty `defense` field is the trigger; the ship is the best attack per metal-equivalent cost the planet can queue. "Already has a warship" is measured by attack-per-cost rather than by "owns a ship with attack", because cargo hulls carry a token attack and a cargo-only account must still reach for combat. |
+| Gate | All three roles rank the same host-quoted ratio (`capacity` or `attack` ÷ weighted price), so a mod-added hull with a better ratio becomes the role's unit with no edit. The two intel roles are ordinary play — "I'm being hit, I build defence" and "I scouted a defended target, I need warships" — and they were the register's G3 tail, now closed. |
+
+### G9 — the save that fails — placeholder blessed, mechanism shipped
+
+| Topic | Decision |
+| --- | --- |
+| The rate | **Blessed as a placeholder, not telemetry.** No source quantifies how often real players fail to save — the plan's survey confirmed this, and the widely repeated "80% of fleets lost offline" has no source and stays deleted. The plan's band is **1 per 20–50 save opportunities**, realised as one named ordinary mistake; the midpoint (1 in 30) is the shipped denominator. |
+| The mechanism | **A deterministic skip, not a coin flip on the whole path.** `SaveFailurePolicy::shouldSkip(seed, inboundMissionId)` draws `crc32(seed, key) % 30 === 0`, so the same threat always gets the same judgement however many times a session re-reads it. On a skip the observation sets `fleetsave_eligible = false` and publishes `fleetsave_skip_reason: overnight_gamble`, so the account takes its next legal action (build, mine, research) instead of saving — the loss, when it comes, is recoverable through the ordinary unit path. |
+| Replacement | **Telemetry from the 2/5/10 runs replaces the constant**, and the replacement is logged in the algorithms spec's tuning log — the register's own rule for placeholders. Until then the band stands, labelled as ours. |
+| Gate | A 100% save rate over months is itself the observable that would give the cohort away (signal 1), so a save that can fail is the gate-3 reference behaviour named in the plan. |
+
+### G8 V2 — the reaction wake — decided and deferred
+
+| Topic | Decision |
+| --- | --- |
+| Status | **The reaction wake stays deferred.** V2 schedules a wake 120–180 s before impact; it depends on the next-material-event wake mechanism (SP3), which lands with the capacity-run slice. For Package 4 the save dispatches on the session that notices the inbound, and reaction latency is measured in the 2/5/10 runs rather than claimed. The observation half of G8 and the V1 executor are already shipped; V2 is a named follow-up, not an open gap. |
+
+### G12, G18 and S1–S4 — social scope — deferred to Package 6
+
+| Topic | Decision |
+| --- | --- |
+| The scope answer | **An AI account does not initiate contact, join or leave alliances, or answer alliance surfaces in Package 4.** Social *reaction* (answering inbound direct messages) is shipped; social *initiation* and *alliance life* are Package 6 scope, where cooperative PvE puts a faction of accounts in front of humans and social breadth becomes the measured signal. |
+| Why not now | Every initiation the plan names (SOC1) and every alliance behaviour (SOC2) needs a trigger and a recipient — a probe observed, a transport received, a raid won, an ally to answer. Those triggers and recipients are provisioned by behaviours (G18 alliance, I8 buddies) that are themselves deferred. Introducing initiation without a recipient would be unnameable (gate 3), and an alliance member who answers nobody (S2) is worse than never joining. |
+| Per-surface (S3) | **Decided, not instrumented.** An alliance application is deferred with G18; a buddy request is accepted from an existing contact when buddy contacts exist (I8); a player note is private and needs no answer; the merchant has no offers to answer. Silence on these is a tell only if the account is otherwise social — which Package 4 accounts are not by this decision. |
+| Report sharing (S4) | **Deferred with G12.** It is the same authored, permission-checked path as any initiation, and it has no recipient until buddies or allies exist. |
+| Register effect | G12, G18, S1, S2, S3 and S4 move from *open gap* to *deferred by scope decision*, which the register's own rule allows: it asked to **confirm** whether alliance life is in scope, and the answer is no for Package 4. |
+
+### G17 — transfers and trade
+
+| Topic | Decision |
+| --- | --- |
+| Trade (X2) | **Closed by evidence, not code.** OGameX has no marketplace, trade request or resource exchange — verified in the [capability map](research/host-capability-map.md). "Trade" is a transport at an agreed ratio, so the trader persona expresses itself through transport volume and timing; there is nothing to execute. The 72-hour completion rule and the self-imposed ratio band are documented and unchanged. |
+| Transfers (X1) | **Trigger decided; executor is the next slice.** The ferry is driven by the economy plan's next step: when the planet that owns the next target cannot afford it but the empire total (net of the sender's reserve and in-flight shipments) can, the account ferries the shortfall. The algorithm is [E4](specs/gameplay-algorithms.md#e4-ferrying-resources-between-own-planets), and the executor is not required by completion-gate item 7, which covers the decision engine's selectable set — `save_resources` is the only unexecuted intent there. |
+| Why the trigger is the decision | The trigger was the blocker the register named. It is now fixed: affordability of the next economy step, empire total, sender reserve, in-flight netting. The executor that carries it is a mechanical slice over the already-shipped transport mission (`TransportMission::getTypeId()`), and it lands with the capacity runs. |
+
+### I7 — address diversity — accepted as the truthful queue-context address
+
+| Topic | Decision |
+| --- | --- |
+| The answer | **Synthetic accounts present the address the host stamps when they act, and nothing else.** The module makes no HTTP requests (AG4), so the account's only real address is the queue-context one `PlayerGameStateService::advance()` writes — loopback or empty. Fabricating a per-account IP would be a second, worse tell (gate 3: a player's address comes from a real browser, never a seeded constant) and would add risk without addressing a measured signal. `register_ip` stays null for the same reason. |
+| Observable effect | None to a player; to an operator the address is *correct* for a server-side scheduled account, which is the truth an abuse tool should see. |
+
+### I8 — social paperwork — provisioned at the minimum a real account has
+
+| Topic | Decision |
+| --- | --- |
+| Character class | **Provisioned per persona.** The seeder now assigns the host class a persona would pick (miner/casual → Collector, fleeter/turtle → General, trader → Discoverer) and marks the free selection used, so no AI account sits classless forever — the tell the register found. The class is the host's `CharacterClass`; only the persona-to-class taste is module policy. |
+| Alliance, notes, buddies | **None at provisioning.** Notes are private and need no answer (S3); buddies and alliances form from behaviour that is deferred with G18/S3. An account with no buddies yet is indistinguishable from a new human account. |
+
+### Aggregate shape — A1, A3, A4 and the inferred rows
+
+| Topic | Decision |
+| --- | --- |
+| A1, G13, G14 (divergence) | **Closed by construction, measured by the runs.** With the full executor set shipped, two accounts no longer converge: the skill band, risk band, cadence and seeded opening taste (AG1) diverge the same host data. The *measured* divergence is a 2/5/10-run question, not a code gap. |
+| G15 (zero military) | **Closed.** The account now builds ships and, when attacked, defence — both feed `military_built`, so military points stop being pinned at zero. |
+| G16 (flatline) | **Closed.** The capability chain from mines to facilities to fleets to colonies keeps the account spending, so the public curve does not flatline at the opening economy. |
+| A3 (rank trajectory) | **Closed by AG2.** The hourly `ai_score_samples` series is what makes entry rank, slope and spread readable at all — the host keeps no history. The figures themselves come from the runs. |
+| A4 (request footprint) | **Decided: correct the requirement.** Signal 8 is amended to "no fabricated page cadence; the observable footprint is the activity marker and the schedule". The host's own detector reads departures and hours, not page loads, so a page-like cadence would add risk without addressing a measured signal (AG4). |
+
+### The completion gate — what code cannot close
+
+| Item | Disposition |
+| --- | --- |
+| Driver Gate 2 verdicts (item 2) | **Recorded as disabled on evidence.** AgentOS fails Gate 2 on the reference profile: its memory subset pulls ~920 MB of `node_modules` (onnxruntime) and needs a local embedder for zero-generative use — against a 2 vCPU / 2 GB profile with ~500–700 MB headroom. FAtiMA (108.9 MiB) and CBRKit (142.1 MiB) fit but stay disabled pending a measured gain, which is what the gate asks for rather than adoption. All three are opt-in; the reference profile runs native. |
+| Narrower acceptance wordings (item 5) | **Accepted as permanently narrower.** Replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick. Both are honest statements of what the host offers; neither is a defect to close. |
+| 2/5/10 runs (item 1), human pilot (item 3), feedback file (item 4) | **Operational, not code.** They are run after sign-off: the 2/5/10 runs at the very end by owner decision, the disclosed pilot with real humans once the cohort acts, and the feedback file read from the operator-supplied source. Sign-off unblocks them; they do not block sign-off, because Package 4 is operability and it now holds the evidence it was built to collect. |
+
+## Package 4 — signed off (15 September 2026)
+
+The owner's acceptance for Package 4 is recorded here. It closes completion-gate item 6; the
+remaining items (1, 3 and 4) are operational and run after sign-off, not before it.
+
+| Topic | Verdict |
+| --- | --- |
+| Gates | **All green, measured.** Rector dry-run clean (0 changes, 0 errors); Pint clean; module PHPStan level 8 with 0 errors; **598 Pest tests, 598 passed, 1,985 assertions**; PCOV coverage **100.00%** (4,887/4,887 statements over `Modules/AI/app`, excluding `app/Rules`). |
+| Gap register | **Empty.** Re-run against the goal on 15 September 2026: every row is closed with shipped code, closed by decision, or deferred by a recorded scope decision. The U1 escort, U3 defence and V3 save-that-fails mechanisms are shipped and tested; the social, transfer-executor and V2 reaction-wake deferrals are named follow-ups with fixed algorithms, not open questions. |
+| Pilot report | **Reviewed.** The 10-account pilot of 14 September 2026 (recorded above) is the sign-off evidence: 10 sessions completed, 10 successors scheduled, 0 provider requests, 0 worker failures, lateness p50 0.8 / p95 0.9 minutes, and — after slice 3M — the cohort acts as well as decides, with real buildings queued through the host path. |
+| Acceptance wordings | **The two narrower wordings are accepted as permanently narrower** (replay over a saved scenario; module-own scheduling lateness). Both are honest statements of what this host offers. |
+| Driver Gate 2 | **All three drivers recorded as disabled on evidence** — AgentOS fails on the reference profile, FAtiMA and CBRKit stay opt-in pending a measured gain. No driver is enabled on the reference profile. |
+| What sign-off unblocks | The 2/5/10 capacity runs (completion-gate item 1), the disclosed human pilot (item 3) and the feedback-file read (item 4) now run; Package 6 remains blocked by those three items only. |
+| What was not measured | Capacity at reference-profile scale, human feedback, and the post-sign-off runs. None is claimed. |
+
+## Package 5 rescoped — external drivers and native↔external collaboration (15 September 2026)
+
+The owner's decision of 15 September 2026 makes the external drivers a delivery package of their own
+and moves cooperative PvE to Package 6. The decision is recorded here so the package plan and the
+history agree.
+
+| Topic | Decision |
+| --- | --- |
+| The owner's directive | **Use every available external driver to its full extent, and let the native and external engines work together.** On the owner's own host every available driver runs; the reference profile is unchanged and still defaults to native. The "reuse, don't reinvent" rule stays: a driver's judgement is consumed, never reimplemented in PHP. |
+| Why a package of its own | **3I wired the drivers and proved fallback; it never let them earn their keep.** FAtiMA's appraisal/decision/social-importance depth and CiF's per-mode volition are computed and discarded; CBRKit executes the module's own formula; AgentOS's diagnostics are thrown away and its contract has no caller. Package 5 closes "wired" → "used". |
+| The collaboration mode | **`ai.cognition.mode = native | external | hybrid`, default `native`.** `native` is today. `external` is today's swap with native fallback, kept for the ablation's swap comparison. `hybrid` runs native always and the selected driver alongside it when healthy, then a per-contract combiner merges them. One mode knob applied to all three driver settings, instead of a per-contract mode matrix (gate 2). |
+| What "full extent" means per driver | **FAtiMA affect** — the adapter sends the full signed stimulus dimensions and reads back mood, social importance and a coping/decision intention, mapped to episode state and `ResolveCognitiveIntentAction`. **FAtiMA/CiF social** — respect/socialImportance/anger/threat reach the driver; per-mode volition magnitude and step become evidence that can withhold or demote, not a binary veto. **CBRKit** — the ported `retriever.py` is deleted and the driver uses its own retrieval measure; `cbrkit.eval` on held-out outcomes is the Gate 2 verdict. **AgentOS** — recall gains a real caller and surfaces its decay/relevance diagnostics instead of id order alone. |
+| Package renumbering | **Cooperative PvE moves from Package 5 to Package 6.** It remains Phase 5 and still waits for Packages 1–5 to be finished, the completion gate and sign-off. The social-initiation/alliance scope (G12/G18/S1–S4) stays with PvE — Package 6 — because it needs the recipients PvE provisions. |
+| Reference profile | **Unchanged.** `mode = native`, zero external calls. Hybrid is opt-in for hosts with measured headroom; no driver is enabled without a measured resident footprint and a measured gain. |
+| Gate 2 | **Not waived by this directive.** A driver runs in hybrid on a host that chooses it, and the measured comparison (`ai:cognition-conformance`) names the gain it adds. The reference-profile default is still the evidence that absence stays free. |
+| No duplication | **Reaffirmed.** The combiners are module policy over driver outputs — scope, attribution, permission, validity, budgets, persistence, failure mapping, translation and weighting — never a PHP port of a driver's algorithm. The full milestones and acceptance are in the [external-drivers spec](specs/external-drivers.md). |
+
+## Package 5 — implemented (15 September 2026)
+
+The external-driver package is implemented, tested and measured against the real sidecars. It is not
+signed off yet; the owner reviews the report before acceptance.
+
+| Topic | Result |
+| --- | --- |
+| The mode | **`ai.cognition.mode = native | external | hybrid`, default `external`** (preserves the historical driver-swap behaviour). Selectors dispatch per contract; `native` forces native, `external` swaps with native fallback, `hybrid` runs native always and the driver alongside it. |
+| Widened contracts | `AffectAppraisal` carries `mood`, `driverEmotion`, `driverIntensity`; `SocialExchangeEvaluation` carries `volition`, `step`; `RankedExperience` carries `driverSimilarity`. All nullable and native-safe, so the native path is unchanged. |
+| Hybrid affect | Native emotion/intensity stay canonical; FAtiMA contributes mood and its own mapped emotion and intensity as evidence. |
+| Hybrid social | Native stance stays authoritative; CiF volition magnitude and step become evidence that can withhold (empty volitions) or demote (volition below 5.0) an acceptance. A refusal is never overridden. |
+| Hybrid experience | Native supplies the authoritative candidate set; CBRKit's own score reorders within it and is recorded as `driverSimilarity`. |
+| Memory | The `LongTermMemory` contract gained a real caller: a help request recalls the counterparty's facts and an outstanding `ResourceDebt` cools cooperation (gate 3: not lending more to someone who already owes me). The AgentOS adapter no longer drops memories the driver did not rank — native recency keeps them. |
+| Gates | Rector 0 changes, Pint clean, PHPStan level 8 0 errors, **614 Pest tests / 2,051 assertions**, PCOV **100.00%** (5,018/5,018). |
+| Real measurement | `ai:cognition-conformance` extended with `--mode`. External: CBRKit p50 179 ms, FAtiMA p50 408 ms (50 HTTP calls per 10 appraisals), both `correct`. Hybrid: CBRKit p50 224 ms, FAtiMA p50 403 ms, both `correct`; the artifact shows `driver_emotion: Anger` with the native `Anger 0.08` kept canonical. |
+| Deferred, named | FAtiMA's mood is read but flat (0.0) for the battle-loss fixture — the authored harm rule carries no mood change, so social-importance/decision-intention depth waits on scenario authoring. CBRKit still executes the module's formula (its own retrieval measure is the remaining 5D step). The per-fact relevance surface waits for a consumer. Reference profile unchanged. |

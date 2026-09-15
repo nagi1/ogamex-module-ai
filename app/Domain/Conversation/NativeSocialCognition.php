@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Conversation;
 
 use Modules\AI\Contracts\SocialCognition;
+use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialRepair;
 use Modules\AI\Enums\AiSocialResource;
@@ -13,6 +14,9 @@ use Modules\AI\Enums\AiSocialTerm;
 class NativeSocialCognition implements SocialCognition
 {
     private const MAX_OUTSTANDING_COMMITMENTS = 3;
+
+    /** How much an outstanding counterparty debt cools a new help request. */
+    private const OUTSTANDING_DEBT_PENALTY = 0.5;
 
     public function evaluateSocialExchange(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
@@ -44,7 +48,7 @@ class NativeSocialCognition implements SocialCognition
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Counter, 'reason' => AiSocialResponseReason::InsufficientAvailableAmount, 'counterTerms' => [AiSocialTerm::Amount->value => $exchange->availableAmount]]);
         }
 
-        $cooperation = $this->cooperationScore($exchange);
+        $cooperation = $this->cooperationScore($exchange) - $this->outstandingDebtPenalty($exchange);
 
         if ($cooperation >= 0.75) {
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::TrustedAndSafe]);
@@ -177,6 +181,23 @@ class NativeSocialCognition implements SocialCognition
     private function cooperationScore(SocialExchangeContext $exchange): float
     {
         return $this->standingWeight($exchange) - $exchange->threat;
+    }
+
+    /**
+     * A counterparty who already owes this AI resources is met with less cooperation on a
+     * new help request — the human play of not lending more to someone who has not repaid
+     * the last debt. Only a current, valid debt fact counts: the recall has already filtered
+     * expired, redacted and ended facts, so a recalled debt is a live obligation.
+     */
+    private function outstandingDebtPenalty(SocialExchangeContext $exchange): float
+    {
+        foreach ($exchange->history as $fact) {
+            if (($fact['predicate'] ?? null) === AiMemoryPredicate::ResourceDebt->name) {
+                return self::OUTSTANDING_DEBT_PENALTY;
+            }
+        }
+
+        return 0.0;
     }
 
     private function hasTradeTerms(SocialExchangeContext $exchange): bool

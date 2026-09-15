@@ -5,10 +5,17 @@ namespace Modules\AI\Providers;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
+use Modules\AI\Actions\QueueAiColonyAction;
+use Modules\AI\Actions\QueueAiFleetSaveAction;
+use Modules\AI\Actions\QueueAiRaidAction;
+use Modules\AI\Actions\QueueAiResearchAction;
+use Modules\AI\Actions\QueueAiSpyAction;
+use Modules\AI\Actions\QueueAiUnitsAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
+use Modules\AI\Console\Commands\RecordAiScoreSamples;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
 use Modules\AI\Console\Commands\RunCognitionConformance;
@@ -22,6 +29,13 @@ use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\LanguageGateway;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\QueueAiBuilding;
+use Modules\AI\Contracts\QueueAiColony;
+use Modules\AI\Contracts\QueueAiFleetSave;
+use Modules\AI\Contracts\QueueAiRaid;
+use Modules\AI\Contracts\QueueAiResearch;
+use Modules\AI\Contracts\QueueAiSpy;
+use Modules\AI\Contracts\QueueAiUnits;
+use Modules\AI\Contracts\RaidEstimator;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
@@ -33,6 +47,7 @@ use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Enums\AiCognitionDriver;
+use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Infrastructure\Cognition\FatimaClient;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
@@ -74,6 +89,7 @@ class AIServiceProvider extends ModuleServiceProvider
         ExplainAiDecision::class,
         PruneAiRecords::class,
         ReconcileLanguageRequests::class,
+        RecordAiScoreSamples::class,
         ReplayAiScenario::class,
         ReportAiPilot::class,
         RunCognitionConformance::class,
@@ -104,11 +120,16 @@ class AIServiceProvider extends ModuleServiceProvider
     /**
      * Dispatch due AI work every minute. The command only leases and enqueues; every
      * decision still runs inside its leased, idempotent job on the AI Horizon lane.
+     *
+     * The score sample is hourly and off the session path: it exists so the growth curve can be
+     * read back at all (the host keeps no score history), and the command itself decides whether
+     * the review collection is switched on, so a manual run behaves exactly like this one.
      */
     protected function configureSchedules(Schedule $schedule): void
     {
         $schedule->command('ai:run-due-work')->everyMinute()->withoutOverlapping(5);
         $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
+        $schedule->command('ai:record-score-samples')->hourly()->withoutOverlapping(5);
         // Retention is enforced on a quiet hour rather than at the moment a row
         // expires: a nightly sweep is one delete per table instead of a job per
         // row, and the windows are measured in days.
@@ -140,6 +161,13 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->singleton(FatimaScenarioTemplate::class);
         $this->app->singleton(FatimaCognitionSession::class);
         $this->app->bind(QueueAiBuilding::class, QueueAiBuildingAction::class);
+        $this->app->bind(QueueAiResearch::class, QueueAiResearchAction::class);
+        $this->app->bind(QueueAiUnits::class, QueueAiUnitsAction::class);
+        $this->app->bind(QueueAiColony::class, QueueAiColonyAction::class);
+        $this->app->bind(QueueAiFleetSave::class, QueueAiFleetSaveAction::class);
+        $this->app->bind(QueueAiRaid::class, QueueAiRaidAction::class);
+        $this->app->bind(RaidEstimator::class, NativeRaidEstimator::class);
+        $this->app->bind(QueueAiSpy::class, QueueAiSpyAction::class);
         $this->app->bind(AiClock::class, SystemAiClock::class);
         $this->app->bind(RandomSource::class, SeededRandomSource::class);
         $this->app->tag([
