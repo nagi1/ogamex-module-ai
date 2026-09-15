@@ -875,3 +875,27 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   `transferPrerequisites`) satisfy the mission research the same way.
 - Gates: `quality` green (687 tests, Pint/PHPStan/Rector/Gate 2 all clean); coverage unchanged at
   98.79% — the additions are covered, the remaining gaps are IMPL-023's.
+
+### IMPL-023 — coverage 98.79% -> 99.33%, remaining branches recorded (15 September 2026)
+- Closed: the whole transfer intent dispatch path — `ExecuteAiIntentAction::transfer` (payload,
+  re-plan and drop branches), `QueueAiTransferAction`'s ownership/ban/vacation guards and empty
+  shipment, and the adapter's `PlanetNotOwned` pair. Tests: three intent tests + two adapter-branch
+  tests in `TransferDepthTest`, and `QueueAiTransfer` added to `QueueActionGuardsTest`'s three
+  enumerations. Suite 686 -> 693 green.
+- Remaining 39 lines, each a branch that needs a fixture the current helpers do not build:
+  `QueueAiTransferAction` 77/78 (the catch — the host refuses without throwing), 98 (a ship with no
+  cargo hold reaching the loop), 103 (`$amount <= 0`); `ScheduleAiIntentAction` 260-267
+  (`scheduleTransfer`, needs the schedule path); `CandidateActionFactory` 139-145
+  (`eligibleTransferCandidates`) and 196-202 (raid candidate creation); `QueueableFleetSavePlanner`
+  63 (proactive save with no profile) and 119 (fewer than two free fleet slots);
+  `QueueableTransferPlanner` 73/153/173 (no source can spare the shipment — one test covers all
+  three) and 96/123 (`nextStepPrice` with no candidates, i.e. a fully-satisfied planet);
+  `RaidPlanner` 82 (`storageReady` with zero storage capacity); `UtilityScorer` 36 (a
+  policy-denied candidate); `PlayerObservationService` 148; `AiCandidateReason` 21/23
+  (`reportSource`, reached by the raid-candidate test); `ProcessAiWork` 281 (no schedule row);
+  `AIServiceProvider` 139 (a session interval in 1..10 s).
+- Note for the next pass: the transfer-intent and factory tests both need the intent helpers
+  (`intentTrace`/`intentSchedule`) and the transfer fixture, and Pest's parallel workers isolate test
+  files — so those helpers have to move to `tests/Support/` and be `require_once`d from
+  `tests/Pest.php` (the `FixturePlayerPerceptionBuilder` pattern) before the factory path can be
+  covered.
