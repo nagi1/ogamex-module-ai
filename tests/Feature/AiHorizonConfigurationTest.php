@@ -1,5 +1,6 @@
 <?php
 
+use Modules\AI\Providers\AIServiceProvider;
 use Modules\AI\Support\HorizonConfiguration;
 use Tests\IsolatedAccountTestCase;
 
@@ -107,4 +108,17 @@ test('a partial plan file is read from the configured path', function (): void {
     } finally {
         unlink($planFile);
     }
+});
+
+// The accelerated universe repeats the work pass every ten seconds instead of once a minute.
+test('a fast session interval repeats the work pass every ten seconds', function (): void {
+    config(['ai.population.session_interval_seconds' => 5]);
+
+    $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
+    (new ReflectionMethod(AIServiceProvider::class, 'configureSchedules'))->invoke(new AIServiceProvider($this->app), $schedule);
+
+    $events = collect($schedule->events())->filter(static fn ($event): bool => str_contains((string) $event->command, 'ai:run-due-work'));
+
+    expect($events->isNotEmpty())->toBeTrue()
+        ->and($events->contains(static fn ($event): bool => $event->isRepeatable()))->toBeTrue();
 });

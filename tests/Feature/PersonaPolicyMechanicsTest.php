@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Date;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\RunAiSession;
+use Modules\AI\Domain\Decision\CandidateAction;
+use Modules\AI\Domain\Decision\CandidateGeneration;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -15,6 +17,7 @@ use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
+use Modules\AI\Domain\Decision\UtilityScorer;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Enums\AiArchetype;
@@ -78,6 +81,42 @@ test('skill bands vary selection only within their defined deterministic margins
 
     expect($novice->selected_action)->toBeInstanceOf(AiCandidateActionType::class)
         ->and($veteran->selected_action)->toBe(AiCandidateActionType::Build);
+});
+
+// The scorer's policy boundary is `allows`: a candidate a persona denies is dropped before any score
+// is computed, so preference can never smuggle a prohibited action into the ranking.
+test('a candidate the policy denies is dropped before scoring', function (): void {
+    $denyRaid = new class () implements ArchetypePolicy {
+        public function archetype(): AiArchetype
+        {
+            return AiArchetype::Fleeter;
+        }
+
+        public function allows(AiCandidateActionType $action): bool
+        {
+            return $action !== AiCandidateActionType::Raid;
+        }
+
+        public function preference(AiCandidateActionType $action): float
+        {
+            return 0.0;
+        }
+    };
+    $this->app->singleton(ArchetypePolicyResolver::class, fn (): ArchetypePolicyRegistry => app()->makeWith(ArchetypePolicyRegistry::class, [
+        'policies' => [$denyRaid],
+    ]));
+
+    $profile = AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Fleeter, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 1]);
+    $raid = app()->makeWith(CandidateAction::class, [
+        'type' => AiCandidateActionType::Raid,
+        'reason' => 'denied-fixture',
+        'parameters' => [],
+        'features' => ['resource_need' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0],
+        'sourceTimestamps' => [],
+    ]);
+    $generation = app()->makeWith(CandidateGeneration::class, ['candidates' => [$raid], 'rejections' => []]);
+
+    expect(app(UtilityScorer::class)->score($profile, $generation, 'denied'))->toBe([]);
 });
 
 function aiPersonaRegisterPolicies(Container $app): void

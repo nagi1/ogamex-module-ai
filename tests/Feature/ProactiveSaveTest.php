@@ -57,6 +57,12 @@ test('no fleet, no proactive save', function (): void {
     expect(app(QueueableFleetSavePlanner::class)->proactivePlan($this->currentUserId, 120))->toBeNull();
 });
 
+// An account the module does not manage has no exposure band to weigh, so a long absence is not a
+// save either: the planner refuses rather than saving for a stranger.
+test('a proactive save for an unmanaged account is refused', function (): void {
+    expect(app(QueueableFleetSavePlanner::class)->proactivePlan($this->currentUserId + 500, 180))->toBeNull();
+});
+
 test('the factory offers a proactive save only for an upcoming absence', function (): void {
     proactiveSaveProfile($this->currentUserId, AiArchetype::Fleeter);
     proactiveSaveDestination($this->currentUserId);

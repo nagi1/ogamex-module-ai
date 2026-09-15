@@ -99,9 +99,6 @@ class QueueAiTransferAction implements QueueAiTransfer
             }
 
             $amount = min((int) ceil($remaining / $capacity), $entry->amount);
-            if ($amount <= 0) {
-                continue;
-            }
 
             $fleet->addUnit($entry->unitObject, $amount);
             $remaining -= $amount * $capacity;

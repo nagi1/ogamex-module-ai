@@ -572,6 +572,26 @@ test('a job that exhausted its attempts leaves the work item for lease reclaim',
         ->and($unchanged?->lease_token)->toBeNull();
 });
 
+// A failed session whose profile has no schedule row recovers by doing nothing: the successor step
+// has nowhere to hang, so the module leaves the item failed rather than inventing a schedule.
+test('a failed session without a schedule row recovers by doing nothing', function (): void {
+    aiWorkProfile($this->currentUserId);
+    $workItem = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now(),
+        'schedule_generation' => 3,
+        'idempotency_key' => 'session:no-schedule:' . $this->currentUserId,
+        'state' => AiWorkState::Failed,
+        'attempts' => 3,
+    ]);
+
+    (new ProcessAiWork($workItem->id))->failed(new RuntimeException('session failed'));
+
+    expect($workItem->fresh()?->state)->toBe(AiWorkState::Failed)
+        ->and(AiWorkItem::query()->where('idempotency_key', 'session:' . $this->currentUserId . ':4')->exists())->toBeFalse();
+});
+
 test('an exhausted session schedules one delayed successor without reopening the failed item', function (): void {
     $schedule = AiSchedule::create([
         'player_id' => $this->currentUserId,

@@ -10,6 +10,7 @@ use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
 use OGame\Models\FleetMission;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use Tests\IsolatedAccountTestCase;
 
@@ -71,6 +72,41 @@ test('the fleetsave action refuses a planet it does not own', function (): void 
 
     expect($notOwned->successful)->toBeFalse()
         ->and($notOwned->reason)->toBe(\Modules\AI\Enums\AiQueueActionReason::PlanetNotOwned->value);
+});
+
+// A shadow split needs two own bodies and two free fleet slots; with the slots spent, the save still
+// flies but stays whole rather than splitting into a second wave it cannot launch (FS-009).
+test('a shadow split is withheld when fewer than two slots are free', function (): void {
+    fleetProfile($this->currentUserId);
+    Planet::factory()->create([
+        'user_id' => $this->currentUserId,
+        'galaxy' => 5,
+        'system' => 10,
+        'planet' => 15,
+        'time_last_update' => now()->subHour()->getTimestamp(),
+    ]);
+    $this->planetAddUnit('small_cargo', 1);
+
+    // The account holds six slots (computer 5); spending five leaves one free, so the split is
+    // withheld while the save itself still flies.
+    for ($index = 0; $index < 5; $index++) {
+        FleetMission::query()->forceCreate([
+            'user_id' => $this->currentUserId,
+            'planet_id_from' => $this->currentPlanetId,
+            'planet_id_to' => $this->currentPlanetId,
+            'mission_type' => 3,
+            'time_departure' => now()->subMinute()->getTimestamp(),
+            'time_arrival' => now()->addHour()->getTimestamp(),
+            'time_arrival_ms' => 0,
+            'processed' => 0,
+            'canceled' => 0,
+        ]);
+    }
+
+    $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableFleetSave::class)
+        ->and($plan?->shadowDestinationPlanetId)->toBe(0);
 });
 
 test('a save the policy skips is withheld and the gamble is named', function (): void {

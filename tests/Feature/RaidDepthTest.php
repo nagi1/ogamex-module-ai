@@ -9,6 +9,8 @@ use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerObservationService;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCandidateActionType;
+use Modules\AI\Enums\AiCandidateReason;
 use Modules\AI\Enums\AiCandidateRejectionReason;
 use Modules\AI\Enums\AiCapability;
 use Modules\AI\Enums\AiQueueActionReason;
@@ -226,6 +228,74 @@ test('an unfilled warehouse drops every visible target', function (): void {
         ->and(array_column($generation->candidates, 'reason'))->not->toContain('fresh_visible_report');
 });
 
+// The successful half of the raid gate: a permitted, fresh, viable report on a full warehouse whose
+// planner accepts the flight becomes a candidate, and its source timestamp is the report that made it.
+test('a viable report is offered as a fresh-report raid candidate', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $reportId = raidDepthReport(
+        $this->currentUserId,
+        $foreign->getPlanetCoordinates()->galaxy,
+        $foreign->getPlanetCoordinates()->system,
+        $foreign->getPlanetCoordinates()->position,
+        ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000],
+    );
+
+    $now = CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC');
+    $snapshot = app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => $this->currentUserId,
+        'observedAt' => $now,
+        'planets' => [['id' => $this->currentPlanetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
+        'targetReports' => [[
+            'report_id' => $reportId,
+            'observed_at' => $now->getTimestamp(),
+            'expires_at' => $now->addHour()->getTimestamp(),
+            'confidence' => 0.8,
+            'travel_cost' => 0.2,
+            'attack_permitted' => true,
+            'score_viable' => true,
+        ]],
+        'availableActions' => array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
+        'fleetsaveEligible' => false,
+        'recoveryFactor' => 0.1,
+        'sourceTimestamps' => [],
+    ]);
+
+    $generation = app(CandidateActionFactory::class)->create($snapshot);
+
+    $raid = collect($generation->candidates)->first(static fn ($candidate): bool => $candidate->type === AiCandidateActionType::Raid);
+
+    expect($raid)->not->toBeNull()
+        ->and($raid?->sourceTimestamps)->toHaveKey(AiCandidateReason::reportSource($reportId));
+});
+
+// A warehouse that cannot hold anything cannot fill, so the raid storage gate stays shut (RAID-009).
+test('the storage gate stays shut when the warehouse cannot hold anything', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddUnit('small_cargo', 1);
+    Planet::query()->whereKey($this->currentPlanetId)->update(['metal_max' => 0, 'crystal_max' => 0, 'deuterium_max' => 0]);
+
+    expect(app(RaidPlanner::class)->storageReady($this->currentUserId))->toBeFalse();
+});
+
+// A report that names its target user is compared against that user's own score rather than a null.
+test('a report naming its target user is scored against that user', function (): void {
+    raidDepthProfile($this->currentUserId);
+    Highscore::query()->where('player_id', $this->currentUserId)->update(['general' => 1000]);
+    $targetUser = User::factory()->create();
+    Highscore::query()->updateOrCreate(['player_id' => $targetUser->id], ['general' => 500]);
+
+    $reportId = raidDepthReport($this->currentUserId, 1, 2, 3, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], $targetUser->id);
+
+    $reports = app(PlayerObservationService::class)->ownedState($this->currentUserId)['target_reports'];
+    $byReport = array_column($reports, null, 'report_id');
+
+    expect($byReport[$reportId]['score_viable'])->toBeTrue();
+});
+
 function raidDepthProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -237,14 +307,14 @@ function raidDepthProfile(int $playerId): AiProfile
     ]);
 }
 
-function raidDepthReport(int $playerId, int $galaxy, int $system, int $position, array $resources): int
+function raidDepthReport(int $playerId, int $galaxy, int $system, int $position, array $resources, ?int $targetUserId = null): int
 {
     $report = new EspionageReport();
     $report->planet_galaxy = $galaxy;
     $report->planet_system = $system;
     $report->planet_position = $position;
     $report->planet_type = 1;
-    $report->planet_user_id = null;
+    $report->planet_user_id = $targetUserId;
     $report->resources = $resources + ['energy' => 0];
     $report->debris = [];
     $report->buildings = [];

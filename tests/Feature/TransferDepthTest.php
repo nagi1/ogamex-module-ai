@@ -1,11 +1,20 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use Modules\AI\Actions\ExecuteAiIntentAction;
 use Modules\AI\Actions\QueueAiTransferAction;
+use Modules\AI\Actions\ScheduleAiIntentAction;
 use Modules\AI\Contracts\QueueAiTransfer;
+use Modules\AI\Domain\Decision\CandidateAction;
+use Modules\AI\Domain\Decision\CandidateActionFactory;
+use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableTransfer;
 use Modules\AI\Domain\Decision\QueueableTransferPlanner;
+use Modules\AI\Domain\Decision\ScoredCandidate;
+use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCandidateActionType;
+use Modules\AI\Enums\AiCapability;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
@@ -15,6 +24,7 @@ use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\FleetMission;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -207,6 +217,122 @@ test('a ferry the host refuses is reported, not thrown', function (): void {
     expect($result->successful)->toBeFalse();
 });
 
+// A flight the host refuses after the adapter has already picked the fleet travels through the
+// catch: the ferry is reported as refused, never thrown.
+test('a ferry the host refuses for fuel is reported, not thrown', function (): void {
+    transferProfile($this->currentUserId);
+    $targetId = transferTarget($this->secondPlanetService);
+    transferSource();
+    // A long flight with no deuterium left: the host's sanity check refuses it after the adapter
+    // built the fleet, which is the only path that reaches the catch.
+    Planet::query()->whereKey($targetId)->update(['galaxy' => 5, 'system' => 10, 'planet' => 15]);
+    $this->planetDeductResources(new Resources(0, 0, 1_000_000));
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    $result = app(QueueAiTransfer::class)->handle(
+        $this->currentUserId,
+        $plan->sourcePlanetId,
+        $plan->targetPlanetId,
+        $plan->metal,
+        $plan->crystal,
+        $plan->deuterium,
+    );
+
+    expect($result->successful)->toBeFalse();
+});
+
+// A hull with no cargo hold at all is skipped by the ferry loop rather than counted as capacity.
+test('a hull with no cargo hold is never taken on a ferry', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
+    $this->planetAddUnit('solar_satellite', 1);
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    expect(app(QueueAiTransfer::class)->handle(
+        $this->currentUserId,
+        $plan->sourcePlanetId,
+        $plan->targetPlanetId,
+        $plan->metal,
+        $plan->crystal,
+        $plan->deuterium,
+    )->reason)->toBe(AiQueueActionReason::NoTransportFleet->value);
+});
+
+// The schedule arm for a transfer carries the plan the session approved, so the ferry funds the
+// body the decision saw rather than a re-decided shortfall.
+test('the transfer intent schedules the shipment the plan approved', function (): void {
+    $profile = transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $session = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now(),
+        'idempotency_key' => 'transfer-schedule:' . $this->currentUserId . ':' . uniqid(),
+        'state' => AiWorkState::Pending,
+    ]);
+
+    app(ScheduleAiIntentAction::class)->handle($profile, $session, transferDecisionTrace($this->currentUserId, $this->currentPlanetId));
+
+    $intent = AiWorkItem::query()->where('idempotency_key', 'intent:session:' . $session->id)->first();
+
+    expect($intent)->not->toBeNull()
+        ->and($intent?->kind)->toBe(AiWorkKind::Transfer)
+        ->and($intent?->payload)->toHaveKeys(['source_planet_id', 'target_planet_id', 'metal', 'crystal', 'deuterium']);
+});
+
+// The candidate factory offers a transfer when the account can ferry, and none when it cannot.
+test('the factory offers a transfer when the account can ferry', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $generation = app(CandidateActionFactory::class)->create(transferSnapshot($this->currentUserId, $this->currentPlanetId));
+
+    expect(array_map(static fn ($candidate): AiCandidateActionType => $candidate->type, $generation->candidates))
+        ->toContain(AiCandidateActionType::Transfer);
+});
+
+// The ferry iterates the target's own row and skips it, then funds the shortfall from the other body.
+test('a homeworld shortfall is funded from the colony', function (): void {
+    transferProfile($this->currentUserId);
+    $homeId = transferTarget($this->planetService);
+    $this->secondPlanetService->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class)
+        ->and($plan?->sourcePlanetId)->toBe($this->secondPlanetService->getPlanetId())
+        ->and($plan?->targetPlanetId)->toBe($homeId);
+});
+
+// A shortfall no other body can spare stays unfunded: the source pass finds nothing and the plan
+// falls through rather than inventing a shipment.
+test('a shortfall no other planet can spare is left unfunded', function (): void {
+    transferProfile($this->currentUserId);
+    transferTarget($this->secondPlanetService);
+
+    expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+// A planet whose own next step is beyond the payback horizon is not a shortfall the ferry reads,
+// so nothing is shipped for it either.
+test('a planet with no next step is skipped by the ferry', function (): void {
+    transferProfile($this->currentUserId);
+    transferSaturate($this->planetService);
+
+    expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
 function transferProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -298,4 +424,76 @@ function transferPrerequisites(): array
     }
 
     return $levels;
+}
+
+/** A decision trace whose selected action is Transfer, for the schedule arm. */
+function transferDecisionTrace(int $playerId, int $planetId): DecisionTrace
+{
+    $candidate = app()->makeWith(CandidateAction::class, [
+        'type' => AiCandidateActionType::Transfer,
+        'reason' => 'transfer-fixture',
+        'parameters' => [],
+        'features' => ['resource_need' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0],
+        'sourceTimestamps' => [],
+    ]);
+    $selected = app()->makeWith(ScoredCandidate::class, ['candidate' => $candidate, 'score' => 1.0, 'components' => []]);
+
+    return app()->makeWith(DecisionTrace::class, [
+        'perception' => app()->makeWith(PerceptionSnapshot::class, [
+            'playerId' => $playerId,
+            'observedAt' => CarbonImmutable::instance(now()),
+            'planets' => [],
+            'targetReports' => [],
+            'availableActions' => [],
+            'fleetsaveEligible' => false,
+            'recoveryFactor' => 0.0,
+            'sourceTimestamps' => [],
+            'inboundFleets' => [],
+        ]),
+        'candidates' => [$selected],
+        'selected' => $selected,
+        'rejections' => [],
+        'inputHash' => 'transfer-fixture',
+    ]);
+}
+
+/** A minimal perception over the account the ferry reads; the transfer eligibility is the planner's. */
+function transferSnapshot(int $playerId, int $planetId): PerceptionSnapshot
+{
+    return app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => $playerId,
+        'observedAt' => CarbonImmutable::instance(now()),
+        'planets' => [['id' => $planetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
+        'targetReports' => [],
+        'availableActions' => array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
+        'fleetsaveEligible' => false,
+        'recoveryFactor' => 0.1,
+        'sourceTimestamps' => [],
+    ]);
+}
+
+/**
+ * A planet whose own next step is beyond every horizon: deep mines repay nothing inside the payback
+ * cap, the energy is covered, the chain is satisfied and the warehouse is empty, so the ferry's
+ * next-step read finds no shortfall at all.
+ */
+function transferSaturate(PlanetService $planet): void
+{
+    foreach (transferPrerequisites() as $machineName => $level) {
+        $object = ObjectService::getObjectByMachineName($machineName);
+        if ($object->type === GameObjectType::Research) {
+            test()->playerSetResearchLevel($machineName, $level);
+            continue;
+        }
+
+        $planet->setObjectLevel($object->id, $level, true);
+    }
+    foreach (['solar_plant' => 40, 'metal_mine' => 25, 'crystal_mine' => 25, 'deuterium_synthesizer' => 25, 'metal_store' => 30, 'crystal_store' => 30, 'deuterium_store' => 30] as $machineName => $level) {
+        $planet->setObjectLevel(ObjectService::getObjectByMachineName($machineName)->id, $level, true);
+    }
+
+    $planet->updateResources(false);
+    $planet->updateResourceProductionStats(false);
+    $planet->updateResourceStorageStats(false);
+    $planet->deductResources(new Resources($planet->metal()->get(), $planet->crystal()->get(), $planet->deuterium()->get()));
 }
