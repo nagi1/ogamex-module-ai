@@ -32,7 +32,7 @@ beforeEach(function (): void {
     app()->bind(LongTermMemory::class, fn (): LongTermMemory => app(LongTermMemorySelector::class)->resolve());
 });
 
-function recordRecallFact(int $playerId, int $subjectPlayerId, string $tag, int|null $sourceObservationId = null): AiMemoryFact
+function recordRecallFact(int $playerId, int $subjectPlayerId, string $tag, int|null $sourceObservationId = null, string|null $validFrom = null): AiMemoryFact
 {
     // Each fact needs its own source, because the recorder deduplicates on it and a repeated
     // source would silently return the first fact instead of creating another one.
@@ -45,7 +45,7 @@ function recordRecallFact(int $playerId, int $subjectPlayerId, string $tag, int|
         AiMemoryEvidenceKind::Claimed,
         ['alliance_tag' => $tag],
         $sourceObservationId ?? ++$nextSourceId,
-        CarbonImmutable::parse(AGENTOS_NOW),
+        CarbonImmutable::parse($validFrom ?? AGENTOS_NOW),
     );
 }
 
@@ -272,4 +272,35 @@ test('the client accepts an empty ranking as an answer', function (): void {
     Http::fake(['*' => Http::response(['ranking' => []], 200)]);
 
     expect(agentOsClient()->recall(1, 'anything', 5, [['id' => 7, 'text' => 'x', 'tags' => []]]))->toBe([]);
+});
+
+test('hybrid memory does not evict the native recency cut', function (): void {
+    config(['ai.cognition.mode' => 'hybrid']);
+    $subject = $this->createUser();
+    recordRecallFact($this->currentUserId, $subject->id, 'RAVEN', null, '2026-09-11 11:59:00 UTC');
+    recordRecallFact($this->currentUserId, $subject->id, 'FORMER', null, '2026-09-11 11:58:00 UTC');
+    $oldest = recordRecallFact($this->currentUserId, $subject->id, 'HIDDEN', null, '2026-09-11 11:57:00 UTC');
+
+    // The driver ranks a fact native recency cut out. Hybrid must not promote it over the cut,
+    // because recency owns membership in hybrid mode.
+    Http::fake(['*' => Http::response(['ranking' => [['id' => $oldest->id]]], 200)]);
+
+    $recalled = app(LongTermMemory::class)->recallRelevantMemories(agentOsQuery($this->currentUserId, $subject->id, 2));
+
+    expect(recalledTags($recalled))->toBe(['RAVEN', 'FORMER']);
+});
+
+test('hybrid memory floats a ranked fact within the native recency cut', function (): void {
+    config(['ai.cognition.mode' => 'hybrid']);
+    $subject = $this->createUser();
+    recordRecallFact($this->currentUserId, $subject->id, 'RAVEN', null, '2026-09-11 11:59:00 UTC');
+    $older = recordRecallFact($this->currentUserId, $subject->id, 'FORMER', null, '2026-09-11 11:58:00 UTC');
+    recordRecallFact($this->currentUserId, $subject->id, 'HIDDEN', null, '2026-09-11 11:57:00 UTC');
+
+    // The driver ranks a fact inside the cut. Relevance leads, recency membership is unchanged.
+    Http::fake(['*' => Http::response(['ranking' => [['id' => $older->id]]], 200)]);
+
+    $recalled = app(LongTermMemory::class)->recallRelevantMemories(agentOsQuery($this->currentUserId, $subject->id, 2));
+
+    expect(recalledTags($recalled))->toBe(['FORMER', 'RAVEN']);
 });

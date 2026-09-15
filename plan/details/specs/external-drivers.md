@@ -121,7 +121,11 @@ which order each engine contributed.
 ### Memory — a real caller first, then the driver's ranking
 
 Native keeps supplying the authoritative, scoped, redaction-aware fact set; AgentOS keeps ranking a
-candidate set the module sends, storing nothing. Two things are missing and both are in scope:
+candidate set the module sends, storing nothing. The merge depends on the configured cognition mode
+(`AgentOsLongTermMemory` owns it): `external` lets the driver's ranking decide which facts survive the
+caller's limit with the native recency floor beneath it, and `hybrid` keeps the native recency set
+and uses the driver's ranking only to reorder within it, so relevance floats to the front without
+evicting recency. Two things are missing and both are in scope:
 
 1. **A caller.** `ContextBuilder` packs caller-supplied sections and never consults `LongTermMemory`.
    The hybrid only matters once recalled history reaches a decision or a reply, so this package wires

@@ -153,8 +153,9 @@ test('the memory selector dispatches by mode', function (): void {
     config(['ai.cognition.mode' => 'native']);
     expect(app(LongTermMemorySelector::class)->resolve())->toBeInstanceOf(Modules\AI\Domain\Conversation\NativeLongTermMemory::class);
 
-    // The memory adapter already composes native candidates with the driver's ranking, so
-    // external and hybrid resolve to the same implementation.
+    // Both modes resolve to the same adapter; the mode selects the merge (external lets the
+    // ranking decide the cut, hybrid reorders within the native cut) and is covered by the
+    // hybrid behaviour tests in AgentOsMemoryDriverTest.
     config(['ai.cognition.mode' => 'external']);
     expect(app(LongTermMemorySelector::class)->resolve())->toBeInstanceOf(AgentOsLongTermMemory::class);
 

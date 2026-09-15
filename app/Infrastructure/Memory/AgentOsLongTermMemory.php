@@ -4,6 +4,7 @@ namespace Modules\AI\Infrastructure\Memory;
 
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
+use Modules\AI\Enums\AiCognitionMode;
 
 /**
  * Recalls older memories with the AgentOS memory driver.
@@ -17,11 +18,22 @@ use Modules\AI\Domain\Conversation\MemoryRecallQuery;
  * an unreadable body, a leaky or duplicated id, or an empty ranking all return the module's own
  * recency-ordered recall, because an AI losing its memory of a player is a worse outcome than a
  * memory arriving in the wrong order.
+ *
+ * The merge depends on the configured cognition mode:
+ * - `external` lets the driver's ranking decide which facts survive the caller's limit, with the
+ *   native recency order as the floor for everything the driver did not rank (the driver-swap
+ *   comparison).
+ * - `hybrid` keeps the native recency set authoritative and uses the driver's ranking only to
+ *   float the relevant facts within it, so no fact the native recall would have returned is ever
+ *   evicted: relevance decides order, recency decides membership.
  */
 class AgentOsLongTermMemory implements LongTermMemory
 {
-    public function __construct(private readonly LongTermMemory $fallback, private readonly AgentOsClient $client)
-    {
+    public function __construct(
+        private readonly LongTermMemory $fallback,
+        private readonly AgentOsClient $client,
+        private readonly AiCognitionMode $mode,
+    ) {
     }
 
     /**
@@ -42,7 +54,9 @@ class AgentOsLongTermMemory implements LongTermMemory
             return $this->bounded($candidates, $query->limit);
         }
 
-        return $this->ranked($candidates, $ranking, $query->limit);
+        return $this->mode === AiCognitionMode::Hybrid
+            ? $this->hybridRanked($candidates, $ranking, $query->limit)
+            : $this->ranked($candidates, $ranking, $query->limit);
     }
 
     /**
@@ -96,6 +110,31 @@ class AgentOsLongTermMemory implements LongTermMemory
         $value = (string) json_encode($candidate['value'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         return trim($candidate['predicate'] . ' ' . $value);
+    }
+
+    /**
+     * `hybrid`: recency owns membership, relevance owns order. The native recall's own cut is
+     * kept verbatim, then reordered by the driver's rank positions, so no fact the native path
+     * would have returned is evicted and the relevant facts surface first. Facts the driver did
+     * not rank keep their native recency order at the tail.
+     *
+     * @param  list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>  $candidates
+     * @param  list<int>  $ranking
+     * @return list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>
+     */
+    private function hybridRanked(array $candidates, array $ranking, int $limit): array
+    {
+        $cut = $this->bounded($candidates, $limit);
+        $rank = array_flip($ranking);
+
+        usort($cut, static function (array $left, array $right) use ($rank): int {
+            $leftRank = $rank[$left['id']] ?? PHP_INT_MAX;
+            $rightRank = $rank[$right['id']] ?? PHP_INT_MAX;
+
+            return $leftRank <=> $rightRank ?: $left['id'] <=> $right['id'];
+        });
+
+        return $cut;
     }
 
     /**

@@ -68,22 +68,26 @@ inside the application container; it writes only rows it then deletes). Each tri
 counterparty 30 facts and moves the debt fact one recency position, so 30 trials walk the whole
 corpus:
 
-| Observation | Native | AgentOS | Same ranking, promotion bounded to the native cut |
+| Observation | Native | `external` (driver decides the cut) | `hybrid` (native recency + driver reorder) |
 | --- | --- | --- | --- |
 | Required-fact (live `ResourceDebt`) recall at the module's 20-fact cut | **66.7 %** (20/30) | **100 %** (30/30) | **66.7 %** (20/30) |
 | Newest fact about the counterparty kept in the cut | **30/30** | **1/30** | **30/30** |
 | Order differs from native | — | 30/30 | 30/30 |
 | Scope leaks (an id the module never sent) | 0 | 0 | 0 |
-| Recall latency p50 | 88.4 ms | 223.4 ms | n/a |
+| Recall latency p50 | 88.4 ms | 223.4 ms | same sidecar |
 | `HelpRequest` answer, production amount | `Counter: insufficient_available_amount` | identical, 30/30 | identical |
 | `HelpRequest` answer with a caller-supplied query text | `Clarify` | `Reject`, 10/30 differ | identical to native |
 
-**The gain and the eviction are the same act.** Replaying the driver's own real ranking with the
-promotion bounded — the ranked memories move to the front of the *same* cut instead of ahead of the
-native floor — returns native's 66.7 % and keeps the newest fact 30/30. So the driver does not widen
-what the consumer can see; it decides which 20 of 30 facts survive a fixed budget, and the +33.3 pp
-is what it buys by dropping the newest facts. Value here is *substitution*, not addition, which is
-why the "no worsened current-fact correctness" clause is not a caveat beside the gain but its price.
+**The two merge modes are now wired and measured.** `external` lets the driver's ranking decide which
+facts survive the caller's limit (the +33.3 pp, paid by evicting the newest fact in 29 of 30 trials);
+`hybrid` keeps the native recency set authoritative and uses the driver's ranking only to reorder
+within it, so relevance floats to the front and no fact the native recall would have returned is ever
+evicted. The gain and the eviction are the same act: with the driver's own real ranking applied inside
+the native cut, recall returns to native's 66.7 % and the newest fact survives 30/30. So the driver
+does not widen what the consumer can see; it decides which 20 of 30 facts survive a fixed budget
+(`external`) or in what order they arrive (`hybrid`). Value here is *substitution* in `external` and
+*ordering* in `hybrid`, which is why the "no worsened current-fact correctness" clause is not a caveat
+beside the gain but its price.
 
 **The value is also confined to the truncating regime.** Below 20 live facts the native recall
 returns everything, so ordering cannot change what the consumer sees — and the module's own fact
@@ -104,16 +108,17 @@ The numeric target is met and the verdict is still **disabled**, for three recor
    `queryText: null`, and both `AgentOsLongTermMemory` and `AgentOsClient` return early on an empty
    query, so the production path never contacts the sidecar. Measured: the unwired order equals the
    native order 30/30, i.e. the driver is not consulted at all.
-3. **Where it is consulted, it trades current facts for relevant ones.** The driver returns a full
-   `topK`, and `AgentOsLongTermMemory::ranked()` places everything it ranked ahead of the native
-   floor, so the driver replaces the whole 20-fact cut rather than reordering it: the newest fact
-   survives 1/30 against 30/30 natively. That is the "no worsened current-fact correctness" clause
-   failing in the same run that shows the +33.3 pp recall gain. Reordering rather than replacing the
-   cut is module policy in `ranked()`, not a driver defect.
+3. **In `external` it trades current facts for relevant ones.** The driver returns a full
+   `topK`, and the `external` merge places everything it ranked ahead of the native floor, so the
+   driver replaces the whole 20-fact cut rather than reordering it: the newest fact survives 1/30
+   against 30/30 natively. That is the "no worsened current-fact correctness" clause failing in the
+   same run that shows the +33.3 pp recall gain. The `hybrid` merge (`hybridRanked()`) avoids the
+   eviction by construction, which is why it is the mode for "relevance and recency".
 
-Revisit when a production-reachable, order-sensitive consumer of recalled memory exists *and*
-promotion is bounded so a ranking cannot evict current facts. Until then the driver stays opt-in and
-disabled, and the reference profile pays nothing for it.
+Revisit when a production-reachable, order-sensitive consumer of recalled memory exists. The `hybrid`
+merge is wired and measured (recency owns membership, relevance owns order); what is still missing is
+a decision that reads the order. Until one exists the driver stays opt-in and disabled, and the
+reference profile pays nothing for it.
 
 **Deletion is complete by construction.** Because the module sends the candidate set per request
 and the sidecar persists nothing, there is no provider index to tombstone or delete: the driver's

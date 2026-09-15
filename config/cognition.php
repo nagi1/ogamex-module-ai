@@ -36,6 +36,11 @@ return [
         // configuration rather than a fixed binding. Native scoped recall is the default and
         // the fallback; the AgentOS sidecar is the optional ranking implementation. The
         // module's facts table stays authoritative whichever driver answers.
+        //
+        // `ai.cognition.mode` decides what the ranking may do: `external` lets the driver's
+        // ranking decide which facts survive the caller's limit (native recency as the floor),
+        // and `hybrid` keeps the native recency set and uses the driver only to reorder within
+        // it, so relevance floats to the front without evicting recency.
         'driver' => env('AI_MEMORY_DRIVER', 'native'),
         'agentos' => [
             'base_url' => env('AI_MEMORY_AGENTOS_URL', 'http://host.docker.internal:8093'),

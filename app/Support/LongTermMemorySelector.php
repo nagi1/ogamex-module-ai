@@ -27,7 +27,7 @@ class LongTermMemorySelector
     {
         $configured = (string) config('ai.cognition.memory.driver', AiMemoryDriver::Native->value);
         $driver = AiMemoryDriver::tryFrom($configured);
-        $mode = AiCognitionMode::tryFrom((string) config('ai.cognition.mode', AiCognitionMode::External->value));
+        $mode = AiCognitionMode::tryFrom((string) config('ai.cognition.mode', AiCognitionMode::External->value)) ?? AiCognitionMode::External;
 
         if ($driver === null) {
             Log::warning('Unrecognised AI memory driver; using native scoped recall.', ['driver' => $configured]);
@@ -35,15 +35,16 @@ class LongTermMemorySelector
             return app(NativeLongTermMemory::class);
         }
 
-        // The memory adapter already composes native candidates with the driver's ranking, so
-        // `external` and `hybrid` resolve to the same implementation; only `native` forces the
-        // driver off.
         if ($mode === AiCognitionMode::Native || $driver === AiMemoryDriver::Native) {
             return app(NativeLongTermMemory::class);
         }
 
+        // `external` lets the driver's ranking decide the cut with the native floor beneath it;
+        // `hybrid` keeps the native recency set and uses the driver only to reorder within it.
+        // Both resolve to the same adapter, which owns the mode-specific merge.
         return app()->makeWith(AgentOsLongTermMemory::class, [
             'fallback' => app(NativeLongTermMemory::class),
+            'mode' => $mode,
             'client' => app()->makeWith(AgentOsClient::class, [
                 'circuit' => app()->makeWith(DriverCircuitBreaker::class, ['driver' => AiMemoryDriver::AgentOs->value]),
             ]),

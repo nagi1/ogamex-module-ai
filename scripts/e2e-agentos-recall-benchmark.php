@@ -8,6 +8,7 @@ use Modules\AI\Actions\EvaluateAiSocialExchangeAction;
 use Modules\AI\Actions\RecordAiMemoryFactAction;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
+use Modules\AI\Enums\AiCognitionMode;
 use Modules\AI\Enums\AiMemoryDriver;
 use Modules\AI\Enums\AiMemoryEvidenceKind;
 use Modules\AI\Enums\AiMemoryPredicate;
@@ -123,78 +124,47 @@ function measureTrial(int $trial, array $corpus, int $debtPosition): array
     $now = CarbonImmutable::now();
     $queryText = 'HelpRequest '.BENCH_RESOURCE.' '.BENCH_AMOUNT;
 
-    $native = recall(AiMemoryDriver::Native, $now, $queryText);
-    $driven = recall(AiMemoryDriver::AgentOs, $now, $queryText);
+    $native = recall(AiMemoryDriver::Native, $now, $queryText, AiCognitionMode::Native);
+    $external = recall(AiMemoryDriver::AgentOs, $now, $queryText, AiCognitionMode::External);
+    $hybrid = recall(AiMemoryDriver::AgentOs, $now, $queryText, AiCognitionMode::Hybrid);
     // The production wiring: `EvaluateAiSocialExchangeAction` sends no query text, so the
     // adapter has nothing to rank against and must fall through to native order.
-    $unwired = recall(AiMemoryDriver::AgentOs, $now, null);
+    $unwired = recall(AiMemoryDriver::AgentOs, $now, null, AiCognitionMode::External);
 
     $exchange = createExchange();
 
     $measured = [
         'trial' => $trial,
         'debt_position' => $debtPosition,
-        'debt_fact_id' => $corpus[$debtPosition] ?? null,
         'native' => summary($native, $corpus),
-        'agentos' => summary($driven, $corpus),
-        // The module-policy counterfactual: the driver's real ranking applied as a reorder of the
-        // native cut rather than as a replacement of it.
-        'bounded' => summary(['recalled' => boundedPromotion($native, $driven), 'milliseconds' => 0.0], $corpus),
+        'external' => summary($external, $corpus),
+        'hybrid' => summary($hybrid, $corpus),
         'unwired_matches_native' => ids($unwired) === ids($native),
-        'production' => decide($exchange, PRODUCTION_AVAILABLE_AMOUNT, $now),
-        'reachable' => decide($exchange, REACHABLE_AVAILABLE_AMOUNT, $now),
+        'production' => decide($exchange, PRODUCTION_AVAILABLE_AMOUNT, $now, AiCognitionMode::External),
+        'reachable' => decide($exchange, REACHABLE_AVAILABLE_AMOUNT, $now, AiCognitionMode::External),
+        'hybrid_reachable' => decide($exchange, REACHABLE_AVAILABLE_AMOUNT, $now, AiCognitionMode::Hybrid),
         'wired_reachable' => wiredDecision($exchange, REACHABLE_AVAILABLE_AMOUNT, $now, $queryText),
     ];
 
     printf(
-        "trial %-3d debt_at=%-3d native: rate=%-7s debt=%-3s | agentos: rate=%-7s debt=%-3s order_changed=%-3s unwired=native:%s newest_kept native:%s agentos:%s | prod %s vs %s | reach %s vs %s | wired %s vs %s\n",
+        "trial %-3d debt_at=%-3d | native debt=%-3s newest=%s | external debt=%-3s newest=%s | hybrid debt=%-3s newest=%s | prod %s vs %s | reach %s vs %s | hybrid %s vs %s\n",
         $trial,
         $debtPosition,
-        milliseconds($measured['native']['milliseconds']),
         yes($measured['native']['debt_in_cut']),
-        milliseconds($measured['agentos']['milliseconds']),
-        yes($measured['agentos']['debt_in_cut']),
-        yes($measured['native']['ids'] !== $measured['agentos']['ids']),
-        yes($measured['unwired_matches_native']),
         yes($measured['native']['newest_in_cut']),
-        yes($measured['agentos']['newest_in_cut']),
+        yes($measured['external']['debt_in_cut']),
+        yes($measured['external']['newest_in_cut']),
+        yes($measured['hybrid']['debt_in_cut']),
+        yes($measured['hybrid']['newest_in_cut']),
         $measured['production']['native'],
         $measured['production']['agentos'],
         $measured['reachable']['native'],
         $measured['reachable']['agentos'],
-        $measured['wired_reachable']['native'],
-        $measured['wired_reachable']['agentos'],
+        $measured['hybrid_reachable']['native'],
+        $measured['hybrid_reachable']['agentos'],
     );
 
     return $measured;
-}
-
-/**
- * The driver's ranking applied inside the native cut: the ranked memories move to the front, the rest
- * keep native order, and nothing is evicted.
- *
- * `AgentOsLongTermMemory::ranked()` promotes every driver-ranked id ahead of the native floor, so a
- * full driver answer replaces the cut. Replaying the same real ranking with that promotion bounded is
- * how much of the measured recall gain survives without the eviction, which is the module-policy
- * question behind the Gate 2 verdict.
- *
- * @param  array{recalled: array<int, array<string, mixed>>}  $native
- * @param  array{recalled: array<int, array<string, mixed>>}  $driven
- * @return list<array<string, mixed>>
- */
-function boundedPromotion(array $native, array $driven): array
-{
-    $rank = array_flip(ids($driven));
-    $cut = $native['recalled'];
-
-    usort($cut, static function (array $left, array $right) use ($rank): int {
-        $leftRank = $rank[(int) $left['id']] ?? PHP_INT_MAX;
-        $rightRank = $rank[(int) $right['id']] ?? PHP_INT_MAX;
-
-        return $leftRank <=> $rightRank ?: (int) $left['id'] <=> (int) $right['id'];
-    });
-
-    return $cut;
 }
 
 /**
@@ -227,7 +197,7 @@ function wiredDecision(AiSocialExchange $exchange, float $availableAmount, Carbo
         }
     });
 
-    $answers = decide($exchange, $availableAmount, $now);
+    $answers = decide($exchange, $availableAmount, $now, AiCognitionMode::External);
 
     app()->bind(LongTermMemory::class, fn (): LongTermMemory => app(LongTermMemorySelector::class)->resolve());
 
@@ -237,9 +207,9 @@ function wiredDecision(AiSocialExchange $exchange, float $availableAmount, Carbo
 /**
  * @return array{recalled: list<array{id:int,source_observation_id:int,source_type:string|null,source_id:int|null,subject_player_id:int,predicate:string,evidence_kind:string,speaker_player_id:int|null,value:array<string,mixed>}>, milliseconds: float}
  */
-function recall(AiMemoryDriver $driver, CarbonImmutable $now, string|null $queryText): array
+function recall(AiMemoryDriver $driver, CarbonImmutable $now, string|null $queryText, AiCognitionMode $mode): array
 {
-    config(['ai.cognition.memory.driver' => $driver->value]);
+    config(['ai.cognition.memory.driver' => $driver->value, 'ai.cognition.mode' => $mode->value]);
 
     $query = app()->makeWith(MemoryRecallQuery::class, [
         'playerId' => BENCH_PLAYER,
@@ -287,12 +257,12 @@ function summary(array $recall, array $corpus): array
  *
  * @return array<string, string>
  */
-function decide(AiSocialExchange $exchange, float $availableAmount, CarbonImmutable $now): array
+function decide(AiSocialExchange $exchange, float $availableAmount, CarbonImmutable $now, AiCognitionMode $mode): array
 {
     $answers = [];
 
     foreach ([AiMemoryDriver::Native, AiMemoryDriver::AgentOs] as $driver) {
-        config(['ai.cognition.memory.driver' => $driver->value]);
+        config(['ai.cognition.memory.driver' => $driver->value, 'ai.cognition.mode' => $mode->value]);
         // Written straight through the builder: the in-memory model still holds the values it
         // was created with, so an `update()` on it would find nothing dirty and issue no query.
         AiSocialExchange::query()->whereKey($exchange->id)->update([
@@ -398,61 +368,50 @@ function report(array $results, int $facts): void
 {
     $trials = count($results);
     $nativeDebt = count(array_filter($results, static fn (array $trial): bool => $trial['native']['debt_in_cut']));
-    $drivenDebt = count(array_filter($results, static fn (array $trial): bool => $trial['agentos']['debt_in_cut']));
-    $orderChanged = count(array_filter($results, static fn (array $trial): bool => $trial['native']['ids'] !== $trial['agentos']['ids']));
+    $externalDebt = count(array_filter($results, static fn (array $trial): bool => $trial['external']['debt_in_cut']));
+    $hybridDebt = count(array_filter($results, static fn (array $trial): bool => $trial['hybrid']['debt_in_cut']));
+    $orderChangedExternal = count(array_filter($results, static fn (array $trial): bool => $trial['native']['ids'] !== $trial['external']['ids']));
+    $orderChangedHybrid = count(array_filter($results, static fn (array $trial): bool => $trial['native']['ids'] !== $trial['hybrid']['ids']));
     $unwired = count(array_filter($results, static fn (array $trial): bool => $trial['unwired_matches_native']));
     $newestNative = count(array_filter($results, static fn (array $trial): bool => $trial['native']['newest_in_cut']));
-    $newestDriven = count(array_filter($results, static fn (array $trial): bool => $trial['agentos']['newest_in_cut']));
-    $boundedDebt = count(array_filter($results, static fn (array $trial): bool => $trial['bounded']['debt_in_cut']));
-    $boundedNewest = count(array_filter($results, static fn (array $trial): bool => $trial['bounded']['newest_in_cut']));
-    $leaks = count(array_filter($results, static fn (array $trial): bool => $trial['agentos']['leaked'] || $trial['native']['leaked']));
+    $newestExternal = count(array_filter($results, static fn (array $trial): bool => $trial['external']['newest_in_cut']));
+    $newestHybrid = count(array_filter($results, static fn (array $trial): bool => $trial['hybrid']['newest_in_cut']));
+    $leaks = count(array_filter($results, static fn (array $trial): bool => $trial['external']['leaked'] || $trial['hybrid']['leaked'] || $trial['native']['leaked']));
 
     $productionSame = count(array_filter($results, static fn (array $trial): bool => $trial['production']['same'] === 'yes'));
     $reachableSame = count(array_filter($results, static fn (array $trial): bool => $trial['reachable']['same'] === 'yes'));
+    $hybridSame = count(array_filter($results, static fn (array $trial): bool => $trial['hybrid_reachable']['same'] === 'yes'));
     $wiredSame = count(array_filter($results, static fn (array $trial): bool => $trial['wired_reachable']['same'] === 'yes'));
-    $reachableAnswers = array_map(
-        static fn (array $trial): string => $trial['reachable']['native'].' -> '.$trial['reachable']['agentos'],
-        $results,
-    );
-    $wiredAnswers = array_map(
-        static fn (array $trial): string => $trial['wired_reachable']['native'].' -> '.$trial['wired_reachable']['agentos'],
-        $results,
-    );
-    $productionAnswers = array_map(
-        static fn (array $trial): string => $trial['production']['native'],
-        $results,
-    );
 
-    $delta = percentage($drivenDebt, $trials) - percentage($nativeDebt, $trials);
+    $deltaExternal = percentage($externalDebt, $trials) - percentage($nativeDebt, $trials);
+    $deltaHybrid = percentage($hybridDebt, $trials) - percentage($nativeDebt, $trials);
     $latencyNative = median(array_column(array_column($results, 'native'), 'milliseconds'));
-    $latencyDriven = median(array_column(array_column($results, 'agentos'), 'milliseconds'));
+    $latencyExternal = median(array_column(array_column($results, 'external'), 'milliseconds'));
 
     printf("\n--- summary ---\n");
-    printf("required-fact (live ResourceDebt) recall at the %d-fact cut: native %5.1f%% (%d/%d) -> agentos %5.1f%% (%d/%d)\n", RECALL_LIMIT, percentage($nativeDebt, $trials), $nativeDebt, $trials, percentage($drivenDebt, $trials), $drivenDebt, $trials);
-    printf("gate 2 target: >= 5pp required-fact improvement -> measured delta %+.1fpp\n", $delta);
-    printf("order changed by the driver: %d/%d trials\n", $orderChanged, $trials);
-    printf("newest fact kept in the cut: native %d/%d, agentos %d/%d (no worsened current-fact correctness)\n", $newestNative, $trials, $newestDriven, $trials);
+    printf("required-fact recall at the %d-fact cut: native %5.1f%%, external %5.1f%% (%+.1fpp), hybrid %5.1f%% (%+.1fpp)\n", RECALL_LIMIT, percentage($nativeDebt, $trials), percentage($externalDebt, $trials), $deltaExternal, percentage($hybridDebt, $trials), $deltaHybrid);
+    printf("newest fact kept in the cut: native %d/%d, external %d/%d, hybrid %d/%d\n", $newestNative, $trials, $newestExternal, $trials, $newestHybrid, $trials);
+    printf("order differs from native: external %d/%d trials, hybrid %d/%d trials\n", $orderChangedExternal, $trials, $orderChangedHybrid, $trials);
     printf("scope leaks (an id the module never sent): %d\n", $leaks);
-    printf("recall latency p50: native %.1fms, agentos %.1fms\n", $latencyNative, $latencyDriven);
-    printf("production wiring (availableAmount %s): driver never receives a query text, unwired run equals native order in %d/%d trials\n", PRODUCTION_AVAILABLE_AMOUNT, $unwired, $trials);
-    printf("decision parity at the production amount: %d/%d identical (%s)\n", $productionSame, $trials, implode(', ', array_unique($productionAnswers)));
-    printf("decision parity at a reachable amount: %d/%d identical (%s)\n", $reachableSame, $trials, implode(' | ', array_unique($reachableAnswers)));
-    printf("decision parity with a caller-supplied query text (experiment override): %d/%d identical (%s)\n", $wiredSame, $trials, implode(' | ', array_unique($wiredAnswers)));
-    printf("order promotion replaces the whole cut: the driver returns a full topK, so the newest fact survives %d/%d under agentos vs %d/%d under native\n", $newestDriven, $trials, $newestNative, $trials);
-    printf("same ranking with the promotion bounded to the native cut: required-fact recall %5.1f%% (%d/%d), newest fact kept %d/%d -> the gain and the eviction are the same act\n", percentage($boundedDebt, $trials), $boundedDebt, $trials, $boundedNewest, $trials);
+    printf("recall latency p50: native %.1fms, external %.1fms (hybrid uses the same sidecar)\n", $latencyNative, $latencyExternal);
+    printf("production wiring (availableAmount %s): no query text, unwired order equals native in %d/%d trials\n", PRODUCTION_AVAILABLE_AMOUNT, $unwired, $trials);
+    printf("decision parity at the production amount: %d/%d identical (%s)\n", $productionSame, $trials, implode(', ', array_unique(array_map(static fn (array $trial): string => $trial['production']['native'], $results))));
+    printf("decision parity at a reachable amount (external): %d/%d identical (%s)\n", $reachableSame, $trials, implode(' | ', array_unique(array_map(static fn (array $trial): string => $trial['reachable']['native'].' -> '.$trial['reachable']['agentos'], $results))));
+    printf("decision parity at a reachable amount (hybrid): %d/%d identical (%s)\n", $hybridSame, $trials, implode(' | ', array_unique(array_map(static fn (array $trial): string => $trial['hybrid_reachable']['native'].' -> '.$trial['hybrid_reachable']['agentos'], $results))));
+    printf("decision parity with a caller-supplied query text (external): %d/%d identical (%s)\n", $wiredSame, $trials, implode(' | ', array_unique(array_map(static fn (array $trial): string => $trial['wired_reachable']['native'].' -> '.$trial['wired_reachable']['agentos'], $results))));
     printf("corpus: %d facts per counterparty (the cut only bites above %d)\n", $facts, RECALL_LIMIT);
 
     printf("\njson:%s\n", json_encode([
         'trials' => $trials,
         'facts_per_counterparty' => $facts,
         'recall_limit' => RECALL_LIMIT,
-        'required_fact_recall' => ['native' => percentage($nativeDebt, $trials), 'agentos' => percentage($drivenDebt, $trials), 'bounded_promotion' => percentage($boundedDebt, $trials), 'delta_pp' => $delta],
-        'order_changed_trials' => $orderChanged,
-        'newest_fact_kept' => ['native' => $newestNative, 'agentos' => $newestDriven, 'bounded_promotion' => $boundedNewest],
+        'required_fact_recall' => ['native' => percentage($nativeDebt, $trials), 'external' => percentage($externalDebt, $trials), 'hybrid' => percentage($hybridDebt, $trials)],
+        'newest_fact_kept' => ['native' => $newestNative, 'external' => $newestExternal, 'hybrid' => $newestHybrid],
+        'order_differs_from_native' => ['external' => $orderChangedExternal, 'hybrid' => $orderChangedHybrid],
         'scope_leaks' => $leaks,
-        'latency_ms_p50' => ['native' => round($latencyNative, 3), 'agentos' => round($latencyDriven, 3)],
+        'latency_ms_p50' => ['native' => round($latencyNative, 3), 'external' => round($latencyExternal, 3)],
         'unwired_matches_native_trials' => $unwired,
-        'decision_parity' => ['production_amount' => $productionSame, 'reachable_amount' => $reachableSame, 'reachable_amount_with_query_text' => $wiredSame],
+        'decision_parity' => ['production_amount' => $productionSame, 'external_reachable' => $reachableSame, 'hybrid_reachable' => $hybridSame, 'external_with_query_text' => $wiredSame],
         'production_amount' => PRODUCTION_AVAILABLE_AMOUNT,
         'reachable_amount' => REACHABLE_AVAILABLE_AMOUNT,
     ], JSON_UNESCAPED_SLASHES));
@@ -474,11 +433,6 @@ function median(array $values): float
 function percentage(int $part, int $total): float
 {
     return $total === 0 ? 0.0 : round($part * 100 / $total, 1);
-}
-
-function milliseconds(float $value): string
-{
-    return number_format($value, 1).'ms';
 }
 
 function yes(bool $value): string
