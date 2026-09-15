@@ -11,8 +11,10 @@ use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
+use OGame\Models\EspionageReport;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
+use OGame\Services\MessageService;
 use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
@@ -84,6 +86,26 @@ test('the spy planner picks a legal foreign target', function (): void {
         ->and($plan->targetPosition)->toBe($foreign->getPlanetCoordinates()->position);
 });
 
+test('the spy planner skips a target it already holds fresh intel on', function (): void {
+    colonyProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+
+    $probed = $this->createForeignPlanet();
+    $unprobed = $this->createForeignPlanet();
+
+    $probedCoordinates = $probed->getPlanetCoordinates();
+    $unprobedCoordinates = $unprobed->getPlanetCoordinates();
+
+    spyReport($this->currentUserId, $probedCoordinates->galaxy, $probedCoordinates->system, $probedCoordinates->position);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->targetGalaxy)->toBe($unprobedCoordinates->galaxy)
+        ->and($plan->targetSystem)->toBe($unprobedCoordinates->system)
+        ->and($plan->targetPosition)->toBe($unprobedCoordinates->position);
+});
+
 test('the spy planner plans nothing without a probe or a legal target', function (): void {
     $profile = colonyProfile($this->currentUserId);
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
@@ -119,6 +141,30 @@ function colonyProfile(int $playerId): AiProfile
         'random_seed' => 10_000 + $playerId,
         'enabled' => true,
     ]);
+}
+
+/** A fresh espionage report delivered to the account as the host would after a probe. */
+function spyReport(int $playerId, int $galaxy, int $system, int $position): int
+{
+    $report = new EspionageReport();
+    $report->planet_galaxy = $galaxy;
+    $report->planet_system = $system;
+    $report->planet_position = $position;
+    $report->planet_type = 1;
+    $report->planet_user_id = null;
+    $report->resources = [];
+    $report->debris = [];
+    $report->buildings = [];
+    $report->research = [];
+    $report->ships = [];
+    $report->defense = [];
+    $report->player_info = [];
+    $report->save();
+
+    $player = app(\OGame\Factories\PlayerServiceFactory::class)->make($playerId, true);
+    app(MessageService::class)->sendEspionageReportMessageToPlayer($player, $report->id);
+
+    return $report->id;
 }
 
 /** Fill every colonisable position of a single-system universe so no empty slot remains. */
