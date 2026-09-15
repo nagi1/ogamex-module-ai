@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Domain\Experience\RankedExperience;
+use Modules\AI\Domain\Routine\RoutineProfile;
 use Modules\AI\Enums\AiBuildingExperienceFeature;
 use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiExperienceFeatureVersion;
@@ -64,8 +65,20 @@ class EconomyUpgrades
 
     private const LEVELS_PER_SLACK = 20.0;
 
-    /** Guides: storage should hold at least 24-48 hours of production before an absence. */
-    private const STORAGE_FILL_HOURS = 48.0;
+    /**
+     * The warehouse has to cover the gap between this account's own visits, so the gap is what the
+     * trigger measures against -- not a constant.
+     *
+     * A warehouse exists so production does not stop while nobody is watching, which makes the
+     * absence the only thing that matters: a player who opens the game five times a day is away
+     * about five hours and has no use for forty-eight hours of storage, while a casual player away
+     * half a day has every use for it. Measured against a fixed 48 hours instead, the trigger was
+     * true for every planet at every level -- the grand test ran the whole cohort to level-nine
+     * warehouses, hours from overflow yet always "urgent", while the mines underneath sat at level
+     * four and never got a turn. The figure is the account's, so it changes with the persona the way
+     * the rest of the routine does, and nothing here names a storage object.
+     */
+    private const HOURS_PER_DAY = 24.0;
 
     /** Bounded so one remembered outcome cannot dominate the arithmetic. */
     private const MAXIMUM_CASES = 20;
@@ -84,8 +97,10 @@ class EconomyUpgrades
     public function pending(PlanetService $planet, AiProfile $profile): array
     {
         // Storage first: a full warehouse stops the planet producing, so it is the more urgent of
-        // the two even when a mine would pay back faster.
-        return [...$this->storage($planet), ...$this->production($planet, $profile)];
+        // the two even when a mine would pay back faster -- but only while it really is about to
+        // fill inside this account's own absence, which is what keeps it from preempting the mine
+        // that pays for everything.
+        return [...$this->storage($planet, $profile), ...$this->production($planet, $profile)];
     }
 
     /** @return list<BuildCandidate> the best-paying production upgrades this planet can pay to widen */
@@ -133,14 +148,15 @@ class EconomyUpgrades
     }
 
     /** @return list<BuildCandidate> storages whose remaining capacity would fill inside an absence */
-    private function storage(PlanetService $planet): array
+    private function storage(PlanetService $planet, AiProfile $profile): array
     {
+        $absence = $this->absenceHours($profile);
         $entries = [];
 
         foreach (ObjectService::getBuildingObjectsWithStorage() as $object) {
             $hours = $this->timeToFill($planet, $object->machine_name);
 
-            if ($hours === null || $hours >= self::STORAGE_FILL_HOURS) {
+            if ($hours === null || $hours >= $absence) {
                 continue;
             }
 
@@ -177,6 +193,18 @@ class EconomyUpgrades
         ], static fn (?float $value): bool => $value !== null);
 
         return $hours === [] ? null : min($hours);
+    }
+
+    /**
+     * How long this account is typically away between two visits, from its own routine.
+     *
+     * The persona already states how often it looks at the account, so the gap is that figure's
+     * reciprocal and no new setting is introduced. It is floored at one session a day so a profile
+     * with an unset or implausible routine still has a horizon rather than an infinite one.
+     */
+    private function absenceHours(AiProfile $profile): float
+    {
+        return self::HOURS_PER_DAY / max(1, RoutineProfile::fromAiProfile($profile)->sessionsPerDay);
     }
 
     private function fillHours(Resource $capacity, Resource $stored, float $productionPerHour, float $addedCapacity): ?float

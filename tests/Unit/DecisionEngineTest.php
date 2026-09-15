@@ -19,6 +19,7 @@ use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
+use Modules\AI\Enums\AiCandidateRejectionReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
@@ -70,6 +71,22 @@ test('stale intel is rejected before scoring a raid', function () {
 
     expect($types)->not->toContain(AiCandidateActionType::Raid);
     expect($trace->rejections['report:12'])->toBe('stale_target_intel');
+});
+
+// A permitted, fresh report is still not a raid the account can fly: the raid planner also applies the
+// bashing limit, the fleet's own capacity and the profit estimate, and none of those travel in the
+// report projection. Offering the target anyway is how the population came to decide without ever
+// acting -- the grand test measured 154 of 181 raid selections producing no work item at all, about a
+// third of every decision the cohort made.
+test('a permitted report the raid planner cannot carry out is rejected before scoring', function () {
+    $trace = app(DecisionEngine::class)->decide(aiDecisionProfile(AiArchetype::Fleeter), aiDecisionSnapshot([], false, [
+        ['report_id' => 12, 'observed_at' => 1_789_012_345, 'expires_at' => 1_789_016_000, 'confidence' => 1, 'travel_cost' => 0.1, 'attack_permitted' => true],
+    ]), 'unviable-raid');
+
+    $types = array_map(static fn ($candidate): AiCandidateActionType => $candidate->candidate->type, $trace->candidates);
+
+    expect($types)->not->toContain(AiCandidateActionType::Raid)
+        ->and($trace->rejections['report:12'])->toBe(AiCandidateRejectionReason::RaidNotViable->value);
 });
 
 test('perception discards unpublished target fields', function () {

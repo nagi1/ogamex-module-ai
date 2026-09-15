@@ -48,24 +48,20 @@ beforeEach(function (): void {
 afterEach(fn (): null => Date::setTestNow());
 
 dataset('persona policy mechanics', [
-    'miner builds and declines raids' => [AiArchetype::Miner, [AiCapability::Build->value => true], false, true, AiCandidateActionType::Build, false],
-    'turtle queues units and declines raids' => [AiArchetype::Turtle, [AiCapability::QueueUnits->value => true], false, true, AiCandidateActionType::QueueUnits, false],
-    'fleeter saves fleet before raid' => [AiArchetype::Fleeter, [], true, true, AiCandidateActionType::FleetSave, true],
-    'trader colonizes and declines raids' => [AiArchetype::Trader, [AiCapability::Colonize->value => true], false, true, AiCandidateActionType::Colonize, false],
+    'miner builds' => [AiArchetype::Miner, [AiCapability::Build->value => true], false, true, AiCandidateActionType::Build],
+    'turtle queues units' => [AiArchetype::Turtle, [AiCapability::QueueUnits->value => true], false, true, AiCandidateActionType::QueueUnits],
+    'fleeter saves its fleet' => [AiArchetype::Fleeter, [], true, true, AiCandidateActionType::FleetSave],
+    'trader colonizes' => [AiArchetype::Trader, [AiCapability::Colonize->value => true], false, true, AiCandidateActionType::Colonize],
 ]);
 
-test('each persona applies its published policy through a persisted session', function (AiArchetype $archetype, array $actions, bool $fleetsaveEligible, bool $attackPermitted, AiCandidateActionType $expected, bool $expectsRaid): void {
+// Which persona may raid at all is the policy registry's answer (`RoutineAndPolicyTest`), and whether a
+// given report is a raid the account can fly is the raid planner's (`DecisionEngineTest`). The fixture
+// names a report the host never issued, so no raid candidate can arise here; this case is about the
+// policy each persona applies through a whole persisted session.
+test('each persona applies its published policy through a persisted session', function (AiArchetype $archetype, array $actions, bool $fleetsaveEligible, bool $attackPermitted, AiCandidateActionType $expected): void {
     $trace = aiPersonaRun($this->app, $this->currentUserId, $this->currentPlanetId, $archetype, $actions, $fleetsaveEligible, $attackPermitted);
-    $candidateActions = array_column($trace->candidates, 'action');
 
     expect($trace->selected_action)->toBe($expected);
-    if (!$expectsRaid) {
-        expect($candidateActions)->not->toContain(AiCandidateActionType::Raid->name);
-
-        return;
-    }
-
-    expect($candidateActions)->toContain(AiCandidateActionType::Raid->name);
 })->with('persona policy mechanics');
 
 test('casual safely does nothing when no permitted action is available', function (): void {

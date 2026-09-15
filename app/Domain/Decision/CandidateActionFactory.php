@@ -12,6 +12,10 @@ class CandidateActionFactory
 {
     private const RESOURCE_RESERVE = 1_000;
 
+    public function __construct(private readonly RaidPlanner $raidPlanner)
+    {
+    }
+
     public function create(PerceptionSnapshot $perception): CandidateGeneration
     {
         // A safe fallback makes a missing capability an observable no-op,
@@ -85,6 +89,18 @@ class CandidateActionFactory
 
             if ($report['expires_at'] <= $perception->observedAt->getTimestamp()) {
                 $rejections[$reportKey] = AiCandidateRejectionReason::StaleTargetIntel->value;
+                continue;
+            }
+
+            // The raid planner is the only authority on whether this raid can be carried out at
+            // all: it applies the bashing limit, the fleet's own capacity and the profit estimate,
+            // and none of those travel in the report projection. Offering a target the planner will
+            // decline is how the population came to decide without ever acting -- measured on the
+            // grand test at 154 of 181 raid selections producing no work item at all, a third of
+            // every decision made. Asking here keeps the candidate list to raids that will actually
+            // be queued, and the drop is recorded so the trace can show it rather than hide it.
+            if (!$this->raidPlanner->plan($perception->playerId, (int) $report['report_id']) instanceof QueueableRaid) {
+                $rejections[$reportKey] = AiCandidateRejectionReason::RaidNotViable->value;
                 continue;
             }
 
