@@ -626,3 +626,32 @@ principles, including two new domains:
 Catalog now **107 principles** (21 shipped, 7 partial, 76 researched, 3 deferred). Remaining open
 (recorded, non-blocking): ACS tutorials ORG-009/010, the French board guide library URLs, and
 `ogamewiki.de`.
+
+### Task index — SQLite task DB (15 September 2026)
+
+The research phase is complete; the remaining work is the implementation slices and their
+pre-requisites. To give multiple agents a single claim-safe index, a small SQLite DB
+(`plan/tasks/tasks.db`, seeded from `plan/tasks/seed.sql`, usage in `plan/tasks/USAGE.md`) now holds:
+- **16 tasks** — `REV-001` (catalog review, the gate), `IMPL-013..020` (SP7 reader, raid/intel/save
+  depth, fleetcrash, fleet composition, ninja, expedition), `DEF-001..003` (deferred), `DISC-001..004`
+  (open discovery).
+- **Dependency graph** — `REV-001` gates all `impl` tasks; `IMPL-013` unblocks the three consumers
+  (raid/intel/save), which unblock fleetcrash, which unblocks ninja; `IMPL-018` is review-gated but
+  otherwise parallel-safe; `IMPL-020` is blocked on the unverified expedition host surface (`DISC-004`).
+- **`ready_tasks` view** — the set an agent may claim right now (empty until `REV-001` is done).
+
+The plan docs remain the source of truth; the DB is a derived index, rebuilt from `seed.sql` when the
+docs change. No gameplay code is touched by this.
+
+### Plan Executor agent + task CLI (15 September 2026)
+
+To run the task index natively from the editor:
+- **Custom agent** `.github/agents/plan-executor.agent.md` — the executor/project-manager role: it
+  reads `ready`, claims one task, follows its `doc_refs`, verifies, and marks `done`, adding tasks
+  and dependencies as work expands. Tools: read, edit, search, execute, todo, agent.
+- **CLI** `plan/tasks/task.py` — wraps the DB with `list/ready/blocked/graph/claim/unclaim/done/
+  block/unblock/deps/depends-on/add/rebuild` over Python's bundled sqlite3 (the `sqlite3` CLI is not
+  installed in WSL; `sudo apt-get install -y sqlite3` adds it — password required, not run here).
+- **Three `doc` tasks added** (DOC-001 U-series block, DOC-002 ninja block, DOC-003 expedition block)
+  and their dependencies wired: `IMPL-018 ← DOC-001`, `IMPL-019 ← DOC-002`, `IMPL-020 ← DOC-003`.
+  These are the only `ready` work until `REV-001` (catalog review) is cleared.

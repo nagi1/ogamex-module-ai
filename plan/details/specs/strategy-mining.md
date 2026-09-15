@@ -185,3 +185,6 @@ acceptance checks.
 
 A cluster that passes all ten is a reviewable implementation slice; the delivery order for the
 wave-6 slices is steps 13–18 of [`gameplay-algorithms.md`](gameplay-algorithms.md#delivery-order).
+The one-stop task index for implementation — every remaining task, its plan references, status,
+notes and dependency graph — is [`../../tasks/USAGE.md`](../../tasks/USAGE.md) (SQLite
+`../../tasks/tasks.db`).
