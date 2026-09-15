@@ -231,3 +231,25 @@ F1–F6 (fleetcrash/phalanx/moon) — plus the pass-6 ninja (NN1/NN2) and expedi
 pass ([`classical-ai-patterns.md`](research/classical-ai-patterns.md)) confirms these are
 experienced-play mechanisms, not inventions. No row is closed by this pass — the executors do not
 exist yet.
+
+## Wave 7 — grand-test live verification (16 September 2026)
+
+Read off the running universe rather than the code, per the [grand test](grand-test.md) §9 loop.
+Evidence class **measured**: each row names the receipt, trace or score it was read from. The two
+mechanical defects this pass found are closed in code (`dc3f597`); the three enrichment rows below
+stay open because each is a decision-core change that needs a named algorithm and a frozen-clock
+measurement before it touches the holy universe.
+
+| # | Gap | Signal it weakens | Evidence | Closing it needs |
+| --- | --- | --- | --- | --- |
+| W7-1 | **A raid windfall is not reinvested.** `FleeterPolicy` weights `QueueUnits` 0.6 and `Build` not at all, so a fleeter ranks ships 15 points above mines in every session and never answers the mine that is its binding constraint. | 3, 9 (growth curve, breadth of play) | measured: `ai:explain-decision --player=14` — QueueUnits 55.2 vs Build 40.3, the gap being `archetype_preference` 15.00 vs 0.00; p14 holds 881k metal against 1.5k crystal at mines 6/4/2 after 133 accepted dispatches, p19 1.82M against 1.6k at 7/6/2 after 147; both are the lowest scorers (3226, 4591) | ECO-* : the scarce resource the account cannot buy ranks above the persona's habit, and a windfall is spent before it is warehoused |
+| W7-2 | **The warehouse trigger cannot tell a windfall from production.** The fill-time test measures `getProductionPerHour`, so loot that lands in one tick reads as ongoing income and the next pass builds the store — for the resource that is *not* the constraint (`EconomyUpgrades::storage`). | 3 (a human notices the account buying warehouses instead of mines) | measured: p14 queued `storage:metal_store` 15× / `storage:crystal_store` 10× while crystal sat at 1,505 of 1,590,000; p19 holds 319k deuterium in a 20k warehouse; p12 is exactly full on all three resources (33.0M/33.0M) | ECO-* : size the store against the gap it must cover, and let a spent windfall reduce the need rather than raise it |
+| W7-3 | **In-flight spy intents are not counted against probes.** `QueueableSpyPlanner::inFlight` de-duplicates by target coordinates, so two scheduled probes for different targets can both be planned from one probe. | 5, 10 (a refusal reads as a mechanical mistake) | measured: 32 receipts `DispatchFleet` refused with the host's "Not enough units on the planet to send the fleet. Units required: espionage_probe" | INT-* : idle probes minus probes already committed to a pending spy item is the real budget |
+
+Closed by this pass, both derived from live evidence and pinned by a test: **W7-fixed-1** —
+`ai:run-due-work` now admits a lease whose worker was killed mid-handle, so an item can no longer be
+stranded `Leased` (3 items sat 13 h; `stuck` is now 0). **W7-fixed-2** —
+`QueueableBuildingPlanner` now asks the host's field gate, which removed the largest single source of
+refused actions (236 receipts, 65% of all rejections; three of the ten planets were at or past their
+cap). Full evidence in
+[`reviews/2026-09-16-grand-live-verification.md`](reviews/2026-09-16-grand-live-verification.md).

@@ -899,3 +899,48 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   files — so those helpers have to move to `tests/Support/` and be `require_once`d from
   `tests/Pest.php` (the `FixturePlayerPerceptionBuilder` pattern) before the factory path can be
   covered.
+
+### Grand-test live verification — two defects fixed, three findings opened (16 September 2026)
+
+One read-only pass over the running `ogamex-grand` universe (10 accounts, ~16 h at 1000×), with two
+deploys. Full record:
+[`reviews/2026-09-16-grand-live-verification.md`](reviews/2026-09-16-grand-live-verification.md).
+
+**Fixed and shipped (`dc3f597`), both derived from live evidence rather than code reading.**
+
+- **A stranded lease was unreachable.** 470 queue failures decomposes into 467 nullable-defence
+  crashes (fixed in `7624ec5`, no recurrence) and 3 `TimeoutExceededException`s at 07:01:35–07:01:44Z.
+  Those three killed their worker mid-handle, and because `ai:run-due-work` is the only thing that
+  admits work and it selected `Pending` and `Retry` alone, the reclaim `ProcessAiWork::isClaimable()`
+  already documents could never be reached — the items sat `Leased` for 13 h while the pilot report
+  counted them as stuck. The pass now admits an expired lease as well; a live lease cannot match,
+  because the lease is 15× the worker's own timeout. Live proof: the scheduler's next pass, running the
+  edited dispatcher off the bind mount, moved ids 12/13/17 to `Completed` and `stuck` fell to 0.
+- **The building planner never asked the host's field gate.** 236 of 365 rejections (65%) were the host
+  refusing `Not enough fields on this planet`. `queueablePlanetId` asked planet type, queue space,
+  requirements and affordability — everything the host's building page asks except the field it also
+  enforces in `BuildingQueueService::start()`, and `terraformer` cannot rescue a full planet because a
+  terraformer consumes a field of its own. Three of the ten planets were at or past their cap
+  (155≥154, 155≥155, 143≥142), so every session there spent its one action on a refused build. The
+  gate is now the same predicate, and the reason it is the *host's* two numbers rather than a module
+  rule is gate 1: a mod that changes the field formula changes the answer with no module edit.
+
+Two existing tests encoded the old behaviour and were corrected rather than duplicated:
+`AiAdmissionLimitTest` described the reclaim in a comment while asserting the pre-fix count, and the
+`ReserveFloorTest` fixture set 210 fields on a 163-field planet (so its "accepts it" half only held
+while the gate was missing).
+
+**Verified live, not assumed.** `IMPL-022` reached the universe: astrophysics sat at 0 on all ten
+accounts before this pass, 5 now hold 1–3, and colonisation completed end to end — player 13 holds
+planets 20 and 30. Persona behaviour matches `player-model.md` row for row (miners, turtles and
+traders raid 0% of sessions; the fleeter 37%; the casual 25%, which is the documented "growth and
+occasional raids"). Zero language tokens, `read_cost` 9 queries, 10 accounts ranked 2–13 on the
+host's own `highscores` with a 30× general spread.
+
+**Opened, not fixed** — each is a decision-core change and rides the §9 loop (named algorithm,
+frozen-clock measurement, then deploy): W7-1 a raid windfall is not reinvested (the fleeter ranks
+ships 15 points above mines and holds 881k metal against 1.5k crystal at mine level 4 — the two
+fleeters are the lowest scorers, 30× behind the leading miner); W7-2 the warehouse trigger cannot tell
+a windfall from production, so it builds the store for the resource that is not the constraint; W7-3
+in-flight spy intents are not counted against available probes (32 refusals). Rows in
+[`GAP-REGISTER.md`](GAP-REGISTER.md#wave-7--grand-test-live-verification-16-september-2026).
