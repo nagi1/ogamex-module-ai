@@ -124,7 +124,8 @@ Checks:
   artisan <args...>                     run any artisan command in the host
   test                                  Pest for this module, parallel with --bail
   test-all                              the whole OGameX suite, parallel with --bail
-  quality                               Rector, Pint, PHPStan, then this module's tests
+  quality                               Gate 2 review, Rector, Pint, PHPStan, then this module's tests
+  gate                                  the over-engineering gate (Gate 2), deterministic half
   coverage                              the one serial run: PCOV coverage of Modules/AI/app
   reap                                  release locks left by a killed test run
 
@@ -176,12 +177,18 @@ case "$command_name" in
         run_core $(pest_runner) $(pest_flags) "$@"
         ;;
     quality)
+        # The over-engineering gate runs first: a slice that fails Gate 2 is fixed before
+        # any formatter or analyser spends time on it.
+        run_core php Modules/AI/scripts/gate-2-review.php
         run_core composer run rector
         run_core composer run cs
         run_core composer run stan
         reap_stale_test_sessions
         # shellcheck disable=SC2046
         run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags)
+        ;;
+    gate)
+        run_core php Modules/AI/scripts/gate-2-review.php
         ;;
     reap)
         reap_stale_test_sessions
