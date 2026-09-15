@@ -96,15 +96,11 @@ class EconomyUpgrades
      */
     public function pending(PlanetService $planet, AiProfile $profile): array
     {
-        // Storage first: a full warehouse stops the planet producing, so it is the more urgent of
-        // the two even when a mine would pay back faster -- but only while it really is about to
-        // fill inside this account's own absence, which is what keeps it from preempting the mine
-        // that pays for everything.
         return [...$this->storage($planet, $profile), ...$this->production($planet, $profile)];
     }
 
     /** @return list<BuildCandidate> the best-paying production upgrades this planet can pay to widen */
-    private function production(PlanetService $planet, AiProfile $profile): array
+    public function production(PlanetService $planet, AiProfile $profile): array
     {
         $entries = [];
         $levels = [];
@@ -147,8 +143,14 @@ class EconomyUpgrades
         return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $affordable);
     }
 
-    /** @return list<BuildCandidate> storages whose remaining capacity would fill inside an absence */
-    private function storage(PlanetService $planet, AiProfile $profile): array
+    /**
+     * @return list<BuildCandidate> storages whose remaining capacity would fill inside an absence
+     *
+     * A full warehouse stops the planet producing, so this is the more urgent of the economy's two
+     * answers -- but only while it really is about to fill inside this account's own absence, which
+     * is what keeps it from preempting the mine that pays for everything.
+     */
+    public function storage(PlanetService $planet, AiProfile $profile): array
     {
         $absence = $this->absenceHours($profile);
         $entries = [];

@@ -197,8 +197,12 @@ test('it publishes the research capability and queues the technology the plan ap
     $this->planetAddResources(capabilityPlenty());
     capabilitySatisfyFacilities($this->currentUserId);
     // Enough capacity that the account is not short: the opening step is the solar plant, and the
-    // capability that follows it is the technology the chain wants.
+    // capability that follows it is the technology the chain wants. A warehouse that could hold the
+    // funded balance is set too, so the storage guard does not preempt that technology.
     $this->planetSetObjectLevel('solar_plant', 20);
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
 
     expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([
         AiCapability::Build->value => false,

@@ -327,6 +327,9 @@ test('the real research action rejects banned and vacation players', function ()
 test('a research intent without a payload decides again', function (): void {
     aiWorkProfile($this->currentUserId);
     $this->planetSetObjectLevel('solar_plant', 20);
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('crystal_store', 10);
+    $this->planetSetObjectLevel('deuterium_store', 10);
     $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]));
 
     foreach (aiResearchChainFacilities() as $machineName => $level) {

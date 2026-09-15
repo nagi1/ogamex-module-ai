@@ -18,9 +18,12 @@ use OGame\Services\ResearchQueueService;
  * Two things want a building. The chain wants the facility a later capability cannot exist without
  * -- an account with no research lab can never research, and one with no shipyard can never own a
  * ship -- and the economy wants the upgrade that repays itself fastest, or the storage that is about
- * to overflow. The chain is asked first because an economy that never reaches a facility produces an
- * account that grows resources and nothing else; the economy's own ranking follows, so once the
- * facilities stand the account is back to its own arithmetic.
+ * to overflow. Ahead of the chain sits a warehouse that is about to overflow: a full warehouse
+ * stops the planet producing, so covering it is more urgent than any facility, and unlike the chain
+ * it resolves in a level or two and hands the slot back. The chain is asked before the economy's
+ * production ranking, because an economy that never reaches a facility produces an account that
+ * grows resources and nothing else; once the facilities stand the account is back to its own
+ * arithmetic.
  *
  * Ahead of both sits a planet that cannot cover the energy its own buildings draw: the host throttles
  * everything it produces, and no player keeps mining their way through a deficit.
@@ -74,7 +77,7 @@ class QueueableBuildingPlanner
             $planet->updateResourceProductionStats(false);
             $planet->updateResourceStorageStats(false);
 
-            foreach ([...$this->energyCapacity->pending($planet), ...$this->facilityChain->pending($planet), ...$this->economyUpgrades->pending($planet, $profile)] as $candidate) {
+            foreach ([...$this->energyCapacity->pending($planet), ...$this->economyUpgrades->storage($planet, $profile), ...$this->facilityChain->pending($planet), ...$this->economyUpgrades->production($planet, $profile)] as $candidate) {
                 // Which queue takes a step is the host's object type, not this module's opinion: the
                 // chain hands over prerequisites, and a technology among them is research.
                 if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {

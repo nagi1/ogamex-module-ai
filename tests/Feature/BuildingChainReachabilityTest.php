@@ -44,6 +44,7 @@ beforeEach(function (): void {
 test('a funded account reaches a research lab, a robotics factory, a shipyard and a technology', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
+    chainStoraged();
 
     $steps = [];
     foreach (range(1, 20) as $round) {
@@ -88,6 +89,7 @@ test('the chain asks for a prerequisite the host names', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
     chainPowered();
+    chainStoraged();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
     $machineName = chainStepMachineName($plan);
@@ -103,6 +105,7 @@ test('the first step is the easiest unlock the host asks for', function (): void
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
     chainPowered();
+    chainStoraged();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
     $machineName = chainStepMachineName($plan);
@@ -150,6 +153,7 @@ test('the chain empties once the host graph is satisfied', function (): void {
     }
 
     chainPowered();
+    chainStoraged();
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
@@ -165,6 +169,7 @@ test('a chain step the account cannot pay for falls through to what it can affor
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
     chainPowered();
+    chainStoraged();
     chainDrainDeuterium($this->currentUserId);
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
@@ -173,6 +178,21 @@ test('a chain step the account cannot pay for falls through to what it can affor
     // losing the whole chain to one step it could not pay for.
     expect($plan)->not->toBeNull()
         ->and(chainQueueOnce($this->currentUserId, $this->currentPlanetId))->toBe($plan?->reason);
+});
+
+// A warehouse that is already full is more urgent than any facility: a full warehouse stops the
+// planet producing, so the planner covers it before the chain's next prerequisite. Storage is the
+// only economy answer allowed ahead of the chain -- the mines still wait their turn.
+test('an overflowing warehouse preempts the chain', function (): void {
+    chainProfile($this->currentUserId);
+    $this->planetAddResources(chainPlenty());
+    chainPowered();
+    $this->planetSetObjectLevel('metal_mine', 5);
+
+    $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->not->toBeNull()
+        ->and($plan?->reason)->toStartWith('storage:');
 });
 
 /**
@@ -222,6 +242,17 @@ function chainPlenty(): Resources
 function chainPowered(): void
 {
     test()->planetSetObjectLevel('solar_plant', 20);
+}
+
+/**
+ * Enough warehouse that a funded balance is not "about to overflow", so a test can ask about the
+ * chain on its own. The overflow case is the storage-preemption test above.
+ */
+function chainStoraged(): void
+{
+    test()->planetSetObjectLevel('metal_store', 10);
+    test()->planetSetObjectLevel('crystal_store', 10);
+    test()->planetSetObjectLevel('deuterium_store', 10);
 }
 
 /** Plans one step, queues it through the host queue that accepts it and lets the host finish it. */
