@@ -1,0 +1,74 @@
+# Generated from plan/details/research/classical-ai-patterns.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: FL-1
+  title: Composable behaviour blocks in a profile
+  source_game: freelancer
+  game: Freelancer
+  confidence: A (handoff)
+  problem: one AI implementation per personality is unbounded work and drift.
+  vanilla: a pilot composes independent behaviour blocks — gun, missile, evade-dodge, evade-break, buzz,
+    pass-by, trail, strafe, engine kill, mine, countermeasure, damage/missile reaction, formation, repair,
+    job.
+  mechanism: ONE ENGINE + COMPOSABLE BEHAVIOUR COMPONENTS + PROFILE PARAMETERS.
+  ogamex_mapping: the brief's H3 — a small `BehaviorProfile` surface (economy / military / raiding / survival
+    / research dimensions) consumed by the **shared** planners, so `Miner/Fleeter/Turtle` reuse one implementation.
+    `ArchetypePolicy` is the existing seed; the gap is that it does not reach the tactical planners.
+  sources: '`pilots_population.ini` (handoff-named).'
+- id: FL-2
+  title: Inheritance overriding selected dimensions
+  source_game: freelancer
+  game: Freelancer
+  confidence: B (handoff)
+  problem: profiles share 90% of behaviour and differ in a few knobs.
+  vanilla: a profile inherits another and overrides only selected behaviours (a medium pirate inherits
+    the easy pirate, overriding gun accuracy and evade).
+  mechanism: base + deltas, not N full profiles.
+  ogamex_mapping: base behaviour + archetype modifiers + skill modifiers + temporary situation. Do **not**
+    build inheritance objects (the brief says so); `ArchetypePolicy` + `AiSkillBand` already layer this
+    way — the work is widening what they can modify, not adding a profile class hierarchy.
+  sources: '`npcships.ini` / pilot profiles (handoff-named).'
+- id: FL-3
+  title: Few strategic parameters, not hundreds
+  source_game: freelancer
+  game: Freelancer
+  confidence: B (handoff)
+  problem: hundreds of magic constants are untunable and unverifiable.
+  vanilla: JobBlock-style values control target preference, flee thresholds, formation, loot preference,
+    combat drift — a small number of meaningful knobs.
+  ogamex_mapping: the brief's "10 strong parameters over 100 speculative ones"; each parameter needs evidence
+    + a current decision it changes + no duplication. Candidate surface is exactly the handoff's profile-dimensions
+    list. Hypothesis H3.
+  sources: JobBlock, modding tutorials (handoff-named).
+- id: FL-4
+  title: Difficulty changes execution *quality*
+  source_game: freelancer
+  game: Freelancer
+  confidence: A (handoff)
+  problem: making AI harder should not change the game it plays.
+  vanilla_mods: repair behaviour — whether repair is used, which type, how quickly — is the lever; skill
+    changes *how well* the same action is executed.
+  ogamex_mapping: Easy tolerates stale intel and noisier decisions; Hard requires fresher intel, considers
+    more candidates, times better. Hypothesis H9; `AiSkillBand` is the home.
+  sources: repair-behaviour mods (handoff-named).
+- id: FL-5
+  title: Cheat difficulty is frustrating (negative lesson)
+  source_game: freelancer
+  game: Freelancer
+  confidence: A (handoff; community feedback)
+  problem: mods that made NPCs effectively repair forever were read as *unfair*, not *smart*.
+  mechanism: strong but frustrating AI.
+  ogamex_mapping: hard AI = better decisions, not resource advantages. Recorded as an explicit non-goal
+    unless a cheating difficulty is deliberately designed and named.
+  sources: Freelancer Rebalance / community feedback (handoff-named).
+- id: FL-6
+  title: Fewer complete profiles improve runtime
+  source_game: freelancer
+  game: Freelancer
+  confidence: B (handoff)
+  problem: many redundant AI entries → unclear control and multiplayer lag.
+  vanilla_mods: 'an experienced modder replaced redundant entries with a small number of complete profiles:
+    clearer control, simpler tuning, better performance.'
+  ogamex_mapping: gate 2, stated as a prohibition — never `MinerEasyRaidPlanner` × `FleeterHardRaidPlanner`
+    …; shared planner + composable modifiers only. Already the design rule; this is the external evidence
+    for it.
+  sources: Freelancer modding (handoff-named).

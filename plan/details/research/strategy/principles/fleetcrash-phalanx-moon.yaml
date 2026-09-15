@@ -1,0 +1,192 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: CRASH-005
+  title: Moon destruction flips the geography
+  domain: fleetcrash
+  confidence: B
+  status: researched
+  principle: destroying a moon redirects its returning fleets to the planet (phalanx-visible) and auto-recalls
+    foreign fleets en route; no debris field results.
+  inputs: moon presence, deathstar availability, mission type 9
+  exceptions: none.
+  archetypes: fleeter strong-positive (both sides)
+  sources: ORG-011 (Wayback), FOR-005
+  ogamex: supported (`MoonDestructionMission` type 9; redirect not re-verified)
+  code: none
+  priority: P2
+- id: CRASH-006
+  title: Moons are phalanx-invisible
+  domain: fleetcrash
+  confidence: A
+  status: researched
+  principle: the phalanx cannot scan a moon, so a moon-launched save is invisible — the load-bearing fact
+    behind moon-to-moon deploy being the safest save.
+  inputs: departure type, phalanx range
+  exceptions: none.
+  archetypes: fleeter strong-positive, miner positive
+  sources: ORG-011 (Wayback), FOR-005, TP-009, GF-002
+  ogamex: supported (`PhalanxService`) but unwired
+  code: none
+  priority: P1
+- id: CRASH-007
+  title: Phalanx is a two-sided tool
+  domain: fleetcrash
+  confidence: C (framing synthesis)
+  status: researched
+  principle: the same phalanx that lets you time a crash on an enemy return is the reason a planet-launched
+    save is unsafe — awareness shapes both offense and your own saves.
+  inputs: phalanx level/range, departure type, scan cost
+  exceptions: none.
+  archetypes: fleeter strong-positive
+  sources: ORG-011 (Wayback), GF-002, TP-009, FOR-005
+  ogamex: supported (`PhalanxService::calculatePhalanxRange`, `getScanCost` 5000) but unwired
+  code: none
+  priority: P1
+- id: CRASH-008
+  title: Blind lanx via debris-field disappearance
+  domain: fleetcrash
+  confidence: B
+  status: researched
+  principle: a harvest save leaks its arrival the instant its debris field vanishes; an observer back-calculates
+    the return and crashes it without seeing the fleet.
+  inputs: DF visibility (>300 units), recycler arrival, victim drive tech
+  exceptions: invisible DF (<300 units), shadow waves.
+  archetypes: fleeter strong-positive (both)
+  sources: FOR-005, TP-009
+  ogamex: supported (DF mechanics) but unwired
+  code: none
+  priority: P2
+- id: CRASH-001
+  title: Debris is never guaranteed income
+  domain: fleetcrash
+  confidence: B
+  status: partial
+  principle: a crash's debris is a second recycler mission with its own capacity and timing; it is not
+    added to raid profit.
+  inputs: debris amount, recycler count, timing
+  exceptions: none.
+  sources: veteran-play §7 (documented), WIK-003 (recycler 20k; reaper/pathfinder also debris-capable)
+  ogamex: supported (`DebrisFieldService`, `RecycleMission` type 8, `calculateRequiredRecyclers`) but
+    **unwired**
+  code: none
+  priority: P1
+- id: CRASH-002
+  title: Phalanx covers a range; scan only what it covers
+  domain: fleetcrash
+  confidence: C
+  status: researched
+  principle: phalanx scan cost/range is a host answer; it reveals return fleets within coverage — a fleeter
+    scans before a crash, a victim knows it can be scanned.
+  inputs: phalanx level, range, deuterium cost
+  exceptions: moon-less planets.
+  sources: ORG-011 (Wayback recovered), FOR-006
+  ogamex: supported (`PhalanxService::calculatePhalanxRange` = level²−1, Discoverer +20%; `getScanCost`
+    = 5000) but **unwired**
+  code: none
+  priority: P1
+- id: CRASH-003
+  title: Deploy-recall interception is timing, not force
+  domain: fleetcrash
+  confidence: C
+  status: researched
+  principle: recall a deployment at ~half flight to time a return; the module owns the recall seam but
+    no caller.
+  inputs: flight time, recall window
+  exceptions: deploy between two own planets only; a same-planet relocation is not recallable.
+  sources: BOT-007 (verified 98–101% of half flight)
+  ogamex: supported (`cancelMission` → `startReturn`; `AiActionType::RecallFleet` enum unused)
+  code: none
+  priority: P1
+- id: CRASH-004
+  title: Moon and jump gate change geography and timing
+  domain: fleetcrash
+  confidence: C
+  status: researched
+  principle: a moon enables phalanx, safer saves and jump-gate movement; its value is coverage, not decoration.
+  inputs: moon presence, jump gate cooldown
+  exceptions: none.
+  sources: ORG-011 (Wayback recovered)
+  ogamex: supported (`JumpGateService::calculateCooldown`, moon as `PlanetType::Moon`) but **unwired**
+  code: none
+  priority: P2
+- id: CRASH-009
+  title: Phalanx reveals the exact return second
+  domain: fleetcrash
+  confidence: A
+  status: researched
+  principle: a phalanx scan shows a returning fleet's exact return timestamp, so the crash is timed to
+    arrive seconds after the return — too fast to re-save.
+  inputs: phalanx level/range, return timestamp
+  exceptions: moon-launched returns (invisible).
+  sources: WIK-006, WIK-009, GF-006 (documented)
+  ogamex: supported (`PhalanxService`) but unwired
+  code: none
+  priority: P1
+- id: CRASH-010
+  title: The speed slider is the timing tool
+  domain: fleetcrash
+  confidence: A
+  status: researched
+  principle: travel time scales inversely with the 10–100% speed slider, so the attacker back-calculates
+    the speed percentage that lands on the target's return second; the slowest hull sets the fleet speed.
+  inputs: flight time, target return, slowest hull speed
+  exceptions: none.
+  sources: TP-014, WIK-006 (documented)
+  ogamex: supported (speed quote) but unwired
+  code: none
+  priority: P1
+- id: CRASH-011
+  title: Timing precision tiers
+  domain: fleetcrash
+  confidence: B
+  status: researched
+  principle: landing 0–2 s after the return is a clean timing attack; 3–5 s gives an active defender a
+    narrow re-launch window; more than 5 s risks a miss.
+  inputs: arrival delta, defender watchfulness
+  exceptions: none.
+  sources: TP-014 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+- id: CRASH-012
+  title: Blind phalanx estimates the return from the routine
+  domain: fleetcrash
+  confidence: B
+  status: researched
+  principle: a crash timed without a phalanx learns the victim's online/offline pattern and fleetsave
+    routine and estimates the return from it — a fresh activity dot means interaction in the last ~5 minutes,
+    no activity in the ~20 before return means likely offline.
+  inputs: activity history, fleetsave routine, return estimate
+  exceptions: none.
+  sources: WIK-007, TP-014 (documented)
+  ogamex: supported (activity marker) but unwired
+  code: none
+  priority: P1
+- id: CRASH-013
+  title: A recall's disappearance from the phalanx is itself a tell
+  domain: fleetcrash
+  confidence: B
+  status: researched
+  principle: a recalled deployment drops off the phalanx, but its disappearance is readable — skilled
+    fleeters time that disappearance to hit the new return.
+  inputs: phalanx before/after, recall timing
+  exceptions: none.
+  sources: WIK-007 (documented)
+  ogamex: supported (`cancelMission`) but unwired
+  code: none
+  priority: P2
+- id: CRASH-014
+  title: The crash EV includes debris, read from the host
+  domain: fleetcrash
+  confidence: A
+  status: researched
+  principle: a crash's net profit is `debris collected + cargo looted − own ship losses − deuterium`,
+    with own losses costed at resource value minus the debris refund of one's own wreckage; the debris
+    percentage is a host/universe setting (vanilla 30%, some 70%, private servers 43–80%), never a module
+    constant.
+  inputs: debris %, loot, losses, fuel
+  exceptions: debris harvested separately (CRASH-001).
+  sources: GF-006, TP-012, WIK-008, TP-013 (documented)
+  ogamex: supported (debris %) but unwired
+  code: none
+  priority: P1

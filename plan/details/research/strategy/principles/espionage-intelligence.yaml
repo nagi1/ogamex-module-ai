@@ -1,0 +1,187 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: INT-005
+  title: The activity stamp is a planet-context action
+  domain: espionage
+  confidence: A
+  status: researched
+  principle: the 15-min marker is set by any planet-context request, not an open tab; it names which planet
+    was touched and when.
+  inputs: planet-context actions, `time_last_update`
+  exceptions: idle tab sets nothing.
+  archetypes: all; fleeter-critical
+  sources: TP-006
+  ogamex: supported (`GalaxyController::getPlanetActivityStatus`) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - DOMAIN_FACT
+- id: INT-006
+  title: Moon-only activity signals phalanx/jump-gate use
+  domain: espionage
+  confidence: B
+  status: researched
+  principle: activity on a moon with none on the planet signals moon facilities in use — a warning while
+    your fleet is in transit.
+  inputs: moon vs planet `time_last_update`
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-006
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - DOMAIN_FACT
+- id: INT-007
+  title: Control your own signature; never hover after dispatch
+  domain: espionage
+  confidence: B
+  status: researched
+  principle: refreshing the launch planet after sending creates an activity chain advertising "something
+    is in flight"; dispatch and disappear.
+  inputs: own activity pattern
+  exceptions: none.
+  archetypes: all; fleeter-critical
+  sources: TP-006
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: INT-008
+  title: Espionage-tech level gates report completeness
+  domain: espionage
+  confidence: A
+  status: researched
+  principle: what a report reveals is thresholded by espionage tech vs target level (host `canRevealData`),
+    so an incomplete report means "send more probes", not "probe failed".
+  inputs: espionage tech, target levels, missing fields
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-008, host `EspionageMission::canRevealData`
+  ogamex: supported but unwired (module sends one probe)
+  code: '`QueueableSpyPlanner`'
+  priority: P2
+  claim_type:
+  - DOMAIN_FACT
+- id: INT-009
+  title: Repeated probing of an active target alerts it
+  domain: espionage
+  confidence: B
+  status: researched
+  principle: probing an active target repeatedly is itself a tell; scout once, act fast, or move on.
+  inputs: probe count per target, target activity
+  exceptions: inactive farms.
+  archetypes: fleeter
+  sources: TP-008
+  ogamex: supported
+  code: none
+  priority: P2
+  claim_type:
+  - SCORING_FACTOR
+- id: INT-010
+  title: The activity timer is per-planet and absolute
+  domain: espionage
+  confidence: A
+  status: researched
+  principle: each planet/moon carries its own 15-min timestamp; the star vanishes exactly 15 min after
+    that body's last update.
+  inputs: per-planet `time_last_update`
+  exceptions: none.
+  archetypes: all
+  sources: TP-006
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - DOMAIN_FACT
+- id: INT-001
+  title: 'Scout is bounded: each target once per intel window'
+  domain: espionage
+  confidence: B
+  status: shipped
+  principle: each neighbour is probed once per window, then the account stops probing and acts on the
+    intel; re-probing the same farm forever is the tell that was removed.
+  inputs: fresh-intel coordinates, in-flight probes
+  exceptions: re-probe escalation when intel is insufficient (INT-002).
+  sources: TP-006, BOT-003 target lifecycle
+  ogamex: supported
+  code: '`QueueableSpyPlanner::freshIntelCoordinates` (N1/N2)'
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: INT-002
+  title: Escalate probe count when a report is incomplete
+  domain: espionage
+  confidence: B
+  status: partial
+  principle: '"send 5–10 probes"; TBot re-probes at ×3 then ×9 when the report does not reveal; the module
+    sends exactly one probe.'
+  inputs: report completeness, probe availability
+  exceptions: none.
+  sources: TP-008 (documented), BOT-003 (verified)
+  ogamex: supported
+  code: single probe today
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: INT-003
+  title: Prioritize targets, do not take the first legal one
+  domain: espionage
+  confidence: B
+  status: researched
+  principle: target selection should score distance, likely yield and novelty, not walk planets in `id`
+    order.
+  inputs: distance, galaxy position, prior knowledge
+  exceptions: none.
+  sources: TP-006, BOT-005
+  ogamex: supported but first-fit
+  code: '`QueueableSpyPlanner::target` first-fit'
+  priority: P1
+  claim_type:
+  - SCORING_FACTOR
+- id: INT-004
+  title: The activity star is intelligence, not decoration
+  domain: espionage
+  confidence: A
+  status: researched
+  principle: the 15-minute activity marker names *which* planet was touched and when; it feeds both raid
+    risk (RAID-004) and target choice — and it must never be triggered deliberately.
+  inputs: planet `time_last_update`, activity status
+  exceptions: none.
+  sources: TP-006 (documented), host-verified
+  ogamex: supported (host galaxy activity + `Planet.time_last_update`) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - DOMAIN_FACT
+- id: INT-011
+  title: Scan from home, not from the colony you are attacking
+  domain: espionage
+  confidence: B
+  status: researched
+  principle: never launch espionage scans from a battle colony — scan from the home planet so the target
+    cannot read your presence from the activity stamp.
+  inputs: origin body, target activity
+  exceptions: none.
+  sources: PLW-003 (documented)
+  ogamex: supported (activity marker) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: INT-012
+  title: Scan by day, never re-scan the same fleet by night
+  domain: espionage
+  confidence: B
+  status: researched
+  principle: seek fleets with scans during the day and do not re-scan the same fleet at night, so a probe
+    reads as a random daytime scan rather than a hunt on a specific fleet.
+  inputs: time of day, prior scans
+  exceptions: none.
+  sources: PLW-003 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC

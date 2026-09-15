@@ -1,0 +1,80 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- domain: Economy
+  sources: strong
+  principles: 7
+  shipped: 7
+  researched_or_gap: '0'
+  coverage: '**high**'
+- domain: Research
+  sources: strong
+  principles: 3
+  shipped: 3
+  researched_or_gap: '0'
+  coverage: '**high**'
+- domain: Colonization
+  sources: strong
+  principles: 4
+  shipped: 1
+  researched_or_gap: 3 (1 partial)
+  coverage: high
+- domain: Raiding
+  sources: strong
+  principles: 14
+  shipped: 3
+  researched_or_gap: '11'
+  coverage: medium (sourced, unwired)
+- domain: Fleet composition
+  sources: strong
+  principles: 15
+  shipped: 2
+  researched_or_gap: 13 (1 partial)
+  coverage: high (sourced, unwired)
+- domain: Fleetsave / survival
+  sources: strong
+  principles: 11
+  shipped: 1
+  researched_or_gap: 10 (2 partial)
+  coverage: high (sourced, unwired)
+- domain: Espionage / intel
+  sources: strong
+  principles: 12
+  shipped: 1
+  researched_or_gap: 11 (1 partial)
+  coverage: medium (sourced, unwired)
+- domain: Fleetcrash / phalanx / moon
+  sources: strong
+  principles: 14
+  shipped: 0
+  researched_or_gap: 14 (1 partial)
+  coverage: medium (sourced, unwired)
+- domain: Ninja / baiting
+  sources: medium
+  principles: 5
+  shipped: 0
+  researched_or_gap: '5'
+  coverage: medium (sourced, unwired)
+- domain: ACS / coordination
+  sources: moderate
+  principles: 14
+  shipped: 0
+  researched_or_gap: '14'
+  coverage: medium (alliance-gated, deferred Pkg 6)
+- domain: Expeditions
+  sources: moderate
+  principles: 2
+  shipped: 0
+  researched_or_gap: '2'
+  coverage: medium (sourced, unwired)
+- domain: Routine / authenticity
+  sources: strong
+  principles: 4
+  shipped: 3
+  researched_or_gap: 1 (1 partial)
+  coverage: high
+- domain: Social / diplomacy
+  sources: moderate
+  principles: 2
+  shipped: 0
+  researched_or_gap: '2'
+  coverage: deferred (Pkg 6)

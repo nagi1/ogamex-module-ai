@@ -1,0 +1,81 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: NIN-001
+  title: The ninja turns a raid into an attacker kill
+  domain: ninja
+  confidence: A
+  status: researched
+  principle: a ninja keeps the real defensive fleet away from the bait planet (hidden on a moon or a timed-return
+    mission) and lands it just before the attacker's fleet arrives, so it fights as defender and kills
+    the attacker.
+  inputs: bait planet, hidden fleet, attacker ETA
+  exceptions: none.
+  sources: WIK-005, TP-011 (documented)
+  ogamex: supported (fleet/moon/defence) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - ADVANCED_TACTIC
+- id: NIN-002
+  title: The ninja fleet lands on the combat second
+  domain: ninja
+  confidence: B
+  status: researched
+  principle: the ninja fleet must be present at the combat second — same-second or a ~1 s server-tick
+    buffer; landing seconds early exposes it to a recall, landing after misses the battle.
+  inputs: attacker ETA, own fleet timing
+  exceptions: none.
+  sources: TP-011, WIK-005 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - ADVANCED_TACTIC
+- id: NIN-003
+  title: Bait reads as a soft farm, not a trap
+  domain: ninja
+  confidence: B
+  status: researched
+  principle: bait leaves a resource pile large enough to make a raider's profit math positive while keeping
+    stationary defence light, so the target reads as a soft farm; a fortress or an obvious trap deters
+    instead of lures.
+  inputs: resource pile, defence levels
+  exceptions: none.
+  sources: TP-011 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: NIN-004
+  title: The trap fleet is absent from the spy report
+  domain: ninja
+  confidence: A
+  status: researched
+  principle: the trap fleet is staged on a nearby moon (moon ninja) or away on a mission timed to return
+    before impact; the moon-lure variant parks a Deathstar plus a wall of solar satellites to bait a big
+    attack and force a moon-forming debris field.
+  inputs: moon presence, return timing, bait composition
+  exceptions: none.
+  sources: TP-011, WIK-005 (documented)
+  ogamex: supported (moon, debris) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - ADVANCED_TACTIC
+- id: NIN-005
+  title: An attacker defends against ninjas by checking for staging
+  domain: ninja
+  confidence: B
+  status: researched
+  principle: phalanx the target's nearby planets for staged fleets, probe when no moon is available, abort
+    if defensive fleet movement appears, and send a last-second espionage probe to confirm the defender's
+    fleet is still on the planet before impact.
+  inputs: phalanx coverage, probe timing, movement signals
+  exceptions: none.
+  sources: WIK-005, TP-014 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - ADVANCED_TACTIC

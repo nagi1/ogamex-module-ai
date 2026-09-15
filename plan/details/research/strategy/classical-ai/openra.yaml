@@ -1,0 +1,27 @@
+# Generated from plan/details/research/classical-ai-patterns.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: OA-1
+  title: Capability modules + data-driven bot profiles
+  source_game: openra
+  game: OpenRA
+  confidence: A (handoff)
+  problem: every personality needs the same capabilities; only the emphasis differs.
+  vanilla: separate **modules** (economy, production, squads, expansion, …) consume a **YAML profile**
+    (`rush`/`normal`/`turtle`/`naval`) with building limits/fractions/delays, production thresholds, unit
+    weights, squad size, scan radii, rush intervals, power thresholds, expansion tolerance.
+  mechanism: shared modules + profile data — no unique implementation per personality.
+  ogamex_mapping: H3 again — the shared tactical planners are the modules; the profile surface is the
+    data. The question the brief poses (can `Miner/Fleeter/Turtle/Trader/Casual` reuse the same capability
+    implementation?) is answerable *yes* given the current planner set.
+  sources: '`OpenRA/OpenRA` `mods/ra/rules/ai.yaml` (handoff-named).'
+- id: OA-2
+  title: A small profile surface covers every archetype
+  source_game: openra
+  game: OpenRA
+  confidence: B (handoff)
+  problem: how few knobs does variety actually need?
+  vanilla: a handful of YAML sections produce four playable profiles.
+  ogamex_mapping: 'the brief''s profile-dimensions list (economy: `roi_sensitivity`, `economic_patience`,
+    `expansion_bias`, `liquidity_preference`; military: `aggression`, `risk_tolerance`; …) is the candidate
+    surface — hypothesis, each parameter to be justified before it exists.'
+  sources: '`ai.yaml` (handoff-named).'

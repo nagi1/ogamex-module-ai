@@ -1,0 +1,180 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: ACS-001
+  title: ACS attack merges fleets into one battle
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: multiple players send fleets to one target at one second and all fight as a single side.
+  inputs: target coords, participant fleets, shared arrival
+  sources: GF-003
+  ogamex: supported (`FleetUnionService`, type 2) but unwired
+  priority: P3
+  claim_type:
+  - DOMAIN_FACT
+- id: ACS-002
+  title: ACS is formed by invitation and join
+  domain: ACS
+  confidence: A
+  status: researched (alliance-gated)
+  principle: one player creates the fleet union and invites others, who join with their own fleets before
+    the shared impact.
+  inputs: invitation, join acceptance, per-member fleet
+  sources: GF-003, host `FleetUnionService`
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - DOMAIN_FACT
+- id: ACS-003
+  title: Synchronize all fleets to the same impact second
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: every participating fleet arrives at the exact same second.
+  inputs: per-fleet duration/speed, shared ETA
+  sources: GF-003
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - ADVANCED_TACTIC
+- id: ACS-004
+  title: The slowest attacker anchors the arrival time
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: the slowest fleet fixes the impact time; faster fleets slow to match it.
+  inputs: slowest ETA, each fleet speed
+  sources: GF-003
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - ADVANCED_TACTIC
+- id: ACS-005
+  title: Espionage precedes the coordinated hit
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: probe the target's defence and fleet before committing the combined attack.
+  inputs: espionage report
+  sources: GF-003
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ACS-006
+  title: Explicit assignment of who sends what, when, where
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: coordination requires clear communication of who sends which fleet, when, where.
+  inputs: member roles, fleet assignment, timing plan
+  sources: GF-003
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ACS-007
+  title: ACS hits targets no single player could
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: the combined attack enables hits on well-defended planets and strong fleeters that no individual
+    fleet could manage.
+  inputs: target strength vs combined alliance strength
+  sources: GF-003
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ACS-008
+  title: ACS defend stations allied fleets via the Alliance Depot
+  domain: ACS
+  confidence: B (Depot building unconfirmed in host survey)
+  status: researched (alliance-gated)
+  principle: an Alliance Depot lets allied fleets hold in orbit to defend; capacity scales with depot
+    level.
+  inputs: depot level, allied fleet count
+  sources: GF-003, host `AcsDefendMission` type 5
+  ogamex: partial (type 5 supported; Depot unverified)
+  priority: P3
+  claim_type:
+  - ADVANCED_TACTIC
+- id: ACS-009
+  title: ACS is ordinary alliance play, not war-only
+  domain: ACS
+  confidence: C (synthesis)
+  status: researched (alliance-gated)
+  principle: ACS is a standing alliance capability (protection, crashing, domination, toplists), not gated
+    to formal war.
+  inputs: alliance membership
+  sources: veteran-play §8, pve-empire, pve-precedents
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ACS-010
+  title: Second-precision ACS is the one real-time case
+  domain: ACS
+  confidence: C (framing) / B (timing fact)
+  status: researched (alliance-gated)
+  principle: among documented social latencies, only ACS demands second-precision timing.
+  inputs: arrival alignment vs reply cadence
+  sources: GF-003, player-communication
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - ADVANCED_TACTIC
+- id: ACS-011
+  title: ACS splits fall under the 72-hour rule
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: trades, recycling help and ACS splits must complete within 72 hours.
+  inputs: split obligations, completion timestamp
+  sources: GF-005 §5
+  ogamex: supported
+  priority: P3
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: ACS-012
+  title: Host supports ACS attack/defend but the module is unwired
+  domain: ACS
+  confidence: A
+  status: researched (alliance-gated)
+  principle: host implements ACS attack (type 2) and defend (type 5); no module planner/action references
+    them.
+  inputs: '`allianceCombatSystemOn`, types 2/5'
+  sources: host-capability-map, GAP-REGISTER W6-5
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - DOMAIN_FACT
+- id: ACS-013
+  title: A joining fleet may not slow the group past 30%
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: the ACS group flies at its slowest fleet's speed, and a later joining fleet may not slow
+    the group by more than 30% of the current flight time; Death Stars cannot join an ACS moon-destruction
+    mission.
+  inputs: join ETA, current group flight time
+  exceptions: none.
+  sources: PLW-004 (documented)
+  ogamex: supported (type 2) but unwired
+  priority: P3
+  claim_type:
+  - DOMAIN_FACT
+- id: ACS-014
+  title: ACS debris splits by agreement
+  domain: ACS
+  confidence: B
+  status: researched (alliance-gated)
+  principle: the loot/debris split is by agreement; the simplest convention divides debris into a loss-equalizing
+    share (by lost units) and a profit share proportional to each player's fleet contribution.
+  inputs: losses, contribution
+  exceptions: none.
+  sources: PLW-004 (documented)
+  ogamex: supported but unwired
+  priority: P3
+  claim_type:
+  - STRATEGIC_HEURISTIC

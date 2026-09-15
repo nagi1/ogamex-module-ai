@@ -843,3 +843,21 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   so a helper `require_once`d from `tests/Pest.php` (the `FixturePlayerPerceptionBuilder` pattern) is
   visible to every worker, but a function defined inside a test file is not — cross-file use passed the
   serial coverage run and failed the parallel test run, which is why the first attempt was reverted.
+
+### Strategy Knowledge Storage Format implemented as YAML (15 September 2026)
+- The owner clarified that "storage" means the **Strategy Knowledge Storage Format**, and re-sent the
+  spec after the earlier "storage-format no" verdict, so it is now built.
+- `plan/details/research/strategy/` holds the machine-readable store, **generated** from the existing
+  Markdown catalogs by `scripts/strategy-export.py`: `sources.yaml` (94), `principles/<domain>.yaml`
+  (107 across 13 domains), `classical-ai/<game>.yaml` (23 across 5 games), `contradictions.yaml` (14
+  confidence-C entries), `open-questions.yaml` (H1–H10), `coverage.yaml` (13 domains); `claim_type[]`
+  is carried onto each principle from `strategy-claims.md`. 22 files, 261 entries, all parse.
+- The location follows the spec: the existing research tree, no new top-level directory; the domains
+  are the repo's own, not the spec's example names.
+- **No runtime config, no schema framework** — as the spec requires. Nothing here is executed.
+- **Open, recorded not hidden:** (a) the source has not flipped — the Markdown is still the editable
+  source and the YAML is derived, so editing the YAML directly would drift; flipping needs the
+  Markdown consumers (`gameplay-algorithms.md`, `GAP-REGISTER.md`, the task DB) repointed first.
+  (b) The spec's `claims/*.yaml` atomic-claims layer has **no extracted data** — the repo goes
+  sources → principles directly; the only claim layer that exists is the classification, carried as
+  `claim_type`.

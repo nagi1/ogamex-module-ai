@@ -1,0 +1,154 @@
+# Generated from plan/details/research/classical-ai-patterns.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: ZH-1
+  title: Economic state modifies action cadence
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff, named file)
+  problem: a fixed production cadence ignores whether the account is rich or broke.
+  vanilla: '`AIData.ini` polls structure/team production at `StructureSeconds`/`TeamSeconds`; `Wealthy`/`Poor`
+    resource thresholds flip `StructuresWealthyRate`/`StructuresPoorRate` / `TeamsWealthyRate`/`TeamsPoorRate`.'
+  mechanism: STATE → parameter modifier → changed behaviour (wealthy → build/spend faster; poor → slow
+    production and preserve resources).
+  why: cadence tracks economic condition instead of a constant; two thresholds and four rates.
+  cost: zero per-tick — the modifier is read, not computed.
+  failure_modes: a threshold cliff at the boundary; a new parameter per state instead of a shared modifier.
+  generalizable: yes — the lesson is "a few named states modify a small parameter surface", never a giant
+    strategy tree.
+  ogamex_mapping: candidate breadth and re-evaluation cadence modulated by account stage and resource
+    pressure. Today `ArchetypePolicy` moves the *action type*, not the cadence — the exact distinction
+    the brief calls out. Open; would need evidence before a `spend/save/normal` surface.
+  sources: '`FreemanZY/Command_And_Conquer_INI` → `AIData.ini`; EA source `AI.h`/`AIPlayer.h`.'
+- id: ZH-2
+  title: Derived world-state signals from raw sensors
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff)
+  problem: reacting to a single weak enemy unit makes the AI twitchy and predictable.
+  vanilla_improved: a script threshold sets `EnemyInBase = true` only when enough enemy force has entered,
+    rather than on first contact.
+  mechanism: aggregate raw events over a threshold into a **named boolean derived state**.
+  why: one reaction per state transition, not per event; the state is inspectable and tunable.
+  cost: a counter and a comparison per event; negligible.
+  failure_modes: a threshold that never fires (the AI stops reacting); a state that is set and never cleared.
+  generalizable: yes, directly.
+  ogamex_mapping: '`PerceptionSnapshot` should expose derived features — `under_sustained_threat`, `high_fleet_exposure`,
+    `resource_overflow_pressure`, `likely_target_online`, `recent_hostility` — rather than forcing every
+    planner to re-derive them from raw events. Partially present (`recovery_factor`); the rest are unwired.'
+  sources: WorldBuilder script guide (handoff-named).
+- id: ZH-3
+  title: Master counter / strategic progression
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: B (handoff)
+  problem: behaviour needs to shift when the game stage shifts (losses, tech, time, failed assaults).
+  vanilla: a counter represents the current strategic stage and changes after those events.
+  mechanism: one bounded ordinal that gates which scripts are active.
+  why: a single named stage is cheaper to reason about than many ad-hoc thresholds.
+  failure_modes: stage proliferation; the counter becomes a hidden state machine nobody can trace.
+  generalizable: maybe — OGameX already has `AiSkillBand` and `ArchetypePolicy`; a `StrategicPosture`
+    would be a *third* axis and must not duplicate them.
+  ogamex_mapping: 'recorded as an **open question** (brief disagreement 5): revisit only if the raid/fleetsave
+    corpus repeatedly needs a temporary operating state that current intent scoring cannot express. Not
+    approved.'
+  sources: WorldBuilder script guide (handoff-named).
+- id: ZH-4
+  title: Difficulty-specific cadence
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff)
+  problem: Easy/Normal/Hard need different pressure without different rules.
+  vanilla: difficulty changes the rate teams are produced (`ResourceGatherersEasy/Normal/Hard`, SkillSets,
+    SkirmishBuildLists).
+  mechanism: difficulty is a *parameter modifier*, not new mechanics.
+  ogamex_mapping: difficulty should change **decision quality** — candidate breadth, intel freshness required,
+    decision noise, reaction delay — never free resources. `AiSkillBand` already does this shape (variation
+    weight, selection margin). This is hypothesis **H9**.
+  sources: '`AIData.ini` (handoff-named).'
+- id: ZH-5
+  title: Context-gated candidate generation
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: B (handoff)
+  problem: scoring obviously-irrelevant strategies wastes the budget and makes bad choices reachable.
+  vanilla: teams are only produced when their condition is true (enemy has tanks → build the anti-tank
+    response).
+  mechanism: the candidate never exists unless its precondition holds — generation is context-sensitive,
+    scoring is only comparative among the live set.
+  generalizable: 'yes — but OGameX''s broad-then-score design is deliberate (gate 2; the techniques note
+    measured search as worse). The import is *narrower*: hard preconditions for legal invalidity (a moon-scanner
+    without a moon), not a taste filter.'
+  ogamex_mapping: '`CandidateActionFactory` may gain legal preconditions; taste stays in the scorer. Open;
+    feeds the F-series (a phalanx/recall/moon candidate cannot exist where the host surface does not).'
+  sources: '`SkirmishScripts` (handoff-named).'
+- id: ZH-6
+  title: Attack-priority sets (per-mission attractiveness)
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff)
+  problem: a target has no single universal score; its attractiveness depends on who is attacking it and
+    why.
+  vanilla: different unit/team types carry different `AttackPrioritySets`.
+  mechanism: attractiveness is a **function of (target, fleet composition, mission, personality, posture,
+    need)**, not a target constant.
+  ogamex_mapping: this is the direct ancestor of the raid target score — the **T6** block. `RaidPlanner`
+    today scores profit only, so the same target is equally attractive to every archetype; the brief's
+    H5 is the target feature list.
+  sources: '`AttackPrioritySets`, `AIData.ini` (handoff-named).'
+- id: ZH-7
+  title: Sequential multi-step plans
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff)
+  problem: some behaviours are sequences, not isolated actions.
+  vanilla: the script system runs sequential scripts with subroutines, counters, flags, timers, one-shot
+    and repeated behaviour.
+  mechanism: a deterministic chain — probe → wait for report → evaluate → attack → schedule recycler →
+    observe outcome — expressed as a plan, not an LLM-coordinated loop.
+  ogamex_mapping: OGameX actions are currently individual intents. The recycle trip (attack → debris →
+    recycle) and the crash sequence are the natural first chains. **F4** writes the recycle trip as such
+    a chain. Open for the rest.
+  sources: '`SkirmishScripts.scb`, WorldBuilder script guide (handoff-named).'
+- id: ZH-8
+  title: Success/failure priority feedback
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: B (handoff; the brief flags it as "bounded stateful adaptation, NOT ML")
+  problem: the AI repeats a pattern that has just failed, and never doubles down on one that worked.
+  vanilla_mod: team success/failure alters that team's priority — a successful attack pattern becomes
+    more likely, a failed one loses priority.
+  mechanism: a bounded per-pattern counter adjusted by outcomes, read back into the score.
+  why: adapts to the *current* universe without any learning runtime; fully deterministic and replayable.
+  failure_modes: momentum lock-in (a temporarily-hot pattern crowds out alternatives); a counter that
+    never decays.
+  generalizable: yes, as **bounded recent-outcome modifiers** over existing memory/state.
+  ogamex_mapping: hypothesis **H8** — a recent low-risk raid success temporarily boosts the raiding posture;
+    repeated losses push toward recovery. The existing `recovery_factor` and the decision-trace outcome
+    records are the raw material; no new persistence layer is implied.
+  sources: SkirmishScripts modding practice (handoff-named).
+- id: ZH-9
+  title: Randomized SkillSets (bounded variety)
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff)
+  problem: identical bots are a cohort giveaway and a boring universe.
+  vanilla: the AI chooses among multiple `SkillSets`; each is a complete, valid behaviour variant.
+  mechanism: deterministic seeded selection among **good** variants — variety over valid choices, never
+    arbitrary action.
+  ogamex_mapping: already the design — `AiSkillBand` (variation weight, selection margin) plus seeded
+    variation over scored candidates. The lesson is the direction of the randomness (over the top candidate
+    set, after rational filtering), which is hypothesis **H-candidate-set** in the plan.
+  sources: '`SkillSets` (handoff-named).'
+- id: ZH-10
+  title: Engine primitives + data decides behaviour
+  source_game: zero-hour
+  game: Zero Hour
+  confidence: A (handoff; the brief's own headline)
+  problem: where is the line between engine and behaviour?
+  vanilla: the C++ engine implements generic capabilities; `AIData.ini` + scripts + teams + build lists
+    + attack priorities decide *actual faction behaviour*. `AIData.ini` does not contain the entire AI.
+  mechanism: primitives in code, taste in data.
+  ogamex_mapping: 'this is cognition **gate 1** restated: the object universe, prices and requirements
+    are host data; module policy may express *taste* but never reachability. Already the governing rule,
+    not new.'
+  sources: EA source + `FreemanZY` data (handoff-named).

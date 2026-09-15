@@ -1,0 +1,173 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: FS-006
+  title: Carry the resources with the fleet
+  domain: fleetsave
+  confidence: A
+  status: researched
+  principle: a save is incomplete unless cargo is loaded too — in-flight resources cannot be raided, and
+    a stripped planet is unprofitable to hit.
+  inputs: planet stock, cargo capacity, loot cap
+  exceptions: none.
+  archetypes: miner strong-positive, fleeter positive
+  sources: TP-009, GF-002, FOR-005
+  ogamex: supported (cargo capacity quotes) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FS-007
+  title: Land after the expected login, with a buffer
+  domain: fleetsave
+  confidence: B (buffer magnitude contested)
+  status: researched
+  principle: time the return after the expected online moment and pad with a buffer; the buffer is a persona
+    band (10–20 min vs +30–60 min are contested).
+  inputs: expected online time, duration, speed, buffer
+  exceptions: none.
+  archetypes: all
+  sources: GF-002, FOR-005, TP-009
+  ogamex: supported
+  code: none (only the skip rate today)
+  priority: P1
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: FS-008
+  title: Mask the dispatch moment with post-save activity
+  domain: fleetsave
+  confidence: B
+  status: researched
+  principle: stay online briefly (or generate activity shortly) after launching so the departure timestamp
+    is not readable off the activity star.
+  inputs: departure timestamp, activity marker
+  exceptions: none.
+  archetypes: fleeter strong-positive
+  sources: TP-009, FOR-005
+  ogamex: supported (activity marker) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FS-009
+  title: Split the fleet across saves (shadow waves)
+  domain: fleetsave
+  confidence: B
+  status: researched
+  principle: divide the fleet among missions/arrival waves so a phalanx-timed crash catches only part;
+    slot cost is the ceiling.
+  inputs: fleet size, slot count, recycler count
+  exceptions: small fleets (not worth splitting).
+  archetypes: fleeter strong-positive
+  sources: GF-002, FOR-005, TP-009
+  ogamex: supported (fleet slots) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - ADVANCED_TACTIC
+- id: FS-010
+  title: A recalled deployment is the phalanx-invisible save
+  domain: fleetsave
+  confidence: A
+  status: researched
+  principle: a recalled deployment disappears from the phalanx entirely, making deploy-recall the safest
+    pre-moon save; recall applies to a deploy between two own planets.
+  inputs: deployment flight, recall moment, origin/destination type
+  exceptions: same-planet relocation is not recallable.
+  archetypes: fleeter strong-positive, miner positive
+  sources: FOR-005, TP-009
+  ogamex: supported (`cancelMission`→`startReturn`) but no module caller
+  code: none (`AiActionType::RecallFleet` unused)
+  priority: P1
+  claim_type:
+  - ADVANCED_TACTIC
+- id: FS-001
+  title: Save a valuable fleet before any offline gap
+  domain: fleetsave
+  confidence: B
+  status: researched
+  principle: '"if you go offline > 30 minutes with a valuable fleet, fleetsave it" — proactive exposure/fleet-value
+    risk, not only a reaction to an inbound attack.'
+  inputs: fleet value, offline window, exposure
+  exceptions: none.
+  sources: TP-007, TP-009 (documented)
+  ogamex: supported but the module is reactive only (`currentPlayerUnderAttack`)
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FS-002
+  title: Vary landing time and route
+  domain: fleetsave
+  confidence: B
+  status: partial
+  principle: '"never save to the same landing time every day"; pattern-aware attackers deduce duration
+    and intercept.'
+  inputs: landing time, route
+  exceptions: none.
+  sources: TP-009, FOR-005 (documented)
+  ogamex: supported
+  code: only the skip rate varies today
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FS-003
+  title: A save can fail, and the failure is named
+  domain: fleetsave
+  confidence: D
+  status: shipped (placeholder)
+  principle: an authentic account occasionally fails ("overnight gamble", forgetting to relaunch); the
+    rate is a placeholder (1/30) until telemetry replaces it.
+  inputs: deterministic per-account draw
+  exceptions: none.
+  sources: TP-009, GF-002 (named modes, no rate)
+  ogamex: supported
+  code: '`SaveFailurePolicy` (V3)'
+  priority: P0
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: FS-004
+  title: React inside a window before impact
+  domain: fleetsave
+  confidence: B
+  status: deferred
+  principle: wake at `arrival − 120…180 s` to react to a hostile, never faster than the 10 s detector
+    floor.
+  inputs: inbound ETA
+  exceptions: none.
+  sources: BOT-005 (verified)
+  ogamex: supported
+  code: V2 deferred
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FS-005
+  title: Enumerate destination × speed routes, not one default
+  domain: fleetsave
+  confidence: B
+  status: partial
+  principle: score feasible mission×destination×speed combinations on exposure, fuel and schedule fit;
+    the module picks the first other own planet at speed 1.0.
+  inputs: owned destinations, speeds, fuel
+  exceptions: none.
+  sources: BOT-005 (verified), TP-009 (documented)
+  ogamex: supported (deploy/recall semantics verified)
+  code: '`QueueableFleetSavePlanner` first-fit'
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FS-011
+  title: Harvest and buddy-hold saves are phalanx-invisible
+  domain: fleetsave
+  confidence: B
+  status: researched
+  principle: a moon-to-debris-field harvest save and a moon-to-buddy-moon hold both fly from a moon and
+    are invisible to phalanx; without a moon the only safe save is a slowed deployment to one's own colony,
+    recalled before arrival.
+  inputs: moon presence, debris field, buddy moon, speed
+  exceptions: none.
+  sources: PLW-001 (documented)
+  ogamex: supported (harvest/hold missions) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - ADVANCED_TACTIC

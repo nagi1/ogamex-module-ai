@@ -1,0 +1,61 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: AUTH-001
+  title: The host detector thresholds are hard constraints
+  domain: authenticity
+  confidence: A
+  status: shipped
+  principle: <18 distinct active hours per 7 days, never react <10 s, a real nightly dark period — these
+    bound every schedule, whatever the persona.
+  inputs: departure hours, reaction latencies
+  exceptions: none.
+  sources: host-verified, veteran-play §5
+  ogamex: supported
+  code: '`SessionPlanner` (H1)'
+  priority: P0
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: AUTH-002
+  title: Sessions and gaps are heavy-tailed, never uniform
+  domain: authenticity
+  confidence: A
+  status: shipped
+  principle: draw session length and gap from a Weibull with shape ≈ 0.7–0.9; a uniform window is exactly
+    what a periodicity detector looks for.
+  inputs: mean wait, shape
+  exceptions: none.
+  sources: ACA-004, ACA-005 (measured), BOT corpus
+  ogamex: supported
+  code: '`SessionPlanner` Weibull draws (H2)'
+  priority: P0
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: AUTH-003
+  title: Plan real absences
+  domain: authenticity
+  confidence: B
+  status: shipped
+  principle: single days, multi-day gaps and a yearly week-long absence, decided once per waking day.
+  inputs: absence draw
+  exceptions: never past ~28 days.
+  sources: veteran-play §9 (measured/estimate)
+  ogamex: supported
+  code: H3
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: AUTH-004
+  title: Wake at the next material event, not on a poll
+  domain: authenticity
+  confidence: A
+  status: partial
+  principle: sleep until the earliest of resource ETA, queue finish, fleet arrival/return, slot free,
+    storage threshold — the one idea every surveyed bot shares.
+  inputs: ETAs
+  exceptions: none.
+  sources: BOT-003/BOT-005/BOT-006 (verified)
+  ogamex: supported
+  code: SP3 — scheduling shipped, full next-wake partial
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC

@@ -1,0 +1,30 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: SOC-001
+  title: Speak rarely and in context; answer reliably
+  domain: social
+  confidence: B
+  status: deferred
+  principle: initiating contact needs a trigger and a recipient; answering stays shipped.
+  inputs: contact trigger
+  exceptions: none.
+  sources: personas/communication research
+  ogamex: partial
+  code: SOC1 deferred to Package 6
+  priority: P3
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: SOC-002
+  title: Alliance life beyond observation
+  domain: social
+  confidence: C
+  status: deferred
+  principle: apply, then behave like a member; membership is observed today but never initiated.
+  inputs: alliance state
+  exceptions: none.
+  sources: FOR-009 (documented)
+  ogamex: partial
+  code: SOC2 deferred to Package 6
+  priority: P3
+  claim_type:
+  - STRATEGIC_HEURISTIC

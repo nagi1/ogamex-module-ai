@@ -1,0 +1,15 @@
+# Generated from plan/details/research/classical-ai-patterns.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: CB-1
+  title: Per-opponent hostility modifies targeting
+  source_game: cobra
+  game: Cobra
+  confidence: A (handoff; the "grudge counter" is a confirmed feature)
+  problem: which enemy to hit when several are legal?
+  vanilla: aggressive acts increment a per-opponent counter; Cobra preferentially attacks the opponent
+    with the highest accumulated hostility/threat.
+  mechanism: a per-opponent scalar, decayed by time, read into target preference.
+  ogamex_mapping: do **not** call it "grudge" and do **not** duplicate FAtiMA/CiF relationship state —
+    existing social/memory state (hostility, attacks against us, destroyed fleet value, probes, betrayal)
+    feeds a **relationship term** in the T6 target score. This is H5's `relationship/hostility` signal.
+  sources: '`KJeff01/Cobra` (handoff-named).'

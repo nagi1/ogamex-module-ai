@@ -1,0 +1,63 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: COL-001
+  title: Choose the slot by the host's own position bonuses
+  domain: colonization
+  confidence: A
+  status: shipped
+  principle: slot choice reads host-published position bonuses (crystal 40/30/20% on slots 1/2/3, metal
+    35% on slot 8, deuterium maximised on slot 15); the earlier "30/22.5/15" figures are stale official
+    values, not a genuine contest — the host's published table is authoritative (gate 1).
+  inputs: host position bonuses, available slots
+  exceptions: none.
+  sources: WIK-012, TP-016 (host 7.4.0/7.5.0 values), ORG-010
+  ogamex: supported
+  code: '`QueueableColonyPlanner` (CL1)'
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: COL-002
+  title: Treat the colony as another mine
+  domain: colonization
+  confidence: B
+  status: partial
+  principle: a new colony's value is the production it adds over cost — the same payback logic as a mine,
+    not a one-off step.
+  inputs: colony cost, position yield
+  exceptions: none.
+  sources: veteran-play §8 (documented)
+  ogamex: supported
+  code: CL2 (next economy step)
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: COL-003
+  title: The first colony is early and deuterium-biased
+  domain: colonization
+  confidence: B
+  status: researched
+  principle: the first colony lands in week 2 at an outer slot (12–15) for deuterium, and Astrophysics
+    is rushed to 3 for a second colony because each new colony doubles income potential.
+  inputs: astro level, slot bonuses, deuterium demand
+  exceptions: none.
+  sources: TP-007 (documented)
+  ogamex: supported (host slot bonuses) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: COL-004
+  title: Spread for coverage, keep one same-system pair
+  domain: colonization
+  confidence: C
+  status: researched
+  principle: spread colonies across systems/galaxies for phalanx coverage, farming radius and resilience,
+    keep one same-system pair for the cheapest moon-to-moon save, and abandon colonies below ~200 fields.
+  inputs: positions, field counts, travel cost
+  exceptions: none.
+  sources: TP-016 (synthesis)
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC

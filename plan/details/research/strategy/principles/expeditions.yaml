@@ -1,0 +1,33 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: EXP-001
+  title: Expeditions are not a fleetsave
+  domain: expeditions
+  confidence: B
+  status: researched
+  principle: expeditions must never be used as a fleetsave because there is a small chance the whole fleet
+    vanishes.
+  inputs: fleet composition, mission choice
+  exceptions: none.
+  sources: PLW-005 (documented)
+  ogamex: not re-verified (expedition mission exists, ORG-012)
+  code: none
+  priority: P2
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: EXP-002
+  title: Expedition outcomes are bounded and slot-16 only
+  domain: expeditions
+  confidence: B
+  status: researched
+  principle: expeditions target only slot 16 of a system; outcomes include found ships (never Death Stars),
+    antimatter, resources capped at cargo capacity, traders, empty return, pirate/alien attack, a rare
+    total fleet loss, and a navigation error that shifts the return time.
+  inputs: slot 16, fleet, cargo
+  exceptions: none.
+  sources: PLW-005 (documented)
+  ogamex: not re-verified
+  code: none
+  priority: P2
+  claim_type:
+  - DOMAIN_FACT

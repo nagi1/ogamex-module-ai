@@ -1,0 +1,111 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: ECO-001
+  title: Prefer economic investment with better amortization
+  domain: economy
+  confidence: A
+  status: shipped
+  principle: order production upgrades by marginal gain ÷ weighted price; stop when payback exceeds the
+    persona horizon.
+  inputs: next-level cost, raw production gain, build time, average mine level.
+  affects: economic investment scoring
+  archetypes: miner strong-positive, fleeter neutral.
+  exceptions: energy bottleneck (ECO-005), imminent threat, major unlock (RES-002, COL-001).
+  sources: FOR-001, TP-002, BOT-001 (verified)
+  ogamex: supported
+  code: '`EconomyUpgrades::pending` (E1)'
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ECO-002
+  title: The payback horizon adapts and caps
+  domain: economy
+  confidence: A
+  status: shipped
+  principle: accept paybacks up to an adaptive cap `min(168 h, 24 h × (1 + average mine level / 20))`.
+  inputs: average mine level, persona horizon.
+  affects: stop rule for the economy rank
+  exceptions: none.
+  sources: BOT-001 (verified), TP-002 (documented)
+  ogamex: supported
+  code: '`EconomyUpgrades::paybackHorizonHours`'
+  priority: P0
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: ECO-003
+  title: Queue time is a tie-break, not a discount
+  domain: economy
+  confidence: B
+  status: shipped
+  principle: queue time orders only near-equal paybacks and feeds the next wake; it never discounts payback
+    (no precedent in the corpus).
+  inputs: build time, switch margin
+  exceptions: long build chosen only when the persona is not absent longer than it.
+  sources: BOT-002, BOT-003 (verified)
+  ogamex: supported
+  code: E2 tie-break
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ECO-004
+  title: Storage upgrades on time-to-fill, not on a fill fraction
+  domain: economy
+  confidence: B
+  status: shipped
+  principle: queue the storage object when remaining capacity fills before the next spend/absence; a full
+    warehouse is fully lootable.
+  inputs: capacity, stored, production per hour, storage horizon (48 h).
+  affects: storage candidacy
+  exceptions: below the energy factor the planet never fills — do not offer storage.
+  sources: TP-010, TP-008 (documented); BOT-002/BOT-001 thresholds disagreed (verified)
+  ogamex: supported
+  code: E3
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: ECO-005
+  title: Build energy capacity before the level that would outdraw the planet
+  domain: economy
+  confidence: C
+  status: shipped (predictive doctrine)
+  principle: if the balance is negative, or the next production level would make it negative, build the
+    cheapest capacity first.
+  inputs: energy balance, next-level energy cost, energy output of capacity objects.
+  affects: energy candidacy before mines
+  exceptions: the deficit doctrine is contested; the module chooses predictive because an unrepaired deficit
+    is the one thing ordinary play never looks like.
+  sources: TP-003, ORG-002, BOT-004 (verified, contested)
+  ogamex: supported
+  code: '`EnergyCapacity` (Y1)'
+  priority: P0
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: ECO-006
+  title: The plant→satellite switch is a persona band, never a constant
+  domain: economy
+  confidence: C
+  status: shipped
+  principle: fusion appears only when deuterium is surplus; satellites are destructible units; the switch
+    level (16/18/20–26/30/32) is contested, so it is a band over host-quoted cost vs output.
+  inputs: plant cost, satellite output, temperature
+  exceptions: none.
+  sources: FOR-003, FOR-004, TP-003 (contested)
+  ogamex: supported
+  code: Y2
+  priority: P0
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: ECO-007
+  title: Value resources in the accepted trade band
+  domain: economy
+  confidence: A
+  status: shipped
+  principle: reduce all costs to one currency with `M + 1.5 C + 2 D` (or the same idea as `3:2:1`).
+  inputs: resource amounts
+  exceptions: the band is planning preference, not a guaranteed rate.
+  sources: BOT-002, BOT-001, BOT-003 (verified), TP-002 (documented)
+  ogamex: supported
+  code: '`EconomyUpgrades` weights'
+  priority: P0
+  claim_type:
+  - SCORING_FACTOR

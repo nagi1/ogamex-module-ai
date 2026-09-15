@@ -1,0 +1,737 @@
+# Generated from plan/details/research/source-registry.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: FOR-001
+  title: Ultimate Miner Guide v2
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/821043`
+  domains:
+  - economy
+  - ROI
+  - research
+  - astro
+  priority: A
+- id: FOR-002
+  title: Metal–Crystal mine ratios
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/715961`
+  domains:
+  - economy
+  - ratios
+  priority: A
+- id: FOR-003
+  title: Solar plant — how high
+  family: official-gameforge-forum
+  url: board.us.ogame.gameforge.com `thread/103866`
+  domains:
+  - energy
+  - satellites
+  priority: A
+- id: FOR-004
+  title: Fusion reactor use
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/817798`
+  domains:
+  - energy
+  priority: B
+- id: FOR-005
+  title: Fleetsaving v2
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/623529`
+  domains:
+  - fleetsave
+  - moon
+  - phalanx
+  priority: A
+- id: FOR-006
+  title: Fleeting advice (2012)
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/690248`
+  domains:
+  - fleetsave
+  - phalanx
+  - debris
+  priority: A
+- id: FOR-007
+  title: Guide 01 — player styles
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/810247`
+  domains:
+  - personas
+  priority: B
+- id: FOR-008
+  title: Player types (2008)
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/404447`
+  domains:
+  - personas
+  - raider
+  priority: C
+- id: FOR-009
+  title: Alliance FAQ v2
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/450057`
+  domains:
+  - alliance
+  - diplomacy
+  priority: B
+- id: FOR-010
+  title: Game rules
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/852578`
+  domains:
+  - rules
+  - bashing
+  priority: A
+- id: FOR-011
+  title: Player active 24/7 (bot tell)
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/816703`
+  domains:
+  - authenticity
+  priority: B
+- id: FOR-012
+  title: Ban wave (2018)
+  family: official-gameforge-forum
+  url: board.en.ogame.gameforge.com `thread/801820`
+  domains:
+  - authenticity
+  priority: C
+- id: ORG-001
+  title: Tutorial 01 — Basic economy
+  family: official-gameforge-forum
+  url: board.origin.ogame.gameforge.com `Thread/591`
+  domains:
+  - economy
+  priority: A
+- id: ORG-002
+  title: Tutorial 02 — Energy
+  family: official-gameforge-forum
+  url: board.origin `Thread/` (energy)
+  domains:
+  - energy
+  priority: B
+- id: ORG-003
+  title: Tutorial 03 — Defense
+  family: official-gameforge-forum
+  url: board.origin `Thread/593`
+  domains:
+  - defence
+  - turtle
+  priority: A
+- id: ORG-004
+  title: Tutorial 06 — Saving
+  family: official-gameforge-forum
+  url: board.origin `Thread/614`
+  domains:
+  - fleetsave
+  priority: A
+- id: ORG-005
+  title: Guide 06 — Fleetsaving
+  family: official-gameforge-forum
+  url: board.origin `Thread/7915`
+  domains:
+  - fleetsave
+  - phalanx
+  priority: A
+- id: ORG-006
+  title: Tutorial 08 — Espionage
+  family: official-gameforge-forum
+  url: board.origin `Thread/616`
+  domains:
+  - espionage
+  priority: A
+- id: ORG-007
+  title: Tutorial 09 — Raids
+  family: official-gameforge-forum
+  url: board.origin `Thread/617`
+  domains:
+  - raiding
+  priority: A
+- id: ORG-008
+  title: Tactic 05a — Fleet composition ✅ recovered
+  family: official-gameforge-forum
+  url: board.origin `Thread/793` (Wayback 2024-04-20)
+  domains:
+  - fleet composition
+  priority: A
+- id: ORG-009
+  title: Tutorial 10 / Guide 10 — ACS
+  family: official-gameforge-forum
+  url: board.origin `Thread/618` + `Thread/790`
+  domains:
+  - ACS
+  - PvP
+  priority: A
+- id: ORG-010
+  title: Tutorial 13 — Colonisation
+  family: official-gameforge-forum
+  url: board.origin `Thread/621`
+  domains:
+  - colonization
+  priority: A
+- id: ORG-011
+  title: Tutorial 15 — Moon ✅ recovered
+  family: official-gameforge-forum
+  url: board.origin `Thread/623` (Wayback 2024-05-19)
+  domains:
+  - moon
+  - phalanx
+  priority: A
+- id: ORG-012
+  title: Tutorial 12 — Expeditions
+  family: official-gameforge-forum
+  url: board.origin `Thread/7793`
+  domains:
+  - expeditions
+  priority: B
+- id: ORG-013
+  title: OptiMine ROI advisor
+  family: official-gameforge-forum
+  url: forum.origin.ogame.gameforge.com `thread/314`
+  domains:
+  - economy
+  - ROI
+  priority: A
+- id: ORG-014
+  title: Forbidden features / tool rules
+  family: official-gameforge-forum
+  url: forum.origin `thread/29`, `thread/320`, `thread/527`
+  domains:
+  - rules
+  - authenticity
+  priority: A
+- id: GF-001
+  title: OGame Raider Guide
+  family: gameforge-official
+  url: gameforge.com `ogame-raider-guide.html`
+  domains:
+  - raiding
+  - fleet composition
+  priority: A
+- id: GF-002
+  title: OGame Fleetsave guide
+  family: gameforge-official
+  url: gameforge.com `ogame-fleetsave.html`
+  domains:
+  - fleetsave
+  priority: A
+- id: GF-003
+  title: OGame Alliance guide (ACS anchor)
+  family: gameforge-official
+  url: gameforge.com `ogame-alliance-guide.html`
+  domains:
+  - alliance
+  - diplomacy
+  - ACS
+  priority: A
+- id: GF-004
+  title: Happy hour / routine
+  family: gameforge-official
+  url: gameforge.com `ogame-happy-hour.html`
+  domains:
+  - routine
+  priority: B
+- id: GF-005
+  title: Official rules
+  family: gameforge-official
+  url: en.ogame.gameforge.com `ajax/main/rules`
+  domains:
+  - bashing
+  - pushing
+  - trade
+  priority: A
+- id: GF-006
+  title: OGame Crasher Guide (2026)
+  family: gameforge-official
+  url: gameforge.com `ogame-crasher-guide.html`
+  domains:
+  - fleetcrash
+  - return-timing
+  - profitability
+  priority: A
+- id: TP-001
+  title: Build order — first week
+  family: third-party-guides
+  url: ogames.net `ogame-build-order-first-week`
+  domains:
+  - economy
+  - opening
+  priority: A
+- id: TP-002
+  title: Mine ratios & payback times
+  family: third-party-guides
+  url: ogames.net `ogame-mine-ratios-payback-times`
+  domains:
+  - economy
+  - ROI
+  priority: A
+- id: TP-003
+  title: Energy management guide
+  family: third-party-guides
+  url: ogames.net `ogame-energy-management-guide`
+  domains:
+  - energy
+  priority: A
+- id: TP-004
+  title: Raiding guide
+  family: third-party-guides
+  url: ogames.net `ogame-raiding-guide`
+  domains:
+  - raiding
+  priority: A
+- id: TP-005
+  title: Fleet save guide
+  family: third-party-guides
+  url: ogames.net `ogame-fleet-save-guide`
+  domains:
+  - fleetsave
+  priority: A
+- id: TP-006
+  title: Activity tracking guide
+  family: third-party-guides
+  url: ogames.net `ogame-activity-tracking-guide`
+  domains:
+  - espionage
+  - activity
+  priority: A
+- id: TP-007
+  title: Getting started
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/guides/getting-started`
+  domains:
+  - economy
+  - opening
+  - fleetsave
+  priority: A
+- id: TP-008
+  title: Farming guide
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/guides/farming`
+  domains:
+  - raiding
+  - loot
+  priority: A
+- id: TP-009
+  title: Fleet saving guide
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/guides/fleet-saving`
+  domains:
+  - fleetsave
+  priority: A
+- id: TP-010
+  title: Metal storage
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/buildings/resources/metal-storage`
+  domains:
+  - storage
+  priority: B
+- id: TP-011
+  title: The Ninja — turning an attack into a trap
+  family: third-party-guides
+  url: ogames.net `ogame-ninja-defense-guide`
+  domains:
+  - ninja
+  - baiting
+  - fleetcrash
+  priority: B
+- id: TP-012
+  title: Fleet crash economics — when to commit
+  family: third-party-guides
+  url: ogames.net `ogame-fleet-crash-economics`
+  domains:
+  - fleetcrash
+  - profitability
+  priority: B
+- id: TP-013
+  title: Debris fields — economy of destruction
+  family: third-party-guides
+  url: ogames.net `ogame-debris-field-guide`
+  domains:
+  - debris
+  - fleetcrash
+  priority: B
+- id: TP-014
+  title: Timing attacks — precision at fleet return
+  family: third-party-guides
+  url: ogames.net `ogame-timing-attacks-guide`
+  domains:
+  - return-timing
+  - blind phalanx
+  priority: B
+- id: TP-015
+  title: Combat mechanics
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/guides/combat-mechanics`
+  domains:
+  - fodder
+  - rapid-fire
+  - debris
+  - loot
+  priority: A
+- id: TP-016
+  title: Planets & moons
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/planets-moons`
+  domains:
+  - colonization
+  - moon
+  - phalanx
+  - jump gate
+  priority: A
+- id: TP-017
+  title: Lunar Base
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/buildings/moon/lunar-base`
+  domains:
+  - moon
+  - fields
+  priority: A
+- id: TP-018
+  title: Battleship
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/ships/combat/battleship`
+  domains:
+  - fleet composition
+  priority: A
+- id: TP-019
+  title: Battlecruiser
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/ships/combat/battlecruiser`
+  domains:
+  - fleet composition
+  priority: A
+- id: TP-020
+  title: Cruiser
+  family: third-party-guides
+  url: sidian.app `ogame-wiki/ships/combat/cruiser`
+  domains:
+  - fleet composition
+  priority: A
+- id: WIK-001
+  title: Messages / Circular / Screen / Trade
+  family: wiki
+  url: ogame.fandom.com
+  domains:
+  - communication
+  priority: C
+- id: WIK-002
+  title: Playing Styles (archived)
+  family: wiki
+  url: ogame.fandom.com `Playing_Styles`
+  domains:
+  - personas
+  priority: C
+- id: WIK-003
+  title: Ships (roles, specs, cost-effectiveness)
+  family: wiki
+  url: ogame.fandom.com `Ships`
+  domains:
+  - fleet composition
+  priority: A
+- id: WIK-004
+  title: Rapid Fire (counters, RF formula)
+  family: wiki
+  url: ogame.fandom.com `Rapid_Fire` via `?action=raw`
+  domains:
+  - fleet composition
+  - counters
+  priority: A
+- id: WIK-005
+  title: Ninja
+  family: wiki
+  url: ogame.fandom.com `Ninja` via `?action=raw`
+  domains:
+  - ninja
+  - baiting
+  priority: B
+- id: WIK-006
+  title: Sensor Phalanx
+  family: wiki
+  url: ogame.fandom.com `Sensor_Phalanx` via `?action=raw`
+  domains:
+  - phalanx
+  - fleetcrash
+  priority: B
+- id: WIK-007
+  title: Fleetsaving
+  family: wiki
+  url: ogame.fandom.com `Fleetsaving` via `?action=raw`
+  domains:
+  - fleetsave
+  - blind phalanx
+  priority: B
+- id: WIK-008
+  title: Debris Field
+  family: wiki
+  url: ogame.fandom.com `Debris_Field` via `?action=raw`
+  domains:
+  - debris
+  - moon
+  priority: B
+- id: WIK-009
+  title: Fleetcrash
+  family: wiki
+  url: ogame.fandom.com `Fleetcrash` via `?action=raw`
+  domains:
+  - fleetcrash
+  priority: B
+- id: WIK-010
+  title: Recall
+  family: wiki
+  url: ogame.fandom.com `Recall` via `?action=raw`
+  domains:
+  - recall
+  - deploy-recall
+  priority: B
+- id: WIK-011
+  title: Moon
+  family: wiki
+  url: ogame.fandom.com `Moon?action=raw`
+  domains:
+  - moon
+  - phalanx
+  - jump gate
+  priority: A
+- id: WIK-012
+  title: Colonization
+  family: wiki
+  url: ogame.fandom.com `Colonization?action=raw`
+  domains:
+  - colonization
+  - slot bonuses
+  priority: A
+- id: BOT-001
+  title: trilogi77/OgameBot
+  family: bot-simulator-source
+  url: github.com/trilogi77/OgameBot
+  domains:
+  - payback
+  - reserve
+  - build guard
+  priority: A
+- id: BOT-002
+  title: halfguru/ogamebot
+  family: bot-simulator-source
+  url: github.com/halfguru/ogamebot
+  domains:
+  - ROI
+  - fleetsave routes
+  - storage
+  priority: A
+- id: BOT-003
+  title: ogame-tbot/TBot
+  family: bot-simulator-source
+  url: github.com/ogame-tbot/TBot
+  domains:
+  - research hurdle
+  - target state machine
+  - wake
+  priority: A
+- id: BOT-004
+  title: jaesivsm/pyogame
+  family: bot-simulator-source
+  url: github.com/jaesivsm/pyogame
+  domains:
+  - requirement closure
+  - energy gate
+  priority: A
+- id: BOT-005
+  title: kweimann/cruiser
+  family: bot-simulator-source
+  url: github.com/kweimann/cruiser
+  domains:
+  - reaction window
+  - route enumeration
+  priority: A
+- id: BOT-006
+  title: racinmat/PHPOgameBot
+  family: bot-simulator-source
+  url: github.com/racinmat/PHPOgameBot
+  domains:
+  - dependency queue
+  - probe solver
+  priority: A
+- id: BOT-007
+  title: ogame-ninja/scripts
+  family: bot-simulator-source
+  url: github.com/ogame-ninja/scripts
+  domains:
+  - deploy-recall timing
+  priority: A
+- id: BOT-008
+  title: r4fek/ogame-bot
+  family: bot-simulator-source
+  url: github.com/r4fek/ogame-bot
+  domains:
+  - offsets
+  - cross-planet spread
+  priority: B
+- id: BOT-009
+  title: ogame-infinity/web-extension
+  family: bot-simulator-source
+  url: github.com/ogame-infinity/web-extension
+  domains:
+  - in-flight netting
+  priority: B
+- id: BOT-010
+  title: jstar88/Ogame-algorithms
+  family: bot-simulator-source
+  url: github.com/jstar88/Ogame-algorithms
+  domains:
+  - plunder split
+  - ACS weighting
+  priority: B
+- id: SIM-001
+  title: peterradzisz/ogame-fleet-optimizer
+  family: bot-simulator-source
+  url: github.com/peterradzisz/ogame-fleet-optimizer
+  domains:
+  - CRN
+  - screening ladder
+  - percentiles
+  priority: A
+- id: SIM-002
+  title: klaasvp/trashsim-public
+  family: bot-simulator-source
+  url: github.com/klaasvp/trashsim-public
+  domains:
+  - N-sim distribution
+  - mean-failure
+  priority: B
+- id: SIM-003
+  title: maximalcode/ogame-combat-sim
+  family: bot-simulator-source
+  url: github.com/maximalcode/ogame-combat-sim
+  domains:
+  - distribution reporting
+  priority: B
+- id: RDT-001
+  title: Bored high-level fleeters
+  family: community
+  url: reddit.com/r/OGame `11f56ug`
+  domains:
+  - fleetsave variety
+  - pressure
+  priority: B
+- id: RDT-002
+  title: Miner repeatedly attacked
+  family: community
+  url: reddit.com/r/OGame `176yj0r`
+  domains:
+  - defence
+  - recovery
+  priority: B
+- id: RDT-003
+  title: Returning player
+  family: community
+  url: reddit.com/r/OGame `1hztgga`
+  domains:
+  - defence/fleet choice
+  priority: C
+- id: RDT-004
+  title: OGame is dying?
+  family: community
+  url: reddit.com/r/OGame `1p66355`
+  domains:
+  - alliance life
+  priority: C
+- id: STA-001
+  title: Live universe snapshot
+  family: community
+  url: mmorpg-stat.eu
+  domains:
+  - population stats
+  priority: B
+- id: ACA-001
+  title: Game bot detection survey
+  family: academic
+  url: arxiv `1606.01426`
+  domains:
+  - authenticity
+  priority: B
+- id: ACA-002
+  title: Bot-characteristics (Kang & Kim)
+  family: academic
+  url: wiley `etrij.2022-0089`
+  domains:
+  - authenticity
+  priority: B
+- id: ACA-003
+  title: Gianvecchio et al. CCS'09
+  family: academic
+  url: gianvecchio.com `ccs09.pdf`
+  domains:
+  - authenticity
+  priority: B
+- id: ACA-004
+  title: Heavy tails in human dynamics
+  family: academic
+  url: nature.com `nature03459`
+  domains:
+  - scheduling
+  priority: A
+- id: ACA-005
+  title: Weibull dwell time
+  family: academic
+  url: microsoft research `dwelltime.pdf`
+  domains:
+  - scheduling
+  priority: A
+- id: PLW-001
+  title: Fleet save
+  family: non-english-communities
+  url: ogame.fandom.com/pl `Fleet_save`
+  domains:
+  - fleetsave
+  - fleetcrash
+  priority: B
+- id: PLW-002
+  title: Rady dla początkujących
+  family: non-english-communities
+  url: ogame.fandom.com/pl `Rady_dla_początkujących`
+  domains:
+  - economy
+  - colonization
+  priority: B
+- id: PLW-003
+  title: Wskazówki
+  family: non-english-communities
+  url: ogame.fandom.com/pl `Wskazówki`
+  domains:
+  - espionage
+  - raiding
+  - opsec
+  priority: B
+- id: PLW-004
+  title: 'FAQ: ACS'
+  family: non-english-communities
+  url: ogame.fandom.com/pl `FAQ:ACS`
+  domains:
+  - ACS
+  - fleetcrash
+  priority: B
+- id: PLW-005
+  title: Technologia Ekspedycji
+  family: non-english-communities
+  url: ogame.fandom.com/pl `Technologia_Ekspedycji`
+  domains:
+  - expeditions
+  priority: B
+- id: DEW-001
+  title: Gebäude
+  family: non-english-communities
+  url: ogame.fandom.com/de `Gebäude`
+  domains:
+  - economy (build formula)
+  priority: C
+- id: DEF-001
+  title: Häufige Fragen neuer Spieler
+  family: non-english-communities
+  url: board.de.ogame.gameforge.com `thread/193284`
+  domains:
+  - fleetsave
+  - phalanx
+  - tactics
+  - moon
+  - debris
+  priority: B

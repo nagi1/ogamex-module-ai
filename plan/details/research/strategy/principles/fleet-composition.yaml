@@ -1,0 +1,235 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: FLE-005
+  title: Fodder absorbs shots and denies rapid fire
+  domain: fleet composition
+  confidence: A
+  status: researched
+  principle: every unit kills at most one enemy per shot, so cheap fodder hulls absorb random targeting
+    and suppress the enemy's rapid fire against your heavies; heavy hulls need a fodder screen.
+  inputs: opponent hull mix, rapid-fire graph, fodder:heavy ratio
+  exceptions: none.
+  archetypes: fleeter strong-positive
+  sources: WIK-004, ORG-008 (Wayback)
+  ogamex: supported (host combat engine + rapid-fire data) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - DOMAIN_FACT
+- id: FLE-006
+  title: Light fighter is the durable fodder; heavy fighter is early-only
+  domain: fleet composition
+  confidence: B (HF early choice contested)
+  status: researched
+  principle: light fighters are the cost-effective fodder and become a raid ship once targets carry plasma;
+    heavy fighters age out once gauss/plasma appear.
+  inputs: target defence composition, stage
+  exceptions: heavy fighter vs rocket/light-laser-heavy defence early.
+  archetypes: fleeter
+  sources: ORG-008 (Wayback), GF-001
+  ogamex: supported but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-007
+  title: Counters are the host rapid-fire graph, never remembered
+  domain: fleet composition
+  confidence: A
+  status: researched
+  principle: pick hulls with rapid fire against the opponent's mix and deny it against your own; the graph
+    is host data (P_repeat = (r−1)/r), never module memory.
+  inputs: opponent mix, per-unit rapid-fire attributes
+  exceptions: none.
+  archetypes: fleeter
+  sources: WIK-004
+  ogamex: supported (host unit data) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - DOMAIN_FACT
+- id: FLE-008
+  title: Composition tracks universe stage and targets, not a fixed ratio
+  domain: fleet composition
+  confidence: C (stage bands) / B (official early band)
+  status: researched
+  principle: rebuild toward what makes current targets profitable (raiding vs crashing vs turtles); stage
+    bands are a shape, not a table.
+  inputs: universe age, typical target defence, target hull mix
+  exceptions: none.
+  archetypes: fleeter
+  sources: ORG-008 (Wayback), GF-001
+  ogamex: supported but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-009
+  title: Recyclers are sized to clear your own debris alone
+  domain: fleet composition
+  confidence: B
+  status: researched
+  principle: keep enough recyclers to harvest a solo hit's debris without alliance help; the count tracks
+    your heavies and expected debris, not a constant.
+  inputs: expected debris, recycler capacity, alliance recycling
+  exceptions: socialized recycling ceiling.
+  archetypes: fleeter strong-positive
+  sources: ORG-008 (Wayback), GF-001
+  ogamex: supported (`DebrisFieldService`, `RecycleMission`) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-010
+  title: Cargo is sized to payload, not a fixed one
+  domain: fleet composition
+  confidence: B
+  status: researched (refines FLE-002)
+  principle: small-cargo scales with raid follow-up, large-cargo with held resources; neither is 1.
+  inputs: payload size, held resources, cargo capacity
+  exceptions: first cargo before any fleet.
+  archetypes: fleeter/raider
+  sources: ORG-008 (Wayback)
+  ogamex: supported but `FIRST_CARGO_AMOUNT = 1` fixed
+  code: '`QueueableUnitPlanner`'
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-011
+  title: The debris role is harvester-by-class
+  domain: fleet composition
+  confidence: A (host) / B (reaper/General)
+  status: researched
+  principle: recyclers harvest the field, reapers auto-collect after a won battle, pathfinders are the
+    alternate debris-capable hull; the debris path is separate from the raid path.
+  inputs: debris amount/coordinates, recycler count, class bonus
+  exceptions: none.
+  archetypes: fleeter; General class strong-positive
+  sources: host-capability-map, GF-001
+  ogamex: supported (`DebrisFieldService::calculateRequiredRecyclers`, `RecycleMission`) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - DOMAIN_FACT
+- id: FLE-001
+  title: Derive roles from host unit properties
+  domain: fleet composition
+  confidence: A
+  status: shipped
+  principle: cargo/defence/escort/colony/probe roles come from host unit properties (capacity, attack)
+    — never a hardcoded ship list.
+  inputs: unit properties, requirements, price
+  exceptions: none.
+  sources: gate 1 reference, BOT corpus
+  ogamex: supported
+  code: '`QueueableUnitPlanner` (U1/U3)'
+  priority: P0
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: FLE-002
+  title: Size cargo to the payload it must carry
+  domain: fleet composition
+  confidence: B
+  status: partial
+  principle: cargo quantity follows raid payload/colony cost, not a fixed `1`.
+  inputs: payload size, cargo capacity
+  exceptions: first cargo while no fleet exists.
+  sources: GF-001, FOR-001 (documented)
+  ogamex: supported
+  code: '`FIRST_CARGO_AMOUNT = 1` fixed'
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-003
+  title: Defence exists to make attack unprofitable, not to win
+  domain: fleet composition
+  confidence: B
+  status: shipped
+  principle: the goal of defence is maximum attacker damage per cost; "the best defense is the one that's
+    never used".
+  inputs: observed attacker, attack/cost ratios
+  exceptions: none.
+  sources: ORG-003, FOR-007 (documented)
+  ogamex: supported
+  code: '`QueueableUnitPlanner::bestDefense` (U3)'
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-004
+  title: Composition, counters and the debris role by account stage
+  domain: fleet composition
+  confidence: B
+  status: researched
+  principle: published play names stage bands (battleship/cruiser/recycler/cargo/probe), a debris-role
+    (recycler/reaper/pathfinder harvest the field) and a moonshot role (light fighter); the module has
+    cargo/defence/escort/probe roles only and no composition, counters or debris role.
+  inputs: stage, tech level, target composition, debris expected
+  exceptions: none.
+  sources: GF-001 (bands), WIK-003 (roles, cost-effectiveness)
+  ogamex: supported (host battle engine, `RecycleMission`) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-012
+  title: Production and launch are two decisions
+  domain: fleet composition
+  confidence: C
+  status: researched
+  principle: production is the stage-sized stock of hulls owned; launch is the minimum/optimal subset
+    sent against one target, gated by simulation plus the profit gate — never the whole stock.
+  inputs: owned hulls, target composition, target defence
+  exceptions: none.
+  sources: TP-008, TP-015, RAID-001 (synthesis)
+  ogamex: supported (battle engine) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-013
+  title: The launch subset is counter-selected per target
+  domain: fleet composition
+  confidence: B
+  status: researched
+  principle: pick the minimum hulls that win against THIS target's mix — cruisers vs light-fighter swarms,
+    destroyers vs battlecruisers, mixed hulls to dilute Deathstar rapid fire — with fodder only when the
+    target can threaten heavy hulls; an undefended target collapses to kill ships plus cargo.
+  inputs: target hull mix, defence, rapid-fire graph
+  exceptions: none.
+  sources: TP-020, TP-018, TP-019, WIK-004 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - ADVANCED_TACTIC
+- id: FLE-014
+  title: The cruiser is the mid-game workhorse; the battleship ages out
+  domain: fleet composition
+  confidence: B
+  status: researched
+  principle: the cruiser has the best damage-per-resource of the mid-game ships and forms the mid-game
+    core; the battleship (standard at 100–1,000) ages out as battlecruisers and reapers (RF×7 vs battleship)
+    become common.
+  inputs: universe stage, opponent mix
+  exceptions: none.
+  sources: TP-020, TP-018 (documented)
+  ogamex: supported but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: FLE-015
+  title: Simulate before dispatch; simulation is a probability average
+  domain: fleet composition
+  confidence: B
+  status: researched
+  principle: run every attack through the combat simulator against the target's actual fleet/defence before
+    dispatch, because a single simulation is a probability average and close fights vary.
+  inputs: target composition, defender state
+  exceptions: none.
+  sources: TP-015, TP-008 (documented)
+  ogamex: supported (`BattleEngine`) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC

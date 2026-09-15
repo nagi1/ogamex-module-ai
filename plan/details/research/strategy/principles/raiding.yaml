@@ -1,0 +1,220 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: RAID-001
+  title: Profit is the gate, not loot
+  domain: raiding
+  confidence: A
+  status: shipped
+  principle: '"Profit = Loot − Deuterium − expected ship losses"; loot ≥ 3× deuterium, losses ≤ 20–30%
+    of loot; a negative raid is a donation.'
+  inputs: loot, deuterium, expected losses
+  exceptions: none.
+  sources: GF-001 (documented)
+  ogamex: supported
+  code: '`RaidPlanner::plan` + `NativeRaidEstimator` (T1–T3)'
+  priority: P0
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: RAID-002
+  title: Respect the host's bashing rule exactly
+  domain: raiding
+  confidence: A
+  status: shipped
+  principle: ≤6 attacks per target per 24 h; destroyed attacking fleets do not count (the module reads
+    the host answer rather than its own counter).
+  inputs: attack count per target per window
+  exceptions: war, probe/missile attacks.
+  sources: GF-005 §4 (documented)
+  ogamex: supported
+  code: '`RaidPlanner::withinBashingLimit`'
+  priority: P0
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: RAID-003
+  title: Use a conservative tail statistic, never a mean
+  domain: raiding
+  confidence: A
+  status: shipped
+  principle: order raids by a lower quantile (P20) and count losing runs; a documented mean-profit reading
+    inverted a 60 M decision.
+  inputs: net-profit sample distribution
+  exceptions: none.
+  sources: SIM-002 (verified failure), SIM-001 (methodology)
+  ogamex: supported
+  code: '`NativeRaidEstimator::lowerQuantile` (T2)'
+  priority: P0
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: RAID-004
+  title: Recent target activity raises interception risk
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: activity observed close to flight raises escape/interception risk and should reduce expected
+    raid utility.
+  inputs: target `time_last_update`, activity star state
+  exceptions: inactives/farms.
+  sources: TP-006 (documented), veteran-play §7
+  ogamex: supported (host `Planet.time_last_update`, galaxy activity status) but **unwired**
+  code: none
+  priority: P1
+  claim_type:
+  - SCORING_FACTOR
+- id: RAID-005
+  title: Intel freshness decays per information type
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: resources/fleets go stale quickly, coordinates/losses slowly; confidence is per-type, not
+    a flat `1.0`.
+  inputs: report age, information type
+  exceptions: none.
+  sources: decision-policies.md, TP-006 (documented)
+  ogamex: supported but flat (`confidence = 1.0` hardcoded in `PlayerObservationService::targetReports`)
+  code: none
+  priority: P1
+  claim_type:
+  - SCORING_FACTOR
+- id: RAID-006
+  title: Profit must carry travel and slot opportunity cost
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: subtract fuel, occupied fleet slots and travel time from expected profit; `travel_cost` is
+    currently a placeholder `0.0`.
+  inputs: distance/fuel, slot occupancy, duration
+  exceptions: none.
+  sources: GF-001, BOT-005 (route enumeration)
+  ogamex: supported (host fuel/duration quotes) but unwired
+  code: '`travel_cost` placeholder'
+  priority: P1
+  claim_type:
+  - SCORING_FACTOR
+- id: RAID-007
+  title: Personality and relationship shape raid utility
+  domain: raiding
+  confidence: C
+  status: researched
+  principle: a fleeter raids more, a turtle/miner less; a past ally or debtor is raided differently —
+    the archetype gate exists at action level but never reaches target scoring.
+  inputs: archetype, relationship state
+  exceptions: none.
+  sources: FOR-007, persona research
+  ogamex: partial (relationship tables exist; not read by `RaidPlanner`)
+  code: none
+  priority: P2
+  claim_type:
+  - BEHAVIOR_PROFILE_PARAMETER
+- id: RAID-008
+  title: Score-ratio gate for target viability
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: a target scoring under ~⅕ of yours cannot defend economically against your fleet class —
+    a pre-profit filter, not a substitute.
+  inputs: target score vs own, fleet class
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-004, GF-001
+  ogamex: supported (public scores) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: RAID-009
+  title: Cluster targets by proximity; raid on a schedule
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: build a farm list clustered by galaxy proximity (cross-galaxy ≈ 5× deuterium) and hit on
+    a storage-fill schedule (8–12 h), not ad hoc nearest-target.
+  inputs: coordinate distance, storage fill time
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-004, TP-008
+  ogamex: supported (distance/fuel quotes) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: RAID-010
+  title: Activity dot at launch is an abort/delay signal
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: a flashing activity dot on the target at flight time means it may have just logged in — abort
+    or delay rather than fly into a recall/ninja.
+  inputs: target `time_last_update` at dispatch
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-004, TP-006
+  ogamex: supported (activity marker) but unwired
+  code: none
+  priority: P1
+  claim_type:
+  - HARD_SAFETY_POLICY
+- id: RAID-011
+  title: Profit threshold is tiered by risk
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: ≥3:1 loot-to-fuel on routine farms, ≥2:1 on defended targets with debris, <1.5:1 marginal
+    — stricter than the single 3× figure when debris subsidises the run.
+  inputs: loot, fuel, debris, target defence
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-004, GF-001
+  ogamex: supported (host fuel/debris) but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: RAID-012
+  title: Size cargo to the report, with a buffer
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: cargo count = expected loot (50%/75% of visible) ÷ capacity, +20% buffer; under-cargoed raids
+    waste already-sunk fuel.
+  inputs: report resources, class loot multiplier, cargo capacity
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-004, TP-008
+  ogamex: supported but `FIRST_CARGO_AMOUNT = 1` fixed
+  code: '`QueueableUnitPlanner`'
+  priority: P1
+  claim_type:
+  - STRATEGIC_HEURISTIC
+- id: RAID-013
+  title: Popular farms are contested; win by proximity or timing
+  domain: raiding
+  confidence: B
+  status: researched
+  principle: well-known inactives are cleaned out fast; the edge is being first (proximity) or hitting
+    on a schedule others miss — novelty is a schedule edge, not an unexplored target.
+  inputs: target popularity, galaxy density, competitor activity
+  exceptions: none.
+  archetypes: fleeter strong
+  sources: TP-004
+  ogamex: supported but unwired
+  code: none
+  priority: P2
+  claim_type:
+  - SCORING_FACTOR
+- id: RAID-014
+  title: Profit = loot − fuel − losses; debris is a separate trip
+  domain: raiding
+  confidence: C (contested)
+  status: researched
+  principle: module doctrine keeps debris OUT of the single-raid gate (two missions, two capacities);
+    the published formula includes it (`Loot + Debris − Fuel − Losses`). Record the split, don't resolve
+    silently.
+  inputs: loot, fuel, losses, debris
+  exceptions: none.
+  archetypes: fleeter
+  sources: RAID-001/CRASH-001 (module), TP-004 (includes debris)
+  ogamex: supported
+  code: '`NativeRaidEstimator` (debris excluded)'
+  priority: P2
+  claim_type:
+  - STRATEGIC_HEURISTIC

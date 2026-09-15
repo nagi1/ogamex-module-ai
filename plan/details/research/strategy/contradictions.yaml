@@ -1,0 +1,113 @@
+# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: ECO-005
+  title: Build energy capacity before the level that would outdraw the planet
+  domain: economy
+  principle: if the balance is negative, or the next production level would make it negative, build the
+    cheapest capacity first.
+  sources: TP-003, ORG-002, BOT-004 (verified, contested)
+  status: shipped (predictive doctrine)
+  ogamex: supported
+- id: ECO-006
+  title: The plant→satellite switch is a persona band, never a constant
+  domain: economy
+  principle: fusion appears only when deuterium is surplus; satellites are destructible units; the switch
+    level (16/18/20–26/30/32) is contested, so it is a band over host-quoted cost vs output.
+  sources: FOR-003, FOR-004, TP-003 (contested)
+  status: shipped
+  ogamex: supported
+- id: COL-004
+  title: Spread for coverage, keep one same-system pair
+  domain: colonization
+  principle: spread colonies across systems/galaxies for phalanx coverage, farming radius and resilience,
+    keep one same-system pair for the cheapest moon-to-moon save, and abandon colonies below ~200 fields.
+  sources: TP-016 (synthesis)
+  status: researched
+  ogamex: supported but unwired
+- id: RAID-007
+  title: Personality and relationship shape raid utility
+  domain: raiding
+  principle: a fleeter raids more, a turtle/miner less; a past ally or debtor is raided differently —
+    the archetype gate exists at action level but never reaches target scoring.
+  sources: FOR-007, persona research
+  status: researched
+  ogamex: partial (relationship tables exist; not read by `RaidPlanner`)
+- id: RAID-014
+  title: Profit = loot − fuel − losses; debris is a separate trip
+  domain: raiding
+  principle: module doctrine keeps debris OUT of the single-raid gate (two missions, two capacities);
+    the published formula includes it (`Loot + Debris − Fuel − Losses`). Record the split, don't resolve
+    silently.
+  sources: RAID-001/CRASH-001 (module), TP-004 (includes debris)
+  status: researched
+  ogamex: supported
+- id: FLE-008
+  title: Composition tracks universe stage and targets, not a fixed ratio
+  domain: fleet composition
+  principle: rebuild toward what makes current targets profitable (raiding vs crashing vs turtles); stage
+    bands are a shape, not a table.
+  sources: ORG-008 (Wayback), GF-001
+  status: researched
+  ogamex: supported but unwired
+- id: FLE-012
+  title: Production and launch are two decisions
+  domain: fleet composition
+  principle: production is the stage-sized stock of hulls owned; launch is the minimum/optimal subset
+    sent against one target, gated by simulation plus the profit gate — never the whole stock.
+  sources: TP-008, TP-015, RAID-001 (synthesis)
+  status: researched
+  ogamex: supported (battle engine) but unwired
+- id: CRASH-007
+  title: Phalanx is a two-sided tool
+  domain: fleetcrash
+  principle: the same phalanx that lets you time a crash on an enemy return is the reason a planet-launched
+    save is unsafe — awareness shapes both offense and your own saves.
+  sources: ORG-011 (Wayback), GF-002, TP-009, FOR-005
+  status: researched
+  ogamex: supported (`PhalanxService::calculatePhalanxRange`, `getScanCost` 5000) but unwired
+- id: CRASH-002
+  title: Phalanx covers a range; scan only what it covers
+  domain: fleetcrash
+  principle: phalanx scan cost/range is a host answer; it reveals return fleets within coverage — a fleeter
+    scans before a crash, a victim knows it can be scanned.
+  sources: ORG-011 (Wayback recovered), FOR-006
+  status: researched
+  ogamex: supported (`PhalanxService::calculatePhalanxRange` = level²−1, Discoverer +20%; `getScanCost`
+    = 5000) but **unwired**
+- id: CRASH-003
+  title: Deploy-recall interception is timing, not force
+  domain: fleetcrash
+  principle: recall a deployment at ~half flight to time a return; the module owns the recall seam but
+    no caller.
+  sources: BOT-007 (verified 98–101% of half flight)
+  status: researched
+  ogamex: supported (`cancelMission` → `startReturn`; `AiActionType::RecallFleet` enum unused)
+- id: CRASH-004
+  title: Moon and jump gate change geography and timing
+  domain: fleetcrash
+  principle: a moon enables phalanx, safer saves and jump-gate movement; its value is coverage, not decoration.
+  sources: ORG-011 (Wayback recovered)
+  status: researched
+  ogamex: supported (`JumpGateService::calculateCooldown`, moon as `PlanetType::Moon`) but **unwired**
+- id: ACS-009
+  title: ACS is ordinary alliance play, not war-only
+  domain: ACS
+  principle: ACS is a standing alliance capability (protection, crashing, domination, toplists), not gated
+    to formal war.
+  sources: veteran-play §8, pve-empire, pve-precedents
+  status: researched (alliance-gated)
+  ogamex: supported but unwired
+- id: ACS-010
+  title: Second-precision ACS is the one real-time case
+  domain: ACS
+  principle: among documented social latencies, only ACS demands second-precision timing.
+  sources: GF-003, player-communication
+  status: researched (alliance-gated)
+  ogamex: supported but unwired
+- id: SOC-002
+  title: Alliance life beyond observation
+  domain: social
+  principle: apply, then behave like a member; membership is observed today but never initiated.
+  sources: FOR-009 (documented)
+  status: deferred
+  ogamex: partial

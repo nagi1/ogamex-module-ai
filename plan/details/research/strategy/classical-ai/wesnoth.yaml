@@ -1,0 +1,47 @@
+# Generated from plan/details/research/classical-ai-patterns.md by scripts/strategy-export.py — do not hand-edit; edit the
+# Markdown catalog and re-run, or start editing here once the migration is accepted.
+- id: WE-1
+  title: Cache expensive analysis with tolerance
+  source_game: wesnoth
+  game: Wesnoth
+  confidence: A (handoff)
+  problem: re-running identical combat/fleet simulations when nothing material changed.
+  vanilla: cached combat analysis with a tolerance — reuse until the relevant state shifts.
+  mechanism: cache key = (our fleet, enemy fleet, defences, combat techs, modifiers); hit until key changes.
+  ogamex_mapping: hypothesis H10 — `NativeRaidEstimator` / the T2 estimator caches by input hash and re-samples
+    only on a key change. This is the one place the brief's cache lesson lands cleanly, because T2's seeded
+    sampling is already deterministic.
+  sources: '`recruitment.cpp` (handoff-named).'
+- id: WE-2
+  title: Score composition, not individual units
+  source_game: wesnoth
+  game: Wesnoth
+  confidence: A (handoff)
+  problem: '"is Cruiser good?" is the wrong question; "what does the existing fleet need?" is the right
+    one.'
+  vanilla: scoring considers the **existing army composition** and applies a similarity penalty, so the
+    AI diversifies rather than spamming the best single unit.
+  ogamex_mapping: the split the brief insists on — **fleet production** (what to own) vs **fleet launch**
+    (what to send at *this* target) — both composition-aware. This is the FLE/U-series composition work
+    (deferred to the next increment) plus the T6 launch subset.
+  sources: '`recruitment.cpp` (handoff-named).'
+- id: WE-3
+  title: Controlled randomness after rational scoring
+  source_game: wesnoth
+  game: Wesnoth
+  confidence: A (handoff)
+  problem: every AI picking the identical top candidate is a giveaway.
+  vanilla: random variation applied **over good candidates**, after scoring — never among bad actions.
+  ogamex_mapping: already shipped — `UtilityScorer` + `AiSkillBand` seeded variation over the scored set.
+    The pattern is confirmed, not new.
+  sources: '`recruitment.cpp` (handoff-named).'
+- id: WE-4
+  title: Save / normal / spend resource states
+  source_game: wesnoth
+  game: Wesnoth
+  confidence: B (handoff)
+  problem: whether to hoard or spend is contextual, not constant.
+  vanilla: save-gold / spend-all / normal states gate recruitment spending.
+  ogamex_mapping: hypothesis only — do not implement until OGame strategy justifies a `save/normal/spend`
+    posture (ZH-1 covers the adjacent idea). Open question.
+  sources: '`recruitment.cpp` (handoff-named).'
