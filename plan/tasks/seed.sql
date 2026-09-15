@@ -149,7 +149,12 @@ INSERT OR REPLACE INTO tasks
   NULL,NULL,'specs/gameplay-algorithms.md',
   'Modules/AI/scripts/coverage-summary.php (100% gate)',
   'tests/Feature/ExecuteIntentTest.php',
-  'Coverage gate red. Gaps: ExecuteAiIntentAction transfer() arm, QueueAiTransferAction guard/fleet branches, ScheduleAiIntentAction::scheduleTransfer, CandidateActionFactory transfer candidate + raid candidate creation, QueueableFleetSavePlanner 63/119, QueueableTransferPlanner branches, RaidPlanner storageReady capacity<=0, UtilityScorer policy-denied continue, PlayerObservationService, AiCandidateReason::reportSource, ProcessAiWork no-schedule row, AIServiceProvider 10s interval. Shared helpers must be require_once-ed from tests/Pest.php (parallel workers isolate test files).');
+  'Coverage gate red. Gaps: ExecuteAiIntentAction transfer() arm, QueueAiTransferAction guard/fleet branches, ScheduleAiIntentAction::scheduleTransfer, CandidateActionFactory transfer candidate + raid candidate creation, QueueableFleetSavePlanner 63/119, QueueableTransferPlanner branches, RaidPlanner storageReady capacity<=0, UtilityScorer policy-denied continue, PlayerObservationService, AiCandidateReason::reportSource, ProcessAiWork no-schedule row, AIServiceProvider 10s interval. Shared helpers must be require_once-ed from tests/Pest.php (parallel workers isolate test files).'),
+ (25,'DOC-005','Flip the strategy source to YAML and extract the atomic-claims layer','doc','todo','P2','W6',
+  NULL,NULL,'strategy',
+  'plan/details/research/strategy/README.md',
+  'plan/details/research/strategy/README.md',
+  'Follow-up to the Strategy Knowledge Storage Format (plan/details/research/strategy/). (a) Flip the source: make the YAML canonical and repoint the Markdown consumers (gameplay-algorithms.md, GAP-REGISTER.md, task DB doc_refs) so there is one authority. (b) Extract the atomic-claims layer (claims/*.yaml) from the sources; the repo currently goes sources -> principles with only a classification, carried as claim_type on each principle.');
 
 -- ── dependencies ────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
