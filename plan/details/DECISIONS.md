@@ -828,3 +828,18 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   smallest gate-clean mechanism is one `config/profiles.php` — the repo's own config convention, no
   new dependency — loaded once at boot. Gate 1 still holds: profile data may carry persona taste,
   never an object id, name, price or requirement.
+
+### Module gates run (15 September 2026) — quality green, coverage red
+- `scripts/ogamex quality` **passes**: Gate 2 review clean (all single-implementation contracts allowed as
+  deliberate seams), Rector 0 changes, Pint clean, PHPStan 0 errors, **686/686 Pest tests pass**.
+- `scripts/ogamex coverage` **fails at 98.79%** (5780/5851; the gate exits 1 on any gap). The gaps are
+  concentrated on the **transfer slice's dispatch path** (`ExecuteAiIntentAction::transfer`,
+  `ScheduleAiIntentAction::scheduleTransfer`, `CandidateActionFactory::eligibleTransferCandidates`,
+  `QueueAiTransferAction`, `QueueableTransferPlanner`) plus a handful of single branches
+  (`RaidPlanner::storageReady` capacity<=0, `UtilityScorer` policy-denied, `PlayerObservationService`,
+  `AiCandidateReason::reportSource`, `ProcessAiWork` no-schedule row, `AIServiceProvider` 10s interval,
+  `QueueableFleetSavePlanner` two branches). `app/Rules` is excluded from the gate.
+- Tracked as **IMPL-023**. Constraint found while fixing: **Pest's parallel workers isolate test files**,
+  so a helper `require_once`d from `tests/Pest.php` (the `FixturePlayerPerceptionBuilder` pattern) is
+  visible to every worker, but a function defined inside a test file is not — cross-file use passed the
+  serial coverage run and failed the parallel test run, which is why the first attempt was reverted.

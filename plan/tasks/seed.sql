@@ -144,7 +144,12 @@ INSERT OR REPLACE INTO tasks
  (23,'IMPL-022','Capability research — queue a leaf research that unlocks a non-object capability (astrophysics)','impl','todo','P1','G2,G7,G3',
   'R2','R2','specs/gameplay-algorithms.md (R2)',
   'app/Domain/Decision/FacilityChain.php',
-  'Live grand run: astro=0 for all 10 accounts despite 7 meeting every prerequisite, so colonize/expedition never fire. FacilityChain queues only the unmet prerequisites of a non-producible ambition, so a leaf research no unit requires is skipped forever. Give R2 capability research a real goal.');
+  'Live grand run: astro=0 for all 10 accounts despite 7 meeting every prerequisite, so colonize/expedition never fire. FacilityChain queues only the unmet prerequisites of a non-producible ambition, so a leaf research no unit requires is skipped forever. Give R2 capability research a real goal.'),
+ (24,'IMPL-023','Close the module PCOV coverage gaps (98.79% -> 100%)','impl','todo','P1','W6-1,W6-3',
+  NULL,NULL,'specs/gameplay-algorithms.md',
+  'Modules/AI/scripts/coverage-summary.php (100% gate)',
+  'tests/Feature/ExecuteIntentTest.php',
+  'Coverage gate red. Gaps: ExecuteAiIntentAction transfer() arm, QueueAiTransferAction guard/fleet branches, ScheduleAiIntentAction::scheduleTransfer, CandidateActionFactory transfer candidate + raid candidate creation, QueueableFleetSavePlanner 63/119, QueueableTransferPlanner branches, RaidPlanner storageReady capacity<=0, UtilityScorer policy-denied continue, PlayerObservationService, AiCandidateReason::reportSource, ProcessAiWork no-schedule row, AIServiceProvider 10s interval. Shared helpers must be require_once-ed from tests/Pest.php (parallel workers isolate test files).');
 
 -- ── dependencies ────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
