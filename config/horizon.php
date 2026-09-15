@@ -29,7 +29,7 @@ return [
         'supervisor-ai' => [
             'connection' => 'redis',
             'queue' => [AiQueueName::Ai->value],
-            'balance' => 'auto',
+            'balance' => env('AI_HORIZON_WORK_BALANCE', 'auto'),
             'autoScalingStrategy' => 'time',
             'minProcesses' => 1,
             'maxProcesses' => 1,

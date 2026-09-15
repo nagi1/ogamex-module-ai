@@ -19,6 +19,7 @@ use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Models\ChatMessage;
 use OGame\Models\User;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
@@ -179,6 +180,55 @@ test('seeding refuses to be the first account in a universe', function (): void 
     $this->artisan('ai:seed-test-universe', ['--players' => 1, '--confirm' => true])
         ->expectsOutputToContain('Register the first human account before seeding')
         ->assertExitCode(1);
+});
+
+test('grand seeding refuses production without any override', function (): void {
+    $this->app->instance('env', 'production');
+
+    $this->artisan('ai:seed-grand-test', ['--confirm' => true])
+        ->expectsOutputToContain('Refusing to seed synthetic accounts in production.')
+        ->assertExitCode(1);
+});
+
+test('grand seeding requires explicit confirmation', function (): void {
+    $this->artisan('ai:seed-grand-test')
+        ->expectsOutputToContain('Re-run with --confirm.')
+        ->assertExitCode(1);
+});
+
+test('grand seeding creates fresh accounts and remains idempotent', function (): void {
+    clearSeededPilotAccounts();
+
+    $this->artisan('ai:seed-grand-test', ['--players' => 2, '--confirm' => true])
+        ->assertExitCode(0);
+
+    $accounts = seededPilotUsers();
+    $messages = ChatMessage::query()
+        ->where('message', 'like', 'Hello neighbour%')
+        ->count();
+    $userCount = User::query()->count();
+
+    $this->artisan('ai:seed-grand-test', ['--players' => 2, '--confirm' => true])
+        ->expectsOutputToContain('already seeded')
+        ->assertExitCode(0);
+
+    expect($accounts)->toHaveCount(2)
+        ->and($messages)->toBe(2)
+        ->and(User::query()->count())->toBe($userCount)
+        ->and(AiProfile::query()->where('settings->pilot', true)->count())->toBe(2);
+});
+
+test('grand seeding tolerates a universe with no human neighbour', function (): void {
+    clearSeededPilotAccounts();
+    $this->artisan('ai:seed-grand-test', ['--players' => 1, '--confirm' => true])->assertExitCode(0);
+
+    DB::statement('SET FOREIGN_KEY_CHECKS = 0');
+    DB::table('users')->whereNotIn('id', seededPilotUsers()->pluck('id'))->delete();
+    DB::statement('SET FOREIGN_KEY_CHECKS = 1');
+
+    $this->artisan('ai:seed-grand-test', ['--players' => 1, '--confirm' => true])->assertExitCode(0);
+
+    expect(AiProfile::query()->where('settings->pilot', true)->count())->toBe(1);
 });
 
 test('seeding twice reuses the same accounts instead of adding more', function (): void {

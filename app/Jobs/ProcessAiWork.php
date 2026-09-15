@@ -19,6 +19,7 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiSchedule;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Models\Planet;
 use Throwable;
@@ -29,23 +30,21 @@ class ProcessAiWork implements ShouldQueue
 
     public int $tries = 3;
 
-    /**
-     * Bounds a poison work item so repeated decision exceptions cannot consume the
-     * whole retry budget; retryLease() owns the work-item attempt cap.
-     */
+    /** Bounds a poison work item; retryLease() owns the work-item attempt cap. */
     public int $maxExceptions = 3;
 
     /**
-     * Below the supervisor timeout in the host's config/horizon.php so Horizon never
-     * force-kills an auto-balancing worker mid-decision, and below the redis
-     * retry_after so the job is never handed to a second worker.
+     * Leave margin below the module's Horizon timeout so a worker is not force-killed
+     * mid-decision. The grand run raises both values for hybrid driver contention.
      */
-    public int $timeout = 25;
+    public int $timeout;
 
     private const PAYLOAD_PLANET_ID = 'planet_id';
 
     public function __construct(public int $workItemId)
     {
+        $this->timeout = max(1, (int) config('ai.horizon.supervisors.supervisor-ai.timeout', 30) - 5);
+
         // Deterministic AI work has its own module-owned Horizon lane so AI volume
         // cannot starve the general or fleet lanes.
         $this->onQueue(AiQueueName::Ai->value);
@@ -59,12 +58,12 @@ class ProcessAiWork implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        // The work item is reclaimed by its expired lease in claimDueWork() rather than
-        // force-failed here, so a hard worker kill cannot clobber a newer lease.
-        Log::error('AI work item failed after all queue attempts; awaiting lease reclaim', [
+        Log::error('AI work item failed after all queue attempts', [
             'work_item_id' => $this->workItemId,
             'error' => $exception->getMessage(),
         ]);
+
+        $this->scheduleSessionRecovery();
     }
 
     public function handle(): void
@@ -86,7 +85,7 @@ class ProcessAiWork implements ShouldQueue
 
         $lock = Cache::lock('ai:player:' . $workItem->player_id, 300);
         if (!$lock->get()) {
-            $this->retryLease($workItem, $leaseToken);
+            $this->retryContendedLease($workItem, $leaseToken);
 
             return;
         }
@@ -120,7 +119,7 @@ class ProcessAiWork implements ShouldQueue
         return DB::transaction(function () use ($leaseToken): AiWorkItem|null {
             /** @var AiWorkItem|null $workItem */
             $workItem = AiWorkItem::query()->lockForUpdate()->find($this->workItemId);
-            if ($workItem === null || $workItem->due_at->isFuture() || !$this->isClaimable($workItem)) {
+            if ($workItem === null || (!$this->acceleratedSession($workItem) && $workItem->due_at->isFuture()) || !$this->isClaimable($workItem)) {
                 return null;
             }
 
@@ -133,6 +132,12 @@ class ProcessAiWork implements ShouldQueue
 
             return $workItem->fresh();
         });
+    }
+
+    private function acceleratedSession(AiWorkItem $workItem): bool
+    {
+        return $workItem->kind === AiWorkKind::RunSession
+            && (int) config('ai.population.session_interval_seconds', 0) > 0;
     }
 
     private function isClaimable(AiWorkItem $workItem): bool
@@ -231,11 +236,73 @@ class ProcessAiWork implements ShouldQueue
 
     private function retryLease(AiWorkItem $workItem, string $leaseToken): void
     {
+        $failed = $workItem->attempts >= $this->tries;
+
         AiWorkItem::query()->whereKey($workItem->id)->where('lease_token', $leaseToken)->update([
-            'state' => $workItem->attempts >= $this->tries ? AiWorkState::Failed : AiWorkState::Retry,
+            'state' => $failed ? AiWorkState::Failed : AiWorkState::Retry,
             'due_at' => now()->addMinute(),
             'lease_token' => null,
             'lease_until' => null,
         ]);
+
+        if ($failed) {
+            $this->scheduleSessionRecovery();
+        }
+    }
+
+    private function retryContendedLease(AiWorkItem $workItem, string $leaseToken): void
+    {
+        AiWorkItem::query()->whereKey($workItem->id)->where('lease_token', $leaseToken)->update([
+            'state' => AiWorkState::Retry,
+            'due_at' => now()->addSeconds(5),
+            'attempts' => 0,
+            'lease_token' => null,
+            'lease_until' => null,
+        ]);
+    }
+
+    private function scheduleSessionRecovery(): void
+    {
+        DB::transaction(function (): void {
+            $workItem = AiWorkItem::query()
+                ->lockForUpdate()
+                ->find($this->workItemId);
+
+            if ($workItem === null || $workItem->kind !== AiWorkKind::RunSession || $workItem->state !== AiWorkState::Failed) {
+                return;
+            }
+
+            $schedule = AiSchedule::query()
+                ->where('player_id', $workItem->player_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($schedule === null) {
+                return;
+            }
+
+            if ($schedule->generation > (int) $workItem->schedule_generation) {
+                return;
+            }
+
+            $nextGeneration = max($schedule->generation, (int) $workItem->schedule_generation) + 1;
+            $nextDueAt = now()->addMinute();
+
+            $schedule->update([
+                'next_due_at' => $nextDueAt,
+                'generation' => $nextGeneration,
+            ]);
+
+            AiWorkItem::query()->firstOrCreate(
+                ['idempotency_key' => 'session:' . $workItem->player_id . ':' . $nextGeneration],
+                [
+                    'player_id' => $workItem->player_id,
+                    'kind' => AiWorkKind::RunSession,
+                    'due_at' => $nextDueAt,
+                    'schedule_generation' => $nextGeneration,
+                    'state' => AiWorkState::Pending,
+                ],
+            );
+        });
     }
 }

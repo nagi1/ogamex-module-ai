@@ -18,6 +18,8 @@ use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
+use Modules\AI\Domain\Routine\SessionPlan;
+use Modules\AI\Domain\Scheduling\NextDueTimeCalculator;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCandidateRejectionReason;
@@ -79,6 +81,17 @@ test('a full published candidate set is traced without unpublished target state'
         'resource_need', 'safety', 'target_confidence', 'travel_cost', 'recovery', 'archetype_preference', 'seeded_variation',
     ]);
     expect(json_encode($trace->candidates, JSON_THROW_ON_ERROR))->not->toContain('unpublished_defender_fleet');
+});
+
+test('an explicit session interval accelerates only the successor schedule', function (): void {
+    config(['ai.population.session_interval_seconds' => 5]);
+    $now = aiDeterministicNow();
+    $plan = app()->makeWith(SessionPlan::class, [
+        'sessionEndsAt' => $now,
+        'nextDueAt' => $now->addDay(),
+    ]);
+
+    expect(app(NextDueTimeCalculator::class)->fromSession($plan, $now)->equalTo($now->addSeconds(5)))->toBeTrue();
 });
 
 test('stale and forbidden reports are rejected before raid scoring', function (): void {

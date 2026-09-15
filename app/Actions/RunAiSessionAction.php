@@ -7,6 +7,8 @@ use Modules\AI\Domain\Scheduling\SessionDecisionService;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use OGame\Models\User;
+use OGame\Services\PlayerGameStateService;
 
 /**
  * Runs one session work item.
@@ -22,11 +24,18 @@ class RunAiSessionAction implements RunAiSession
         private SessionDecisionService $sessionDecisionService,
         private ScheduleAiIntentAction $scheduleAiIntentAction,
         private AiClock $clock,
+        private PlayerGameStateService $playerGameStateService,
     ) {
     }
 
     public function handle(AiProfile $profile, AiWorkItem $workItem): void
     {
+        // Scheduled actors have no HTTP page load to advance completed host queues. Use the host
+        // seam without stamping activity when the session later decides to do nothing.
+        if (User::query()->whereKey($profile->player_id)->exists()) {
+            $this->playerGameStateService->advance($profile->player_id, null, false);
+        }
+
         // A message is answered when the account next wakes, not when it next thinks about
         // its economy: sessions are 34 to 56 minutes apart, and that is the whole window a
         // reply has to fit inside.

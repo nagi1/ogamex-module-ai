@@ -27,12 +27,16 @@ class RunDueAiWork extends Command
             return self::SUCCESS;
         }
 
-        AiWorkItem::query()
+        $work = AiWorkItem::query()
             ->whereIn('state', [AiWorkState::Pending, AiWorkState::Retry])
-            ->where('due_at', '<=', now())
             ->oldest('due_at')
-            ->limit($admission->limit)
-            ->pluck('id')
+            ->limit($admission->limit);
+
+        if ((int) config('ai.population.session_interval_seconds', 0) <= 0) {
+            $work->where('due_at', '<=', now());
+        }
+
+        $work->pluck('id')
             ->each(static fn (int $workItemId) => ProcessAiWork::dispatch($workItemId));
 
         return self::SUCCESS;

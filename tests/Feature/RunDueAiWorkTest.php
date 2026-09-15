@@ -40,6 +40,27 @@ test('dispatcher limits to due pending or retry work', function () {
     Bus::assertDispatchedTimes(ProcessAiWork::class, 1);
 });
 
+test('accelerated dispatch admits a future pending session', function (): void {
+    config(['ai.population.session_interval_seconds' => 5]);
+    $work = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now()->addHour(),
+        'idempotency_key' => 'accelerated-future-session',
+        'state' => AiWorkState::Pending,
+    ]);
+    Bus::fake();
+    $command = app(RunDueAiWork::class);
+    $command->setLaravel($this->app);
+
+    $command->run(
+        app()->makeWith(ArrayInput::class, ['parameters' => ['--limit' => 10]]),
+        app(NullOutput::class),
+    );
+
+    Bus::assertDispatched(ProcessAiWork::class, static fn (ProcessAiWork $job): bool => $job->workItemId === $work->id);
+});
+
 function aiDueWork(int $playerId, AiWorkState $state, Carbon $dueAt, string $suffix): AiWorkItem
 {
     return AiWorkItem::create([

@@ -8,8 +8,10 @@ use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Models\BuildingQueue;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Models\User;
+use OGame\Services\ObjectService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -57,6 +59,38 @@ test('queued work moves the activity marker through the host', function (): void
 
     expect(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(1)
         ->and(User::query()->whereKey($this->currentUserId)->value('time'))->toBeGreaterThan($before);
+});
+
+test('the next AI session applies a finished host queue before deciding', function (): void {
+    config(['ai.cognition.conversation.enabled' => false]);
+    $profile = aiMarkerProfile($this->currentUserId);
+    $this->planetAddResources(app()->makeWith(Resources::class, [
+        'metal' => 1_000_000,
+        'crystal' => 1_000_000,
+        'deuterium' => 1_000_000,
+    ]));
+
+    $firstSession = aiMarkerSession($profile, 'queue-building');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $firstSession->id])->handle();
+
+    $intent = AiWorkItem::query()
+        ->where('player_id', $profile->player_id)
+        ->where('kind', AiWorkKind::BuildFirstBuilding)
+        ->sole();
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $intent->id])->handle();
+
+    $queue = BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->sole();
+    $activityAfterQueue = User::query()->whereKey($this->currentUserId)->value('time');
+    BuildingQueue::query()->whereKey($queue->id)->update(['time_end' => now()->subSecond()->getTimestamp()]);
+
+    $secondSession = aiMarkerSession($profile, 'apply-building');
+    app()->makeWith(ProcessAiWork::class, ['workItemId' => $secondSession->id])->handle();
+
+    $planet = Planet::query()->findOrFail($this->currentPlanetId);
+    expect($planet->solar_plant)->toBe(1)
+        ->and($queue->fresh()->processed)->toBe(1)
+        ->and(User::query()->whereKey($this->currentUserId)->value('time'))->toBe($activityAfterQueue)
+        ->and(ObjectService::getObjectById($queue->object_id)->machine_name)->toBe('solar_plant');
 });
 
 function aiMarkerProfile(int $playerId): AiProfile

@@ -22,6 +22,7 @@ use Modules\AI\Console\Commands\RunCognitionConformance;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Console\Commands\RunLanguageConformance;
 use Modules\AI\Console\Commands\SeedAiTestUniverse;
+use Modules\AI\Console\Commands\SeedGrandTest;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\ContextBuilder;
@@ -94,6 +95,7 @@ class AIServiceProvider extends ModuleServiceProvider
         RunDueAiWork::class,
         RunLanguageConformance::class,
         SeedAiTestUniverse::class,
+        SeedGrandTest::class,
     ];
 
     public function boot(): void
@@ -125,7 +127,15 @@ class AIServiceProvider extends ModuleServiceProvider
      */
     protected function configureSchedules(Schedule $schedule): void
     {
-        $schedule->command('ai:run-due-work')->everyMinute()->withoutOverlapping(5);
+        $sessionInterval = (int) config('ai.population.session_interval_seconds', 0);
+        $dueWork = $schedule->command('ai:run-due-work');
+        if ($sessionInterval > 0 && $sessionInterval <= 10) {
+            $dueWork->everyTenSeconds();
+        }
+        if ($sessionInterval <= 0 || $sessionInterval > 10) {
+            $dueWork->everyMinute();
+        }
+        $dueWork->withoutOverlapping(5);
         $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
         $schedule->command('ai:record-score-samples')->hourly()->withoutOverlapping(5);
         // Retention is enforced on a quiet hour rather than at the moment a row

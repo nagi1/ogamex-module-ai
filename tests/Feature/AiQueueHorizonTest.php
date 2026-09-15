@@ -30,6 +30,14 @@ test('ai work is queued on the module lane with tags', function (): void {
         ->and($job->timeout)->toBeLessThan(config('horizon.defaults.supervisor-ai.timeout'));
 });
 
+test('the AI job timeout follows the configured Horizon margin', function (): void {
+    config(['ai.horizon.supervisors.supervisor-ai.timeout' => 120]);
+
+    $job = app()->makeWith(ProcessAiWork::class, ['workItemId' => 7]);
+
+    expect($job->timeout)->toBe(115);
+});
+
 test('the module contributes its horizon lanes to every environment', function (): void {
     $environments = array_keys((array) config('horizon.environments'));
 

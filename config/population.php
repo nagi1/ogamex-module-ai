@@ -14,4 +14,7 @@ return [
     'active_session_cap' => (int) env('AI_POPULATION_ACTIVE_SESSION_CAP', 0),
     'dispatch_batch_size' => (int) env('AI_POPULATION_DISPATCH_BATCH_SIZE', 100),
     'session_action_cap' => (int) env('AI_POPULATION_SESSION_ACTION_CAP', 1),
+    // Zero preserves each persona's waking-day cadence; a positive value is an explicit
+    // accelerated-run control that still uses the normal session, planner and executor paths.
+    'session_interval_seconds' => (int) env('AI_POPULATION_SESSION_INTERVAL_SECONDS', 0),
 ];

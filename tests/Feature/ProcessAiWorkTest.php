@@ -21,12 +21,14 @@ use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiSchedule;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
@@ -373,7 +375,24 @@ test('lock contention retries work without an action', function (): void {
     }
 
     expect($work->fresh()?->state)->toBe(AiWorkState::Retry)
+        ->and($work->fresh()?->attempts)->toBe(0)
         ->and(AiActionReceipt::query()->where('idempotency_key', $work->idempotency_key)->count())->toBe(0);
+});
+
+test('repeated lock contention does not poison a work item', function (): void {
+    $work = aiBuildingWork($this->currentUserId, 'locked-repeated', attempts: 2);
+    $lock = Cache::lock('ai:player:' . $this->currentUserId, 300);
+    $lock->get();
+
+    try {
+        $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
+        $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
+    } finally {
+        $lock->release();
+    }
+
+    expect($work->fresh()?->state)->toBe(AiWorkState::Retry)
+        ->and($work->fresh()?->attempts)->toBe(0);
 });
 
 test('a disabled profile completes work without a game action', function (): void {
@@ -409,6 +428,28 @@ test('future work stays pending and terminal receipts prevent a second action', 
     expect($future->fresh()?->state)->toBe(AiWorkState::Pending)
         ->and($terminal->fresh()?->state)->toBe(AiWorkState::Completed)
         ->and(BuildingQueue::query()->where('planet_id', $this->currentPlanetId)->count())->toBe(0);
+});
+
+test('accelerated future sessions are claimable by the worker', function (): void {
+    config(['ai.population.session_interval_seconds' => 5]);
+    aiWorkProfile($this->currentUserId);
+    $work = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now()->addMinute(),
+        'schedule_generation' => 1,
+        'idempotency_key' => 'session:accelerated:' . $this->currentUserId,
+        'state' => AiWorkState::Pending,
+    ]);
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
+
+    expect($work->fresh()?->state)->toBe(AiWorkState::Completed)
+        ->and(AiWorkItem::query()
+            ->where('player_id', $this->currentUserId)
+            ->where('kind', AiWorkKind::RunSession)
+            ->where('id', '!=', $work->id)
+            ->exists())->toBeTrue();
 });
 
 test('an expired lease is reclaimed so a queue retry can finish the work', function (): void {
@@ -479,6 +520,44 @@ test('a thrown decision retries and then fails at the configured attempt limit',
         ->and($failed->fresh()?->state)->toBe(AiWorkState::Failed);
 });
 
+test('an exhausted session recovers when the job itself marks the work failed', function (): void {
+    aiWorkProfile($this->currentUserId);
+    $schedule = AiSchedule::create([
+        'player_id' => $this->currentUserId,
+        'timezone' => 'UTC',
+        'next_due_at' => now(),
+        'generation' => 3,
+    ]);
+    $workItem = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now(),
+        'schedule_generation' => 3,
+        'idempotency_key' => 'session:failed-in-handle:' . $this->currentUserId,
+        'state' => AiWorkState::Pending,
+        'attempts' => 2,
+    ]);
+    $this->app->bind(RunAiSession::class, static fn (): RunAiSession => new class implements RunAiSession
+    {
+        public function handle(AiProfile $profile, AiWorkItem $workItem): void
+        {
+            throw new RuntimeException('session failure');
+        }
+    });
+
+    expect(fn () => $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $workItem->id])->handle())
+        ->toThrow(RuntimeException::class, 'session failure');
+
+    $successor = AiWorkItem::query()
+        ->where('idempotency_key', 'session:' . $this->currentUserId . ':4')
+        ->sole();
+
+    expect($workItem->fresh()?->state)->toBe(AiWorkState::Failed)
+        ->and($schedule->fresh()?->generation)->toBe(4)
+        ->and($successor->state)->toBe(AiWorkState::Pending)
+        ->and($successor->schedule_generation)->toBe(4);
+});
+
 test('a job that exhausted its attempts leaves the work item for lease reclaim', function (): void {
     $workItem = aiBuildingWork($this->currentUserId, 'lease-reclaim', attempts: 2);
 
@@ -489,6 +568,39 @@ test('a job that exhausted its attempts leaves the work item for lease reclaim',
     expect($unchanged?->state)->toBe(AiWorkState::Pending)
         ->and($unchanged?->attempts)->toBe(2)
         ->and($unchanged?->lease_token)->toBeNull();
+});
+
+test('an exhausted session schedules one delayed successor without reopening the failed item', function (): void {
+    $schedule = AiSchedule::create([
+        'player_id' => $this->currentUserId,
+        'timezone' => 'UTC',
+        'next_due_at' => now(),
+        'generation' => 3,
+    ]);
+    $workItem = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now(),
+        'schedule_generation' => 3,
+        'idempotency_key' => 'session:' . $this->currentUserId . ':3',
+        'state' => AiWorkState::Failed,
+        'attempts' => 3,
+    ]);
+    $job = new ProcessAiWork($workItem->id);
+
+    $job->failed(new RuntimeException('session failed'));
+    $job->failed(new RuntimeException('duplicate failure callback'));
+
+    $successor = AiWorkItem::query()
+        ->where('idempotency_key', 'session:' . $this->currentUserId . ':4')
+        ->sole();
+
+    expect($workItem->fresh()?->state)->toBe(AiWorkState::Failed)
+        ->and($schedule->fresh()?->generation)->toBe(4)
+        ->and($successor->state)->toBe(AiWorkState::Pending)
+        ->and($successor->schedule_generation)->toBe(4)
+        ->and($successor->due_at->greaterThan(now()))->toBeTrue()
+        ->and(AiWorkItem::query()->where('idempotency_key', 'session:' . $this->currentUserId . ':4')->count())->toBe(1);
 });
 
 /** The host's own identifier for an object, so a test never states an id itself. */
