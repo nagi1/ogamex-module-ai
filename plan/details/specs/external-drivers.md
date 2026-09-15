@@ -182,3 +182,11 @@ Deferred with a named reason:
 - **Per-fact relevance surface.** The AgentOS sidecar emits relevance scores, but no consumer weighs
   them yet, so the module consumes the driver's order and keeps un-ranked memories on the native
   floor. Surfacing relevance is one field once a caller (the language context path) needs it.
+- **The memory driver's consumer, measured.** 5E wired a real caller, but the approval test
+  (`scripts/e2e-agentos-recall-benchmark.php`, 15 September 2026) shows the consumer cannot see the
+  driver's work: the only reader of a recall is the help-request debt penalty, which
+  `RunAiConversationCycleAction::respond()` never reaches because it passes `availableAmount = 0`,
+  and the caller sends no query text so the sidecar is not contacted at all. Consulted directly, the
+  driver gains +33.3 pp required-fact recall at the module's 20-fact cut while evicting the newest
+  fact in 29 of 30 trials, because a full `topK` promotion replaces the cut instead of reordering it.
+  Gate 2 therefore stays unmet: [driver decision record](../research/phase-3-driver-decisions.md).

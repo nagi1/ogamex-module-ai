@@ -61,11 +61,45 @@ Measured on 14 September 2026 against the built image:
 | Empty candidate set | `{ranking:[], considered:0}` and no graph work |
 | Malformed JSON / unknown route / health | `400` / `404` / `{"status":"ok"}` |
 
-**Gate 2 is still unmet.** The driver demonstrably *changes* which memory is surfaced first, and
-the module's own recency order remains the fallback; nothing yet shows that the driver's order
-is better in a way that beats the native path on held-out outcomes, which is the 5-percentage-point
-recall or 20%-cost target. Enabling it by default would add a network hop for no measured gain,
-so it stays opt-in and disabled.
+**Gate 2 is unmet, measured (15 September 2026).** The approval test is
+`scripts/e2e-agentos-recall-benchmark.php`, an operator run over the real database, the real sidecar
+and the real decision action (`php scripts/e2e-agentos-recall-benchmark.php --confirm --trials=30 --facts=30`
+inside the application container; it writes only rows it then deletes). Each trial gives the
+counterparty 30 facts and moves the debt fact one recency position, so 30 trials walk the whole
+corpus:
+
+| Observation | Native | AgentOS |
+| --- | --- | --- |
+| Required-fact (live `ResourceDebt`) recall at the module's 20-fact cut | **66.7 %** (20/30) | **100 %** (30/30) |
+| Newest fact about the counterparty kept in the cut | **30/30** | **1/30** |
+| Order differs from native | — | 30/30 |
+| Scope leaks (an id the module never sent) | 0 | 0 |
+| Recall latency p50 | 88.4 ms | 223.4 ms |
+| `HelpRequest` answer, production amount | `Counter: insufficient_available_amount` | identical, 30/30 |
+| `HelpRequest` answer with a caller-supplied query text | `Clarify` | `Reject`, 10/30 differ |
+
+The numeric target is met and the verdict is still **disabled**, for three recorded reasons:
+
+1. **No production-reachable consumer.** The only reader of a recall is
+   `NativeSocialCognition::outstandingDebtPenalty()` (a presence test over the recalled list), and
+   `RunAiConversationCycleAction::respond()` calls the evaluator with `availableAmount = 0` because
+   no transfer capability is wired. `evaluateHelpRequest()` therefore answers `Counter` for every
+   real help request *before* the debt penalty is read. Measured: 30/30 identical answers under both
+   drivers.
+2. **The caller sends no query text.** `EvaluateAiSocialExchangeAction::recalledHistory()` passes
+   `queryText: null`, and both `AgentOsLongTermMemory` and `AgentOsClient` return early on an empty
+   query, so the production path never contacts the sidecar. Measured: the unwired order equals the
+   native order 30/30, i.e. the driver is not consulted at all.
+3. **Where it is consulted, it trades current facts for relevant ones.** The driver returns a full
+   `topK`, and `AgentOsLongTermMemory::ranked()` places everything it ranked ahead of the native
+   floor, so the driver replaces the whole 20-fact cut rather than reordering it: the newest fact
+   survives 1/30 against 30/30 natively. That is the "no worsened current-fact correctness" clause
+   failing in the same run that shows the +33.3 pp recall gain. Reordering rather than replacing the
+   cut is module policy in `ranked()`, not a driver defect.
+
+Revisit when a production-reachable, order-sensitive consumer of recalled memory exists *and*
+promotion is bounded so a ranking cannot evict current facts. Until then the driver stays opt-in and
+disabled, and the reference profile pays nothing for it.
 
 **Deletion is complete by construction.** Because the module sends the candidate set per request
 and the sidecar persists nothing, there is no provider index to tombstone or delete: the driver's
