@@ -140,7 +140,11 @@ INSERT OR REPLACE INTO tasks
  (22,'DOC-004','Close T6/V7 residuals — mark clustering + route×speed shipped, defer relationship/contest','doc','todo','P2','W6-1,W6-3',NULL,'T6,V7',
   'plan/details/specs/gameplay-algorithms.md',
   'plan/details/specs/gameplay-algorithms.md',
-  'Doc-only accuracy pass: proximity clustering is already shipped via travel_cost; V7 route x speed is resolved for deployment saves. Relationship (RAID-007) and contest (RAID-013) recorded as deferred.');
+  'Doc-only accuracy pass: proximity clustering is already shipped via travel_cost; V7 route x speed is resolved for deployment saves. Relationship (RAID-007) and contest (RAID-013) recorded as deferred.'),
+ (23,'IMPL-022','Capability research — queue a leaf research that unlocks a non-object capability (astrophysics)','impl','todo','P1','G2,G7,G3',
+  'R2','R2','specs/gameplay-algorithms.md (R2)',
+  'app/Domain/Decision/FacilityChain.php',
+  'Live grand run: astro=0 for all 10 accounts despite 7 meeting every prerequisite, so colonize/expedition never fire. FacilityChain queues only the unmet prerequisites of a non-producible ambition, so a leaf research no unit requires is skipped forever. Give R2 capability research a real goal.');
 
 -- ── dependencies ────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES

@@ -786,3 +786,23 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   would be dead code.
 - **Contest (RAID-013) deferred.** The module observes no other player's raid schedule, so a contest
   model would be an unmeasured guess; proximity is already the shipped edge.
+
+### Grand-test live run — a nullable-defence crash fixed, a capability-research gap found (15 September 2026)
+- **The live run crashed on every session that reached the escort check.** An espionage report stores
+  a probe that revealed no defence as a **null** `defense` column (the host migration marks it
+  nullable), and `QueueableUnitPlanner::observedDefendedTarget()` iterated it directly:
+  `foreach() argument must be of type array|object, null given`. It was 467 of the 470 failed jobs.
+  Guarded the same way `resources` already is (`?? []`) and pinned with
+  `a report whose defence is null does not break unit planning`.
+- **After the fix and a stack restart the cohort plays cleanly** — 3046 actions accepted against 211
+  rejected, zero generative calls, all ten accounts growing. Miners, turtles and traders never raid
+  (Raid is explicitly denied in their policies); the two fleeters raid 41–46% of sessions; the two
+  casuals raid 27–29% (per `player-model.md`, "growth and occasional raids").
+- **Gap found, task IMPL-022:** astrophysics is never researched, so **colonize and expedition are
+  permanently unreachable**. All ten accounts have `astro = 0` after eight hours at 1000×, and seven
+  of them already meet every prerequisite (`research_lab ≥ 3`, `espionage ≥ 4`, `impulse_drive ≥ 3`).
+  `FacilityChain` is the only research source: `pending()` returns the unmet *prerequisites* of the
+  cheapest non-producible ambition, and `nextAmbition()` skips an ambition whose prerequisites all
+  stand. A leaf research that no unit requires (astrophysics) therefore has its prerequisites climbed
+  and is then skipped forever. R2 says such a research must score through the capability it unlocks;
+  today nothing does.
