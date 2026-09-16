@@ -146,9 +146,10 @@ class EconomyUpgrades
     /**
      * @return list<BuildCandidate> storages whose remaining capacity would fill inside an absence
      *
-     * A full warehouse stops the planet producing, so this is the more urgent of the economy's two
-     * answers -- but only while it really is about to fill inside this account's own absence, which
-     * is what keeps it from preempting the mine that pays for everything.
+     * A warehouse is grown only while its fill lies in the future -- it would overflow inside this
+     * account's own absence, so a bigger store buys the time away. A warehouse that is already full
+     * (time to fill zero) is a spend signal, not a warehouse signal: the surplus above capacity is
+     * fully lootable, so it is answered by the mine that spends it, never by a bigger warehouse.
      */
     public function storage(PlanetService $planet, AiProfile $profile): array
     {
@@ -158,7 +159,7 @@ class EconomyUpgrades
         foreach (ObjectService::getBuildingObjectsWithStorage() as $object) {
             $hours = $this->timeToFill($planet, $object->machine_name);
 
-            if ($hours === null || $hours >= $absence) {
+            if ($hours === null || $hours <= 0.0 || $hours >= $absence) {
                 continue;
             }
 

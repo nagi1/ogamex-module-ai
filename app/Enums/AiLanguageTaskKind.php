@@ -13,6 +13,9 @@ enum AiLanguageTaskKind: string
     /** A substantive reply a human will read, where wording quality is the point. */
     case ConversationReply = 'conversation_reply';
 
+    /** A critical campaign decision consultation, where a typed recommendation over supplied candidates is the point. */
+    case CampaignConsultation = 'campaign_consultation';
+
     /** The opt-in sanitized provider run, which must be able to name its own vendor. */
     case Conformance = 'conformance';
 }

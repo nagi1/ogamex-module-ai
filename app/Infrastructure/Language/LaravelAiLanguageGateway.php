@@ -3,6 +3,7 @@
 namespace Modules\AI\Infrastructure\Language;
 
 use Carbon\CarbonImmutable;
+use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Modules\AI\Ai\Agents\OgameConversationReplyAgent;
 use Modules\AI\Contracts\LanguageGateway;
@@ -34,13 +35,18 @@ class LaravelAiLanguageGateway implements LanguageGateway
             return $this->failedResult($exception, $request);
         }
 
-        /** The SDK guarantees structured responses for agents with HasStructuredOutput. */
-        /** @var StructuredAgentResponse $response */
         return $this->structuredResult($response, $request);
     }
 
-    private function structuredResult(StructuredAgentResponse $response, LanguageRequest $request): LanguageResult
+    private function structuredResult(AgentResponse $response, LanguageRequest $request): LanguageResult
     {
+        // The SDK builds a StructuredAgentResponse only when the provider answered with a
+        // structured envelope; a plain text reply breaks the lane's output contract and is
+        // classified as a provider failure, not a schema mismatch.
+        if (!$response instanceof StructuredAgentResponse) {
+            return $this->failedResult(new RuntimeException('The provider answered with a non-structured response.'), $request);
+        }
+
         $text = $response['text'] ?? null;
         $interpretation = AiLanguageInterpretation::tryFrom((string) ($response['interpretation'] ?? ''));
         $candidates = $response['candidates'] ?? null;
@@ -144,7 +150,7 @@ class LaravelAiLanguageGateway implements LanguageGateway
         }
     }
 
-    private function invalidResult(LanguageRequest $request, StructuredAgentResponse|null $response = null): LanguageResult
+    private function invalidResult(LanguageRequest $request, AgentResponse|null $response = null): LanguageResult
     {
         $attribution = $this->attribution($request);
 

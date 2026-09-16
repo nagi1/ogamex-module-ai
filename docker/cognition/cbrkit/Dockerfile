@@ -11,7 +11,7 @@ WORKDIR /driver
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
-COPY retriever.py ./
+COPY retriever.py eval_retriever.py ./
 
 # cbrkit 1.6.0 builds its API settings and loads callables while importing
 # `cbrkit.api`, but `cbrkit serve` only assigns CBRKIT_RETRIEVER afterwards.

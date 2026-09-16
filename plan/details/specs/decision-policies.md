@@ -61,10 +61,10 @@ Loss recovery follows the [player state model](player-model.md). Biases and mist
 
 ## Strategy mining and the wave-6 enrichment
 
-The [strategy mining](strategy-mining.md) programme and the [principle catalog](../research/strategy-principles.md)
+The [strategy mining](strategy-mining.md) programme and the [principle catalog](../research/strategy/README.md)
 map these policies onto validated OGame play. Its claim layer — which distinguishes domain facts,
 hard-safety policies, scoring factors, heuristics, profile parameters and advanced tactics — is
-[`research/strategy-claims.md`](../research/strategy-claims.md). The wave-6 strategy-depth gaps
+[`research/strategy/claims/`](../research/strategy/claims/types.yaml). The wave-6 strategy-depth gaps
 (activity risk in raid, spy target ranking, proactive fleetsave, fleetcrash/phalanx/moon) are depth,
 not capability: the host supports every seam, the module does not yet reach it. The algorithm blocks
 for them — T6–T8, N4/N5, V6–V8, F1–F6 — are written in

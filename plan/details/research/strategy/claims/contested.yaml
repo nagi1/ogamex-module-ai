@@ -1,0 +1,88 @@
+# Canonical strategy knowledge store. This file is authoritative: edit here, not in the Markdown
+# catalogs under plan/details/research/. Those remain the human narrative and are derived from this
+# store, never the reverse.
+#
+# The atomic contested claims, preserved verbatim and never silently reconciled. A principle that
+# consumes one of these carries the `contested` confidence marker and a pointer back to this id.
+
+- id: CLAIM-RAID-014
+  verdict: REJECTED
+  subject: single-raid gate
+  claim: ogames.net publishes `Profit = Loot + Debris − Fuel − Losses`; the module deliberately keeps
+    debris out of the raid gate (two missions, two capacities).
+  disposition: module doctrine unchanged; the split is recorded in `RAID-014` and `T4`/`F4`.
+
+- id: CLAIM-FS-007
+  verdict: CONTESTED
+  subject: landing buffer
+  claim: '"10–20 minutes after you log in" (single non-Gameforge source) vs "+30–60 minutes" (Gameforge).'
+  disposition: a persona band, never a constant.
+
+- id: CLAIM-CRASH-003
+  verdict: CORRECTED
+  subject: same-planet relocation recallability
+  claim: a same-planet relocation is not recallable (`cancelMission` early-returns on
+    `planet_id_from === planet_id_to`); a deployment between two own planets is recallable.
+  disposition: '`F2`/`V4` state the correction.'
+
+- id: CLAIM-CRASH-005
+  verdict: PARTIALLY_VERIFIED
+  subject: moon-destruction fleet redirect
+  claim: moon destruction (type 9) redirects returning fleets to the planet; the fleet-redirect
+    consequence is not re-verified against the host.
+  disposition: '`F6` marks it as such.'
+
+- id: CLAIM-FLE-006
+  verdict: CONTESTED
+  subject: heavy-fighter aging
+  claim: heavy fighter ages out once gauss/plasma appear; contested for the early rocket/light-laser
+    defence case.
+  disposition: persona/stage band.
+
+- id: CLAIM-SIM-MEAN
+  verdict: REJECTED
+  subject: mean-profit estimate
+  claim: a mean-profit reading inverted a real 60 M decision (TrashSim thread).
+  disposition: '`T2` uses a conservative tail statistic, never a mean.'
+
+- id: CLAIM-AUTH-LOSS
+  verdict: REJECTED
+  subject: offline fleet-loss rate
+  claim: '"80% of fleets are lost while offline" has no source and is deleted wherever it appears.'
+  disposition: '`V3`.'
+
+- id: CLAIM-NIN-ARRIVAL
+  verdict: CONTESTED
+  subject: ninja arrival timing
+  claim: WIK-005 says the ninja fleet arrives "a few seconds before" impact; TP-011 says same-second or
+    ~1 s before and warns that arriving seconds early exposes the fleet to a recall.
+  disposition: reconciled by the server-tick observation (a ~1 s buffer lands on the same combat
+    second); recorded, not silently merged.
+
+- id: CLAIM-DEBRIS-RATE
+  verdict: HOST_CONFIG
+  subject: debris rate
+  claim: TP-013 (43/55/80% + defence debris) vs WIK-008 (vanilla 30%, some 70%) — a private-server vs
+    vanilla difference.
+  disposition: reinforces gate 1 — read the debris rate from the host.
+
+- id: CLAIM-TP019-ERROR
+  verdict: SOURCE_INTERNAL_ERROR
+  subject: Deathstar rapid fire vs battlecruiser
+  claim: TP-019's tip text prints Deathstar RF×250 against battlecruisers while its own RF table (and
+    WIK-004) list ×15; the canonical value is 15.
+  disposition: do not encode 250.
+
+- id: CLAIM-ECO006-FUSION
+  verdict: CONTESTED
+  subject: fusion's early role
+  claim: PLW-002 says fusion has an early role ("for the first few levels the fusion plant is good"),
+    against ECO-006's "fusion only when deuterium is surplus".
+  disposition: stays a persona band (C), consistent with ECO-006's own contested-switch note.
+
+- id: CLAIM-COL001-SLOTS
+  verdict: CORRECTED
+  subject: colony slot bonuses
+  claim: WIK-012 + TP-016 agree exactly on the host 7.4.0/7.5.0 slot bonuses; the earlier "30/22.5/15"
+    figures were stale official values, not a genuine contest.
+  disposition: COL-001 upgraded to confidence A.

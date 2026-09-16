@@ -1,5 +1,6 @@
-# Generated from plan/details/research/strategy-principles.md by scripts/strategy-export.py — do not hand-edit; edit the
-# Markdown catalog and re-run, or start editing here once the migration is accepted.
+# Canonical strategy knowledge store. This file is authoritative: edit here, not in the
+# Markdown catalogs under plan/details/research/. Those remain the human narrative and are
+# derived from this store, never the reverse.
 - id: AUTH-001
   title: The host detector thresholds are hard constraints
   domain: authenticity

@@ -1,0 +1,39 @@
+# Canonical strategy knowledge store. This file is authoritative: edit here, not in the Markdown
+# catalogs under plan/details/research/. Those remain the human narrative and are derived from this
+# store, never the reverse.
+#
+# The atomic claim types. Every principle in principles/*.yaml carries exactly one `claim_type`;
+# the type decides what a sourced observation may become at implementation time, so a fact can
+# never silently turn into executable policy.
+
+- code: DOMAIN_FACT
+  meaning: a mechanic or fact about the game or host
+  disposition: verify against the host; becomes a precondition or host check, never a module constant
+
+- code: HARD_SAFETY_POLICY
+  meaning: a binding rule or legal invalidity
+  disposition: a hard gate in the planner (abort or refuse), never a scored preference
+
+- code: SCORING_FACTOR
+  meaning: a term that belongs in a score
+  disposition: a documented component of the relevant scorer, with its own line in the decision trace
+
+- code: STRATEGIC_HEURISTIC
+  meaning: a rule-of-thumb ordering or trigger
+  disposition: the default mechanism — a comparator or trigger, the smallest thing that closes the gap
+
+- code: BEHAVIOR_PROFILE_PARAMETER
+  meaning: a persona, archetype or skill knob
+  disposition: a band in ArchetypePolicy / AiSkillBand, never a constant
+
+- code: POSSIBLE_STRATEGIC_POSTURE_TRIGGER
+  meaning: a candidate trigger for a temporary state
+  disposition: recorded only; stays open until an intent genuinely cannot be scored
+
+- code: ADVANCED_TACTIC
+  meaning: a named expert manoeuvre
+  disposition: an executor gated behind a reviewed cluster, never silent
+
+- code: REJECTED_OR_UNSUPPORTED
+  meaning: dismissed or not supportable
+  disposition: recorded and not implemented

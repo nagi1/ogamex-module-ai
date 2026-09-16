@@ -15,6 +15,7 @@ use Modules\AI\Actions\QueueAiSpyAction;
 use Modules\AI\Actions\QueueAiTransferAction;
 use Modules\AI\Actions\QueueAiUnitsAction;
 use Modules\AI\Actions\RunAiSessionAction;
+use Modules\AI\Console\Commands\AdvanceAiCampaigns;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
@@ -28,6 +29,7 @@ use Modules\AI\Console\Commands\SeedAiTestUniverse;
 use Modules\AI\Console\Commands\SeedGrandTest;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
+use Modules\AI\Contracts\CampaignConsultationGateway;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\LanguageGateway;
@@ -52,10 +54,13 @@ use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
 use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
+use Modules\AI\Enums\AiCampaignConsultationMode;
 use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Infrastructure\Cognition\FatimaClient;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
+use Modules\AI\Infrastructure\Language\LaravelAiCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
+use Modules\AI\Infrastructure\Language\NullCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
@@ -64,6 +69,7 @@ use Modules\AI\Observers\ObserveCommittedChatMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\CooperativeHostilityPolicy;
 use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\ExperienceEngineSelector;
 use Modules\AI\Support\FatimaScenarioTemplate;
@@ -77,6 +83,7 @@ use OGame\Events\Game\BuildingCompleted;
 use OGame\Models\AllianceMember;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Services\HostilityGuard;
 use OGame\Services\ModuleSlotService;
 
 class AIServiceProvider extends ModuleServiceProvider
@@ -91,6 +98,7 @@ class AIServiceProvider extends ModuleServiceProvider
     ];
 
     protected array $commands = [
+        AdvanceAiCampaigns::class,
         ExplainAiDecision::class,
         PruneAiRecords::class,
         ReconcileLanguageRequests::class,
@@ -115,6 +123,11 @@ class AIServiceProvider extends ModuleServiceProvider
         ChatMessage::observe(RedactDeletedChatMemory::class);
         AllianceMember::observe(ObserveCommittedAllianceMembership::class);
         Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
+
+        // The cooperative policy is a read-only answer the host guard consults at hostile
+        // dispatch; the host enforces it. Registering here means a disabled module registers
+        // nothing, and the guard's fail-closed path blocks hostility instead of unlocking PvP.
+        app(HostilityGuard::class)->register(app(CooperativeHostilityPolicy::class));
 
         // The module's operator page is reachable from the admin sidebar through the host's
         // documented slot, so the module adds a link instead of replacing the menu template.
@@ -142,6 +155,7 @@ class AIServiceProvider extends ModuleServiceProvider
             $dueWork->everyMinute();
         }
         $dueWork->withoutOverlapping(5);
+        $schedule->command('ai:advance-campaigns')->everyMinute()->withoutOverlapping(5);
         $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
         $schedule->command('ai:record-score-samples')->hourly()->withoutOverlapping(5);
         // Retention is enforced on a quiet hour rather than at the moment a row
@@ -162,6 +176,9 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->bind(LanguageGateway::class, fn (): LanguageGateway => (bool) config('ai.language.enabled', false)
             ? app(LaravelAiLanguageGateway::class)
             : app(NullLanguageGateway::class));
+        $this->app->bind(CampaignConsultationGateway::class, fn (): CampaignConsultationGateway => AiCampaignConsultationMode::tryFrom((string) config('ai.campaign-consultation.mode', AiCampaignConsultationMode::Off->value)) !== AiCampaignConsultationMode::Off
+            ? app(LaravelAiCampaignConsultationGateway::class)
+            : app(NullCampaignConsultationGateway::class));
         $this->app->bind(SocialCognition::class, fn (): SocialCognition => app(SocialCognitionSelector::class)->resolve());
         // Affect and social cognition resolve the same session, so the module advances one
         // integrated character state rather than one per contract. The circuit breaker needs

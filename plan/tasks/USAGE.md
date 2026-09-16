@@ -10,7 +10,7 @@ The **plan docs are authoritative**; the DB is a derived index. When a plan doc 
 edit the row) — never let the DB and the docs disagree.
 
 - Gaps: `plan/details/GAP-REGISTER.md` (wave 6 rows `W6-1..6` are the strategy-depth gaps)
-- Principles: `plan/details/research/strategy-principles.md`
+- Principles: `plan/details/research/strategy/principles/`
 - Code mapping: `plan/details/research/architecture-mapping.md`
 - Algorithms: `plan/details/specs/gameplay-algorithms.md` (blocks `SP7`, `T6-T8`, `N4/N5`, `V6-V8`, `F1-F6`, `U-series`)
 - Integration gates: `plan/details/specs/strategy-mining.md` → "Integration gates (L)"

@@ -43,10 +43,15 @@ php artisan ai:experience-conformance --confirm
 `POST /retrieve` accepts `{casebase, queries}` in the body. The module already owns
 outcome cases, their owner scope, feature/ruleset versions and the deterministic
 tie-break, so sending them per request keeps one authoritative store and makes the
-driver replaceable without a migration. The retriever in `retriever.py` reproduces
-the module's documented similarity formula rather than selecting a different
-built-in metric, so a native-versus-driver comparison measures the implementation,
-not a changed metric.
+driver replaceable without a migration. The retriever in `retriever.py` is the
+driver's own measure: a per-feature weighted similarity where object and planet ids
+are categorical identities and the target level is numeric. It is deliberately not
+a port of the module's uniform-mean formula, so a native-versus-driver comparison
+can observe a real difference.
+
+The held-out measurement that decides whether the driver earns the hybrid default
+lives in `eval_retriever.py`; run it inside the container with
+`python /driver/eval_retriever.py`.
 
 ## Server deployment
 

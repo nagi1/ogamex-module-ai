@@ -76,7 +76,7 @@ Every agent begins by reading the assigned package and the named section of [det
 
 ## Package 5 — external drivers, full utilization and native↔external collaboration
 
-**Status:** implemented on 15 September 2026 — all gates green (Rector, Pint, PHPStan 0 errors, 614 Pest tests, 100.00% PCOV) and the hybrid mode measured against the real sidecars; not yet signed off. **Owner:** one module agent.
+**Status:** implemented on 15 September 2026 — all gates green (Rector, Pint, PHPStan 0 errors, 614 Pest tests, 100.00% PCOV) and the hybrid mode measured against the real sidecars; 5D (CBRKit's own retrieval measure) closed 16 September 2026 and the three consumer-less deferrals closed by decision; **signed off 16 September 2026** (owner direction: "finalize all gated for 5 and start 6"). **Owner:** one module agent.
 
 **Goal:** on a host with measured headroom the optional external cognition drivers are used to their
 full extent — not as swap-only decorations — and the native engines keep running alongside them, so
@@ -116,21 +116,21 @@ and still fail the game.
 
 | # | Item | Package | Status |
 | --- | --- | --- | --- |
-| 1 | 3J runs at **2, 5 and 10** AI accounts, recorded as figures (memory gate G3). Rescaled by owner decision of 14 September 2026 from 100/500/1,000 players: at this size they show that behaviour, lateness and per-player cost hold as the population grows rather than measuring capacity at reference-profile scale | 3 | **Post-sign-off** — parked at the very end by owner decision; the 10-account pilot stands in until they run |
+| 1 | 3J runs at **2, 5 and 10** AI accounts, recorded as figures (memory gate G3). Rescaled by owner decision of 14 September 2026 from 100/500/1,000 players: at this size they show that behaviour, lateness and per-player cost hold as the population grows rather than measuring capacity at reference-profile scale | 3 | **Reclassified 16 September 2026** — runs alongside Package 6; the 10-account pilot stands in until they run |
 | 2 | A Gate 2 verdict for each of CBRKit, FAtiMA/CiF and AgentOS. A driver that fails Gate 2 closes this item by being recorded as disabled on evidence: the gate asks for a measured verdict, not for adoption | 3 | **Recorded as disabled on evidence (15 September 2026).** AgentOS fails Gate 2 on the reference profile (~920 MB node_modules + a local-embedder need); FAtiMA (108.9 MiB) and CBRKit (142.1 MiB) fit but stay disabled pending a measured gain — which is the verdict the gate asks for, not adoption |
-| 3 | The disclosed pilot at pilot scale, run with real humans | 4 | **Post-sign-off** — run once the cohort acts; Package 4 is operability and holds the evidence to schedule it |
-| 4 | Human feedback present in the pilot report, read from an operator-supplied file | 4 | **Post-sign-off** — read from the operator-supplied file when the disclosed pilot runs |
+| 3 | The disclosed pilot at pilot scale, run with real humans | 4 | **Reclassified 16 September 2026** — runs alongside Package 6; the owner provides the humans once the cohort is disclosed |
+| 4 | Human feedback present in the pilot report, read from an operator-supplied file | 4 | **Reclassified 16 September 2026** — read from the operator-supplied file when the disclosed pilot runs alongside Package 6 |
 | 5 | Two acceptance wordings met only with narrower evidence: replay is read-only over a saved scenario rather than live state, and lateness is the module's own scheduling lateness because this host has no server tick to measure | 4 | **Accepted as permanently narrower (15 September 2026).** Replay over a saved scenario and module-own scheduling lateness are honest statements of what the host offers; recorded in DECISIONS.md |
 | 6 | The owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md) | 4 | **Signed off 15 September 2026.** All gates green — Rector, Pint, PHPStan (0 errors), 598 Pest tests passed, 100.00% PCOV — and the acceptance is written down in [details/DECISIONS.md](details/DECISIONS.md) |
 | 7 | Executor coverage for what the decision engine can select: `build`, `research`, `queue_units` (cargo + colony ship + probe), `colonize`, `fleet_save`, `spy` and `raid` all execute; only `save_resources` remains a traceable intent with no executor | 2/3 | **Complete** — every published capability now has a host path, 14 September 2026 |
 | 8 | The building chain the executors depend on: the planner must reach the facilities the later capabilities are gated behind, and must pick among targets the host already accepts rather than the best target overall | 2/3 | **Implemented (14 September 2026)** — measured: a seeded account owns no buildings and no research, so without this every fleet, unit and research capability stays permanently unavailable on that account. `FacilityChain` derives the steps from the host catalogue rather than naming them (gate 1), and `QueueableBuildingPlanner` walks those steps plus the persona ranking until the host accepts one, so a refused favourite no longer costs the account its whole build capability. Covered by `BuildingChainReachabilityTest`, whose expectations are computed from the same catalogue |
-| 9 | Package 5 acceptance — the external drivers used to their full extent under the hybrid mode, measured per its spec | 5 | **Implemented 15 September 2026** — all gates green and the hybrid mode measured against the real sidecars; deferred and named: mood/decision depth beyond valence, CBRKit's own retrieval measure, the per-fact relevance surface |
+| 9 | Package 5 acceptance — the external drivers used to their full extent under the hybrid mode, measured per its spec | 5 | **Implemented 15 September 2026, 5D closed 16 September 2026.** All gates green and the hybrid mode measured against the real sidecars; CBRKit's own retrieval measure shipped (+25.0pp precision@2 on the synthetic held-out set); FAtiMA mood/decision depth and the per-fact relevance surface closed as deferred (no consumer); the memory consumer disabled on evidence. **Signed off 16 September 2026** |
 
 Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for all three drivers.
 
 ## Package 6 — cooperative PvE mode
 
-**Status:** blocked by Packages 1–5, blocked by every open item in the [completion gate](#packages-15-completion-gate-owner-rule-14-september-2026) above, **and gated by sign-off.** This package does not start until Packages 1–5 are complete *and signed*: every acceptance criterion met with recorded evidence, the pilot report reviewed, and the owner's acceptance written down in [details/DECISIONS.md](details/DECISIONS.md). Implemented is not signed — an operator who has not read the pilot report has not accepted it — and by owner rule of 14 September 2026 neither is finished: Packages 1–5 are done only when the checklist above has no open items left. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
+**Status:** started 16 September 2026. Packages 1–5 are complete and signed (owner direction 16 September 2026: "finalize all gated for 5 and start 6"), and the three operational completion-gate items — the 2/5/10 capacity runs (item 1), the disclosed human pilot (item 3) and the operator feedback file (item 4) — are reclassified by the same direction from blocking this package to running alongside it; the owner provides the humans and the feedback file when the cohort is disclosed. **Deterministic module slices shipped and verified 16 September 2026** (one explicit pass, all gates green: Gate 2 clean, Rector/Pint/PHPStan clean, 777 Pest tests / 2511 assertions, PCOV 100.00% 6335/6335): the campaign board's records (`AiCampaign`, `AiCampaignObjective`, `AiCampaignContribution`) with the open/declare/contribute actions; objective resolution from a committed coalition victory (IMPL-026); the campaign director lifecycle (IMPL-027); the reward allocator's AI-exclusion guard on top of the operation-level contribution dedup (IMPL-028); the cooperative policy registration — the host read-only extension point `OGame\Contracts\HostilityPolicy` + `OGame\Services\HostilityGuard` (enforced at `GameMission::isMissionPossible` for attack/espionage/moon-destruction and at the missile launch path, fail-closed in a `cooperative` universe with no policy) and the module's `CooperativeHostilityPolicy`, which blocks exactly coalition-versus-coalition hostility; 6C operator control and fail-closed admission (IMPL-029); and the 6A consultation lane — transport (IMPL-030), redacted brief (IMPL-032), receipt/budget/caps (IMPL-033) and profile-bounded ranking adjustment (IMPL-034). The 6A lane is off by default and is never wired into a campaign decision point until 6B's measured gain lands. **Remaining:** 6B (IMPL-031, driver-signal utilisation) is measurement-gated on the 2/5/10 capacity-run comparison. **Owner:** one host safety agent and one module campaign agent, merged only as a paired release.
 
 **Goal:** a dedicated cooperative universe lets humans fight an AI faction using normal game systems while human-on-human hostility stays blocked.
 
@@ -141,6 +141,87 @@ Already closed: the global A1–A8 gates are evidenced, and Gate 1 passes for al
 **Do not modify:** ordinary universe behavior, core battle rules, ships or resources. Do not create an AI-only combat engine.
 
 **Acceptance:** humans cannot attack, counter-spy, missile or join ACS against humans in cooperative mode; both can fight faction; ordinary mode stays unchanged; disabling module remains safe; contributions are idempotent; failed coalition gets a recoverable next objective.
+
+### New Package 6 work items — driver-informed campaign decisions and player divergence
+
+These are additive cooperative-PvE work items. They do not alter Package 5's driver contracts or
+its accepted 5A–5F evidence, and they apply only to a cooperative universe/campaign. They must not
+change ordinary-universe player decisions.
+
+| Item | Deliverable | Proof before moving on |
+| --- | --- | --- |
+| **6A — driver-informed critical campaign consultation** | Add an opt-in critical-decision consultation lane beside chat for material unresolved cooperative-campaign decisions: faction fleet loss, repeated campaign setbacks, contested objective, coalition conflict, new campaign phase or major rank change. Use a fresh non-conversational Laravel AI structured-output agent with the existing provider routing, request ledger, SDK failover, usage/failure events and agent fakes. Its bounded request contains only the current permitted campaign facts and commitments; already-generated legal, executable candidates and native scores; profile revision; FAtiMA/CiF typed appraisal, mood, social-volition and protocol-step evidence; CBRKit ranked outcome cases and driver similarity; and AgentOS recalled authorised facts with relevance, stability and provenance. Every external value is typed, attributed to its driver/version and treated as evidence, never as instructions. The agent returns a strict typed recommendation over only supplied candidate IDs plus bounded risk/reason/evidence IDs. It cannot name a new action, alter terms, use a tool, access memory, invoke a sub-agent or execute host work. The module validates candidate IDs, current legality/visibility, obligations, campaign state and source validity, then may apply only a profile-bounded adjustment to a later ranking; native policy still chooses and dispatches the action. | A campaign fixture proves every healthy selected driver field reaches the serialized, redacted advice brief and a matching recommendation affects only an already legal campaign candidate within its permitted profile bound. Missing, invalid, stale or unauthorised driver evidence is absent. Native mode and unavailable drivers make zero provider calls and preserve the same campaign decision. Provider refusal, malformed output, exhausted budget, timeout and failover preserve the immediate native decision; uncertain usage settles once. Laravel AI structured-agent fakes with stray prompts prevented, SDK failure/failover telemetry and one opt-in sanitized real-provider conformance run prove the provider/model path without a custom HTTP client, parser, retry loop, queue lifecycle or model-memory store. |
+| **6B — full driver-signal utilisation for cooperative player divergence** | Add one bounded driver-evidence contribution at the existing campaign utility/social decision points, not a new planner or driver manager. Profile traits decide how much their own account reacts to supported evidence: FAtiMA appraisal/mood changes threat and recovery appetite; CiF volition/step changes coalition and social caution; CBRKit outcome similarity changes confidence in a familiar campaign plan; AgentOS relevance/provenance changes which permitted past relationship or obligation weighs. The host continues to supply every object, price, requirement and executable capability; no object list, universal action rule or driver algorithm is hardcoded. A conformance utilisation record lists every verified external-driver field, its source, consumer and observed effect; a field with no safe consumer is recorded as unused with its reason instead of silently discarded. | With identical legal cooperative state and the same external-driver evidence, differently profiled accounts make reproducibly different but professional-player-plausible campaign choices or social stances from the existing legal candidate set; an individual profile remains reproducible under its seed. No driver can promote an unavailable action, override a native refusal, leak another account's fact, bypass an obligation or weaken the cooperative human-versus-human safety boundary. The 2/5/10-account comparison reports per-profile campaign action, social and recovery divergence, latency, RAM, provider attempts and fallback rate against native-only and hybrid baselines; it must show a player-visible gain before any driver or consultation lane becomes a default. |
+| **6C — operator control and fail-closed LLM admission** | Keep campaign consultation disabled by default. Give operators explicit `off` / `observe` / `advice` mode, independent universe, campaign and account enablement, staff kill switch, selected provider/model ladder, allowed campaign-event triggers, per-trigger cooldown, maximum advice age, driver-evidence inclusion policy, and hard universe/campaign/account token, attempt, cost and concurrency caps. `observe` may record a validated recommendation but must not alter ranking, campaign state or scheduled work; `off` must not resolve Laravel AI configuration or contact a provider. Turning the staff switch off stops new admission, prevents retries and requires a current-enabled recheck before an already-running result can affect a later decision. Each receipt records reason, trigger, configuration revision, selected driver evidence IDs, provider/model, usage, validation result and whether it changed a ranking; raw prompts, private fact text and hidden reasoning are never retained. | Disabled, cap-refused, campaign-disabled, account-disabled, trigger-disallowed, cooldown, stale, kill-switched and provider-unavailable paths make zero new LLM requests and retain the exact native campaign decision. Observe mode records no decision-score, campaign-state or work-item change. A concurrent-cap test proves no combination of accounts, retries or provider failovers exceeds the configured ledger; a mid-request kill-switch test proves its result is ignored. The operator page and `ai:explain-decision` expose the stop reason and attributable recommendation disposition without exposing private prompt content. |
+
+**Laravel AI boundary for 6A:** use the package's structured agent, provider/model routing,
+provider-failover handling, response decoding, usage reporting and test fakes rather than rebuilding
+any of them. The module still owns authoritative facts, bounded context construction, budgets,
+receipt lifecycle, deterministic validation, campaign state and host-action adapters. SDK tools,
+web/file search, MCP, conversational storage, autonomous agent loops and SDK queue/broadcast lifecycle
+remain out of scope because they would grant the provider authority or duplicate module safeguards.
+
+## Package 7 — evidence-gated strategic and social evolution
+
+**Status:** planned; blocked by Package 6 being complete, signed off and reviewed with a real
+cohort. **Owner:** one module agent per non-overlapping slice; host changes, if a proven generic
+gap requires them, remain a separate paired pull request.
+
+**Goal:** improve strategic judgement, long-term recall, diplomacy and cooperative variety only
+where measured play shows a player-visible gap. Native policy, canonical facts, persona and the
+normal host action paths remain the authority.
+
+**Dependencies:** Package 6 acceptance and a review record that names the observed gap, its
+affected accounts and its baseline figure. A proposed capability without that evidence stays
+disabled and is not a Package 7 slice.
+
+**Reuse rule:** 7A reuses Package 6's accepted consultation lane, receipt ledger, operator controls
+and validation path. It may widen the eligible scope only after its own evidence gate; it does not add
+a second Laravel AI adapter, provider client, advice store or decision authority.
+
+**Scope:**
+
+1. **7A — bounded LLM strategic consultation.** After a fleet loss, war declaration, repeated
+   attacks, alliance conflict, new colony or major rank change, make at most one separately
+   budgeted advisory request only when there is a material unresolved decision. A bounded brief
+   may include current permitted facts, existing legal candidates, relevant outcome cases and
+   attributed FAtiMA/CiF, CBRKit and AgentOS evidence. Its typed recommendation is validated
+   against current visibility, commitments and executable capabilities, then may adjust a later
+   candidate ranking. Event deduplication, per-account cooldown, expiry and a separate global
+   sub-budget are required. Normal policy responds immediately; provider failure, refusal or
+   timeout leaves its decision unchanged.
+2. **7B — semantic recall experiment.** Enable hosted embeddings only after a held-out review
+   demonstrates native retrieval misses that exact/entity recall and the selected external-memory
+   ranking do not close. Keep canonical facts and permission/current-validity checks in the
+   module. Projection is bounded asynchronous work, never a session-time or automatic
+   summarisation path; no local model runs on the reference VPS.
+3. **7C — small-scale PsychSim diplomacy experiment.** Evaluate only the account and one to
+   three relevant counterparts at depth one; depth two needs a recorded measured gain and capacity
+   evidence. It proposes social stance or coalition evidence, never fleets, resources, promises
+   or a replacement player runtime.
+4. **7D — Package 6 social life.** Add alliances, first contact and faction social objectives
+   through the existing fact, relationship, commitment, permission and host-delivery boundaries.
+   Initiation needs a real recipient and game event trigger; alliance terms, departures and aid
+   retain exact source-backed terms and expiry. The account's existing persona, obligations and
+   human-scale timing decide whether it engages.
+5. **7E — further cooperative campaign objectives.** Add one PvE objective type at a time using
+   normal accounts, missions, combat estimation and committed outcomes. Each objective declares
+   its recoverable failure path, idempotent contribution/reward handling and the hostility-policy
+   proof before another type begins.
+
+**Do not build:** LLM gameplay authority, tools or fleet dispatch; periodic reflection; automatic
+per-event summaries; AI-to-AI LLM chat; a local embedding model; a generic planner, campaign
+framework or second player runtime. Package 7 does not enable sidecars, embeddings, PsychSim or a
+provider on the 2 vCPU / 2 GB reference deployment without measured headroom and a recorded gain.
+
+**Acceptance:** every enabled slice has a before/after measured review result and a disabled-path
+test proving native provider-off play is unchanged. LLM advice is one bounded, attributable,
+non-executable recommendation and cannot delay or override the existing decision. Semantic recall
+improves held-out authorised retrieval enough to justify its cost and never surfaces deleted,
+stale or unauthorised truth. PsychSim stays within its counterpart/depth/capacity bounds. Social
+life increases meaningful reciprocal interaction without breaking persona consistency or exact
+commitments. Each added PvE objective preserves ordinary-universe behaviour and the cooperative
+human-versus-human safety boundary.
 
 ## Standing after delivery — the review loop
 
@@ -164,7 +245,7 @@ page and the pilot report are made of.
 
 ## Integration order
 
-Merge packages strictly 1 → 2 → 3 → 4 → 5 → 6. A package first uses existing OGameX services, models and module extension points. Only a proven missing generic capability may produce a separate host pull request; the next module agent then works only from that merged revision, recorded in its handoff.
+Merge packages strictly 1 → 2 → 3 → 4 → 5 → 6 → 7. A package first uses existing OGameX services, models and module extension points. Only a proven missing generic capability may produce a separate host pull request; the next module agent then works only from that merged revision, recorded in its handoff.
 
 The [strategy mining](details/specs/strategy-mining.md) workstream is **not a package**: it is a
 research/planning pass over Packages 1–5 that enriches the existing algorithms. Its implementation

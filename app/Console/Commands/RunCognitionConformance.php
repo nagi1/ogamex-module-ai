@@ -183,6 +183,8 @@ class RunCognitionConformance extends Command
             DB::rollBack();
         }
 
+        $differentiation = $this->cbrkitDifferentiationProbe();
+
         return [
             'driver' => 'cbrkit',
             'contract' => ExperienceEngine::class,
@@ -195,9 +197,11 @@ class RunCognitionConformance extends Command
             'request_bytes' => $totals['request'],
             'response_bytes' => $totals['response'],
             // Equivalence alone cannot distinguish a driver answer from a native fallback,
-            // so the call count must also prove the driver was actually reached.
-            'correct' => $totals['calls'] >= $iterations && $driverOrder === $nativeOrder,
+            // so the call count must also prove the driver was actually reached, and the
+            // differentiation probe must prove its own weighted measure was the one used.
+            'correct' => $totals['calls'] >= $iterations && $driverOrder === $nativeOrder && $differentiation['correct'],
             'ranking' => ['driver' => $driverOrder, 'native' => $nativeOrder],
+            'differentiation' => $differentiation,
             'observed_failure_modes' => [$this->cbrkitFailureProbe()],
         ];
     }
@@ -403,6 +407,45 @@ class RunCognitionConformance extends Command
             'probe' => 'non-object casebase',
             'status' => $response->status(),
             'refused' => !$response->successful(),
+        ];
+    }
+
+    /**
+     * The driver's own measure is per-feature weighted with categorical identity, so two
+     * cases for different objects score equally even when their ids are numerically near.
+     * The numeric port this replaced ranked object 3 above object 9 (0.667 vs 0.222) for a
+     * query about object 2; the categorical measure ties them at 0. This probe pins that
+     * tie — it is what makes "the driver used its own measure" observable rather than assumed.
+     *
+     * @return array{probe: string, correct: bool, similarities: array<string, float>}
+     */
+    private function cbrkitDifferentiationProbe(): array
+    {
+        $response = Http::connectTimeout(2)
+            ->timeout(5)
+            ->acceptJson()
+            ->post(
+                rtrim((string) config('ai.cognition.experience.cbrkit.base_url'), '/') . '/retrieve',
+                [
+                    'casebase' => [
+                        9001 => ['object_id' => 9, 'target_level' => 6],
+                        9002 => ['object_id' => 3, 'target_level' => 6],
+                        9003 => ['object_id' => 2, 'target_level' => 6],
+                    ],
+                    'queries' => ['current' => ['object_id' => 2, 'target_level' => 6]],
+                ],
+            );
+
+        $scores = $response->json()['steps'][0]['queries']['current']['similarities'] ?? null;
+
+        $match = is_array($scores) ? (float) ($scores[9003] ?? 0.0) : 0.0;
+        $far = is_array($scores) ? (float) ($scores[9001] ?? -1.0) : -1.0;
+        $near = is_array($scores) ? (float) ($scores[9002] ?? -1.0) : -1.0;
+
+        return [
+            'probe' => 'per-feature weighted measure',
+            'correct' => $match === 1.0 && $far === $near && $near < 1.0,
+            'similarities' => ['object_match' => $match, 'object_9' => $far, 'object_3' => $near],
         ];
     }
 

@@ -90,9 +90,14 @@ Progressive passes: **Pass 1** core → **Pass 2** gaps → **Pass 3** contradic
 
 ## Artifacts
 
-- `research/source-registry.md` — reusable source index (**done**).
-- `research/strategy-principles.md` — atomic Strategy Knowledge Catalog + coverage matrix (**done: 107 principles across 13 domains**).
-- `research/strategy-claims.md` — atomic claim layer + claim-type classification (**done**).
+- `research/strategy/sources.yaml` — reusable source index (**done**).
+- `research/strategy/principles/*.yaml` — atomic Strategy Knowledge Catalog (**done: 107 principles across 13 domains**).
+- `research/strategy/claims/*.yaml` — atomic claim layer + claim-type classification (**done**).
+- `research/strategy/coverage.yaml` — the per-domain coverage matrix (**done**).
+
+  The [`strategy/`](research/strategy/README.md) YAML store is the single authority; the Markdown
+  catalogs (`source-registry.md`, `strategy-principles.md`, `strategy-claims.md`) remain the human
+  narrative and are derived from it.
 - `research/architecture-mapping.md` — every researched principle mapped to current code (**done**).
 - `research/classical-ai-patterns.md` — classical game AI pattern catalog (**done**).
 - `specs/gameplay-algorithms.md` — F-series (fleetcrash/phalanx/moon) and richer N/T/FS blocks (**done**).
@@ -100,15 +105,15 @@ Progressive passes: **Pass 1** core → **Pass 2** gaps → **Pass 3** contradic
 - `DECISIONS.md` — the mining decision and the formalize-vs-new split (**done**).
 - `reviews/` — one cheap, machine-parsable review record per pass (**done**).
 
-## Coverage matrix (final — authoritative copy in [`strategy-principles.md`](research/strategy-principles.md#coverage-matrix))
+## Coverage matrix (final — authoritative copy in [`research/strategy/coverage.yaml`](research/strategy/coverage.yaml))
 
 The research has landed: **107 principles across 13 domains** (21 shipped, 7 partial, 76 researched,
 3 deferred, 0 gap). The gap pass (3 agents, 15 Sep) closed the last unsourced domains — ninja/baiting,
 expeditions, non-English (DE/PL), fleet composition, moon economics and colony positioning — adding
 26 sources and 24 principles plus two new domains (NIN, EXP). Remaining open discovery: ACS tutorials
 ORG-009/010, the French board guide library URLs, and `ogamewiki.de`. The claim-type classification
-lives in [`strategy-claims.md`](research/strategy-claims.md). This file no longer maintains a second
-copy of the matrix.
+lives in [`research/strategy/claims/types.yaml`](research/strategy/claims/types.yaml). This file no
+longer maintains a second copy of the matrix.
 
 ## Classical game AI reverse engineering (milestones 6–8)
 
@@ -171,7 +176,7 @@ acceptance checks.
    independent sources or is mechanically derivable.
 2. **Deduplication** — equivalent claims merged, provenance kept.
 3. **Confidence classification** — every claim carries A/B/C/D; implementation candidates are A/B.
-4. **Contradiction review** — disagreements recorded verbatim in [`strategy-claims.md`](research/strategy-claims.md),
+4. **Contradiction review** — disagreements recorded verbatim in [`research/strategy/claims/contested.yaml`](research/strategy/claims/contested.yaml),
    never silently resolved.
 5. **Mechanics validation** — marked supported / partially supported / unsupported against
    [`host-capability-map.md`](research/host-capability-map.md); unsupported mechanics are never discarded.

@@ -53,23 +53,7 @@ function fakeCognitionSidecars(): void
             ]],
         ]),
         '*/retrieve' => function ($request) {
-            $casebase = $request->data()['casebase'];
-
-            // The real driver refuses a casebase whose values are not objects, which is the
-            // failure mode the probe records.
-            if (!is_array($casebase)) {
-                return Http::response('not an object', 500);
-            }
-
-            $similarities = [];
-
-            foreach (array_keys($casebase) as $id) {
-                $similarities[(string) $id] = 1.0;
-            }
-
-            return Http::response([
-                'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
-            ]);
+            return retrievalResponse($request);
         },
     ]);
 }
@@ -79,22 +63,39 @@ function fakeRetrievalSidecar(): void
 {
     Http::fake([
         '*/retrieve' => function ($request) {
-            $casebase = $request->data()['casebase'];
-
-            if (!is_array($casebase)) {
-                return Http::response('not an object', 500);
-            }
-
-            $similarities = [];
-
-            foreach (array_keys($casebase) as $id) {
-                $similarities[(string) $id] = 1.0;
-            }
-
-            return Http::response([
-                'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
-            ]);
+            return retrievalResponse($request);
         },
+    ]);
+}
+
+/**
+ * Emulates the driver's per-feature weighted measure: object identity is categorical, so a
+ * case scores 1.0 when its object matches the query and 0.0 otherwise. The tie fixture (all
+ * one object) therefore ties as the real driver does, while the differentiation probe's mixed
+ * objects expose the categorical tie the module's own numeric port could not produce.
+ */
+function retrievalResponse($request)
+{
+    $payload = $request->data();
+    $casebase = $payload['casebase'];
+
+    // The real driver refuses a casebase whose values are not objects, which is the
+    // failure mode the probe records.
+    if (!is_array($casebase)) {
+        return Http::response('not an object', 500);
+    }
+
+    $query = is_array($payload['queries']['current'] ?? null) ? $payload['queries']['current'] : [];
+    $objectId = $query['object_id'] ?? null;
+    $similarities = [];
+
+    foreach ($casebase as $id => $case) {
+        $case = is_array($case) ? $case : [];
+        $similarities[(string) $id] = ($case['object_id'] ?? null) === $objectId ? 1.0 : 0.0;
+    }
+
+    return Http::response([
+        'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
     ]);
 }
 
@@ -153,6 +154,13 @@ test('a measured run records latency, bytes and failure modes for both drivers',
         ->and($experience['latency_ms']['samples'])->toBe(2)
         ->and($experience['correct'])->toBeTrue()
         ->and($experience['ranking']['driver'])->toBe($experience['ranking']['native'])
+        // The weighted measure ties the two different-object cases, which is what tells the
+        // driver's own measure from the numeric port it replaced.
+        ->and($experience['differentiation']['probe'])->toBe('per-feature weighted measure')
+        ->and($experience['differentiation']['correct'])->toBeTrue()
+        ->and($experience['differentiation']['similarities']['object_match'])->toEqual(1.0)
+        ->and($experience['differentiation']['similarities']['object_9'])->toBe($experience['differentiation']['similarities']['object_3'])
+        ->and($experience['differentiation']['similarities']['object_9'])->toBeLessThan(1.0)
         // The probe proves a refused casebase is recorded, not assumed.
         ->and($experience['observed_failure_modes'][0]['status'])->toBe(500)
         ->and($experience['observed_failure_modes'][0]['refused'])->toBeTrue();

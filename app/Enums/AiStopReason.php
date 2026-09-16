@@ -26,4 +26,19 @@ enum AiStopReason: string
 
     /** The session action cap is zero, so a session plans and schedules but queues nothing. */
     case SessionActionCap = 'session_action_cap';
+
+    /** The campaign consultation lane is off, so no provider is ever contacted. */
+    case ConsultationDisabled = 'consultation_disabled';
+
+    /** The operator removed this campaign event from the consultation allowlist. */
+    case ConsultationTriggerDisallowed = 'consultation_trigger_disallowed';
+
+    /** The same campaign event was consulted on too recently for a second call. */
+    case ConsultationCooldown = 'consultation_cooldown';
+
+    /** A consultation daily ceiling would be exceeded by another call. */
+    case ConsultationUsageCap = 'consultation_usage_cap';
+
+    /** As many consultations are in flight as the universe allows at once. */
+    case ConsultationConcurrencyCap = 'consultation_concurrency_cap';
 }

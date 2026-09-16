@@ -28,7 +28,7 @@ class ResolveAiProviderRouteAction
         if ($rungs === []) {
             // The single configured pair is the last resort, exactly as it behaved before ladders
             // existed, and it is only credential-checked once routing is what asked for it.
-            $rungs = $this->configuredPair($routing);
+            $rungs = $this->configuredPair($task, $routing);
         }
 
         return app()->makeWith(AiProviderLadder::class, ['rungs' => $rungs]);
@@ -163,14 +163,21 @@ class ResolveAiProviderRouteAction
     }
 
     /** @return list<array{provider: string, model: string}> */
-    private function configuredPair(bool $requireCredential): array
+    private function configuredPair(AiLanguageTaskKind $task, bool $requireCredential): array
     {
-        $provider = (string) config('ai.language.provider', 'openai');
+        $provider = (string) config($this->providerConfigKey($task) . '.provider', 'openai');
 
         if ($requireCredential && !$this->hasCredential($provider)) {
             return [];
         }
 
-        return [['provider' => $provider, 'model' => (string) config('ai.language.model', 'gpt-5-mini')]];
+        return [['provider' => $provider, 'model' => (string) config($this->providerConfigKey($task) . '.model', 'gpt-5-mini')]];
+    }
+
+    private function providerConfigKey(AiLanguageTaskKind $task): string
+    {
+        return $task === AiLanguageTaskKind::CampaignConsultation
+            ? 'ai.campaign-consultation'
+            : 'ai.language';
     }
 }

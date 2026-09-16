@@ -223,10 +223,10 @@ test('a chain step the account cannot pay for falls through to what it can affor
         ->and(chainQueueOnce($this->currentUserId, $this->currentPlanetId))->toBe($plan?->reason);
 });
 
-// A warehouse that is already full is more urgent than any facility: a full warehouse stops the
-// planet producing, so the planner covers it before the chain's next prerequisite. Storage is the
-// only economy answer allowed ahead of the chain -- the mines still wait their turn.
-test('an overflowing warehouse preempts the chain', function (): void {
+// A warehouse that is already full is a spend signal, not a warehouse signal: the surplus above
+// capacity is fully lootable, so the planner falls through to the routine economy (chain or mine)
+// that spends it instead of buying a bigger warehouse the next windfall would fill again.
+test('a full warehouse is spent, not grown', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
     chainPowered();
@@ -235,24 +235,37 @@ test('an overflowing warehouse preempts the chain', function (): void {
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
     expect($plan)->not->toBeNull()
-        ->and($plan?->reason)->toStartWith('storage:');
+        ->and($plan?->reason)->not->toStartWith('storage:')
+        ->and($plan?->reason)->toMatch('/^(chain|economy):/');
 });
 
-// Storage is the one answer checked across every planet before any routine step: a full warehouse on
-// the newest colony stops that colony producing, so it outranks a mine or facility on the homeworld.
-test('an overflowing warehouse on one planet preempts a routine step on another', function (): void {
+// Storage is the one answer checked across every planet before any routine step, but only while a
+// warehouse will actually fill during the absence: a near-full warehouse on the newest colony still
+// outranks a mine or facility on the homeworld.
+test('a warehouse that will fill during the absence preempts a routine step on another planet', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());
     chainStoraged();
     chainPowered();
 
     expect($this->secondPlanetService)->not->toBeNull();
-    $this->secondPlanetService->addResources(new Resources(1_000_000, 0, 0));
+    $colony = $this->secondPlanetService;
+    // Persist the levels so the planner's fresh read sees the colony's real production.
+    $colony->setObjectLevel(ObjectService::getObjectByMachineName('solar_plant')->id, 20, true);
+    $colony->setObjectLevel(ObjectService::getObjectByMachineName('metal_mine')->id, 20, true);
+    $colony->updateResourceProductionStats(false);
+    $colony->updateResourceStorageStats(false);
+
+    // Fill all but one unit of capacity, so the store overflows as soon as it produces anything:
+    // a future fill grows the warehouse, a present fill spends the surplus.
+    $colony->updateResourceStorageStats(false);
+    $headroom = $colony->metalStorage()->get() - $colony->getResources()->metal->get();
+    $colony->addResources(new Resources(max(0.0, $headroom - 1.0), 0, 0));
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
     expect($plan)->not->toBeNull()
-        ->and($plan->planetId)->toBe($this->secondPlanetService->getPlanetId())
+        ->and($plan->planetId)->toBe($colony->getPlanetId())
         ->and($plan?->reason)->toStartWith('storage:');
 });
 

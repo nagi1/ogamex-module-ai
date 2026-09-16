@@ -165,32 +165,27 @@ gain each driver adds. Driver-swap evidence (`external`) stays available for the
   own activation gates.
 - It does not add a `DriverManager`, a framework split or a second player runtime.
 
-## Shipped vs deferred (15 September 2026)
+## Shipped vs deferred (16 September 2026)
 
 Shipped and measured: the `native | external | hybrid` mode with per-contract combiners (5A), the
 widened contracts, the hybrid affect depth via mood and the driver's own judgement (5B, mood only),
 the CiF volition/step evidence with withhold and demote (5C), the hybrid experience merge with
-`driverSimilarity` (5D, module side), and the memory caller plus the native-floor reorder (5E).
+`driverSimilarity` (5D, module side), the memory caller plus the native-floor reorder (5E), and —
+closing 5D on 16 September 2026 — CBRKit's own per-feature weighted measure with categorical object
+and planet identity (`docker/cognition/cbrkit/retriever.py`) plus its held-out comparison harness
+(`eval_retriever.py`).
 
-Deferred with a named reason:
+Closed by decision, not code (16 September 2026):
 
-- **FAtiMA social importance and decision intention.** The `/emotions` endpoint returns `Mood`, which
-  is read; the social-importance asset and the `GET /decisions` intention are not yet parsed because
-  the module has no verified consumer shape for them, and the authored harm rule carries no mood
-  change, so the valence signal is currently flat for the battle-loss fixture. This is scenario
-  authoring plus a second adapter read, not a missing seam.
-- **CBRKit's own retrieval measure.** `retriever.py` still executes the module's formula, so the
-  driver's order matches native (equivalence). Letting it use a per-feature weighted measure and
-  measuring `cbrkit.eval` on held-out outcomes is the remaining 5D step; the seam and the
-  `driverSimilarity` evidence are already in place.
-- **Per-fact relevance surface.** The AgentOS sidecar emits relevance scores, but no consumer weighs
-  them yet, so the module consumes the driver's order and keeps un-ranked memories on the native
-  floor. Surfacing relevance is one field once a caller (the language context path) needs it.
-- **The memory driver's consumer, measured.** 5E wired a real caller, but the approval test
-  (`scripts/e2e-agentos-recall-benchmark.php`, 15 September 2026) shows the consumer cannot see the
-  driver's work: the only reader of a recall is the help-request debt penalty, which
-  `RunAiConversationCycleAction::respond()` never reaches because it passes `availableAmount = 0`,
-  and the caller sends no query text so the sidecar is not contacted at all. Consulted directly, the
-  driver gains +33.3 pp required-fact recall at the module's 20-fact cut while evicting the newest
-  fact in 29 of 30 trials, because a full `topK` promotion replaces the cut instead of reordering it.
-  Gate 2 therefore stays unmet: [driver decision record](../research/phase-3-driver-decisions.md).
+- **FAtiMA social importance and decision intention.** No verified consumer shape exists: the module
+  has no caller that would consume the social-importance asset or the `GET /decisions` intention, and
+  building one without a caller is the speculative machinery gate 2 forbids. Closed as deferred until
+  a consumer is named; the seam and the adapter read stay available.
+- **Per-fact relevance surface.** AgentOS emits relevance scores, but no consumer weighs them.
+  Surfacing the field is one change once the language context path needs it; closed as deferred.
+- **The memory driver's consumer, measured.** The approval test
+  (`scripts/e2e-agentos-recall-benchmark.php`, 15 September 2026) shows the value is substitution, not
+  addition: the +33.3 pp required-fact recall comes from a full `topK` promotion that evicts the
+  newest fact in 29 of 30 trials, and the only production reader sits behind an
+  `availableAmount = 0` branch with no query text. Gate 2 therefore stays unmet; closed as disabled
+  on evidence: [driver decision record](../research/phase-3-driver-decisions.md).

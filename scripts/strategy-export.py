@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Migration: the strategy research Markdown -> the structured YAML knowledge store.
+"""Migration accepted: the YAML strategy knowledge store is now canonical.
 
-The Markdown catalogs stay the human narrative; this writes the machine-readable store
-(`plan/details/research/strategy/`) that a later runtime/tooling phase reads. It is a
-one-off migration, kept so the mapping from Markdown to YAML stays reproducible and
-reviewable.
+The YAML files under `plan/details/research/strategy/` are the single authority; the Markdown
+catalogs under `plan/details/research/` remain the human narrative and are derived from the
+store, never the reverse. This script is the original Markdown -> YAML migration, retained for
+provenance and to regenerate the derived views; it is not the ongoing write path. The
+`strategy/claims/` layer is hand-maintained and has no Markdown upstream, so this script does
+not write it.
 
 Reads:
     plan/details/research/source-registry.md        -> strategy/sources.yaml
@@ -28,8 +30,9 @@ RESEARCH = MODULE_ROOT / "plan/details/research"
 OUT = RESEARCH / "strategy"
 
 HEADER = (
-    "# Generated from {source} by scripts/strategy-export.py — do not hand-edit; edit the\n"
-    "# Markdown catalog and re-run, or start editing here once the migration is accepted.\n"
+    "# Canonical strategy knowledge store. This file is authoritative: edit here, not in the\n"
+    "# Markdown catalogs under plan/details/research/. Those remain the human narrative and are\n"
+    "# derived from this store, never the reverse.\n"
 )
 
 BULLET = re.compile(r"^-\s+(.*)$")

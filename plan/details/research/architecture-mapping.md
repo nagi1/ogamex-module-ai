@@ -4,7 +4,7 @@ Created 15 September 2026 by the [strategy mining](../specs/strategy-mining.md) 
 pass. For every **researched** principle it names what the code does today, which signals are missing,
 where the change would land, its size and priority. No implementation is implied; this is the map the
 later implementation slices consume. Source of truth for the principles themselves:
-[`strategy-principles.md`](strategy-principles.md); for host mechanics:
+[`research/strategy/principles/`](strategy/principles/); for host mechanics:
 [`host-capability-map.md`](host-capability-map.md).
 
 Legend: `none` = no code expresses the principle today.
@@ -92,7 +92,8 @@ Legend: `none` = no code expresses the principle today.
 
 ACS is an **alliance-gated** mechanic (host `allianceCombatSystemOn`, `FleetUnionService` type 2,
 `AcsDefendMission` type 5) with **no module planner or action**. The full ACS principles
-(ACS-001..012) live in [`strategy-principles.md`](strategy-principles.md) under **ACS / coordination**.
+(ACS-001..012) live in [`research/strategy/principles/acs-coordination.yaml`](strategy/principles/acs-coordination.yaml) under
+**ACS / coordination**.
 The two Origin-board tutorial anchors (ORG-009/010) remain unfetched (Wayback capture attempt failed);
 the Gameforge alliance guide (GF-003) is the verified anchor. ACS execution stays deferred to Package 6
 (alliance life), consistent with the existing scope decision.

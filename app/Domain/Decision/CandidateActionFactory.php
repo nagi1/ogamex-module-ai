@@ -52,16 +52,51 @@ class CandidateActionFactory
             }
 
             $type = $capability->actionType();
+            $need = $type === AiCandidateActionType::Build
+                ? $resourceNeed + $this->buildScarcityBoost($perception, $resourceNeed)
+                : $resourceNeed;
+
             $candidates[] = app()->makeWith(CandidateAction::class, [
                 'type' => $type,
                 'reason' => AiCandidateReason::publishedCapability($capability),
                 'parameters' => [],
-                'features' => $this->features($resourceNeed, $type === AiCandidateActionType::SaveResources ? 0.7 : 0.2, 0, 0, $perception->recoveryFactor),
+                'features' => $this->features($need, $type === AiCandidateActionType::SaveResources ? 0.7 : 0.2, 0, 0, $perception->recoveryFactor),
                 'sourceTimestamps' => $perception->sourceTimestamps,
             ]);
         }
 
         return $candidates;
+    }
+
+    /**
+     * The surplus is spent by the mine that grows what the account is short of, before the persona's
+     * ship habit: the more one resource towers over the least, the more a build is the answer. The
+     * floor ignores mild imbalance, so a safety action (a fleetsave under a visible raid) is never
+     * outranked by an ordinary surplus; only a severe one — one resource hundreds of times another —
+     * makes the mine the answer.
+     */
+    private function buildScarcityBoost(PerceptionSnapshot $perception, float $resourceNeed): float
+    {
+        if ($resourceNeed < 1.0) {
+            return 0.0;
+        }
+
+        $metal = 0.0;
+        $crystal = 0.0;
+        $deuterium = 0.0;
+
+        foreach ($perception->planets as $planet) {
+            $metal += (float) ($planet['resources']['metal'] ?? 0.0);
+            $crystal += (float) ($planet['resources']['crystal'] ?? 0.0);
+            $deuterium += (float) ($planet['resources']['deuterium'] ?? 0.0);
+        }
+
+        $abundant = max($metal, $crystal, $deuterium);
+        $scarce = min($metal, $crystal, $deuterium);
+
+        // 0 below 10:1, 1.0 once one resource is 1,000x another: the scarce resource
+        // ranks above the persona's habit only when it really is the binding constraint.
+        return min(1.0, max(0.0, (log10($abundant / max(1.0, $scarce)) - 1.0) / 2.0));
     }
 
     /** @return array<int, CandidateAction> */

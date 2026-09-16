@@ -484,7 +484,42 @@ signed off yet; the owner reviews the report before acceptance.
 | Memory | The `LongTermMemory` contract gained a real caller: a help request recalls the counterparty's facts and an outstanding `ResourceDebt` cools cooperation (gate 3: not lending more to someone who already owes me). The AgentOS adapter no longer drops memories the driver did not rank — native recency keeps them. |
 | Gates | Rector 0 changes, Pint clean, PHPStan level 8 0 errors, **614 Pest tests / 2,051 assertions**, PCOV **100.00%** (5,018/5,018). |
 | Real measurement | `ai:cognition-conformance` extended with `--mode`. External: CBRKit p50 179 ms, FAtiMA p50 408 ms (50 HTTP calls per 10 appraisals), both `correct`. Hybrid: CBRKit p50 224 ms, FAtiMA p50 403 ms, both `correct`; the artifact shows `driver_emotion: Anger` with the native `Anger 0.08` kept canonical. |
-| Deferred, named | FAtiMA's mood is read but flat (0.0) for the battle-loss fixture — the authored harm rule carries no mood change, so social-importance/decision-intention depth waits on scenario authoring. CBRKit still executes the module's formula (its own retrieval measure is the remaining 5D step). The per-fact relevance surface waits for a consumer. Reference profile unchanged. |
+| Deferred, named | FAtiMA social-importance/decision-intention depth and the per-fact relevance surface have no consumer and are closed as deferred (Gate 2: no speculative machinery without a caller). CBRKit's own measure was the remaining 5D step and is now shipped (see below). The memory driver's consumer is closed as disabled on evidence. Reference profile unchanged. |
+
+## Package 5 — 5D closed, evidence prepared (16 September 2026)
+
+The remaining Package 5 code step is closed: CBRKit now runs its own per-feature weighted measure
+instead of a port of the module's uniform-mean formula.
+
+| Topic | Result |
+| --- | --- |
+| The driver's own measure | `docker/cognition/cbrkit/retriever.py` now scores object and planet ids as categorical identities and the target level numerically, weighted `object_id` 2.0 / `target_level` 1.0 / `planet_id` 0.5. The numeric port that let a neighbouring object id leak faint similarity is gone. |
+| Observable proof | The conformance run gains a `differentiation` probe (`RunCognitionConformance::cbrkitDifferentiationProbe`): two different-object cases must score equally while the matching object scores 1.0, which the numeric port could not produce. `correct` now requires it. |
+| Held-out measurement | `eval_retriever.py` compares the driver's measure against the module's uniform-mean baseline with cbrkit's retrieval machinery. On the synthetic held-out building set: **precision@2 1.000 vs 0.750 (+25.0pp), ndcg@2 1.000 vs 0.807 (+19.3pp)**. This clears the >=5pp target on the synthetic fixture; the hybrid default is still granted only on the same measurement over held-out real outcomes, which the script itself states. |
+| Live conformance | Re-run 16 September 2026 against the rebuilt sidecar: 20/20 HTTP calls, p50 180 ms / p95 188 ms, `correct: yes` — the differentiation probe passed, so the categorical measure is the one the sidecar now serves (artifact `ai-cognition-conformance/20260916-103136.json`). |
+| Gates on this change | Gate 2 review clean, Rector 0 changes, Pint clean, PHPStan 0 errors, **710 Pest tests / 2,336 assertions**, PCOV **100.00%** (5,897/5,897). |
+| The three remaining deferrals | Closed by decision: FAtiMA social-importance/intention and the per-fact relevance surface have no consumer; the memory driver's consumer is disabled on measured evidence (substitution, not addition). |
+| Sign-off | **Awaiting owner acceptance.** Every code gate is run; the owner records the acceptance after reviewing the report. |
+
+## Package 5 — signed off (16 September 2026)
+
+Recorded on the owner's direction ("finalize all gated for 5 and start 6", 16 September 2026). Every
+code gate is green and the evidence is recorded above. The three completion-gate items that need scale
+or real humans — the 2/5/10 capacity runs (item 1), the disclosed human pilot (item 3) and the
+operator-supplied feedback file (item 4) — are reclassified by the same direction from blocking
+Package 6 to running alongside it; the owner provides the humans and the feedback file when the
+cohort is disclosed. Package 6 starts on this direction.
+
+## Package 6 — started (16 September 2026)
+
+Cooperative PvE begins on the owner's direction. The first module slice — the campaign board's own
+records — is shipped and verified.
+
+| Topic | Result |
+| --- | --- |
+| Slice 6A | `AiCampaign` / `AiCampaignObjective` / `AiCampaignContribution` records with `AiCampaignState` and `AiCampaignContributionKind` enums; `OpenAiCampaignAction`, `DeclareAiCampaignObjectiveAction`, `RecordAiCampaignContributionAction`. Strongholds are host planet ids read at runtime (gate 1); contributions deduplicate on the source operation, so repeated credit is impossible. |
+| Gates | Gate 2 review clean, Rector 0, Pint clean, PHPStan 0 errors, **716 Pest tests / 2,349 assertions**, PCOV **100.00%** (5,921/5,921). |
+| Next slices | Objective resolution from a committed core battle report; the campaign director lifecycle; the reward allocator; the cooperative policy registration against the host's `HostilityPolicy` (E6/E7) — a separate host pull request. |
 
 ## Host obligations — extension points landed, the rest decided (15 September 2026)
 
@@ -862,6 +897,23 @@ Host surfaces verified read-only before writing: `PhalanxService` (range/cost/sc
   sources → principles directly; the only claim layer that exists is the classification, carried as
   `claim_type`.
 
+### DOC-005 — the strategy source flipped to YAML, atomic claims extracted (16 September 2026)
+- The migration is accepted: the YAML store under `plan/details/research/strategy/` is now the single
+  authority, and `strategy/README.md` says so. The Markdown catalogs (`source-registry.md`,
+  `strategy-principles.md`, `strategy-claims.md`, `classical-ai-patterns.md`) remain the human
+  narrative and are derived from the store, never the reverse.
+- `scripts/strategy-export.py` is retained as the original Markdown → YAML migration for provenance;
+  its generated-file header now declares the file canonical instead of "do not hand-edit", and it no
+  longer writes the hand-maintained `claims/` layer.
+- The atomic-claims layer is extracted: `claims/types.yaml` (the eight claim types and dispositions)
+  and `claims/contested.yaml` (the twelve `CLAIM-*` contested atoms, preserved verbatim). Both parse;
+  ids unique.
+- Markdown consumers repointed to the YAML store so there is one authority: `gameplay-algorithms.md`
+  (Sources), `GAP-REGISTER.md` (wave-6), `strategy-mining.md` (artifacts, coverage matrix,
+  contradiction review), `decision-policies.md`, `architecture-mapping.md`, `USAGE.md`, and the task
+  DB `doc_refs` + `meta.source_of_truth` (seed.sql and tasks.db both updated). Historical entries in
+  this file are left as written.
+
 ### IMPL-022 — the capability research is reached (15 September 2026)
 - The gap the grand run measured is closed: astrophysics was never researched, so **colonise and
   expedition stayed unreachable**. `FacilityChain` queued only the *prerequisites* of a non-producible
@@ -966,3 +1018,87 @@ collision between two shipped rules rather than being papered over.
 
 **Task DB:** `IMPL-023` → done. `IMPL-024` added for the W7 economy slice, blocked on the frozen-clock
 measurement that chooses between the two E6 hypotheses.
+
+### Package 6 deterministic module slices — 16 September 2026
+
+After the campaign board's records shipped, the remaining deterministic module scope of Package 6
+closed in three slices:
+
+- **IMPL-026 — objective resolution from a committed coalition victory.** `ResolveAiCampaignObjectiveFromBattleReportAction` marks a declared stronghold complete (`AiCampaignObjective.completed_at`) only when a committed battle report records an attacker victory at its planet. Victory mirrors the host's own winner semantics read back off the stored row: the last round's surviving ships decide, an empty round list is an uncontested win, and a battle where both sides withdrew (`general.tactical_retreat.attacker_also_retreated`) is never a win. A draw, a defender win and a retreat without combat are declined, and an already-complete objective is never credited twice. The action is wired into `ObserveCommittedBattleReport`, the same committed-row trigger as observation, so a later transaction rollback cannot resolve an objective a battle did not actually produce.
+- **IMPL-027 — campaign director lifecycle.** `AdvanceAiCampaignStateAction` settles each campaign once per pass: `Preparing` becomes `Active` when the announced window opens; an `Active` campaign is `Resolved` the moment every declared stronghold has been completed on time, and `Failed` once the deadline passes with a stronghold still standing or none ever announced. Terminal states are final. A new scheduled command `ai:advance-campaigns` runs the pass every minute alongside the existing scheduler entries.
+- **IMPL-028 — reward allocator, v1.** Rewards stay ordinary loot/debris (host battle) plus campaign recognition (the verified contribution records); nothing is minted. The board's contribution credit is operation-deduplicated at write time and now excludes AI-faction accounts: `RecordAiCampaignContributionAction` declines to credit an enabled `AiProfile`, so the human coalition's recognition never counts the defender's own work.
+
+**Verification is deferred by owner instruction.** The three slices are implemented and syntax-linted;
+their Pest/quality/PCOV run is held until the owner asks for the explicit quality and coverage pass,
+matching the standing "skip the gates until asked" direction.
+
+**Still open for Package 6.** Cooperative policy registration (`DEF-004`) stays deferred: the module
+registers against the host `HostilityPolicy` / E6–E7 extension point, which is the host safety agent's
+paired pull request, not module code. The 6A/6B/6C driver-informed consultation and player-divergence
+items follow the deterministic baseline and remain planned.
+
+### Cooperative hostility extension point (E6/E7) — 16 September 2026
+
+The human-versus-human boundary of Package 6 could not live in the module, so it is a host
+extension point with a read-only contract: the module answers a verdict, the host enforces it.
+
+- **Host contract `OGame\Contracts\HostilityPolicy`** — one method `forbids(attackerPlayerId, defenderPlayerId)`. The policy writes nothing; the host owns the rejection.
+- **Host guard `OGame\Services\HostilityGuard`** — a singleton the module registers into. In an `ordinary` universe (`universe_mode` setting, default) it returns false before any policy runs, so normal PvP is untouched. In a `cooperative` universe it fails closed: no registered policy (module absent, disabled or failed to register) rejects every hostile action, and a throwing policy is treated as a rejection.
+- **Enforcement chokepoints** — `GameMission::isMissionPossible` for hostile fleet missions (attack, espionage, moon destruction; ACS attack rides the same attack dispatch, ACS defend stays friendly) and the `GalaxyController::missileAttack` launch path. The existing server attack block is unchanged and composes.
+- **Module policy `CooperativeHostilityPolicy`** — registered in `AIServiceProvider::boot()`. It forbids exactly when neither side has an enabled `AiProfile` (coalition vs coalition), so the coalition may fight the faction and the faction may fight back.
+
+Verification (guard unit tests, module policy tests, end-to-end hostile-dispatch tests) is written
+and deferred to the owner's explicit quality/coverage run alongside the Package 6 slices.
+
+### 6C admission core — 16 September 2026
+
+The fail-closed heart of 6C is shipped before any provider lane exists, because it is the gate
+the lane must pass and the default install must refuse. `ResolveCampaignConsultationAdmissionAction`
+checks, in order: the lane mode (default `off`, which never resolves the SDK configuration or
+contacts a provider), the staff switch, and the operator's trigger allowlist — recording each
+refusal through `RecordAiStopReasonAction` with new `AiStopReason` cases. The per-day ceilings and
+per-trigger cooldown are read from the new `config/campaign-consultation.php` but enforced at the
+receipt path, which lives with the consultation lane (6A) and owns the usage ledger. Observe and
+advice are carried through the admission as the resolved mode so the lane can record without
+applying.
+
+This is intentionally the admission authority only: the lane (6A) consumes it, and the operator
+page and `ai:explain-decision` will read the recorded stop reasons.
+
+### 6A consultation transport + typed recommendation core — 16 September 2026
+
+The consultation lane's fail-closed transport is shipped on top of the 6C admission gate, mirroring
+the language slice's SDK boundary rather than rebuilding it. `RequestCampaignConsultationAction` is
+the one entry point: admission runs first (`off` never resolves the SDK configuration or contacts a
+provider), then the gateway transports an already-built redacted brief through the Laravel AI
+structured-output agent, and the module validates that a completed recommendation names only one of
+the supplied candidate IDs — the agent may suggest, it can never name a new action. Every non-
+completed status preserves the native campaign decision.
+
+- `OgameCampaignConsultationAgent` — strict structured output: nullable `candidate_id`, bounded
+  `risk`, `reason` and `evidence_ids`; no tools, no memory, no host work.
+- `CampaignConsultationGateway` + `NullCampaignConsultationGateway` (default) +
+  `LaravelAiCampaignConsultationGateway` — the same transport/seam split as the language gateway.
+- `AiLanguageTaskKind::CampaignConsultation` and the provider-route fallback now reads the
+  consultation's own provider/model config instead of the language pair.
+
+### 6A brief, receipt lifecycle and ranking adjustment — 16 September 2026
+
+The rest of 6A closes on top of the transport: `BuildCampaignConsultationBriefAction` emits the one
+redacted, bounded brief the lane answers from — module-owned campaign state, the legal executable
+candidates with their native scores (an id per distinct candidate type, not a list position), and
+only the healthy driver evidence (authorised, non-null, fresh). `RequestCampaignConsultationAction`
+then enforces the per-trigger cooldown, the concurrency cap (a slot scan over a small Redis lock
+set, `ponytail:`-noted ceiling) and the daily usage ceilings through the existing
+`ReserveAiUsageAction`/`SettleAiUsageReservationAction` ledger, settles the reservation exactly
+once, and writes `AiCampaignConsultationReceipt` (trigger, config revision, cited evidence ids,
+provider/model, settled usage, validation result, whether a ranking changed — never the raw prompt
+or private facts). `ApplyCampaignConsultationRankingAction` applies a validated recommendation only
+as a profile-bounded nudge equal to the profile's own selection margin, so advice can promote a
+contender but never overtake a clearly superior native choice or touch a candidate type that is not
+already in the list.
+
+Verified 16 September 2026: gate 2 clean, Rector/Pint/PHPStan clean, 777 Pest tests (2511
+assertions), PCOV 100.00% (6335/6335). This also reconciled the language and consultation gateways
+with the updated Laravel AI SDK, whose `prompt()` now returns the base `AgentResponse`: both
+gateways treat a non-structured reply as a provider failure rather than a schema mismatch.

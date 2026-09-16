@@ -48,7 +48,7 @@ line is the list of host answers it needs.
 | W6-5 | [F1](#f1-phalanx-coverage) [F2](#f2-deploy-recall-interception) [F3](#f3-the-moon-as-geography) [F4](#f4-the-recycle-trip) [F5](#f5-blind-lanx-via-the-debris-field) [F6](#f6-moon-destruction) | Phalanx, deploy-recall, moon geography, recycle trip, blind lanx, moon destruction — host-supported, module-unwired | **partially shipped** (F2 recall executor + F3 moon-destination save; F1/F4 ride the deferred crash executor, F5 P2, F6 last-priority) |
 | Ninja (pass-6) | [NN1](#nn1-anti-ninja-checks-on-the-raid-path) [NN2](#nn2-the-ninja-trap-defender-counter-crash) | Anti-ninja staging checks on the raid path; the defender's timed counter-landing | **partially shipped** (NN1 moon-staging check at dispatch; NN2 trap deferred — gated behind a reviewed cluster) |
 | Expeditions (pass-6) | [EX1](#ex1-slot-16-outcomes-and-never-a-save) | Slot-16 only, host-returned outcomes, never a fleetsave | **shipped** (slot-16 executor over the host mission, one disposable civil cargo ship; host surface verified — DISC-004 closed) |
-| W7-1 / W7-2 (economy) | [E6](#e6-spend-a-windfall-before-warehousing-it) | Spend a surplus before warehousing it | **planned** — the smallest slice is not chosen; two hypotheses recorded, both needing a frozen-clock before/after |
+| W7-1 / W7-2 (economy) | [E6](#e6-spend-a-windfall-before-warehousing-it) | Spend a surplus before warehousing it | **shipped** — hypothesis (b) then (a): a full warehouse is a spend signal, and a severe scarcity makes a mine outrank the ship habit |
 
 ## How to read an algorithm block
 
@@ -266,7 +266,7 @@ and a planet with an empty warehouse does not.
 
 ### E6 — Spend a windfall before warehousing it
 
-**Planned** — recorded from the grand-test live-verification pass (16 September 2026); not yet sliced.
+**Shipped** — hypothesis (b): a full warehouse is a spend signal, not a warehouse signal (16 September 2026).
 
 **Gaps:** W7-1, W7-2 · **Host:** current storage capacity and stored amount per resource, production
 per hour (the same stored columns E3 reads), and the production objects' payback (E1).
@@ -298,16 +298,15 @@ is zero and the horizon is E3's.
 (gate 1); and the rule players state in their own words, "a player spends a surplus before warehousing
 it" (gate 3).
 
-**What the attempt found (16 September 2026).** Skipping a full warehouse in `EconomyUpgrades::storage`
-looks like the smallest slice, but it collides with the shipped E3 precedence the live run and its tests
-already pin: `BuildingChainReachabilityTest` asserts that an overflowing warehouse preempts the chain
-— the same "grow storage at capacity" the corpus records as a valid variant. The deeper cause is the
-fleeter's missing `Build` preference, and the preference axis is too coarse to make a fleeter build
-mines *occasionally* without also making it build them constantly. Two hypotheses therefore remain, and
-neither is set without a frozen-clock before/after: (a) keep the storage precedence and give the fleeter
-a scarcity-weighted `resource_need` so Build wins exactly when a resource is the binding constraint, or
-(b) change the storage trigger to "grow only when no mine repays", re-pinning the two chain-precedence
-tests to the new contract.
+**What shipped (16 September 2026).** Hypothesis (b): `EconomyUpgrades::storage` now skips a full
+warehouse (`time_to_fill <= 0`), so a present overflow is answered by the routine economy — the mine
+that spends the surplus — and only a fill that lies in the future (`0 < time_to_fill < absence`)
+queues a bigger store. The two chain-precedence tests are re-pinned: a full warehouse falls through to
+the chain or a mine, and a near-full warehouse on one planet still preempts a routine step on another.
+Hypothesis (a) then shipped (IMPL-025): `CandidateActionFactory` boosts the Build candidate's
+`resource_need` by a bounded scarcity term — 0 below a 10:1 abundant-to-scarce ratio, 1.0 at 1,000:1 —
+so a fleeter's mine outranks its ship habit only when one resource is genuinely the binding constraint,
+and a safety action (a fleetsave under a visible raid) is never outranked.
 
 **Accept.** A planet whose warehouse is full queues the mine that spends the surplus, and a planet
 whose warehouse will fill during the absence queues the warehouse — measured on a frozen-clock replay
@@ -1724,6 +1723,10 @@ here so the older notes can be trusted where they were right and not trusted whe
 | "Bots have no failure model" | **Confirmed**, and no source quantifies human failure either | [V3](#v3-the-save-that-fails) keeps the placeholder honest |
 
 ## Sources
+
+The canonical strategy knowledge — sources, principles and claims — is the YAML store at
+[`../research/strategy/`](../research/strategy/README.md); the Markdown catalogs are its human
+narrative. Algorithm blocks below name the principle IDs that store assigns.
 
 Algorithms and constants: [what automation tools already solved](../research/ogame-automation-algorithms.md)
 (eleven projects, with the per-project file paths); [experienced-player strategy and deterministic

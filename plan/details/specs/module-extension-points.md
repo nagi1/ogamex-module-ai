@@ -15,8 +15,8 @@ Phase 1 and Phase 2 use the existing module provider/route/migration discovery, 
 | E3 / deferred | If a future executable combat feature needs an estimate unavailable from the normal engine, consider an isolated generic estimation path accepting supplied visible/assumed values. Current Phase 2 records safe intents and does not need it. | Repeated estimates neither mutate state nor emit committed events; changing unseen defender state cannot alter identical input estimates. |
 | E4 / future Phase 3+ | Consume existing notifications first. Add a generic notification only after proving it is unavailable and has non-AI consumers. | One legal observation per recipient; no instant offline awareness; normal play unchanged without listeners. |
 | E5 / Phase 2 and 5 | Reuse admin.nav for controls; add a curated player-profile information slot and a structured in-game navigation entry only for disclosure/campaign access. Module owns pages and translations. | Unauthorized users cannot see admin controls; empty registration changes no UI; no template replacement or script injection. |
-| E6 / Phase 5 | Add a narrow optional restriction contract at authoritative hostile-action validation for declared modes, including all launch paths, missiles and moon attacks. It may reject additional actions but cannot grant an action core rules forbid. | Human-on-human hostility fails through UI and direct requests in PvE; normal-universe outcomes are unchanged. |
-| E7 / Phase 5 | Declare required mode providers and safe disable behavior. An active PvE world must not silently become PvP when its module is absent. Use a host-level maintenance/hostile-dispatch block until campaign shutdown is resolved. | Disabling/crashing the provider blocks new hostile launches; existing missions still resolve, and ordinary universes are unaffected. |
+| E6 / Phase 5 — **shipped** | `OGame\Contracts\HostilityPolicy` (read-only interface) + `OGame\Services\HostilityGuard`, consulted at `GameMission::isMissionPossible` for hostile fleet missions (attack, espionage, moon destruction) and at the missile launch path. It may reject additional actions but cannot grant an action core rules forbid. | Human-on-human hostility fails through UI and direct requests in PvE; normal-universe outcomes are unchanged. |
+| E7 / Phase 5 — **shipped** | `universe_mode` host setting (`ordinary` default). In a `cooperative` universe the guard fails closed: with no registered policy (module absent, disabled or failed to register) every hostile action is rejected, and a throwing policy is treated as a rejection. Ordinary universes never consult a policy. | Disabling/crashing the provider blocks new hostile launches; existing missions still resolve, and ordinary universes are unaffected. |
 
 E1 also needs durable action correlation: reuse an existing core operation ID where available, otherwise add the smallest receipt seam needed to reconcile uncertain dispatch. This is required before autonomous fleets.
 
@@ -30,12 +30,12 @@ Cognition, case features, memory schemas, language budgets and provider drivers 
 
 ## Contract caveats
 
-The existing extension draft permits observation and additive UI only. E6 is a **new restricted category**, not something those passive events already support. Document its precedence, failure behavior and opt-in scope before implementation; do not hide enforcement in a controller or rely on a social truce.
+The existing extension draft permits observation and additive UI only. E6 is a **new restricted category**, not something those passive events already support; it is now implemented as a read-only contract the host consults and enforces, with its precedence (ordinary universes never consult a policy), failure behavior (no policy or a throwing policy rejects in a cooperative universe) and opt-in scope (`universe_mode = cooperative`) documented in the host guard. Enforcement is not hidden in a controller — the fleet chokepoint is `GameMission::isMissionPossible` — and there is no social truce.
 
 Small identity flags can use existing metadata. High-volume schedules, memory and faction/coalition state use module tables. No alliance metadata helper is required just to store an AI campaign's membership.
 
 ## Delivery and DX
 
-Phase 1 and Phase 2 complete their module-only slices through E1. E2 and E4 are evaluated only when Phase 3 needs durable facts; E3 is evaluated only when a future executable combat feature needs an estimate. E5–E7 remain future UI/PvE considerations.
+Phase 1 and Phase 2 complete their module-only slices through E1. E2 and E4 are evaluated only when Phase 3 needs durable facts; E3 is evaluated only when a future executable combat feature needs an estimate. E5 remains future UI; E6–E7 are shipped for Package 6's cooperative mode.
 
 Update host docs/modules.md as the supported contract catalogue and mark the old draft's completed sections accurately. Add event/slot examples to HelloWorld only where useful. Record the minimum supported host revision in the module release notes. Every host change proves module-disabled behavior and relevant race cases; avoid speculative extension points.
