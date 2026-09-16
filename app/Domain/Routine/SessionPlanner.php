@@ -99,6 +99,19 @@ class SessionPlanner
     }
 
     /**
+     * Whether the instant falls inside the account's waking window, i.e. the account
+     * would be awake then rather than in its dark period (SP3). The day's own drift
+     * is applied, so the answer is for the window the instant actually lands in.
+     */
+    public function isAwake(AiProfile $profile, CarbonImmutable $instant): bool
+    {
+        $local = $instant->setTimezone(RoutineProfile::fromAiProfile($profile)->timezone);
+        [$wake, $bed] = $this->dayWindow($profile, $local->startOfDay());
+
+        return $local->greaterThanOrEqualTo($wake) && $local->lessThan($bed);
+    }
+
+    /**
      * The waking window that contains the moment, or the next one when the
      * moment falls inside a dark period.
      *

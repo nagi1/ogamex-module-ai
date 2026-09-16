@@ -41,7 +41,18 @@ class PlayerPerceptionBuilder
             'recoveryFactor' => max(0.0, min(1.0, (float) ($observation['recovery_factor'] ?? 0))),
             'sourceTimestamps' => $this->sourceTimestamps((array) ($observation['source_timestamps'] ?? []), $observedAt),
             'upcomingAbsenceMinutes' => $upcomingAbsenceMinutes,
+            'fleetSlotsFree' => (int) ($observation['fleet_slots_free'] ?? 0),
+            'colonizeEligible' => (bool) ($observation['colonize_eligible'] ?? false),
+            'reactionWakeAt' => $this->reactionWakeAt($observation),
         ]);
+    }
+
+    /** @param array<string, mixed> $observation */
+    private function reactionWakeAt(array $observation): ?int
+    {
+        return isset($observation['reaction_wake_at']) && is_numeric($observation['reaction_wake_at'])
+            ? (int) $observation['reaction_wake_at']
+            : null;
     }
 
     /** @param array<string, mixed> $observation */

@@ -22,6 +22,7 @@ use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Enums\AiCandidateActionType;
+use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
@@ -130,9 +131,23 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
-            AiCandidateActionType::DoNothing,
+            AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
             AiCandidateActionType::SaveResources => null,
         };
+    }
+
+    /**
+     * W8-L7: a quiet session leaves a counter naming why nothing else was available, so the
+     * review loop can read "why is the population quiet today" from the same artifact every
+     * other refusal uses. No new table.
+     */
+    private function recordQuietDecision(AiProfile $profile, DecisionTrace $trace): void
+    {
+        app(RecordAiStopReasonAction::class)->handle(AiStopReason::QuietDecision, [
+            'player_id' => $profile->player_id,
+            'candidates' => count($trace->candidates),
+            'rejections' => count($trace->rejections),
+        ]);
     }
 
     private function scheduleBuild(AiProfile $profile, AiWorkItem $sessionWorkItem): void

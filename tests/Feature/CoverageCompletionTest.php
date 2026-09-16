@@ -168,12 +168,14 @@ test('the perception builder maps inbound fleets defensively', function (): void
             ['mission_id' => 5, 'time_arrival' => 123, 'planet_id_to' => 7],
             ['mission_id' => 9],
         ],
+        'reaction_wake_at' => 1_234_567,
         'source_timestamps' => [],
     ]);
 
     expect($snapshot->inboundFleets)->toBe([
         ['mission_id' => 5, 'mission_type' => 0, 'time_arrival' => 123, 'planet_id_to' => 7],
     ]);
+    expect($snapshot->reactionWakeAt)->toBe(1_234_567);
 });
 
 function completionProfile(int $playerId): AiProfile

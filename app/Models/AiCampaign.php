@@ -26,6 +26,9 @@ class AiCampaign extends Model
         return ['state' => AiCampaignState::class, 'starts_at' => 'datetime', 'ends_at' => 'datetime'];
     }
 
+    /**
+     * @return HasMany<AiCampaignObjective, $this>
+     */
     public function objectives(): HasMany
     {
         return $this->hasMany(AiCampaignObjective::class, 'campaign_id');

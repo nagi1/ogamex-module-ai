@@ -14,6 +14,7 @@ use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Enums\AiAccountState;
 use Modules\AI\Enums\AiCapability;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\RandomSource;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\DeploymentMission;
@@ -24,6 +25,7 @@ use OGame\Models\Highscore;
 use OGame\Models\Message;
 use OGame\Models\Planet\Coordinate;
 use OGame\Services\FleetMissionService;
+use OGame\Services\ObjectService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
 
@@ -46,6 +48,17 @@ class PlayerObservationService
     /** RAID-008: a target scoring under this fraction of ours is not worth the fleet. */
     private const VIABILITY_SCORE_DIVISOR = 5;
 
+    /** CL3: the storage horizon (48 h) a colony's opening must repay inside, from E3. */
+    private const COLONY_DEVELOPMENT_HOURS = 48.0;
+
+    /** V2: the reaction window a hostile inbound wakes the account inside, in seconds before impact. */
+    private const REACTION_WINDOW_MIN_SECONDS = 120;
+
+    private const REACTION_WINDOW_MAX_SECONDS = 180;
+
+    /** V2: the host's own bot detector floor; a save closer than this to impact reads as scripted. */
+    private const REACTION_FLOOR_SECONDS = 10;
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
@@ -58,6 +71,7 @@ class PlayerObservationService
         private QueueableSpyPlanner $queueableSpyPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
         private AccountStateResolver $accountStateResolver,
+        private RandomSource $randomSource,
     ) {
     }
 
@@ -72,6 +86,7 @@ class PlayerObservationService
      *     fleetsave_eligible:bool,
      *     fleetsave_skip_reason:string|null,
      *     inbound_fleets:list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}>,
+     *     reaction_wake_at:int|null,
      *     recall_eligible:bool
      * }
      */
@@ -92,6 +107,14 @@ class PlayerObservationService
             // would refuse. An account with no planets, and one the host no
             // longer has, are offered nothing for the same reason.
             'available_actions' => $active ? $this->availableActions($playerId) : [],
+            // The host's fleet-slot ceiling decides which dispatches may be published: a
+            // colony, spy, raid, expedition or transfer the host would refuse for slot
+            // exhaustion is never offered (SP8). Reaching the object that raises the
+            // ceiling is a host obligation (R11), not a module-side object list.
+            'fleet_slots_free' => $active ? $this->freeFleetSlots($playerId) : 0,
+            // CL3: a colony is founded only when the account's own production can bring it
+            // online — a body the account cannot develop outranks nothing and sits at zero.
+            'colonize_eligible' => $active && $this->canDevelopColony($playerId),
             // Enemy intel arrives through the host's own espionage-report
             // messages, never from this module reaching into target state.
             'target_reports' => $active ? $this->targetReports($playerId) : [],
@@ -101,6 +124,48 @@ class PlayerObservationService
             ...$this->inboundThreat($playerId, $active),
             ...$this->recallState($playerId, $active),
         ];
+    }
+
+    /**
+     * The host's own fleet-slot answer, reduced to the free count a dispatch would need.
+     */
+    private function freeFleetSlots(int $playerId): int
+    {
+        $player = $this->playerServiceFactory->make($playerId, true);
+
+        return max(0, $player->getFleetSlotsMax() - $player->getFleetSlotsInUse());
+    }
+
+    /**
+     * Whether the account's own production can fund a new colony's opening (CL3).
+     *
+     * A colony starts at zero, and developing it is paid from what the account already produces;
+     * the cheapest production object the host offers is the opening step, and the account is eligible
+     * once its production covers that cost inside the storage horizon (the same 48 h E3 uses). The
+     * host supplies every object and price, so a mod that changes either changes this gate with no
+     * module edit.
+     */
+    private function canDevelopColony(int $playerId): bool
+    {
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $planets = $player->planets->all();
+
+        $perHour = 0.0;
+
+        foreach ($planets as $planet) {
+            $perHour += $planet->getMetalProductionPerHour()
+                + $planet->getCrystalProductionPerHour()
+                + $planet->getDeuteriumProductionPerHour();
+        }
+
+        $cheapest = PHP_FLOAT_MAX;
+
+        foreach (ObjectService::getGameObjectsWithProduction() as $object) {
+            $price = ObjectService::getObjectRawPrice($object->machine_name);
+            $cheapest = min($cheapest, $price->metal->get() + $price->crystal->get() + $price->deuterium->get());
+        }
+
+        return $perHour * self::COLONY_DEVELOPMENT_HOURS >= $cheapest;
     }
 
     /**
@@ -153,6 +218,7 @@ class PlayerObservationService
                 // no cascade, so every message here has a report by construction.
                 /** @var EspionageReport $report */
                 $report = $reports->get((int) $message->espionage_report_id);
+                $targetScore = $targetScores->get((int) $report->planet_user_id);
 
                 return [
                     'report_id' => (int) $message->espionage_report_id,
@@ -176,7 +242,7 @@ class PlayerObservationService
                     // Bashing and target legality are re-checked by the raid planner
                     // at decision time, so the intel itself is simply attackable.
                     'attack_permitted' => true,
-                    'score_viable' => $this->scoreViable($ownScore, (int) ($targetScores->get((int) $report->planet_user_id)?->general ?? 0)),
+                    'score_viable' => $this->scoreViable($ownScore, $targetScore === null ? 0 : (int) $targetScore->general),
                 ];
             })
             ->all();
@@ -283,7 +349,8 @@ class PlayerObservationService
      * @return array{
      *     fleetsave_eligible:bool,
      *     fleetsave_skip_reason:string|null,
-     *     inbound_fleets:list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}>
+     *     inbound_fleets:list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}>,
+     *     reaction_wake_at:int|null
      * }
      */
     private function inboundThreat(int $playerId, bool $active): array
@@ -293,6 +360,7 @@ class PlayerObservationService
                 'fleetsave_eligible' => false,
                 'fleetsave_skip_reason' => null,
                 'inbound_fleets' => [],
+                'reaction_wake_at' => null,
             ];
         }
 
@@ -318,19 +386,39 @@ class PlayerObservationService
         // to. Offering it otherwise is how a trace claims an action the account cannot take.
         $saveable = $fleetMissions->currentPlayerUnderAttack()
             && $this->queueableFleetSavePlanner->plan($playerId) !== null;
+        $seed = AiProfile::query()->where('player_id', $playerId)->value('random_seed');
+        $seed = $seed === null ? null : (int) $seed;
+
+        // V2: a reaction lands inside the 120–180 s window before impact, never instantly and
+        // never below the host's 10 s detector floor. An early notice withholds the save and
+        // publishes the reaction wake instead; a notice past the floor is a doomed save the
+        // account does not attempt.
+        $earliestArrival = $inbound === [] ? null : (int) min(array_column($inbound, 'time_arrival'));
+        $reactionWakeAt = null;
+
+        if ($saveable && $earliestArrival !== null) {
+            $secondsToImpact = $earliestArrival - (int) now()->timestamp;
+
+            if ($secondsToImpact > self::REACTION_WINDOW_MAX_SECONDS) {
+                $reactionWakeAt = $earliestArrival - $this->reactionLeadSeconds($seed);
+                $saveable = false;
+            } elseif ($secondsToImpact < self::REACTION_FLOOR_SECONDS) {
+                $saveable = false;
+            }
+        }
 
         // A save that fails is decided against a specific inbound fleet, so the same threat gets
         // the same judgement however many times the session re-reads it.
         if ($saveable) {
             $key = $inbound === [] ? 0 : (int) min(array_column($inbound, 'mission_id'));
-            $seed = AiProfile::query()->where('player_id', $playerId)->value('random_seed');
-            $skipReason = $this->saveFailurePolicy->shouldSkip($seed === null ? null : (int) $seed, $key);
+            $skipReason = $this->saveFailurePolicy->shouldSkip($seed, $key);
 
             if ($skipReason !== null) {
                 return [
                     'fleetsave_eligible' => false,
                     'fleetsave_skip_reason' => $skipReason,
                     'inbound_fleets' => $inbound,
+                    'reaction_wake_at' => null,
                 ];
             }
         }
@@ -339,7 +427,21 @@ class PlayerObservationService
             'fleetsave_eligible' => $saveable,
             'fleetsave_skip_reason' => null,
             'inbound_fleets' => $inbound,
+            'reaction_wake_at' => $reactionWakeAt,
         ];
+    }
+
+    /**
+     * The seconds before impact the account wakes to react: a deterministic per-account draw
+     * inside the 120–180 s window, so the same inbound always gets the same reaction and the
+     * reaction never lands below the host's 10 s detector floor.
+     */
+    private function reactionLeadSeconds(?int $seed): int
+    {
+        $unit = $this->randomSource->unitInterval($seed ?? 0, 'reaction-wake');
+
+        return self::REACTION_WINDOW_MIN_SECONDS
+            + (int) round((self::REACTION_WINDOW_MAX_SECONDS - self::REACTION_WINDOW_MIN_SECONDS) * $unit);
     }
 
     /**

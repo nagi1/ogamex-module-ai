@@ -138,6 +138,29 @@ test('a save the policy does not skip stays eligible', function (): void {
         ->and($state['fleetsave_skip_reason'])->toBeNull();
 });
 
+test('an inbound landing past the reaction window withholds the save and publishes the wake', function (): void {
+    fleetProfile($this->currentUserId);
+    $this->planetAddUnit('small_cargo', 1);
+    $mission = fleetInboundHostileFleet($this->currentPlanetId, 600);
+
+    $state = app(PlayerObservationService::class)->ownedState($this->currentUserId);
+
+    expect($state['fleetsave_eligible'])->toBeFalse()
+        ->and($state['fleetsave_skip_reason'])->toBeNull()
+        ->and($state['reaction_wake_at'])->toBeBetween($mission->time_arrival - 180, $mission->time_arrival - 120);
+});
+
+test('an inbound inside the detector floor is not saved', function (): void {
+    fleetProfile($this->currentUserId);
+    $this->planetAddUnit('small_cargo', 1);
+    fleetInboundHostileFleet($this->currentPlanetId, 5);
+
+    $state = app(PlayerObservationService::class)->ownedState($this->currentUserId);
+
+    expect($state['fleetsave_eligible'])->toBeFalse()
+        ->and($state['reaction_wake_at'])->toBeNull();
+});
+
 function fleetProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -158,7 +181,7 @@ function fleetOwnPlanetIds(int $playerId): array
     );
 }
 
-function fleetInboundHostileFleet(int $targetPlanetId): FleetMission
+function fleetInboundHostileFleet(int $targetPlanetId, int $leadSeconds = 150): FleetMission
 {
     $foreign = test()->createForeignPlanet();
     $foreignPlayer = $foreign->getPlayer();
@@ -170,7 +193,7 @@ function fleetInboundHostileFleet(int $targetPlanetId): FleetMission
     $mission->planet_id_to = $targetPlanetId;
     $mission->mission_type = 1;
     $mission->time_departure = now()->subMinute()->timestamp;
-    $mission->time_arrival = now()->addHour()->timestamp;
+    $mission->time_arrival = now()->addSeconds($leadSeconds)->timestamp;
     $mission->time_arrival_ms = 0;
     $mission->processed = 0;
     $mission->canceled = 0;

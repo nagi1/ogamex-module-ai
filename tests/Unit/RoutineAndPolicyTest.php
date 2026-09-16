@@ -79,6 +79,17 @@ test('session plans are seeded and keep due work in the future', function () {
     expect($first->nextDueAt->greaterThanOrEqualTo($first->sessionEndsAt))->toBeTrue();
 });
 
+test('the account is awake inside its window and asleep inside the dark period', function () {
+    $planner = app(SessionPlanner::class);
+    $profile = aiRoutineProfile([AiProfileSettings::TIMEZONE => 'UTC']);
+
+    $noon = CarbonImmutable::create(2026, 9, 11, 12, 0, 0, 'UTC');
+    $deepNight = CarbonImmutable::create(2026, 9, 11, 3, 0, 0, 'UTC');
+
+    expect($planner->isAwake($profile, $noon))->toBeTrue()
+        ->and($planner->isAwake($profile, $deepNight))->toBeFalse();
+});
+
 test('next due calculator handles future and elapsed session plans', function () {
     $now = CarbonImmutable::createFromTimestamp(1_789_012_345);
     $calculator = app(NextDueTimeCalculator::class);

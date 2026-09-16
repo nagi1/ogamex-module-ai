@@ -126,6 +126,8 @@ class ReplayAiScenarioAction
             'fleetsaveEligible' => (bool) $this->scalar($input, 'fleetsave_eligible'),
             'recoveryFactor' => (float) $this->scalar($input, 'recovery_factor'),
             'sourceTimestamps' => $this->labels($input, 'source_timestamps'),
+            'fleetSlotsFree' => (int) $this->scalar($input, 'fleet_slots_free'),
+            'colonizeEligible' => (bool) $this->scalar($input, 'colonize_eligible'),
         ]);
     }
 

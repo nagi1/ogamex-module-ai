@@ -8,6 +8,7 @@ require_once __DIR__ . '/../Support/FixtureAiClock.php';
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
+use Modules\AI\Domain\Decision\CandidateActionFactory;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\CasualPolicy;
@@ -129,6 +130,24 @@ test('recovery input is bounded and recorded in the deterministic score', functi
     expect($trace->selected->components['recovery'])->toBe(20.0);
 });
 
+test('a spy and a colony are withheld when no fleet slot is free', function () {
+    $generation = app(CandidateActionFactory::class)->create(aiDecisionGatedSnapshot(0, true));
+
+    expect(array_map(static fn ($candidate): AiCandidateActionType => $candidate->type, $generation->candidates))
+        ->not->toContain(AiCandidateActionType::Spy)
+        ->and(array_map(static fn ($candidate): AiCandidateActionType => $candidate->type, $generation->candidates))
+        ->not->toContain(AiCandidateActionType::Colonize);
+});
+
+test('a colony is withheld when the account cannot develop it even with a free slot', function () {
+    $generation = app(CandidateActionFactory::class)->create(aiDecisionGatedSnapshot(2, false));
+
+    expect(array_map(static fn ($candidate): AiCandidateActionType => $candidate->type, $generation->candidates))
+        ->toContain(AiCandidateActionType::Spy)
+        ->and(array_map(static fn ($candidate): AiCandidateActionType => $candidate->type, $generation->candidates))
+        ->not->toContain(AiCandidateActionType::Colonize);
+});
+
 /** @param array<string, bool> $actions @param array<int, array<string, mixed>> $reports */
 function aiDecisionSnapshot(array $actions, bool $fleetsaveEligible = false, array $reports = []): PerceptionSnapshot
 {
@@ -141,6 +160,25 @@ function aiDecisionSnapshot(array $actions, bool $fleetsaveEligible = false, arr
         'fleetsaveEligible' => $fleetsaveEligible,
         'recoveryFactor' => 0.0,
         'sourceTimestamps' => ['owned_state' => '2026-09-11T00:00:00+00:00'],
+        'fleetSlotsFree' => 2,
+        'colonizeEligible' => true,
+    ]);
+}
+
+/** A snapshot with spy and colonize published, gated by the fleet slot and colony-development bounds. */
+function aiDecisionGatedSnapshot(int $fleetSlotsFree, bool $colonizeEligible): PerceptionSnapshot
+{
+    return app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => 1,
+        'observedAt' => CarbonImmutable::createFromTimestamp(1_789_012_345),
+        'planets' => [['id' => 1, 'resources' => ['metal' => 2_000, 'crystal' => 2_000, 'deuterium' => 2_000]]],
+        'targetReports' => [],
+        'availableActions' => ['save_resources' => false, 'build' => false, 'research' => false, 'queue_units' => false, 'spy' => true, 'colonize' => true],
+        'fleetsaveEligible' => false,
+        'recoveryFactor' => 0.0,
+        'sourceTimestamps' => ['owned_state' => '2026-09-11T00:00:00+00:00'],
+        'fleetSlotsFree' => $fleetSlotsFree,
+        'colonizeEligible' => $colonizeEligible,
     ]);
 }
 

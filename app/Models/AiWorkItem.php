@@ -16,6 +16,7 @@ use Modules\AI\Enums\AiWorkState;
  * @property array<string, mixed>|null $payload
  * @property int $attempts
  * @property string $idempotency_key
+ * @property int $schedule_generation
  * @property AiWorkState $state
  * @property string|null $lease_token
  * @property Carbon|null $lease_until

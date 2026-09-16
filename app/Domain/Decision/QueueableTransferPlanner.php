@@ -145,7 +145,11 @@ class QueueableTransferPlanner
         );
     }
 
-    /** The first other body that can spare the shipment and still keep its own reserve. */
+    /**
+     * The first other body that can spare the shipment and still keep its own reserve.
+     *
+     * @param array<PlanetService> $planets
+     */
     private function source(array $planets, PlanetService $target, Resources $need): ?PlanetService
     {
         foreach ($planets as $source) {

@@ -46,6 +46,14 @@ class NativeRaidEstimator
         $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
         $target = $this->planetServiceFactory->make($targetPlanetId, true);
 
+        if ($target === null) {
+            return app()->makeWith(RaidEstimate::class, [
+                'samples' => 0,
+                'losingRuns' => 0,
+                'p20NetProfit' => 0.0,
+            ]);
+        }
+
         $ships = $origin->getShipUnits();
         if ($ships->units === []) {
             return app()->makeWith(RaidEstimate::class, [

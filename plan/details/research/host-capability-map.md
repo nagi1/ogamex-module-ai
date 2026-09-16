@@ -126,6 +126,11 @@ merged revision.
 10. **`getBuildingObjectsWithStorage()` excludes stations.** **Closed by evidence 15 September 2026:**
     `StationObject` has no `storage` field, so no station can carry storage in this host and the
     building-only enumeration is already complete.
+11. **The fleet-slot ceiling object is named only inside the host.** `PlayerService::getFleetSlotsMax()`
+    reads `computer_technology` by name; no lookup maps a `CalculationType` back to its object, so the
+    module's build chain could not reach the object that raises the ceiling without hardcoding it.
+    **Closed 16 September 2026:** `ObjectService::getObjectByCalculationType()` +
+    `GameObject::hasCalculation()` publish the reverse lookup, and `FacilityChain` uses it.
 
 Obligations 2, 3, 6, 7 and 8 remain open asks in
 [**the host change request**](../specs/host-change-request.md); obligations 1 and 9 are closed (the

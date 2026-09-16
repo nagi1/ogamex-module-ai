@@ -360,7 +360,9 @@ class RunCognitionConformance extends Command
                 0.1,
             );
 
-            $cases[] = $case->id;
+            if ($case !== null) {
+                $cases[] = $case->id;
+            }
         }
 
         return $cases;

@@ -56,6 +56,18 @@ class CandidateActionFactory
                 ? $resourceNeed + $this->buildScarcityBoost($perception, $resourceNeed)
                 : $resourceNeed;
 
+            // SP8: a spy or colony dispatch the host would refuse for slot exhaustion is
+            // never offered — the account checks the fleet screen before sending.
+            if (($type === AiCandidateActionType::Spy || $type === AiCandidateActionType::Colonize) && $perception->fleetSlotsFree < 1) {
+                continue;
+            }
+
+            // CL3: a colony the account cannot develop outranks nothing, so colonise is
+            // offered only when the existing production can bring the new body online.
+            if ($type === AiCandidateActionType::Colonize && !$perception->colonizeEligible) {
+                continue;
+            }
+
             $candidates[] = app()->makeWith(CandidateAction::class, [
                 'type' => $type,
                 'reason' => AiCandidateReason::publishedCapability($capability),
@@ -151,7 +163,7 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleExpeditionCandidates(PerceptionSnapshot $perception): array
     {
-        if ($this->queueableExpeditionPlanner->plan($perception->playerId) === null) {
+        if ($perception->fleetSlotsFree < 1 || $this->queueableExpeditionPlanner->plan($perception->playerId) === null) {
             return [];
         }
 
@@ -167,7 +179,7 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleTransferCandidates(PerceptionSnapshot $perception): array
     {
-        if ($this->queueableTransferPlanner->plan($perception->playerId) === null) {
+        if ($perception->fleetSlotsFree < 1 || $this->queueableTransferPlanner->plan($perception->playerId) === null) {
             return [];
         }
 
@@ -182,6 +194,15 @@ class CandidateActionFactory
 
     private function raidCandidatesFromVisibleReports(PerceptionSnapshot $perception): CandidateGeneration
     {
+        // SP8: no free fleet slot means no raid can be dispatched, so no target is
+        // offered — the account checks the fleet screen before sending.
+        if ($perception->fleetSlotsFree < 1) {
+            return app()->makeWith(CandidateGeneration::class, [
+                'candidates' => [],
+                'rejections' => [],
+            ]);
+        }
+
         $candidates = [];
         $rejections = [];
 

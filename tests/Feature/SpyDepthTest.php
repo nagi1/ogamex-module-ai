@@ -4,8 +4,12 @@ use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Planet;
@@ -76,6 +80,33 @@ test('the spy planner prefers a target it knows is rich', function (): void {
     expect($plan)->toBeInstanceOf(QueueableSpy::class)
         ->and($plan->targetGalaxy)->toBe($known->getPlanetCoordinates()->galaxy)
         ->and($plan->targetPosition)->toBe($known->getPlanetCoordinates()->position);
+});
+
+test('a probe promised to an open spy intent is not a second probe', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+    $this->createForeignPlanet();
+
+    AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::Spy,
+        'state' => AiWorkState::Pending,
+        'due_at' => now(),
+        'idempotency_key' => 'spy-commit:' . $this->currentUserId,
+        'payload' => ['planet_id' => $this->currentPlanetId],
+    ]);
+
+    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+test('a body that is not a planet is skipped, not probed', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+
+    $debris = $this->createForeignPlanet();
+    Planet::query()->whereKey($debris->getPlanetId())->update(['planet_type' => PlanetType::DebrisField->value]);
+
+    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
 function spyDepthProfile(int $playerId): AiProfile

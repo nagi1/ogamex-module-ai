@@ -2,8 +2,12 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Actions\CurrentAiAffectIntensityAction;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
+use Modules\AI\Enums\AiAffectEmotion;
+use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
 
 class UtilityScorer
@@ -23,6 +27,8 @@ class UtilityScorer
     public function __construct(
         private ArchetypePolicyResolver $policyRegistry,
         private RandomSource $randomSource,
+        private CurrentAiAffectIntensityAction $currentAffectIntensity,
+        private AiClock $clock,
     ) {
     }
 
@@ -30,6 +36,10 @@ class UtilityScorer
     public function score(AiProfile $profile, CandidateGeneration $generation, string $decisionKey): array
     {
         $policy = $this->policyRegistry->for($profile->archetype);
+        $affectWeight = (float) config('ai.cognition.affect.decision_weight', 0);
+        // One mood read per decision, never per candidate, and only when the opt-in weight is
+        // on: the default path performs no affect query and changes no score.
+        $appetite = $affectWeight > 0.0 ? $this->threatAppetite($profile) : 0.0;
         $scored = [];
         foreach ($generation->candidates as $candidate) {
             if (!$policy->allows($candidate->type)) {
@@ -46,6 +56,7 @@ class UtilityScorer
                 'recovery' => $features['recovery'] * self::RECOVERY_WEIGHT,
                 'archetype_preference' => $policy->preference($candidate->type) * self::ARCHETYPE_WEIGHT,
                 'seeded_variation' => $variation,
+                'affect' => $appetite * $this->appetiteDirection($candidate->type) * $affectWeight,
             ];
             $scored[] = app()->makeWith(ScoredCandidate::class, [
                 'candidate' => $candidate,
@@ -59,6 +70,33 @@ class UtilityScorer
         usort($scored, static fn (ScoredCandidate $left, ScoredCandidate $right): int => $right->score <=> $left->score ?: $left->candidate->type->value <=> $right->candidate->type->value);
 
         return $scored;
+    }
+
+    /**
+     * The account's current mood as a signed appetite: anger presses the attack, fear presses
+     * the save, and the skill band decides how fully the account plays the feeling. The value
+     * stays inside [-1, 1] so the opt-in weight alone bounds what a mood can move.
+     */
+    private function threatAppetite(AiProfile $profile): float
+    {
+        $now = $this->clock->now();
+        $anger = $this->currentAffectIntensity->handle($profile->player_id, AiAffectEmotion::Anger, $now);
+        $fear = $this->currentAffectIntensity->handle($profile->player_id, AiAffectEmotion::Fear, $now);
+
+        return max(-1.0, min(1.0, ($anger - $fear) * $profile->skill_band->evidenceReaction()));
+    }
+
+    /**
+     * Which way a candidate type leans on the appetite: an attack wants anger, a save or
+     * fleetsave wants caution, and everything else is a routine step the mood leaves alone.
+     */
+    private function appetiteDirection(AiCandidateActionType $type): int
+    {
+        return match ($type) {
+            AiCandidateActionType::Raid => 1,
+            AiCandidateActionType::SaveResources, AiCandidateActionType::FleetSave => -1,
+            default => 0,
+        };
     }
 
     /** @param array<int, ScoredCandidate> $candidates */

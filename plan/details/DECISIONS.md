@@ -387,6 +387,21 @@ with the owner's acceptance rather than left open, so the register can be re-run
 | --- | --- |
 | Status | **The reaction wake stays deferred.** V2 schedules a wake 120–180 s before impact; it depends on the next-material-event wake mechanism (SP3), which lands with the capacity-run slice. For Package 4 the save dispatches on the session that notices the inbound, and reaction latency is measured in the 2/5/10 runs rather than claimed. The observation half of G8 and the V1 executor are already shipped; V2 is a named follow-up, not an open gap. |
 
+**16 September 2026 re-check (after the capacity runs).** The deferral's stated premise — "V2 depends
+on SP3" — is refuted by a code trace. The wake-scheduling mechanism V2 needs already exists:
+`SessionDecisionService::scheduleSuccessor()` accepts an absolute `next_due_at`, and the inbound ETA is
+already observed (`PerceptionSnapshot::inboundFleets[].time_arrival`, assembled in
+`PlayerObservationService::inboundThreat()` from `getActiveFleetMissionsForCurrentPlayer()`). Full SP3 is
+the *enumeration* of every wake term; V2 needs only one term of it. The reason V2 stays deferred is now
+a different, accurate one: the reaction-window semantics change the shipped save-on-notice behaviour
+(V1) broadly — the save would move from "dispatch when the session notices the inbound" to "withhold
+when arrival is more than the window out, schedule a wake at `arrival − draw(120,180)`, save inside the
+window, and never save below the host's 10 s detector floor". That rework touches V3 (`SaveFailurePolicy`
+draw timing), V6 (proactive absence saves) and the dark-period wake logic, and the window boundary needs
+a live inbound-fleet re-measure to calibrate before committing. The path is now narrow and named: one
+`reaction_wake_at` publication in `inboundThreat()`, one clamp in `SessionDecisionService`, and the
+fleetsave tests re-based on the window. Nothing about it needs SP3.
+
 ### G12, G18 and S1–S4 — social scope — deferred to Package 6
 
 | Topic | Decision |
@@ -1102,3 +1117,138 @@ Verified 16 September 2026: gate 2 clean, Rector/Pint/PHPStan clean, 777 Pest te
 assertions), PCOV 100.00% (6335/6335). This also reconciled the language and consultation gateways
 with the updated Laravel AI SDK, whose `prompt()` now returns the base `AgentResponse`: both
 gateways treat a non-structured reply as a provider failure rather than a schema mismatch.
+
+### 2/5/10 capacity comparison — measured, 16 September 2026
+
+Completion-gate item 1 (the 2/5/10 capacity runs) is recorded. `local-docker-dev/docker-compose.capacity.yml`
++ `local-docker-dev/capacity-run.sh` + `local-docker-dev/capacity-prepare.php` run one bounded 240 s
+window per population in a fresh `ogamex-cap-{2,5,10}` universe (hybrid drivers, 1000× speeds, 5 s
+session interval, 8 Horizon workers) — never touching the holy `ogamex-grand` database. The figures
+are in [`reviews/2026-09-16-capacity-2-5-10.md`](reviews/2026-09-16-capacity-2-5-10.md):
+
+- **Per-player cost flat:** queue-worker resident memory ~1.15–1.17 GiB and the report read
+  ~375–386 ms / 9 queries at 2, 5 and 10 accounts — the drivers are shared services, and the review
+  loop stays cheap as the cohort grows.
+- **Lateness bounded:** p95 1.53 → 3.37 → 3.82 min; p50 is noisy at this window and not a signal.
+- **Behaviour holds:** zero stuck, zero retried, zero language attempts (provider-off unchanged).
+
+Caveats recorded: 240 s ≈ four scheduler ticks (the manual dispatch loop was not used, so throughput
+is scheduler-bound), no score samples in an hourly sampler, and hybrid-only (the native-only baseline
+6B's divergence comparison needs is not yet run). This closes the capacity comparison but does not by
+itself answer 6B's player-visible-gain question.
+
+### Wave-8 fixes shipped — dispatch ceiling, storage spend, colonise eligibility, probe budget, quiet reason (16 September 2026)
+
+Five measured ordinary-play defects closed, each a bounded change at an existing decision point (all
+gates deferred by owner instruction to a later explicit pass; syntax-linted only):
+
+- **IMPL-035 (W8-L1) — the dispatch ceiling.** `fleet_slots_free` is published by the observation and
+  read by `CandidateActionFactory`, so a colony, spy, raid, expedition or transfer the host would
+  refuse for slot exhaustion is never offered. The build chain reaches the ceiling-raising technology
+  through host obligation R11 — `ObjectService::getObjectByCalculationType()` +
+  `GameObject::hasCalculation()` — never a module object list.
+- **IMPL-036 (W8-L4) — a full warehouse still spends.** `EconomyUpgrades::spendSurplus()` offers the
+  best mine with no payback horizon when a resource is at capacity, and `QueueableBuildingPlanner`
+  runs that pass ahead of the chain, so a discarded surplus is spent instead of a routine step.
+- **IMPL-037 (W8-L5) — colonise must not outrank development.** `colonize_eligible` is published only
+  when the account's own production can fund a colony's opening inside the 48 h storage horizon, so a
+  body the account cannot develop stops outranking the body that pays for it.
+- **IMPL-038 (W7-3) — the probe budget counts committed probes.** `QueueableSpyPlanner::origin()` now
+  subtracts probes committed to open spy intents per planet, so two pending probes for different
+  targets plan from the budget that remains after the other is committed.
+- **IMPL-040 (W8-L7) — the quiet decision writes a reason.** `ScheduleAiIntentAction` records
+  `AiStopReason::QuietDecision` with the candidate/rejection counts when `DoNothing` is selected, so
+  `ai_stop_counters` answers "why is the population quiet" without a new table.
+
+**IMPL-041 (W8-L6) — hourly score-sample trail, diagnosed.** The `ai:record-score-samples` entry
+(`->hourly()->withoutOverlapping(5)`) has been present since `b8925c7` and is correct in `bf064ac`; the
+command writes one bounded line per run and warns rather than silences when `ai.review.enabled` is
+false. The 15 Sep 07:00–11:00 → silence pattern is therefore not an entry guard and not the 5-minute
+mutex (a stale lock expires in minutes, and no "skipped" line was logged); it matches a deploy/restart
+around 11:00 with the grand scheduler container's stale entrypoint discarding command output. No code
+change; the evidence trail lives in the scheduler run log, which a re-measure (REV-003) reads.
+
+### IMPL-031 — 6B: one bounded driver-evidence contribution at the decision point (16 September 2026)
+
+6B is implemented as its smallest coherent slice: a bounded, profile-weighted **affect appetite**
+contribution to `UtilityScorer`, opt-in and off by default. The account's persisted mood (anger vs
+fear intensity, driver- or native-appraised) adds an `affect` component to the score; the skill band
+decides the reaction (`AiSkillBand::evidenceReaction`: novice 1.0, standard 0.5, veteran 0.2), so the
+same evidence moves differently profiled accounts reproducibly. The nudge is bounded by
+`ai.cognition.affect.decision_weight` (default 0), so an enabled mood can flip a near-equal choice but
+never promote an unavailable action, override a refusal, or outvote safety/resource weights; the
+default path performs no affect query and changes no score, so ordinary-universe decisions stay
+byte-for-byte unchanged until the weight is opted in.
+
+The conformance utilisation record (`specs/driver-utilisation-conformance.md`) lists every verified
+external-driver field with source, consumer and effect: FAtiMA `intensity` is used by this slice;
+`mood`, `driverEmotion`/`driverIntensity`, CiF `volition`/`step`, CBRKit `driverSimilarity` (campaign
+plan confidence) and AgentOS relevance/provenance are recorded as **unused with their reason** — each
+lacks a reachable campaign decision point today, and 6B must not change ordinary-universe decisions.
+
+Also fixed in the same pass, the latent defects the deferred gates had let through: the missing
+`ObjectService` import in `PlayerObservationService::canDevelopColony()` (a `Class not found` at
+runtime), and the test fixtures that construct `PerceptionSnapshot` directly and were gating off every
+fleet and colony candidate since IMPL-035/037. Verification is the focused test files
+(`AffectAppetiteTest`, `DecisionEngineTest`, `DeterministicSessionLoopTest`, `RaidDepthTest`,
+`TransferDepthTest`, `PersonaPolicyMechanicsTest`, `AiCapabilityPublicationTest`,
+`CoverageCompletionTest`); the full gate pass stays deferred per owner instruction.
+
+### DISC-005 and DISC-006 — the two Wave-8 discovery rows, answered by code-read (16 September 2026)
+
+**DISC-005 (the two colonies that "never materialised their stats").** The host does materialise a
+settled colony: `ColonisationMission::processArrival` → `PlanetServiceFactory::createAdditionalPlanetForPlayer`
+→ `createPlanet` writes a real planet row (`metal = 500`, `crystal = 500`, `field_max`, temperature,
+100% mine/solar/fusion percents, `time_last_update = now`) and fires `PlanetCreated`. The module's
+`QueueAiColonyAction` goes through the host's own `FleetMissionService::createNewFromPlanet` with
+`ColonisationMission`, so no host step is skipped. The zeros the read reported are the host's lazy
+stat columns, not an empty planet: `PlanetService::metalStorage()` reads `planet.metal_max`, and both
+storage and production stats are computed only by `PlanetService::update()`
+(`updateResourceStorageStats` / `updateResourceProductionStats`), which `PlayerGameStateService::advance()`
+runs on the player's *current* planet alone. `RunAiSessionAction` advances only the current planet, so
+a colony the account never visits keeps `metal_max = 0`, production 0, no mines and its creation-time
+stamp while its stored 500/500 metal/crystal sit untouched. No host defect and no skipped step: the
+account simply never develops its own new colony — the root that IMPL-037 (colonise eligibility) now
+guards at decision time. Non-blocking follow-up, recorded not implemented: the session loop never
+updates a non-current planet, so a fresh colony is only ever advanced once it becomes the current
+planet.
+
+**DISC-006 (why the espionage-report flow and the raid pipeline starved).** W8-L1 is confirmed as the
+cause by code-read. An espionage mission is a fleet mission consuming one fleet slot, and only its
+arrival creates an `EspionageReport` (`EspionageMission::processArrival` → `createEspionageReport`).
+With eight of ten accounts holding one slot, every probe dispatch was refused by the host ("Maximum
+number of fleets reached") → no espionage missions flew → no new reports → `RaidPlanner` had no fresh
+report to act on → `Raid` stopped being offered. IMPL-035 closes the loop two ways (the candidate
+factory withholds spy/raid/colony/expedition/transfer when `fleet_slots_free < 1`, and `FacilityChain`
+reaches the ceiling object through the host's R11 `getObjectByCalculationType(MAX_FLEET_SLOTS)` so the
+build order can raise the ceiling), and IMPL-038 closes the secondary defect (the probe budget now
+counts probes committed to pending spy intents). A live recovery re-measure — whether the fleeter's
+raid pipeline actually recovers once slots and probes are free — rides the next capacity/pilot run; it
+is not module code.
+
+### DEF-001 (V2) and IMPL-042 (SP3) — the last scheduling gaps, closed (16 September 2026)
+
+The 16 September re-check above recorded that V2 no longer depended on SP3 and named the narrow path.
+Both are now shipped, in the same scheduling pass:
+
+- **V2 — the reaction window (DEF-001).** `PlayerObservationService::inboundThreat` applies the window
+  to `fleetsave_eligible`: an inbound landing more than 180 s out withholds the immediate save and
+  publishes `reaction_wake_at = arrival − draw(120, 180)` (deterministic per account and inbound); an
+  inbound inside the host's 10 s detector floor is a doomed save the account does not attempt; between
+  the two the account saves now. `SessionDecisionService` clamps the successor to the reaction wake, so
+  the save dispatches inside the window rather than on the session that first notices the inbound. The
+  hostility answer stays the host's `currentPlayerUnderAttack()` — no mission-type list was added
+  (gate 1).
+- **SP3 — the next-material-event wake (IMPL-042, W6-6).** `SessionDecisionService::nextMaterialEventWake`
+  clamps the successor to the earliest material event the account would be awake for — a building or
+  research finish (`BuildingQueue`/`ResearchQueue.time_end`), an own or inbound fleet arrival
+  (`FleetMission.time_arrival`) — plus a right-skewed arrival delay, bounded by the waking window via the
+  new `SessionPlanner::isAwake()`. The routine session stays the upper bound, so an event in the dark
+  period is slept through (G10 intact). `resource_eta`, `storage_threshold` and the non-fleet `slot_free`
+  terms are recorded as deferred refinements — nameable and host-computable, not open gaps.
+
+Verification: 794 Pest tests / 2552 assertions green, Pint clean, module PHPStan 0 errors, Rector
+dry-run clean, Gate 2 exit 0, PCOV 100.00% (6500/6500). New tests: the reaction-window boundaries and
+the `reaction_wake_at` publication (`FleetSavePlannerTest`), the reaction-wake clamp
+(`DeterministicSessionLoopTest`), the next-material-event clamp across building/research/fleet/inbound
+terms (`DeterministicSessionLoopTest`), and the `isAwake` window primitive (`RoutineAndPolicyTest`).

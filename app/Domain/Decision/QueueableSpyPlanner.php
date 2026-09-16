@@ -87,17 +87,46 @@ class QueueableSpyPlanner
     }
 
     /**
-     * The first planet carrying an idle probe.
+     * The first planet whose idle probes still exceed what its own pending spy intents
+     * have committed (N6). A probe already promised to a queued or retried intent is not a
+     * second probe, so two pending probes for different targets each plan from the budget
+     * that remains after the other is committed.
      */
     private function origin(PlayerService $player): ?PlanetService
     {
+        $committed = $this->committedProbesByPlanet($player->getId());
+        $probeName = EspionageMission::getRequiredShipMachineNames()[0];
+
         foreach ($player->planets->all() as $planet) {
-            if ($planet->getShipUnits()->getAmountByMachineName(EspionageMission::getRequiredShipMachineNames()[0]) > 0) {
+            $idle = $planet->getShipUnits()->getAmountByMachineName($probeName);
+
+            if ($idle > ($committed[$planet->getPlanetId()] ?? 0)) {
                 return $planet;
             }
         }
 
         return null;
+    }
+
+    /** @return array<int, int> probes committed to open spy intents, keyed by the origin planet */
+    private function committedProbesByPlanet(int $playerId): array
+    {
+        $committed = [];
+
+        foreach (AiWorkItem::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiWorkKind::Spy)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Leased, AiWorkState::Retry])
+            ->get(['payload']) as $item) {
+            $payload = $item->payload ?? [];
+            $planetId = (int) ($payload['planet_id'] ?? 0);
+
+            if ($planetId > 0) {
+                $committed[$planetId] = ($committed[$planetId] ?? 0) + 1;
+            }
+        }
+
+        return $committed;
     }
 
     /**
@@ -133,12 +162,17 @@ class QueueableSpyPlanner
             }
 
             $target = $this->planetServiceFactory->make($planet->id, true);
-            $owner = $target->getPlayer();
 
-            if ($owner->isInVacationMode()) {
+            if ($target === null) {
                 continue;
             }
-            if ($owner->getUsername(false) === 'Legor') {
+
+            $owner = $target->getPlayer();
+
+            if ($owner?->isInVacationMode() === true) {
+                continue;
+            }
+            if ($owner?->getUsername(false) === 'Legor') {
                 continue;
             }
             if ($this->activityIntelReader->activityAt($target)) {

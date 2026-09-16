@@ -10,6 +10,7 @@ readonly class SocialExchangeContext
 {
     /**
      * @param array<string, mixed> $terms
+     * @param array<int, array<string, mixed>> $history
      */
     public function __construct(
         public int $exchangeId,

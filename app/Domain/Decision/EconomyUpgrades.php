@@ -102,8 +102,29 @@ class EconomyUpgrades
     /** @return list<BuildCandidate> the best-paying production upgrades this planet can pay to widen */
     public function production(PlanetService $planet, AiProfile $profile): array
     {
+        $horizon = $this->paybackHorizonHours($this->averageLevel($this->productionLevels($planet)));
+
+        return $this->rankedProduction($planet, $profile, $horizon);
+    }
+
+    /**
+     * E7: a full warehouse is a spend signal — the surplus is a permanent loss, so the best mine is
+     * offered with no payback horizon and the planner spends the surplus rather than discarding it.
+     * Empty when no resource is at capacity, so the routine order is unchanged otherwise.
+     *
+     * @return list<BuildCandidate>
+     */
+    public function spendSurplus(PlanetService $planet, AiProfile $profile): array
+    {
+        return $this->storageIsFull($planet)
+            ? $this->rankedProduction($planet, $profile, INF)
+            : [];
+    }
+
+    /** @return list<BuildCandidate> the production upgrades whose payback lies inside the horizon */
+    private function rankedProduction(PlanetService $planet, AiProfile $profile, float $horizon): array
+    {
         $entries = [];
-        $levels = [];
 
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
             if (!BuildingQueueObject::accepts($object->machine_name)) {
@@ -115,8 +136,6 @@ class EconomyUpgrades
                 continue;
             }
 
-            $levels[] = $planet->getObjectLevel($object->machine_name);
-
             $entries[] = [
                 'hours' => $this->paybackHours($profile, (int) $object->id, ObjectService::getObjectPrice($object->machine_name, $planet), $gain),
                 'buildTime' => $planet->getBuildingConstructionTime($object->machine_name),
@@ -126,8 +145,6 @@ class EconomyUpgrades
                 ]),
             ];
         }
-
-        $horizon = $this->paybackHorizonHours($this->averageLevel($levels));
 
         $affordable = array_values(array_filter(
             $entries,
@@ -141,6 +158,22 @@ class EconomyUpgrades
         });
 
         return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $affordable);
+    }
+
+    /** @return list<int> the current level of every production object, for the payback horizon */
+    private function productionLevels(PlanetService $planet): array
+    {
+        $levels = [];
+
+        foreach (ObjectService::getGameObjectsWithProduction() as $object) {
+            if (!BuildingQueueObject::accepts($object->machine_name)) {
+                continue;
+            }
+
+            $levels[] = $planet->getObjectLevel($object->machine_name);
+        }
+
+        return $levels;
     }
 
     /**
@@ -172,6 +205,19 @@ class EconomyUpgrades
         usort($entries, static fn (array $left, array $right): int => $left['hours'] <=> $right['hours']);
 
         return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $entries);
+    }
+
+    /**
+     * Whether any resource is at or above this planet's storage capacity — the full-warehouse
+     * state that makes production overflow a permanent loss (E7).
+     */
+    private function storageIsFull(PlanetService $planet): bool
+    {
+        $stored = $planet->getResources();
+
+        return $planet->metalStorage()->get() <= $stored->metal->get()
+            || $planet->crystalStorage()->get() <= $stored->crystal->get()
+            || $planet->deuteriumStorage()->get() <= $stored->deuterium->get();
     }
 
     /**

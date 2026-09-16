@@ -59,6 +59,10 @@ return [
         // episode, so an ablation can compare a baseline without affect enrichment against one
         // with it without deleting state.
         'enrichment' => (bool) env('AI_AFFECT_ENRICHMENT', true),
+        // How far the account's current mood may move a decision score. Zero keeps
+        // ordinary-universe decisions unchanged (the ablation baseline); a positive value is
+        // the opt-in 6B divergence, measured before any driver or consultation lane defaults.
+        'decision_weight' => (int) env('AI_AFFECT_DECISION_WEIGHT', 0),
     ],
 
     'conversation' => [

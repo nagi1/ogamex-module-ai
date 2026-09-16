@@ -15,9 +15,11 @@ use Modules\AI\Enums\AiCandidateRejectionReason;
 use Modules\AI\Enums\AiCapability;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\Highscore;
 use OGame\Models\Planet;
@@ -175,6 +177,7 @@ test('an unviable target is dropped before the profit test', function (): void {
         'fleetsaveEligible' => false,
         'recoveryFactor' => 0.1,
         'sourceTimestamps' => [],
+        'fleetSlotsFree' => 2,
     ]);
 
     $generation = app(CandidateActionFactory::class)->create($snapshot);
@@ -220,6 +223,7 @@ test('an unfilled warehouse drops every visible target', function (): void {
         'fleetsaveEligible' => false,
         'recoveryFactor' => 0.1,
         'sourceTimestamps' => [],
+        'fleetSlotsFree' => 2,
     ]);
 
     $generation = app(CandidateActionFactory::class)->create($snapshot);
@@ -262,6 +266,7 @@ test('a viable report is offered as a fresh-report raid candidate', function ():
         'fleetsaveEligible' => false,
         'recoveryFactor' => 0.1,
         'sourceTimestamps' => [],
+        'fleetSlotsFree' => 2,
     ]);
 
     $generation = app(CandidateActionFactory::class)->create($snapshot);
@@ -294,6 +299,22 @@ test('a report naming its target user is scored against that user', function ():
     $byReport = array_column($reports, null, 'report_id');
 
     expect($byReport[$reportId]['score_viable'])->toBeTrue();
+});
+
+// A raid estimate against a body the host no longer treats as a planet is empty, never an error:
+// the estimator refuses the question rather than crash inside the battle engine.
+test('a raid estimate for a body that is not a planet is empty, not an error', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddUnit('small_cargo', 1);
+
+    $debris = $this->createForeignPlanet();
+    Planet::query()->whereKey($debris->getPlanetId())->update(['planet_type' => PlanetType::DebrisField->value]);
+
+    $estimate = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $debris->getPlanetId(), 1);
+
+    expect($estimate->samples)->toBe(0)
+        ->and($estimate->losingRuns)->toBe(0)
+        ->and($estimate->p20NetProfit)->toBe(0.0);
 });
 
 function raidDepthProfile(int $playerId): AiProfile

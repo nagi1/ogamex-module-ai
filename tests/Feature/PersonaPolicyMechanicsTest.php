@@ -159,6 +159,8 @@ function aiPersonaSnapshot(int $playerId, int $planetId, array $actions, bool $f
         'fleetsaveEligible' => $fleetsaveEligible,
         'recoveryFactor' => 0.1,
         'sourceTimestamps' => ['owned_state' => $now->toIso8601String()],
+        'fleetSlotsFree' => 2,
+        'colonizeEligible' => true,
     ]);
 }
 

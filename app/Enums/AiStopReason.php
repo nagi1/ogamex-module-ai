@@ -41,4 +41,7 @@ enum AiStopReason: string
 
     /** As many consultations are in flight as the universe allows at once. */
     case ConsultationConcurrencyCap = 'consultation_concurrency_cap';
+
+    /** A session's only candidate was DoNothing, so nothing else was available to choose. */
+    case QuietDecision = 'quiet_decision';
 }

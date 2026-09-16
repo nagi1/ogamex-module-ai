@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Decision;
 
 use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
+use OGame\GameObjects\Models\Calculations\CalculationType;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -76,6 +77,12 @@ class FacilityChain
             }
         }
 
+        // SP8: a slot-bound account — zero free fleet slots — reaches the technology that
+        // raises the ceiling, never named here (R11 publishes the object behind the value).
+        foreach ($this->fleetSlotCeilingResearch($planet) as $machineName => $level) {
+            $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'slot-ceiling');
+        }
+
         // A prerequisite requested at several levels appears once per level, so the account climbs
         // to the next one it is missing. Unmet host prerequisites come first, then facilities before
         // research: an ordinary player stands the factory before chasing the technology or yard it
@@ -126,6 +133,26 @@ class FacilityChain
         }
 
         return $required;
+    }
+
+    /**
+     * The technology that raises the fleet-slot ceiling, as a chain step only when the account is
+     * slot-bound (zero free slots). The object is never named: it is the one the host publishes as
+     * carrying `MAX_FLEET_SLOTS` (host obligation R11).
+     *
+     * @return array<string, int>
+     */
+    private function fleetSlotCeilingResearch(PlanetService $planet): array
+    {
+        $player = $planet->getPlayer();
+
+        if ($player === null || $player->getFleetSlotsMax() - $player->getFleetSlotsInUse() > 0) {
+            return [];
+        }
+
+        $ceiling = ObjectService::getObjectByCalculationType(CalculationType::MAX_FLEET_SLOTS);
+
+        return $ceiling === null ? [] : [$ceiling->machine_name => 1];
     }
 
     /**
@@ -227,6 +254,7 @@ class FacilityChain
             'metal' => $planet->getMetalProductionPerHour(),
             'crystal' => $planet->getCrystalProductionPerHour(),
             'deuterium' => $planet->getDeuteriumProductionPerHour(),
+            default => 0.0,
         };
     }
 

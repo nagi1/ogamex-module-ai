@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\QueueAiResearchAction;
 use Modules\AI\Contracts\QueueAiBuilding;
@@ -208,6 +209,32 @@ test('the chain empties once the host graph is satisfied', function (): void {
 // A chain step the host refuses used to cost the account its whole build capability. A player who
 // cannot pay for a laboratory yet mines instead, and that is what the ordering has to fall through to
 // rather than publishing nothing at all.
+test('a slot-bound account reaches the technology that raises its fleet ceiling', function (): void {
+    chainProfile($this->currentUserId);
+    // No computer technology yet, so the ceiling object is the step the chain must grow.
+    $this->playerSetResearchLevel('computer_technology', 0);
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+    $planet = array_values($player->planets->all())[0];
+
+    // Fill every fleet slot with an active, non-missile mission, so the chain has to grow the ceiling
+    // the host publishes behind MAX_FLEET_SLOTS rather than send a dispatch the host would refuse.
+    for ($slot = 0; $slot < $player->getFleetSlotsMax(); $slot++) {
+        DB::table('fleet_missions')->insert([
+            'user_id' => $this->currentUserId,
+            'planet_id_from' => $this->currentPlanetId,
+            'mission_type' => 1,
+            'time_arrival' => now()->addHour()->getTimestamp(),
+        ]);
+    }
+
+    expect($player->getFleetSlotsInUse())->toBeGreaterThanOrEqual($player->getFleetSlotsMax());
+
+    $steps = app(FacilityChain::class)->pending($planet);
+    $machineNames = array_map(static fn (BuildCandidate $step): string => ObjectService::getObjectById($step->buildingId)->machine_name, $steps);
+
+    expect($machineNames)->toContain('computer_technology');
+});
+
 test('a chain step the account cannot pay for falls through to what it can afford', function (): void {
     chainProfile($this->currentUserId);
     $this->planetAddResources(chainPlenty());

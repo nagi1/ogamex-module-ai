@@ -84,6 +84,16 @@ class QueueableBuildingPlanner
             }
         }
 
+        // E7: a full warehouse is a spend signal, and the surplus is a permanent loss while a
+        // deferred routine step is not — so it outranks the chain and the routine mine. The
+        // pass is empty for a planet whose warehouse still has room.
+        foreach ($planets as $planet) {
+            $step = $this->firstQueueable($planet, $profile, $this->economyUpgrades->spendSurplus($planet, $profile));
+            if ($step !== null) {
+                return $step;
+            }
+        }
+
         // The routine economy, planet by planet in the account's own order: the energy a planet
         // needs before it throttles, the chain's facilities, then the fastest-paying mine.
         foreach ($planets as $planet) {

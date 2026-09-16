@@ -40,6 +40,8 @@
         },
         "fleetsave_eligible": true,
         "recovery_factor": 0.0,
+        "fleet_slots_free": 2,
+        "colonize_eligible": true,
         "source_timestamps": {
             "resources": "2026-09-14T05:55:00+00:00",
             "report:77": "2026-09-14T05:40:00+00:00"

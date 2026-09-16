@@ -46,7 +46,7 @@ class AdvanceAiCampaignStateAction
 
     private function settle(AiCampaign $campaign, CarbonImmutable $now): void
     {
-        if ($campaign->state === AiCampaignState::Preparing && $now->gte($campaign->starts_at)) {
+        if ($campaign->state === AiCampaignState::Preparing && $campaign->starts_at !== null && $now->gte($campaign->starts_at)) {
             $campaign->state = AiCampaignState::Active;
             $campaign->save();
         }
@@ -62,7 +62,7 @@ class AdvanceAiCampaignStateAction
             return;
         }
 
-        if ($now->gt($campaign->ends_at)) {
+        if ($campaign->ends_at !== null && $now->gt($campaign->ends_at)) {
             $campaign->state = AiCampaignState::Failed;
             $campaign->save();
         }

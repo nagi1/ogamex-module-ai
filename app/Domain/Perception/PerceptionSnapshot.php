@@ -29,6 +29,9 @@ readonly class PerceptionSnapshot
         public array $inboundFleets = [],
         public bool $recallEligible = false,
         public ?int $upcomingAbsenceMinutes = null,
+        public int $fleetSlotsFree = 0,
+        public bool $colonizeEligible = false,
+        public ?int $reactionWakeAt = null,
     ) {
     }
 
@@ -59,6 +62,7 @@ readonly class PerceptionSnapshot
             'upcoming_absence_minutes' => $this->upcomingAbsenceMinutes,
             'recovery_factor' => $this->recoveryFactor,
             'source_timestamps' => $this->sourceTimestamps,
+            'reaction_wake_at' => $this->reactionWakeAt,
         ];
     }
 }

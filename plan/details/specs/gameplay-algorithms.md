@@ -30,7 +30,7 @@ line is the list of host answers it needs.
 | C1 | [Y1](#y1-the-energy-interlock) | Capacity before the level that would outdraw the planet (shipped) | **shipped** |
 | G2 | [R1](#r1-the-research-hurdle) [R2](#r2-capability-research) | Research only when it out-pays the last purchase, and only when it unlocks something | **shipped** (executor + chain/capability research; R1 hurdle still rides the shared payback path) |
 | G3, A2, G15 | [U1](#u1-role-derivation--what-units-are-for) [U2](#u2-cargo-sizing) [U3](#u3-defence--unprofitability-not-ratios) | Roles from host unit properties; cargo sized from host capacity; defence only when attacked | **U1/U2/U3 shipped** (cargo, colony ship, probe, escort, defence); the two intel roles read the host's own attack and report answers |
-| G4, G8, G9 | [V1](#v1-the-save-state-machine) [V2](#v2-the-reaction-window) [V3](#v3-the-save-that-fails) | Save to a duration derived from the absence, react inside a window, and let one fail | **V1 and V3 shipped** (deploy between own planets under attack; a named skip at the blessed placeholder rate); V2 deferred to the capacity runs |
+| G4, G8, G9 | [V1](#v1-the-save-state-machine) [V2](#v2-the-reaction-window) [V3](#v3-the-save-that-fails) | Save to a duration derived from the absence, react inside a window, and let one fail | **V1, V2 and V3 shipped** (deploy between own planets under attack; a named skip at the blessed placeholder rate; a reaction wake 120–180 s before impact) |
 | G5 | [N1](#n1-probe-sizing) [N2](#n2-target-lifecycle) | Probe enough to reveal, escalate when it does not, and let stale targets die | **N1/N2 shipped** (one probe, legal target, reports re-published as intel; 24 h staleness) |
 | G6, S4 | [T1](#t1-the-profit-test-as-an-audit-trail) [T2](#t2-the-estimator) [T3](#t3-the-bashing-limit) | Loot − deuterium − expected losses must clear a tail threshold | **T1/T2/T3 shipped** (P20 estimate, bashing limit, profit test, attack dispatch); S4 report-sharing still open |
 | G7 | [CL1](#cl1--slot-choice) [CL2](#cl2--the-colony-is-another-mine) | Choose the slot by the host's own position bonuses; treat the colony as a mine | **shipped** (executor + colony-ship role); CL2 treat-colony-as-mine is the next economy step |
@@ -49,6 +49,11 @@ line is the list of host answers it needs.
 | Ninja (pass-6) | [NN1](#nn1-anti-ninja-checks-on-the-raid-path) [NN2](#nn2-the-ninja-trap-defender-counter-crash) | Anti-ninja staging checks on the raid path; the defender's timed counter-landing | **partially shipped** (NN1 moon-staging check at dispatch; NN2 trap deferred — gated behind a reviewed cluster) |
 | Expeditions (pass-6) | [EX1](#ex1-slot-16-outcomes-and-never-a-save) | Slot-16 only, host-returned outcomes, never a fleetsave | **shipped** (slot-16 executor over the host mission, one disposable civil cargo ship; host surface verified — DISC-004 closed) |
 | W7-1 / W7-2 (economy) | [E6](#e6-spend-a-windfall-before-warehousing-it) | Spend a surplus before warehousing it | **shipped** — hypothesis (b) then (a): a full warehouse is a spend signal, and a severe scarcity makes a mine outrank the ship habit |
+| W8-L1 | [SP8](#sp8-the-dispatch-ceiling) | Read free fleet slots before publishing a dispatch; reach the object that raises the ceiling | **planned** (IMPL-035) |
+| W8-L4 | [E7](#e7-a-full-warehouse-forces-the-mine-not-a-fallback) | A full warehouse forces the mine ahead of a routine fallback | **planned** (IMPL-036) |
+| W8-L5 | [CL3](#cl3-colonise-only-when-the-account-can-develop-the-body) | Colonise only with a free slot and the means to develop the new body | **planned** (IMPL-037) |
+| W7-3 | [N6](#n6-the-probe-budget-counts-committed-probes) | Budget probes as idle minus committed-to-pending | **planned** (IMPL-038) |
+| W8-L7 | [SP9](#sp9-the-quiet-decision-writes-its-reason) | The quiet decision writes a stop reason naming why nothing else was available | **planned** (IMPL-040) |
 
 ## How to read an algorithm block
 
@@ -104,6 +109,15 @@ PHPOgameBot computes exactly `max(now, resource_eta, build_slot_free, fleet_slot
 (**verified**). The three agree, so this is not taste — it is the mechanism. The jitter must be
 heavy-tailed, not uniform: see [H2](#h2-session-shape) and the traps in [H5](#h5-what-makes-a-schedule-look-worse).
 
+**Shipped (IMPL-042, 16 September 2026).** `SessionDecisionService::nextMaterialEventWake` clamps the
+successor session to the earliest material event the account would be awake for — a building or
+research finish (`BuildingQueue`/`ResearchQueue.time_end`), an own or inbound fleet arrival
+(`FleetMission.time_arrival`) — plus a right-skewed arrival delay, bounded by the waking window
+(`SessionPlanner::isAwake`). The routine session stays the upper bound, so an event in the dark period
+is slept through. The hostile-inbound term is V2's reaction wake; `resource_eta`, `storage_threshold`
+and the `slot_free` (beyond fleet-return) terms remain the deferred refinements, all nameable and
+host-computable, not open gaps.
+
 ### SP4 — One mutating action at a time per contended resource
 
 A planet has one building slot, a player has one research slot and a bounded number of fleet slots.
@@ -155,6 +169,61 @@ by any planet-context action and nothing else (**host**) — and a galaxy activi
 The reader is host-quoted and never writes: the module neither fabricates activity nor hides it,
 and the marker is refreshed only through real work, exactly as
 [H4](#h4-the-activity-marker-is-a-side-effect-never-a-ping) requires.
+
+---
+
+### SP8 — The dispatch ceiling
+
+**Gaps:** W8-L1 · **Host:** `getFleetSlotsMax()`, `getFleetSlotsInUse()`, and — for the build half — the
+object that raises the ceiling, which the host exposes only by its internal name (`computer_technology`)
+and `ObjectService` gives no lookup by calculation type, so it is a host obligation (R11: publish the
+object carrying `MAX_FLEET_SLOTS`) rather than a module-side list.
+
+**Rule.**
+
+```
+free_slots = getFleetSlotsMax() − getFleetSlotsInUse()
+if free_slots <= 0: publish no dispatch (colony, spy, raid, expedition, transfer)
+```
+
+A dispatch is published only when the host would accept it; every other fleet-capable planner already
+learns the host's answer at the same chokepoint. The build order must be able to reach the object that
+raises the ceiling, which is the host obligation above, not a module constant.
+
+**Constants.** None new: both slot numbers are host answers; the ceiling object comes from the host
+catalogue once R11 lands.
+
+**Gate.** Gate 1 — the ceiling is a host answer, never a module list. Gate 2 — one subtraction before
+one publish. Gate 3 — a player checks the fleet screen before sending; publishing a fleet the host will
+refuse is not something a human does.
+
+**Evidence.** Measured: `getFleetSlotsMax()` = 1 on eight of ten accounts (the object that raises it
+was never researched), 1027 dispatch refusals in 24 h, 917 of them `CreateColony`, every one
+"Maximum number of fleets reached".
+
+**Accept.** A dispatch is never published while the host would refuse it for slot exhaustion; an
+account whose ceiling object is reachable eventually raises it.
+
+### SP9 — The quiet decision writes its reason
+
+**Gaps:** W8-L7 · **Host:** none new — the module's own trace is the input.
+
+**Rule.** Where the decision engine already takes a quiet decision (`DoNothing`, or a trace whose single
+candidate carries the `always_available` reason), write one stop reason naming *why nothing else was
+available* through `RecordAiStopReasonAction`. No new table and no new job: `ai_stop_counters` is the
+artifact, and only mechanisms that already decide may write it.
+
+**Constants.** None.
+
+**Gate.** Gate 2 — reuses the existing stop-counter table and the existing decision point; a new
+surface for the same fact would be machinery. Gate 3 — "why was the account quiet" is exactly what a
+reviewer of the account's own play asks.
+
+**Evidence.** Measured: `ai_stop_counters` empty after 31 h while 470 sessions chose `DoNothing`, every
+trace carrying one `always_available` candidate, so no artifact can say why nothing else was offered.
+
+**Accept.** A quiet session leaves a stop counter that names the reason the only candidate was
+"always available", without inventing a new store.
 
 ---
 
@@ -311,6 +380,29 @@ and a safety action (a fleetsave under a visible raid) is never outranked.
 **Accept.** A planet whose warehouse is full queues the mine that spends the surplus, and a planet
 whose warehouse will fill during the absence queues the warehouse — measured on a frozen-clock replay
 before it touches the holy universe.
+
+### E7 — A full warehouse forces the mine, not a fallback
+
+**Gaps:** W8-L4 · **Host:** the stored production and storage columns E3/E6 read, plus the production
+objects' payback (E1).
+
+**Rule.** When a warehouse is full (`time_to_fill <= 0`) and the mine that would spend the surplus lies
+outside the payback horizon, the full warehouse is itself the spend signal: the planner offers the mine
+(`production`) ahead of a routine fallback such as research, because production that overflows is a
+permanent loss while a deferred routine step is not.
+
+**Constants.** None new — the zero threshold is E6's and the horizon is E3's.
+
+**Gate.** Gate 2 — one precedence decision at the point the planner already picks its step. Gate 3 — a
+player whose warehouse overflows spends the surplus before anything else; discarding 8.9M metal/h is
+not something a human does.
+
+**Evidence.** Measured: four homeworlds at exactly 100% storage; `QueueableBuildingPlanner::plan(20)`
+returned a research step, so the metal kept producing and was discarded. E6 hypothesis (b) shipped the
+"full warehouse is not a warehouse signal" half, but the planner's fallback still outranks the mine.
+
+**Accept.** A full warehouse leads to the mine that spends it, never to a routine fallback that leaves
+the surplus overflowing.
 
 ### E4 — Ferrying resources between own planets
 
@@ -626,6 +718,13 @@ bot detector naming **10 seconds** as the floor below which a reaction is flagge
 **Finding.** No project models a reaction it *missed*; every one is best-effort with a generous window.
 That is the blindness [V3](#v3-the-save-that-fails) corrects.
 
+**Shipped (DEF-001, 16 September 2026).** `PlayerObservationService::inboundThreat` now applies the
+window to `fleetsave_eligible`: an inbound landing more than 180 s out withholds the immediate save and
+publishes `reaction_wake_at = arrival − draw(120, 180)`; an inbound inside the 10 s host floor is a
+doomed save the account does not attempt; between the two the account saves now. `SessionDecisionService`
+clamps the successor to the reaction wake, so the save dispatches inside the window rather than on the
+session that first notices the inbound.
+
 ### V3 — The save that fails
 
 **Gaps:** G9 · **Host:** none beyond V1's — this is a persona parameter.
@@ -829,6 +928,27 @@ in flight" (INT-007, **documented**). Dispatch, then do no further planet-contex
 body until the next scheduled need. This is the negative-space twin of
 [H4](#h4-the-activity-marker-is-a-side-effect-never-a-ping): the marker is never manufactured, and
 it is never *not* produced when real work requires it.
+
+### N6 — The probe budget counts committed probes
+
+**Gaps:** W7-3 · **Host:** the launch planet's idle probe count and the probes already committed to
+pending spy work items.
+
+**Rule.** The real probe budget is *idle probes minus probes already committed to a pending spy item*,
+counted per work item, never de-duplicated by target coordinates. Two scheduled probes for different
+targets each plan from the remaining budget, not from the same single probe.
+
+**Constants.** None new.
+
+**Gate.** Gate 2 — one subtraction at the point the spy planner already sizes its probe. Gate 3 — a
+player counts the probes they have before sending a second one.
+
+**Evidence.** Measured: 32 receipts refused with "Not enough units … espionage_probe"; code-read:
+`inFlightCoordinates()` de-duplicates by target coordinates, so two different-target probes both planned
+from one probe.
+
+**Accept.** Two pending probes for different targets each plan from the budget that remains after the
+other is committed, and a third probe that would over-commit is not published.
 
 ---
 
@@ -1185,6 +1305,28 @@ thing the empire could build at home — which is how the miner guide describes 
 are mines … build whatever has the shortest return on investment") and how the memoir roadmap is
 *derived* rather than tabulated. The colony then runs [E1](#e1-payback-ordering--the-next-mine) with its
 own numbers.
+
+### CL3 — Colonise only when the account can develop the body
+
+**Gaps:** W8-L5 · **Host:** the dispatch ceiling ([SP8](#sp8-the-dispatch-ceiling)),
+`getMaxPlanetAmount()`, and the account's own current production/queue state (CL2).
+
+**Rule.** A colonise candidate is eligible only when a free fleet slot exists (SP8) **and** the empire
+can develop the body it would found — the account's existing buildings can afford to bring a new mine
+online. Otherwise the colonise candidate ranks below developing what the account already owns, because
+founding a body it cannot use spends a slot and a colony ship for nothing.
+
+**Constants.** None new — the slot answer is SP8's and the developability is CL2's own numbers.
+
+**Gate.** Gate 1 — eligibility reads host answers. Gate 2 — one eligibility check on the existing
+candidate. Gate 3 — a player develops what they own before expanding; founding bodies that then sit at
+zero production is not what a professional does.
+
+**Evidence.** Measured: one account froze for 14 h — 174 sessions, 168 colonise work items, 112 refused
+at the fleet cap, score +0 (rank 6 → 10) — and both of its settled colonies report production 0.
+
+**Accept.** An account that cannot use a new body does not let colonise outrank its own development;
+with a free slot and the means to develop, colonise stays eligible.
 
 ---
 

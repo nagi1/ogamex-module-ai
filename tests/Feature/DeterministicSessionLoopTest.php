@@ -37,6 +37,9 @@ use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SystemAiClock;
 use Modules\AI\Tests\Support\FixturePlayerPerceptionBuilder;
+use OGame\Models\BuildingQueue;
+use OGame\Models\FleetMission;
+use OGame\Models\ResearchQueue;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -93,6 +96,86 @@ test('an explicit session interval accelerates only the successor schedule', fun
     ]);
 
     expect(app(NextDueTimeCalculator::class)->fromSession($plan, $now)->equalTo($now->addSeconds(5)))->toBeTrue();
+});
+
+test('a hostile reaction wake pulls the next session earlier (V2)', function (): void {
+    config(['ai.population.session_interval_seconds' => 3600]);
+    $now = CarbonImmutable::create(2026, 9, 11, 12, 0, 0, 'UTC');
+    Date::setTestNow($now);
+
+    $profile = aiDeterministicProfile(AiArchetype::Miner, $this->currentUserId);
+    $profile->update(['settings' => ['timezone' => 'UTC']]);
+    $profile->refresh();
+
+    $reactionWakeAt = $now->addSeconds(90)->getTimestamp();
+    aiDeterministicInstallPerception($this->app, aiDeterministicSnapshot(
+        $this->currentUserId,
+        $this->currentPlanetId,
+        $now,
+        [],
+        false,
+        [],
+        [],
+        $reactionWakeAt,
+    ));
+
+    aiDeterministicRun($profile);
+    $schedule = AiSchedule::query()->where('player_id', $this->currentUserId)->firstOrFail();
+
+    expect($schedule->next_due_at->getTimestamp())->toBe($reactionWakeAt);
+});
+
+test('a material event inside the waking window pulls the next session earlier (SP3)', function (): void {
+    config(['ai.population.session_interval_seconds' => 3600]);
+    $now = CarbonImmutable::create(2026, 9, 11, 12, 0, 0, 'UTC');
+    Date::setTestNow($now);
+
+    $profile = aiDeterministicProfile(AiArchetype::Miner, $this->currentUserId);
+    $profile->update(['settings' => ['timezone' => 'UTC']]);
+    $profile->refresh();
+
+    aiDeterministicInstallPerception($this->app, aiDeterministicSnapshot(
+        $this->currentUserId,
+        $this->currentPlanetId,
+        $now,
+        [],
+        false,
+        [],
+        [['mission_id' => 9, 'mission_type' => 3, 'time_arrival' => $now->addSeconds(90)->getTimestamp(), 'planet_id_to' => $this->currentPlanetId]],
+    ));
+
+    BuildingQueue::query()->forceCreate([
+        'planet_id' => $this->currentPlanetId,
+        'object_id' => 1,
+        'object_level_target' => 2,
+        'time_end' => $now->addMinute()->getTimestamp(),
+    ]);
+    ResearchQueue::query()->forceCreate([
+        'planet_id' => $this->currentPlanetId,
+        'object_id' => 1,
+        'object_level_target' => 2,
+        'time_end' => $now->addSeconds(120)->getTimestamp(),
+    ]);
+    FleetMission::query()->forceCreate([
+        'user_id' => $this->currentUserId,
+        'planet_id_from' => $this->currentPlanetId,
+        'planet_id_to' => $this->currentPlanetId,
+        'mission_type' => 3,
+        'time_departure' => $now->getTimestamp(),
+        'time_arrival' => $now->addSeconds(180)->getTimestamp(),
+        'time_arrival_ms' => 0,
+        'processed' => 0,
+        'canceled' => 0,
+    ]);
+
+    aiDeterministicRun($profile);
+    $schedule = AiSchedule::query()->where('player_id', $this->currentUserId)->firstOrFail();
+
+    // The earliest material event (the build at +60 s) wins; the wake is at most the event plus
+    // the arrival delay's ceiling, and well before the fixed one-hour interval it replaced.
+    expect($schedule->next_due_at->getTimestamp())
+        ->toBeLessThan($now->addSeconds(3600)->getTimestamp())
+        ->and($schedule->next_due_at->getTimestamp())->toBeLessThanOrEqual($now->addMinute()->addSeconds(300)->getTimestamp());
 });
 
 test('stale and forbidden reports are rejected before raid scoring', function (): void {
@@ -162,8 +245,8 @@ function aiDeterministicInstallPerception(Application $app, PerceptionSnapshot $
     $app->instance(PlayerPerceptionBuilder::class, $app->makeWith(FixturePlayerPerceptionBuilder::class, ['snapshot' => $snapshot]));
 }
 
-/** @param array<string, bool> $actions @param array<int, array<string, mixed>> $reports */
-function aiDeterministicSnapshot(int $playerId, int $planetId, CarbonImmutable $now, array $actions, bool $fleetsaveEligible, array $reports = []): PerceptionSnapshot
+/** @param array<string, bool> $actions @param array<int, array<string, mixed>> $reports @param list<array{mission_id:int, mission_type:int, time_arrival:int, planet_id_to:int}> $inboundFleets */
+function aiDeterministicSnapshot(int $playerId, int $planetId, CarbonImmutable $now, array $actions, bool $fleetsaveEligible, array $reports = [], array $inboundFleets = [], ?int $reactionWakeAt = null): PerceptionSnapshot
 {
     return app()->makeWith(PerceptionSnapshot::class, [
         'playerId' => $playerId,
@@ -179,7 +262,11 @@ function aiDeterministicSnapshot(int $playerId, int $planetId, CarbonImmutable $
         ]],
         'availableActions' => $actions + array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
         'fleetsaveEligible' => $fleetsaveEligible,
+        'inboundFleets' => $inboundFleets,
+        'reactionWakeAt' => $reactionWakeAt,
         'recoveryFactor' => 0.1,
         'sourceTimestamps' => ['owned_state' => $now->toIso8601String()],
+        'fleetSlotsFree' => 2,
+        'colonizeEligible' => true,
     ]);
 }

@@ -333,6 +333,13 @@ test('a planet with no next step is skipped by the ferry', function (): void {
     expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
+test('a single-body account has nothing to ferry', function (): void {
+    transferProfile($this->currentUserId);
+    Planet::query()->where('user_id', $this->currentUserId)->where('id', '!=', $this->currentPlanetId)->update(['destroyed' => 1]);
+
+    expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
 function transferProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -469,6 +476,7 @@ function transferSnapshot(int $playerId, int $planetId): PerceptionSnapshot
         'fleetsaveEligible' => false,
         'recoveryFactor' => 0.1,
         'sourceTimestamps' => [],
+        'fleetSlotsFree' => 2,
     ]);
 }
 

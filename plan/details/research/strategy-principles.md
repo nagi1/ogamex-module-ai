@@ -360,10 +360,10 @@ documented principle the code does **not** yet express, and implementation stays
 - **sources:** TP-009, GF-002 (named modes, no rate) · **ogamex:** supported · **code:** `SaveFailurePolicy` (V3) · **priority:** P0
 
 ### FS-004 — React inside a window before impact
-- **category:** fleetsave · **confidence:** B · **status:** deferred
+- **category:** fleetsave · **confidence:** B · **status:** shipped (V2)
 - **principle:** wake at `arrival − 120…180 s` to react to a hostile, never faster than the 10 s detector floor.
 - **inputs:** inbound ETA · **exceptions:** none.
-- **sources:** BOT-005 (verified) · **ogamex:** supported · **code:** V2 deferred · **priority:** P2
+- **sources:** BOT-005 (verified) · **ogamex:** supported · **code:** `inboundThreat` reaction window + `reaction_wake_at` (V2) · **priority:** P2
 
 ### FS-005 — Enumerate destination × speed routes, not one default
 - **category:** fleetsave · **confidence:** B · **status:** partial
@@ -666,10 +666,10 @@ Alliance-gated (host `allianceCombatSystemOn`). Execution deferred to Package 6;
 - **sources:** veteran-play §9 (measured/estimate) · **ogamex:** supported · **code:** H3 · **priority:** P0
 
 ### AUTH-004 — Wake at the next material event, not on a poll
-- **category:** authenticity · **confidence:** A · **status:** partial
+- **category:** authenticity · **confidence:** A · **status:** shipped (SP3)
 - **principle:** sleep until the earliest of resource ETA, queue finish, fleet arrival/return, slot free, storage threshold — the one idea every surveyed bot shares.
 - **inputs:** ETAs · **exceptions:** none.
-- **sources:** BOT-003/BOT-005/BOT-006 (verified) · **ogamex:** supported · **code:** SP3 — scheduling shipped, full next-wake partial · **priority:** P1
+- **sources:** BOT-003/BOT-005/BOT-006 (verified) · **ogamex:** supported · **code:** `SessionDecisionService::nextMaterialEventWake` + `SessionPlanner::isAwake` (IMPL-042) · **priority:** P1
 
 ## Social / diplomacy
 
