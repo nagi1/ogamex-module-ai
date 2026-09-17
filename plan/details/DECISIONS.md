@@ -1539,3 +1539,35 @@ Readiness was the real cost: 23 "ready" rows told a pickup agent that 23 repo pa
 in fact 13 pending slices were. `ready_tasks` now lists only real work (`WP-010`…`WP-019`, `LLM-010`,
 `RP-004`). The audit lives in `research/repos/WORK-PACKAGE.md`; deleting the `RP-*` family is recorded
 there as a coordinator call, deliberately not taken here.
+
+### Package 7 slice audit — four of five slices are not new machinery (17 September 2026)
+
+Package 7 was written before Package 6 and Package S finished shipping the campaign-consultation lane,
+so its slices were audited against the code before any agent starts on them. One slice turns out to be a
+scope widening of shipped machinery, one already has a measured starting point that points *away* from
+it, one is greenfield, and two are already indexed elsewhere.
+
+- **7A is not a new lane.** Transport, `off`/`observe`/`advice` admission, the staff switch, trigger
+  allowlist, cooldown, concurrency cap, daily ceilings, receipts, deterministic validation, the
+  profile-bounded ranking nudge, thinking-model routing and read-only tools all ship (6A/6B/6C plus
+  S4/S5/S8), and six of 7A's listed events already fire as triggers (`FleetLoss`, `RepeatedSetback`,
+  `ContestedObjective`, `CoalitionConflict`, `NewPhase`, `RankChange`). What is genuinely left is **war
+  declaration** and **new colony**, plus the fact that the lane is campaign-keyed —
+  `RequestCampaignConsultationAction::handle()` takes an `AiCampaign` and the brief is built from one —
+  so ordinary-universe advice is a shape change, not a config flag, and needs its own budget, caps and
+  evidence gate. Recorded as `P7-001`.
+- **7B's gate has already been partly measured, and the measurement points away from it.** The AgentOS
+  recall benchmark (15 September, 30 trials) found the driver's value is **substitution, not addition** —
+  the required-fact recall gain *is* the eviction of the newest facts (newest-kept 1/30 vs native 30/30)
+  — and the sole consumer is unreachable because every real help request answers
+  `Counter: insufficient_available_amount`. It reopens only on a held-out review that shows a miss native
+  retrieval cannot close. Recorded as `P7-002`.
+- **7C is greenfield.** PsychSim appears nowhere in the module and is not one of the four supported
+  drivers, so it is a driver integration *plus* a diplomacy consumer — the deepest dependency and the
+  least evidenced of the five. Recorded as `P7-003`.
+- **7D and 7E needed no new row:** 7D is already `DEF-003` (social/ACS/alliance life, deferred), and 7E's
+  first instance is `PVE-001` from the PvE research pass.
+
+All three new rows are `deferred`, because Package 7 is still gated on a review record that names a
+player-visible gap and its two operational inputs (the disclosed coalition and the human pilot) are the
+owner's. `ready_tasks` is unchanged by this audit: it lists only work that can start.

@@ -222,6 +222,23 @@ life increases meaningful reciprocal interaction without breaking persona consis
 commitments. Each added PvE objective preserves ordinary-universe behaviour and the cooperative
 human-versus-human safety boundary.
 
+### Package 7 slice audit — what is already shipped, what is not (17 September 2026)
+
+Package 7 was written before Package 6 and Package S finished shipping the campaign-consultation
+lane. Audited slice by slice against the code, four of the five are not new machinery; only three
+genuinely need rows, and two of them are already indexed elsewhere.
+
+| Slice | What already exists | What is genuinely left | Index |
+| --- | --- | --- | --- |
+| **7A — bounded LLM strategic consultation** | The whole lane: transport (`RequestCampaignConsultationAction`), fail-closed admission (`off`/`observe`/`advice`, staff switch, trigger allowlist), cooldowns, concurrency cap, daily ceilings, receipts, deterministic validation, a profile-bounded ranking nudge, thinking-model routing, read-only tools. Six of its listed events already fire as triggers: fleet loss, repeated attacks (= repeated setback), alliance conflict (= coalition conflict), rank change — plus contested objective and new phase. | Two events are unbuilt (**war declaration**, **new colony**), and the lane is keyed on `AiCampaign` — it takes a campaign, and the brief is built from one — so ordinary-universe (non-campaign) consultation is a shape change, not a config flag. It needs its own budget and its own evidence gate. | `P7-001` (deferred) |
+| **7B — semantic recall experiment** | The measurement half already ran: the AgentOS recall benchmark (15 Sep, 30 trials) found the driver's value is **substitution, not addition** — replaying its ranking with the promotion bounded to the native cut gives back native's recall and keeps the newest fact — and the sole consumer is unreachable in production. | A held-out review that shows native retrieval misses what exact/entity recall closes; until then the measured evidence points *away* from enabling it. | `P7-002` (deferred) |
+| **7C — small-scale PsychSim diplomacy** | Nothing. PsychSim appears nowhere in the module (`app/`, `config/`, `tests/`), and it is not one of the four supported drivers. | A driver integration plus the diplomacy consumer; the deepest dependency of the five and the least evidenced. | `P7-003` (deferred) |
+| **7D — Package 6 social life** | — | Already indexed: `DEF-003` ("Social / ACS / alliance life (Package 6)", deferred P3) is this slice. | `DEF-003` |
+| **7E — further cooperative campaign objectives** | The campaign board, objective resolution, director, reward allocator and disagreement-safe contribution records all ship. | One objective type at a time, each with its recoverable failure path and hostility proof; instance 1 is the faction-races-the-same-objective slice from the PvE research. | `PVE-001` (+ `PVE-002` for the campaign page) |
+
+Every row stays `deferred`: Package 7 is still gated on a review record that names a player-visible
+gap, and the two operational inputs (the disclosed coalition and its human pilot) are the owner's.
+
 ## Package S — LLM full utilisation (side, on-command)
 
 **Status:** planned, owner-commanded 16 September 2026. Runs beside Packages 6/7, not gated by them
