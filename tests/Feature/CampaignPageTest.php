@@ -5,6 +5,7 @@ use Modules\AI\Actions\OpenAiCampaignAction;
 use Modules\AI\Actions\SummarizeAiCampaignAction;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Models\AiCampaignObjective;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use OGame\Models\Highscore;
@@ -52,4 +53,16 @@ test('the campaign page renders for any logged-in player', function (): void {
 
     expect($response->status())->toBe(200)
         ->and($response->getContent())->toContain('Coalition campaign');
+});
+
+test('an objective whose planet is gone renders a placeholder coordinate', function (): void {
+    $campaign = app(OpenAiCampaignAction::class)->handle(now()->subHour()->toImmutable(), now()->addDay()->toImmutable());
+    AiCampaignObjective::unguarded(fn () => AiCampaignObjective::create([
+        'campaign_id' => $campaign->id,
+        'planet_id' => 999_999,
+    ]));
+
+    $summary = app(SummarizeAiCampaignAction::class)->handle();
+
+    expect($summary['strongholds'][0]['coordinates'])->toBe('—');
 });
