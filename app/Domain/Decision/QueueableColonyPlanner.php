@@ -54,6 +54,14 @@ class QueueableColonyPlanner
         }
 
         $player ??= $this->playerServiceFactory->make($playerId, true);
+
+        // An account at its planet cap cannot found another colony: the host cancels the
+        // mission at arrival, so planning one is pure waste of a colony ship and a fleet slot.
+        // The cap is the host's own astrophysics answer, never a module constant.
+        if ($player->planets->planetCount() >= $player->getMaxPlanetAmount()) {
+            return null;
+        }
+
         $origin = $this->colonyShipPlanet($player->planets->all());
         if ($origin === null) {
             return null;

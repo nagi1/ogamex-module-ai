@@ -65,6 +65,26 @@ test('the colony planner gives up when every colonisable slot is taken', functio
     expect(app(QueueableColonyPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
+// An account at its host-derived planet cap must not plan a colony: the host cancels the
+// mission at arrival, so every dispatch is a wasted colony ship and fleet slot.
+test('the colony planner refuses once the account is at its planet cap', function (): void {
+    colonyProfile($this->currentUserId);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->playerSetResearchLevel('astrophysics', 1);
+
+    foreach ([[2, 1, 4], [2, 1, 5]] as [$galaxy, $system, $position]) {
+        Planet::factory()->create([
+            'user_id' => $this->currentUserId,
+            'galaxy' => $galaxy,
+            'system' => $system,
+            'planet' => $position,
+            'time_last_update' => now()->timestamp,
+        ]);
+    }
+
+    expect(app(QueueableColonyPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
 // An experienced player colonises the bigger slot, not the first empty one: with
 // positions 4 (large) and 12 (small) the only gaps, the planner takes 4.
 test('the colony planner prefers the larger empty slot', function (): void {
