@@ -228,6 +228,14 @@ is grown first — nameable play, "upgrade the warehouse before the mine that wi
 is derived from the host's own price (`getObjectPrice`) and storage (`getBuildingMaxStorage` twice),
 and the store candidates are the host's `getBuildingObjectsWithStorage()`, so no object is named.
 
+## Standing defence pass (WP-008) — 17 September 2026
+
+A turtle or miner no longer sits at zero defence until a hostile shows up. `QueueableUnitPlanner`
+gained a last-priority standing-defence branch: when the planet's defence value (host raw price,
+`getDefenseObjects()`) is below the persona's fraction of its fleet value — turtle 0.5, miner 0.2 —
+it queues the best attack-per-cost defence piece. The reactive `underAttack` branch stays first, and
+the floor is persona taste over host data, never a hardcoded defence count.
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human
@@ -1507,3 +1515,27 @@ fails on these board pages; `curl` on the same URL returns them.)
 
 Every `DISC-*` row is now closed (`DISC-001`…`DISC-009`), and the registry carries the two-step method so
 the next moved-forum source costs one CDX query instead of a third failed pass.
+
+### Per-repo residue audit — the RP-* family is provenance, not a work queue (17 September 2026)
+
+The 23 `RP-*` rows each say *"execute this repo's plan … only repo-specific items here"*. Audit against
+the 74 ADOPT-IDEA/ENHANCE mechanism rows in `research/repos/plans/*.plan.md` and the shipped slices
+shows that premise does not hold: 22 of the 23 repos' mechanisms are already indexed as shared `WP-*`
+slices, and the 23rd adds a three-line docblock.
+
+- **8 rows closed `done`.** Five contributed everything they had to now-shipped slices — jaesivsm
+  (`WP-001`), klaasvp (`WP-002`/`WP-003`), kweimann (`WP-001`/`WP-004`), maximalcode (`WP-003`), r4fek
+  (`WP-001`) — and three had nothing adoptable at all: eracle (a 2015 Selenium stub), jstar88-ogame-
+  algorithms (a licence-less PHP-5 formula library the host already answers), patrykstefanski (a second
+  battle engine, wholesale REFUSE).
+- **14 rows `deferred` as pointers.** Every remaining mechanism is already a `WP-006`…`WP-019` row, so
+  the per-repo rows carry no independent work; their notes now name the exact slice codes, and a pickup
+  agent starts from `WP-*`.
+- **1 row left `todo`.** hammermaps is the only repo with residue of its own: the `AiArchetype`
+  docblock should record the fold onto the mined profile names (raider→Fleeter, defensive→Turtle,
+  neutral→Casual). Doc-only, no behaviour, no test.
+
+Readiness was the real cost: 23 "ready" rows told a pickup agent that 23 repo passes were available when
+in fact 13 pending slices were. `ready_tasks` now lists only real work (`WP-010`…`WP-019`, `LLM-010`,
+`RP-004`). The audit lives in `research/repos/WORK-PACKAGE.md`; deleting the `RP-*` family is recorded
+there as a coordinator call, deliberately not taken here.

@@ -148,3 +148,59 @@ the deduplicated, ranked slice list.
 15. Raid outcome feedback (cooldown + blacklist + real-loot attribution)
 16. Liveness floor, then no-op idle override + anti-bot self-check
 17. P3 investigate list (phalanx, moonshot, jump gate, …) as seams are confirmed
+
+## Per-repo residue audit — do the 23 per-repo plans still carry work? (17 September 2026)
+
+`RP-001..RP-023` in the task DB tell an agent to *"execute this repo's plan … only repo-specific items
+here"*. This audit tests that claim against the mapping above and against what has shipped.
+
+**Method.** Extract every ADOPT-IDEA / ENHANCE mechanism row from the 23 `plans/*.plan.md` files (74
+rows), match each mechanism to the `WP-*` slice whose source list names that repo, then check whether
+that slice is shipped.
+
+| Repo (RP row) | Mechanisms | Mapped to | RP status after audit |
+| --- | --- | --- | --- |
+| alaingilbert-ogame (RP-001) | defenceless-report signal; phalanx scan; section-based intel confidence | WP-013, WP-019 | deferred |
+| eracle-ogamebot (RP-002) | none — "nothing to adopt, nothing to enhance" | — | done |
+| halfguru-ogamebot (RP-003) | never save into a threatened body; colonise bigger slots | WP-004 (done), WP-010 | deferred |
+| hammermaps-ogamex-ai-players (RP-004) | anti-bot self-check; archetype→class affinity; rare no-op | WP-018, WP-019 + **own residue** | todo |
+| jaesivsm-pyogame (RP-005) | debris recycling | WP-001 (done) | done |
+| janeczkins-xbot (RP-006) | harvest-save; jump gate; surplus transfer; colony abandon; weak-attack save | WP-005 (done), WP-006, WP-010, WP-012, WP-019 | deferred |
+| jstar88-ogame-algorithms (RP-007) | none — the host already answers every formula it hardcodes | — | done |
+| jstar88-opbe (RP-008) | lower-tail loot (ships as WP-002) | WP-019 | deferred |
+| klaasvp-trashsim (RP-009) | outcome buckets; typical-case mean | WP-002 (done), WP-003 (done) | done |
+| kweimann-cruiser (RP-010) | expedition debris harvest; save-destination ranking | WP-001 (done), WP-004 (done) | done |
+| maximalcode-combat-sim (RP-011) | battle-outcome distribution | WP-003 (done) | done |
+| ogame-infinity-web-extension (RP-012) | expedition composition + rotation; defended-raid debris valuation | WP-009, WP-019 | deferred |
+| ogame-ninja-scripts (RP-013) | debris recycling; message the attacker; standing defence; surplus transfer | WP-001 (done), WP-008, WP-012, WP-016 | deferred |
+| ogame-opensource-2-ai (RP-014) | purge / inactivity exemption | WP-017 | deferred |
+| ogame-tbot-tbot (RP-015) | harvest-save; probe-only inbound; recall timing; spy origin | WP-005 (done), WP-006, WP-011, WP-014 | deferred |
+| patrykstefanski-og-battle-engine (RP-016) | none — wholesale REFUSE, the host engine matches it | — | done |
+| peterradzisz-fleet-optimizer (RP-017) | survival floor (ships as WP-003) | WP-019 | deferred |
+| piecepapercode-barakis (RP-018) | solar-satellite energy fallback; standing defence | WP-019, WP-008 | deferred |
+| r4fek-ogame-bot (RP-019) | debris harvest | WP-001 (done) | done |
+| racinmat-phpogamebot (RP-020) | storage-before-build; probe escalation | WP-007, WP-014 | deferred |
+| rbardtke-ogamex-combat-sim (RP-021) | pre-flight round-trip duration; defended loot tier | WP-019 ×2 | deferred |
+| shinigallo-ogame-agi (RP-022) | game-phase bucket; consultation confidence gate + horizon | WP-019 ×2 | deferred |
+| trilogi77-ogamebot (RP-023) | debris; moonshot; raid cooldown + blacklist; metal-dump; save/expedition/colony/defence/outcome enhancements | WP-001 (done), WP-004 (done), WP-008…WP-015, WP-019 ×3 | deferred |
+
+**Status semantics used above.** `done` = nothing left for this repo (its mechanisms shipped, or it
+had nothing adoptable). `deferred` = every remaining idea is already indexed elsewhere (`WP-006`…
+`WP-019`), so the row is a pointer, not work. `todo` = the single row with residue of its own. Slice
+codes are annotated `(done)` only where that matters to the verdict; for everything else the live status
+is the task DB's.
+
+**Finding.** The premise that each per-repo row holds work of its own does **not** hold: 22 of the 23
+repos' mechanisms are already indexed as shared `WP-*` slices, and the remaining one adds a three-line
+docblock. Five repos are complete because everything they contributed ships in `WP-001`–`WP-004`
+(jaesivsm, klaasvp, kweimann, maximalcode, r4fek); three contributed nothing adoptable at all (eracle,
+jstar88-ogame-algorithms, patrykstefanski). The other fourteen are **pointers**: their content lives in
+`WP-006`–`WP-019`, which are the rows to start.
+
+**The one genuine residue (hammermaps).** `app/Enums/AiArchetype.php`'s docblock should record the fold
+onto the repo's named profiles — raider→Fleeter (Raid 0.9), defensive→Turtle (QueueUnits 1.0),
+neutral→Casual — so a later reader stops re-deriving it. Doc-only; no behaviour, no test.
+
+**Recommendation (coordinator call, recorded not decided here).** Treat `RP-*` as provenance rather than
+a work queue: delete the family once this audit is accepted, or keep it read-only. A pickup agent should
+always start from `WP-*`.
