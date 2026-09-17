@@ -48,7 +48,9 @@ class QueueableMinePercentPlanner
         $player ??= $this->playerServiceFactory->make($playerId, true);
 
         foreach ($player->planets->all() as $planet) {
-            $planet->updateResources(false);
+            // Energy is read off the planet's persisted production columns, so the stats must be
+            // recomputed here: a caller that only advanced resources leaves them stale at zero.
+            $planet->updateResourceProductionStats(false);
             $energy = (float) $planet->energy()->get();
 
             if ($energy < 0.0) {
