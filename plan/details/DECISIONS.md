@@ -2135,3 +2135,19 @@ agent's decision. The image is `python:3.13-slim` + the pinned source + a stdlib
 HTTP server — no numpy/scipy/Qt. Wave 3.3 (module driver `PsychSimSocialCognition`
 behind `Contracts\SocialCognition`) and 3.4 (the OGame social-exchange consumer)
 are the remaining P7-003 work.
+
+### P7-003 — PsychSim driver ships; the sidecar becomes a cooperation dilemma (18 September 2026)
+
+Wave 3.3 and 3.4 close `P7-003` and finish PsychSim fully. The sidecar's `/evaluate` now runs a
+**sequential cooperation dilemma** instead of the symmetric Chicken game: the account decides first
+whether to cooperate, the counterparty answers holding a depth-one mental model of the account, and
+the answer is the account's depth-one stance — `cooperate` below the counterparty's defection-incentive
+threshold, `defect` above it. The module maps its own `threat` rating (0..1) into that incentive as
+`temptation = threat * 2` on the sidecar's 0..2 scale, so the depth-one model cooperates below half
+and defects above it. The driver is `PsychSimClient` (HTTP, circuit-broken) + `PsychSimSocialCognition`
+(implements `Contracts\SocialCognition`, withholds an acceptance the native rules would have granted
+only when the driver models the counterparty as exploiting the account), selected by `SocialCognitionSelector`
+when `ai.cognition.driver = psychsim`; the consumer is the already-wired `EvaluateAiSocialExchangeAction`
+(no change). The driver only restrains, never grants, so provider-off/native play is unchanged and the
+default `fatima` binding is untouched. Verified with `tests/Feature/PsychSimSocialCognitionTest.php`
+(10 tests) and a clean Gate 2 pass; the driver makes zero provider calls.
