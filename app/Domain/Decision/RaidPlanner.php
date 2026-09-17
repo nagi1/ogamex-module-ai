@@ -2,16 +2,23 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Raid\RaidEstimate;
+use Modules\AI\Enums\AiExperienceCaseFamily;
+use Modules\AI\Enums\AiRaidExperienceFeature;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
+use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\AttackMission;
+use OGame\GameMissions\BattleEngine\Services\LootService;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet\Coordinate;
+use OGame\Models\Resources;
 use OGame\Models\User;
+use OGame\Services\CharacterClassService;
 use OGame\Services\FleetMissionService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -32,6 +39,17 @@ class RaidPlanner
     private const BASHING_LIMIT = 6;
 
     private const BASHING_WINDOW_HOURS = 24;
+
+    /** A farm is not re-hit inside this window, however many sessions run (a machine signature otherwise). */
+    private const RAID_COOLDOWN_HOURS = 6;
+
+    /** A target with this many recent raid outcomes is judged on what actually landed. */
+    private const BLACKLIST_RAIDS = 3;
+
+    private const BLACKLIST_WINDOW_DAYS = 7;
+
+    /** Metal-equivalent loot a farm must average, across the judged raids, or it is left alone. */
+    private const BLACKLIST_LOOT_FLOOR = 10_000.0;
 
     /** RAID-011: loot-to-fuel ratio a raid must clear before it flies (metal-equivalent loot : deuterium). */
     private const LOOT_TIER_FARM = 3.0;
@@ -123,7 +141,17 @@ class RaidPlanner
             return null;
         }
 
-        $estimate = $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
+        if (!$this->withinCooldown($playerId, $target->getPlanetId())) {
+            return null;
+        }
+
+        if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
+            return null;
+        }
+
+        $estimate = $this->defencelessTarget($target)
+            ? $this->defencelessEstimate($player, $origin, $target)
+            : $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
         if ($estimate->samples === 0) {
             return null;
         }
@@ -170,6 +198,45 @@ class RaidPlanner
         }
 
         return null;
+    }
+
+    /**
+     * Whether the live target has neither ships nor defence, so it cannot fight
+     * back (FS-013).
+     */
+    private function defencelessTarget(PlanetService $target): bool
+    {
+        return $target->getDefenseUnits()->units === [] && $target->getShipUnits()->units === [];
+    }
+
+    /**
+     * A live-defenceless target cannot fight back, so the 50-sample screen is a
+     * deterministic win. The loot is the host's own cargo-constrained plunder via
+     * LootService, converted with the estimator's own weights — never a second
+     * loot authority.
+     */
+    private function defencelessEstimate(PlayerService $player, PlanetService $origin, PlanetService $target): RaidEstimate
+    {
+        $fraction = app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
+        $resources = $target->getResources();
+        $loot = LootService::distributeLoot(
+            new Resources(
+                $resources->metal->get() * $fraction,
+                $resources->crystal->get() * $fraction,
+                $resources->deuterium->get() * $fraction,
+                0,
+            ),
+            $origin->getShipUnits()->getTotalCargoCapacity($player),
+        );
+
+        $metalEquivalent = $this->raidEstimator->metalEquivalent($loot);
+
+        return app()->makeWith(RaidEstimate::class, [
+            'samples' => 1,
+            'p20NetProfit' => $metalEquivalent,
+            'p20Loot' => $metalEquivalent,
+            'pWin' => 1.0,
+        ]);
     }
 
     /**
@@ -221,5 +288,48 @@ class RaidPlanner
             ->count();
 
         return $attacks < self::BASHING_LIMIT;
+    }
+
+    /**
+     * A farm is hit on the storage-fill schedule, not back-to-back: the same
+     * target is left alone inside the cooldown however many sessions run, or
+     * the account reads as a script (FS-015). The last attack is the host's own
+     * fleet-mission history.
+     */
+    private function withinCooldown(int $playerId, int $targetPlanetId): bool
+    {
+        $lastAttack = FleetMission::query()
+            ->where('user_id', $playerId)
+            ->where('planet_id_to', $targetPlanetId)
+            ->where('mission_type', AttackMission::getTypeId())
+            ->orderByDesc('time_departure')
+            ->value('time_departure');
+
+        return $lastAttack === null || (int) $lastAttack <= now()->subHours(self::RAID_COOLDOWN_HOURS)->timestamp;
+    }
+
+    /**
+     * A target the account keeps coming home empty from is blacklisted for the
+     * window: the real loot the host recorded in each raid outcome — never the
+     * estimator's screen — is the taste that closes the loop (FS-015).
+     */
+    private function blacklisted(int $playerId, int $galaxy, int $system, int $position): bool
+    {
+        $cases = AiExperienceCase::query()
+            ->where('player_id', $playerId)
+            ->where('family', AiExperienceCaseFamily::Raid)
+            ->where('created_at', '>=', now()->subDays(self::BLACKLIST_WINDOW_DAYS))
+            ->where('features->' . AiRaidExperienceFeature::Galaxy->value, $galaxy)
+            ->where('features->' . AiRaidExperienceFeature::System->value, $system)
+            ->where('features->' . AiRaidExperienceFeature::Position->value, $position)
+            ->get(['features']);
+
+        if ($cases->count() < self::BLACKLIST_RAIDS) {
+            return false;
+        }
+
+        $totalLoot = $cases->sum(fn (AiExperienceCase $case): float => (float) ($case->features[AiRaidExperienceFeature::Loot->value] ?? 0));
+
+        return $totalLoot / $cases->count() < self::BLACKLIST_LOOT_FLOOR;
     }
 }

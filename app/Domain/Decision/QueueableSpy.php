@@ -19,6 +19,7 @@ readonly class QueueableSpy
         public int $targetPosition,
         public int $targetType,
         public int $missionType,
+        public int $probeCount = 1,
     ) {
     }
 }

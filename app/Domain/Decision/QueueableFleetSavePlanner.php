@@ -66,7 +66,7 @@ class QueueableFleetSavePlanner
 
         $player = $this->playerServiceFactory->make($playerId, true);
 
-        return $this->saveFor($player, $player->planets->all(), $profile->archetype);
+        return $this->saveFor($player, $player->planets->all(), $profile->archetype, $absenceMinutes);
     }
 
     private function profile(int $playerId): ?AiProfile
@@ -77,7 +77,7 @@ class QueueableFleetSavePlanner
     /**
      * @param array<int, PlanetService> $planets
      */
-    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype): ?QueueableFleetSave
+    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, ?int $absenceMinutes = null): ?QueueableFleetSave
     {
         $origin = $this->origin($planets);
         if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype)) {
@@ -89,12 +89,40 @@ class QueueableFleetSavePlanner
             return $this->harvestSaveFallback($player, $origin);
         }
 
+        $destination = $ranked[0];
+        $speed = $absenceMinutes === null
+            ? 1.0
+            : $this->saveSpeed($player, $origin, $destination, $absenceMinutes);
+
         return app()->makeWith(QueueableFleetSave::class, [
             'originPlanetId' => $origin->getPlanetId(),
-            'destinationPlanetId' => $ranked[0]->getPlanetId(),
+            'destinationPlanetId' => $destination->getPlanetId(),
             'missionType' => DeploymentMission::getTypeId(),
             'shadowDestinationPlanetId' => $this->shadowDestinationPlanetId($player, $origin, $ranked, $archetype),
+            'speed' => $speed,
         ]);
+    }
+
+    /**
+     * The fastest save speed whose outbound flight still lands at least the
+     * absence out (FS-012): the fleet stays away the whole absence and is home
+     * again soon after. The slowest speed stays the floor when no speed can
+     * reach the absence.
+     */
+    private function saveSpeed(PlayerService $player, PlanetService $origin, PlanetService $destination, int $absenceMinutes): float
+    {
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+        $absenceSeconds = $absenceMinutes * 60;
+        $units = $origin->getShipUnits();
+
+        for ($speed = 10; $speed >= 1; $speed--) {
+            $duration = $fleetMissions->calculateFleetMissionDuration($origin, $destination->getPlanetCoordinates(), $units, null, (float) $speed);
+            if ($duration >= $absenceSeconds) {
+                return (float) $speed;
+            }
+        }
+
+        return 1.0;
     }
 
     /**
@@ -335,9 +363,17 @@ class QueueableFleetSavePlanner
             return null;
         }
 
+        // The fleet parks half its outbound flight, then returns, with a
+        // deterministic per-account jitter so a cohort does not all recall on
+        // the same tick (FS-007).
+        $flightSeconds = max(0, (int) $deployment->time_arrival - (int) $deployment->time_departure);
+        $half = (int) round($flightSeconds / 2);
+        $jitter = (($profile->random_seed % 21) - 10) / 100.0;
+
         return app()->makeWith(QueueableRecall::class, [
             'planetId' => (int) $deployment->planet_id_from,
             'missionId' => (int) $deployment->id,
+            'recallAt' => (int) $deployment->time_arrival + $half + (int) round($half * $jitter),
         ]);
     }
 }

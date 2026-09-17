@@ -21,6 +21,7 @@ readonly class QueueableFleetSave
         public int $harvestGalaxy = 0,
         public int $harvestSystem = 0,
         public int $harvestPosition = 0,
+        public float $speed = 1.0,
     ) {
     }
 }

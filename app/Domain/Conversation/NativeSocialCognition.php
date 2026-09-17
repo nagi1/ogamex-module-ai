@@ -29,6 +29,7 @@ class NativeSocialCognition implements SocialCognition
             AiSocialExchangeType::Warning => $this->evaluateWarning($exchange),
             AiSocialExchangeType::CooperationRequest => $this->evaluateCooperationRequest($exchange),
             AiSocialExchangeType::CompensationOffer => $this->evaluateCompensationOffer($exchange),
+            AiSocialExchangeType::AttackerNotice => app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::RoutineAcknowledgement]),
         };
     }
 

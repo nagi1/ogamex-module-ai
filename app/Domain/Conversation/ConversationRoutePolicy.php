@@ -23,7 +23,7 @@ class ConversationRoutePolicy
     public function routeFor(AiSocialExchangeType $type): AiConversationRoute
     {
         return match ($type) {
-            AiSocialExchangeType::Greeting, AiSocialExchangeType::Thanks => AiConversationRoute::Authored,
+            AiSocialExchangeType::Greeting, AiSocialExchangeType::Thanks, AiSocialExchangeType::AttackerNotice => AiConversationRoute::Authored,
             default => AiConversationRoute::Realization,
         };
     }

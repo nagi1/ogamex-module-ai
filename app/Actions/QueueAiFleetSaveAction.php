@@ -47,6 +47,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
         int $harvestGalaxy = 0,
         int $harvestSystem = 0,
         int $harvestPosition = 0,
+        float $speed = 1.0,
     ): AiActionResult {
         if ($harvestPosition > 0) {
             return $this->harvestSave($playerId, $originPlanetId, $harvestGalaxy, $harvestSystem, $harvestPosition);
@@ -81,7 +82,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 $shadow = $this->planetServiceFactory->makeForPlayer($player, $shadowDestinationPlanetId, false);
                 [$military, $civil] = $this->splitFleet($origin);
                 if ($military->units !== [] && $civil->units !== []) {
-                    return $this->dispatchShadowWaves($player, $origin, $destination, $shadow, $military, $civil);
+                    return $this->dispatchShadowWaves($player, $origin, $destination, $shadow, $military, $civil, $speed);
                 }
             }
 
@@ -99,7 +100,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 DeploymentMission::getTypeId(),
                 $origin->getShipUnits(),
                 $cargo,
-                self::SAVE_SPEED,
+                $speed,
             );
 
             return AiActionResult::queued($mission->id);
@@ -159,7 +160,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
      * which carry the stock, to the other (FS-009). The combat wave leaves
      * first, so a refusal on the second still leaves the valuable half parked.
      */
-    private function dispatchShadowWaves(PlayerService $player, PlanetService $origin, PlanetService $destination, PlanetService $shadow, UnitCollection $military, UnitCollection $civil): AiActionResult
+    private function dispatchShadowWaves(PlayerService $player, PlanetService $origin, PlanetService $destination, PlanetService $shadow, UnitCollection $military, UnitCollection $civil, float $speed): AiActionResult
     {
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
@@ -170,7 +171,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             DeploymentMission::getTypeId(),
             $military,
             new Resources(),
-            self::SAVE_SPEED,
+            $speed,
         );
 
         $fleetMissions->createNewFromPlanet(
@@ -180,7 +181,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             DeploymentMission::getTypeId(),
             $civil,
             $this->liftableStock($player, $origin, $civil),
-            self::SAVE_SPEED,
+            $speed,
         );
 
         return AiActionResult::queued($mission->id);

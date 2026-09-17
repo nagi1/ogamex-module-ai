@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
@@ -70,6 +71,8 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_TARGET_TYPE = 'target_type';
 
+    private const PAYLOAD_PROBE_COUNT = 'probe_count';
+
     private const PAYLOAD_SOURCE_PLANET_ID = 'source_planet_id';
 
     private const PAYLOAD_TARGET_PLANET_ID = 'target_planet_id';
@@ -81,6 +84,8 @@ class ScheduleAiIntentAction
     private const PAYLOAD_DEUTERIUM = 'deuterium';
 
     private const PAYLOAD_REASON = 'reason';
+
+    private const PAYLOAD_SPEED = 'speed';
 
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
@@ -104,14 +109,14 @@ class ScheduleAiIntentAction
      *
      * @param array<string, mixed> $payload
      */
-    private function enqueue(AiProfile $profile, AiWorkItem $sessionWorkItem, AiWorkKind $kind, array $payload): void
+    private function enqueue(AiProfile $profile, AiWorkItem $sessionWorkItem, AiWorkKind $kind, array $payload, ?CarbonImmutable $dueAt = null): void
     {
         AiWorkItem::query()->firstOrCreate(
             ['idempotency_key' => 'intent:session:' . $sessionWorkItem->id],
             [
                 'player_id' => $profile->player_id,
                 'kind' => $kind,
-                'due_at' => $this->clock->now(),
+                'due_at' => $dueAt ?? $this->clock->now(),
                 'schedule_generation' => (int) ($sessionWorkItem->schedule_generation ?? 1),
                 'state' => AiWorkState::Pending,
                 'payload' => $payload,
@@ -327,6 +332,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_TARGET_GALAXY => $plan->harvestGalaxy,
             self::PAYLOAD_TARGET_SYSTEM => $plan->harvestSystem,
             self::PAYLOAD_TARGET_POSITION => $plan->harvestPosition,
+            self::PAYLOAD_SPEED => $plan->speed,
             self::PAYLOAD_REASON => 'fleetsave',
         ]);
     }
@@ -346,7 +352,7 @@ class ScheduleAiIntentAction
         $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Recall, [
             self::PAYLOAD_PLANET_ID => $plan->planetId,
             self::PAYLOAD_REASON => 'recall',
-        ]);
+        ], CarbonImmutable::createFromTimestamp($plan->recallAt));
     }
 
     /**
@@ -367,6 +373,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
             self::PAYLOAD_TARGET_TYPE => $plan->targetType,
             self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_PROBE_COUNT => $plan->probeCount,
             self::PAYLOAD_REASON => 'spy:' . $plan->targetGalaxy . ':' . $plan->targetSystem . ':' . $plan->targetPosition,
         ]);
     }

@@ -22,6 +22,7 @@ use Modules\AI\Support\RandomSource;
 use OGame\Models\BuildingQueue;
 use OGame\Models\FleetMission;
 use OGame\Models\ResearchQueue;
+use OGame\Services\SettingsService;
 
 /**
  * Records a deterministic session decision and schedules exactly one future
@@ -95,6 +96,11 @@ class SessionDecisionService
         // SP3: wake at the next material event inside the waking window (a build, research or
         // fleet landing) instead of the full routine gap; the routine session stays the bound.
         $nextDueAt = $this->nextMaterialEventWake($profile, $perception, $now, $nextDueAt);
+
+        // An account that sleeps still lives: a session is never scheduled past the host's own
+        // inactive-deletion threshold, so a long persona-shaped absence reads as a holiday,
+        // never as an abandoned account the host would purge.
+        $nextDueAt = $this->livenessFloor($now, $nextDueAt);
 
         $nextGeneration = $schedule->generation + 1;
 
@@ -191,6 +197,24 @@ class SessionDecisionService
 
         return self::MATERIAL_EVENT_ARRIVAL_MIN_SECONDS
             + (int) round((self::MATERIAL_EVENT_ARRIVAL_MAX_SECONDS - self::MATERIAL_EVENT_ARRIVAL_MIN_SECONDS) * $unit * $unit);
+    }
+
+    /**
+     * Caps the next session at one day before the host would delete an inactive
+     * account, read from the host's own setting. Zero (the default) disables the
+     * clamp, so the persona's holiday cadence is unchanged unless the operator
+     * has actually enabled inactive-player deletion.
+     */
+    private function livenessFloor(CarbonImmutable $now, CarbonImmutable $nextDueAt): CarbonImmutable
+    {
+        $deletionDays = app(SettingsService::class)->inactivePlayerDeletionDays();
+        if ($deletionDays <= 1) {
+            return $nextDueAt;
+        }
+
+        $floor = $now->addDays($deletionDays - 1);
+
+        return $nextDueAt->lessThan($floor) ? $nextDueAt : $floor;
     }
 
     private function recordDecisionTrace(AiProfile $profile, AiWorkItem $workItem, DecisionTrace $trace, CarbonImmutable $now): void

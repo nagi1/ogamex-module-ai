@@ -70,6 +70,29 @@ class ActivityIntelReader
         return exp(-$minutesToArrival / self::ACTIVITY_WINDOW_MINUTES);
     }
 
+    /**
+     * The completeness factor a report's sections justify: a probe that returned
+     * no fleet or defence section cannot answer "raid it or not" even when fresh,
+     * so each missing section halves the confidence and a present one never
+     * raises it (INT-003). null = the section was not returned, [] = returned
+     * and empty.
+     *
+     * @param array<string, int>|null $ships
+     * @param array<string, int>|null $defense
+     */
+    public function completenessFactor(?array $ships, ?array $defense): float
+    {
+        $factor = 1.0;
+        if ($ships === null) {
+            $factor *= 0.5;
+        }
+        if ($defense === null) {
+            $factor *= 0.5;
+        }
+
+        return $factor;
+    }
+
     private function typeWindowSeconds(string $type, int $ttlHours): int
     {
         // ponytail: the fast/slow split is sourced (decision-policies.md); the

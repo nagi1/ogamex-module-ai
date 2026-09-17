@@ -14,17 +14,25 @@ use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCandidateReason;
 use Modules\AI\Enums\AiCandidateRejectionReason;
 use Modules\AI\Enums\AiCapability;
+use Modules\AI\Enums\AiExperienceCaseFamily;
+use Modules\AI\Enums\AiExperienceFeatureVersion;
+use Modules\AI\Enums\AiExperienceOutcome;
+use Modules\AI\Enums\AiExperienceRulesetVersion;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiAffectState;
+use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\AttackMission;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
+use OGame\Models\FleetMission;
 use OGame\Models\Highscore;
 use OGame\Models\Planet;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\MessageService;
@@ -404,6 +412,86 @@ test('the estimator reports pWin as the survived fraction', function (): void {
     expect($wiped->pWin)->toBe(0.0);
 });
 
+test('the raid planner skips a target it already hit inside the cooldown', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+
+    raidFleetMission($this->currentUserId, $foreign->getPlanetId(), $coordinates, now()->getTimestamp());
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeNull();
+});
+
+test('the raid planner blacklists a target that keeps coming home empty', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+
+    for ($i = 0; $i < 3; $i++) {
+        AiExperienceCase::create([
+            'player_id' => $this->currentUserId,
+            'outcome_observation_id' => 9_000 + $i,
+            'family' => AiExperienceCaseFamily::Raid,
+            'outcome' => AiExperienceOutcome::Failed,
+            'feature_version' => AiExperienceFeatureVersion::RaidV1->value,
+            'ruleset_version' => AiExperienceRulesetVersion::HostBattleReportLootV1->value,
+            'features' => [
+                'galaxy' => $coordinates->galaxy,
+                'system' => $coordinates->system,
+                'position' => $coordinates->position,
+                'loot' => 0,
+            ],
+            'utility' => 0,
+            'uncertainty' => 0,
+        ]);
+    }
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeNull();
+});
+
+test('the raid planner leaves a target alone when its real loot stays worth it', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    for ($i = 0; $i < 3; $i++) {
+        AiExperienceCase::create([
+            'player_id' => $this->currentUserId,
+            'outcome_observation_id' => 9_100 + $i,
+            'family' => AiExperienceCaseFamily::Raid,
+            'outcome' => AiExperienceOutcome::Succeeded,
+            'feature_version' => AiExperienceFeatureVersion::RaidV1->value,
+            'ruleset_version' => AiExperienceRulesetVersion::HostBattleReportLootV1->value,
+            'features' => [
+                'galaxy' => $coordinates->galaxy,
+                'system' => $coordinates->system,
+                'position' => $coordinates->position,
+                'loot' => 100_000,
+            ],
+            'utility' => 1,
+            'uncertainty' => 0,
+        ]);
+    }
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+});
+
 function raidDepthProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -436,4 +524,22 @@ function raidDepthReport(int $playerId, int $galaxy, int $system, int $position,
     app(MessageService::class)->sendEspionageReportMessageToPlayer($player, $report->id);
 
     return $report->id;
+}
+
+/** An attack mission already sent at the target, as the host records one. */
+function raidFleetMission(int $playerId, int $targetPlanetId, Coordinate $coordinates, int $departure): void
+{
+    $mission = new FleetMission();
+    $mission->user_id = $playerId;
+    $mission->planet_id_from = null;
+    $mission->planet_id_to = $targetPlanetId;
+    $mission->mission_type = AttackMission::getTypeId();
+    $mission->galaxy_to = $coordinates->galaxy;
+    $mission->system_to = $coordinates->system;
+    $mission->position_to = $coordinates->position;
+    $mission->time_departure = $departure;
+    $mission->time_arrival = $departure + 60;
+    $mission->processed = 0;
+    $mission->canceled = 0;
+    $mission->save();
 }

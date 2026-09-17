@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\TransportMission;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
 use OGame\Models\Resources;
 use OGame\Models\User;
@@ -29,6 +30,9 @@ class QueueableTransferPlanner
 {
     /** r4fek's documented floor: combined metal and crystal below this is not worth a shipment. */
     private const MINIMUM_SHIPMENT = 50_000;
+
+    /** A planet at this fraction of its storage is about to overflow and is swept (E9). */
+    private const SURPLUS_RATIO = 0.8;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -82,7 +86,84 @@ class QueueableTransferPlanner
             ]);
         }
 
+        return $this->surplus($planets);
+    }
+
+    /**
+     * The reverse of the need-driven ferry: a planet about to overflow ships its
+     * above-floor surplus to the best-developed body, so the mines do not stall
+     * (E9/X2). A moon keeps its deuterium for fleet jumps; a planet sweeps all
+     * three resources.
+     *
+     * @param array<PlanetService> $planets
+     */
+    private function surplus(array $planets): ?QueueableTransfer
+    {
+        $drop = $this->dropBody($planets);
+        if ($drop === null) {
+            return null;
+        }
+
+        foreach ($planets as $source) {
+            if ($source->getPlanetId() === $drop->getPlanetId() || !$this->nearCap($source)) {
+                continue;
+            }
+
+            $floor = $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS);
+            $shipment = $this->aboveFloor($source, $floor, $source->getPlanetType() === PlanetType::Moon);
+            if (!$this->worthShipping($shipment)) {
+                continue;
+            }
+
+            return app()->makeWith(QueueableTransfer::class, [
+                'sourcePlanetId' => $source->getPlanetId(),
+                'targetPlanetId' => $drop->getPlanetId(),
+                'metal' => (int) round($shipment->metal->get()),
+                'crystal' => (int) round($shipment->crystal->get()),
+                'deuterium' => (int) round($shipment->deuterium->get()),
+            ]);
+        }
+
         return null;
+    }
+
+    /**
+     * The most developed own planet, by the host's building count: the drop the
+     * surplus consolidates onto. Moons are never the drop.
+     *
+     * @param array<PlanetService> $planets
+     */
+    private function dropBody(array $planets): ?PlanetService
+    {
+        $best = null;
+        foreach ($planets as $planet) {
+            if ($planet->getPlanetType() === PlanetType::Moon) {
+                continue;
+            }
+
+            if ($best === null || $planet->getBuildingCount() > $best->getBuildingCount()) {
+                $best = $planet;
+            }
+        }
+
+        return $best;
+    }
+
+    /** Whether either stored resource is at or past the near-cap threshold. */
+    private function nearCap(PlanetService $planet): bool
+    {
+        return $planet->metal()->get() >= self::SURPLUS_RATIO * $planet->metalStorage()->get()
+            || $planet->crystal()->get() >= self::SURPLUS_RATIO * $planet->crystalStorage()->get();
+    }
+
+    /** What a body ships above its reserve floor; a moon keeps its deuterium. */
+    private function aboveFloor(PlanetService $source, Resources $floor, bool $keepDeuterium): Resources
+    {
+        return new Resources(
+            max(0.0, $source->metal()->get() - $floor->metal->get()),
+            max(0.0, $source->crystal()->get() - $floor->crystal->get()),
+            $keepDeuterium ? 0.0 : max(0.0, $source->deuterium()->get() - $floor->deuterium->get()),
+        );
     }
 
     /**

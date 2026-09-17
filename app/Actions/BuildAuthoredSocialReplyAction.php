@@ -53,6 +53,7 @@ class BuildAuthoredSocialReplyAction
             AiSocialExchangeType::Warning => $this->warningReplyLines($response),
             AiSocialExchangeType::CooperationRequest => $this->cooperationReplyLines($response),
             AiSocialExchangeType::CompensationOffer => $this->compensationReplyLines($response),
+            AiSocialExchangeType::AttackerNotice => $this->attackerNoticeLines(),
         };
     }
 
@@ -160,5 +161,16 @@ class BuildAuthoredSocialReplyAction
             AiSocialResponse::Clarify => ['State the exact compensation and due time.'],
             AiSocialResponse::Counter => ['I need exact compensation terms before I can respond.'],
         };
+    }
+
+    /**
+     * The casual one-liner an alert defender sends back to a raider: seen, not
+     * escalated. Authored because one line has nothing a provider would improve.
+     *
+     * @return list<string>
+     */
+    private function attackerNoticeLines(): array
+    {
+        return ['online :)', 'I saw that. :)', 'nice try ;)', 'still here. :)'];
     }
 }

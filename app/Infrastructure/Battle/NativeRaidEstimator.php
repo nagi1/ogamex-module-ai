@@ -130,7 +130,7 @@ class NativeRaidEstimator
         return $values[max(0, min($rank, count($values) - 1))];
     }
 
-    private function metalEquivalent(Resources $resources): float
+    public function metalEquivalent(Resources $resources): float
     {
         return $resources->metal->get()
             + self::CRYSTAL_WEIGHT * $resources->crystal->get()

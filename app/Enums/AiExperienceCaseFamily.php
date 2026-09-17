@@ -6,4 +6,5 @@ enum AiExperienceCaseFamily: int
 {
     case SocialAssistance = 1;
     case BuildingUpgrade = 2;
+    case Raid = 3;
 }

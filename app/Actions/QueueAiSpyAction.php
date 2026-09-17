@@ -32,7 +32,7 @@ class QueueAiSpyAction implements QueueAiSpy
     ) {
     }
 
-    public function handle(int $playerId, int $planetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType): AiActionResult
+    public function handle(int $playerId, int $planetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType, int $probeCount = 1): AiActionResult
     {
         if (!Planet::query()->whereKey($planetId)->where('user_id', $playerId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
@@ -49,11 +49,13 @@ class QueueAiSpyAction implements QueueAiSpy
             }
 
             $planet = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
-            $units = new UnitCollection();
             // The ship the host's own espionage mission consumes; the name comes from the mission,
             // never from a module constant.
             $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
-            $units->addUnit($probe, 1);
+            // Send what the origin actually holds: the plan may ask for a volley the planet cannot fill.
+            $count = min(max(1, $probeCount), $planet->getShipUnits()->getAmountByMachineName($probe->machine_name));
+            $units = new UnitCollection();
+            $units->addUnit($probe, $count);
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(

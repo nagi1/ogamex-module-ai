@@ -223,6 +223,30 @@ test('the spy action launches the host espionage mission', function (): void {
         ->and($result->queueId)->not->toBeNull();
 });
 
+test('the spy action sends the requested probe volley', function (): void {
+    colonyProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('espionage_probe', 5);
+    $foreign = $this->createForeignPlanet();
+    spyQuiet($foreign);
+
+    $result = app(QueueAiSpy::class)->handle(
+        $this->currentUserId,
+        $this->currentPlanetId,
+        $foreign->getPlanetCoordinates()->galaxy,
+        $foreign->getPlanetCoordinates()->system,
+        $foreign->getPlanetCoordinates()->position,
+        $foreign->getPlanetType()->value,
+        5,
+    );
+
+    expect($result->successful)->toBeTrue($result->reason);
+
+    $mission = FleetMission::query()->whereKey($result->queueId)->first();
+    expect($mission)->not->toBeNull()
+        ->and($mission->espionage_probe)->toBe(5);
+});
+
 function colonyProfile(int $playerId): AiProfile
 {
     return AiProfile::create([

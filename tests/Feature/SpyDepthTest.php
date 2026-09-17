@@ -14,6 +14,7 @@ use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\User;
+use OGame\Services\FleetMissionService;
 use OGame\Services\MessageService;
 use OGame\Services\PlanetService;
 use Tests\IsolatedAccountTestCase;
@@ -109,6 +110,71 @@ test('a body that is not a planet is skipped, not probed', function (): void {
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
+test('the spy planner escalates probes for a redacted report on a rich target', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 5);
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+
+    $reportId = spyDepthRedactedReport(
+        $this->currentUserId,
+        $target->getPlanetCoordinates()->galaxy,
+        $target->getPlanetCoordinates()->system,
+        $target->getPlanetCoordinates()->position,
+        ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0],
+    );
+    Message::query()->where('espionage_report_id', $reportId)->update(['created_at' => now()->subHours(30)]);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->probeCount)->toBe(5);
+});
+
+test('the spy planner does not escalate a redacted report on an empty target', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 5);
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+
+    $reportId = spyDepthRedactedReport(
+        $this->currentUserId,
+        $target->getPlanetCoordinates()->galaxy,
+        $target->getPlanetCoordinates()->system,
+        $target->getPlanetCoordinates()->position,
+        ['metal' => 0, 'crystal' => 0, 'deuterium' => 0],
+    );
+    Message::query()->where('espionage_report_id', $reportId)->update(['created_at' => now()->subHours(30)]);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->probeCount)->toBe(1);
+});
+
+test('the spy planner sends the probe from the closest own planet', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+    expect($this->secondPlanetService)->not->toBeNull();
+    $this->secondPlanetService->addUnit('espionage_probe', 1);
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+
+    $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => app(PlayerServiceFactory::class)->make($this->currentUserId, true)]);
+    $targetCoordinates = $target->getPlanetCoordinates();
+    $homeDistance = $fleetMissions->calculateFleetMissionDistance($this->planetService, $targetCoordinates);
+    $secondDistance = $fleetMissions->calculateFleetMissionDistance($this->secondPlanetService, $targetCoordinates);
+    $closestPlanetId = $homeDistance <= $secondDistance ? $this->currentPlanetId : $this->secondPlanetService->getPlanetId();
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->planetId)->toBe($closestPlanetId);
+});
+
 function spyDepthProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -139,6 +205,28 @@ function spyDepthReport(int $playerId, int $galaxy, int $system, int $position, 
     $report->research = [];
     $report->ships = [];
     $report->defense = [];
+    $report->player_info = [];
+    $report->save();
+
+    $player = app(PlayerServiceFactory::class)->make($playerId, true);
+    app(MessageService::class)->sendEspionageReportMessageToPlayer($player, $report->id);
+
+    return $report->id;
+}
+
+function spyDepthRedactedReport(int $playerId, int $galaxy, int $system, int $position, array $resources): int
+{
+    $report = new EspionageReport();
+    $report->planet_galaxy = $galaxy;
+    $report->planet_system = $system;
+    $report->planet_position = $position;
+    $report->planet_type = 1;
+    $report->planet_user_id = null;
+    $report->resources = $resources + ['energy' => 0];
+    $report->debris = [];
+    $report->buildings = [];
+    $report->research = [];
+    // ships and defense stay null: the host redacted both sections.
     $report->player_info = [];
     $report->save();
 

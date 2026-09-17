@@ -122,30 +122,18 @@ class FacilityChain
      *
      * @return array<string, int>
      */
-    /** The merged mission research map. The catalogue is host-static, so the read is done once per
-     *  worker process instead of once per chain instance: three chain instances per perception were
-     *  rebuilding 11 missions (and a player each) for this one answer.
-     *
-     * @var array<string, int>|null
-     */
-    private static ?array $missionResearch = null;
-
     /** @return array<string, int> */
     private function missionRequiredResearch(): array
     {
-        if (self::$missionResearch !== null) {
-            return self::$missionResearch;
-        }
-
         $required = [];
 
-        foreach (GameMissionFactory::getAllMissions() as $mission) {
+        foreach (GameMissionFactory::getMissionClasses() as $mission) {
             foreach ($mission::getRequiredResearch() as $machineName => $level) {
                 $required[$machineName] = max($required[$machineName] ?? 0, $level);
             }
         }
 
-        return self::$missionResearch = $required;
+        return $required;
     }
 
     /**

@@ -20,5 +20,6 @@ interface QueueAiFleetSave
         int $harvestGalaxy = 0,
         int $harvestSystem = 0,
         int $harvestPosition = 0,
+        float $speed = 1.0,
     ): AiActionResult;
 }

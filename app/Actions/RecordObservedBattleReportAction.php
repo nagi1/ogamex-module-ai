@@ -101,7 +101,35 @@ class RecordObservedBattleReportAction
             $recorded++;
         }
 
+        $this->recordRaidLoot($battleReport, $attackerPlayerId, $participants);
+
         return $recorded;
+    }
+
+    /**
+     * The raid-outcome experience case for the attacker, when this account was
+     * the raider: the host's own loot column becomes taste over the target, so a
+     * repeatedly empty farm is later blacklisted instead of re-screened forever.
+     *
+     * @param array<int, int> $participants
+     */
+    private function recordRaidLoot(BattleReport $battleReport, int $attackerPlayerId, array $participants): void
+    {
+        if (!in_array($attackerPlayerId, $participants, true)) {
+            return;
+        }
+
+        $observation = AiObservation::query()
+            ->where('player_id', $attackerPlayerId)
+            ->where('source_type', AiObservationSource::BattleReport)
+            ->where('source_id', $battleReport->id)
+            ->first();
+
+        if ($observation === null) {
+            return;
+        }
+
+        app(RecordAiRaidOutcomeAction::class)->handle($attackerPlayerId, $observation->id, $battleReport);
     }
 
     /**

@@ -12,5 +12,5 @@ use Modules\AI\Support\AiActionResult;
  */
 interface QueueAiSpy
 {
-    public function handle(int $playerId, int $planetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType): AiActionResult;
+    public function handle(int $playerId, int $planetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType, int $probeCount = 1): AiActionResult;
 }

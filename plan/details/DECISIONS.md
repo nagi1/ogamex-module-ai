@@ -257,6 +257,89 @@ of the task is deferred: the host seam (`PlanetService::abandonPlanet()`, a soft
 is verified to exist, but the abandon flow needs its own action/planner branch and was not in this
 slice's file list.
 
+## Recall timing + absence-aware save speed (WP-011) — 17 September 2026
+
+The recall is now a timed event, not an arbitrary later session: `recallPlan()` computes
+`recallAt = time_arrival + half the deployment flight`, plus a deterministic per-account jitter
+(±10% of the half), and `ScheduleAiIntentAction` enqueues the recall work item due at that moment.
+A proactive save also flies at the right speed: `saveFor()` sweeps the host's speed percent from
+fastest down, taking the first whose outbound flight still lands at least the upcoming absence out
+(and the slowest speed when nothing can reach it); the speed travels through the fleetsave payload to
+the dispatch. Reactive saves keep the classic slowest speed.
+
+## Surplus consolidation transfer (WP-012) — 17 September 2026
+
+The ferry now runs both directions. `QueueableTransferPlanner` gained a surplus-sweep pass after the
+need-driven one: a planet at 80% of its storage ships its above-`ReserveFloor` surplus to the
+best-developed body (highest host building-count, moons excluded as drop). A moon source keeps its
+deuterium for fleet jumps; a planet sweeps all three resources. The 50k minimum shipment still gates
+trivial sweeps, so a just-funded colony is not ping-ponged back the other way.
+
+## Defenceless-target intel signal + raid short-circuit (WP-013) — 17 September 2026
+
+An espionage report now publishes `defenceless` when both the fleet and defence sections are
+present-and-empty (`[]`, not `null`) — the live target cannot fight back. A missing section never
+raises confidence: `ActivityIntelReader::completenessFactor()` halves the published confidence per
+absent section and leaves a present one unchanged. `RaidPlanner::plan()` short-circuits a defenceless
+target past the 50-sample estimator: the loot is the host's own `LootService::distributeLoot()` at the
+target's class loot fraction, capped by the origin fleet's cargo, converted with the estimator's own
+`metalEquivalent()` weights — a deterministic win (`samples=1, pWin=1.0`) with no second loot
+authority.
+
+## Probe escalation + closest spy origin (WP-014) — 17 September 2026
+
+Scouting now sends the probes a target is worth, from the nearest base. `QueueableSpyPlanner` picks
+the closest own planet with an idle probe (net of committed intents) for the chosen target instead of
+the first in collection order, and computes a probe count: one for a complete report or a first
+contact, five for a redacted report on a defended or known-rich body (the host redacts ships below
+two probes and defence below three, so one probe re-reads the same redacted report forever), and one
+for a redacted report on an empty body. The count travels through the spy payload; `QueueAiSpyAction`
+clamps it to what the origin actually holds before the host mission starts.
+
+## Raid outcome feedback (WP-015) — 17 September 2026
+
+The raid loop now learns from what actually landed. `RaidPlanner` skips a target hit inside a
+six-hour cooldown (the host's own fleet-mission history, so the account never reads as a script) and
+blacklists a target whose last seven days of raid outcomes — at least three — average below
+10k metal-equivalent of real loot. The real loot is the host's own battle-report `loot` column:
+`RecordObservedBattleReportAction` now commits a `Raid` experience case for the attacker, keyed by
+target coordinates, and the planner reads those cases instead of re-screening the target forever.
+
+## Message a new attacker (WP-016) — 17 September 2026
+
+The defender now pings a raider once. The conversation cycle reads the committed battle reports
+where this account was the defender and sends one casual authored line (`online :)`, …) to each
+attacker it has not yet answered — never again, so a repeatedly probed account does not read as a
+bot. The line is a new `AttackerNotice` exchange type that stays on the authored route and sends
+straight through the direct path, because there is no inbound message to reply to.
+
+## Liveness floor under next-due time (WP-017) — 17 September 2026
+
+An account that sleeps still lives. The successor session is never scheduled past the host's own
+inactive-deletion threshold (read from `inactive_player_deletion_days`, minus one day): the default
+of zero keeps the persona's holiday cadence unchanged, and only when the operator actually enables
+inactive-player deletion does a long persona-shaped absence get clamped short of a purge. The floor
+is keyed to the profile's own session, never to any "is active" row.
+
+## Rare no-op idle override + anti-bot self-check (WP-018) — 17 September 2026
+
+The account now occasionally opens the game and does nothing. After scoring, a small seeded,
+skill-band-aware draw (novice 5%, standard 2%, veteran 1%) replaces the winning real action with
+`DoNothing` — never when a fleetsave is eligible or a reaction wake is set, so variance never
+trades away a real reaction. A regression test pins the round-the-clock guarantee: the waking
+window spans fewer distinct hours than the host's `bot_detection_active_hours` threshold.
+
+## P3 investigate list seam audit (WP-019) — 17 September 2026
+
+Each P3 idea was checked against the host before any code. Phalanx (`PhalanxService`), jump-gate
+(`JumpGateService`), metal-dump research (`ObjectService::getResearchObjects`), solar-satellite
+energy (`solar_satellite` host unit) and pre-flight round-trip (`calculateFleetMissionDuration`)
+seams exist and are deferred on owned moons/gates or a case. Moonshot is cut (no host self-battle
+seam; `checkOwnPlanet` refuses self-attacks), archetype→class affinity is host provisioning work
+(module never creates users), game-phase and consultation-confidence are cut (no seam, YAGNI),
+defended-raid debris is deferred on the TP-004/RAID-014 doctrine, and the CRN ladder stays dead
+until U6 ships ≥2 launch subsets. The audit table is in `research/repos/WORK-PACKAGE.md`.
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human

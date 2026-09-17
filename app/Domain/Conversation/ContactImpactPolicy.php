@@ -41,7 +41,7 @@ class ContactImpactPolicy
             AiSocialExchangeType::CeasefireRequest => ['socialImportance' => 0.02],
             AiSocialExchangeType::CooperationRequest => ['affinity' => 0.02, 'socialImportance' => 0.05],
             AiSocialExchangeType::TradeOffer => ['affinity' => 0.05, 'respect' => 0.02, 'socialImportance' => 0.05],
-            AiSocialExchangeType::HelpRequest, AiSocialExchangeType::CompensationOffer => [],
+            AiSocialExchangeType::HelpRequest, AiSocialExchangeType::CompensationOffer, AiSocialExchangeType::AttackerNotice => [],
         };
     }
 

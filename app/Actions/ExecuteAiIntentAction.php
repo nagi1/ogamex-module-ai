@@ -72,6 +72,8 @@ class ExecuteAiIntentAction
 
     private const PAYLOAD_TARGET_TYPE = 'target_type';
 
+    private const PAYLOAD_PROBE_COUNT = 'probe_count';
+
     private const PAYLOAD_SOURCE_PLANET_ID = 'source_planet_id';
 
     private const PAYLOAD_TARGET_PLANET_ID = 'target_planet_id';
@@ -83,6 +85,8 @@ class ExecuteAiIntentAction
     private const PAYLOAD_DEUTERIUM = 'deuterium';
 
     private const PAYLOAD_REASON = 'reason';
+
+    private const PAYLOAD_SPEED = 'speed';
 
     /**
      * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
@@ -270,6 +274,7 @@ class ExecuteAiIntentAction
             'harvestGalaxy' => (int) ($workItem->payload[self::PAYLOAD_TARGET_GALAXY] ?? 0),
             'harvestSystem' => (int) ($workItem->payload[self::PAYLOAD_TARGET_SYSTEM] ?? 0),
             'harvestPosition' => (int) ($workItem->payload[self::PAYLOAD_TARGET_POSITION] ?? 0),
+            'speed' => (float) ($workItem->payload[self::PAYLOAD_SPEED] ?? 1.0),
         ]) ?? app(QueueableFleetSavePlanner::class)->plan($workItem->player_id);
 
         if (!$step instanceof QueueableFleetSave) {
@@ -285,6 +290,7 @@ class ExecuteAiIntentAction
                 $step->harvestGalaxy,
                 $step->harvestSystem,
                 $step->harvestPosition,
+                $step->speed,
             ),
             ['destination_planet_id' => $step->destinationPlanetId, 'mission_type' => $step->missionType],
             $step->originPlanetId,
@@ -318,6 +324,7 @@ class ExecuteAiIntentAction
             'targetPosition' => $workItem->payload[self::PAYLOAD_TARGET_POSITION] ?? null,
             'targetType' => $workItem->payload[self::PAYLOAD_TARGET_TYPE] ?? null,
             'missionType' => $workItem->payload[self::PAYLOAD_MISSION_TYPE] ?? null,
+            'probeCount' => $workItem->payload[self::PAYLOAD_PROBE_COUNT] ?? 1,
         ]) ?? app(QueueableSpyPlanner::class)->plan($workItem->player_id);
 
         if (!$step instanceof QueueableSpy) {
@@ -325,7 +332,7 @@ class ExecuteAiIntentAction
         }
 
         return [
-            app(QueueAiSpy::class)->handle($workItem->player_id, $step->planetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType),
+            app(QueueAiSpy::class)->handle($workItem->player_id, $step->planetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->probeCount),
             ['target_galaxy' => $step->targetGalaxy, 'target_system' => $step->targetSystem, 'target_position' => $step->targetPosition],
             $step->planetId,
         ];

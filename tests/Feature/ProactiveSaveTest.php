@@ -76,6 +76,19 @@ test('the factory offers a proactive save only for an upcoming absence', functio
         ->and(array_map(static fn ($c) => $c->type, $quiet->candidates))->not->toContain(AiCandidateActionType::FleetSave);
 });
 
+// The save flies fast enough to stay away the whole absence, but no faster: an
+// absence no speed can reach parks at the slowest speed (FS-012).
+test('a proactive save picks a speed whose flight reaches the absence', function (): void {
+    proactiveSaveProfile($this->currentUserId, AiArchetype::Fleeter);
+    proactiveSaveDestination($this->currentUserId);
+    $this->planetAddUnit('large_cargo', 1);
+
+    $planner = app(QueueableFleetSavePlanner::class);
+
+    expect($planner->proactivePlan($this->currentUserId, 1_000_000)?->speed)->toBe(1.0)
+        ->and($planner->proactivePlan($this->currentUserId, 120)?->speed)->toBeGreaterThan(1.0);
+});
+
 function proactiveSaveProfile(int $playerId, AiArchetype $archetype): AiProfile
 {
     return AiProfile::create([

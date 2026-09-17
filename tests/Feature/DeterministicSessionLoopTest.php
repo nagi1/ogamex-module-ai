@@ -40,6 +40,7 @@ use Modules\AI\Tests\Support\FixturePlayerPerceptionBuilder;
 use OGame\Models\BuildingQueue;
 use OGame\Models\FleetMission;
 use OGame\Models\ResearchQueue;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -207,6 +208,20 @@ test('every persona completes its session and receives one successor schedule', 
             ->and($schedule->generation)->toBe(2)
             ->and(AiWorkItem::query()->where('player_id', $playerId)->where('kind', AiWorkKind::RunSession->value)->where('state', AiWorkState::Pending->value)->count())->toBe(1);
     }
+});
+
+test('a long absence is clamped under the host inactive-deletion window', function (): void {
+    app(SettingsService::class)->set('inactive_player_deletion_days', 3);
+    config(['ai.population.session_interval_seconds' => 864_000]);
+
+    $now = aiDeterministicNow();
+    aiDeterministicInstallPerception($this->app, aiDeterministicSnapshot($this->currentUserId, $this->currentPlanetId, $now, [], true));
+
+    aiDeterministicRun(aiDeterministicProfile(AiArchetype::Miner, $this->currentUserId));
+    $schedule = AiSchedule::query()->where('player_id', $this->currentUserId)->firstOrFail();
+
+    // The successor wakes one day before the host would delete it, never the full ten days out.
+    expect($schedule->next_due_at->getTimestamp())->toBe($now->addDays(2)->getTimestamp());
 });
 
 function aiDeterministicNow(): CarbonImmutable

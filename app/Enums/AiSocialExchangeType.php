@@ -13,4 +13,5 @@ enum AiSocialExchangeType: int
     case Warning = 7;
     case CooperationRequest = 8;
     case CompensationOffer = 9;
+    case AttackerNotice = 10;
 }

@@ -5,8 +5,11 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Str;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiExperienceCaseFamily;
+use Modules\AI\Enums\AiExperienceOutcome;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiEmotionalEpisode;
+use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use OGame\Models\BattleReport;
@@ -43,6 +46,7 @@ class CommittedBattleReportObservationTest extends TestCase
     protected function tearDown(): void
     {
         AiEmotionalEpisode::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
+        AiExperienceCase::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiObservation::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         AiProfile::query()->whereIn('player_id', $this->createdPlayerIds)->delete();
         User::query()->whereKey($this->createdPlayerIds)->delete();
@@ -87,6 +91,36 @@ class CommittedBattleReportObservationTest extends TestCase
 
         expect($episode->emotion)->toBe(AiAffectEmotion::Anger)
             ->and((float) $episode->intensity)->toBe(0.8);
+    }
+
+    public function test_a_raid_loot_commits_a_raid_outcome_case_for_the_attacker(): void
+    {
+        $defender = $this->createPlayer();
+        $attacker = $this->createPlayer();
+
+        AiProfile::create([
+            'player_id' => $attacker->id,
+            'archetype' => AiArchetype::Fleeter,
+            'skill_band' => AiSkillBand::Standard,
+            'random_seed' => 1,
+            'enabled' => true,
+        ]);
+
+        BattleReport::unguarded(fn (): BattleReport => BattleReport::create([
+            'planet_galaxy' => 1,
+            'planet_system' => 1,
+            'planet_position' => 1,
+            'planet_user_id' => $defender->id,
+            'attacker' => ['player_id' => $attacker->id, 'resource_loss' => 100.0],
+            'defender' => ['player_id' => $defender->id, 'resource_loss' => 400.0],
+            'loot' => ['metal' => 1_000, 'crystal' => 500, 'deuterium' => 250],
+        ]));
+
+        $case = AiExperienceCase::query()->where('player_id', $attacker->id)->where('family', AiExperienceCaseFamily::Raid)->sole();
+
+        expect($case->outcome)->toBe(AiExperienceOutcome::Succeeded)
+            ->and($case->features['galaxy'])->toBe(1)
+            ->and((float) $case->features['loot'])->toBe(2_250.0);
     }
 
     private function createPlayer(): User

@@ -36,6 +36,7 @@ use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
 use Tests\IsolatedAccountTestCase;
 
@@ -102,6 +103,39 @@ function deliveredReplies(int $playerId): int
 {
     return AiConversationReply::query()->where('player_id', $playerId)->where('state', AiConversationReplyState::Delivered)->count();
 }
+
+test('a committed attack is answered once per attacker', function (): void {
+    $attacker = $this->createUser();
+    enabledAiProfile($this->currentUserId);
+
+    $report = BattleReport::unguarded(fn (): BattleReport => BattleReport::create([
+        'planet_galaxy' => 1,
+        'planet_system' => 1,
+        'planet_position' => 1,
+        'planet_user_id' => $this->currentUserId,
+        'attacker' => ['player_id' => $attacker->id],
+        'defender' => ['player_id' => $this->currentUserId],
+    ]));
+
+    AiObservation::query()->firstOrCreate([
+        'player_id' => $this->currentUserId,
+        'source_type' => AiObservationSource::BattleReport,
+        'source_id' => $report->id,
+    ], [
+        'kind' => AiObservationKind::BattleReportObserved,
+        'subject_player_id' => $attacker->id,
+        'source_time' => CarbonImmutable::parse(CONVERSATION_NOW),
+        'observed_at' => CarbonImmutable::parse(CONVERSATION_NOW),
+    ]);
+
+    expect(runConversationCycle($this->currentUserId))->toBe(1);
+
+    $exchange = AiSocialExchange::query()->where('player_id', $this->currentUserId)->sole();
+    $reply = ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $attacker->id)->sole();
+
+    expect($exchange->type)->toBe(AiSocialExchangeType::AttackerNotice)
+        ->and($reply->message)->toBeIn(['online :)', 'I saw that. :)', 'nice try ;)', 'still here. :)']);
+});
 
 test('an inbound greeting is answered once through the authored delivery path', function (): void {
     $human = $this->createUser();

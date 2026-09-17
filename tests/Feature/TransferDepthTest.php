@@ -103,6 +103,31 @@ test('the ferry dispatches a transport mission over the host path', function ():
         ->and(FleetMission::query()->where('mission_type', \OGame\GameMissions\TransportMission::getTypeId())->count())->toBe(1);
 });
 
+// A body near its storage cap ships its above-floor surplus to the most-developed
+// planet, the reverse direction of the need-driven ferry (E9/X2).
+test('a planet near its cap ships its surplus to the best-developed body', function (): void {
+    transferProfile($this->currentUserId);
+    $this->planetAddUnit('large_cargo', 8);
+    // The homeworld is the more developed body: it stays the drop.
+    $this->planetSetObjectLevel('solar_plant', 20);
+
+    $colony = $this->secondPlanetService;
+    foreach (['metal_store' => 4, 'crystal_store' => 4, 'deuterium_store' => 4] as $machineName => $level) {
+        $colony->setObjectLevel(ObjectService::getObjectByMachineName($machineName)->id, $level, true);
+    }
+    $colony->updateResources(false);
+    $colony->updateResourceProductionStats(false);
+    $colony->updateResourceStorageStats(false);
+    $colony->addResources(new Resources(120_000, 120_000, 0));
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class)
+        ->and($plan->sourcePlanetId)->toBe($colony->getPlanetId())
+        ->and($plan->targetPlanetId)->toBe($this->currentPlanetId)
+        ->and($plan->metal + $plan->crystal)->toBeGreaterThanOrEqual(50_000);
+});
+
 test('a source with no cargo hull cannot ferry', function (): void {
     transferProfile($this->currentUserId);
     transferTarget($this->secondPlanetService);

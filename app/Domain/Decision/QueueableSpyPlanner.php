@@ -44,6 +44,12 @@ class QueueableSpyPlanner
     /** A report stays fresh this long; scouting and raiding agree on the window. */
     private const INTEL_TTL_HOURS = 24;
 
+    /** A partial report on a valuable target gets this many probes; the host redacts ships below two and defence below three probes, so one probe re-reads the same redacted report. */
+    private const ESCALATED_PROBES = 5;
+
+    /** Metal-equivalent loot that makes a redacted report worth a probe volley. */
+    private const RICH_YIELD = 10_000.0;
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
@@ -63,18 +69,15 @@ class QueueableSpyPlanner
         }
 
         $player = $this->playerServiceFactory->make($playerId, true);
-        $origin = $this->origin($player);
-        if ($origin === null) {
-            return null;
-        }
 
         $skip = $this->freshIntelCoordinates($playerId)
             + $this->inFlightCoordinates($playerId)
             + $this->openSpyIntentCoordinates($playerId);
-        $target = $this->target($player, $origin, $skip);
-        if ($target === null) {
+        $selection = $this->target($player, $skip);
+        if ($selection === null) {
             return null;
         }
+        [$origin, $target] = $selection;
 
         return app()->makeWith(QueueableSpy::class, [
             'planetId' => $origin->getPlanetId(),
@@ -83,29 +86,33 @@ class QueueableSpyPlanner
             'targetPosition' => (int) $target->planet,
             'targetType' => (int) $target->planet_type,
             'missionType' => EspionageMission::getTypeId(),
+            'probeCount' => $this->probeCount($target),
         ]);
     }
 
     /**
-     * The first planet whose idle probes still exceed what its own pending spy intents
+     * Every own planet whose idle probes still exceed what its own pending spy intents
      * have committed (N6). A probe already promised to a queued or retried intent is not a
      * second probe, so two pending probes for different targets each plan from the budget
      * that remains after the other is committed.
+     *
+     * @return list<PlanetService>
      */
-    private function origin(PlayerService $player): ?PlanetService
+    private function idleProbePlanets(PlayerService $player): array
     {
         $committed = $this->committedProbesByPlanet($player->getId());
         $probeName = EspionageMission::getRequiredShipMachineNames()[0];
+        $planets = [];
 
         foreach ($player->planets->all() as $planet) {
             $idle = $planet->getShipUnits()->getAmountByMachineName($probeName);
 
             if ($idle > ($committed[$planet->getPlanetId()] ?? 0)) {
-                return $planet;
+                $planets[] = $planet;
             }
         }
 
-        return null;
+        return $planets;
     }
 
     /** @return array<int, int> probes committed to open spy intents, keyed by the origin planet */
@@ -141,9 +148,15 @@ class QueueableSpyPlanner
      * the lowest id.
      *
      * @param array<string, true> $skipCoordinates
+     * @return array{0: PlanetService, 1: Planet}|null the origin and its target
      */
-    private function target(PlayerService $player, PlanetService $origin, array $skipCoordinates): ?Planet
+    private function target(PlayerService $player, array $skipCoordinates): ?array
     {
+        $idleOrigins = $this->idleProbePlanets($player);
+        if ($idleOrigins === []) {
+            return null;
+        }
+
         $candidates = Planet::query()
             ->where('user_id', '!=', $player->getId())
             ->where('destroyed', 0)
@@ -179,8 +192,9 @@ class QueueableSpyPlanner
                 continue;
             }
 
+            $origin = $this->closestOrigin($idleOrigins, $planet, $fleetMissions);
             $distance = $fleetMissions->calculateFleetMissionDistance($origin, new Coordinate((int) $planet->galaxy, (int) $planet->system, (int) $planet->planet));
-            $scored[] = ['planet' => $planet, 'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance];
+            $scored[] = ['planet' => $planet, 'origin' => $origin, 'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance];
         }
 
         if ($scored === []) {
@@ -189,7 +203,70 @@ class QueueableSpyPlanner
 
         usort($scored, static fn (array $left, array $right): int => $right['score'] <=> $left['score']);
 
-        return $scored[0]['planet'];
+        return [$scored[0]['origin'], $scored[0]['planet']];
+    }
+
+    /**
+     * The own planet with an idle probe closest to the target, not the first in
+     * collection order: a probe is fuel and time, so the nearest base sends it.
+     *
+     * @param list<PlanetService> $origins
+     */
+    private function closestOrigin(array $origins, Planet $target, FleetMissionService $fleetMissions): PlanetService
+    {
+        $coordinate = new Coordinate((int) $target->galaxy, (int) $target->system, (int) $target->planet);
+        $best = $origins[0];
+        $bestDistance = $fleetMissions->calculateFleetMissionDistance($best, $coordinate);
+
+        foreach ($origins as $origin) {
+            $distance = $fleetMissions->calculateFleetMissionDistance($origin, $coordinate);
+            if ($distance < $bestDistance) {
+                $best = $origin;
+                $bestDistance = $distance;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * The probes this target is worth. A complete report refreshes with one; a
+     * partial report on a defended or known-rich body gets a volley — the host
+     * redacts ships below two probes and defence below three, so one probe is
+     * how the account keeps re-reading the same redacted report forever. An
+     * empty redaction stays at one: the probes are not worth it.
+     */
+    private function probeCount(Planet $target): int
+    {
+        $report = EspionageReport::query()
+            ->where('planet_galaxy', $target->galaxy)
+            ->where('planet_system', $target->system)
+            ->where('planet_position', $target->planet)
+            ->orderByDesc('id')
+            ->first(['resources', 'ships', 'defense']);
+
+        if ($report === null) {
+            return 1;
+        }
+
+        if ($this->activityIntelReader->completenessFactor($report->ships, $report->defense) >= 1.0) {
+            return 1;
+        }
+
+        if (!$this->isDefended($report->ships, $report->defense) && $this->yieldFromResources($report->resources ?? []) < self::RICH_YIELD) {
+            return 1;
+        }
+
+        return self::ESCALATED_PROBES;
+    }
+
+    /**
+     * @param array<string, int>|null $ships
+     * @param array<string, int>|null $defense
+     */
+    private function isDefended(array|null $ships, array|null $defense): bool
+    {
+        return ($ships ?? []) !== [] || ($defense ?? []) !== [];
     }
 
     /**
@@ -215,12 +292,22 @@ class QueueableSpyPlanner
             }
 
             $resources = $report->resources ?? [];
-            $yield["{$planet->galaxy}:{$planet->system}:{$planet->planet}"] = (int) ($resources['metal'] ?? 0)
-                + 1.5 * (int) ($resources['crystal'] ?? 0)
-                + 2.0 * (int) ($resources['deuterium'] ?? 0);
+            $yield["{$planet->galaxy}:{$planet->system}:{$planet->planet}"] = $this->yieldFromResources($resources);
         }
 
         return $yield;
+    }
+
+    /**
+     * Metal-equivalent of a report's visible resources, on the estimator's own weights.
+     *
+     * @param array<string, mixed> $resources
+     */
+    private function yieldFromResources(array $resources): float
+    {
+        return (float) ($resources['metal'] ?? 0)
+            + 1.5 * (float) ($resources['crystal'] ?? 0)
+            + 2.0 * (float) ($resources['deuterium'] ?? 0);
     }
 
     /**

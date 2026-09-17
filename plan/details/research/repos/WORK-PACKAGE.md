@@ -117,6 +117,24 @@ the deduplicated, ranked slice list.
 - Pre-flight round-trip duration — rbardtke-ogamex-combat-sim: one host `calculateFleetMissionDuration()` call so a save isn't away past the next window; threshold is persona taste.
 - CRN screen→confirm ladder — peterradzisz-fleet-optimizer: paired seeds across candidates; dead until U6 gives ≥2 launch subsets.
 
+### P3 seam audit — 17 September 2026
+
+Each item was checked against the host before any code. Verdict per row:
+
+| Item | Host seam | Verdict |
+| --- | --- | --- |
+| Phalanx fleet scan | `PhalanxService` (range, cost, scan) | **deferred** — seam exists; blocked on an owned moon (none in cohort yet). |
+| Moonshot | `AttackMission::checkOwnPlanet` refuses self-attacks | **cut** — no self-battle seam; hitting a neighbour to farm debris is machine-shaped (gate 3). |
+| Jump-gate transfer | `JumpGateService` (`getEligibleTargets`, cooldown) | **deferred** — seam exists; blocked on owned moons + gates (none yet), low value. |
+| Metal-dump research | `ObjectService::getResearchObjects()` + research queue | **deferred** — seam exists; no case yet, `FacilityChain` already spends surplus. |
+| Archetype→character-class affinity | provisioning is host-owned (module never creates users) | **host work** — not a module change; a host-side mapping, not a seam. |
+| Game-phase classification | no host phase/bucket concept | **cut** — no seam; YAGNI until consultation wants it. |
+| Consultation confidence gate + horizon | no confidence signal in the consultation lane | **cut** — no seam; YAGNI until a case wants it. |
+| Solar-satellite energy fallback | `solar_satellite` is a host unit; `EnergyCapacity` already picks producers | **deferred** — seam exists; only the exhausted-buildings branch is missing, low value. |
+| Defended-raid debris valuation | doctrine conflict with TP-004/RAID-014 | **deferred** — resolve doctrine first (debris stays out of the single-raid gate). |
+| Pre-flight round-trip duration | `FleetMissionService::calculateFleetMissionDuration()` | **confirmed** — seam exists; threshold is persona taste. |
+| CRN screen→confirm ladder | gated on U6 launch subsets | **dead** — U6 (≥2 launch subsets) is not shipped. |
+
 ## Cross-cutting refusals
 | Pattern | Repos | Reason |
 |---|---|---|

@@ -39,4 +39,19 @@ enum AiSkillBand: int
             self::Veteran => 0.2,
         };
     }
+
+    /**
+     * The chance a session that could act instead does nothing — the "opened the
+     * game, did nothing, closed it" moment (FS-018). A novice idles more often
+     * than a veteran. ponytail: three unmeasured rates; the review loop's hourly
+     * sample is the upgrade path once the no-op rate is observable in play.
+     */
+    public function idleOverrideProbability(): float
+    {
+        return match ($this) {
+            self::Novice => 0.05,
+            self::Standard => 0.02,
+            self::Veteran => 0.01,
+        };
+    }
 }

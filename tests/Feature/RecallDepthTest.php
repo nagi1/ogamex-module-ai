@@ -142,6 +142,26 @@ test('the recall action rejects a player the host does not know', function (): v
     expect($result->successful)->toBeFalse();
 });
 
+// The recall fires at roughly half the deployment's flight time after it lands,
+// with a deterministic per-account jitter (FS-007).
+test('the recall plan fires at half the deployment flight with jitter', function (): void {
+    recallProfile($this->currentUserId);
+    $this->planetAddUnit('large_cargo', 1);
+    $second = recallSecondOwnPlanet($this->currentUserId);
+
+    $mission = recallDeploymentRow($this->currentUserId, $this->currentPlanetId, $second->id);
+    $mission->time_departure = now()->subHours(2)->timestamp;
+    $mission->time_arrival = now()->addHours(2)->timestamp;
+    $mission->save();
+
+    $plan = app(QueueableFleetSavePlanner::class)->recallPlan($this->currentUserId);
+
+    expect($plan)->not->toBeNull();
+    $half = 2 * 3600;
+    expect($plan->recallAt)->toBeGreaterThanOrEqual($mission->time_arrival + (int) round($half * 0.9))
+        ->and($plan->recallAt)->toBeLessThanOrEqual($mission->time_arrival + (int) round($half * 1.1));
+});
+
 test('recall planning returns nothing for an unmanaged account', function (): void {
     expect(app(QueueableFleetSavePlanner::class)->recallPlan($this->currentUserId + 1_000_000))->toBeNull();
 });

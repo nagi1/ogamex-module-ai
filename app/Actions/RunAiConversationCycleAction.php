@@ -14,7 +14,9 @@ use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Jobs\GenerateAiReply;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiObservation;
+use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSocialExchange;
+use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
 
 /**
@@ -54,7 +56,82 @@ class RunAiConversationCycleAction
             }
         }
 
+        foreach ($this->unansweredAttackObservations($playerId) as $observation) {
+            if ($this->answerAttacker($observation, $now)) {
+                $answered++;
+            }
+        }
+
         return $answered;
+    }
+
+    /**
+     * Committed attacks where this account was the defender and the attacker has not yet
+     * been answered. The battle report names the defender in its planet owner, and the
+     * reply is the same bounded authored path as a chat answer, once per distinct attacker
+     * (a human pings the raider once, not every raid).
+     *
+     * @return Collection<int, AiObservation>
+     */
+    private function unansweredAttackObservations(int $playerId): Collection
+    {
+        return AiObservation::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiObservationKind::BattleReportObserved)
+            ->whereIn('source_id', BattleReport::query()->where('planet_user_id', $playerId)->select('id'))
+            ->whereNotIn('subject_player_id', AiSocialExchange::query()
+                ->where('player_id', $playerId)
+                ->where('type', AiSocialExchangeType::AttackerNotice)
+                ->select('counterparty_player_id'))
+            ->oldest('id')
+            ->limit(self::MAXIMUM_PENDING_MESSAGES)
+            ->get();
+    }
+
+    private function answerAttacker(AiObservation $observation, CarbonImmutable $now): bool
+    {
+        $playerId = (int) $observation->player_id;
+        $attackerId = (int) $observation->subject_player_id;
+
+        if ($attackerId <= 0 || $playerId === $attackerId) {
+            return false;
+        }
+
+        $exchange = app(RecordAiSocialExchangeAction::class)->handle(
+            $playerId,
+            $attackerId,
+            $observation->id,
+            AiSocialExchangeType::AttackerNotice,
+            [],
+            null,
+            1,
+        );
+
+        if ($exchange === null) {
+            return false;
+        }
+
+        // A notice has no inbound message to reply to, so it skips the
+        // chat-sourced queue/seal/deliver pipeline and sends the authored line
+        // straight through the direct path the sealed reply would have used.
+        $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, $now);
+        if ($evaluated === null) {
+            return false;
+        }
+
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        if ($profile === null) {
+            return false;
+        }
+
+        $message = app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, $profile);
+        if ($message === null) {
+            return false;
+        }
+
+        app(DeliverAiDirectReplyAction::class)->handle($playerId, $attackerId, $message);
+
+        return true;
     }
 
     /**

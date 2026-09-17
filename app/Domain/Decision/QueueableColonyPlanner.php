@@ -8,6 +8,7 @@ use OGame\Factories\PlayerServiceFactory;
 use OGame\GameConstants\UniverseConstants;
 use OGame\GameMissions\ColonisationMission;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
 use OGame\Services\PlanetService;
@@ -96,9 +97,9 @@ class QueueableColonyPlanner
      * walk keeps the largest empty slot it sees and returns it. The per-account
      * seed offsets the walk so two accounts do not claim the same slot, and it
      * stays the tie-break: an equal-size slot later in the walk loses. The host
-     * answers reach (`canColonizePosition`) and emptiness (`makeForCoordinate`
-     * returns null); the field range is the host's `planetData`, never a
-     * position list.
+     * answers reach (`canColonizePosition`) and emptiness (one read of the rows
+     * occupying the systems the walk visits); the field range is the host's
+     * `planetData`, never a position list.
      */
     private function emptySlot(PlayerService $player, int $seed): ?Coordinate
     {
@@ -116,16 +117,31 @@ class QueueableColonyPlanner
         for ($galaxyOffset = 0; $galaxyOffset < $galaxies; $galaxyOffset++) {
             $galaxy = 1 + (($seed + $galaxyOffset) % $galaxies);
 
+            $systemsInWalk = [];
             for ($system = 1; $system <= $systemsPerGalaxy; $system++) {
-                $systemWithOffset = 1 + (($system + ($seed >> 4) - 1) % $systems);
+                $systemsInWalk[] = 1 + (($system + ($seed >> 4) - 1) % $systems);
+            }
 
+            // The walk asks about every position of every system it visits, and a
+            // point lookup per position costs a round trip each for an answer one
+            // read already holds. `destroyed` is deliberately unfiltered: a row
+            // occupies its coordinate exactly as the host reports it.
+            $occupied = [];
+            foreach (Planet::query()
+                ->where('galaxy', $galaxy)
+                ->whereIn('system', $systemsInWalk)
+                ->where('planet_type', PlanetType::Planet->value)
+                ->get(['system', 'planet']) as $occupying) {
+                $occupied[$occupying->system . ':' . $occupying->planet] = true;
+            }
+
+            foreach ($systemsInWalk as $systemWithOffset) {
                 for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
                     if (!$player->canColonizePosition($position)) {
                         continue;
                     }
 
-                    $coordinate = new Coordinate($galaxy, $systemWithOffset, $position);
-                    if ($this->planetServiceFactory->makeForCoordinate($coordinate, false, PlanetType::Planet) !== null) {
+                    if (isset($occupied[$systemWithOffset . ':' . $position])) {
                         continue;
                     }
 
@@ -135,7 +151,7 @@ class QueueableColonyPlanner
                     // seeded walk order as the tie-break.
                     $fields = $this->planetServiceFactory->planetData($position, false)['fields'][1];
                     if ($fields > $bestFields) {
-                        $best = $coordinate;
+                        $best = new Coordinate($galaxy, $systemWithOffset, $position);
                         $bestFields = (float) $fields;
                     }
                 }

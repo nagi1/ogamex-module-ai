@@ -250,14 +250,14 @@ class PlayerObservationService
                     'report_id' => (int) $message->espionage_report_id,
                     'observed_at' => (int) ($message->created_at->timestamp ?? 0),
                     'expires_at' => (int) ($message->created_at?->addHours(self::INTEL_TTL_HOURS)->timestamp ?? 0),
-                    // The profit test reads loot, fleet and defence, all of which go
-                    // stale fast; confidence is that fast-type freshness (RAID-005).
+                    // Freshness, downgraded by completeness: a resources-only probe
+                    // cannot answer "raid it or not" even when fresh (INT-003).
                     'confidence' => $this->activityIntelReader->intelConfidence(
                         (int) ($message->created_at->timestamp ?? 0),
                         $nowTimestamp,
                         self::INTEL_TTL_HOURS,
                         'resources',
-                    ),
+                    ) * $this->activityIntelReader->completenessFactor($report->ships, $report->defense),
                     // A normalized host distance: the planner enforces the exact
                     // fuel cost in its gate, and this lets the scorer prefer the
                     // closer target among what remains (RAID-006).
@@ -269,6 +269,8 @@ class PlayerObservationService
                     // vacation, banned, admin) instead of trusting the intel is attackable.
                     'attack_permitted' => $this->attackPermitted($player, $report),
                     'score_viable' => $this->scoreViable($ownScore, $targetScore === null ? 0 : (int) $targetScore->general),
+                    // [] is "probed and empty"; null is "not returned" (INT-004).
+                    'defenceless' => $report->ships === [] && $report->defense === [],
                 ];
             })
             ->all();
