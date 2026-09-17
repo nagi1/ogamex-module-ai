@@ -9,6 +9,8 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use OGame\Models\Highscore;
 
+require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
+
 uses(AiQueueModuleTestCase::class);
 
 test('the campaign summary is empty when no campaign exists', function (): void {

@@ -36,7 +36,7 @@ class ApplyAiAllianceAction
 
     private function applicationMessage(int $playerId): string
     {
-        $archetype = AiArchetype::tryFrom((int) AiProfile::query()->where('player_id', $playerId)->value('archetype'));
+        $archetype = AiProfile::query()->where('player_id', $playerId)->first(['archetype'])?->archetype;
 
         return match ($archetype) {
             AiArchetype::Miner => 'Active miner looking for a stable alliance to trade deuterium for protection.',
