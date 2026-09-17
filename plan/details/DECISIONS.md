@@ -2151,3 +2151,18 @@ when `ai.cognition.driver = psychsim`; the consumer is the already-wired `Evalua
 (no change). The driver only restrains, never grants, so provider-off/native play is unchanged and the
 default `fatima` binding is untouched. Verified with `tests/Feature/PsychSimSocialCognitionTest.php`
 (10 tests) and a clean Gate 2 pass; the driver makes zero provider calls.
+
+### RV-008 — sensor phalanx ships: build it on the moon, then scan before the raid (18 September 2026)
+
+The account now uses the host's sensor phalanx. `FacilityChain` proposes the `sensor_phalanx` on an
+owned moon (module taste), and the host's own recursive requirement graph puts the `lunar_base` first,
+so the existing building queue stands the station through the normal path. `QueueablePhalanxPlanner`
+publishes a scan candidate when an owned moon carries a phalanx and a fresh espionage report's target
+is inside range, and `QueueAiPhalanxAction` runs the scan through the host's `PhalanxService`, keeping
+only the one number the raid decision consumes — how many ships were arriving at the target. A scan the
+host refuses (out of range or too little deuterium) records the refusal and writes no scan row.
+`RaidPlanner` now refuses a raid whose recent scan saw ships arriving at the target: the defender has a
+fleet on the way home or an ally in bound, and flying into it is a ninja, not a raid. The scan is a
+candidate action (`AiCandidateActionType::Phalanx`) scheduled as its own work item (`AiWorkKind::Phalanx`)
+and executed like the other queue actions. Verified with `tests/Feature/SensorPhalanxTest.php` (5 tests)
+and a clean Gate 2 pass.
