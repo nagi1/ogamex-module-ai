@@ -2086,3 +2086,11 @@ never re-applied to, and a pending application is never duplicated. The pass run
 attack, and alliance chat is deliberately unobserved (S1); a defend/ACS decision needs an
 "ally under attack" observation first. The host already enforces `CooperativeHostilityPolicy` at
 hostile dispatch, so no module-side policy work is owed — only the observation, then the action.
+
+### PVE-002 — coalition campaign page ships (17 September 2026)
+
+The coalition-facing situation log is live at `/campaign` (ordinary in-game middleware, not the
+staff gate): the latest campaign's state, objective progress (completed strongholds of the set),
+the faction momentum counter from PVE-001 (the influence bar), and both sides' losses as the host's
+own write-time `military_lost` aggregates split by faction/coalition. Read-only, one bounded pass,
+no new collection — the review loop's "cheap to read" rule.
