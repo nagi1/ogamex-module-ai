@@ -72,7 +72,7 @@ class CandidateActionFactory
                 'type' => $type,
                 'reason' => AiCandidateReason::publishedCapability($capability),
                 'parameters' => [],
-                'features' => $this->features($need, $type === AiCandidateActionType::SaveResources ? 0.7 : 0.2, 0, 0, $perception->recoveryFactor),
+                'features' => $this->features($need, 0.2, 0, 0, $perception->recoveryFactor),
                 'sourceTimestamps' => $perception->sourceTimestamps,
             ]);
         }

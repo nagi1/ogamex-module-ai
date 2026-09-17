@@ -59,7 +59,6 @@ beforeEach(function (): void {
 test('a full published candidate set is traced without unpublished target state', function (): void {
     $now = aiDeterministicNow();
     aiDeterministicInstallPerception($this->app, aiDeterministicSnapshot($this->currentUserId, $this->currentPlanetId, $now, [
-        AiCapability::SaveResources->value => true,
         AiCapability::Build->value => true,
         AiCapability::Research->value => true,
         AiCapability::QueueUnits->value => true,
@@ -73,7 +72,6 @@ test('a full published candidate set is traced without unpublished target state'
     // planner declines it as not viable -- the same gate the stale/forbidden test below asserts.
     expect(array_column($trace->candidates, 'action'))->toEqualCanonicalizing([
         AiCandidateActionType::DoNothing->name,
-        AiCandidateActionType::SaveResources->name,
         AiCandidateActionType::Build->name,
         AiCandidateActionType::Research->name,
         AiCandidateActionType::QueueUnits->name,

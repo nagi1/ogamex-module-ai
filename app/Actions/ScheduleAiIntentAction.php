@@ -132,7 +132,6 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
-            AiCandidateActionType::SaveResources => null,
         };
     }
 

@@ -1,12 +1,13 @@
 # AI enhancement work package — mined from 23 OGame bot/AI repos (17 September 2026)
 
 ## Scope & rules
-Ideas only, never ported code (Gameforge policy: study the feature, build our own host-read version).
-Every mechanism below passes the three cognition gates: universe/prices/requirements are host-read
-(gate 1), the smallest mechanism that closes the gap (gate 2), and nameable as ordinary experienced
-OGame play (gate 3). No new dependencies, no second battle engine, no host-side daemon, no ported
-code. Per-repo detail (every ADOPT/ENHANCE/REFUSE row and the grep evidence) stays in `repos/` and
-`repos/plans/`; this file is the deduplicated, ranked slice list.
+Ideas first, but porting or referencing another repo's implementation is now permitted — the old
+Gameforge "no porting" policy has been discarded (17 Sep 2026, see plan/details/DECISIONS.md).
+Still: universe/prices/requirements stay host-read (gate 1), the smallest mechanism that closes the
+gap (gate 2), and every mechanism nameable as ordinary experienced OGame play (gate 3). No new
+dependencies, no second battle engine, no host-side daemon. Per-repo detail (every
+ADOPT/ENHANCE/REFUSE row and the grep evidence) stays in `repos/` and `repos/plans/`; this file is
+the deduplicated, ranked slice list.
 
 ## P1 — adopt now
 

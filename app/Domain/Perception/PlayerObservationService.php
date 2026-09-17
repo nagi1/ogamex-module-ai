@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Domain\Perception;
 
+use Carbon\CarbonImmutable;
+use Modules\AI\Actions\CurrentAiAffectIntensityAction;
 use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableColonyPlanner;
@@ -12,6 +14,7 @@ use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\SaveFailurePolicy;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Enums\AiAccountState;
+use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiCapability;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\RandomSource;
@@ -80,6 +83,7 @@ class PlayerObservationService
      *     player_id:int,
      *     observed_at:int,
      *     account_state:string,
+     *     recovery_factor:float,
      *     planets:array<int, array{id:int, resources:array<string, float|int>}>,
      *     available_actions:array<string, bool>,
      *     target_reports:array<int, array<string, mixed>>,
@@ -99,6 +103,9 @@ class PlayerObservationService
             'player_id' => $playerId,
             'observed_at' => (int) now()->timestamp,
             'account_state' => $state->value,
+            // W9-2: the scorer has always read this signal; publish it so a live
+            // decision carries the account's real, decaying recovery pressure.
+            'recovery_factor' => $active ? $this->recoveryFactor($playerId) : 0.0,
             'planets' => $state === AiAccountState::Final ? [] : $this->planets($playerId),
             // A suspended account is not playing, and the host is the authority
             // on that state: a banned or vacationing account is offered nothing
@@ -166,6 +173,24 @@ class PlayerObservationService
         }
 
         return $perHour * self::COLONY_DEVELOPMENT_HOURS >= $cheapest;
+    }
+
+    /**
+     * W9-2: the recovery signal the scorer has always read but never received.
+     *
+     * The only persisted, decaying setback signal is affect intensity: a battle the account
+     * came off worse in appraises to Anger (NativeAffectEngine) and decays 0.25/day, so the
+     * still-raw anger is the "not yet recovered" reading. ponytail: anger is a proxy — a true
+     * losses-vs-rebuilt ratio belongs to the experience layer (WP-015), and the affect decay is
+     * the closest existing bounded signal.
+     */
+    private function recoveryFactor(int $playerId): float
+    {
+        return app(CurrentAiAffectIntensityAction::class)->handle(
+            $playerId,
+            AiAffectEmotion::Anger,
+            CarbonImmutable::instance(now()),
+        );
     }
 
     /**
@@ -239,9 +264,9 @@ class PlayerObservationService
                     // The 15-minute activity star is galaxy-visible, so publishing
                     // it here is a legal observation, not a reach into target state.
                     'activity' => $this->targetActivity($report),
-                    // Bashing and target legality are re-checked by the raid planner
-                    // at decision time, so the intel itself is simply attackable.
-                    'attack_permitted' => true,
+                    // Legality mirrors the host's own AttackMission checks (own body,
+                    // vacation, banned, admin) instead of trusting the intel is attackable.
+                    'attack_permitted' => $this->attackPermitted($player, $report),
                     'score_viable' => $this->scoreViable($ownScore, $targetScore === null ? 0 : (int) $targetScore->general),
                 ];
             })
@@ -293,6 +318,31 @@ class PlayerObservationService
         );
 
         return $target === null ? null : $this->activityIntelReader->activityAt($target);
+    }
+
+    /**
+     * Whether the host would allow an attack on the reported body: the same questions
+     * AttackMission asks — the body still exists and has an owner, it is not the
+     * account's own, and its owner is not vacationing, banned or admin-protected.
+     * Bashing and profit stay the raid planner's job.
+     */
+    private function attackPermitted(PlayerService $player, EspionageReport $report): bool
+    {
+        $target = $this->planetServiceFactory->makeForCoordinate(
+            new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position),
+            false,
+            PlanetType::from((int) $report->planet_type),
+        );
+
+        $targetPlayer = $target?->getPlayer();
+
+        if ($targetPlayer === null || $player->equals($targetPlayer)) {
+            return false;
+        }
+
+        return !$targetPlayer->isInVacationMode()
+            && !$targetPlayer->isBanned()
+            && !$targetPlayer->isAdmin();
     }
 
     /** @return array<int, array{id:int, resources:array<string, float|int>}> */

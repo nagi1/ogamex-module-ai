@@ -5,7 +5,6 @@ namespace Modules\AI\Enums;
 /** Explicitly published capabilities that may become safe Phase 2 intents. */
 enum AiCapability: string
 {
-    case SaveResources = 'save_resources';
     case Build = 'build';
     case Research = 'research';
     case QueueUnits = 'queue_units';
@@ -15,7 +14,6 @@ enum AiCapability: string
     public function actionType(): AiCandidateActionType
     {
         return match ($this) {
-            self::SaveResources => AiCandidateActionType::SaveResources,
             self::Build => AiCandidateActionType::Build,
             self::Research => AiCandidateActionType::Research,
             self::QueueUnits => AiCandidateActionType::QueueUnits,

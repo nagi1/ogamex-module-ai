@@ -290,3 +290,15 @@ pass confirmed the mechanism itself. Two things were corrected while registering
 
 The other outstanding measurement is completion-gate item 1: REV-004 records what the 2/5/10-account
 comparison must report, and `IMPL-031` (6B) and `DEF-001` (V2 reaction wake) both wait on it.
+
+## Wave 9 — half-wired play loops (17 September 2026)
+
+Mined in the repo pass; full evidence in `repos/half-wired-play-loops.md`. Each row is a loop that
+is started but never closed, so the mechanism exists on one side and nothing on the other.
+
+| # | Gap | Signal it weakens | Evidence | Closing it needs |
+| --- | --- | --- | --- | --- |
+| W9-1 | **`SaveResources` is a declared capability that nothing produces.** The enum case, three policy preference weights and the scheduler's `=> null` branch exist, but `availableActions()` never publishes it, so no candidate is ever built and the branch is dead. | 3, 4 | code-read; `AiCapability.php:8`, `PlayerObservationService.php:331-337`, `ScheduleAiIntentAction.php:135`, `Policies/MinerPolicy.php:13` | wire a real hoard-for-next-step intent, or delete the capability, the weights and the null branch — gate 2/3 — **closed (HL-001)**: the capability was deleted across the enum, policies, scorer and scheduler |
+| W9-2 | **The `recovery` score term is always 0.** `RECOVERY_WEIGHT = 20.0` multiplies a `recoveryFactor` that `ownedState()` never publishes, so live decisions score it 0; only replay carries a value. | 3, 4 | code-read; `UtilityScorer.php:23,56`, `PlayerPerceptionBuilder.php:41`, `PlayerObservationService.php:88-108` | publish a real recovery signal from an existing observation, or delete the component and the snapshot field — **closed (HL-002)**: `recovery_factor` is published from the account's decaying Anger affect |
+| W9-3 | **Target legality is never checked before a raid.** `attack_permitted` is hardcoded `true`, so the `AttackNotPermitted` rejection is unreachable and `RaidPlanner::plan()` gates on bashing + profit only. | 1, 3 | code-read; `PlayerObservationService.php:244`, `CandidateActionFactory.php:217`, `RaidPlanner.php` | compute `attack_permitted` from the host's legality answer, or add the check to `RaidPlanner::plan()` — **closed (HL-003)**: `attack_permitted` mirrors the host's own-body / vacation / banned / admin checks |
+| W9-4 | **`losingRuns` is counted and never consumed.** The estimator computes how many sampled runs lose, but no gate reads it. | 3, 6 | code-read; `NativeRaidEstimator.php:85`, `RaidEstimate.php:19`, `RaidPlanner.php:124` | add a losing-run threshold to the profit gate, or delete the field — **closed (HL-004)**: `losingRuns` deleted; P20 <= 0 already encodes a losing fifth, and WP-003 adds a real survival floor later |

@@ -94,7 +94,7 @@ class UtilityScorer
     {
         return match ($type) {
             AiCandidateActionType::Raid => 1,
-            AiCandidateActionType::SaveResources, AiCandidateActionType::FleetSave => -1,
+            AiCandidateActionType::FleetSave => -1,
             default => 0,
         };
     }

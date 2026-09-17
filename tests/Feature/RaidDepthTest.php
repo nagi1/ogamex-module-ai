@@ -8,6 +8,7 @@ use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerObservationService;
+use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCandidateReason;
@@ -16,6 +17,7 @@ use Modules\AI\Enums\AiCapability;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
+use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -131,6 +133,75 @@ test('owned state prices a distant target higher than a near one', function (): 
 
     expect($byReport[$nearId]['travel_cost'])->toBeLessThan($byReport[$farId]['travel_cost'])
         ->and($byReport[$farId]['travel_cost'])->toBeGreaterThan(0.0);
+});
+
+// Legality is the host's own answer, not a constant: the intel projection mirrors
+// AttackMission's own-body / vacation / banned / admin checks (HL-003 / W9-3).
+test('a report on the account own planet is published not attackable', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $own = Planet::query()->whereKey($this->currentPlanetId)->firstOrFail();
+    $reportId = raidDepthReport($this->currentUserId, $own->galaxy, $own->system, $own->planet, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    $reports = app(PlayerObservationService::class)->ownedState($this->currentUserId)['target_reports'];
+    $byReport = array_column($reports, null, 'report_id');
+
+    expect($byReport[$reportId]['attack_permitted'])->toBeFalse();
+});
+
+test('a report on a vacationing player is published not attackable', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $vacationUser = User::factory()->create(['vacation_mode' => true]);
+    Planet::factory()->create([
+        'user_id' => $vacationUser->id,
+        'galaxy' => 1,
+        'system' => 2,
+        'planet' => 3,
+        'time_last_update' => now()->subHour()->getTimestamp(),
+    ]);
+    $reportId = raidDepthReport($this->currentUserId, 1, 2, 3, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    $reports = app(PlayerObservationService::class)->ownedState($this->currentUserId)['target_reports'];
+    $byReport = array_column($reports, null, 'report_id');
+
+    expect($byReport[$reportId]['attack_permitted'])->toBeFalse();
+});
+
+test('a report on an ordinary foreign planet is published attackable', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $foreign = $this->createForeignPlanet();
+    $reportId = raidDepthReport(
+        $this->currentUserId,
+        $foreign->getPlanetCoordinates()->galaxy,
+        $foreign->getPlanetCoordinates()->system,
+        $foreign->getPlanetCoordinates()->position,
+        ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000],
+    );
+
+    $reports = app(PlayerObservationService::class)->ownedState($this->currentUserId)['target_reports'];
+    $byReport = array_column($reports, null, 'report_id');
+
+    expect($byReport[$reportId]['attack_permitted'])->toBeTrue();
+});
+
+// W9-2: the recovery signal the scorer reads is published from the account's own
+// decaying affect (a battle it lost appraises to Anger), not left at a constant 0.
+test('owned state publishes a recovery factor from the account anger', function (): void {
+    raidDepthProfile($this->currentUserId);
+    AiAffectState::create([
+        'player_id' => $this->currentUserId,
+        'emotion' => AiAffectEmotion::Anger,
+        'intensity' => 0.7,
+        'revision' => 0,
+        'updated_for' => now(),
+    ]);
+
+    expect(app(PlayerObservationService::class)->ownedState($this->currentUserId)['recovery_factor'])->toBeGreaterThan(0.5);
+});
+
+test('owned state publishes zero recovery when no affect is recorded', function (): void {
+    raidDepthProfile($this->currentUserId);
+
+    expect(app(PlayerObservationService::class)->ownedState($this->currentUserId)['recovery_factor'])->toBe(0.0);
 });
 
 test('a target far below our own score is published unviable', function (): void {
@@ -313,7 +384,6 @@ test('a raid estimate for a body that is not a planet is empty, not an error', f
     $estimate = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $debris->getPlanetId(), 1);
 
     expect($estimate->samples)->toBe(0)
-        ->and($estimate->losingRuns)->toBe(0)
         ->and($estimate->p20NetProfit)->toBe(0.0);
 });
 

@@ -49,7 +49,6 @@ class NativeRaidEstimator
         if ($target === null) {
             return app()->makeWith(RaidEstimate::class, [
                 'samples' => 0,
-                'losingRuns' => 0,
                 'p20NetProfit' => 0.0,
             ]);
         }
@@ -58,7 +57,6 @@ class NativeRaidEstimator
         if ($ships->units === []) {
             return app()->makeWith(RaidEstimate::class, [
                 'samples' => 0,
-                'losingRuns' => 0,
                 'p20NetProfit' => 0.0,
             ]);
         }
@@ -82,7 +80,6 @@ class NativeRaidEstimator
 
         return app()->makeWith(RaidEstimate::class, [
             'samples' => count($netProfits),
-            'losingRuns' => count(array_filter($netProfits, static fn (float $net): bool => $net < 0.0)),
             'p20NetProfit' => $this->lowerQuantile($netProfits, 0.2),
         ]);
     }

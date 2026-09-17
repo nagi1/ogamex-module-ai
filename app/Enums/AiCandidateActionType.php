@@ -9,7 +9,6 @@ namespace Modules\AI\Enums;
 enum AiCandidateActionType: int
 {
     case DoNothing = 1;
-    case SaveResources = 2;
     case Build = 3;
     case Research = 4;
     case QueueUnits = 5;

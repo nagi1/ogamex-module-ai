@@ -10,7 +10,6 @@ class TurtlePolicy extends ConfiguredArchetypePolicy
     protected array $preferences = [
         AiCandidateActionType::QueueUnits->value => 1.0,
         AiCandidateActionType::Build->value => 0.7,
-        AiCandidateActionType::SaveResources->value => 0.8,
         AiCandidateActionType::FleetSave->value => 0.6,
     ];
 

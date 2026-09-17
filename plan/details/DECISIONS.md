@@ -118,6 +118,35 @@ Rare major-event advice is a disabled post-baseline Phase 3+ option. No routine 
 
 Ordinary Linux capacity, cognition quality, CBR learning benefit, semantic recall benefit, PsychSim CPU cost, language route frequency and prompt size are open measurements. Proposed resource caps are protective configuration, not claims of capacity or achieved quality. Record experiment results and keep unsupported drivers disabled.
 
+## Work-package seeding & policy discard — 17 September 2026
+
+- **Gameforge no-porting policy discarded.** The owner removed `repos/gameforge-policy.md` and the
+  old "never port / never copy code" rule. Porting or referencing another repo's implementation is
+  now permitted; the three cognition gates still decide *what* is built and *how* it is derived.
+- **Repo research promoted to the task DB.** The 23-repo work package (`repos/WORK-PACKAGE.md`) and
+  the per-repo plans are seeded as `WP-*` and `RP-*` tasks; the new half-wired play loops
+  (`repos/half-wired-play-loops.md`) are seeded as `HL-*` tasks with Wave-9 gap refs. LLM-usage and
+  PvE research land as `repos/llm-ogame-ai.md` and `repos/pve-concepts.md`.
+- **No implementation in this session.** This pass only prepares and orders work items for a later
+  executor agent.
+
+## Half-wired play loops closed — 17 September 2026
+
+Four Wave-9 loops closed autonomously (gates 2/3, host-read throughout):
+
+- **HL-001 / W9-1** — the never-published `SaveResources` capability was deleted: enum case, action
+  type, the three policy preference weights, the scheduler's `=> null` branch, the scorer appetite
+  arm and the factory ternary. A capability with no executor must not be published.
+- **HL-003 / W9-3** — `attack_permitted` is now computed from the host's own legality answer (own
+  body, vacation, banned, admin), mirroring `AttackMission`; the `AttackNotPermitted` rejection is
+  live instead of dead.
+- **HL-004 / W9-4** — `losingRuns` deleted from `RaidEstimate`/`NativeRaidEstimator`. P20 <= 0 already
+  means a fifth of the sampled runs lose, so the count was dead weight; WP-003 adds the real
+  survival floor later.
+- **HL-002 / W9-2** — `recovery_factor` is published from the account's decaying Anger affect (a lost
+  battle appraises to Anger and decays 0.25/day). `ponytail:` anger is a proxy — a true
+  losses-vs-rebuilt ratio belongs to the experience layer (WP-015).
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human
