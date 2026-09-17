@@ -10,4 +10,5 @@ enum AiActionType: int
     case DispatchFleet = 4;
     case RecallFleet = 5;
     case CreateColony = 6;
+    case SetMinePercent = 7;
 }

@@ -8,6 +8,7 @@ use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableColonyPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
+use Modules\AI\Domain\Decision\QueueableMinePercentPlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
@@ -73,6 +74,7 @@ class PlayerObservationService
         private QueueableColonyPlanner $queueableColonyPlanner,
         private QueueableFleetSavePlanner $queueableFleetSavePlanner,
         private QueueableSpyPlanner $queueableSpyPlanner,
+        private QueueableMinePercentPlanner $queueableMinePercentPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
         private AccountStateResolver $accountStateResolver,
         private RandomSource $randomSource,
@@ -391,6 +393,7 @@ class PlayerObservationService
             AiCapability::QueueUnits->value => $this->queueableUnitPlanner->plan($playerId, $player) !== null,
             AiCapability::Colonize->value => $this->queueableColonyPlanner->plan($playerId, $player) !== null,
             AiCapability::Spy->value => $this->queueableSpyPlanner->plan($playerId, $player) !== null,
+            AiCapability::ThrottleMine->value => $this->queueableMinePercentPlanner->plan($playerId, $player) !== null,
         ];
     }
 

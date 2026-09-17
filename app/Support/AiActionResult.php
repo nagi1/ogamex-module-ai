@@ -23,6 +23,16 @@ readonly class AiActionResult
         ]);
     }
 
+    /** A host write with no queue id — a direct, validated state change. */
+    public static function succeeded(AiQueueActionReason $reason): self
+    {
+        return app()->makeWith(self::class, [
+            'successful' => true,
+            'reason' => $reason->value,
+            'queueId' => null,
+        ]);
+    }
+
     public static function rejected(AiQueueActionReason|string $reason): self
     {
         return app()->makeWith(self::class, [

@@ -20,4 +20,5 @@ enum AiCandidateActionType: int
     case Expedition = 11;
     case Transfer = 12;
     case Recycle = 13;
+    case ThrottleMine = 14;
 }

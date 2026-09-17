@@ -6,6 +6,7 @@ use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\QueueAiColony;
 use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
+use Modules\AI\Contracts\QueueAiMinePercent;
 use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiRecycle;
@@ -19,6 +20,8 @@ use Modules\AI\Domain\Decision\QueueableColony;
 use Modules\AI\Domain\Decision\QueueableColonyPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
+use Modules\AI\Domain\Decision\QueueableMinePercent;
+use Modules\AI\Domain\Decision\QueueableMinePercentPlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecycle;
 use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
@@ -90,6 +93,8 @@ class ExecuteAiIntentAction
 
     private const PAYLOAD_SPEED = 'speed';
 
+    private const PAYLOAD_PERCENTAGE = 'percentage';
+
     /**
      * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
      */
@@ -106,6 +111,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Spy => $this->spy($workItem, $planetId),
             AiWorkKind::Raid => $this->raid($workItem, $planetId),
             AiWorkKind::Recycle => $this->recycle($workItem, $planetId),
+            AiWorkKind::SetMinePercent => $this->minePercent($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -390,6 +396,33 @@ class ExecuteAiIntentAction
             app(QueueAiRaid::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->launchUnits),
             ['target_galaxy' => $step->targetGalaxy, 'target_system' => $step->targetSystem, 'target_position' => $step->targetPosition],
             $step->originPlanetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function minePercent(AiWorkItem $workItem, int $planetId): array
+    {
+        $buildingId = $workItem->payload[self::PAYLOAD_BUILDING_ID] ?? null;
+        $percentage = $workItem->payload[self::PAYLOAD_PERCENTAGE] ?? null;
+        $step = is_int($buildingId) && is_int($percentage)
+            ? app()->makeWith(QueueableMinePercent::class, [
+                'planetId' => $planetId,
+                'buildingId' => $buildingId,
+                'percentage' => $percentage,
+                'reason' => $this->reason($workItem),
+            ])
+            : app(QueueableMinePercentPlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueableMinePercent) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiMinePercent::class)->handle($workItem->player_id, $step->planetId, $step->buildingId, $step->percentage),
+            ['building_id' => $step->buildingId, 'percentage' => $step->percentage, 'mine_reason' => $step->reason],
+            $step->planetId,
         ];
     }
 

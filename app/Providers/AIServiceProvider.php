@@ -8,6 +8,7 @@ use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\QueueAiColonyAction;
 use Modules\AI\Actions\QueueAiExpeditionAction;
 use Modules\AI\Actions\QueueAiFleetSaveAction;
+use Modules\AI\Actions\QueueAiMinePercentAction;
 use Modules\AI\Actions\QueueAiRaidAction;
 use Modules\AI\Actions\QueueAiRecallAction;
 use Modules\AI\Actions\QueueAiRecycleAction;
@@ -39,6 +40,7 @@ use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\QueueAiColony;
 use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
+use Modules\AI\Contracts\QueueAiMinePercent;
 use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiRecycle;
@@ -204,6 +206,7 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->bind(QueueAiRecycle::class, QueueAiRecycleAction::class);
         $this->app->bind(QueueAiSpy::class, QueueAiSpyAction::class);
         $this->app->bind(QueueAiTransfer::class, QueueAiTransferAction::class);
+        $this->app->bind(QueueAiMinePercent::class, QueueAiMinePercentAction::class);
         $this->app->bind(AiClock::class, SystemAiClock::class);
         $this->app->bind(RandomSource::class, SeededRandomSource::class);
         $this->app->tag([

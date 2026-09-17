@@ -10,6 +10,7 @@ enum AiCapability: string
     case QueueUnits = 'queue_units';
     case Spy = 'spy';
     case Colonize = 'colonize';
+    case ThrottleMine = 'throttle_mine';
 
     public function actionType(): AiCandidateActionType
     {
@@ -19,6 +20,7 @@ enum AiCapability: string
             self::QueueUnits => AiCandidateActionType::QueueUnits,
             self::Spy => AiCandidateActionType::Spy,
             self::Colonize => AiCandidateActionType::Colonize,
+            self::ThrottleMine => AiCandidateActionType::ThrottleMine,
         };
     }
 }

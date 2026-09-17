@@ -12,6 +12,8 @@ use Modules\AI\Domain\Decision\QueueableExpedition;
 use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
+use Modules\AI\Domain\Decision\QueueableMinePercent;
+use Modules\AI\Domain\Decision\QueueableMinePercentPlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecall;
 use Modules\AI\Domain\Decision\QueueableRecycle;
@@ -89,6 +91,8 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_SPEED = 'speed';
 
+    private const PAYLOAD_PERCENTAGE = 'percentage';
+
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
         private QueueableUnitPlanner $queueableUnitPlanner,
@@ -98,6 +102,7 @@ class ScheduleAiIntentAction
         private QueueableSpyPlanner $queueableSpyPlanner,
         private QueueableTransferPlanner $queueableTransferPlanner,
         private QueueableRecyclePlanner $queueableRecyclePlanner,
+        private QueueableMinePercentPlanner $queueableMinePercentPlanner,
         private RaidPlanner $raidPlanner,
         private AiClock $clock,
     ) {
@@ -142,6 +147,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
+            AiCandidateActionType::ThrottleMine => $this->scheduleMinePercent($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
     }
@@ -377,6 +383,25 @@ class ScheduleAiIntentAction
             self::PAYLOAD_MISSION_TYPE => $plan->missionType,
             self::PAYLOAD_PROBE_COUNT => $plan->probeCount,
             self::PAYLOAD_REASON => 'spy:' . $plan->targetGalaxy . ':' . $plan->targetSystem . ':' . $plan->targetPosition,
+        ]);
+    }
+
+    /**
+     * A mine-percentage change travels as its own intent: the planet, the mine
+     * and the percentage the planner derived from the host's own numbers.
+     */
+    private function scheduleMinePercent(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableMinePercentPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableMinePercent) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::SetMinePercent, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_BUILDING_ID => $plan->buildingId,
+            self::PAYLOAD_PERCENTAGE => $plan->percentage,
+            self::PAYLOAD_REASON => $plan->reason,
         ]);
     }
 

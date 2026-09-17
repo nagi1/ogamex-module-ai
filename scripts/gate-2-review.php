@@ -33,6 +33,7 @@ const ALLOWED_SINGLE_IMPLEMENTATION = [
     'QueueAiRaid',
     'QueueAiSpy',
     'QueueAiTransfer',
+    'QueueAiMinePercent',
 ];
 
 $moduleFiles = modulePhpFiles($moduleRoot);

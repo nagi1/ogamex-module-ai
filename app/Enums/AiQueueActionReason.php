@@ -23,4 +23,6 @@ enum AiQueueActionReason: string
     case NoDisposableFleet = 'no_disposable_fleet';
     case NoTransportFleet = 'no_transport_fleet';
     case SourceShortAtDispatch = 'source_short_at_dispatch';
+    case PercentApplied = 'percent_applied';
+    case PercentRefused = 'percent_refused';
 }
