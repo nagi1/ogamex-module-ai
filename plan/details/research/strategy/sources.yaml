@@ -156,17 +156,17 @@
   - fleet composition
   priority: A
 - id: ORG-009
-  title: Tutorial 10 / Guide 10 — ACS
+  title: Tutorial 10 / Guide 10 — ACS ✅ recovered
   family: official-gameforge-forum
-  url: board.origin `Thread/618` + `Thread/790`
+  url: board.origin `Thread/618` (Wayback 2023-02-06) + `Thread/790` (Wayback 2022-10-04)
   domains:
   - ACS
   - PvP
   priority: A
 - id: ORG-010
-  title: Tutorial 13 — Colonisation
+  title: Tutorial 13 — Colonisation ❗ not archived
   family: official-gameforge-forum
-  url: board.origin `Thread/621`
+  url: board.origin `Thread/621` (no Wayback capture; colonisation already sourced by TP-016, WIK-012, PLW-002)
   domains:
   - colonization
   priority: A
@@ -736,3 +736,19 @@
   - moon
   - debris
   priority: B
+- id: FRB-001
+  title: Tutorial Raider — Top player
+  family: non-english-communities
+  url: board.fr.ogame.gameforge.com `441237` (Wayback 2014-08-27, replay verified)
+  domains:
+  - raiding
+  - strategy
+  priority: C
+- id: FRB-002
+  title: Guide du Mineur
+  family: non-english-communities
+  url: board.fr.ogame.gameforge.com `thread/726448` (Wayback 2020-12-05, replay verified)
+  domains:
+  - economy
+  - mining
+  priority: C

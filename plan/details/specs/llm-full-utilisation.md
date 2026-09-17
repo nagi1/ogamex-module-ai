@@ -4,7 +4,10 @@
 (all six campaign triggers now have a signal: new phase, contested objective, fleet loss, repeated
 setback, coalition conflict, rank change) and S8 done for the consultation lane (`CampaignFactsTool`
 + `LegalCandidatesTool`; `CounterpartyFactsTool`/`HostCapabilityTool` deferred until their lanes
-exist). The whole Package S is shipped; see the slice sections for the deferred follow-ups.
+exist). The whole Package S is shipped; see the slice sections for the deferred follow-ups. **17
+September (DISC-008)** — the LLM-bot survey's sixteen learnings were scored against the shipped
+package: one correction slice (S9, the cache-read token accounting S6 left unfed) and a recorded set
+of refusals; see the S9 section.
 
 **Shipped:** S1 prompt review + `PromptGateOneTest` gate-1 guard · S2 `llm-prompt-knowledge.md` ·
 S3 language lane enabled by default (`deepseek-flash` + `gpt-5.6-luna` fallback) · S4 the
@@ -233,6 +236,61 @@ posture and the PvE director is not built, so neither has a consumer yet — bui
 gate-2 dead code. They land with the lanes that actually read counterparty memory (reply) and host
 capability (PvE director).
 
+### S9 — settle the cache-read tokens the SDK already reports (DISC-008, 17 September 2026)
+
+The repo survey ([`repos/llm-ogame-ai.md`](../research/repos/llm-ogame-ai.md)) found exactly three
+OGame projects that genuinely call a model. Its sixteen learnings were scored against what S1–S8
+already ship: fifteen are already implemented, or refused by plan doctrine, or a gated deferral
+already recorded elsewhere. One is a real gap in a shipped slice, and closing it means feeding a
+parameter S6 already priced.
+
+**What is wrong.** `LaravelAiLanguageGateway` reads only `usage->promptTokens` and
+`usage->completionTokens`. The SDK's `Usage` also carries `cacheReadInputTokens`, and **both** parsers
+already subtract the cached part out of `promptTokens` (DeepSeek `ParsesTextResponses.php:86`,
+`prompt_tokens − prompt_cache_hit_tokens`; OpenAI `:142-148`, `input − cached − cacheWrite`). A
+settled request therefore records the *uncached* input alone: cached input is invisible in the ledger,
+never charged at the `cached_input` rate `config/pricing.php` already holds, and no lane can report a
+cache-hit rate. `SettleAiUsageReservationAction` passes a hardcoded `0` for the cached parameter that
+`ResolveAiUsageCostAction` accepts and prices.
+
+- **Smallest fix.** Carry `cacheReadInputTokens` from the response into settlement, record it beside
+the token columns, count it in the input ceiling, and report the hit rate beside tokens and cost.
+  Files: `app/Infrastructure/Language/LaravelAiLanguageGateway.php` (both usage reads),
+  `app/Actions/SettleAiUsageReservationAction.php`, its four callers (`GenerateAiReplyAction`,
+  `RequestCampaignConsultationAction`, `ReconcileAiLanguageRequestsAction`),
+  `app/Models/AiUsageReservation.php` + one migration, and the two reporting actions
+  (`BuildAiPilotReportAction`, `SummarizeAiOperabilityAction`).
+- **Proof.** A replayed fixture carrying `prompt_cache_hit_tokens` settles a cost equal to the manual
+  arithmetic (`uncached × input + cached × cached_input + output × output`) and the reservation records
+  the hit count; a response without the field is unchanged; the input ceiling counts
+  `promptTokens + cacheReadInputTokens`; `ai:pilot-report` prints the hit rate per provider/model. It is
+  also the measurement the prefix-stability question needs — a stable instruction prefix is exactly what
+  a provider's automatic caching serves, and today nothing observes it.
+- **Not plumbed:** cache *write* tokens. DeepSeek and OpenAI bill cached reads only, so a write-token
+  column would be a third token category nothing charges. Recorded as deliberately ignored (gate 2),
+  not built.
+
+**Scored learnings (S1–S8 against the survey).**
+
+| Survey learning | Verdict | Where |
+| --- | --- | --- |
+| Strict JSON output contract + closed action vocabulary | shipped | proposal/consultation validators |
+| Taste in the system prompt, never object ids or prices | shipped | S1 + S2, `PromptGateOneTest` |
+| Periodic planner separated from the cheap per-message call | shipped | event-triggered consultation vs. per-message reply |
+| Advisory-only: a deterministic gate decides, never the model | shipped | profile-bounded nudge in `ApplyCampaignConsultationRankingAction` |
+| Summarised snapshots, never raw state | shipped | S1 token-lean context; S8 shrinks the brief to the campaign id |
+| Skip the call on a trivial turn | shipped | trigger allowlist + cooldown + `off` default; authored route for greetings |
+| Small model per decision, tiered by task | shipped | S5 routing |
+| `max_tokens` caps + JSON mode | shipped | `config/language.php`, `config/campaign-consultation.php` |
+| Plan once, execute deterministically several times | shipped | native policy executes; consultation refreshes on events |
+| Deterministic fallback on every failure path | shipped | sealed authored reply; native decision on any non-completed status |
+| Truncation budgets (`top-5`, `[:200]`) | better than the survey | S1 omits rather than truncates |
+| Self-reflection: transcript → summary → next-cycle directive | **refused** | doctrine already forbids periodic reflection and per-event summaries (`budgets.md`, Package 7 "do not build"); the six deterministic trigger signals carry what materially changed |
+| "Strategic RAG" by keyword scoring | **refused** | the survey itself flags it as mislabelled; memory mechanisms are specified in [`agent-memory-tooling.md`](../research/agent-memory-tooling.md) |
+| Provider Batch API for summaries | already-gated deferral | [`budgets.md`](budgets.md) "Coalescing, batches and deferred work" |
+| Embedding retrieval | already gated | Package 7B, needs a held-out review first |
+| Cache-read token accounting | **adopt — S9 above** | the only real gap found |
+
 ## Order and dependencies
 
 ```
@@ -250,6 +308,7 @@ S6 (parallel) ────┘
 - S6 runs in parallel from day one.
 - S8 is on-command and depends on S4 (the consultation lane it instruments) and S6 (its tool steps
   are billed); it changes no shipped lane until the owner commands it.
+- S9 is independent: it corrects the settlement path S6 shipped and can land any time.
 
 ## Owner sign-off flags (answer before work starts)
 

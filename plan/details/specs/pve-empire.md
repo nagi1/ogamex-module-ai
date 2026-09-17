@@ -54,3 +54,50 @@ Initial rewards are ordinary loot/debris plus campaign recognition. Do not mint 
 Finish or suspend new operations before changing mode. Core flights already launched still resolve; never erase them to award victory. If the provider disappears while PvE is active, the host blocks new hostile dispatch until operators complete safe shutdown. It must not silently unlock human PvP.
 
 Success requires a small coalition completing a campaign with meaningful support roles, understandable losses and a recoverable failed attempt. Review whether players want another campaign. Separate evidence for this mode from normal-mode retention and test total combat/coordination load within the same module budgets.
+
+## What the PvE field adds — scored (DISC-009, 17 September 2026)
+
+[`pve-concepts.md`](../research/repos/pve-concepts.md) harvested twelve transferable structures from
+shipped games and the OGame ecosystem. Each was scored against this spec, the three gates, and
+Package 7's rule that a further PvE objective starts only from a review record naming the gap. One
+mechanism is adopted and deferred to that gate, one surface is deferred with a trigger, and the rest
+are already shipped, already recorded, or refused.
+
+**Adopted — the campaign can be lost to the faction, not only to the clock.** An `Active` campaign
+resolves when every declared stronghold is complete and fails when the deadline passes: the faction
+never advances anything, so the only opponent is time. The mechanism is one counter on `AiCampaign`
+plus the faction's own declared objective set, advanced by the existing scheduled pass
+(`ai:advance-campaigns`) on a published schedule, so the coalition's win condition becomes "complete
+the ladder first". Objective *ordering* (`scout → weaken → final stronghold`) is the escalation
+ladder and the same counter is the influence bar that gates the decisive objective — neither becomes a
+second mechanism. Rewards are unchanged: ordinary loot/debris plus the verified contribution record,
+paid only when the campaign completes. Task `PVE-001`, deferred until a review record exists.
+
+**Deferred with a named trigger — the coalition-facing campaign page.** The deliverable list above
+includes a module-owned campaign page and none exists; the only shipped page is the operator page at
+`admin/ai`. Its content is already decided by the research: objective progress and both sides' losses,
+as counters aggregated at write time (the review loop's own "cheap to read" rule). It waits on a
+disclosed coalition campaign — a page for a coalition that does not exist is speculative UI. Task
+`PVE-002`.
+
+**Already shipped — no slice.** Operation-deduplicated credit with AI participation excluded and
+nothing minted covers contribution-shaped, never-negative rewards; the published window, disclosed
+starting conditions and pre-campaign difficulty profile cover the visible shared threat; and
+per-stronghold difficulty needs no code at all — a stronghold is an ordinary account, so
+differentiating one is assigning it a different existing persona/archetype. A difficulty field would
+be a second authority over behaviour the profile already owns.
+
+**Refused.** Titles/achievement recognition (a product surface and a second recognition authority
+beside the contribution record); a scaling penalty on play near the faction (it degrades ordinary
+play, which this mode must leave unchanged, and it is a second economy); a damage-treadmill monster
+(the friction would be a health bar, not ordinary OGame combat).
+
+**Recorded deferrals, each with the trigger that would make it a slice.**
+
+| Idea | Trigger |
+| --- | --- |
+| Outcome-scaled difficulty (a fast win makes the next campaign harder) | the first campaign's review record — the input is outcome quality, and no campaign has run |
+| Succession/aftermath after the faction loses its decisive objective | a campaign whose climax resolves mid-window; "surviving enemies rebuild normally" is what ships today |
+| Tribute / non-combat resolution lane | Package 7D, the social lane this would ride |
+| Seasonal event lane between campaigns | after the persistent campaign has run once with a coalition |
+| Sided PvE (aid or resist the faction) | after the single-coalition campaign is proven; it doubles the social model |

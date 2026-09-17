@@ -134,7 +134,9 @@ Priorities: **A** deep-read first · **B** supporting · **C** only for gaps/con
 ## Non-English communities (DE / PL)
 
 Recovered in the gap pass of 15 September 2026. Polish Fandom is the strongest accessible non-English
-corpus; the German/French board guide libraries were confirmed to exist but not retrievable this pass.
+corpus; the German board FAQ thread (DEF-001) was recovered, and the French board guide library was
+confirmed to exist but recorded as not retrievable — **that is corrected in the 17 September retry
+below: the French threads are archived and replay fine**, and the German `ogamewiki.de` is gone.
 
 | id | Title | URL | Domains | Priority |
 | --- | --- | --- | --- | --- |
@@ -145,6 +147,25 @@ corpus; the German/French board guide libraries were confirmed to exist but not 
 | PLW-005 | Technologia Ekspedycji | ogame.fandom.com/pl `Technologia_Ekspedycji` | expeditions | B |
 | DEW-001 | Gebäude | ogame.fandom.com/de `Gebäude` | economy (build formula) | C |
 | DEF-001 | Häufige Fragen neuer Spieler | board.de.ogame.gameforge.com `thread/193284` | fleetsave, phalanx, tactics, moon, debris | B |
+| FRB-001 | Tutorial Raider — Top player | board.fr.ogame.gameforge.com `441237` (Wayback 2014-08-27) | raiding, strategy | C |
+| FRB-002 | Guide du Mineur | board.fr.ogame.gameforge.com `thread/726448` (Wayback 2020-12-05) | economy, mining | C |
+
+### French board tutorial library — the rest of the section (17 September 2026)
+
+The library is `board.fr.ogame.gameforge.com/…/board611-tutoriels-jeu-forum/` (under
+`board1474-ogame-le-jeu/board103-support-et-questions/`), and the board's own thread form is
+`/index.php?thread/<id>-<slug>/`. These carry 200/30x captures and are retrievable; they are recorded as
+retrievable sources, not yet deep-read or mined into claims.
+
+| Thread | Capture |
+| --- | --- |
+| `441238` raider | 2013-11-03 |
+| `457511` mineur défensif, fournisseur de carburant | 2014-03-06 |
+| `797680` rendre sa flotte invisible (ghost de flotte) | 2013-12-07 |
+| `828313` speedsim | 2014-08-27 |
+| `858266` mineur agressif | 2014-03-13 |
+| `858268` composition des flottes — vaisseaux | 2015-09-26 |
+| `756332` crash de flotte, lunage | 2026-02-15 (replay verified) |
 
 ## Gap domains — discovery status (closed 15 September 2026)
 
@@ -191,6 +212,30 @@ limitation, never fabricated.
 - **Gap pass (15 Sep, 3 agents):** all gap domains now sourced (see the closure table above). Recovered:
   Fandom `Ninja`, `Sensor_Phalanx`, `Fleetsaving`, `Debris_Field`, `Fleetcrash`, `Recall`, `Moon`,
   `Colonization` (via `?action=raw`); Sidian combat/planets/moon/ship pages; ogames.net ninja/crash/
-  debris/timing guides; the Gameforge crasher guide; and the Polish Fandom strategy pages. Still open:
-  French board guide library (confirmed to exist, thread URLs not retrievable), German `ogamewiki.de`
-  (extraction failed), German board FAQ answer bodies (index only), and ORG-009/010 ACS tutorials.
+  debris/timing guides; the Gameforge crasher guide; and the Polish Fandom strategy pages. Left open at
+  that point: the French board guide library, German `ogamewiki.de`, German board FAQ answer bodies
+  (index only), and ORG-009/010 ACS tutorials — all three retrieval rows are answered below.
+
+### 17 September retrieval retry — the three open sources answered (DISC-001/002/003)
+
+The 15 September failures were **URL keying, not availability**. Two method fixes:
+
+1. **Enumerate first.** `web.archive.org/cdx/search/cdx?url=<host>&matchType=domain&filter=original:.*<pattern>.*&collapse=urlkey&fl=original,timestamp,statuscode`
+   lists every capture; guessing a timestamp against a moved forum always 404s.
+2. **Replay the exact original URL, query string included.** `web.archive.org/web/<timestamp>id_/<original-url>`
+   returns the raw bytes. Dropping the captured `?s=<token>` / `?postID=` query yields a Wayback 404, which
+   reads as "not archived" — that is what happened on 15 September for ORG-009/010.
+
+- **ORG-009 (ACS tutorials) — RECOVERED.** `Thread/618` (capture 2023-02-06) and `Thread/790` (capture
+  2022-10-04) both replay with full text (37 KB / 83 KB): the union-attack flow (initiate the attack, then
+  convert it to a union and invite alliance/buddy-list members from the fleet menu), the five-player cap,
+  and the ACS defence deploy. `GF-003` already sources the ACS claim set, so no re-mining was required —
+  the tutorials are an independent confirmation of ACS-001..012.
+- **ORG-010 (Colonisation tutorial) — NOT ARCHIVED.** No capture exists for `Thread/621` (the CDX prefix
+  match on `621` returns only the unrelated `Thread/6217`). Its domain is already sourced by TP-016,
+  WIK-012 and PLW-002, so the row closes as unrecoverable rather than open.
+- **French board guide library — RECOVERED.** Threads are archived and replay; see the FRB rows and the
+  section table above. The earlier "not retrievable" reading came from the forum-root path.
+- **`ogamewiki.de` — DEAD, never archived.** `ogamewiki.de`, `www.ogamewiki.de`, `ogame-wiki.de` and
+  `ogamewiki.com` all return NXDOMAIN, and the Wayback index holds **zero** captures for the domain, so
+  there is nothing to retrieve. The German gap stays covered by DEW-001 (build formula) and DEF-001.

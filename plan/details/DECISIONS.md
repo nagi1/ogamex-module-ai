@@ -160,6 +160,74 @@ the host has one authority. Recycle is an eligible candidate (not a published ca
 expedition/transfer. `ponytail:` the scan is the 20 largest fields and the first hull-owning body; a
 distance cap and a closest-body scan are the upgrade path.
 
+## Raid P20 loot quantile (WP-002) — 17 September 2026
+
+`RaidEstimate` now carries `p20Loot` beside `p20NetProfit`, both lower-tail quantiles from the
+identical `seed + i` sample stream (one bounded screen, no second pass). The raid fuel-tier test
+feeds `clearsLootTier()` from `p20Loot` instead of the hand-rolled `min(metalEq × classLootFraction,
+cargo)` scalar in `RaidPlanner::expectedLoot()`, which is deleted together with its duplicated
+`CRYSTAL_WEIGHT`/`DEUTERIUM_WEIGHT` constants and the now-unused `CharacterClassService` import.
+The host engine's cargo-constrained, fill-ordered `BattleResult::$loot` is the single loot authority
+(gate 1); the estimator samples live planet state rather than the espionage report's stale snapshot.
+Two leftovers fixed in the same pass so the standing gate stays green: `QueueableRecyclePlanner`
+dropped its unread `PlanetServiceFactory` injection (PHPStan `property.onlyWritten`), and
+`QueueAiRecycle` was documented as a deliberate host-action-gateway seam in the gate allowlist and
+`GATE-AUDIT.md` B4.
+
+## Raid survival floor (WP-003) — 17 September 2026
+
+`RaidEstimate` gained `pWin` — the fraction of the same `seed + i` sample stream in which the
+attacking fleet survived (not wiped), read from the host's own `BattleResult::$attackerUnitsResult`
+via `getAmount() > 0` (the round sanitizer keeps zero-amount entries, so `.units === []` is not the
+wiped test). `RaidPlanner::plan()` now asks "will I survive?" before "does it profit?" and refuses
+below `SURVIVAL_FLOOR = 0.8`; the fleet-loss rate is the complement `1 - pWin`, stored nowhere
+separately so there is no second authority for the same number (gate 2). `ponytail:` the floor is one
+unmeasured value for every persona; per-archetype tightening is the upgrade path once play data
+shows it varies.
+
+## Fleetsave destination safety (WP-004) — 17 September 2026
+
+`QueueableFleetSavePlanner::rankedDestinations()` now (a) drops own bodies a hostile fleet is
+already inbound to before the moon/distance sort — parking the save into a second incoming attack is
+worse than holding (FS-010) — and (b) ranks the origin's own same-coordinate moon (the planet↔moon
+hop a phalanx cannot observe, FS-005) ahead of every other moon. The unsafe set reads the same
+`FleetMissionService::getActiveFleetMissionsForCurrentPlayer()` source the inbound picture already
+assembles, so "under attack" stays one authority; `PlayerObservationService` needs no change because
+its `inboundThreat()` reuses `plan()` and simply observes the safe-destination result.
+
+## Single-planet harvest-save (WP-005) — 17 September 2026
+
+A one-planet account can now save. When `rankedDestinations()` finds no own-body destination,
+`QueueableFleetSavePlanner` falls back to a harvest-save: it reuses `QueueableRecyclePlanner` to
+find a host debris field the origin can recycle, and returns a `QueueableFleetSave` whose
+`harvestPosition` is set (destination 0). `QueueAiFleetSaveAction` dispatches the whole fleet on the
+host `RecycleMission` at the slowest speed instead of a deployment, so the fleet is in the air while
+the inbound hostile lands (FS-011). The fallback only fires when the recycle planner's origin is the
+same body, so it never moves a different planet's fleet. `ponytail:` the recycle mission returns the
+fleet once it arrives, so a long absence is not fully covered — the speed/distance sweep is the
+upgrade path.
+
+## Weak-attack / nothing-to-save fleetsave gate (WP-006) — 17 September 2026
+
+The reactive save now honours the same exposure band the proactive save already applied: the
+fleet-value gate moved into `QueueableFleetSavePlanner::saveFor()`, so a fleet below the persona's
+band (Fleeter 5k / Trader 25k / others 50k) is not moved whether the trigger is reactive or a
+planned absence. Separately, `PlayerObservationService::inboundThreat()` no longer saves from a
+probe-only inbound: a save is only eligible when at least one inbound mission is not the host's
+espionage type (FS-012). `ponytail:` the janeczkins WeakAttackRatio (inbound points vs parked fleet)
+is left out — it is a ratio threshold with no measured value; the band plus the probe check close
+the named cases, and the ratio is the upgrade path if play data shows it varies.
+
+## Storage-before-build preprocessor (WP-007) — 17 September 2026
+
+`EconomyUpgrades::storageForPrice()` closes the young-planet stall: when the cheapest next production
+build costs more than the planet's warehouse can even hold, the host will never accept it and the
+account would fall through. It returns the store that raises the blocking resource (cheapest first),
+and `QueueableBuildingPlanner` prepends that store before the production candidates, so the warehouse
+is grown first — nameable play, "upgrade the warehouse before the mine that will not fit". Blocking
+is derived from the host's own price (`getObjectPrice`) and storage (`getBuildingMaxStorage` twice),
+and the store candidates are the host's `getBuildingObjectsWithStorage()`, so no object is named.
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human
@@ -1371,3 +1439,71 @@ Concretely, `config/cognition.php` now defaults to **hybrid mode** with every dr
 A missing or failed sidecar still degrades per call to native — the safety/authority rules are
 unchanged, and native stays the fallback and the ablation baseline. `external-drivers.md`, `budgets.md`,
 `WORK-PACKAGES.md` and `AGENTS.md` are corrected to match.
+
+### DISC-008 and DISC-009 — the repo research distilled into work items (17 September 2026)
+
+Both discovery rows are closed by scoring the harvested research against what actually shipped. The
+pattern is the same in each: the field is smaller than its reputation, most of what it recommends is
+already implemented here, and the honest output is one correction rather than a new mechanism. No code
+changed; the output is the two spec sections and the task rows that index them. Verification is the
+seed round-trip (`sqlite3 < seed.sql` reproduces `tasks.db` exactly, 110 tasks / 42 dependencies).
+
+**DISC-008 — LLM usage.** The survey found three OGame projects that genuinely call a model. Fifteen of
+its sixteen learnings are already shipped (S1–S8: strict JSON contract, taste-only prompts,
+periodic-vs-per-message split, advisory-only authority, summarised snapshots, skip-on-trivial-turn,
+tiered model routing, `max_tokens` caps, plan-once-execute-deterministically, deterministic fallback),
+already gated (`budgets.md` provider batches, 7B embeddings) or already refused by doctrine
+(self-reflection/rolling summaries, "strategic RAG" keyword scoring). The one real gap sits inside a
+shipped slice: the SDK's `Usage` exposes `cacheReadInputTokens` and **both** parsers subtract the cached
+part out of `promptTokens` (DeepSeek `ParsesTextResponses.php:86`, OpenAI `:142-148`), but
+`LaravelAiLanguageGateway` reads only `promptTokens`/`completionTokens` and
+`SettleAiUsageReservationAction` passes a hardcoded `0` into the cached parameter
+`ResolveAiUsageCostAction` already prices. Cached input is therefore uncounted, never charged at the
+`cached_input` rate `config/pricing.php` holds, and no lane reports a cache-hit rate — which is exactly
+the number the prefix-caching question needs. Recorded as **LLM-010** (P2, ready); cache *write* tokens
+are deliberately left unplumbed because neither supported provider bills them.
+
+**DISC-009 — PvE.** Twelve transferable structures were scored against [`pve-empire.md`](specs/pve-empire.md)
+and Package 7's evidence rule. One is adopted: the campaign cannot currently be lost to the faction,
+only to the clock, so the faction gets its own declared objective set and **one** counter advanced by
+the existing `ai:advance-campaigns` pass — objective ordering is the escalation ladder and the same
+counter is the influence bar, so the research's top three ideas fold into a single mechanism
+(**PVE-001**, deferred until a campaign review record exists). One surface is deferred with a trigger:
+the spec's coalition-facing campaign page does not exist (only the operator page at `admin/ai`), and its
+decided content — objective progress plus both sides' losses, as write-time counters — waits on a
+disclosed coalition (**PVE-002**, deferred). Contribution-shaped rewards, the published window and
+per-stronghold difficulty need no slice at all: a stronghold is an ordinary account, so differentiating
+one is assigning it a different existing persona, and a difficulty field would be a second authority
+over behaviour the profile already owns. Titles/achievements, a scaling penalty near the faction and a
+damage-treadmill monster are refused on gates 2 and 3.
+
+### DISC-001, DISC-002 and DISC-003 — the three open retrieval rows answered (17 September 2026)
+
+All three closed by fixing the retrieval method, not by finding new sources. Two method errors produced
+the 15 September "not retrievable" reading. First, a Wayback replay key is the capture's **full original
+URL including its query string** — the old boards were captured as
+`.../Thread/618-Tutorial-10-ACS/?s=71948677...`, and requesting the path without `?s=` returns a Wayback
+404 that looks exactly like "never archived". Second, a timestamp should never be guessed:
+`web.archive.org/cdx/search/cdx?url=<host>&matchType=domain&filter=original:.*<pattern>.*` enumerates
+captures, and `web/<timestamp>id_/<original-url>` returns the raw bytes. (The `fetch_webpage` extractor
+fails on these board pages; `curl` on the same URL returns them.)
+
+- **DISC-001 (ACS tutorials, ORG-009/010) — recovered, half closed as unrecoverable.** ORG-009's
+  `Thread/618` (capture 2023-02-06, 37 KB) and `Thread/790` (capture 2022-10-04, 83 KB) both replay with
+  full text: the union-attack flow (launch a normal attack, convert it to a union, then invite
+  alliance/buddy-list members from the fleet menu), the five-player cap and the ACS defence deploy.
+  ORG-010's `Thread/621` has **no capture at all**, and colonisation is already sourced by TP-016,
+  WIK-012 and PLW-002, so that half closes as unrecoverable rather than open. GF-003 already sources
+  ACS-001..012, so the recovered tutorials confirm the claim set independently — no re-mining.
+- **DISC-002 (French board guide library) — recovered.** The library is
+  `board.fr.ogame.gameforge.com/…/board611-tutoriels-jeu-forum/`, using the board's own
+  `/index.php?thread/<id>-<slug>/` form. Verified replays: `441237` Tutorial Raider Top player (316 KB)
+  and `726448` Guide du Mineur (84 KB); seven more threads are listed as retrievable in
+  `source-registry.md`. `FRB-001`/`FRB-002` join the canonical store at priority C, recorded as
+  retrievable sources rather than as mined claims.
+- **DISC-003 (`ogamewiki.de`) — dead and never archived.** All four variants (bare, `www`,
+  `ogame-wiki.de`, `.com`) return NXDOMAIN and the Wayback index holds **zero** captures, so there is
+  nothing to retrieve. The German gap stays covered by DEW-001 (build formula) and DEF-001 (board FAQ).
+
+Every `DISC-*` row is now closed (`DISC-001`…`DISC-009`), and the registry carries the two-step method so
+the next moved-forum source costs one CDX query instead of a third failed pass.
