@@ -2094,3 +2094,13 @@ staff gate): the latest campaign's state, objective progress (completed strongho
 the faction momentum counter from PVE-001 (the influence bar), and both sides' losses as the host's
 own write-time `military_lost` aggregates split by faction/coalition. Read-only, one bounded pass,
 no new collection — the review loop's "cheap to read" rule.
+
+### Wave 1 ships; one pre-existing flaky test remains (17 September 2026)
+
+PVE-001, DEF-003 and PVE-002 (the deterministic Package 6 slices) are implemented, tested and
+committed. The full suite is green except `ReserveFloorTest` (SP5 reserve floor), which passes in
+isolation and in the dev DB but fails under full-suite parallel ordering with "the planner refuses
+a build ... Expecting null not to be null" — a pre-existing test-isolation issue, not a Wave 1
+regression. Four earlier pre-existing full-suite gaps surfacing on the same quality run were fixed
+in this session (throttle-mine assertion + replay fixture + raid `PlanetService` import + the
+mine-percent stale-energy read). The reserve-floor ordering failure is left for its slice owner.
