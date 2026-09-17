@@ -13,7 +13,7 @@ namespace Modules\AI\Domain\Operability;
  * @property list<array<string, mixed>> $stopReasons
  * @property array<string, int> $population
  * @property array<string, int> $actions
- * @property array<string, int> $language
+ * @property array<string, int|float> $language
  */
 readonly class AiOperabilityOverview
 {
@@ -22,7 +22,7 @@ readonly class AiOperabilityOverview
      * @param list<array<string, mixed>> $stopReasons
      * @param array<string, int> $population
      * @param array<string, int> $actions
-     * @param array<string, int> $language
+     * @param array<string, int|float> $language
      */
     public function __construct(
         public bool $workEnabled = true,

@@ -33,10 +33,9 @@ more-intelligent choices. This package closes the distance between "wired and fa
   The combiners are module policy over driver outputs — scope, attribution, permission,
   current-validity, validation, budgets, persistence, failure mapping, translation and weighting. They
   never port a driver's algorithm to PHP and never add a native equivalent for comparison.
-- **The [reference deployment profile](budgets.md#reference-deployment-profile).** Native stays the
-  only path that fits 2 vCPU / 2 GB with no GPU. Hybrid mode is opt-in for hosts with measured headroom.
-  The default remains `native`; nothing on the reference profile changes without a measured resident
-  footprint and a measured gain.
+- **Best AI first, optimise later (owner, 16 September 2026).** The goal is the strongest account we
+  can build; the 2 vCPU / 2 GB profile is an optimisation target, not a gate. Hybrid mode is the
+  default, with native as the floor and every selected driver contributing alongside it.
 
 ## The collaboration model
 
@@ -46,7 +45,7 @@ external driver runs alongside it when it is healthy and can contribute**; a mod
 merges the two answers.
 
 ```
-ai.cognition.mode = native | external | hybrid        (default: native)
+ai.cognition.mode = native | external | hybrid        (default: hybrid)
 ```
 
 - **`native`** — the `*.driver` settings are ignored; every contract resolves to its native engine.
@@ -113,10 +112,9 @@ own similarity order; the merged order is the driver's order with the module's t
 floor applied on top. `RankedExperience` widens with a nullable `driverSimilarity` (the driver's own
 score), so a review and the conformance command can tell a native order from a driver order.
 
-Gate 2 stands: CBRKit only earns the hybrid default when `cbrkit.eval` over held-out real outcomes
-shows the gain the native uniform mean cannot express (the ≥5 pp top-k target already recorded in the
-driver-acceptance criteria). Until then hybrid runs opt-in and the measured comparison says exactly
-which order each engine contributed.
+`cbrkit.eval` over held-out real outcomes stays the recorded measure of the gain CBRKit adds over the
+native uniform mean (the ≥5 pp top-k target); hybrid is the default, and the measured comparison says
+exactly which order each engine contributed.
 
 ### Memory — a real caller first, then the driver's ranking
 
@@ -150,15 +148,15 @@ evicting recency. Two things are missing and both are in scope:
 
 ## Package acceptance
 
-With `ai.cognition.mode = native` the reference profile behaves exactly as today and makes zero
-external calls. With `hybrid` on a host that chose a driver, each selected driver contributes its own
-signal *in addition to* the native floor, every failure degrades per call to native alone, no driver
-can grant what the module refuses, and the measured comparison (`ai:cognition-conformance`) names the
-gain each driver adds. Driver-swap evidence (`external`) stays available for the ablation, unchanged.
+With `ai.cognition.mode = hybrid` (the default) each selected driver contributes its own signal *in
+addition to* the native floor, every failure degrades per call to native alone, no driver can grant
+what the module refuses, and the measured comparison (`ai:cognition-conformance`) names the gain each
+driver adds. `native` stays the ablation baseline and the reference-profile fallback; driver-swap
+evidence (`external`) stays available for the ablation, unchanged.
 
 ## What this package does not do
 
-- It does not enable any driver on the reference profile; `native` stays the default.
+- It does not enable a driver as a hard requirement; a missing sidecar degrades to native.
 - It does not write PHP that duplicates a driver's algorithm; the combiners are module policy over
   driver outputs.
 - It does not add PsychSim, embeddings, ML compression or semantic retrieval; those stay behind their

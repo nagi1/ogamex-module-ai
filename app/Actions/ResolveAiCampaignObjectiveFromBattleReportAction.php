@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Actions;
 
+use Carbon\CarbonImmutable;
+use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Models\AiCampaignObjective;
 use OGame\Models\BattleReport;
 use OGame\Models\Planet;
@@ -24,7 +26,7 @@ class ResolveAiCampaignObjectiveFromBattleReportAction
         /** @var BattleReport|null $battleReport */
         $battleReport = BattleReport::query()->find($battleReportId);
 
-        if ($battleReport === null || !$this->attackerWon($battleReport)) {
+        if ($battleReport === null) {
             return 0;
         }
 
@@ -39,10 +41,34 @@ class ResolveAiCampaignObjectiveFromBattleReportAction
             return 0;
         }
 
-        return AiCampaignObjective::query()
+        $objectives = AiCampaignObjective::query()
             ->where('planet_id', $planetId)
             ->whereNull('completed_at')
-            ->update(['completed_at' => $battleReport->created_at ?? now()]);
+            ->get(['id', 'campaign_id']);
+
+        if ($objectives->isEmpty()) {
+            return 0;
+        }
+
+        if ($this->attackerWon($battleReport)) {
+            return AiCampaignObjective::query()
+                ->whereIn('id', $objectives->pluck('id'))
+                ->update(['completed_at' => $battleReport->created_at ?? now()]);
+        }
+
+        // A battle at a standing stronghold that did not fall is the stronghold being contested,
+        // so the campaign carries one signal to consult on at its next decision.
+        $at = CarbonImmutable::instance($battleReport->created_at ?? now());
+
+        foreach ($objectives as $objective) {
+            app(RecordCampaignConsultationSignalAction::class)->handle(
+                $objective->campaign_id,
+                AiCampaignConsultationTrigger::ContestedObjective,
+                $at,
+            );
+        }
+
+        return 0;
     }
 
     private function attackerWon(BattleReport $battleReport): bool

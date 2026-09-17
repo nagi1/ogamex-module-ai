@@ -1,7 +1,6 @@
 <?php
 
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Http;
 use Modules\AI\Actions\AppraiseObservedBattleReportAction;
 use Modules\AI\Actions\CurrentAiAffectIntensityAction;
 use Modules\AI\Actions\EvaluateAiSocialExchangeAction;
@@ -36,11 +35,14 @@ use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\LongTermMemorySelector;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
 use Tests\IsolatedAccountTestCase;
 
-uses(IsolatedAccountTestCase::class);
+require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
+
+uses(IsolatedAccountTestCase::class, InteractsWithCognitionFixtures::class);
 
 const ABLATION_NOW = '2026-09-11 12:00:00 UTC';
 
@@ -223,7 +225,12 @@ test('configuration d reorders recall only when the recall driver is selected', 
 
     $baseline = array_column($recall(), 'id');
 
-    Http::fake(['*' => Http::response(['ranking' => [['id' => $second->id], ['id' => $first->id]]], 200)]);
+    // The driven order is the driver's; only the envelope is the recorded one, carrying this
+    // account's own ids.
+    $this->fakeAgentOsDriver($this->driverProbe('agentos.reversed_pair', [
+        '@first' => $first->id,
+        '@second' => $second->id,
+    ]));
     config(['ai.cognition.memory.driver' => AiMemoryDriver::AgentOs->value]);
     $driven = array_column($recall(), 'id');
 

@@ -32,16 +32,11 @@ class BuildCampaignConsultationBriefAction
         $candidates = $this->candidates($trace->candidates);
         $healthyEvidence = $this->healthyEvidence($evidence);
 
+        // S8: the campaign state and the legal candidates arrive through the agent's read-only
+        // tools, so only the current turn (the campaign id) and the admitted driver evidence stay
+        // in the prompt. Evidence has no tool yet, so it stays serialized rather than being dropped.
         $serialized = json_encode([
-            'campaign' => [
-                'id' => $campaign->id,
-                'state' => $campaign->state->value,
-                'starts_at' => $campaign->starts_at?->toIso8601String(),
-                'ends_at' => $campaign->ends_at?->toIso8601String(),
-                'open_objectives' => $campaign->objectives()->whereNull('completed_at')->count(),
-                'completed_objectives' => $campaign->objectives()->whereNotNull('completed_at')->count(),
-            ],
-            'candidates' => $candidates,
+            'campaign_id' => $campaign->id,
             'evidence' => array_map(
                 static fn (CampaignConsultationEvidence $item, int $index): array => [
                     'id' => $index + 1,
@@ -61,6 +56,7 @@ class BuildCampaignConsultationBriefAction
                 $candidates,
             ))),
             'evidenceIds' => array_map(static fn (int $index): int => $index + 1, array_keys($healthyEvidence)),
+            'candidates' => $candidates,
         ]);
     }
 

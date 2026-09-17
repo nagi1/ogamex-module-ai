@@ -3,6 +3,7 @@
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Modules\AI\Actions\RecordAiExperienceOutcomeAction;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\LongTermMemory;
@@ -15,8 +16,12 @@ use Modules\AI\Domain\Conversation\SocialExchangeContext;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiBuildingExperienceFeature;
 use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiExperienceCaseFamily;
+use Modules\AI\Enums\AiExperienceFeatureVersion;
+use Modules\AI\Enums\AiExperienceOutcome;
+use Modules\AI\Enums\AiExperienceRulesetVersion;
 use Modules\AI\Enums\AiMemoryDriver;
 use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiSocialExchangeType;
@@ -39,9 +44,12 @@ use Modules\AI\Support\FatimaScenarioTemplate;
 use Modules\AI\Support\LongTermMemorySelector;
 use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use Tests\IsolatedAccountTestCase;
 
-uses(IsolatedAccountTestCase::class);
+require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
+
+uses(IsolatedAccountTestCase::class, InteractsWithCognitionFixtures::class);
 
 beforeEach(function (): void {
     app()->bind(AiClock::class, SystemAiClock::class);
@@ -69,27 +77,51 @@ function hybridStimulus(AiArchetype $archetype = AiArchetype::Miner): ObservedSt
     ]);
 }
 
-function hybridFatimaFake(array $emotions = [], mixed $socialExchanges = []): void
+/** @return array<string, int> the module's real building-upgrade features */
+function hybridBuildingFeatures(int $objectId, int $targetLevel, int $planetId = 1): array
 {
-    Http::fake([
-        '*/scenarios' => Http::response('"Scenario created"'),
-        '*/emotions' => Http::response($emotions),
-        '*/socialexchanges' => Http::response($socialExchanges),
-        '*/beliefs' => Http::response('"Belief updated."'),
-        '*/perceptions' => Http::response('"perceived"'),
+    return [
+        AiBuildingExperienceFeature::PlanetId->value => $planetId,
+        AiBuildingExperienceFeature::ObjectId->value => $objectId,
+        AiBuildingExperienceFeature::TargetLevel->value => $targetLevel,
+    ];
+}
+
+function hybridBuildingCase(int $playerId, int $sourceId, int $objectId, int $targetLevel): int
+{
+    return app(RecordAiExperienceOutcomeAction::class)->handle(
+        $playerId,
+        $sourceId,
+        AiExperienceCaseFamily::BuildingUpgrade,
+        AiExperienceOutcome::Succeeded,
+        AiExperienceFeatureVersion::BuildingUpgradeV1->value,
+        AiExperienceRulesetVersion::HostBuildingCompletionV1->value,
+        hybridBuildingFeatures($objectId, $targetLevel),
+        0.5,
+        0.25,
+    )->id;
+}
+
+/** The production building-upgrade query, as `EconomyUpgrades` and the conformance trial ask it. */
+function hybridBuildingQuery(int $playerId, int $limit): ExperienceQuery
+{
+    return app()->makeWith(ExperienceQuery::class, [
+        'playerId' => $playerId,
+        'family' => AiExperienceCaseFamily::BuildingUpgrade,
+        'featureVersion' => AiExperienceFeatureVersion::BuildingUpgradeV1->value,
+        'rulesetVersion' => AiExperienceRulesetVersion::HostBuildingCompletionV1->value,
+        'features' => [
+            AiBuildingExperienceFeature::ObjectId->value => 2,
+            AiBuildingExperienceFeature::TargetLevel->value => 6,
+        ],
+        'limit' => $limit,
     ]);
 }
 
-function hybridEmotion(string $type, float $intensity, string $cause): array
-{
-    return ['Type' => $type, 'Intensity' => $intensity, 'Target' => 'Other', 'CauseEventId' => 1, 'CauseEventName' => $cause];
-}
-
-function hybridExchange(float|null $volition): array
-{
-    return [['Name' => 'CooperativeMove', 'Step' => 'Start', 'Volitions' => $volition === null ? [] : ['*' => $volition]]];
-}
-
+/**
+ * A greeting the module's own rules accept whatever the counterparty's standing is, so the
+ * driver's rapport threshold is the only thing that can withhold it.
+ */
 function hybridGreeting(float $trust = 0.5, float $affinity = 0.5): SocialExchangeContext
 {
     return app()->makeWith(SocialExchangeContext::class, [
@@ -165,21 +197,20 @@ test('the memory selector dispatches by mode', function (): void {
 
 test('the hybrid affect engine keeps the native taxonomy and carries the driver depth', function (): void {
     config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
-    hybridFatimaFake([
-        'Name' => 'Miner',
-        'Mood' => 0.5,
-        'Emotions' => [hybridEmotion('Anger', 1.0, 'Event(Action-End, Other, Harm, Miner)')],
-    ]);
+    $this->fakeFatimaDriver();
 
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(hybridStimulus());
     $native = app(NativeAffectEngine::class)->appraiseObservedEvent(hybridStimulus());
 
+    // The module's own persona-weighted figure is the appraisal; the driver's unweighted Anger is
+    // evidence alongside it, and its intensity is the one the sidecar really returned.
     expect($appraisal)->toBeInstanceOf(AffectAppraisal::class)
         ->and($appraisal->emotion)->toBe($native->emotion)
         ->and($appraisal->intensity)->toBe($native->intensity)
-        ->and($appraisal->mood)->toBe(0.5)
+        ->and($appraisal->intensity)->toBeLessThan(0.4)
+        ->and($appraisal->mood)->toEqual(0.0)
         ->and($appraisal->driverEmotion)->toBe(AiAffectEmotion::Anger)
-        ->and($appraisal->driverIntensity)->toBe(1.0);
+        ->and($appraisal->driverIntensity)->toEqual(0.4);
 });
 
 test('the hybrid affect engine degrades to a plain native appraisal when the driver is down', function (): void {
@@ -198,9 +229,11 @@ test('the hybrid affect engine degrades to a plain native appraisal when the dri
 
 test('the hybrid social engine withholds an acceptance the driver says cannot start', function (): void {
     config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
-    hybridFatimaFake([], hybridExchange(null));
+    $this->fakeFatimaDriver();
 
-    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(hybridGreeting());
+    // A standing of 0.2 reduces to a rapport of 2, which the authored scenario's starting
+    // condition does not clear, so CiF offers no volition at all.
+    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(hybridGreeting(0.2, 0.2));
 
     expect($evaluation->response)->toBe(AiSocialResponse::Reject)
         ->and($evaluation->reason)->toBe(AiSocialResponseReason::SocialExchangeVolition)
@@ -210,7 +243,9 @@ test('the hybrid social engine withholds an acceptance the driver says cannot st
 
 test('the hybrid social engine questions an acceptance the driver only weakly supports', function (): void {
     config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
-    hybridFatimaFake([], hybridExchange(2.0));
+    // The authored influence rule sets a constant, so the driver answers 7 or nothing at all and
+    // a volition below the module's own acceptance threshold can only be a probe.
+    $this->fakeFatimaDriver(['socialexchanges' => $this->driverProbe('fatima.socialexchanges.lukewarm')]);
 
     $evaluation = app(SocialCognition::class)->evaluateSocialExchange(hybridGreeting());
 
@@ -222,10 +257,11 @@ test('the hybrid social engine questions an acceptance the driver only weakly su
 
 test('the hybrid social engine keeps a native acceptance with strong driver evidence', function (): void {
     config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
-    hybridFatimaFake([], hybridExchange(7.0));
+    $this->fakeFatimaDriver();
 
     $evaluation = app(SocialCognition::class)->evaluateSocialExchange(hybridGreeting());
 
+    // A standing of 0.5 clears the authored threshold, so CiF offers the volition it really does.
     expect($evaluation->response)->toBe(AiSocialResponse::Accept)
         ->and($evaluation->reason)->toBe(AiSocialResponseReason::RoutineAcknowledgement)
         ->and($evaluation->volition)->toBe(7.0)
@@ -234,7 +270,7 @@ test('the hybrid social engine keeps a native acceptance with strong driver evid
 
 test('the hybrid social engine never overrides a native refusal', function (): void {
     config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
-    hybridFatimaFake([], hybridExchange(7.0));
+    $this->fakeFatimaDriver();
 
     $context = app()->makeWith(SocialExchangeContext::class, [
         'exchangeId' => 2,
@@ -284,79 +320,33 @@ test('the hybrid social engine answers natively when the driver has no counterpa
 test('the hybrid experience engine merges the native similarity with the driver order', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.mode' => 'hybrid']);
 
-    $first = app(Modules\AI\Actions\RecordAiExperienceOutcomeAction::class)->handle(
-        $this->currentUserId,
-        4001,
-        AiExperienceCaseFamily::SocialAssistance,
-        Modules\AI\Enums\AiExperienceOutcome::Succeeded,
-        'v1',
-        'v1',
-        ['amount' => 100, 'resource' => 'crystal'],
-        0.5,
-        0.25,
-    )->id;
-    $second = app(Modules\AI\Actions\RecordAiExperienceOutcomeAction::class)->handle(
-        $this->currentUserId,
-        4002,
-        AiExperienceCaseFamily::SocialAssistance,
-        Modules\AI\Enums\AiExperienceOutcome::Succeeded,
-        'v1',
-        'v1',
-        ['amount' => 50, 'resource' => 'metal'],
-        0.5,
-        0.25,
-    )->id;
+    // The module's uniform mean scores a different object at the right level at 0.833 and the same
+    // object at a distant level at 0.667, so native ranks the different object first. The driver's
+    // categorical identity puts any same-object case above any other, so it ranks them the other
+    // way round; the native similarity stays the figure the decision policy weighs.
+    $otherObject = hybridBuildingCase($this->currentUserId, 4001, 3, 6);
+    $distantLevel = hybridBuildingCase($this->currentUserId, 4002, 2, 2);
 
-    // The driver's own measure orders the cases the other way around from native.
-    Http::fake(['*' => Http::response(['steps' => [['queries' => ['current' => ['similarities' => [(string) $first => 0.4, (string) $second => 0.9]]]]]])]);
+    $this->fakeCbrKitDriver();
 
-    $query = app()->makeWith(ExperienceQuery::class, [
-        'playerId' => $this->currentUserId,
-        'family' => AiExperienceCaseFamily::SocialAssistance,
-        'featureVersion' => 'v1',
-        'rulesetVersion' => 'v1',
-        'features' => ['amount' => 100, 'resource' => 'crystal'],
-        'limit' => 5,
-    ]);
-
-    $ranked = app(ExperienceEngine::class)->rankSimilarExperiences($query);
+    $ranked = app(ExperienceEngine::class)->rankSimilarExperiences(hybridBuildingQuery($this->currentUserId, 5));
 
     expect($ranked)->toHaveCount(2)
-        ->and($ranked[0]->caseId)->toBe($second)
-        ->and($ranked[0]->similarity)->toBe(0.25)
-        ->and($ranked[0]->driverSimilarity)->toBe(0.9)
-        ->and($ranked[1]->caseId)->toBe($first)
-        ->and($ranked[1]->similarity)->toBe(1.0)
-        ->and($ranked[1]->driverSimilarity)->toBe(0.4);
+        ->and($ranked[0]->caseId)->toBe($distantLevel)
+        ->and($ranked[0]->similarity)->toEqualWithDelta(0.6666666666666667, 1e-9)
+        ->and($ranked[0]->driverSimilarity)->toEqualWithDelta(0.7777777777777778, 1e-9)
+        ->and($ranked[1]->caseId)->toBe($otherObject)
+        ->and($ranked[1]->similarity)->toEqualWithDelta(0.8333333333333334, 1e-9)
+        ->and($ranked[1]->driverSimilarity)->toEqualWithDelta(0.3333333333333333, 1e-9);
 });
 
 test('the hybrid experience engine keeps the native ranking when the driver is down', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.mode' => 'hybrid']);
-
-    app(Modules\AI\Actions\RecordAiExperienceOutcomeAction::class)->handle(
-        $this->currentUserId,
-        4003,
-        AiExperienceCaseFamily::SocialAssistance,
-        Modules\AI\Enums\AiExperienceOutcome::Succeeded,
-        'v1',
-        'v1',
-        ['amount' => 100],
-        0.5,
-        0.25,
-    );
+    hybridBuildingCase($this->currentUserId, 4003, 2, 6);
 
     Http::fake(fn (): never => throw new ConnectionException('down'));
 
-    $query = app()->makeWith(ExperienceQuery::class, [
-        'playerId' => $this->currentUserId,
-        'family' => AiExperienceCaseFamily::SocialAssistance,
-        'featureVersion' => 'v1',
-        'rulesetVersion' => 'v1',
-        'features' => ['amount' => 100],
-        'limit' => 5,
-    ]);
-
-    $ranked = app(ExperienceEngine::class)->rankSimilarExperiences($query);
+    $ranked = app(ExperienceEngine::class)->rankSimilarExperiences(hybridBuildingQuery($this->currentUserId, 5));
 
     expect($ranked)->toHaveCount(1)
         ->and($ranked[0]->driverSimilarity)->toBeNull()
@@ -366,61 +356,24 @@ test('the hybrid experience engine keeps the native ranking when the driver is d
 test('the hybrid experience engine keeps the native candidate set and only reorders within it', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.mode' => 'hybrid']);
 
-    $best = app(Modules\AI\Actions\RecordAiExperienceOutcomeAction::class)->handle(
-        $this->currentUserId,
-        4010,
-        AiExperienceCaseFamily::SocialAssistance,
-        Modules\AI\Enums\AiExperienceOutcome::Succeeded,
-        'v1',
-        'v1',
-        ['amount' => 100],
-        0.5,
-        0.25,
-    )->id;
-    $middle = app(Modules\AI\Actions\RecordAiExperienceOutcomeAction::class)->handle(
-        $this->currentUserId,
-        4011,
-        AiExperienceCaseFamily::SocialAssistance,
-        Modules\AI\Enums\AiExperienceOutcome::Succeeded,
-        'v1',
-        'v1',
-        ['amount' => 80],
-        0.5,
-        0.25,
-    )->id;
-    $far = app(Modules\AI\Actions\RecordAiExperienceOutcomeAction::class)->handle(
-        $this->currentUserId,
-        4012,
-        AiExperienceCaseFamily::SocialAssistance,
-        Modules\AI\Enums\AiExperienceOutcome::Succeeded,
-        'v1',
-        'v1',
-        ['amount' => 10],
-        0.5,
-        0.25,
-    )->id;
+    $exact = hybridBuildingCase($this->currentUserId, 4010, 2, 6);
+    $otherObject = hybridBuildingCase($this->currentUserId, 4011, 3, 6);
+    $distantLevel = hybridBuildingCase($this->currentUserId, 4012, 2, 2);
 
-    // The driver promotes `far` over the native top two, but the native set is authoritative:
-    // `far` is not evidence and the driver only reorders the two cases native kept.
-    Http::fake(['*' => Http::response(['steps' => [['queries' => ['current' => ['similarities' => [(string) $best => 0.1, (string) $middle => 0.2, (string) $far => 0.9]]]]]])]);
+    $this->fakeCbrKitDriver();
 
-    $query = app()->makeWith(ExperienceQuery::class, [
-        'playerId' => $this->currentUserId,
-        'family' => AiExperienceCaseFamily::SocialAssistance,
-        'featureVersion' => 'v1',
-        'rulesetVersion' => 'v1',
-        'features' => ['amount' => 100],
-        'limit' => 2,
-    ]);
+    // The driver ranks the distant level above the different object, but the native cut of two is
+    // authoritative: a case native did not rank is not evidence for this choice, so the answer
+    // holds the native pair and the excluded case never surfaces.
+    $ranked = app(ExperienceEngine::class)->rankSimilarExperiences(hybridBuildingQuery($this->currentUserId, 2));
+    $rankedIds = array_map(fn ($case): int => $case->caseId, $ranked);
 
-    $ranked = app(ExperienceEngine::class)->rankSimilarExperiences($query);
-
-    expect($ranked)->toHaveCount(2)
-        ->and($ranked[0]->caseId)->toBe($middle)
-        ->and($ranked[0]->similarity)->toBe(0.8)
-        ->and($ranked[0]->driverSimilarity)->toBe(0.2)
-        ->and($ranked[1]->caseId)->toBe($best)
-        ->and($ranked[1]->similarity)->toBe(1.0)
+    expect($rankedIds)->toBe([$exact, $otherObject])
+        ->and($rankedIds)->not->toContain($distantLevel)
+        ->and($ranked[0]->similarity)->toBe(1.0)
+        ->and($ranked[0]->driverSimilarity)->toBe(1.0)
+        ->and($ranked[1]->similarity)->toEqualWithDelta(0.8333333333333334, 1e-9)
+        // The driver never ranked this one, so it arrives with no driver evidence at all.
         ->and($ranked[1]->driverSimilarity)->toBeNull();
 });
 

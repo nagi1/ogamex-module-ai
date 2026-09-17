@@ -4,17 +4,20 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
+require_once __DIR__ . '/../Support/InteractsWithCognitionFixtures.php';
 
-uses(AiQueueModuleTestCase::class);
+uses(AiQueueModuleTestCase::class, InteractsWithCognitionFixtures::class);
 
 /**
  * The opt-in measurement run is module code, so it is covered like any other: every refusal,
  * both driver paths and the failure probes.
  *
- * With the sidecars faked the run is instant, which is what keeps it inside the fast suite
- * while the real measurement stays an operator command. The module is booted here rather than
+ * The sidecars are replayed from the bodies they really answered
+ * (`tests/Fixtures/cognition/`), which keeps the run instant and inside the fast suite while the
+ * real measurement stays an operator command. The module is booted here rather than
  * wired by hand, so this also proves the command is registered and its bindings resolve in a
  * real installation instead of only under a test-local copy of them.
  */
@@ -32,71 +35,6 @@ function cognitionConformanceEvidence(): array
         'path' => $path,
         'report' => json_decode(Storage::disk('local')->get($path), true, flags: JSON_THROW_ON_ERROR),
     ];
-}
-
-/** Both sidecars answer in the shape the real ones do, including the failure probe. */
-function fakeCognitionSidecars(): void
-{
-    Http::fake([
-        '*/scenarios' => Http::response('"Scenario created"'),
-        '*/beliefs' => Http::response('"Belief updated."'),
-        '*/perceptions' => Http::response('"perceived"'),
-        '*/emotions' => Http::response([
-            'Name' => 'Miner',
-            'Mood' => 0.0,
-            'Emotions' => [[
-                'Type' => 'Anger',
-                'Intensity' => 5.0,
-                'Target' => 'Other',
-                'CauseEventId' => 1,
-                'CauseEventName' => 'Event(Action-End, Other, Harm, Miner)',
-            ]],
-        ]),
-        '*/retrieve' => function ($request) {
-            return retrievalResponse($request);
-        },
-    ]);
-}
-
-/** Only the retrieval endpoint answers, for the runs that measure the experience driver alone. */
-function fakeRetrievalSidecar(): void
-{
-    Http::fake([
-        '*/retrieve' => function ($request) {
-            return retrievalResponse($request);
-        },
-    ]);
-}
-
-/**
- * Emulates the driver's per-feature weighted measure: object identity is categorical, so a
- * case scores 1.0 when its object matches the query and 0.0 otherwise. The tie fixture (all
- * one object) therefore ties as the real driver does, while the differentiation probe's mixed
- * objects expose the categorical tie the module's own numeric port could not produce.
- */
-function retrievalResponse($request)
-{
-    $payload = $request->data();
-    $casebase = $payload['casebase'];
-
-    // The real driver refuses a casebase whose values are not objects, which is the
-    // failure mode the probe records.
-    if (!is_array($casebase)) {
-        return Http::response('not an object', 500);
-    }
-
-    $query = is_array($payload['queries']['current'] ?? null) ? $payload['queries']['current'] : [];
-    $objectId = $query['object_id'] ?? null;
-    $similarities = [];
-
-    foreach ($casebase as $id => $case) {
-        $case = is_array($case) ? $case : [];
-        $similarities[(string) $id] = ($case['object_id'] ?? null) === $objectId ? 1.0 : 0.0;
-    }
-
-    return Http::response([
-        'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
-    ]);
 }
 
 test('the conformance run refuses to contact a sidecar without explicit confirmation', function (): void {
@@ -131,7 +69,8 @@ test('a run with neither driver selected explains what to configure', function (
 
 test('a measured run records latency, bytes and failure modes for both drivers', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.driver' => 'fatima']);
-    fakeCognitionSidecars();
+    $this->fakeFatimaDriver();
+    $this->fakeCbrKitDriver();
 
     $this->artisan('ai:cognition-conformance --confirm --iterations=2')
         ->expectsOutputToContain('Measured evidence written to')
@@ -176,7 +115,7 @@ test('a measured run records latency, bytes and failure modes for both drivers',
 
 test('a hybrid run measures the driver contribution against the native floor', function (): void {
     config(['ai.cognition.driver' => 'fatima']);
-    fakeCognitionSidecars();
+    $this->fakeFatimaDriver();
 
     $this->artisan('ai:cognition-conformance --confirm --only=fatima --iterations=1 --mode=hybrid')
         ->expectsOutputToContain('Measured evidence written to')
@@ -196,7 +135,7 @@ test('a hybrid run measures the driver contribution against the native floor', f
 
 test('the iteration count defaults to twenty and is floored at one', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.driver' => 'native']);
-    fakeRetrievalSidecar();
+    $this->fakeCbrKitDriver();
 
     $this->artisan('ai:cognition-conformance --confirm --only=cbrkit')->assertExitCode(0);
     expect(cognitionConformanceEvidence()['report']['iterations'])->toBe(20);
@@ -208,26 +147,9 @@ test('the iteration count defaults to twenty and is floored at one', function ()
 test('a ranking that disagrees with the module fails the run', function (): void {
     config(['ai.cognition.experience.driver' => 'cbrkit', 'ai.cognition.driver' => 'native']);
 
-    // Ascending scores invert the module's own ordering for a tied casebase.
-    Http::fake([
-        '*/retrieve' => function ($request) {
-            $casebase = $request->data()['casebase'];
-
-            if (!is_array($casebase)) {
-                return Http::response('not an object', 500);
-            }
-
-            $similarities = [];
-
-            foreach (array_keys($casebase) as $position => $id) {
-                $similarities[(string) $id] = (float) $position;
-            }
-
-            return Http::response([
-                'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
-            ]);
-        },
-    ]);
+    // The conformance casebase ties in the retriever's own measure, so a ranking that
+    // disagrees with the module's ordering can only be authored.
+    $this->fakeCbrKitDisagreeingDriver();
 
     $this->artisan('ai:cognition-conformance --confirm --only=cbrkit --iterations=1')->assertExitCode(1);
 
@@ -240,13 +162,8 @@ test('a ranking that disagrees with the module fails the run', function (): void
 test('a cognition driver that cannot answer fails the run', function (): void {
     config(['ai.cognition.driver' => 'fatima']);
 
-    Http::fake([
-        '*/scenarios' => Http::response('"created"'),
-        '*/beliefs' => Http::response('"ok"'),
-        '*/perceptions' => Http::response('"ok"'),
-        // The driver reports failures as a plain JSON string while still answering 200.
-        '*/emotions' => Http::response('"There are already stored property values that will collide"'),
-    ]);
+    // The driver reports failures as a plain JSON string while still answering 200.
+    $this->fakeFatimaDriver(['*' => $this->driverProbe('fatima.emotions.plain_failure')]);
 
     $this->artisan('ai:cognition-conformance --confirm --only=fatima --iterations=1')->assertExitCode(1);
 

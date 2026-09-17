@@ -23,9 +23,12 @@ use Modules\AI\Support\DriverResponseLimit;
 use Modules\AI\Support\ExperienceEngineSelector;
 use Modules\AI\Support\FatimaScenarioTemplate;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use Tests\IsolatedAccountTestCase;
 
-uses(IsolatedAccountTestCase::class);
+require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
+
+uses(IsolatedAccountTestCase::class, InteractsWithCognitionFixtures::class);
 
 /**
  * Bounded input (gate A4). The module decides how much a driver may say back, because a
@@ -33,6 +36,7 @@ uses(IsolatedAccountTestCase::class);
  * oversized body is refused exactly like a malformed one and the native answer stands.
  */
 beforeEach(function (): void {
+    config(['ai.cognition.mode' => 'external']);
     app()->bind(AiClock::class, SystemAiClock::class);
     app()->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
     app()->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
@@ -104,7 +108,7 @@ test('an oversized experience-driven response is refused and the native ranking 
         'ai.cognition.payload.maximum_response_bytes' => 64,
     ]);
     boundedExperienceCase($this->currentUserId, 4001, 2);
-    Http::fake(['*' => Http::response(str_repeat('x', 4_096))]);
+    $this->fakeCbrKitDriver($this->driverProbe('cbrkit.oversized'));
 
     $ranked = app(ExperienceEngine::class)->rankSimilarExperiences(boundedExperienceQuery($this->currentUserId, 2));
 
@@ -118,15 +122,17 @@ test('a response within the bound is still interpreted', function (): void {
         'ai.cognition.experience.driver' => 'cbrkit',
         'ai.cognition.payload.maximum_response_bytes' => 4_096,
     ]);
-    $caseId = boundedExperienceCase($this->currentUserId, 4002, 2);
-    Http::fake(['*' => Http::response([
-        'steps' => [['queries' => ['current' => ['similarities' => [(string) $caseId => 0.25]]]]],
-    ])]);
+    boundedExperienceCase($this->currentUserId, 4002, 2);
+
+    $this->fakeCbrKitDriver();
 
     $ranked = app(ExperienceEngine::class)->rankSimilarExperiences(boundedExperienceQuery($this->currentUserId, 2));
 
+    // The retriever scores a matching object at 1.0, and the driver was the one asked.
     expect($ranked)->toHaveCount(1)
-        ->and($ranked[0]->similarity)->toBe(0.25);
+        ->and($ranked[0]->similarity)->toBe(1.0);
+
+    Http::assertSentCount(1);
 });
 
 test('an oversized cognition-driven response is refused and the native appraisal stands', function (): void {
@@ -134,12 +140,7 @@ test('an oversized cognition-driven response is refused and the native appraisal
         'ai.cognition.driver' => 'fatima',
         'ai.cognition.payload.maximum_response_bytes' => 64,
     ]);
-    Http::fake([
-        '*/scenarios' => Http::response('"created"'),
-        '*/beliefs' => Http::response('"Belief updated."'),
-        '*/perceptions' => Http::response('"perceived"'),
-        '*/emotions' => Http::response(str_repeat('x', 4_096)),
-    ]);
+    $this->fakeFatimaDriver(['*' => $this->driverProbe('fatima.emotions.oversized')]);
 
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(boundedStimulus(AiArchetype::Miner, 0.5));
 

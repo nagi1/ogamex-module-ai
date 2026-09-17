@@ -108,6 +108,17 @@ class ResolveAiProviderRouteAction
         return $this->covers($definition, $now);
     }
 
+    /**
+     * Whether a vendor is inside its own published peak window at the given time.
+     *
+     * The cost resolver shares this so a request and its price agree on which half of the
+     * day it is; a vendor with no window is never peak.
+     */
+    public function isPeakFor(string $provider, CarbonImmutable $now): bool
+    {
+        return $this->isPeak($provider, $now);
+    }
+
     /** @param array<string, mixed> $definition */
     private function covers(array $definition, CarbonImmutable $now): bool
     {
@@ -165,13 +176,13 @@ class ResolveAiProviderRouteAction
     /** @return list<array{provider: string, model: string}> */
     private function configuredPair(AiLanguageTaskKind $task, bool $requireCredential): array
     {
-        $provider = (string) config($this->providerConfigKey($task) . '.provider', 'openai');
+        $provider = (string) config($this->providerConfigKey($task) . '.provider', 'deepseek');
 
         if ($requireCredential && !$this->hasCredential($provider)) {
             return [];
         }
 
-        return [['provider' => $provider, 'model' => (string) config($this->providerConfigKey($task) . '.model', 'gpt-5-mini')]];
+        return [['provider' => $provider, 'model' => (string) config($this->providerConfigKey($task) . '.model', 'deepseek-flash')]];
     }
 
     private function providerConfigKey(AiLanguageTaskKind $task): string

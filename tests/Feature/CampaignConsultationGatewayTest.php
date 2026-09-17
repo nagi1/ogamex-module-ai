@@ -10,6 +10,8 @@ use Modules\AI\Enums\AiCampaignConsultationStatus;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Infrastructure\Language\LaravelAiCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\NullCampaignConsultationGateway;
+use Modules\AI\Infrastructure\Language\Tools\CampaignFactsTool;
+use Modules\AI\Infrastructure\Language\Tools\LegalCandidatesTool;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -25,11 +27,12 @@ function consultationRequest(bool $emptyLadder = false): CampaignConsultationReq
     return new CampaignConsultationRequest(
         AiCampaignConsultationTrigger::NewPhase,
         'brief',
-        [3, 6],
         app()->makeWith(AiProviderLadder::class, ['rungs' => $emptyLadder ? [] : [['provider' => 'openai', 'model' => 'gpt-5-mini']]]),
         20,
         400,
         8,
+        5,
+        [['id' => 3, 'action' => 'Build', 'reason' => 'fixture', 'score' => 2.0], ['id' => 6, 'action' => 'Research', 'reason' => 'fixture', 'score' => 1.0]],
     );
 }
 
@@ -131,11 +134,13 @@ test('malformed structured envelopes are invalid and never name a candidate', fu
     }
 });
 
-test('the agent declares its bounded schema and untrusted-data instructions', function (): void {
+test('the agent declares its bounded schema, its read-only tools and tool-first instructions', function (): void {
     $agent = app()->makeWith(OgameCampaignConsultationAgent::class, ['request' => consultationRequest()]);
+    $tools = collect($agent->tools())->map(static fn (object $tool): string => $tool::class)->all();
 
-    expect($agent->instructions())->toContain('3, 6')
-        ->and($agent->schema(new JsonSchemaTypeFactory()))->toHaveKeys(['candidate_id', 'risk', 'reason', 'evidence_ids']);
+    expect($agent->instructions())->not->toContain('3, 6')
+        ->and($agent->schema(new JsonSchemaTypeFactory()))->toHaveKeys(['candidate_id', 'risk', 'reason', 'evidence_ids'])
+        ->and($tools)->toBe([CampaignFactsTool::class, LegalCandidatesTool::class]);
 });
 
 test('an enabled lane resolves the SDK gateway through the provider binding', function (): void {

@@ -32,6 +32,17 @@ The first campaign limits enemy aggression to a published campaign schedule and 
 
 Use disclosed fixed starting conditions, ordinary production and a pre-campaign difficulty profile. Adjust future campaigns using aggregate participation and outcomes; never scale a defender invisibly after humans commit fleets. Review repeated pressure and losses before increasing difficulty.
 
+## LLM consultation pulls facts, not prompts
+
+The campaign director and the later social/diplomacy lanes may ask a model for a bounded recommendation,
+but they do not pre-ship every fact the model might need. They give the model a small set of read-only
+tools — campaign facts, the legal candidates with native scores, one counterparty's remembered terms,
+and a host capability read — so it pulls only what it is weighing, on demand, and the module's own
+deterministic validator still decides what to do with the answer. The tool contract and the gate rules
+are in [laravel-ai-tools.md](../research/laravel-ai-tools.md); a tool is host-read, bounded, read-only
+and never an authority, and the same failure path as the monolithic brief applies — a missing provider
+or an empty tool answer leaves the native decision unchanged.
+
 ## Contributions and rewards
 
 Scouts share authorized reports; suppliers deliver real resources to participating allies; defenders use permitted ACS support; attackers and recyclers commit actual fleets. The board distinguishes verified actions from self-reported assistance. Visibility requires consent or ordinary report access.

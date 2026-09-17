@@ -17,7 +17,7 @@ use Modules\AI\Domain\Review\AiScoreReport;
  * @property array<string, int> $work
  * @property array<string, int> $actions
  * @property list<float> $latencyMinutes
- * @property array<string, int> $language
+ * @property array<string, int|float> $language
  * @property array<string, mixed>|null $feedback
  */
 readonly class AiPilotReport
@@ -29,7 +29,7 @@ readonly class AiPilotReport
      * @param array<string, int> $work
      * @param array<string, int> $actions
      * @param list<float> $latencyMinutes
-     * @param array<string, int> $language
+     * @param array<string, int|float> $language
      * @param array<string, mixed>|null $feedback
      */
     public function __construct(

@@ -181,17 +181,18 @@ class BuildAiPilotReportAction
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|float>
      */
     private function language(CarbonImmutable $from, CarbonImmutable $now): array
     {
         $reservations = AiUsageReservation::query()
             ->whereBetween('reserved_for', [$from->toDateString(), $now->toDateString()])
-            ->get(['actual_input_tokens', 'actual_output_tokens']);
+            ->get(['actual_input_tokens', 'actual_output_tokens', 'cost']);
 
         return [
             'attempts' => AiLanguageRequest::query()->whereBetween('created_at', [$from, $now])->count(),
             'tokens' => (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_input_tokens + (int) $reservation->actual_output_tokens),
+            'cost' => round((float) $reservations->sum(static fn ($reservation): float => (float) $reservation->cost), 8),
         ];
     }
 

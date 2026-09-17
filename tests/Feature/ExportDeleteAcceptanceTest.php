@@ -29,10 +29,13 @@ use Modules\AI\Support\LongTermMemorySelector;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use OGame\Models\ChatMessage;
 use Tests\IsolatedAccountTestCase;
 
-uses(IsolatedAccountTestCase::class);
+require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
+
+uses(IsolatedAccountTestCase::class, InteractsWithCognitionFixtures::class);
 
 const DELETE_ACCEPTANCE_NOW = '2026-09-11 12:00:00 UTC';
 
@@ -164,7 +167,12 @@ test('swapping the recall driver changes the order and never the canonical state
     $before = canonicalState($this->currentUserId);
     $nativeOrder = app(LongTermMemory::class)->recallRelevantMemories(recallQueryFor($this->currentUserId, $human->id, 'debt'));
 
-    Http::fake(['*' => Http::response(['ranking' => [['id' => $nativeOrder[1]['id']], ['id' => $nativeOrder[0]['id']]]], 200)]);
+    // The driven order is the driver's; only the envelope is the recorded one, carrying this
+    // account's own ids.
+    $this->fakeAgentOsDriver($this->driverProbe('agentos.reversed_pair', [
+        '@first' => (int) $nativeOrder[0]['id'],
+        '@second' => (int) $nativeOrder[1]['id'],
+    ]));
     config(['ai.cognition.memory.driver' => AiMemoryDriver::AgentOs->value]);
     $drivenOrder = app(LongTermMemory::class)->recallRelevantMemories(recallQueryFor($this->currentUserId, $human->id, 'debt'));
 

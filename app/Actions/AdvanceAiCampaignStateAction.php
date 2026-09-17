@@ -3,6 +3,7 @@
 namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
+use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Enums\AiCampaignState;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignObjective;
@@ -49,6 +50,8 @@ class AdvanceAiCampaignStateAction
         if ($campaign->state === AiCampaignState::Preparing && $campaign->starts_at !== null && $now->gte($campaign->starts_at)) {
             $campaign->state = AiCampaignState::Active;
             $campaign->save();
+
+            app(RecordCampaignConsultationSignalAction::class)->handle($campaign->id, AiCampaignConsultationTrigger::NewPhase, $now);
         }
 
         if ($campaign->state !== AiCampaignState::Active) {

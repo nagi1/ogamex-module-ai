@@ -1,0 +1,359 @@
+{
+    "_meta": {
+        "driver": "fatima",
+        "image": "ogamex-ai-cognition-fatima:net8",
+        "endpoint": "http://host.docker.internal:8092",
+        "captured_at": "2026-09-16T21:11:44Z",
+        "capture_script": "scripts/capture-cognition-fixtures.php",
+        "request_builder": "Modules\\AI\\Infrastructure\\Cognition\\FatimaClient + FatimaCognitionSession",
+        "scenario": "OgameCognition",
+        "instance": 1,
+        "character": "Miner",
+        "note": "The recorded social-exchange target is the capture counterparty; the module reads only Name, Step and Volitions."
+    },
+    "channels": {
+        "scenario_created": "Scenario named 'OgameCognition' created containing '5' characters",
+        "belief_updated": "Belief updated.",
+        "perception_perceived": "1 event(s) perceived by Miner",
+        "emotions": {
+            "aid": {
+                "request": {
+                    "event": "Event(Action-End, Other, Aid, Miner)",
+                    "beliefs": {
+                        "StimulusDesirability(SELF, Other)": "0.5",
+                        "StimulusThreat(SELF, Other)": "0"
+                    }
+                },
+                "body": {
+                    "Name": "Miner",
+                    "Mood": 0,
+                    "Emotions": [
+                        {
+                            "Type": "Gratitude",
+                            "Intensity": 0.5,
+                            "Target": "Other",
+                            "CauseEventId": 1,
+                            "CauseEventName": "Event(Action-End, Other, Aid, Miner)"
+                        }
+                    ]
+                }
+            },
+            "aid_strong": {
+                "request": {
+                    "event": "Event(Action-End, Other, Aid, Miner)",
+                    "beliefs": {
+                        "StimulusDesirability(SELF, Other)": "0.9",
+                        "StimulusThreat(SELF, Other)": "0"
+                    }
+                },
+                "body": {
+                    "Name": "Miner",
+                    "Mood": 0,
+                    "Emotions": [
+                        {
+                            "Type": "Gratitude",
+                            "Intensity": 0.9,
+                            "Target": "Other",
+                            "CauseEventId": 1,
+                            "CauseEventName": "Event(Action-End, Other, Aid, Miner)"
+                        }
+                    ]
+                }
+            },
+            "harm": {
+                "request": {
+                    "event": "Event(Action-End, Other, Harm, Miner)",
+                    "beliefs": {
+                        "StimulusDesirability(SELF, Other)": "-0.4",
+                        "StimulusThreat(SELF, Other)": "0"
+                    }
+                },
+                "body": {
+                    "Name": "Miner",
+                    "Mood": 0,
+                    "Emotions": [
+                        {
+                            "Type": "Anger",
+                            "Intensity": 0.4,
+                            "Target": "Other",
+                            "CauseEventId": 1,
+                            "CauseEventName": "Event(Action-End, Other, Harm, Miner)"
+                        }
+                    ]
+                }
+            },
+            "threat": {
+                "request": {
+                    "event": "Event(Action-End, Other, Threaten, Miner)",
+                    "beliefs": {
+                        "StimulusDesirability(SELF, Other)": "0",
+                        "StimulusThreat(SELF, Other)": "-0.6"
+                    }
+                },
+                "body": {
+                    "Name": "Miner",
+                    "Mood": 0,
+                    "Emotions": [
+                        {
+                            "Type": "Fear",
+                            "Intensity": 0.6,
+                            "Target": "-",
+                            "CauseEventId": 1,
+                            "CauseEventName": "Event(Action-End, Other, Threaten, Miner)"
+                        }
+                    ]
+                }
+            },
+            "neutral": {
+                "request": {
+                    "event": "Event(Action-End, Other, Harm, Miner)",
+                    "beliefs": {
+                        "StimulusDesirability(SELF, Other)": "0",
+                        "StimulusThreat(SELF, Other)": "0"
+                    }
+                },
+                "body": {
+                    "Name": "Miner",
+                    "Mood": 0,
+                    "Emotions": []
+                }
+            }
+        },
+        "socialexchanges": {
+            "rapport-0": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "0"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": []
+                    }
+                ]
+            },
+            "rapport-1": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "1"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": []
+                    }
+                ]
+            },
+            "rapport-2": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "2"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": []
+                    }
+                ]
+            },
+            "rapport-3": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "3"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": []
+                    }
+                ]
+            },
+            "rapport-4": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "4"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            },
+            "rapport-5": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "5"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            },
+            "rapport-6": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "6"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            },
+            "rapport-7": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "7"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            },
+            "rapport-8": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "8"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            },
+            "rapport-9": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "9"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            },
+            "rapport-10": {
+                "request": {
+                    "target": "Player42",
+                    "rapport": "10"
+                },
+                "body": [
+                    {
+                        "Name": "CooperativeMove",
+                        "Description": "Whether this counterparty's standing supports a cooperative move",
+                        "Target": "Player42",
+                        "Step": "Start",
+                        "Steps": [
+                            "Start",
+                            "Give",
+                            "End"
+                        ],
+                        "Volitions": {
+                            "*": 7
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}

@@ -14,10 +14,10 @@ use Tests\IsolatedAccountTestCase;
 uses(IsolatedAccountTestCase::class);
 
 /**
- * The redacted brief carries exactly what the lane is permitted to say: the module's own
- * campaign state, the legal candidates with their native scores, and only the driver evidence
- * that is authorised, non-null and fresh. Missing, invalid, stale and unauthorised evidence
- * is absent, and no candidate parameter or source timestamp ever leaves the module.
+ * The redacted brief carries the current turn and the driver evidence that is authorised, non-null
+ * and fresh; the campaign state and the legal candidates with their native scores travel structured
+ * for the consultation tools instead of being serialized. Missing, invalid, stale and unauthorised
+ * evidence is absent, and no candidate parameter or source timestamp ever leaves the module.
  */
 function briefCampaign(): Modules\AI\Models\AiCampaign
 {
@@ -106,12 +106,10 @@ test('the brief lists legal candidates by stable action-type id, without paramet
         scoredCandidate(AiCandidateActionType::Build, 4.0),
     ]), []);
 
-    $decoded = json_decode($brief->serialized, true, flags: JSON_THROW_ON_ERROR);
-
     expect($brief->candidateIds)->toBe([AiCandidateActionType::Build->value, AiCandidateActionType::FleetSave->value])
-        ->and($decoded['candidates'][0])->toMatchArray(['id' => AiCandidateActionType::Build->value, 'action' => 'Build'])
-        ->and($decoded['candidates'][1])->toMatchArray(['id' => AiCandidateActionType::FleetSave->value, 'action' => 'FleetSave'])
-        ->and($decoded['candidates'])->each->not->toHaveKey('parameters');
+        ->and($brief->candidates[0])->toMatchArray(['id' => AiCandidateActionType::Build->value, 'action' => 'Build'])
+        ->and($brief->candidates[1])->toMatchArray(['id' => AiCandidateActionType::FleetSave->value, 'action' => 'FleetSave'])
+        ->and($brief->candidates)->each->not->toHaveKey('parameters');
 });
 
 test('a duplicated candidate type keeps only its best native score', function (): void {
@@ -120,9 +118,7 @@ test('a duplicated candidate type keeps only its best native score', function ()
         scoredCandidate(AiCandidateActionType::Build, 7.0, 'higher'),
     ]), []);
 
-    $decoded = json_decode($brief->serialized, true, flags: JSON_THROW_ON_ERROR);
-
-    expect($decoded['candidates'])->toHaveCount(1)
-        ->and($decoded['candidates'][0]['score'])->toEqual(7.0)
-        ->and($decoded['candidates'][0]['reason'])->toBe('higher');
+    expect($brief->candidates)->toHaveCount(1)
+        ->and($brief->candidates[0]['score'])->toEqual(7.0)
+        ->and($brief->candidates[0]['reason'])->toBe('higher');
 });

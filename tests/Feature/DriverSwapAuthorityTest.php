@@ -30,9 +30,12 @@ use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\ExperienceEngineSelector;
 use Modules\AI\Support\FatimaScenarioTemplate;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use Tests\IsolatedAccountTestCase;
 
-uses(IsolatedAccountTestCase::class);
+require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
+
+uses(IsolatedAccountTestCase::class, InteractsWithCognitionFixtures::class);
 
 /**
  * One authority (gate A2) and no truth widening (gate A5).
@@ -47,6 +50,7 @@ uses(IsolatedAccountTestCase::class);
  * as AIServiceProvider::register() wires them.
  */
 beforeEach(function (): void {
+    config(['ai.cognition.mode' => 'external']);
     app()->bind(AiClock::class, SystemAiClock::class);
     app()->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
     app()->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
@@ -166,38 +170,6 @@ function seedSwapAuthority(int $playerId, int $counterpartyId): void
     swapExperienceCase($playerId, $observation->id, 2);
 }
 
-/** Both drivers answer, and the cognition driver answers beyond the module's scale. */
-function hostileSwapAnswers(): void
-{
-    Http::fake([
-        '*/scenarios' => Http::response('"Scenario created"'),
-        '*/beliefs' => Http::response('"Belief updated."'),
-        '*/perceptions' => Http::response('"perceived"'),
-        '*/emotions' => Http::response([
-            'Name' => 'Miner',
-            'Mood' => 0.0,
-            'Emotions' => [[
-                'Type' => 'Anger',
-                'Intensity' => 5.0,
-                'Target' => 'Other',
-                'CauseEventId' => 1,
-                'CauseEventName' => 'Event(Action-End, Other, Harm, Miner)',
-            ]],
-        ]),
-        '*/retrieve' => function ($request) {
-            $similarities = [];
-
-            foreach (array_keys($request->data()['casebase']) as $id) {
-                $similarities[(string) $id] = 1.0;
-            }
-
-            return Http::response([
-                'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
-            ]);
-        },
-    ]);
-}
-
 test('disabling every driver answers from the module and writes no record', function (): void {
     $counterparty = $this->createUser();
     seedSwapAuthority($this->currentUserId, $counterparty->id);
@@ -221,9 +193,10 @@ test('a swapped driver may change its answer while changing no module record', f
     seedSwapAuthority($this->currentUserId, $counterparty->id);
     $before = moduleRecordSnapshot();
 
-    // Stubs are registered once: a second Http::fake() merges rather than replaces, so an
-    // earlier catch-all would silently shadow every driver response below.
-    hostileSwapAnswers();
+    // Both sidecars answer from their recordings, so the swap is not vacuously passing. Each
+    // fake is registered against its own endpoint, so neither can shadow the other.
+    $this->fakeFatimaDriver();
+    $this->fakeCbrKitDriver();
 
     config(['ai.cognition.driver' => AiCognitionDriver::Native->value, 'ai.cognition.experience.driver' => 'native']);
     $baselineIntensity = app(AffectEngine::class)->appraiseObservedEvent(swapObservedStimulus())->intensity;
@@ -253,21 +226,11 @@ test('a driver cannot surface a case the module did not send', function (): void
     swapExperienceCase($foreignOwner->id, 6002, 2);
 
     config(['ai.cognition.experience.driver' => 'cbrkit']);
-    Http::fake(function ($request) {
-        $casebase = $request->data()['casebase'];
-        $similarities = [];
-
-        foreach (array_keys($casebase) as $id) {
-            $similarities[(string) $id] = 1.0;
-        }
-
-        // The module never sent this case, so it can never become retrievable evidence.
-        $similarities['987654'] = 1.0;
-
-        return Http::response([
-            'steps' => [['queries' => ['current' => ['similarities' => $similarities]]]],
-        ]);
-    });
+    // The retriever scores only what it is handed, so an answer naming a case the module never
+    // sent can only be a probe.
+    $this->fakeCbrKitDriver($this->driverProbe('cbrkit.scores_an_unsent_case', [
+        '@sent' => (string) $ownCaseId,
+    ]));
 
     $ranked = app(ExperienceEngine::class)->rankSimilarExperiences(swapExperienceQuery($this->currentUserId));
 

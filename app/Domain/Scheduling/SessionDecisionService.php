@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Scheduling;
 
 use Carbon\CarbonImmutable;
+use Modules\AI\Actions\ConsultCampaignDecisionAction;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
@@ -42,6 +43,7 @@ class SessionDecisionService
         private SessionPlanner $sessionPlanner,
         private NextDueTimeCalculator $nextDueTimeCalculator,
         private DecisionEngine $decisionEngine,
+        private ConsultCampaignDecisionAction $consultCampaignDecision,
         private AiClock $clock,
         private AccountStateResolver $accountStateResolver,
         private RandomSource $randomSource,
@@ -63,6 +65,11 @@ class SessionDecisionService
         $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
         $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;
         $trace = $this->decisionEngine->decide($profile, $perception, $decisionKey);
+
+        // A material campaign event (a new phase, a held stronghold) consults once here and may
+        // nudge the ranking before the final selection; off by default, so an ordinary session
+        // makes no provider call and its recorded decision is unchanged.
+        $trace = $this->consultCampaignDecision->handle($profile, $trace, $decisionKey);
 
         $this->recordDecisionTrace($profile, $workItem, $trace, $now);
 

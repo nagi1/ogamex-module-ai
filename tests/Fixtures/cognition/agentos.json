@@ -1,0 +1,130 @@
+{
+    "_meta": {
+        "driver": "agentos",
+        "image": "ogamex-ai-cognition-agentos:0.10.16",
+        "endpoint": "http://host.docker.internal:8093",
+        "captured_at": "2026-09-16T21:11:44Z",
+        "capture_script": "scripts/capture-cognition-fixtures.php",
+        "request_builder": "Modules\\AI\\Infrastructure\\Memory\\AgentOsClient",
+        "status": 200,
+        "note": "The ranking depends on the query and the memory texts, so a replay must match both. A query with no lexical overlap returns the candidates in their given order rather than an empty ranking."
+    },
+    "channels": {
+        "recall": [
+            {
+                "request": {
+                    "query": "alliance membership",
+                    "limit": 3,
+                    "memories": [
+                        {
+                            "id": 9020,
+                            "text": "AllianceMembership {\"alliance_tag\":\"RAVEN\"}",
+                            "tags": [
+                                "AllianceMembership",
+                                "Claimed"
+                            ]
+                        },
+                        {
+                            "id": 9021,
+                            "text": "AllianceMembership {\"alliance_tag\":\"FORMER\"}",
+                            "tags": [
+                                "AllianceMembership",
+                                "Claimed"
+                            ]
+                        },
+                        {
+                            "id": 9022,
+                            "text": "AllianceMembership {\"alliance_tag\":\"HIDDEN\"}",
+                            "tags": [
+                                "AllianceMembership",
+                                "Claimed"
+                            ]
+                        }
+                    ]
+                },
+                "body": {
+                    "ranking": [
+                        {
+                            "id": 9020,
+                            "encodingStrength": 0.2875,
+                            "stability": 9809999.999999998,
+                            "retrievalCount": 0
+                        },
+                        {
+                            "id": 9021,
+                            "encodingStrength": 0.2875,
+                            "stability": 9809999.999999998,
+                            "retrievalCount": 0
+                        },
+                        {
+                            "id": 9022,
+                            "encodingStrength": 0.2875,
+                            "stability": 9809999.999999998,
+                            "retrievalCount": 0
+                        }
+                    ],
+                    "considered": 3,
+                    "discarded": 0,
+                    "partiallyRetrieved": 0
+                }
+            },
+            {
+                "request": {
+                    "query": "former alliance tag",
+                    "limit": 3,
+                    "memories": [
+                        {
+                            "id": 9020,
+                            "text": "AllianceMembership {\"alliance_tag\":\"RAVEN\"}",
+                            "tags": [
+                                "AllianceMembership",
+                                "Claimed"
+                            ]
+                        },
+                        {
+                            "id": 9021,
+                            "text": "AllianceMembership {\"alliance_tag\":\"FORMER\"}",
+                            "tags": [
+                                "AllianceMembership",
+                                "Claimed"
+                            ]
+                        },
+                        {
+                            "id": 9022,
+                            "text": "AllianceMembership {\"alliance_tag\":\"HIDDEN\"}",
+                            "tags": [
+                                "AllianceMembership",
+                                "Claimed"
+                            ]
+                        }
+                    ]
+                },
+                "body": {
+                    "ranking": [
+                        {
+                            "id": 9021,
+                            "encodingStrength": 0.2875,
+                            "stability": 9809999.999999998,
+                            "retrievalCount": 0
+                        },
+                        {
+                            "id": 9022,
+                            "encodingStrength": 0.2875,
+                            "stability": 9809999.999999998,
+                            "retrievalCount": 0
+                        },
+                        {
+                            "id": 9020,
+                            "encodingStrength": 0.2875,
+                            "stability": 9809999.999999998,
+                            "retrievalCount": 0
+                        }
+                    ],
+                    "considered": 3,
+                    "discarded": 0,
+                    "partiallyRetrieved": 1
+                }
+            }
+        ]
+    }
+}

@@ -21,6 +21,67 @@ The [raw original plan](reference/raw-original-plan.md) is preserved unchanged. 
 
 Reopen a decision with the problem, evidence, alternatives, chosen change and affected contracts. Keep routine tuning in its canonical specification.
 
+## Package S decisions — 16 September 2026
+
+Owner direction to ship the LLM side package (`plan/details/specs/llm-full-utilisation.md`).
+
+- **Language lane enabled by default.** `ai.language.enabled` defaults `true`, reversing the 3H
+  fail-closed default. The authored-text fallback stays the floor: provider-off, failed, timed-out
+  and invalid outcomes still deliver the sealed authored reply, and AI-to-AI / greeting / thanks
+  never escalate. `ai.campaign-consultation.mode` stays `off` until the lane is wired (S4).
+- **Verified model names.** Default `deepseek` / `deepseek-flash` (DeepSeek-V4.1-Flash), fallback
+  `openai` / `gpt-5.6-luna` (GPT-5.6 Luna), thinking `deepseek-v4-pro`. Names pinned from the
+  2026 vendor docs; `deepseek-v4-flash` is retired (still accepted, served by V4.1-Flash).
+- **Priced model matrix.** `config/pricing.php` maps `provider.model` → input/cached/output per 1M
+  (off-peak), peak = 2× via the windows in `config/routing.php`. `ResolveAiUsageCostAction` prices a
+  settled call fail-closed (unknown model → no cost); `SettleAiUsageReservationAction` records `cost`
+  on the reservation and the receipt/request mirror it; the pilot report and operability overview
+  report settled dollar cost.
+
+### S4b trigger semantics — 17 September 2026
+
+The four remaining campaign triggers fire from the two reducers that already see the underlying fact,
+each writing one campaign-scoped `AiCampaignConsultationSignal` for the active campaign(s):
+
+- **FleetLoss** — the battle observer (`RecordObservedBattleReportAction`) detects that the single
+  faction side of a committed report ended the last round with zero ships and the other side kept
+  survivors. An empty round list is an uncontested arrival, not a fleet loss.
+- **RepeatedSetback** — the same observer cascades from fleet loss: once the campaign has
+  `REPEATED_SETBACK_LOSSES` (2) fleet-loss signals, the second defeat consults once. The counter reads
+  FleetLoss signals, so losses that pile up before a session consumes the open signal collapse into
+  one row (a `ponytail:` undercount with no practical ceiling — OGame defeats are minutes apart and a
+  session follows each).
+- **CoalitionConflict** — the same observer: a report whose two sides are both coalition (neither an
+  enabled faction profile) is coalition infighting.
+- **RankChange** — `RecordAiScoreSamplesAction` fires when a faction account's `general_rank` moved
+  between two hourly samples (both non-null). Rank data exists only while score sampling is on
+  (`ai.review.enabled`), the same gate that runs the pass, so an off switch takes the signal with it.
+
+No schema change: all six triggers live on the existing signal table, and the lane consumes them
+identically. The choice to scope every signal to *all* active campaigns (not just the one the consumer
+reads first) keeps the trigger honest to the data model; the consumer's "oldest active campaign" read
+is an existing lane property, not something S4b re-decided.
+
+### S8 tool set — two shipped, two deferred — 17 September 2026
+
+S8 replaces the stuffed consultation prompt with read-only tools. The two with a real consultation
+consumer shipped: `CampaignFactsTool` (campaign phase/window/stronghold counts, scoped to the one
+campaign the lane is consulting on) and `LegalCandidatesTool` (the legal candidates with native scores
+and reasons). The consultation agent implements `HasTools`, and the serialized brief shrank to the
+campaign id — the "current turn" only.
+
+The other two study tools were **deferred, not built**:
+
+- `CounterpartyFactsTool` replaces the reply lane's recalled-memory section, and the reply agent keeps
+  its no-tools posture — no consumer yet.
+- `HostCapabilityTool` needs the account and the specific object a candidate names; the consultation
+  brief strips candidate parameters by design, so the lane cannot ask it a meaningful question. It
+  belongs to the PvE director, which is not built.
+
+Building either now would be gate-2 dead code (a tool with no consumer). They land with the lanes that
+read them. The request DTO now carries `campaignId` + structured `candidates` instead of the
+`candidateIds` the old instructions embedded, which the slice made dead.
+
 ## Simplification — 11 September 2026
 
 The main roadmap now has five phases. Growth/survival and opponents/recovery are two parts of Phase 2. Technical documents are optional references under details, not a required reading sequence. Existing scope, research and the raw original are preserved.
@@ -1252,3 +1313,19 @@ dry-run clean, Gate 2 exit 0, PCOV 100.00% (6500/6500). New tests: the reaction-
 the `reaction_wake_at` publication (`FleetSavePlannerTest`), the reaction-wake clamp
 (`DeterministicSessionLoopTest`), the next-material-event clamp across building/research/fleet/inbound
 terms (`DeterministicSessionLoopTest`), and the `isAwake` window primitive (`RoutineAndPolicyTest`).
+
+### Owner direction 16 September 2026 — strongest account first, drivers on by default
+
+Two decisions, recorded here so the plan and the code agree:
+
+1. **Ignore the reference-profile budget for now.** The 2 vCPU / 2 GB VPS is an optimisation target,
+   not a gate. Build the strongest account first; trim against the machine afterwards.
+2. **No proof gate before a default.** The external drivers are used to the fullest now, with the
+   deterministic engines as the floor — no 2/5/10 "player-visible gain" test has to pass first.
+
+Concretely, `config/cognition.php` now defaults to **hybrid mode** with every driver on:
+`AI_COGNITION_DRIVER=fatima`, `AI_COGNITION_MODE=hybrid`, `AI_MEMORY_DRIVER=agentos`,
+`AI_EXPERIENCE_DRIVER=cbrkit`, and `AI_AFFECT_DECISION_WEIGHT=10` (the 6B mood nudge, previously `0`).
+A missing or failed sidecar still degrades per call to native — the safety/authority rules are
+unchanged, and native stays the fallback and the ablation baseline. `external-drivers.md`, `budgets.md`,
+`WORK-PACKAGES.md` and `AGENTS.md` are corrected to match.

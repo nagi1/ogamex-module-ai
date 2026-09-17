@@ -60,7 +60,12 @@ class ReportAiPilot extends Command
             $report->latencyPercentile(95.0),
             count($report->latencyMinutes),
         ));
-        $this->line('  language: ' . $this->counts($report->language));
+        $language = $report->language;
+        $providerCost = (float) ($language['cost'] ?? 0.0);
+        unset($language['cost']);
+
+        $this->line('  language: ' . $this->counts($language));
+        $this->line(sprintf('  provider cost: $%.8f', $providerCost));
         $this->line('  score: ' . $this->score($report->score));
         $this->line(sprintf(
             '  read cost: %.1f ms · %d queries',
@@ -108,7 +113,7 @@ class ReportAiPilot extends Command
     }
 
     /**
-     * @param array<string, int> $counts
+     * @param array<string, int|float> $counts
      */
     private function counts(array $counts): string
     {
@@ -117,7 +122,7 @@ class ReportAiPilot extends Command
         }
 
         return implode(', ', array_map(
-            static fn (string $name, int $value): string => $name . ' ' . $value,
+            static fn (string $name, int|float $value): string => $name . ' ' . $value,
             array_keys($counts),
             array_values($counts),
         ));

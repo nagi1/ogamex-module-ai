@@ -1,9 +1,9 @@
 <?php
 
 return [
-    'enabled' => env('AI_LANGUAGE_ENABLED', false),
-    'provider' => env('AI_LANGUAGE_PROVIDER', 'openai'),
-    'model' => env('AI_LANGUAGE_MODEL', 'gpt-5-mini'),
+    'enabled' => env('AI_LANGUAGE_ENABLED', true),
+    'provider' => env('AI_LANGUAGE_PROVIDER', 'deepseek'),
+    'model' => env('AI_LANGUAGE_MODEL', 'deepseek-flash'),
     'timeout_seconds' => (int) env('AI_LANGUAGE_TIMEOUT_SECONDS', 20),
     // A timed-out provider call is charged at its reserved maximum once this window
     // passes, because its remote completion can no longer be observed.

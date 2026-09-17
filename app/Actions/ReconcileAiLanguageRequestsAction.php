@@ -39,7 +39,7 @@ class ReconcileAiLanguageRequestsAction
             ->where('created_at', '<=', $deadline)
             ->oldest('id')
             ->limit(self::BATCH_SIZE)
-            ->get(['id', 'conversation_reply_id', 'usage_reservation_id']);
+            ->get(['id', 'conversation_reply_id', 'usage_reservation_id', 'provider', 'model']);
 
         $settled = 0;
 
@@ -56,7 +56,7 @@ class ReconcileAiLanguageRequestsAction
      */
     private function close(AiLanguageRequest $request): int
     {
-        $settled = $this->settle($request->usage_reservation_id);
+        $settled = $this->settle($request);
         $this->markUnobserved($request->id);
 
         app(DeliverAiSealedReplyAction::class)->handle($request->conversation_reply_id);
@@ -68,10 +68,10 @@ class ReconcileAiLanguageRequestsAction
      * A reservation that is no longer reserved was settled by the worker that owns it, so
      * only an attempt that is genuinely unsettled consumes budget here.
      */
-    private function settle(int $usageReservationId): int
+    private function settle(AiLanguageRequest $request): int
     {
         $reservation = AiUsageReservation::query()
-            ->whereKey($usageReservationId)
+            ->whereKey($request->usage_reservation_id)
             ->where('state', AiUsageReservationState::Reserved)
             ->first();
 
@@ -84,6 +84,8 @@ class ReconcileAiLanguageRequestsAction
             $reservation->reserved_input_tokens,
             $reservation->reserved_output_tokens,
             $this->clock->now(),
+            $request->provider,
+            $request->model,
         );
 
         return $result === null ? 0 : 1;

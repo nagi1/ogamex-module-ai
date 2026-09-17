@@ -2,7 +2,11 @@
 
 namespace Modules\AI\Actions;
 
+use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Review\AiScoreSampleRun;
+use Modules\AI\Enums\AiCampaignConsultationTrigger;
+use Modules\AI\Enums\AiCampaignState;
+use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Support\AiClock;
@@ -47,6 +51,13 @@ class RecordAiScoreSamplesAction
                 continue;
             }
 
+            $newRank = $score->general_rank > 0 ? (int) $score->general_rank : null;
+            $previousRank = AiScoreSample::query()
+                ->where('player_id', $playerId)
+                ->where('sampled_at', '<', $sampledAt)
+                ->orderByDesc('sampled_at')
+                ->value('general_rank');
+
             AiScoreSample::query()->updateOrCreate(
                 ['player_id' => $playerId, 'sampled_at' => $sampledAt],
                 [
@@ -56,9 +67,17 @@ class RecordAiScoreSamplesAction
                     'military_built' => (int) $score->military_built,
                     'military_destroyed' => (int) $score->military_destroyed,
                     'military_lost' => (int) $score->military_lost,
-                    'general_rank' => $score->general_rank > 0 ? (int) $score->general_rank : null,
+                    'general_rank' => $newRank,
                 ],
             );
+
+            // A rank that moved between hours is a material campaign event. Rank data only
+            // exists while score sampling is on (`ai.review.enabled`), the same gate that runs
+            // this pass, so an off switch takes the signal with it rather than inventing one.
+            if ($previousRank !== null && $newRank !== null && (int) $previousRank !== $newRank) {
+                $this->signalRankChange($now);
+            }
+
             $sampled++;
         }
 
@@ -67,5 +86,12 @@ class RecordAiScoreSamplesAction
             'skipped' => $skipped,
             'sampledAt' => $sampledAt,
         ]);
+    }
+
+    private function signalRankChange(CarbonImmutable $at): void
+    {
+        foreach (AiCampaign::query()->where('state', AiCampaignState::Active)->pluck('id') as $campaignId) {
+            app(RecordCampaignConsultationSignalAction::class)->handle($campaignId, AiCampaignConsultationTrigger::RankChange, $at);
+        }
     }
 }

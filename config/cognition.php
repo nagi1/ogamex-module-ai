@@ -2,20 +2,21 @@
 
 return [
     /*
-     * Optional external cognition drivers. Every driver is disabled by default and
-     * the native implementations remain the fallback, so a missing, stopped or
-     * misconfigured sidecar never changes ordinary gameplay.
+     * Optional external cognition drivers. Hybrid mode is now the default: the native
+     * engines run always as the floor, and the selected external drivers contribute
+     * alongside them. A missing, stopped or misconfigured sidecar still degrades per
+     * call to native, so ordinary gameplay never breaks on a driver outage.
      *
      * One setting selects the affect and social-cognition driver pair, because both
      * contracts must share a single integrated character state.
      */
-    'driver' => env('AI_COGNITION_DRIVER', 'native'),
+    'driver' => env('AI_COGNITION_DRIVER', 'fatima'),
 
     // How the selected external drivers are used relative to the native engines:
     // `native` ignores the driver settings, `external` swaps the driver in with native as
-    // the per-call fallback (the historical default), and `hybrid` runs native always with
-    // the selected driver contributing alongside it.
-    'mode' => env('AI_COGNITION_MODE', 'external'),
+    // the per-call fallback, and `hybrid` runs native always with the selected driver
+    // contributing alongside it (the default).
+    'mode' => env('AI_COGNITION_MODE', 'hybrid'),
 
     'circuit' => [
         // Consecutive failures before the driver is skipped entirely.
@@ -33,15 +34,15 @@ return [
 
     'memory' => [
         // Recall is a swap point, so the long-term memory implementation is chosen by
-        // configuration rather than a fixed binding. Native scoped recall is the default and
-        // the fallback; the AgentOS sidecar is the optional ranking implementation. The
+        // configuration rather than a fixed binding. Native scoped recall is the floor and
+        // the fallback; the AgentOS sidecar is the default ranking implementation. The
         // module's facts table stays authoritative whichever driver answers.
         //
         // `ai.cognition.mode` decides what the ranking may do: `external` lets the driver's
         // ranking decide which facts survive the caller's limit (native recency as the floor),
         // and `hybrid` keeps the native recency set and uses the driver only to reorder within
         // it, so relevance floats to the front without evicting recency.
-        'driver' => env('AI_MEMORY_DRIVER', 'native'),
+        'driver' => env('AI_MEMORY_DRIVER', 'agentos'),
         'agentos' => [
             'base_url' => env('AI_MEMORY_AGENTOS_URL', 'http://host.docker.internal:8093'),
             'connect_timeout_seconds' => (int) env('AI_MEMORY_AGENTOS_CONNECT_TIMEOUT_SECONDS', 2),
@@ -59,10 +60,10 @@ return [
         // episode, so an ablation can compare a baseline without affect enrichment against one
         // with it without deleting state.
         'enrichment' => (bool) env('AI_AFFECT_ENRICHMENT', true),
-        // How far the account's current mood may move a decision score. Zero keeps
-        // ordinary-universe decisions unchanged (the ablation baseline); a positive value is
-        // the opt-in 6B divergence, measured before any driver or consultation lane defaults.
-        'decision_weight' => (int) env('AI_AFFECT_DECISION_WEIGHT', 0),
+        // How far the account's current mood may move a decision score. A positive value
+        // applies the mood as a bounded, profile-weighted appetite nudge (the 6B divergence),
+        // on by default; zero keeps decisions unchanged for a no-affect ablation baseline.
+        'decision_weight' => (int) env('AI_AFFECT_DECISION_WEIGHT', 10),
     ],
 
     'conversation' => [
@@ -77,7 +78,7 @@ return [
     ],
 
     'experience' => [
-        'driver' => env('AI_EXPERIENCE_DRIVER', 'native'),
+        'driver' => env('AI_EXPERIENCE_DRIVER', 'cbrkit'),
         // How far a finalized, matching outcome may move a decision score. Setting this
         // to zero disables the enrichment without deleting recorded evidence, which is
         // the baseline an ablation compares an enabled configuration against.

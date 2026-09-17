@@ -15,16 +15,17 @@ use Modules\AI\Enums\AiCampaignConsultationTrigger;
 readonly class CampaignConsultationRequest
 {
     /**
-     * @param list<int> $candidateIds
+     * @param list<array{id:int, action:string, reason:string, score:float}> $candidates
      */
     public function __construct(
         public AiCampaignConsultationTrigger $trigger,
         public string $serializedBrief,
-        public array $candidateIds,
         public AiProviderLadder $ladder,
         public int $timeoutSeconds,
         public int $maximumReasonCharacters,
         public int $maximumEvidenceIds,
+        public int $campaignId,
+        public array $candidates,
     ) {
     }
 }

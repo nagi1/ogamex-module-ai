@@ -113,19 +113,20 @@ class SummarizeAiOperabilityAction
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|float>
      */
     private function language(CarbonImmutable $now): array
     {
         $reservations = AiUsageReservation::query()
             ->where('reserved_for', $now->toDateString())
-            ->get(['reserved_input_tokens', 'reserved_output_tokens', 'actual_input_tokens', 'actual_output_tokens']);
+            ->get(['reserved_input_tokens', 'reserved_output_tokens', 'actual_input_tokens', 'actual_output_tokens', 'cost']);
 
         return [
             'attempts' => AiLanguageRequest::query()->where('created_at', '>=', $now->startOfDay())->count(),
             'in_flight' => AiLanguageRequest::query()->where('state', AiLanguageRequestState::Generating)->count(),
             'reserved_tokens' => (int) $reservations->sum(static fn ($reservation): int => $reservation->reserved_input_tokens + $reservation->reserved_output_tokens),
             'actual_tokens' => (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_input_tokens + (int) $reservation->actual_output_tokens),
+            'cost' => round((float) $reservations->sum(static fn ($reservation): float => (float) $reservation->cost), 8),
         ];
     }
 }

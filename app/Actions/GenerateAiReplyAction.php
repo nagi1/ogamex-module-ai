@@ -18,6 +18,7 @@ use Modules\AI\Enums\AiLanguageTaskKind;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
 use OGame\Models\ChatMessage;
 
@@ -247,6 +248,8 @@ class GenerateAiReplyAction
             $result->inputTokens,
             $result->outputTokens,
             $this->clock->now(),
+            $result->provider,
+            $result->model,
         ) !== null;
     }
 
@@ -261,6 +264,9 @@ class GenerateAiReplyAction
             'input_tokens' => $result->inputTokens,
             'output_tokens' => $result->outputTokens,
             'latency_milliseconds' => max(0, $latencyMilliseconds),
+            // The settled reservation is the one authority for cost; the request mirrors it so a
+            // report reads one number instead of recomputing.
+            'cost' => AiUsageReservation::query()->find($request->usage_reservation_id)?->cost,
         ]);
     }
 

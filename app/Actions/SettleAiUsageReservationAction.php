@@ -11,13 +11,13 @@ use Modules\AI\Models\AiUsageReservation;
 
 class SettleAiUsageReservationAction
 {
-    public function handle(int $reservationId, int $actualInputTokens, int $actualOutputTokens, CarbonImmutable $settledAt): AiUsageReservation|null
+    public function handle(int $reservationId, int $actualInputTokens, int $actualOutputTokens, CarbonImmutable $settledAt, string|null $provider = null, string|null $model = null): AiUsageReservation|null
     {
         if ($actualInputTokens < 0 || $actualOutputTokens < 0) {
             return null;
         }
 
-        return DB::transaction(function () use ($reservationId, $actualInputTokens, $actualOutputTokens, $settledAt): AiUsageReservation|null {
+        return DB::transaction(function () use ($reservationId, $actualInputTokens, $actualOutputTokens, $settledAt, $provider, $model): AiUsageReservation|null {
             $reservation = AiUsageReservation::query()->lockForUpdate()->find($reservationId);
 
             if ($reservation === null) {
@@ -37,6 +37,7 @@ class SettleAiUsageReservationAction
             $reservation->update([
                 'actual_input_tokens' => $actualInputTokens,
                 'actual_output_tokens' => $actualOutputTokens,
+                'cost' => app(ResolveAiUsageCostAction::class)->handle($provider, $model, $actualInputTokens, 0, $actualOutputTokens, $settledAt),
                 'state' => AiUsageReservationState::Settled,
                 'settled_at' => $settledAt,
             ]);

@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -35,16 +36,27 @@ use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\FatimaScenarioTemplate;
 use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
+use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use Tests\IsolatedAccountTestCase;
 
-uses(IsolatedAccountTestCase::class);
+require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
+
+uses(IsolatedAccountTestCase::class, InteractsWithCognitionFixtures::class);
 
 /**
  * The FAtiMA driver is opt-in. Every failure branch must leave the native appraisal
  * and the native social response in place, because both feed ordinary gameplay and a
  * stopped sidecar must never change what an AI decides.
+ *
+ * The successful paths replay what the running sidecar really answered, captured into
+ * `tests/Fixtures/cognition/fatima.json`. The fake follows the driver's own rule — what it
+ * answers depends on the beliefs and the event it was just handed — so its thresholds are
+ * real rather than assumed: a rapport the module derives as 3 or less genuinely withholds the
+ * social exchange, and nothing in this file states that threshold itself.
  */
 beforeEach(function (): void {
+    // Swap semantics: FAtiMA replaces native, with native as the per-call fallback.
+    config(['ai.cognition.mode' => 'external']);
     config(['ai.cognition.driver' => 'fatima']);
     app()->bind(AiClock::class, SystemAiClock::class);
 
@@ -62,37 +74,12 @@ beforeEach(function (): void {
     app()->singleton(FatimaCognitionSession::class);
 });
 
-/** @param array<string, mixed> $emotions */
-function fakeFatima(array $emotions = [], mixed $socialExchanges = [], int|null &$reloads = null): void
+/** How many recorded calls the driver received on one endpoint. */
+function fatimaCalls(string $suffix): int
 {
-    $reloads = 0;
-
-    Http::fake([
-        '*/scenarios' => function () use (&$reloads) {
-            $reloads++;
-
-            return Http::response('"Scenario named \'OgameCognition\' created containing \'5\' characters"');
-        },
-        '*/socialexchanges' => Http::response($socialExchanges),
-        '*/emotions' => Http::response($emotions),
-        '*/beliefs' => Http::response('"Belief updated."'),
-        '*/perceptions' => Http::response('"1 event(s) perceived by Miner"'),
-    ]);
-}
-
-function fatimaEmotions(string $type, float $intensity, string $cause): array
-{
-    return [
-        'Name' => 'Miner',
-        'Mood' => 0.0,
-        'Emotions' => [[
-            'Type' => $type,
-            'Intensity' => $intensity,
-            'Target' => 'Other',
-            'CauseEventId' => 1,
-            'CauseEventName' => $cause,
-        ]],
-    ];
+    return Http::recorded()
+        ->filter(fn (array $pair): bool => str_ends_with($pair[0]->url(), $suffix))
+        ->count();
 }
 
 function fatimaStimulus(AiArchetype $archetype, float $harm, float $aid, float $threat, float $trust = 0.0): ObservedStimulus
@@ -119,8 +106,15 @@ function fatimaObservation(int $playerId, int $counterpartyId, string $key): AiO
     ]);
 }
 
-/** Seeds a persona and a trusted relationship, so the native engine accepts the request. */
-function acceptedFatimaHelpRequest(int $playerId, int $counterpartyId): int
+/**
+ * Seeds a persona and a relationship, then records a greeting.
+ *
+ * A greeting is the one exchange the module's own rules accept whatever the counterparty's
+ * standing is, so the driver's rapport threshold is the only thing that can withhold it. A help
+ * request cannot show that: the trust that makes the native rules accept it is the same trust that
+ * carries the rapport past the authored threshold.
+ */
+function greetedFatimaExchange(int $playerId, int $counterpartyId, float $trust, float $affinity): int
 {
     AiProfile::create([
         'player_id' => $playerId,
@@ -130,23 +124,23 @@ function acceptedFatimaHelpRequest(int $playerId, int $counterpartyId): int
         'enabled' => true,
     ]);
 
-    $source = fatimaObservation($playerId, $counterpartyId, 'accepted-' . $counterpartyId);
+    $source = fatimaObservation($playerId, $counterpartyId, 'greeting-' . $counterpartyId . '-' . $trust);
     app(RecordAiRelationshipInteractionAction::class)->handle(
         $playerId,
         $counterpartyId,
         $source->id,
         CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
-        0.9,
+        $trust,
         0.0,
-        0.9,
+        $affinity,
     );
 
     return app(RecordAiSocialExchangeAction::class)->handle(
         $playerId,
         $counterpartyId,
         $source->id,
-        AiSocialExchangeType::HelpRequest,
-        [AiSocialTerm::Amount->value => 10],
+        AiSocialExchangeType::Greeting,
+        [],
     )->id;
 }
 
@@ -175,64 +169,65 @@ test('an unrecognised cognition driver is reported and falls back to native', fu
     Log::shouldHaveReceived('warning')->once();
 });
 
-test('the driver appraises each stimulus branch from signed OCC values', function (string $type, float $harm, float $aid, float $threat, AiAffectEmotion $emotion): void {
+test('the driver appraises each stimulus branch from signed OCC values', function (float $harm, float $aid, float $threat, AiAffectEmotion $emotion, float $intensity): void {
     $branch = match (true) {
         $aid > $harm => 'Aid',
         $threat > $harm => 'Threaten',
         default => 'Harm',
     };
     $event = sprintf('Event(Action-End, Other, %s, Miner)', $branch);
-    fakeFatima(fatimaEmotions($type, 0.4, $event), [], $reloads);
+    $this->fakeFatimaDriver();
 
-    config(['ai.cognition.driver' => 'fatima']);
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, $harm, $aid, $threat));
 
+    // The intensity is the driver's own answer for the belief it was given, which is why an
+    // aid of 0.5 comes back as 0.5 rather than as the module's persona-weighted figure.
     expect($appraisal->emotion)->toBe($emotion)
-        ->and($appraisal->intensity)->toBe(0.4)
+        ->and($appraisal->intensity)->toEqualWithDelta($intensity, 1e-9)
         // Each appraisal resets the driver, so mood and goal state cannot accumulate.
-        ->and($reloads)->toBe(1);
+        ->and(fatimaCalls('/scenarios'))->toBe(1);
 
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/perceptions')
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/perceptions')
         && $request->data() === [$event]);
 })->with([
-    'aid becomes gratitude' => ['Gratitude', 0.0, 0.5, 0.0, AiAffectEmotion::Gratitude],
-    'harm becomes anger' => ['Anger', 0.4, 0.0, 0.0, AiAffectEmotion::Anger],
-    'threat becomes fear' => ['Fear', 0.0, 0.0, 0.6, AiAffectEmotion::Fear],
-    'aid outranks harm' => ['Gratitude', 0.2, 0.5, 0.0, AiAffectEmotion::Gratitude],
-    'threat outranks harm' => ['Fear', 0.2, 0.0, 0.6, AiAffectEmotion::Fear],
+    'aid becomes gratitude' => [0.0, 0.5, 0.0, AiAffectEmotion::Gratitude, 0.5],
+    'harm becomes anger' => [0.4, 0.0, 0.0, AiAffectEmotion::Anger, 0.4],
+    'threat becomes fear' => [0.0, 0.0, 0.6, AiAffectEmotion::Fear, 0.6],
+    'aid outranks harm' => [0.2, 0.5, 0.0, AiAffectEmotion::Gratitude, 0.5],
+    'threat outranks harm' => [0.2, 0.0, 0.6, AiAffectEmotion::Fear, 0.6],
 ]);
 
 test('the signed OCC value follows the branch that was actually observed', function (): void {
-    fakeFatima(['Name' => 'Miner', 'Mood' => 0.0, 'Emotions' => []], [], $reloads);
+    $this->fakeFatimaDriver();
 
     // Harm answers despite the threat, because threat must outrank harm to win.
     app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.4, 0.0, 0.2));
 
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/beliefs')
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/beliefs')
         && $request->data() === ['name' => 'StimulusDesirability(SELF, Other)', 'value' => '-0.4']);
 });
 
 test('the aid branch is sent as a positive OCC desirability', function (): void {
-    fakeFatima(['Name' => 'Miner', 'Mood' => 0.0, 'Emotions' => []], [], $reloads);
+    $this->fakeFatimaDriver();
 
     app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0));
 
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/beliefs')
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/beliefs')
         && $request->data() === ['name' => 'StimulusDesirability(SELF, Other)', 'value' => '0.5']);
 });
 
 test('the threat branch lowers the goal success probability instead of the desirability', function (): void {
-    fakeFatima(['Name' => 'Miner', 'Mood' => 0.0, 'Emotions' => []], [], $reloads);
+    $this->fakeFatimaDriver();
 
     app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.0, 0.6));
 
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/beliefs')
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/beliefs')
         && $request->data() === ['name' => 'StimulusThreat(SELF, Other)', 'value' => '-0.6']);
 });
 
 test('an emotion the module cannot represent is declined rather than approximated', function (): void {
     Log::spy();
-    fakeFatima(fatimaEmotions('Joy', 0.9, 'Event(Action-End, Other, Aid, Miner)'), [], $reloads);
+    $this->fakeFatimaDriver(['emotions' => $this->driverProbe('fatima.emotions.unrepresentable')]);
 
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0));
 
@@ -244,7 +239,7 @@ test('an emotion the module cannot represent is declined rather than approximate
 });
 
 test('an emotion caused by a different event is ignored', function (): void {
-    fakeFatima(fatimaEmotions('Anger', 0.9, 'Event(Action-End, Other, Harm, Miner)'), [], $reloads);
+    $this->fakeFatimaDriver(['emotions' => $this->driverProbe('fatima.emotions.wrong_cause')]);
 
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0));
 
@@ -252,25 +247,31 @@ test('an emotion caused by a different event is ignored', function (): void {
 });
 
 test('an empty emotional pool falls back to the native appraisal', function (): void {
-    fakeFatima(['Name' => 'Miner', 'Mood' => 0.0, 'Emotions' => []], [], $reloads);
+    // A stimulus with no harm, aid or threat is the one appraisal the authored rules bind to no
+    // intensity, which is what leaves the driver's pool empty.
+    $this->fakeFatimaDriver();
 
-    expect(app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0))->intensity)->toBe(0.5);
+    $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.0, 0.0));
+
+    expect(fatimaCalls('/emotions'))->toBe(1)
+        ->and($appraisal->emotion)->toBe(AiAffectEmotion::Anger)
+        ->and($appraisal->intensity)->toBe(0.0)
+        ->and($appraisal->driverEmotion)->toBeNull();
 });
 
 test('a normalised intensity is clamped to the module ceiling', function (): void {
     config(['ai.cognition.fatima.intensity_ceiling' => 0.75]);
-    fakeFatima(fatimaEmotions('Anger', 9.0, 'Event(Action-End, Other, Harm, Miner)'), [], $reloads);
+    // The driver echoes the belief it is given, so an aid of 0.9 really does come back as 0.9.
+    $this->fakeFatimaDriver();
 
-    $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.4, 0.0, 0.0));
+    $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.9, 0.0));
 
-    expect($appraisal->intensity)->toBe(0.75);
+    expect($appraisal->emotion)->toBe(AiAffectEmotion::Gratitude)
+        ->and($appraisal->intensity)->toBe(0.75);
 });
 
-test('a malformed driver payload falls back to the native appraisal', function (mixed $payload): void {
-    Http::fake([
-        '*/scenarios' => Http::response('"created"'),
-        '*/emotions' => Http::response($payload),
-    ]);
+test('a malformed driver payload falls back to the native appraisal', function (string $probe): void {
+    $this->fakeFatimaDriver(['emotions' => $this->driverProbe($probe)]);
 
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0));
 
@@ -278,11 +279,11 @@ test('a malformed driver payload falls back to the native appraisal', function (
         ->and($appraisal->intensity)->toBe(0.5);
 })->with([
     // The driver reports failures as a plain JSON string while still answering HTTP 200.
-    'error text' => ['"There are already stored property values that will collide"'],
-    'missing pool' => [['Name' => 'Miner', 'Mood' => 0.0]],
-    'non-object pool' => [['Name' => 'Miner', 'Emotions' => 'none']],
-    'malformed entry' => [['Name' => 'Miner', 'Emotions' => [['Type' => 'Anger', 'Intensity' => 'high']]]],
-    'missing cause event' => [['Name' => 'Miner', 'Emotions' => [['Type' => 'Anger', 'Intensity' => 1.0]]]],
+    'error text' => ['fatima.emotions.plain_failure'],
+    'missing pool' => ['fatima.emotions.missing_pool'],
+    'non-object pool' => ['fatima.emotions.non_object_pool'],
+    'malformed entry' => ['fatima.emotions.malformed_entry'],
+    'missing cause event' => ['fatima.emotions.missing_cause'],
 ]);
 
 test('an unreachable driver falls back to the native appraisal', function (): void {
@@ -295,7 +296,7 @@ test('an unreachable driver falls back to the native appraisal', function (): vo
 });
 
 test('a driver server error falls back to the native appraisal', function (): void {
-    Http::fake(['*' => Http::response('boom', 500)]);
+    $this->fakeFatimaDriver(['*' => $this->driverProbe('fatima.server_error')]);
 
     $appraisal = app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0));
 
@@ -305,15 +306,16 @@ test('a driver server error falls back to the native appraisal', function (): vo
 
 test('the driver is skipped while its circuit is open and retried once it clears', function (): void {
     config(['ai.cognition.circuit.failures' => 1]);
-    // The driver answers failures with HTTP 200 and a plain string, so this is a
-    // recorded request that still fails the contract.
-    Http::fake(['*' => Http::response('"broken"')]);
+    // The driver answers its failures with HTTP 200 and a plain string, so this is a recorded
+    // request that still fails the contract.
+    $this->fakeFatimaDriver(['*' => $this->driverProbe('fatima.emotions.plain_failure')]);
 
     $engine = app(AffectEngine::class);
     // The first contract failure reaches the threshold, so the circuit opens.
     $engine->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0));
 
-    Http::fake(['*' => Http::response('"broken"')]);
+    // An empty fake clears the recorded log without replacing the installed stub.
+    Http::fake();
     expect($engine->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.0, 0.5, 0.0))->emotion)->toBe(AiAffectEmotion::Gratitude);
     expect(Http::recorded())->toHaveCount(0);
 
@@ -326,7 +328,7 @@ test('the driver is skipped while its circuit is open and retried once it clears
 
 test('a contested session lock degrades to the native appraisal', function (): void {
     Log::spy();
-    fakeFatima(fatimaEmotions('Anger', 0.4, 'Event(Action-End, Other, Harm, Miner)'), [], $reloads);
+    $this->fakeFatimaDriver();
 
     // Another appraisal holds the character, so this one cannot run within its own
     // timeout and must not risk interleaving state on a shared character.
@@ -339,9 +341,10 @@ test('a contested session lock degrades to the native appraisal', function (): v
     $held->release();
 
     expect($appraisal->emotion)->toBe(AiAffectEmotion::Anger)
-        ->and($appraisal->intensity)->toEqualWithDelta(0.08, 1e-9)
-        ->and($reloads)->toBe(0);
+        ->and($appraisal->intensity)->toEqualWithDelta(0.08, 1e-9);
 
+    // The lock is taken before the first call, so nothing reaches the driver at all.
+    Http::assertNothingSent();
     Log::shouldHaveReceived('warning')->once();
 });
 
@@ -427,10 +430,12 @@ test('a native social response that is not an acceptance is never overridden', f
 test('the driver withholds an exchange the native rules would have accepted', function (): void {
     Log::spy();
     $counterparty = $this->createUser();
-    fakeFatima([], [['Name' => 'CooperativeMove', 'Step' => 'Start', 'Volitions' => []]], $reloads);
+    $this->fakeFatimaDriver();
 
+    // Trust and affinity of 0.3 reduce to a rapport of 3, which is the authored threshold the
+    // counterparty has to clear; the native rules accept the greeting regardless.
     $evaluation = app(EvaluateAiSocialExchangeAction::class)
-        ->handle(acceptedFatimaHelpRequest($this->currentUserId, $counterparty->id), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
+        ->handle(greetedFatimaExchange($this->currentUserId, $counterparty->id, 0.3, 0.3), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
 
     expect($evaluation?->response)->toBe(AiSocialResponse::Reject)
         ->and($evaluation?->response_reason)->toBe(AiSocialResponseReason::SocialExchangeVolition);
@@ -438,40 +443,42 @@ test('the driver withholds an exchange the native rules would have accepted', fu
     Log::shouldHaveReceived('info')->once();
 
     // The counterparty is addressed through a name the module derives from its own identity.
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/socialexchanges')
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/socialexchanges')
         && $request->data() === ['target' => 'Player' . $counterparty->id]);
 
     // Trust and affinity are reduced to one rapport value on the driver's scale.
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/beliefs')
-        && $request->data() === ['name' => 'RapportLevel(SELF, Player' . $counterparty->id . ')', 'value' => '9']);
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/beliefs')
+        && $request->data() === ['name' => 'RapportLevel(SELF, Player' . $counterparty->id . ')', 'value' => '3']);
 });
 
 test('a usable volition leaves the native acceptance in place', function (): void {
     $counterparty = $this->createUser();
-    fakeFatima([], [['Name' => 'CooperativeMove', 'Step' => 'Start', 'Volitions' => ['*' => 7.0]]], $reloads);
+    $this->fakeFatimaDriver();
 
+    // A rapport of 9 clears the authored threshold, so CiF offers a volition and the native
+    // acceptance stands rather than being questioned.
     $evaluation = app(EvaluateAiSocialExchangeAction::class)
-        ->handle(acceptedFatimaHelpRequest($this->currentUserId, $counterparty->id), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
+        ->handle(greetedFatimaExchange($this->currentUserId, $counterparty->id, 0.9, 0.9), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
 
     expect($evaluation?->response)->toBe(AiSocialResponse::Accept);
 });
 
-test('an unusable driver signal leaves the native acceptance in place', function (mixed $exchanges): void {
+test('an unusable driver signal leaves the native acceptance in place', function (string $probe): void {
     $counterparty = $this->createUser();
-    fakeFatima([], $exchanges, $reloads);
+    $this->fakeFatimaDriver(['socialexchanges' => $this->driverProbe($probe)]);
 
     $evaluation = app(EvaluateAiSocialExchangeAction::class)
-        ->handle(acceptedFatimaHelpRequest($this->currentUserId, $counterparty->id), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
+        ->handle(greetedFatimaExchange($this->currentUserId, $counterparty->id, 0.3, 0.3), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
 
     expect($evaluation?->response)->toBe(AiSocialResponse::Accept);
 })->with([
-    'no authored exchange' => [[]],
-    'a different exchange' => [[['Name' => 'SomethingElse', 'Step' => 'Start', 'Volitions' => []]]],
+    'no authored exchange' => ['fatima.socialexchanges.none'],
+    'a different exchange' => ['fatima.socialexchanges.other'],
     // The endpoint answers a JSON object rather than a list when it cannot resolve the
     // scenario, instance or character.
-    'a non-list payload' => [['Message' => 'The given key was not present in the dictionary.']],
-    'a malformed entry' => [[['Name' => 'CooperativeMove', 'Step' => 'Start']]],
-    'a non-numeric volition' => [[['Name' => 'CooperativeMove', 'Step' => 'Start', 'Volitions' => ['*' => 'many']]]],
+    'a non-list payload' => ['fatima.socialexchanges.non_list'],
+    'a malformed entry' => ['fatima.socialexchanges.malformed_entry'],
+    'a non-numeric volition' => ['fatima.socialexchanges.non_numeric_volition'],
 ]);
 
 test('an unreachable social driver leaves the native acceptance in place', function (): void {
@@ -479,7 +486,7 @@ test('an unreachable social driver leaves the native acceptance in place', funct
     Http::fake(['*' => fn () => throw new ConnectionException('refused')]);
 
     $evaluation = app(EvaluateAiSocialExchangeAction::class)
-        ->handle(acceptedFatimaHelpRequest($this->currentUserId, $counterparty->id), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
+        ->handle(greetedFatimaExchange($this->currentUserId, $counterparty->id, 0.3, 0.3), 100, CarbonImmutable::parse('2026-09-11 13:00:00 UTC'));
 
     expect($evaluation?->response)->toBe(AiSocialResponse::Accept);
 });

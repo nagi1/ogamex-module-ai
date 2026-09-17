@@ -11,6 +11,8 @@ use Modules\AI\Enums\AiLanguageRequestState;
  * @property int $conversation_reply_id
  * @property AiLanguageRequestState $state
  * @property int $usage_reservation_id
+ * @property string|null $provider
+ * @property string|null $model
  */
 #[Unguarded]
 class AiLanguageRequest extends Model
@@ -20,6 +22,7 @@ class AiLanguageRequest extends Model
         return [
             'state' => AiLanguageRequestState::class,
             'interpretation' => AiLanguageInterpretation::class,
+            'cost' => 'float',
         ];
     }
 }

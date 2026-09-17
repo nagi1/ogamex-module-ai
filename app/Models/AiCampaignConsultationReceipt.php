@@ -41,6 +41,7 @@ class AiCampaignConsultationReceipt extends Model
             'status' => AiCampaignConsultationStatus::class,
             'evidence_ids' => 'array',
             'changed_ranking' => 'boolean',
+            'cost' => 'float',
         ];
     }
 }

@@ -20,6 +20,7 @@ use Modules\AI\Enums\AiLanguageTaskKind;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationReceipt;
+use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
 
 /**
@@ -99,11 +100,12 @@ class RequestCampaignConsultationAction
         $request = app()->makeWith(CampaignConsultationRequest::class, [
             'trigger' => $trigger,
             'serializedBrief' => $brief->serialized,
-            'candidateIds' => $brief->candidateIds,
             'ladder' => $ladder,
             'timeoutSeconds' => (int) config('ai.campaign-consultation.timeout_seconds'),
             'maximumReasonCharacters' => (int) config('ai.campaign-consultation.maximum_reason_characters'),
             'maximumEvidenceIds' => (int) config('ai.campaign-consultation.maximum_evidence_ids'),
+            'campaignId' => $campaign->id,
+            'candidates' => $brief->candidates,
         ]);
 
         $recommendation = app(CampaignConsultationGateway::class)->recommend($request);
@@ -149,6 +151,8 @@ class RequestCampaignConsultationAction
             $timedOut ? (int) config('ai.campaign-consultation.maximum_input_tokens', 4_000) : $recommendation->inputTokens,
             $timedOut ? (int) config('ai.campaign-consultation.maximum_output_tokens', 640) : $recommendation->outputTokens,
             $this->clock->now(),
+            $recommendation->provider,
+            $recommendation->model,
         );
     }
 
@@ -170,6 +174,7 @@ class RequestCampaignConsultationAction
                 'provider_request_id' => $recommendation->providerRequestId,
                 'input_tokens' => $recommendation->inputTokens,
                 'output_tokens' => $recommendation->outputTokens,
+                'cost' => AiUsageReservation::query()->find($reservationId)?->cost,
                 'usage_reservation_id' => $reservationId,
                 'changed_ranking' => $completed && $mode === AiCampaignConsultationMode::Advice,
                 'request_key' => 'campaign-consultation:' . $campaign->id . ':' . $trigger->value . ':' . $trace->inputHash,

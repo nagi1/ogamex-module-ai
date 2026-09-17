@@ -19,8 +19,9 @@ has already recorded — moves the decision score as a signed **appetite**:
   mood can promote a near-equal candidate but can never promote an unavailable action, override a
   native refusal, or outvote the safety/resource weights.
 
-The default is off, so ordinary-universe decisions are byte-for-byte unchanged until an operator
-opts the weight in for the cooperative cohort they measure.
+The default is **hybrid (on)** from 16 September 2026 (owner: strongest account first, optimise
+later): the mood nudge applies at `ai.cognition.affect.decision_weight = 10` by default, with `0` kept
+as the no-affect ablation baseline.
 
 | Field | Source | Consumer | Observed effect |
 | --- | --- | --- | --- |

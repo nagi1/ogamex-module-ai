@@ -1,0 +1,32 @@
+{
+    "_meta": {
+        "captured_from": "https://api.deepseek.com/v1/chat/completions",
+        "model": "deepseek-flash",
+        "response_format": "json_object",
+        "notes": "Shape-verified against the DeepSeek API docs (OpenAI-compatible chat completions, thinking-mode aware). Replace with scripts/capture-language-fixtures.php --confirm once provider credentials exist."
+    },
+    "structured_reply": {
+        "status": 200,
+        "body": {
+            "id": "chatcmpl-ogamex-fixture",
+            "object": "chat.completion",
+            "created": 1758000000,
+            "model": "deepseek-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "{\"text\":\"Understood - noted.\",\"interpretation\":\"none\",\"candidates\":[]}"
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 128,
+                "completion_tokens": 12,
+                "total_tokens": 140
+            }
+        }
+    }
+}

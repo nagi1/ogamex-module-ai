@@ -12,6 +12,10 @@ use Modules\AI\Domain\Experience\NativeExperienceEngine;
 use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiExperienceDriver;
 use Modules\AI\Enums\AiMemoryDriver;
+use Modules\AI\Infrastructure\Cognition\HybridAffectEngine;
+use Modules\AI\Infrastructure\Cognition\HybridSocialCognition;
+use Modules\AI\Infrastructure\Experience\HybridExperienceEngine;
+use Modules\AI\Infrastructure\Memory\AgentOsLongTermMemory;
 use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\ExperienceEngineSelector;
 use Modules\AI\Support\LongTermMemorySelector;
@@ -21,9 +25,9 @@ use Tests\IsolatedAccountTestCase;
 uses(IsolatedAccountTestCase::class);
 
 /**
- * Absence is free (gate A1). No Phase 3 baseline may depend on a sidecar, so every
- * optional contract must resolve to its native implementation when nothing is
- * configured, and must never attempt a request while doing so.
+ * Absence is free (gate A1). No baseline may depend on a sidecar being up: a missing,
+ * stopped or misconfigured driver degrades per call to native, and an empty or native
+ * driver setting resolves native without ever attempting a request.
  *
  * The module's own bindings are not active in this suite, so they are wired here exactly
  * as AIServiceProvider::register() wires them. Routing through the selectors keeps the
@@ -36,18 +40,18 @@ beforeEach(function (): void {
     app()->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
 });
 
-test('every optional contract resolves to its native implementation when nothing is configured', function (string $contract, string $selector, string $native): void {
+test('every optional contract resolves to its hybrid default when nothing is configured', function (string $contract, string $selector, string $default): void {
     Http::fake();
 
-    expect(app($selector)->resolve())->toBeInstanceOf($native)
-        ->and(app($contract))->toBeInstanceOf($native);
+    expect(app($selector)->resolve())->toBeInstanceOf($default)
+        ->and(app($contract))->toBeInstanceOf($default);
 
     Http::assertNothingSent();
 })->with([
-    'affect' => [AffectEngine::class, AffectEngineSelector::class, NativeAffectEngine::class],
-    'social cognition' => [SocialCognition::class, SocialCognitionSelector::class, NativeSocialCognition::class],
-    'long-term memory' => [LongTermMemory::class, LongTermMemorySelector::class, NativeLongTermMemory::class],
-    'experience' => [ExperienceEngine::class, ExperienceEngineSelector::class, NativeExperienceEngine::class],
+    'affect' => [AffectEngine::class, AffectEngineSelector::class, HybridAffectEngine::class],
+    'social cognition' => [SocialCognition::class, SocialCognitionSelector::class, HybridSocialCognition::class],
+    'long-term memory' => [LongTermMemory::class, LongTermMemorySelector::class, AgentOsLongTermMemory::class],
+    'experience' => [ExperienceEngine::class, ExperienceEngineSelector::class, HybridExperienceEngine::class],
 ]);
 
 test('every optional contract still resolves to native when its setting is empty', function (): void {

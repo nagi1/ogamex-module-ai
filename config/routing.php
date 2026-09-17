@@ -55,7 +55,10 @@ return [
     'ladders' => [
         'conversation_reply' => [
             ['provider' => 'deepseek', 'model' => 'deepseek-flash'],
-            ['provider' => 'openai', 'model' => 'gpt-5-mini'],
+            ['provider' => 'openai', 'model' => 'gpt-5.6-luna'],
+        ],
+        'campaign_consultation' => [
+            ['provider' => 'deepseek', 'model' => 'deepseek-v4-pro'],
         ],
         'conformance' => [
             ['provider' => 'deepseek', 'model' => 'deepseek-flash'],

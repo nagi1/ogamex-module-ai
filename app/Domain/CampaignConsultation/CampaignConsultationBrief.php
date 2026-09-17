@@ -15,11 +15,13 @@ readonly class CampaignConsultationBrief
     /**
      * @param list<int> $candidateIds
      * @param list<int> $evidenceIds
+     * @param list<array{id:int, action:string, reason:string, score:float}> $candidates
      */
     public function __construct(
         public string $serialized,
         public array $candidateIds,
         public array $evidenceIds,
+        public array $candidates,
     ) {
     }
 }

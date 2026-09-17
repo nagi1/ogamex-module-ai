@@ -9,8 +9,9 @@ Stated by the owner on 14 September 2026, and now a decision criterion rather th
 > **2 vCPU, 2 GB RAM, no GPU** — an ordinary small VPS that already runs the Laravel app, its
 > queue workers, the database and Redis.
 
-Any capability added to the baseline has to fit this machine. A capability that does not is
-opt-in for hosts with measured headroom, which is what the swap-ease rule exists to preserve.
+Owner direction 16 September 2026: build the strongest account first and optimise later. This profile
+is the eventual deployment target, not a gate — capabilities run at full strength now and are trimmed
+against this machine once the strongest account is measured.
 
 Measured in this workspace on 14 September 2026 (the development host, **not** the target
 profile — recorded as an order of magnitude, not as target capacity):
@@ -31,12 +32,12 @@ The per-candidate verdicts, the evidence behind them and the list of things that
 on this profile are in [how modern AI tooling solves agent memory](../research/agent-memory-tooling.md#verdicts-against-the-reference-profile).
 Two rules follow directly:
 
-1. **The native engines are not a fallback on this profile; they are the only path that fits it.**
-   FAtiMA at 109 MiB and CBRKit at 142 MiB are ordinary candidates; a Node runtime with a 920 MB
-   dependency tree, a JVM graph database or a local language model are not.
-2. **No driver is enabled on the reference profile without a measured resident footprint and a
-   stated remaining-headroom figure.** The 2/5/10-account runs are what turn these verdicts
-   into numbers.
+1. **Native engines are the fallback and the floor, not the default.** FAtiMA at 109 MiB and CBRKit
+   at 142 MiB are ordinary candidates; a Node runtime with a 920 MB dependency tree, a JVM graph
+   database or a local language model are not.
+2. **Every driver is enabled by default; the resident-footprint figure is recorded, not a gate.** The
+   2/5/10-account runs measure the profile, and optimisation happens after the strongest account is
+   built.
 
 ## Model-call policy
 

@@ -1,0 +1,375 @@
+{
+    "_meta": {
+        "driver": "cbrkit",
+        "image": "ogamex-ai-cognition-cbrkit:1.6.0",
+        "endpoint": "http://host.docker.internal:8091",
+        "captured_at": "2026-09-16T21:11:44Z",
+        "capture_script": "scripts/capture-cognition-fixtures.php",
+        "request_builder": "Modules\\AI\\Infrastructure\\Experience\\CbrKitClient",
+        "note": "The retriever weights planet_id and object_id as categorical identity and target_level as numeric, so a stored case scores independently of the other cases sent. That is why one score can be replayed for any request carrying the same case features under the same query."
+    },
+    "channels": {
+        "retrieve": {
+            "canonical": {
+                "request": {
+                    "casebase": {
+                        "9010": {
+                            "planet_id": 1,
+                            "object_id": 2,
+                            "target_level": 6
+                        },
+                        "9011": {
+                            "planet_id": 1,
+                            "object_id": 2,
+                            "target_level": 5
+                        },
+                        "9012": {
+                            "planet_id": 1,
+                            "object_id": 3,
+                            "target_level": 6
+                        },
+                        "9013": {
+                            "planet_id": 1,
+                            "object_id": 2,
+                            "target_level": 6
+                        },
+                        "9014": {
+                            "planet_id": 1,
+                            "object_id": 2,
+                            "target_level": 2
+                        }
+                    },
+                    "queries": {
+                        "current": {
+                            "object_id": 2,
+                            "target_level": 6
+                        }
+                    }
+                },
+                "body": {
+                    "steps": [
+                        {
+                            "queries": {
+                                "current": {
+                                    "similarities": {
+                                        "9010": 1,
+                                        "9011": 0.9444444444444445,
+                                        "9012": 0.3333333333333333,
+                                        "9013": 1,
+                                        "9014": 0.7777777777777778
+                                    },
+                                    "ranking": [
+                                        "9010",
+                                        "9013",
+                                        "9011",
+                                        "9014",
+                                        "9012"
+                                    ],
+                                    "casebase": {
+                                        "9010": {
+                                            "planet_id": 1,
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        },
+                                        "9011": {
+                                            "planet_id": 1,
+                                            "object_id": 2,
+                                            "target_level": 5
+                                        },
+                                        "9012": {
+                                            "planet_id": 1,
+                                            "object_id": 3,
+                                            "target_level": 6
+                                        },
+                                        "9013": {
+                                            "planet_id": 1,
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        },
+                                        "9014": {
+                                            "planet_id": 1,
+                                            "object_id": 2,
+                                            "target_level": 2
+                                        }
+                                    },
+                                    "query": {
+                                        "object_id": 2,
+                                        "target_level": 6
+                                    },
+                                    "duration": 0
+                                }
+                            },
+                            "metadata": {
+                                "name": "build",
+                                "doc": "Creates a retriever from a similarity function.\n\nThis is the core building block for retrieval pipelines.\nIt flattens all (casebase, query) batches into a single list of pairwise\ncomparisons and evaluates them together using the similarity function.\nWhen multiprocessing is enabled, parallelism occurs at the level of\nindividual similarity computations within batches.\n\nTo parallelize across batches instead (i.e., process each (casebase, query)\npair independently), wrap the result with `distribute`.\n\nArgs:\n    similarity_func: Similarity function to compute the similarity between cases.\n    multiprocessing: Either a boolean to enable multiprocessing with all cores\n        or an integer to specify the number of processes to use or a multiprocessing.Pool object.\n        Parallelizes the similarity computations within batches.\n    chunksize: Number of pairs to process at a time using the similarity function.\n        If 0, it will be set to the number of pairs divided by the number of processes.\n\nReturns:\n    A retriever function that computes the similarity between cases.\n\nExamples:\n    >>> import cbrkit\n    >>> retriever = cbrkit.retrieval.build(\n    ...     cbrkit.sim.attribute_value(\n    ...         attributes={\n    ...             \"price\": cbrkit.sim.numbers.linear(max=100000),\n    ...             \"year\": cbrkit.sim.numbers.linear(max=50),\n    ...             \"model\": cbrkit.sim.attribute_value(\n    ...                 attributes={\n    ...                     \"make\": cbrkit.sim.generic.equality(),\n    ...                 }\n    ...             ),\n    ...         },\n    ...         aggregator=cbrkit.sim.aggregator(pooling=\"mean\"),\n    ...     )\n    ... )",
+                                "metadata": {
+                                    "similarity_func": {
+                                        "name": "feature_similarity",
+                                        "doc": "Weighted similarity over the query's known features.\n\nCBRKit passes the case as ``x`` and the query as ``y``. A feature the query\ndoes not state (``None`` or absent) is not compared, and an unknown case\nvalue still counts toward the weighted denominator and scores zero, so\nmissing case evidence lowers the score the way the module's contract\nexpects."
+                                    },
+                                    "multiprocessing": false,
+                                    "chunksize": 0
+                                }
+                            },
+                            "duration": 6.415600000764243e-5
+                        }
+                    ],
+                    "duration": 0.00031862600008025765
+                }
+            },
+            "production": {
+                "request": {
+                    "casebase": {
+                        "9020": {
+                            "planet_id": 1,
+                            "object_id": 2,
+                            "target_level": 5
+                        },
+                        "9021": {
+                            "planet_id": 1,
+                            "object_id": 3,
+                            "target_level": 5
+                        }
+                    },
+                    "queries": {
+                        "current": {
+                            "object_id": 2
+                        }
+                    }
+                },
+                "body": {
+                    "steps": [
+                        {
+                            "queries": {
+                                "current": {
+                                    "similarities": {
+                                        "9020": 1,
+                                        "9021": 0
+                                    },
+                                    "ranking": [
+                                        "9020",
+                                        "9021"
+                                    ],
+                                    "casebase": {
+                                        "9020": {
+                                            "planet_id": 1,
+                                            "object_id": 2,
+                                            "target_level": 5
+                                        },
+                                        "9021": {
+                                            "planet_id": 1,
+                                            "object_id": 3,
+                                            "target_level": 5
+                                        }
+                                    },
+                                    "query": {
+                                        "object_id": 2
+                                    },
+                                    "duration": 0
+                                }
+                            },
+                            "metadata": {
+                                "name": "build",
+                                "doc": "Creates a retriever from a similarity function.\n\nThis is the core building block for retrieval pipelines.\nIt flattens all (casebase, query) batches into a single list of pairwise\ncomparisons and evaluates them together using the similarity function.\nWhen multiprocessing is enabled, parallelism occurs at the level of\nindividual similarity computations within batches.\n\nTo parallelize across batches instead (i.e., process each (casebase, query)\npair independently), wrap the result with `distribute`.\n\nArgs:\n    similarity_func: Similarity function to compute the similarity between cases.\n    multiprocessing: Either a boolean to enable multiprocessing with all cores\n        or an integer to specify the number of processes to use or a multiprocessing.Pool object.\n        Parallelizes the similarity computations within batches.\n    chunksize: Number of pairs to process at a time using the similarity function.\n        If 0, it will be set to the number of pairs divided by the number of processes.\n\nReturns:\n    A retriever function that computes the similarity between cases.\n\nExamples:\n    >>> import cbrkit\n    >>> retriever = cbrkit.retrieval.build(\n    ...     cbrkit.sim.attribute_value(\n    ...         attributes={\n    ...             \"price\": cbrkit.sim.numbers.linear(max=100000),\n    ...             \"year\": cbrkit.sim.numbers.linear(max=50),\n    ...             \"model\": cbrkit.sim.attribute_value(\n    ...                 attributes={\n    ...                     \"make\": cbrkit.sim.generic.equality(),\n    ...                 }\n    ...             ),\n    ...         },\n    ...         aggregator=cbrkit.sim.aggregator(pooling=\"mean\"),\n    ...     )\n    ... )",
+                                "metadata": {
+                                    "similarity_func": {
+                                        "name": "feature_similarity",
+                                        "doc": "Weighted similarity over the query's known features.\n\nCBRKit passes the case as ``x`` and the query as ``y``. A feature the query\ndoes not state (``None`` or absent) is not compared, and an unknown case\nvalue still counts toward the weighted denominator and scores zero, so\nmissing case evidence lowers the score the way the module's contract\nexpects."
+                                    },
+                                    "multiprocessing": false,
+                                    "chunksize": 0
+                                }
+                            },
+                            "duration": 4.988300133845769e-5
+                        }
+                    ],
+                    "duration": 0.0002611499985505361
+                }
+            },
+            "conformance_tie": {
+                "request": {
+                    "casebase": {
+                        "9030": {
+                            "planet_id": 1,
+                            "object_id": 2,
+                            "target_level": 6
+                        },
+                        "9031": {
+                            "planet_id": 2,
+                            "object_id": 2,
+                            "target_level": 6
+                        },
+                        "9032": {
+                            "planet_id": 3,
+                            "object_id": 2,
+                            "target_level": 6
+                        },
+                        "9033": {
+                            "planet_id": 4,
+                            "object_id": 2,
+                            "target_level": 6
+                        }
+                    },
+                    "queries": {
+                        "current": {
+                            "object_id": 2,
+                            "target_level": 6
+                        }
+                    }
+                },
+                "body": {
+                    "steps": [
+                        {
+                            "queries": {
+                                "current": {
+                                    "similarities": {
+                                        "9030": 1,
+                                        "9031": 1,
+                                        "9032": 1,
+                                        "9033": 1
+                                    },
+                                    "ranking": [
+                                        "9030",
+                                        "9031",
+                                        "9032",
+                                        "9033"
+                                    ],
+                                    "casebase": {
+                                        "9030": {
+                                            "planet_id": 1,
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        },
+                                        "9031": {
+                                            "planet_id": 2,
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        },
+                                        "9032": {
+                                            "planet_id": 3,
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        },
+                                        "9033": {
+                                            "planet_id": 4,
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        }
+                                    },
+                                    "query": {
+                                        "object_id": 2,
+                                        "target_level": 6
+                                    },
+                                    "duration": 0
+                                }
+                            },
+                            "metadata": {
+                                "name": "build",
+                                "doc": "Creates a retriever from a similarity function.\n\nThis is the core building block for retrieval pipelines.\nIt flattens all (casebase, query) batches into a single list of pairwise\ncomparisons and evaluates them together using the similarity function.\nWhen multiprocessing is enabled, parallelism occurs at the level of\nindividual similarity computations within batches.\n\nTo parallelize across batches instead (i.e., process each (casebase, query)\npair independently), wrap the result with `distribute`.\n\nArgs:\n    similarity_func: Similarity function to compute the similarity between cases.\n    multiprocessing: Either a boolean to enable multiprocessing with all cores\n        or an integer to specify the number of processes to use or a multiprocessing.Pool object.\n        Parallelizes the similarity computations within batches.\n    chunksize: Number of pairs to process at a time using the similarity function.\n        If 0, it will be set to the number of pairs divided by the number of processes.\n\nReturns:\n    A retriever function that computes the similarity between cases.\n\nExamples:\n    >>> import cbrkit\n    >>> retriever = cbrkit.retrieval.build(\n    ...     cbrkit.sim.attribute_value(\n    ...         attributes={\n    ...             \"price\": cbrkit.sim.numbers.linear(max=100000),\n    ...             \"year\": cbrkit.sim.numbers.linear(max=50),\n    ...             \"model\": cbrkit.sim.attribute_value(\n    ...                 attributes={\n    ...                     \"make\": cbrkit.sim.generic.equality(),\n    ...                 }\n    ...             ),\n    ...         },\n    ...         aggregator=cbrkit.sim.aggregator(pooling=\"mean\"),\n    ...     )\n    ... )",
+                                "metadata": {
+                                    "similarity_func": {
+                                        "name": "feature_similarity",
+                                        "doc": "Weighted similarity over the query's known features.\n\nCBRKit passes the case as ``x`` and the query as ``y``. A feature the query\ndoes not state (``None`` or absent) is not compared, and an unknown case\nvalue still counts toward the weighted denominator and scores zero, so\nmissing case evidence lowers the score the way the module's contract\nexpects."
+                                    },
+                                    "multiprocessing": false,
+                                    "chunksize": 0
+                                }
+                            },
+                            "duration": 5.802600207971409e-5
+                        }
+                    ],
+                    "duration": 0.00028241899781278335
+                }
+            },
+            "conformance_differentiation": {
+                "request": {
+                    "casebase": {
+                        "9040": {
+                            "object_id": 9,
+                            "target_level": 6
+                        },
+                        "9041": {
+                            "object_id": 3,
+                            "target_level": 6
+                        },
+                        "9042": {
+                            "object_id": 2,
+                            "target_level": 6
+                        }
+                    },
+                    "queries": {
+                        "current": {
+                            "object_id": 2,
+                            "target_level": 6
+                        }
+                    }
+                },
+                "body": {
+                    "steps": [
+                        {
+                            "queries": {
+                                "current": {
+                                    "similarities": {
+                                        "9040": 0.3333333333333333,
+                                        "9041": 0.3333333333333333,
+                                        "9042": 1
+                                    },
+                                    "ranking": [
+                                        "9042",
+                                        "9040",
+                                        "9041"
+                                    ],
+                                    "casebase": {
+                                        "9040": {
+                                            "object_id": 9,
+                                            "target_level": 6
+                                        },
+                                        "9041": {
+                                            "object_id": 3,
+                                            "target_level": 6
+                                        },
+                                        "9042": {
+                                            "object_id": 2,
+                                            "target_level": 6
+                                        }
+                                    },
+                                    "query": {
+                                        "object_id": 2,
+                                        "target_level": 6
+                                    },
+                                    "duration": 0
+                                }
+                            },
+                            "metadata": {
+                                "name": "build",
+                                "doc": "Creates a retriever from a similarity function.\n\nThis is the core building block for retrieval pipelines.\nIt flattens all (casebase, query) batches into a single list of pairwise\ncomparisons and evaluates them together using the similarity function.\nWhen multiprocessing is enabled, parallelism occurs at the level of\nindividual similarity computations within batches.\n\nTo parallelize across batches instead (i.e., process each (casebase, query)\npair independently), wrap the result with `distribute`.\n\nArgs:\n    similarity_func: Similarity function to compute the similarity between cases.\n    multiprocessing: Either a boolean to enable multiprocessing with all cores\n        or an integer to specify the number of processes to use or a multiprocessing.Pool object.\n        Parallelizes the similarity computations within batches.\n    chunksize: Number of pairs to process at a time using the similarity function.\n        If 0, it will be set to the number of pairs divided by the number of processes.\n\nReturns:\n    A retriever function that computes the similarity between cases.\n\nExamples:\n    >>> import cbrkit\n    >>> retriever = cbrkit.retrieval.build(\n    ...     cbrkit.sim.attribute_value(\n    ...         attributes={\n    ...             \"price\": cbrkit.sim.numbers.linear(max=100000),\n    ...             \"year\": cbrkit.sim.numbers.linear(max=50),\n    ...             \"model\": cbrkit.sim.attribute_value(\n    ...                 attributes={\n    ...                     \"make\": cbrkit.sim.generic.equality(),\n    ...                 }\n    ...             ),\n    ...         },\n    ...         aggregator=cbrkit.sim.aggregator(pooling=\"mean\"),\n    ...     )\n    ... )",
+                                "metadata": {
+                                    "similarity_func": {
+                                        "name": "feature_similarity",
+                                        "doc": "Weighted similarity over the query's known features.\n\nCBRKit passes the case as ``x`` and the query as ``y``. A feature the query\ndoes not state (``None`` or absent) is not compared, and an unknown case\nvalue still counts toward the weighted denominator and scores zero, so\nmissing case evidence lowers the score the way the module's contract\nexpects."
+                                    },
+                                    "multiprocessing": false,
+                                    "chunksize": 0
+                                }
+                            },
+                            "duration": 5.3349001973401755e-5
+                        }
+                    ],
+                    "duration": 0.0002565689974289853
+                }
+            }
+        },
+        "refused_casebase": {
+            "request": {
+                "casebase": "not-an-object",
+                "queries": {
+                    "current": {
+                        "object_id": 1
+                    }
+                }
+            },
+            "status": 500,
+            "body": "Internal Server Error"
+        }
+    }
+}
