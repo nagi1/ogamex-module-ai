@@ -233,11 +233,33 @@ Low value with one moon — the gate is a destination pair.
 **Accept.** With one moon nothing changes; with two, a frozen-clock case picks the jump over the
 flight and a cooldown-blocked one falls back to the flight.
 
+### RV-010 — Metal-dump research when the warehouse is full and the planet cannot build
+
+**Why.** Deferred on a measured case; the live universe produced it. Eight cohort planets were
+metal-capped with idle build and research queues, and `QueueableBuildingPlanner::plan()` returned
+`null` for accounts 12, 17 and 18 because those planets are field-full
+(`getBuildingCount() >= getPlanetFieldMax()`). Every mine the full-warehouse spend offers consumes a
+planet field, so `canQueue()` refuses them all and the surplus metal is discarded with no sink.
+
+**Seam.** `ObjectService::getResearchObjects()` and `getObjectPrice()` — the research catalogue and
+next-level price, read from the host.
+
+**Files.** `Modules/AI/app/Domain/Decision/EconomyUpgrades.php`,
+`Modules/AI/tests/Feature/EconomyUpgradesTest.php`.
+
+**Smallest mechanism.** `spendSurplus()` appends a research dump after its mines: the technology that
+spends the largest share of its next-level price in the capped resource, cheapest-first on a tie. A
+planet with a free field keeps mining (the mine candidates come first); only a field-full planet
+falls through to the dump. `firstQueueable()` routes the research candidate to `queueableResearch()`
+unchanged.
+
+**Accept.** A field-full metal-capped planet plans a research dump (live: accounts 12, 17, 18 →
+`armor_technology`), a planet with free fields keeps mining, and a non-capped account is unchanged.
+
 ## Deferred, with the trigger that opens them
 
 | Row | Idea | Trigger |
 | --- | --- | --- |
-| RV-010 | Metal-dump research while saving (trilogi77) | A measured metal-capped state that `EconomyUpgrades::spendSurplus()` and `FacilityChain` both leave unresolved. Today the full-warehouse spend (`W8-L4`) and the facility chain already cover it, so this is real only if a read shows metal being discarded with a queue idle |
 | RV-011 | Game-phase classification (shinigallo) | A named consumer wants it. Derivable from host reads (own rank, object levels, host highscore) with no host change, but with no consumer it is config for a value nothing varies on |
 | RV-012 | Consultation confidence gate + horizon (shinigallo) | The 6A/7A consultation lane enabled **and** a confidence source in the brief. The brief carries no confidence signal today, and the lane is off by default |
 | RV-013 | Moonshot (trilogi77) | A host self-battle seam. `AttackMission::checkOwnPlanet` refuses self-attacks by design, and sending a fleet to die on a neighbour to farm debris is machine-shaped against gate 3, so this stays cut unless the owner wants the seam |

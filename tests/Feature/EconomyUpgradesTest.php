@@ -15,6 +15,8 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\ExperienceEngineSelector;
 use Modules\AI\Support\SystemAiClock;
+use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use Tests\IsolatedAccountTestCase;
@@ -168,6 +170,39 @@ test('the experience weight is the ablation switch', function (): void {
     config(['ai.cognition.experience.decision_weight' => 0]);
 
     expect(economyRanking($this->planetService, $profile))->toBe($baseline);
+});
+
+/**
+ * E9: a full warehouse the economy cannot spend on a mine is dumped into research, and the dump is
+ * a technology from the host's own catalogue that spends the capped resource. A metal-capped planet
+ * therefore never gets a crystal-only technology, and the reason names the host object it came from.
+ */
+test('a full warehouse offers a research dump that spends the capped resource', function (): void {
+    $profile = economyProfile($this->currentUserId);
+
+    $this->planetSetObjectLevel('solar_plant', 25);
+    $this->planetSetObjectLevel('metal_mine', 10);
+    $this->planetSetObjectLevel('crystal_mine', 10);
+    $this->planetSetObjectLevel('deuterium_synthesizer', 5);
+    $this->planetAddResources(new Resources(10_000_000, 0, 0));
+    economyRefresh($this->planetService);
+
+    $candidates = app(EconomyUpgrades::class)->spendSurplus($this->planetService, $profile);
+    $dumps = array_values(array_filter(
+        $candidates,
+        static fn (BuildCandidate $candidate): bool => ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research,
+    ));
+
+    expect($dumps)->not->toBeEmpty();
+
+    foreach ($dumps as $dump) {
+        $object = ObjectService::getObjectById($dump->buildingId);
+        $price = ObjectService::getObjectPrice($object->machine_name, $this->planetService);
+
+        expect($object->type)->toBe(GameObjectType::Research)
+            ->and($dump->reason)->toBe('economy:dump:' . $object->machine_name)
+            ->and($price->metal->get())->toBeGreaterThan(0.0);
+    }
 });
 
 function economyProfile(int $playerId, AiSkillBand $band = AiSkillBand::Standard, int $seed = 42): AiProfile

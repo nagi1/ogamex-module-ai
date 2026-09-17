@@ -112,13 +112,80 @@ class EconomyUpgrades
      * offered with no payback horizon and the planner spends the surplus rather than discarding it.
      * Empty when no resource is at capacity, so the routine order is unchanged otherwise.
      *
+     * A planet that cannot build -- its fields are full, so every mine is refused -- still has one
+     * sink left, and the spend falls back to it: the technology that spends the largest share of its
+     * price in the capped resource (E9). The mine candidates come first, so a planet with a free
+     * field keeps mining and only a planet that cannot build reaches the dump.
+     *
      * @return list<BuildCandidate>
      */
     public function spendSurplus(PlanetService $planet, AiProfile $profile): array
     {
-        return $this->storageIsFull($planet)
-            ? $this->rankedProduction($planet, $profile, INF)
-            : [];
+        if (!$this->storageIsFull($planet)) {
+            return [];
+        }
+
+        return [
+            ...$this->rankedProduction($planet, $profile, INF),
+            ...$this->researchDump($planet),
+        ];
+    }
+
+    /**
+     * E9: a full warehouse the economy cannot spend on a mine -- a field-full planet -- is dumped
+     * into the technology that spends the largest share of its price in the capped resource, so a
+     * metal-capped planet researches the metal-heavy technology instead of a crystal-only one. The
+     * list is host-derived: the technologies are the host's own catalogue and the price is the host's
+     * price for the next level.
+     *
+     * @return list<BuildCandidate>
+     */
+    public function researchDump(PlanetService $planet): array
+    {
+        $full = $this->fullResources($planet);
+        if ($full === []) {
+            return [];
+        }
+
+        $entries = [];
+
+        foreach (ObjectService::getResearchObjects() as $object) {
+            $price = ObjectService::getObjectPrice($object->machine_name, $planet);
+            $total = $price->sum();
+            $spend = 0.0;
+
+            foreach ($full as $resource) {
+                $spend += match ($resource) {
+                    'metal' => $price->metal->get(),
+                    'crystal' => $price->crystal->get(),
+                    'deuterium' => $price->deuterium->get(),
+                    default => 0.0,
+                };
+            }
+
+            if ($spend <= 0.0 || $total <= 0.0) {
+                continue;
+            }
+
+            // The share of the price paid in capped resources, not the absolute amount: a pure-metal
+            // armour is a better metal dump than a drive whose crystal half is not overflowing. The
+            // cheapest spender wins a tie, so the dump stays small and frequent rather than one huge
+            // research.
+            $entries[] = [
+                'share' => $spend / $total,
+                'total' => $total,
+                'candidate' => app()->makeWith(BuildCandidate::class, [
+                    'buildingId' => $object->id,
+                    'reason' => 'economy:dump:' . $object->machine_name,
+                ]),
+            ];
+        }
+
+        usort($entries, static function (array $left, array $right): int {
+            return $right['share'] <=> $left['share'] ?: $left['total'] <=> $right['total'];
+        });
+
+        return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $entries);
     }
 
     /** @return list<BuildCandidate> the production upgrades whose payback lies inside the horizon */
@@ -294,11 +361,21 @@ class EconomyUpgrades
      */
     private function storageIsFull(PlanetService $planet): bool
     {
+        return $this->fullResources($planet) !== [];
+    }
+
+    /**
+     * @return list<string> the resources this planet currently holds at or above capacity
+     */
+    private function fullResources(PlanetService $planet): array
+    {
         $stored = $planet->getResources();
 
-        return $planet->metalStorage()->get() <= $stored->metal->get()
-            || $planet->crystalStorage()->get() <= $stored->crystal->get()
-            || $planet->deuteriumStorage()->get() <= $stored->deuterium->get();
+        return array_keys(array_filter([
+            'metal' => $planet->metalStorage()->get() <= $stored->metal->get(),
+            'crystal' => $planet->crystalStorage()->get() <= $stored->crystal->get(),
+            'deuterium' => $planet->deuteriumStorage()->get() <= $stored->deuterium->get(),
+        ]));
     }
 
     /**

@@ -1937,3 +1937,31 @@ Tests (`RaidDepthTest`): an LF swarm draws cruisers and excludes the account's o
 undefended farm sends one kill hull plus cargo, and `NativeRaidEstimator::estimateFleet` screens a
 caller-supplied subset in one draw. Tests, quality and coverage gates were deliberately not run
 (owner: run later).
+
+### RV-010 — metal-dump research when the warehouse is full and the planet cannot build (17 September 2026)
+
+`RV-010` was deferred on a measured case; the live universe produced it, so the deferral is lifted
+and the slice implemented. The read: **8 cohort planets metal-capped with idle build and research
+queues**, and `QueueableBuildingPlanner::plan()` returned `null` for accounts 12, 17 and 18 because
+those planets are **field-full** (`getBuildingCount() >= getPlanetFieldMax()`). Every mine the
+full-warehouse spend offers consumes a planet field, so `canQueue()` refuses all of them and the
+surplus metal is discarded with no sink — the exact state the trigger named.
+
+The mechanism is the smallest one that closes it and it reuses the authorities already in place:
+
+- `EconomyUpgrades::fullResources()` names the resources held at or above capacity (host storage
+  numbers), and `storageIsFull()` is now that list being non-empty — the one place the capped
+  question is asked.
+- `EconomyUpgrades::researchDump()` ranks the host's own research catalogue by the share of each
+  technology's next-level price paid in the capped resource, cheapest-first on a tie. The candidate
+  is a `BuildCandidate` whose object is the host's, so `firstQueueable()` routes it to
+  `queueableResearch()` unchanged — no planner edit.
+- `spendSurplus()` appends the dump after the mines, so a planet with a free field keeps mining and
+  only a field-full (or otherwise mine-refused) planet reaches the dump; a non-full account returns
+  `[]` exactly as before.
+
+Measured on the grand universe after the change: the planner now returns `armor_technology` (pure
+metal, no crystal or deuterium) for accounts 12, 17 and 18, an `energy_technology` dump for an
+account whose crystal is capped instead, and the ordinary `metal_mine`/`storage` steps for the
+non-capped accounts — unchanged. Tests, quality and coverage gates were deliberately not run
+(owner: run later).
