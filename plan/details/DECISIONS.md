@@ -1916,3 +1916,24 @@ that a deficit the building queue can answer is *not* a yard order) and one end-
 `ExecuteIntentTest` proving the host queue accepts the amount the planner sizes. Module PHPStan level 8
 and Pint clean on the changed files; the quality and coverage gates were deliberately not run.
 
+### RV-002 — the launch subset: counters, not the garage (16 September 2026)
+
+`RaidPlanner` no longer launches the whole origin fleet. After the estimate passes, it derives the
+launch subset and re-screens it once before dispatch:
+
+- **Counter selection** is the host's own rapid-fire graph: a hull scores `+rf*amount` for rapid fire
+  against the target's mix and `-rf*amount` where the target shreds it back, so a light-fighter swarm
+  draws cruisers and a hull the target counters is denied. No counter map lives in the module.
+- **Cargo vs kill** is the host's own civil/military split: cargo is the fewest civil hulls that carry
+  the loot (largest capacity first), and the greedy grows military hulls in counter order, simulating
+  one draw per candidate until the subset survives — the smallest hull set that wins, with a `ponytail:`
+  note that one draw is a probability average and the 50-sample full-stock screen already bounds the
+  worst case. A defenceless farm gets cargo plus one cheapest kill hull.
+- The subset rides the work item (`launch_units`) through `ScheduleAiIntentAction` →
+  `ExecuteAiIntentAction` → `QueueAiRaid::handle(..., ?array $launchUnits)`, which sends the subset
+  via the host's normal attack path; an intent without it (an older item) still sends the whole fleet.
+
+Tests (`RaidDepthTest`): an LF swarm draws cruisers and excludes the account's own light fighters, an
+undefended farm sends one kill hull plus cargo, and `NativeRaidEstimator::estimateFleet` screens a
+caller-supplied subset in one draw. Tests, quality and coverage gates were deliberately not run
+(owner: run later).
