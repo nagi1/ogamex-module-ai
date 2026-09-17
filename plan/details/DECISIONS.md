@@ -1840,3 +1840,39 @@ it, one is greenfield, and two are already indexed elsewhere.
 All three new rows are `deferred`, because Package 7 is still gated on a review record that names a
 player-visible gap and its two operational inputs (the disclosed coalition and the human pilot) are the
 owner's. `ready_tasks` is unchanged by this audit: it lists only work that can start.
+
+### W11-1 — the transfer loop was refused by the host, not by policy (17 September 2026)
+
+Deployed the day's work to the grand stack (backup, `migrate --force`, worker restart) and read the
+live cohort against it. The module's own pilot report was down on the holy DB because the bind-mounted
+working tree expected `actual_cached_input_tokens` and the migration had not been applied — applied
+now, report green again (`work.stuck 0`, `language.tokens 0`, 9-query / 0.8 s read).
+
+Refusals ranked over 24 h put one defect far ahead of the rest: 1,303 "Not enough resources on the
+planet to send the fleet.", 1,194 "Maximum number of fleets reached." and 388 "…colony_ship" — 88 % of
+every refused action. Only the first was still live at full rate (617 of 618 transfer dispatches in
+one hour, 40 % of the 24 h total); the slot and colony counts were largely pre-deploy history, and the
+colony half is covered by `bc0f6ba`, which landed concurrently from another agent.
+
+Root cause was not the planner. `GameMission::start` builds the flight's debit as the cargo **plus the
+flight's own fuel** before `startMissionSanityChecks` checks the origin planet, and the transfer planner
+quotes the source's above-floor surplus when the session decides. The work item then runs 0.6–3.4 min
+later (the pilot report's own lateness), so the planet has spent the quote and the host refuses the
+whole flight — which is why a transport loop meant to keep near-cap planets mining shipped almost
+nothing.
+
+Fixed in `QueueAiTransferAction` (the one place every caller passes through): clamp each resource to
+the source's own stock, abandon a remnant below the planner's own `MINIMUM_SHIPMENT` as
+`source_short_at_dispatch`, and reduce the deuterium cargo by the fuel the host will charge for that
+exact fleet and route (`FleetMissionService::calculateConsumption`) so the debit fits. The planner's
+minimum became public rather than duplicated.
+
+Measured on the holy DB, same universe, 90 seconds after the deploy: **0** host resource refusals and
+**13 flown transfers**, against **0 flown and 158 refused** in the 10 minutes before it. What is left is
+small and of one shape — a decision-time answer going stale at dispatch (`Maximum number of fleets
+reached.` ~30/h, plus colony-ship, expedition-ceiling and target-activity refusals in single digits per
+hour) — recorded in [Wave 11](GAP-REGISTER.md#wave-11--the-ferry-quote-spent-before-dispatch-17-september-2026)
+as one dispatch-time re-check rather than four more guards.
+
+Module suite after the change: 867 Pest tests / 2,756 assertions green. The quality and coverage gates
+were deliberately not run for this pass.

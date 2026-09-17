@@ -22,4 +22,5 @@ enum AiQueueActionReason: string
     case UnderAttack = 'under_attack';
     case NoDisposableFleet = 'no_disposable_fleet';
     case NoTransportFleet = 'no_transport_fleet';
+    case SourceShortAtDispatch = 'source_short_at_dispatch';
 }

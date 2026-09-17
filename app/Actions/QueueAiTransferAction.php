@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiTransfer;
+use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -55,7 +56,11 @@ class QueueAiTransferAction implements QueueAiTransfer
 
             $source = $this->planetServiceFactory->makeForPlayer($player, $sourcePlanetId, false);
             $target = $this->planetServiceFactory->makeForPlayer($player, $targetPlanetId, false);
-            $shipment = new Resources($metal, $crystal, $deuterium);
+
+            $shipment = $this->loadable($source, $metal, $crystal, $deuterium);
+            if ($shipment === null) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
 
             $fleet = $this->transportFleet($player, $source, $shipment);
             if ($fleet === null) {
@@ -63,6 +68,8 @@ class QueueAiTransferAction implements QueueAiTransfer
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+            $shipment = $this->leavingFuelBehind($source, $shipment, $fleet, $target, $fleetMissions);
+
             $mission = $fleetMissions->createNewFromPlanet(
                 $source,
                 $target->getPlanetCoordinates(),
@@ -77,6 +84,53 @@ class QueueAiTransferAction implements QueueAiTransfer
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * The shipment is quoted when the session decides, but a work item can run minutes later and at
+     * this game speed the source has spent part of the surplus by then: the host refuses a flight
+     * whose cargo the planet no longer holds, which is what most refused transfers were. A player
+     * loads what is still on the pad, so each resource is clamped to the source's own stock, and a
+     * remnant below the ordinary minimum is abandoned instead of flying a fleet for it.
+     */
+    private function loadable(PlanetService $source, int $metal, int $crystal, int $deuterium): ?Resources
+    {
+        $held = [
+            (int) floor($source->metal()->get()),
+            (int) floor($source->crystal()->get()),
+            (int) floor($source->deuterium()->get()),
+        ];
+
+        // Nothing was spent between the decision and this dispatch, so the quote stands.
+        if ($metal <= $held[0] && $crystal <= $held[1] && $deuterium <= $held[2]) {
+            return new Resources($metal, $crystal, $deuterium);
+        }
+
+        $shipment = new Resources(min($metal, $held[0]), min($crystal, $held[1]), min($deuterium, $held[2]));
+
+        if ($shipment->metal->get() + $shipment->crystal->get() < QueueableTransferPlanner::MINIMUM_SHIPMENT) {
+            return null;
+        }
+
+        return $shipment;
+    }
+
+    /**
+     * The host demands the cargo *and* the flight's own fuel on the origin planet, so a shipment that
+     * takes the last deuterium is refused for resources even though the cargo itself fits. The fuel
+     * is the host's own figure for this fleet and route; a player leaves it behind and flies with
+     * the rest.
+     */
+    private function leavingFuelBehind(PlanetService $source, Resources $shipment, UnitCollection $fleet, PlanetService $target, FleetMissionService $fleetMissions): Resources
+    {
+        $fuel = $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
+        $spare = (int) floor($source->deuterium()->get()) - (int) ceil($fuel);
+
+        return new Resources(
+            $shipment->metal->get(),
+            $shipment->crystal->get(),
+            min($shipment->deuterium->get(), max(0, $spare)),
+        );
     }
 
     /**

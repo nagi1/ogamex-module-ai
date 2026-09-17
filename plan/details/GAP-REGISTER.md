@@ -381,3 +381,25 @@ targets whose ceiling loot genuinely clears the tier. What remains is dominated 
 tech + planets per distinct owner, though only the owner's tech is read — the planet-list-lazy lever),
 the per-planet building-queue read (`QueueableBuildingPlanner`, the other agent's file), and the
 per-candidate experience-case read (`EconomyUpgrades` → CBR engine).
+
+## Wave 11 — the ferry quote spent before dispatch (17 September 2026)
+
+Read off the live cohort while deploying the day's work. **617 of 618 transfer dispatches were refused
+by the host in one hour** — "Not enough resources on the planet to send the fleet." — which was 40 % of
+all refused actions in 24 h and by far the largest live defect. The host's
+`GameMission::startMissionSanityChecks` checks the origin planet against the flight's debit, and
+`GameMission::start` builds that debit as the cargo **plus the flight's own fuel**; the transfer
+planner quotes the source's above-floor surplus when the session decides, and the work item runs
+0.6–3.4 min later (the pilot report's own p50/p95 lateness), by which time the planet has spent it.
+
+| # | Gap | Signal it weakens | Evidence | Closing it needs |
+| --- | --- | --- | --- | --- |
+| W11-1 | **The ferry ships a quote the source no longer holds.** The decision snapshots the surplus, the executor dispatches it minutes later, and the host refuses the whole flight — so the transport loop that keeps a near-cap planet's mines running produced almost no shipments at all. | 2, 4, 9 | measured: 617 refused / 1 accepted transfer-shaped receipts in one hour; 1,211 `Not enough resources` refusals in 24 h; 434 of them in the 17:00 hour | clamp the shipment to the source's own stock at dispatch, abandon a remnant below the planner's own minimum with `source_short_at_dispatch`, and leave the host's own `FleetMissionService::calculateConsumption` fuel behind — **closed (W11-1)**: 0 host resource refusals and 13 flown transfers in the 90 s after the deploy, against 0 flown and 158 refused in the 10 min before it |
+
+**What this leaves.** The decision-time checks are sound; what remains is the same decision→dispatch
+lag showing up as a race the module loses at dispatch: `Maximum number of fleets reached.` (~30/hour
+now, up from ~0.5/min because the ferries finally occupy slots), `Not enough units … colony_ship`,
+`You are conducting too many expeditions at the same time.` and `target_active_at_dispatch`, all
+single-digit per hour. Each is a host refusal the *planner* already asks about at decision time, so
+closing them is one question — a dispatch-time re-check of the host's own `isMissionPossible` — not
+four more guards.

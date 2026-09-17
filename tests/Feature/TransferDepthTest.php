@@ -227,6 +227,66 @@ test('a combat-only fleet cannot ferry', function (): void {
         ->toBe(AiQueueActionReason::NoTransportFleet->value);
 });
 
+// A work item runs minutes after the session quoted the shipment, and at this game speed the source
+// has spent part of the surplus by then. The host refuses a cargo the planet no longer holds, which
+// is what most refused transfers were; a player loads what is still on the pad.
+test('the ferry ships what the source still holds, not what the session quoted', function (): void {
+    transferProfile($this->currentUserId);
+    $targetId = transferTarget($this->secondPlanetService);
+    transferSource();
+    // Hold enough to carry whatever is clamped down to the source's own stock.
+    $this->planetAddUnit('large_cargo', 80);
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+
+    // A quote far past the source's stock: the flight still leaves, carrying what is there.
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $targetId, 9_000_000, 900_000, 0);
+
+    $mission = FleetMission::query()
+        ->where('mission_type', \OGame\GameMissions\TransportMission::getTypeId())
+        ->latest('id')
+        ->first();
+
+    expect($result->successful)->toBeTrue($result->reason)
+        ->and($mission?->metal)->toBeGreaterThanOrEqual(1_000_000)
+        ->and($mission?->metal)->toBeLessThan(9_000_000);
+});
+
+// A quote spent away before dispatch leaves too little to be worth a fleet, so the ferry is abandoned
+// instead of flying a token shipment that costs a fleet slot.
+test('a quote spent away before dispatch is abandoned, not flown', function (): void {
+    transferProfile($this->currentUserId);
+    $targetId = transferTarget($this->secondPlanetService);
+    transferSource();
+    $this->planetDeductResources(new Resources(990_000, 990_000, 1_000_000));
+
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $targetId, 900_000, 900_000, 0);
+
+    expect($result->successful)->toBeFalse()
+        ->and($result->reason)->toBe(AiQueueActionReason::SourceShortAtDispatch->value);
+});
+
+// The host demands the cargo *and* the flight's own fuel on the origin planet, so a ferry that takes
+// the last deuterium is refused however small the cargo is. A player leaves the fuel behind.
+test('the ferry leaves the fuel it needs on the source', function (): void {
+    transferProfile($this->currentUserId);
+    $targetId = transferTarget($this->secondPlanetService);
+    transferSource();
+    $this->planetAddUnit('large_cargo', 80);
+
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $targetId, 200_000, 200_000, 1_000_000);
+
+    $mission = FleetMission::query()
+        ->where('mission_type', \OGame\GameMissions\TransportMission::getTypeId())
+        ->latest('id')
+        ->first();
+
+    expect($result->successful)->toBeTrue($result->reason)
+        ->and($mission?->deuterium_consumption)->toBeGreaterThan(0)
+        ->and($mission?->deuterium)->toBeLessThan(1_000_000);
+});
+
 test('a ferry the host refuses is reported, not thrown', function (): void {
     transferProfile($this->currentUserId);
     transferTarget($this->secondPlanetService);

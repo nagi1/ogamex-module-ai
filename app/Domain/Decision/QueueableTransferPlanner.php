@@ -28,8 +28,12 @@ use OGame\Services\PlanetService;
  */
 class QueueableTransferPlanner
 {
-    /** r4fek's documented floor: combined metal and crystal below this is not worth a shipment. */
-    private const MINIMUM_SHIPMENT = 50_000;
+    /**
+     * r4fek's documented floor: combined metal and crystal below this is not worth a shipment.
+     * Shared with the dispatch adapter, which re-applies it to the clamped amount rather than
+     * flying a fleet for what is left of a spent surplus.
+     */
+    public const MINIMUM_SHIPMENT = 50_000;
 
     /** A planet at this fraction of its storage is about to overflow and is swept (E9). */
     private const SURPLUS_RATIO = 0.8;
