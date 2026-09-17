@@ -54,6 +54,9 @@ class FacilityChain
     /** The moon station the account wants; module taste, never a source of truth for its requirements. */
     private const PHALANX_STATION = 'sensor_phalanx';
 
+    /** The second moon station, only useful as a pair; module taste, requirements host-read. */
+    private const JUMP_GATE_STATION = 'jump_gate';
+
     /** @return list<BuildCandidate> the unmet prerequisites of the one ambition in hand, easiest unlock first */
     public function pending(PlanetService $planet): array
     {
@@ -94,6 +97,16 @@ class FacilityChain
 
             foreach (ObjectService::getRecursiveRequirements(self::PHALANX_STATION) as $machineName => $level) {
                 $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'moon-station');
+            }
+
+            // A jump gate is only a save as a pair, so it is a chain step once the account owns
+            // two moons (RV-009).
+            if ($this->hasTwoMoons($planet)) {
+                $this->addRequirement($planet, self::JUMP_GATE_STATION, 1, $ordered, $producers, 'moon-station');
+
+                foreach (ObjectService::getRecursiveRequirements(self::JUMP_GATE_STATION) as $machineName => $level) {
+                    $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'moon-station');
+                }
             }
         }
 
@@ -329,6 +342,17 @@ class FacilityChain
         // host's, so a missing player reads as level zero rather than crashing a
         // decision on data the host itself would not normally be without.
         return $planet->getPlayer()?->getResearchLevel($machineName) ?? 0;
+    }
+
+    /**
+     * A jump gate moves a fleet between two moons, so it is only ever useful once the account
+     * owns a pair. The station is not proposed on a single moon (RV-009).
+     */
+    private function hasTwoMoons(PlanetService $planet): bool
+    {
+        $player = $planet->getPlayer();
+
+        return $player !== null && count($player->planets->allMoons()) >= 2;
     }
 
     /** @return list<GameObject> what this account could produce, cheapest first */

@@ -29,4 +29,6 @@ enum AiQueueActionReason: string
     case NoSuitableAlliance = 'no_suitable_alliance';
     case PhalanxScanned = 'phalanx_scanned';
     case PhalanxScanRefused = 'phalanx_scan_refused';
+    case JumpGateJumped = 'jump_gate_jumped';
+    case JumpGateUnavailable = 'jump_gate_unavailable';
 }

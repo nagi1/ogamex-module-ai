@@ -93,6 +93,8 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_SPEED = 'speed';
 
+    private const PAYLOAD_JUMP_GATE_PLANET_ID = 'jump_gate_planet_id';
+
     private const PAYLOAD_PERCENTAGE = 'percentage';
 
     public function __construct(
@@ -344,6 +346,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_TARGET_GALAXY => $plan->harvestGalaxy,
             self::PAYLOAD_TARGET_SYSTEM => $plan->harvestSystem,
             self::PAYLOAD_TARGET_POSITION => $plan->harvestPosition,
+            self::PAYLOAD_JUMP_GATE_PLANET_ID => $plan->jumpGatePlanetId,
             self::PAYLOAD_SPEED => $plan->speed,
             self::PAYLOAD_REASON => 'fleetsave',
         ]);

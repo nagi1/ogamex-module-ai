@@ -10,6 +10,7 @@ use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
 use OGame\Models\User;
 use OGame\Services\FleetMissionService;
+use OGame\Services\JumpGateService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -31,6 +32,7 @@ class QueueableFleetSavePlanner
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private QueueableRecyclePlanner $queueableRecyclePlanner,
+        private JumpGateService $jumpGate,
     ) {
     }
 
@@ -82,6 +84,18 @@ class QueueableFleetSavePlanner
         $origin = $this->origin($planets);
         if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype)) {
             return null;
+        }
+
+        // A jump gate moves the whole fleet between two owned moons with no flight time, so
+        // it beats any flight in exposure: when it is available it is the save (RV-009).
+        $jump = $this->jumpGateTarget($player, $origin);
+        if ($jump !== null) {
+            return app()->makeWith(QueueableFleetSave::class, [
+                'originPlanetId' => $origin->getPlanetId(),
+                'destinationPlanetId' => $jump->getPlanetId(),
+                'missionType' => DeploymentMission::getTypeId(),
+                'jumpGatePlanetId' => $jump->getPlanetId(),
+            ]);
         }
 
         $ranked = $this->rankedDestinations($player, $planets, $origin);
@@ -290,7 +304,33 @@ class QueueableFleetSavePlanner
     }
 
     /**
-     * Own bodies a hostile fleet is already inbound to. Parking the save on one
+     * The jump-gate save: the origin must be a moon with a gate, the origin must not be on
+     * cooldown, and at least one other gated moon must be free of both cooldown and an inbound
+     * hostile (RV-009). The host's own eligibility answers the rest.
+     */
+    private function jumpGateTarget(PlayerService $player, PlanetService $origin): ?PlanetService
+    {
+        if ($origin->getPlanetType() !== PlanetType::Moon || $origin->getObjectLevel('jump_gate') < 1) {
+            return null;
+        }
+
+        if ($this->jumpGate->isOnCooldown($origin)) {
+            return null;
+        }
+
+        $unsafe = $this->unsafeDestinations($player);
+
+        foreach ($this->jumpGate->getEligibleTargets($player, $origin) as $target) {
+            if (!isset($unsafe[$target->getPlanetId()])) {
+                return $target;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The first own body a hostile fleet is already inbound to. Parking the save on one
      * of them is worse than holding, so they are not destinations (FS-010). The
      * same active-mission source the inbound picture already reads, so this is
      * the one authority for "under attack".

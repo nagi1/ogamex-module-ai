@@ -22,6 +22,8 @@ readonly class QueueableFleetSave
         public int $harvestSystem = 0,
         public int $harvestPosition = 0,
         public float $speed = 1.0,
+        // Non-zero when the save is a jump-gate transfer to this moon instead of a flight.
+        public int $jumpGatePlanetId = 0,
     ) {
     }
 }

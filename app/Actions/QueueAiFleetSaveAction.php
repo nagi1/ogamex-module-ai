@@ -15,6 +15,7 @@ use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
+use OGame\Services\JumpGateService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
@@ -36,6 +37,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
         private PlanetServiceFactory $planetServiceFactory,
+        private JumpGateService $jumpGate,
     ) {
     }
 
@@ -48,7 +50,12 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
         int $harvestSystem = 0,
         int $harvestPosition = 0,
         float $speed = 1.0,
+        int $jumpGatePlanetId = 0,
     ): AiActionResult {
+        if ($jumpGatePlanetId > 0) {
+            return $this->jumpSave($playerId, $originPlanetId, $jumpGatePlanetId);
+        }
+
         if ($harvestPosition > 0) {
             return $this->harvestSave($playerId, $originPlanetId, $harvestGalaxy, $harvestSystem, $harvestPosition);
         }
@@ -104,6 +111,54 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             );
 
             return AiActionResult::queued($mission->id);
+        } catch (Exception $exception) {
+            return AiActionResult::rejected($exception->getMessage());
+        }
+    }
+
+    /**
+     * The jump-gate save: the whole transferable fleet moves instantly between two gated moons
+     * instead of flying. The host's own eligibility is re-checked here — the fleet may have moved
+     * and the cooldown may have landed since planning (RV-009).
+     */
+    private function jumpSave(int $playerId, int $originPlanetId, int $destinationPlanetId): AiActionResult
+    {
+        if (!Planet::query()->whereKey($originPlanetId)->where('user_id', $playerId)->exists()) {
+            return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
+        }
+        if (!Planet::query()->whereKey($destinationPlanetId)->where('user_id', $playerId)->exists()) {
+            return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
+        }
+
+        try {
+            $player = $this->playerGameStateService->advance($playerId, $originPlanetId);
+
+            if ($player->isBanned()) {
+                return AiActionResult::rejected(AiQueueActionReason::PlayerBanned);
+            }
+            if ($player->isInVacationMode()) {
+                return AiActionResult::rejected(AiQueueActionReason::VacationMode);
+            }
+
+            $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
+            $destination = $this->planetServiceFactory->makeForPlayer($player, $destinationPlanetId, false);
+
+            if ($origin->getObjectLevel('jump_gate') < 1
+                || $destination->getObjectLevel('jump_gate') < 1
+                || $this->jumpGate->isOnCooldown($origin)
+                || $this->jumpGate->isOnCooldown($destination)) {
+                return AiActionResult::rejected(AiQueueActionReason::JumpGateUnavailable);
+            }
+
+            $transferable = array_flip($this->jumpGate->getTransferableShips());
+            $ships = array_intersect_key($origin->getShipUnits()->toArray(), $transferable);
+            if ($ships === [] || !$this->jumpGate->transferShips($origin, $destination, $ships)) {
+                return AiActionResult::rejected(AiQueueActionReason::JumpGateUnavailable);
+            }
+
+            $this->jumpGate->setCooldown($origin, $destination);
+
+            return AiActionResult::succeeded(AiQueueActionReason::JumpGateJumped);
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }

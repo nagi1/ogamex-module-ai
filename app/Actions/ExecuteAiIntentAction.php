@@ -96,6 +96,8 @@ class ExecuteAiIntentAction
 
     private const PAYLOAD_SPEED = 'speed';
 
+    private const PAYLOAD_JUMP_GATE_PLANET_ID = 'jump_gate_planet_id';
+
     private const PAYLOAD_PERCENTAGE = 'percentage';
 
     /**
@@ -287,6 +289,7 @@ class ExecuteAiIntentAction
             'harvestSystem' => (int) ($workItem->payload[self::PAYLOAD_TARGET_SYSTEM] ?? 0),
             'harvestPosition' => (int) ($workItem->payload[self::PAYLOAD_TARGET_POSITION] ?? 0),
             'speed' => (float) ($workItem->payload[self::PAYLOAD_SPEED] ?? 1.0),
+            'jumpGatePlanetId' => (int) ($workItem->payload[self::PAYLOAD_JUMP_GATE_PLANET_ID] ?? 0),
         ]) ?? app(QueueableFleetSavePlanner::class)->plan($workItem->player_id);
 
         if (!$step instanceof QueueableFleetSave) {
@@ -303,6 +306,7 @@ class ExecuteAiIntentAction
                 $step->harvestSystem,
                 $step->harvestPosition,
                 $step->speed,
+                $step->jumpGatePlanetId,
             ),
             ['destination_planet_id' => $step->destinationPlanetId, 'mission_type' => $step->missionType],
             $step->originPlanetId,
