@@ -559,6 +559,22 @@ test('the estimator simulates a counter-selected subset, not the whole stock', f
         ->and($estimate->pWin)->toBeIn([0.0, 1.0]);
 });
 
+// RV-007: the ladder rung is the sample counter — one draw screens a candidate, the wide pass is
+// requested only for the winner.
+test('the subset estimator screens one draw by default and confirms wide on request', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddUnit('cruiser', 10);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addUnit('light_fighter', 100);
+
+    $fleet = new UnitCollection();
+    $fleet->addUnit(ObjectService::getUnitObjectByMachineName('cruiser'), 10);
+    $estimator = app(NativeRaidEstimator::class);
+
+    expect($estimator->estimateFleet($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), $fleet, 1)->samples)->toBe(1)
+        ->and($estimator->estimateFleet($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), $fleet, 1, 50)->samples)->toBe(50);
+});
+
 function raidDepthProfile(int $playerId): AiProfile
 {
     return AiProfile::create([

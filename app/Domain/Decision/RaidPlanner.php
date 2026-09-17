@@ -72,6 +72,9 @@ class RaidPlanner
      */
     private const SURVIVAL_FLOOR = 0.8;
 
+    /** The wide confirmation the winning launch subset pays for; the screen is one draw per candidate. */
+    private const CONFIRM_SAMPLES = 50;
+
     /**
      * The account's own player, loaded once per planner instance. A skill-pass
      * screen is read-only and the host flushes the factory cache before every
@@ -249,22 +252,22 @@ class RaidPlanner
             $this->counterScore($right->unitObject, $targetMix) <=> $this->counterScore($left->unitObject, $targetMix)
             ?: $this->attackPerCost($player, $right->unitObject) <=> $this->attackPerCost($player, $left->unitObject));
 
-        // Grow the counter hulls from the strongest down, simulating once per step: the smallest
-        // fleet whose single draw survives is the launch (FLE-012). ponytail: one draw per candidate
-        // is a probability average — a close fight may need the next hull on a later re-plan; the
-        // 50-sample full-stock screen already bounds the worst case.
+        // Grow the counter hulls from the strongest down in a screen-then-confirm ladder (RV-007):
+        // one draw per candidate through the shared seed stream, so candidates meet the same
+        // randomness, and the wide pass only on the first survivor — a single lucky draw never flies
+        // a coin-flip fleet.
         $launch = $cargo;
         foreach ($hulls as $hull) {
             $launch[$hull->unitObject->machine_name] = $hull->amount;
-            $estimate = $this->raidEstimator->estimateFleet(
-                $playerId,
-                $origin->getPlanetId(),
-                $target->getPlanetId(),
-                $this->fleet($launch),
-                $seed,
-            );
+            $fleet = $this->fleet($launch);
 
-            if ($estimate->samples > 0 && $estimate->pWin >= 1.0) {
+            $screen = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $seed, 1);
+            if ($screen->samples === 0 || $screen->pWin < 1.0) {
+                continue;
+            }
+
+            $confirm = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $seed, self::CONFIRM_SAMPLES);
+            if ($confirm->pWin >= self::SURVIVAL_FLOOR) {
                 return $launch;
             }
         }

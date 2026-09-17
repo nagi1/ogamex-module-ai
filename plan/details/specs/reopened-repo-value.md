@@ -157,6 +157,10 @@ and leave the two rows blocked; a moon arrives through ordinary play (the host's
 **Accept.** A dated line naming the owning account and its moon facilities, or stating that none
 exists yet. `RV-008`/`RV-009` unblock the day it does.
 
+**Finding — 17 September 2026.** No admitted account owns a moon: the whole universe holds one
+(`planets.id = 29`, `planet_type = 3`, user 1 "Legor"), outside the cohort (admitted accounts are
+players 12–31). `RV-008`/`RV-009` stay blocked; a moon must arrive through ordinary play.
+
 ### RV-006 — Ground the defended loot tier in the host's own numbers *(depends: RV-003)*
 
 **Why and change.** Replace the fixed `LOOT_TIER_DEFENDED = 2.0` with the tier `RV-003` measured —

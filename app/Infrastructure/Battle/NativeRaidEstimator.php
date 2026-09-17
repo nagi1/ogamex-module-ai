@@ -53,11 +53,13 @@ class NativeRaidEstimator
 
     /**
      * One simulation of a specific fleet against the target — the launch-subset screen (U6). The
-     * fleet is what the caller counter-selected; the engine and the defender stay the host's.
+     * fleet is what the caller counter-selected; the engine and the defender stay the host's. The
+     * sample count is the caller's ladder rung: one draw for a candidate screen, the wide pass for
+     * the winner's confirmation.
      */
-    public function estimateFleet(int $playerId, int $originPlanetId, int $targetPlanetId, UnitCollection $fleet, int $seed): RaidEstimate
+    public function estimateFleet(int $playerId, int $originPlanetId, int $targetPlanetId, UnitCollection $fleet, int $seed, int $samples = 1): RaidEstimate
     {
-        return $this->screen($playerId, $originPlanetId, $targetPlanetId, $fleet, $seed, 1);
+        return $this->screen($playerId, $originPlanetId, $targetPlanetId, $fleet, $seed, $samples);
     }
 
     private function screen(int $playerId, int $originPlanetId, int $targetPlanetId, ?UnitCollection $fleet, int $seed, int $samples): RaidEstimate
