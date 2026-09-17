@@ -135,6 +135,15 @@ Each item was checked against the host before any code. Verdict per row:
 | Pre-flight round-trip duration | `FleetMissionService::calculateFleetMissionDuration()` | **confirmed** — seam exists; threshold is persona taste. |
 | CRN screen→confirm ladder | gated on U6 launch subsets | **dead** — U6 (≥2 launch subsets) is not shipped. |
 
+**Re-checked against the code 17 September 2026** — four verdicts above no longer hold, because the
+host moved or the audit read a neighbour instead of the seam: pre-flight round-trip duration is
+shipped (`QueueableFleetSavePlanner` already refuses a save that outlives the absence),
+archetype→character-class affinity is shipped (`SeedAiTestUniverseAction::characterClass()` plus the
+wired `/characterclass/select` path), the production-percentage levers are reachable today
+(`PlanetService::setBuildingPercent()` and its player path), and the inactivity policy is already
+read and clamped (`SessionDecisionService::livenessFloor()`). The surviving ideas are minted as
+`RV-001`…`RV-013` in the task DB, defined in `specs/reopened-repo-value.md`.
+
 ## Cross-cutting refusals
 | Pattern | Repos | Reason |
 |---|---|---|
@@ -222,3 +231,8 @@ neutral→Casual — so a later reader stops re-deriving it. Doc-only; no behavi
 **Recommendation (coordinator call, recorded not decided here).** Treat `RP-*` as provenance rather than
 a work queue: delete the family once this audit is accepted, or keep it read-only. A pickup agent should
 always start from `WP-*`.
+
+**Since this audit (17 September 2026):** the `RP-*` pointers have all resolved — every `WP-*` slice
+they name is `done` — and the surviving ideas were re-checked against the code and minted as the
+`RV-*` rows in `specs/reopened-repo-value.md`, which also records the four audit verdicts the code
+contradicts. `RP-004`, the last row with residue of its own, is closed.
