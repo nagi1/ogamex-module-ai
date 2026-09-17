@@ -25,4 +25,6 @@ enum AiQueueActionReason: string
     case SourceShortAtDispatch = 'source_short_at_dispatch';
     case PercentApplied = 'percent_applied';
     case PercentRefused = 'percent_refused';
+    case AllianceApplied = 'alliance_applied';
+    case NoSuitableAlliance = 'no_suitable_alliance';
 }

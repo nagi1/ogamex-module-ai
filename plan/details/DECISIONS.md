@@ -2067,3 +2067,22 @@ ordering (scout → weaken → final stronghold) is the declaration order the co
 completion is checked first, so a ladder finished before the faction tops out still resolves.
 Rewards are unchanged. The race pace is one rung per pass — the operator's pass cadence IS the
 campaign clock (noted with a `ponytail:` ceiling in the action).
+
+### DEF-003 — alliance life ships; ACS-defend deferred on its trigger (17 September 2026)
+
+The account now has alliance life of its own (G18): an enabled profile with no alliance and no
+outstanding application applies, through the host's own `AllianceService::applyToAlliance`, to the
+alliance its tier would join. `AllianceChoice` reads only host data (the account's `general_rank`
+against the population, each open alliance's member count, points-per-member from
+`AllianceHighscore` and its pitch text) and picks: a weak account lands in the mass/open alliance,
+a mid account in a normal active one, and a strong account in a high points-per-member core —
+the alliance FAQ's own "mass vs elitist" taxonomy. An alliance that already rejected the account is
+never re-applied to, and a pending application is never duplicated. The pass runs on
+`ai:advance-alliance-life` (10 minutes). Heuristic sources: FOR-009 (alliance FAQ), GF-003
+(alliance guide), the PvE/social research already in `plan/details/research/`.
+
+**Deferred, with its trigger named:** ACS-defend (`AcsDefendMission`, type 5) and answering
+`FleetUnionInvite`s. The module observes inbound fleets to its own planets, not allies under
+attack, and alliance chat is deliberately unobserved (S1); a defend/ACS decision needs an
+"ally under attack" observation first. The host already enforces `CooperativeHostilityPolicy` at
+hostile dispatch, so no module-side policy work is owed — only the observation, then the action.

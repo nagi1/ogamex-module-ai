@@ -18,6 +18,7 @@ use Modules\AI\Actions\QueueAiTransferAction;
 use Modules\AI\Actions\QueueAiUnitsAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\AdvanceAiCampaigns;
+use Modules\AI\Console\Commands\AdvanceAiAllianceLife;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
@@ -103,6 +104,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
     protected array $commands = [
         AdvanceAiCampaigns::class,
+        AdvanceAiAllianceLife::class,
         ExplainAiDecision::class,
         PruneAiRecords::class,
         ReconcileLanguageRequests::class,
@@ -160,6 +162,7 @@ class AIServiceProvider extends ModuleServiceProvider
         }
         $dueWork->withoutOverlapping(5);
         $schedule->command('ai:advance-campaigns')->everyMinute()->withoutOverlapping(5);
+        $schedule->command('ai:advance-alliance-life')->everyTenMinutes()->withoutOverlapping(5);
         $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
         $schedule->command('ai:record-score-samples')->hourly()->withoutOverlapping(5);
         // Retention is enforced on a quiet hour rather than at the moment a row
