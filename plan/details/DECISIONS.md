@@ -1876,3 +1876,43 @@ as one dispatch-time re-check rather than four more guards.
 
 Module suite after the change: 867 Pest tests / 2,756 assertions green. The quality and coverage gates
 were deliberately not run for this pass.
+
+### W12-1 / RV-001 — the yard as the second route to power (17 September 2026)
+
+Taking the top of the reopened-repo backlog ([`specs/reopened-repo-value.md`](specs/reopened-repo-value.md),
+row `RV-001`, from the mined `piecepapercode-barakis` plan). The module had one route to capacity and
+it was the building queue: `EnergyCapacity::pending()` asks the host for every producing object and
+keeps the ones `BuildingQueueObject::accepts()` admits, so the unit queue's own producer — the solar
+satellite — was unreachable by construction. A planet whose plant the queue would not take therefore
+bought nothing at all and stayed throttled.
+
+The live read that sized the slice: of 20 admitted accounts, **10 planets across 8 accounts ran a
+negative energy balance** (player 17 alone had three, −2327 combined), four of those planets had a
+**full building queue** so their capacity candidates were unqueueable, and `ai_action_receipts` held
+**zero** power orders while the unit queue spent the same 20 minutes on habits (standing defence 447,
+cargo payload 181, escort 54, colony 6, probe 3).
+
+The mechanism is the smallest one that closes it and it reuses the authorities already in place rather
+than restating them:
+
+- `EnergyCapacity::outdrawn()` became `shortfall()` — the same question (the deficit the planet is in,
+  or the one its next production upgrade would create) returning the magnitude instead of a boolean, so
+  the yard's order can be sized from it instead of a second calculation over the same host numbers.
+- `QueueableBuildingPlanner::queueablePlanetId()` became public `canQueue()` — it always returned
+  `$planet->getPlanetId()` or null, so the boolean was the real contract — and the unit planner asks
+  *that* gate rather than restating the queue's rules. The yard may only take a shortfall the building
+  queue has refused.
+- `QueueableUnitPlanner` gained one pass before its habits: while no hostile is inbound, a planet that
+  is short and cannot buy capacity from the building queue orders the unit the host itself reports as
+  producing power, ranked per metal-equivalent cost and capped by what the planet can pay for. The pass
+  is account-wide because a throttled planet bleeds wherever it sits — the habit loop's per-planet
+  early return would have let a homeworld habit mask a colony's shortfall, which is what the first
+  version did and the live read caught.
+
+Measured on the grand universe: **0** power orders ever before the reload, then **8** in the first 20
+seconds after it, every one `queued` by the host (`unit_id` 212, amounts 2–38), and the planner's own
+read returns the power role for 11 of the 20 accounts. Tests: `UnitPlannerRolesTest` (the order, and
+that a deficit the building queue can answer is *not* a yard order) and one end-to-end case in
+`ExecuteIntentTest` proving the host queue accepts the amount the planner sizes. Module PHPStan level 8
+and Pint clean on the changed files; the quality and coverage gates were deliberately not run.
+

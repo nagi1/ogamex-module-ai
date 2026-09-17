@@ -403,3 +403,16 @@ now, up from ~0.5/min because the ferries finally occupy slots), `Not enough uni
 single-digit per hour. Each is a host refusal the *planner* already asks about at decision time, so
 closing them is one question — a dispatch-time re-check of the host's own `isMissionPossible` — not
 four more guards.
+
+## Wave 12 — the throttled planet that was never buying power (17 September 2026)
+
+Read off the live cohort in the same deploy pass as Wave 11, working the reopened-repo value backlog
+([`specs/reopened-repo-value.md`](specs/reopened-repo-value.md), row `RV-001`). The module had exactly
+one route to capacity — the building queue — and `EnergyCapacity` asks the host for every producing
+object only to keep the ones `BuildingQueueObject::accepts()` admits. The unit queue's own producer,
+the solar satellite, was therefore unreachable by construction, so a planet whose plant the building
+queue would not take sat in deficit and mined at a fraction of what its mines said.
+
+| # | Gap | Signal it weakens | Evidence | Closing it needs |
+| --- | --- | --- | --- | --- |
+| W12-1 | **A throttled planet's power was only ever bought from the building queue.** A planet in deficit whose capacity the building queue cannot take — because the plant is out of reach or the queue is full — bought nothing and stayed throttled, while every session's unit queue went on the account's habits. | 3, 4, 9 | measured: 10 planets across 8 of the 20 admitted accounts ran a negative balance (17: three planets, −2327 combined; 13 −916; 21 −781); four of those planets had a full building queue (5 open items), so their capacity candidates were unqueueable; `ai_action_receipts` held **zero** power orders while the unit mix over 20 min was habits only (standing defence 447, cargo payload 181, escort 54, colony 6, probe 3) | the yard as the second route, taken only when the building planner's own gate says no, sized to the shortfall the capacity question reports — **closed (RV-001)**: 8 power orders in the first 20 s after the worker reload, every one `queued` (`unit_id` 212, amounts 2–38), and the planner's own read returns the power role for 11 of the 20 accounts |

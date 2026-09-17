@@ -55,6 +55,13 @@ first. A mod-added energy unit is offered with no module edit (gate 1).
 **Gates.** Named play: "build satellites when you cannot afford the next plant". Gate 2: one
 accepts-check and one extra source in an existing loop.
 
+**Shipped 17 September 2026 (`RV-001`).** `EnergyCapacity::outdrawn()` became `shortfall()` (the
+magnitude, not a boolean), `QueueableBuildingPlanner::queueablePlanetId()` became public `canQueue()`
+so the yard asks the building queue's own gate instead of restating it, and the unit planner gained an
+account-wide power pass before its habits, guarded by "no hostile inbound". Live: 0 power orders ever,
+then 8 in the first 20 s after the worker reload, all `queued`, with the planner returning the role for
+11 of 20 accounts. Recorded as [Wave 12](../GAP-REGISTER.md) and in `DECISIONS.md`.
+
 ### RV-002 — U6: launch the counter subset, not the whole stock (W6-4 remainder)
 
 **Why.** `W6-4` shipped only the payload-sized cargo half. Production and launch are two decisions:

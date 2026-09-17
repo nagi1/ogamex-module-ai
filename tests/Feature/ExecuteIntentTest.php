@@ -18,6 +18,7 @@ use OGame\Models\EspionageReport;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\MessageService;
+use OGame\Services\ObjectService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -67,6 +68,32 @@ test('a units selection schedules and executes a ship', function (): void {
 
     expect($intent)->not->toBeNull()
         ->and($intent->kind)->toBe(AiWorkKind::QueueUnits);
+
+    $result = intentExecute($intent, $this->currentPlanetId);
+
+    expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
+});
+
+// The yard route has to survive the real host path, not just the planner: the amount the planner
+// sizes for a deficit must be one the unit queue accepts, or the account spends a session on a
+// refusal instead of on power.
+test('a yard power order is scheduled and executed as a satellite', function (): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+    $this->planetSetObjectLevel('shipyard', 2);
+    $this->planetAddUnit('small_cargo', 1);
+    // The next plant level costs more than the planet holds, so the building queue will not take
+    // it and the shortfall falls through to the yard.
+    $this->planetSetObjectLevel('solar_plant', 25);
+    $this->planetSetObjectLevel('metal_mine', 21);
+    $this->planetSetObjectLevel('crystal_mine', 21);
+    $this->planetSetObjectLevel('deuterium_synthesizer', 21);
+
+    $intent = intentSchedule($profile, AiCandidateActionType::QueueUnits, $this->currentPlanetId);
+
+    expect($intent)->not->toBeNull()
+        ->and($intent->kind)->toBe(AiWorkKind::QueueUnits)
+        ->and(ObjectService::getObjectById((int) $intent->payload['unit_id'])->machine_name)->toBe('solar_satellite');
 
     $result = intentExecute($intent, $this->currentPlanetId);
 

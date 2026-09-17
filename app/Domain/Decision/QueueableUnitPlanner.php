@@ -79,6 +79,21 @@ class QueueableUnitPlanner
 
         $underAttack = $this->underAttack($player);
 
+        // Power outranks the habits below but not an incoming attack. A planet that is throttling
+        // loses production every hour it stays short, wherever it sits on the account, so it is
+        // answered before a habit on another planet gets its turn -- the same reason the building
+        // planner runs its storage pass before its routine. The building planner has already
+        // refreshed every planet's balance earlier in this perception, so the shortfall read here
+        // is the session's own.
+        if (!$underAttack) {
+            foreach ($planets as $planet) {
+                $power = $this->powerFromYard($planet);
+                if ($power !== null) {
+                    return $power;
+                }
+            }
+        }
+
         foreach ($planets as $planet) {
             $planet->updateResources(false);
 
@@ -100,21 +115,6 @@ class QueueableUnitPlanner
                 $defense = $this->bestDefense($player, $planet);
                 if ($defense !== null) {
                     return $this->unit($planet, $defense, 'role:defense:' . $defense->machine_name);
-                }
-            }
-
-            // Power: a planet that is short and whose capacity the building queue will not take
-            // buys it from the yard instead. How short it is comes from the capacity question
-            // itself, so the two routes cannot disagree about the deficit.
-            $shortfall = $this->energyCapacity->shortfall($planet);
-            if ($shortfall > 0.0 && !$this->capacityBuildable($planet)) {
-                $producer = $this->bestEnergyProducer($planet);
-                if ($producer !== null) {
-                    $perUnit = (float) $planet->getObjectProduction($producer->machine_name, 1, true)->energy->get();
-                    $affordable = ObjectService::getObjectMaxBuildAmount($producer->machine_name, $planet, true);
-
-                    return $this->unit($planet, $producer, 'role:energy:' . $producer->machine_name,
-                        min((int) ceil($shortfall / $perUnit), $affordable));
                 }
             }
 
@@ -304,6 +304,36 @@ class QueueableUnitPlanner
     private function bestDefense(PlayerService $player, PlanetService $planet): ?UnitObject
     {
         return $this->bestByProperty($player, $planet, ObjectService::getDefenseObjects(), 'attack');
+    }
+
+    /**
+     * The yard's answer to a power shortfall, or null when the yard is not the answer.
+     *
+     * Only a planet the building queue cannot cover has a shortfall left to buy here, and how many
+     * units that takes comes from the capacity question itself, capped by what the planet can pay
+     * for -- so the two routes cannot disagree about either the deficit or the price.
+     */
+    private function powerFromYard(PlanetService $planet): ?QueueableUnit
+    {
+        $shortfall = $this->energyCapacity->shortfall($planet);
+        if ($shortfall <= 0.0 || $this->capacityBuildable($planet)) {
+            return null;
+        }
+
+        $producer = $this->bestEnergyProducer($planet);
+        if ($producer === null) {
+            return null;
+        }
+
+        $perUnit = (float) $planet->getObjectProduction($producer->machine_name, 1, true)->energy->get();
+        $affordable = ObjectService::getObjectMaxBuildAmount($producer->machine_name, $planet, true);
+
+        return $this->unit(
+            $planet,
+            $producer,
+            'role:energy:' . $producer->machine_name,
+            min((int) ceil($shortfall / $perUnit), $affordable)
+        );
     }
 
     /**
