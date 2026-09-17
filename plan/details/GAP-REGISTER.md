@@ -302,3 +302,30 @@ is started but never closed, so the mechanism exists on one side and nothing on 
 | W9-2 | **The `recovery` score term is always 0.** `RECOVERY_WEIGHT = 20.0` multiplies a `recoveryFactor` that `ownedState()` never publishes, so live decisions score it 0; only replay carries a value. | 3, 4 | code-read; `UtilityScorer.php:23,56`, `PlayerPerceptionBuilder.php:41`, `PlayerObservationService.php:88-108` | publish a real recovery signal from an existing observation, or delete the component and the snapshot field — **closed (HL-002)**: `recovery_factor` is published from the account's decaying Anger affect |
 | W9-3 | **Target legality is never checked before a raid.** `attack_permitted` is hardcoded `true`, so the `AttackNotPermitted` rejection is unreachable and `RaidPlanner::plan()` gates on bashing + profit only. | 1, 3 | code-read; `PlayerObservationService.php:244`, `CandidateActionFactory.php:217`, `RaidPlanner.php` | compute `attack_permitted` from the host's legality answer, or add the check to `RaidPlanner::plan()` — **closed (HL-003)**: `attack_permitted` mirrors the host's own-body / vacation / banned / admin checks |
 | W9-4 | **`losingRuns` is counted and never consumed.** The estimator computes how many sampled runs lose, but no gate reads it. | 3, 6 | code-read; `NativeRaidEstimator.php:85`, `RaidEstimate.php:19`, `RaidPlanner.php:124` | add a losing-run threshold to the profit gate, or delete the field — **closed (HL-004)**: `losingRuns` deleted; P20 <= 0 already encodes a losing fifth, and WP-003 adds a real survival floor later |
+
+## Wave 10 — session cost read (17 September 2026)
+
+A read-only pass over the running grand universe, taken because an AI **session** job measured 1–36 s
+where its sibling work kinds measure ~310 ms. Nothing was changed to take it: a `DB::listen` listener
+with a `debug_backtrace` walk attributed every query of one
+`PlayerPerceptionBuilder::build($playerId, 45)` to the frame that issued it, and MySQL's own profiler
+supplied the server-side figure (0.076 ms per `select 1`, so the cost is round trips and rebuilds, not
+query work). A session's cost *is* its perception build: `PlayerObservationService::availableActions()`
+runs every planner, and each planner re-resolves the host service graph.
+
+Two defects found in the same pass were fixed immediately and are **not** rows below, but they set the
+baseline these rows are read against — ~430 queries per perception after them, ~516 before:
+
+- **`CACHE_STORE`, not `CACHE_DRIVER`.** Laravel 13 reads `env('CACHE_STORE', 'database')`, and both the
+  grand and capacity composes set the legacy `CACHE_DRIVER`, so the live universe silently ran the
+  **database** cache: every module lock, circuit-breaker read/write and host cache op was a MySQL round
+  trip and `CACHE_PREFIX` isolation was a no-op.
+- **The colony walk.** `QueueableColonyPlanner::emptySlot()` checked up to 600 coordinates with
+  `makeForCoordinate($coordinate, false, ...)` — cache bypassed, one query per position, 405 queries per
+  perception. Now one read per galaxy over the systems the walk visits, with walk order, bounds and
+  tie-break unchanged.
+
+| # | Gap | Signal it weakens | Evidence | Closing it needs |
+| --- | --- | --- | --- | --- |
+| W10-1 | **The host mission catalogue is instantiated to read static metadata.** `GameMissionFactory::getAllMissions()` resolves 11 mission classes, and `GameMission::__construct` pulls `FleetMissionService` and `MessageService`, both of which require a `PlayerService` — so every mission build drags a player (users, highscores, users_tech, planets list). Measured **33 queries per call**, and the module's `FacilityChain::missionRequiredResearch()` calls it **9 times per perception = 297 of ~430 queries**, for `getTypeId()`/`getRequiredResearch()`/`getRequiredShipMachineNames()`, which are already `static`: the same metadata through the class name costs **0 queries**. | 1, 2 | measured; `GameMissionFactory.php:23-50`, `FleetMissionService.php::__construct`, `MessageService.php::__construct`, `FacilityChain.php:129`; 33 / 297 / 0 queries | split the catalogue from instantiation (`getMissionClasses()`) and let the static-metadata callers use it — **IMPL-043** |
+| W10-2 | **The host service graph is rebuilt per lookup.** `PlayerServiceFactory::make($id, true)` rebuilds a `PlayerService` on every call (~4 queries: users, highscores, users_tech, and `PlanetListService`'s planets read), and one perception triggers ~34 rebuilds through 20 module and 30 host forced-reload sites; `PlanetServiceFactory::makeForCoordinate($c, false, ...)` bypasses the factory's own coordinate cache (the colony walk did this 405× before the fix above). | 1, 2 | measured; `PlayerServiceFactory.php:28-42`, `PlayerService.php:74-121`, `PlanetListService.php:45`, `PlanetServiceFactory.php:225-275` | one reload per job (memoise the forced reload, or make the planet list lazy) — **IMPL-044** |
