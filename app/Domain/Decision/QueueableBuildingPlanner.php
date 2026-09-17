@@ -131,8 +131,8 @@ class QueueableBuildingPlanner
                 return $research;
             }
 
-            $planetId = $this->queueablePlanetId($planet, $candidate);
-            if ($planetId === null) {
+            $planetId = $planet->getPlanetId();
+            if (!$this->canQueue($planet, $candidate)) {
                 continue;
             }
 
@@ -146,7 +146,14 @@ class QueueableBuildingPlanner
         return null;
     }
 
-    private function queueablePlanetId(PlanetService $planet, BuildCandidate $candidate): ?int
+    /**
+     * Whether the building queue will take this candidate on this planet right now.
+     *
+     * Public because "the building queue cannot answer this" is a question a second planner has to
+     * ask: a planet that cannot buy capacity here has one other route, and the yard may only take it
+     * when this says no. The gate itself stays in one place rather than being restated next to it.
+     */
+    public function canQueue(PlanetService $planet, BuildCandidate $candidate): bool
     {
         $object = ObjectService::getObjectById($candidate->buildingId);
         $machineName = $object->machine_name;
@@ -165,11 +172,7 @@ class QueueableBuildingPlanner
             // terraformer consumes a field too.
             && (!$object->consumesPlanetField || $planet->getBuildingCount() < $planet->getPlanetFieldMax());
 
-        if (!$queueable) {
-            return null;
-        }
-
-        return $planet->getPlanetId();
+        return $queueable;
     }
 
     /**

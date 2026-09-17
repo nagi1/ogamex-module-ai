@@ -30,7 +30,7 @@ class EnergyCapacity
     /** @return list<BuildCandidate> the cheapest capacity, or nothing when the planet is not short */
     public function pending(PlanetService $planet): array
     {
-        if (!$this->outdrawn($planet)) {
+        if ($this->shortfall($planet) <= 0.0) {
             return [];
         }
 
@@ -60,28 +60,29 @@ class EnergyCapacity
     }
 
     /**
-     * Whether the planet is short already, or would be after the next level of something it runs.
+     * How much power the planet wants: the deficit it is already in, or the one its next production
+     * upgrade would create, whichever is larger. Zero when the balance covers the next step.
      *
-     * A consumer is any production object whose next level draws more than it makes, so the planet is
-     * short when one of those upgrades would land it below zero.
+     * The magnitude is public because a planet that cannot buy the capacity has one other route --
+     * the yard -- and how many power units that route needs is this question's answer, not a second
+     * calculation over the same host numbers.
      */
-    private function outdrawn(PlanetService $planet): bool
+    public function shortfall(PlanetService $planet): float
     {
         $energy = (float) $planet->energy()->get();
+        $deficit = -$energy;
 
-        if ($energy < 0) {
-            return true;
-        }
-
+        // A consumer is any production object whose next level draws more than it makes, so the
+        // planet is short when one of those upgrades would land it below zero.
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
             $gain = $this->energyGainOfNextLevel($planet, $object->machine_name);
 
-            if ($gain < 0 && $energy + $gain < 0) {
-                return true;
+            if ($gain < 0.0) {
+                $deficit = max($deficit, -($energy + $gain));
             }
         }
 
-        return false;
+        return max(0.0, $deficit);
     }
 
     /**

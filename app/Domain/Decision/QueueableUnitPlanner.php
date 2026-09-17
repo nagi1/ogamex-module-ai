@@ -30,6 +30,11 @@ use OGame\Services\PlayerService;
  * hostile is inbound, and a combat escort when a fresh report shows a defended target the account's
  * own fleet is not expected to crack.
  *
+ * Power is the one role the building queue shares: a planet that is short and whose capacity the
+ * building queue cannot take buys it from the yard instead, which is what a player does when the
+ * plant is out of reach or the queue is busy. It is offered only when the building planner's own
+ * gate says no, so the two never compete over the same shortfall.
+ *
  * Which object fills each role is read from the host: cargo is the ship with the largest cargo
  * capacity per metal-equivalent cost the planet can actually queue, combat and defence are the
  * hulls with the best attack per metal-equivalent cost, and the colony ship is the ship the host's
@@ -50,6 +55,8 @@ class QueueableUnitPlanner
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
+        private EnergyCapacity $energyCapacity,
+        private QueueableBuildingPlanner $buildingPlanner,
     ) {
     }
 
@@ -93,6 +100,21 @@ class QueueableUnitPlanner
                 $defense = $this->bestDefense($player, $planet);
                 if ($defense !== null) {
                     return $this->unit($planet, $defense, 'role:defense:' . $defense->machine_name);
+                }
+            }
+
+            // Power: a planet that is short and whose capacity the building queue will not take
+            // buys it from the yard instead. How short it is comes from the capacity question
+            // itself, so the two routes cannot disagree about the deficit.
+            $shortfall = $this->energyCapacity->shortfall($planet);
+            if ($shortfall > 0.0 && !$this->capacityBuildable($planet)) {
+                $producer = $this->bestEnergyProducer($planet);
+                if ($producer !== null) {
+                    $perUnit = (float) $planet->getObjectProduction($producer->machine_name, 1, true)->energy->get();
+                    $affordable = ObjectService::getObjectMaxBuildAmount($producer->machine_name, $planet, true);
+
+                    return $this->unit($planet, $producer, 'role:energy:' . $producer->machine_name,
+                        min((int) ceil($shortfall / $perUnit), $affordable));
                 }
             }
 
@@ -282,6 +304,61 @@ class QueueableUnitPlanner
     private function bestDefense(PlayerService $player, PlanetService $planet): ?UnitObject
     {
         return $this->bestByProperty($player, $planet, ObjectService::getDefenseObjects(), 'attack');
+    }
+
+    /**
+     * Whether the building queue can still answer this planet's power with a capacity it will take.
+     *
+     * The building planner owns that gate, so it is asked rather than restated here: the yard may
+     * only take the shortfall once the queue has said it cannot.
+     */
+    private function capacityBuildable(PlanetService $planet): bool
+    {
+        foreach ($this->energyCapacity->pending($planet) as $candidate) {
+            if ($this->buildingPlanner->canQueue($planet, $candidate)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The unit the host reports as producing power, ranked by power per metal-equivalent cost.
+     *
+     * Only the host's producing objects are asked, so a unit that looks like a power source but
+     * produces nothing is not a candidate; ships and defence are the yard's business and the rest
+     * is the building queue's. A mod-added power unit is picked up here with no edit.
+     */
+    private function bestEnergyProducer(PlanetService $planet): ?UnitObject
+    {
+        $best = null;
+        $bestRatio = 0.0;
+
+        foreach (ObjectService::getGameObjectsWithProduction() as $object) {
+            if (!$object instanceof UnitObject) {
+                continue;
+            }
+
+            if (!$this->queueable($planet, $object)) {
+                continue;
+            }
+
+            $energy = (float) $planet->getObjectProduction($object->machine_name, 1, true)->energy->get();
+            if ($energy <= 0.0) {
+                continue;
+            }
+
+            $ratio = $energy / $this->metalEquivalent(ObjectService::getObjectRawPrice($object->machine_name));
+            if ($ratio <= $bestRatio) {
+                continue;
+            }
+
+            $best = $object;
+            $bestRatio = $ratio;
+        }
+
+        return $best;
     }
 
     /**

@@ -150,6 +150,41 @@ test('the save failure policy skips deterministically and names the gamble', fun
         ->and($policy->shouldSkip($skipSeed, 7))->toBe('overnight_gamble');
 });
 
+// A planet that cannot buy its capacity from the building queue has one other route: the yard. The
+// unit is read from the host's own production, so whatever the host reports as producing power is
+// what gets built -- never a name this module keeps.
+test('a deficit the building queue will not take is bought from the yard', function (): void {
+    unitProfile($this->currentUserId, AiArchetype::Fleeter);
+    $this->planetAddResources(unitPlenty());
+    $this->planetSetObjectLevel('shipyard', 2);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetSetObjectLevel('solar_plant', 25);
+    $this->planetSetObjectLevel('metal_mine', 21);
+    $this->planetSetObjectLevel('crystal_mine', 21);
+    $this->planetSetObjectLevel('deuterium_synthesizer', 21);
+
+    $plan = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+
+    // The next plant level costs more metal than the planet holds, so the building planner refuses
+    // it and the capacity question falls through to the yard.
+    expect($plan)->toBeInstanceOf(QueueableUnit::class)
+        ->and($plan->reason)->toBe('role:energy:solar_satellite')
+        ->and($plan->amount)->toBeGreaterThanOrEqual(1);
+});
+
+// The two routes must never compete over the same shortfall: while the building queue can still take
+// a plant, the plant is the answer and the yard stays out of it.
+test('a deficit the building queue can answer is not a yard order', function (): void {
+    unitProfile($this->currentUserId, AiArchetype::Fleeter);
+    $this->planetAddResources(unitPlenty());
+    $this->planetSetObjectLevel('shipyard', 2);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetSetObjectLevel('metal_mine', 20);
+    $this->planetSetObjectLevel('crystal_mine', 18);
+
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
 function unitProfile(int $playerId, AiArchetype $archetype = AiArchetype::Miner): AiProfile
 {
     return AiProfile::create([
