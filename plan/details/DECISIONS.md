@@ -147,6 +147,19 @@ Four Wave-9 loops closed autonomously (gates 2/3, host-read throughout):
   battle appraises to Anger and decays 0.25/day). `ponytail:` anger is a proxy — a true
   losses-vs-rebuilt ratio belongs to the experience layer (WP-015).
 
+## Debris-field recycling (WP-001) — 17 September 2026
+
+The raid/expedition loop now closes. `QueueableRecyclePlanner` scans the host `DebrisField` rows
+above a 10k metal-equivalent floor, skips fields already being harvested (in-flight or pending
+recycle), and returns the nearest one an own body with the host's harvest hull can reach.
+`QueueAiRecycleAction` dispatches the host `RecycleMission` (type 8) with enough hulls to carry the
+field, capped by what the body holds. Slot 16 (expedition debris) uses the pathfinder, slots 1-15 the
+recycler — both read from a new host accessor `RecycleMission::getHarvesterMachineNameForPosition()`
+(gate 1: the module never names a ship), which also replaces the mission's own inline hardcodes so
+the host has one authority. Recycle is an eligible candidate (not a published capability) beside
+expedition/transfer. `ponytail:` the scan is the 20 largest fields and the first hull-owning body; a
+distance cap and a closest-body scan are the upgrade path.
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human

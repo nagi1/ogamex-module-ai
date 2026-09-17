@@ -19,4 +19,5 @@ enum AiCandidateActionType: int
     case Recall = 10;
     case Expedition = 11;
     case Transfer = 12;
+    case Recycle = 13;
 }

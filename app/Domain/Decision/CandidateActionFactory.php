@@ -17,6 +17,7 @@ class CandidateActionFactory
         private readonly QueueableExpeditionPlanner $queueableExpeditionPlanner,
         private readonly QueueableTransferPlanner $queueableTransferPlanner,
         private readonly QueueableFleetSavePlanner $queueableFleetSavePlanner,
+        private readonly QueueableRecyclePlanner $queueableRecyclePlanner,
     ) {
     }
 
@@ -34,6 +35,7 @@ class CandidateActionFactory
                 ...$this->eligibleRecallCandidates($perception),
                 ...$this->eligibleExpeditionCandidates($perception),
                 ...$this->eligibleTransferCandidates($perception),
+                ...$this->eligibleRecycleCandidates($perception),
                 ...$raidGeneration->candidates,
             ],
             'rejections' => $raidGeneration->rejections,
@@ -186,6 +188,22 @@ class CandidateActionFactory
         return [app()->makeWith(CandidateAction::class, [
             'type' => AiCandidateActionType::Transfer,
             'reason' => AiCandidateReason::EligibleTransfer->value,
+            'parameters' => [],
+            'features' => $this->features(0.4, 0.3, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> */
+    private function eligibleRecycleCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($perception->fleetSlotsFree < 1 || $this->queueableRecyclePlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Recycle,
+            'reason' => AiCandidateReason::EligibleRecycle->value,
             'parameters' => [],
             'features' => $this->features(0.4, 0.3, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,

@@ -15,6 +15,7 @@ enum AiWorkKind: int
     case Recall = 9;
     case Expedition = 10;
     case Transfer = 11;
+    case Recycle = 12;
 
     public function actionType(): AiActionType
     {
@@ -22,7 +23,7 @@ enum AiWorkKind: int
             self::QueueResearch => AiActionType::QueueResearch,
             self::QueueUnits => AiActionType::QueueUnits,
             self::Colonize => AiActionType::CreateColony,
-            self::FleetSave, self::Spy, self::Raid, self::Expedition, self::Transfer => AiActionType::DispatchFleet,
+            self::FleetSave, self::Spy, self::Raid, self::Expedition, self::Transfer, self::Recycle => AiActionType::DispatchFleet,
             self::Recall => AiActionType::RecallFleet,
             self::BuildFirstBuilding, self::RunSession => AiActionType::QueueBuilding,
         };

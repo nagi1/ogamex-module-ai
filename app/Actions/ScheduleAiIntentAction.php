@@ -13,6 +13,8 @@ use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecall;
+use Modules\AI\Domain\Decision\QueueableRecycle;
+use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
@@ -88,6 +90,7 @@ class ScheduleAiIntentAction
         private QueueableFleetSavePlanner $queueableFleetSavePlanner,
         private QueueableSpyPlanner $queueableSpyPlanner,
         private QueueableTransferPlanner $queueableTransferPlanner,
+        private QueueableRecyclePlanner $queueableRecyclePlanner,
         private RaidPlanner $raidPlanner,
         private AiClock $clock,
     ) {
@@ -127,6 +130,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
             AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem),
+            AiCandidateActionType::Recycle => $this->scheduleRecycle($profile, $sessionWorkItem),
             AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem),
             AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
@@ -278,6 +282,28 @@ class ScheduleAiIntentAction
             self::PAYLOAD_CRYSTAL => $plan->crystal,
             self::PAYLOAD_DEUTERIUM => $plan->deuterium,
             self::PAYLOAD_REASON => 'transfer:' . $plan->sourcePlanetId . ':' . $plan->targetPlanetId,
+        ]);
+    }
+
+    /**
+     * The same for a debris field the plan approved: the origin body and the field
+     * coordinate travel with the intent, so the harvest goes where the session saw.
+     */
+    private function scheduleRecycle(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableRecyclePlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableRecycle) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Recycle, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_TARGET_GALAXY => $plan->targetGalaxy,
+            self::PAYLOAD_TARGET_SYSTEM => $plan->targetSystem,
+            self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
+            self::PAYLOAD_TARGET_TYPE => $plan->targetType,
+            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_REASON => 'recycle:' . $plan->targetGalaxy . ':' . $plan->targetSystem . ':' . $plan->targetPosition,
         ]);
     }
 

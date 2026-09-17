@@ -11,6 +11,7 @@ enum AiCandidateReason: string
     case EligibleRecall = 'eligible_recall';
     case EligibleExpedition = 'eligible_expedition';
     case EligibleTransfer = 'eligible_transfer';
+    case EligibleRecycle = 'eligible_recycle';
     case FreshVisibleReport = 'fresh_visible_report';
 
     public static function publishedCapability(AiCapability $capability): string

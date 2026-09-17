@@ -8,6 +8,7 @@ use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Contracts\QueueAiRecall;
+use Modules\AI\Contracts\QueueAiRecycle;
 use Modules\AI\Contracts\QueueAiResearch;
 use Modules\AI\Contracts\QueueAiSpy;
 use Modules\AI\Contracts\QueueAiTransfer;
@@ -19,6 +20,8 @@ use Modules\AI\Domain\Decision\QueueableColonyPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
+use Modules\AI\Domain\Decision\QueueableRecycle;
+use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
@@ -96,6 +99,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Recall => $this->recall($workItem, $planetId),
             AiWorkKind::Spy => $this->spy($workItem, $planetId),
             AiWorkKind::Raid => $this->raid($workItem, $planetId),
+            AiWorkKind::Recycle => $this->recycle($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -311,6 +315,31 @@ class ExecuteAiIntentAction
 
         return [
             app(QueueAiSpy::class)->handle($workItem->player_id, $step->planetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType),
+            ['target_galaxy' => $step->targetGalaxy, 'target_system' => $step->targetSystem, 'target_position' => $step->targetPosition],
+            $step->planetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function recycle(AiWorkItem $workItem, int $planetId): array
+    {
+        $step = $this->fromPayload(QueueableRecycle::class, [
+            'planetId' => $planetId,
+            'targetGalaxy' => $workItem->payload[self::PAYLOAD_TARGET_GALAXY] ?? null,
+            'targetSystem' => $workItem->payload[self::PAYLOAD_TARGET_SYSTEM] ?? null,
+            'targetPosition' => $workItem->payload[self::PAYLOAD_TARGET_POSITION] ?? null,
+            'targetType' => $workItem->payload[self::PAYLOAD_TARGET_TYPE] ?? null,
+            'missionType' => $workItem->payload[self::PAYLOAD_MISSION_TYPE] ?? null,
+        ]) ?? app(QueueableRecyclePlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueableRecycle) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiRecycle::class)->handle($workItem->player_id, $step->planetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType),
             ['target_galaxy' => $step->targetGalaxy, 'target_system' => $step->targetSystem, 'target_position' => $step->targetPosition],
             $step->planetId,
         ];
