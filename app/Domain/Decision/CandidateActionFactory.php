@@ -49,7 +49,9 @@ class CandidateActionFactory
         $candidates = [];
 
         foreach (AiCapability::cases() as $capability) {
-            if (!$perception->availableActions[$capability->value]) {
+            // A replay scenario bypasses the perception builder, so a capability the scenario
+            // predates is absent rather than false; absent means unpublished, same as the builder.
+            if (!($perception->availableActions[$capability->value] ?? false)) {
                 continue;
             }
 

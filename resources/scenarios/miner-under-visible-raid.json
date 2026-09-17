@@ -36,7 +36,8 @@
             "research": false,
             "queue_units": false,
             "spy": true,
-            "colonize": false
+            "colonize": false,
+            "throttle_mine": false
         },
         "fleetsave_eligible": true,
         "recovery_factor": 0.0,

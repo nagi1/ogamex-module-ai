@@ -226,6 +226,7 @@ test('it publishes the research capability and queues the technology the plan ap
         AiCapability::QueueUnits->value => false,
         AiCapability::Colonize->value => false,
         AiCapability::Spy->value => false,
+        AiCapability::ThrottleMine->value => false,
     ]);
 
     $session = capabilitySession($profile, 'research');

@@ -48,8 +48,7 @@ beforeEach(function (): void {
     // fire here — its draw keys off the work-item id, which shifts with suite
     // ordering and would otherwise flip a clear winner to DoNothing at random.
     $seeded = new SeededRandomSource();
-    $this->app->bind(RandomSource::class, fn (): RandomSource => new class($seeded) implements RandomSource
-    {
+    $this->app->bind(RandomSource::class, fn (): RandomSource => new class ($seeded) implements RandomSource {
         public function __construct(private SeededRandomSource $inner)
         {
         }
