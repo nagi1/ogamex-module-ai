@@ -15,6 +15,8 @@ readonly class QueueableRaid
         public int $targetPosition,
         public int $targetType,
         public int $missionType,
+        /** @var array<string, int> the counter-selected launch subset; empty means the whole fleet. */
+        public array $launchUnits = [],
     ) {
     }
 }

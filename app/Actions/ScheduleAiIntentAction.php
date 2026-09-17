@@ -59,6 +59,8 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_MISSION_TYPE = 'mission_type';
 
+    private const PAYLOAD_LAUNCH_UNITS = 'launch_units';
+
     private const PAYLOAD_DESTINATION_PLANET_ID = 'destination_planet_id';
 
     private const PAYLOAD_SHADOW_DESTINATION_PLANET_ID = 'shadow_destination_planet_id';
@@ -402,6 +404,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
             self::PAYLOAD_TARGET_TYPE => $plan->targetType,
             self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_LAUNCH_UNITS => $plan->launchUnits,
             self::PAYLOAD_REASON => 'raid:' . $reportId,
         ]);
     }

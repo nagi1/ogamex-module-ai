@@ -60,6 +60,8 @@ class ExecuteAiIntentAction
 
     private const PAYLOAD_MISSION_TYPE = 'mission_type';
 
+    private const PAYLOAD_LAUNCH_UNITS = 'launch_units';
+
     private const PAYLOAD_DESTINATION_PLANET_ID = 'destination_planet_id';
 
     private const PAYLOAD_SHADOW_DESTINATION_PLANET_ID = 'shadow_destination_planet_id';
@@ -377,6 +379,7 @@ class ExecuteAiIntentAction
             'targetPosition' => $workItem->payload[self::PAYLOAD_TARGET_POSITION] ?? null,
             'targetType' => $workItem->payload[self::PAYLOAD_TARGET_TYPE] ?? null,
             'missionType' => $workItem->payload[self::PAYLOAD_MISSION_TYPE] ?? null,
+            'launchUnits' => $workItem->payload[self::PAYLOAD_LAUNCH_UNITS] ?? [],
         ]);
 
         if (!$step instanceof QueueableRaid) {
@@ -384,7 +387,7 @@ class ExecuteAiIntentAction
         }
 
         return [
-            app(QueueAiRaid::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType),
+            app(QueueAiRaid::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->launchUnits),
             ['target_galaxy' => $step->targetGalaxy, 'target_system' => $step->targetSystem, 'target_position' => $step->targetPosition],
             $step->originPlanetId,
         ];

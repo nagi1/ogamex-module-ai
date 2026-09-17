@@ -12,5 +12,5 @@ use Modules\AI\Support\AiActionResult;
  */
 interface QueueAiRaid
 {
-    public function handle(int $playerId, int $originPlanetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType): AiActionResult;
+    public function handle(int $playerId, int $originPlanetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType, ?array $launchUnits = null): AiActionResult;
 }

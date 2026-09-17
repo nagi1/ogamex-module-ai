@@ -26,6 +26,7 @@ use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\GameMissions\AttackMission;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
@@ -36,6 +37,7 @@ use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\MessageService;
+use OGame\Services\ObjectService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -490,6 +492,71 @@ test('the raid planner leaves a target alone when its real loot stays worth it',
     }
 
     expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+});
+
+// U6: the launch is not the stock. A target fielding a light-fighter swarm draws cruisers — the
+// hull with rapid fire against it — and the account's own light fighters stay home.
+test('a light-fighter swarm draws cruisers as the launch subset', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(10_000_000, 10_000_000, 10_000_000));
+    $this->planetAddUnit('light_fighter', 50);
+    $this->planetAddUnit('cruiser', 50);
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $foreign->addUnit('light_fighter', 200);
+    $reportId = raidDepthReport(
+        $this->currentUserId,
+        $foreign->getPlanetCoordinates()->galaxy,
+        $foreign->getPlanetCoordinates()->system,
+        $foreign->getPlanetCoordinates()->position,
+        ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000],
+    );
+
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
+
+    expect($plan)->toBeInstanceOf(QueueableRaid::class)
+        ->and($plan->launchUnits)->toHaveKey('cruiser')
+        ->and($plan->launchUnits)->not->toHaveKey('light_fighter');
+});
+
+// U6: an undefended farm gets cargo for the haul plus one kill hull, never the whole stock.
+test('an undefended farm sends kill ships plus cargo, not the whole stock', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(10_000_000, 10_000_000, 10_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $this->planetAddUnit('light_fighter', 20);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $reportId = raidDepthReport(
+        $this->currentUserId,
+        $foreign->getPlanetCoordinates()->galaxy,
+        $foreign->getPlanetCoordinates()->system,
+        $foreign->getPlanetCoordinates()->position,
+        ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000],
+    );
+
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
+
+    expect($plan)->toBeInstanceOf(QueueableRaid::class)
+        ->and($plan->launchUnits)->toHaveKey('small_cargo')
+        ->and($plan->launchUnits['light_fighter'])->toBe(1);
+});
+
+// U6: the subset screen is the same engine, one draw, over a caller-supplied fleet.
+test('the estimator simulates a counter-selected subset, not the whole stock', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddUnit('cruiser', 10);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addUnit('light_fighter', 100);
+
+    $fleet = new UnitCollection();
+    $fleet->addUnit(ObjectService::getUnitObjectByMachineName('cruiser'), 10);
+
+    $estimate = app(NativeRaidEstimator::class)->estimateFleet($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), $fleet, 1);
+
+    expect($estimate->samples)->toBe(1)
+        ->and($estimate->pWin)->toBeIn([0.0, 1.0]);
 });
 
 function raidDepthProfile(int $playerId): AiProfile

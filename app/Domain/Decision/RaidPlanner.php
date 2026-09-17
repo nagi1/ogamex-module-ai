@@ -12,6 +12,9 @@ use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\AttackMission;
 use OGame\GameMissions\BattleEngine\Services\LootService;
+use OGame\GameObjects\Models\UnitObject;
+use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
@@ -20,6 +23,7 @@ use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
 use OGame\Services\FleetMissionService;
+use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 
@@ -200,6 +204,13 @@ class RaidPlanner
             return null;
         }
 
+        // The launch is not the stock (U6): the smallest counter-selected hulls whose single
+        // simulation survives this target fly, not the whole garage.
+        $launchUnits = $this->launchUnits($playerId, $player, $origin, $target, $profile->random_seed);
+        if ($launchUnits === null) {
+            return null;
+        }
+
         return app()->makeWith(QueueableRaid::class, [
             'originPlanetId' => $origin->getPlanetId(),
             'targetGalaxy' => (int) $report->planet_galaxy,
@@ -207,7 +218,207 @@ class RaidPlanner
             'targetPosition' => (int) $report->planet_position,
             'targetType' => (int) $report->planet_type,
             'missionType' => AttackMission::getTypeId(),
+            'launchUnits' => $launchUnits,
         ]);
+    }
+
+    /**
+     * The launch subset: enough cargo for the haul plus the smallest counter-selected hulls whose
+     * single simulation survives this target (U6).
+     *
+     * The counter order is the host's own rapid-fire graph — a hull that shreds the target's mix
+     * ranks first and one the target shreds back is denied — never a module counter map. Cargo is
+     * sized to the loot the origin could carry, largest hull first, so a farm draws kill ships plus
+     * cargo rather than the whole stock. Null when even the full stock does not survive the draw.
+     *
+     * @return array<string, int>|null
+     */
+    private function launchUnits(int $playerId, PlayerService $player, PlanetService $origin, PlanetService $target, int $seed): ?array
+    {
+        $targetMix = [...$target->getShipUnits()->units, ...$target->getDefenseUnits()->units];
+        $lootVolume = $this->lootVolume($this->maximumLoot($player, $origin, $target));
+        $cargo = $this->cargoForLoot($player, $origin, $lootVolume);
+
+        // Nothing fights back: cargo plus one cheapest kill hull, nothing to simulate.
+        if ($targetMix === []) {
+            return $this->withKillHull($origin, $cargo);
+        }
+
+        $hulls = $this->militaryHulls($origin);
+        usort($hulls, fn (UnitEntry $left, UnitEntry $right) =>
+            $this->counterScore($right->unitObject, $targetMix) <=> $this->counterScore($left->unitObject, $targetMix)
+            ?: $this->attackPerCost($player, $right->unitObject) <=> $this->attackPerCost($player, $left->unitObject));
+
+        // Grow the counter hulls from the strongest down, simulating once per step: the smallest
+        // fleet whose single draw survives is the launch (FLE-012). ponytail: one draw per candidate
+        // is a probability average — a close fight may need the next hull on a later re-plan; the
+        // 50-sample full-stock screen already bounds the worst case.
+        $launch = $cargo;
+        foreach ($hulls as $hull) {
+            $launch[$hull->unitObject->machine_name] = $hull->amount;
+            $estimate = $this->raidEstimator->estimateFleet(
+                $playerId,
+                $origin->getPlanetId(),
+                $target->getPlanetId(),
+                $this->fleet($launch),
+                $seed,
+            );
+
+            if ($estimate->samples > 0 && $estimate->pWin >= 1.0) {
+                return $launch;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * How well a hull counters the target's mix: rapid fire against it, minus the target's rapid
+     * fire back, weighted by how many the target fields. Read from the host's own graph (gate 1).
+     *
+     * @param list<UnitEntry> $targetMix
+     */
+    private function counterScore(UnitObject $candidate, array $targetMix): int
+    {
+        $score = 0;
+
+        foreach ($targetMix as $entry) {
+            $score += $this->rapidfire($candidate, $entry->unitObject) * $entry->amount;
+            $score -= $this->rapidfire($entry->unitObject, $candidate) * $entry->amount;
+        }
+
+        return $score;
+    }
+
+    /** The rapid-fire factor of one hull against another, or zero when it has none. */
+    private function rapidfire(UnitObject $shooter, UnitObject $target): int
+    {
+        foreach ($shooter->rapidfire as $rapidfire) {
+            if ($rapidfire->object_machine_name === $target->machine_name) {
+                return $rapidfire->amount;
+            }
+        }
+
+        return 0;
+    }
+
+    /** Attack per metal-equivalent price, so an unmatched hull still ranks by what it kills. */
+    private function attackPerCost(PlayerService $player, UnitObject $unit): float
+    {
+        $attack = (float) $unit->properties->attack->calculate($player)->totalValue;
+        $price = $this->raidEstimator->metalEquivalent(ObjectService::getObjectRawPrice($unit->machine_name));
+
+        return $price > 0.0 ? $attack / $price : 0.0;
+    }
+
+    /**
+     * The fewest civil cargo hulls that carry the loot, largest capacity first, so the haul stays
+     * intact while the military hulls shrink to the counters. Civil vs military is the host's own
+     * split, so a mod-added transport is cargo with no edit (gate 1).
+     *
+     * @return array<string, int>
+     */
+    private function cargoForLoot(PlayerService $player, PlanetService $origin, int $volume): array
+    {
+        $stock = $origin->getShipUnits();
+        $ships = [];
+
+        foreach (ObjectService::getCivilShipObjects() as $ship) {
+            $amount = $stock->getAmountByMachineName($ship->machine_name);
+            $capacity = $this->capacity($player, $ship);
+            if ($amount > 0 && $capacity > 0) {
+                $ships[] = ['unit' => $ship, 'amount' => $amount, 'capacity' => $capacity];
+            }
+        }
+
+        usort($ships, static fn (array $left, array $right): int => $right['capacity'] <=> $left['capacity']);
+
+        $cargo = [];
+        $carried = 0;
+
+        foreach ($ships as $entry) {
+            if ($carried >= $volume) {
+                break;
+            }
+
+            $amount = min($entry['amount'], (int) ceil(($volume - $carried) / $entry['capacity']));
+            $cargo[$entry['unit']->machine_name] = $amount;
+            $carried += $amount * $entry['capacity'];
+        }
+
+        return $cargo;
+    }
+
+    /**
+     * The defenceless farm still gets a kill hull: the cheapest military ship the account owns, one
+     * hull, so the cargo never flies alone (U6). The target cannot fight back, so one is enough.
+     *
+     * @param array<string, int> $cargo
+     * @return array<string, int>
+     */
+    private function withKillHull(PlanetService $origin, array $cargo): array
+    {
+        $cheapest = null;
+        $cheapestPrice = null;
+
+        foreach (ObjectService::getMilitaryShipObjects() as $ship) {
+            if ($origin->getShipUnits()->getAmountByMachineName($ship->machine_name) <= 0) {
+                continue;
+            }
+
+            $price = $this->raidEstimator->metalEquivalent(ObjectService::getObjectRawPrice($ship->machine_name));
+            if ($cheapestPrice === null || $price < $cheapestPrice) {
+                $cheapest = $ship;
+                $cheapestPrice = $price;
+            }
+        }
+
+        if ($cheapest === null) {
+            return $cargo;
+        }
+
+        $cargo[$cheapest->machine_name] = max($cargo[$cheapest->machine_name] ?? 0, 1);
+
+        return $cargo;
+    }
+
+    /** @return list<UnitEntry> the military hulls the origin actually owns, in stock order. */
+    private function militaryHulls(PlanetService $origin): array
+    {
+        $hulls = [];
+
+        foreach (ObjectService::getMilitaryShipObjects() as $ship) {
+            $amount = $origin->getShipUnits()->getAmountByMachineName($ship->machine_name);
+            if ($amount > 0) {
+                $hulls[] = new UnitEntry($ship, $amount);
+            }
+        }
+
+        return $hulls;
+    }
+
+    private function capacity(PlayerService $player, UnitObject $unit): int
+    {
+        return (int) $unit->properties->capacity->calculate($player)->totalValue;
+    }
+
+    private function lootVolume(Resources $loot): int
+    {
+        return (int) ($loot->metal->get() + $loot->crystal->get() + $loot->deuterium->get());
+    }
+
+    /** @param array<string, int> $units */
+    private function fleet(array $units): UnitCollection
+    {
+        $fleet = new UnitCollection();
+
+        foreach ($units as $machineName => $amount) {
+            if ($amount > 0) {
+                $fleet->addUnit(ObjectService::getUnitObjectByMachineName($machineName), $amount);
+            }
+        }
+
+        return $fleet;
     }
 
     /**

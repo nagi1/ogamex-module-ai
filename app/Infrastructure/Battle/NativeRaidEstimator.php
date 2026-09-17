@@ -10,6 +10,7 @@ use OGame\GameMissions\BattleEngine\Models\AttackerFleet;
 use OGame\GameMissions\BattleEngine\Models\DefenderFleet;
 use OGame\GameMissions\BattleEngine\PhpBattleEngine;
 use OGame\GameMissions\BattleEngine\RustBattleEngine;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
 use OGame\Services\SettingsService;
 
@@ -47,6 +48,20 @@ class NativeRaidEstimator
 
     public function estimate(int $playerId, int $originPlanetId, int $targetPlanetId, int $seed): RaidEstimate
     {
+        return $this->screen($playerId, $originPlanetId, $targetPlanetId, null, $seed, self::SCREEN_SAMPLES);
+    }
+
+    /**
+     * One simulation of a specific fleet against the target — the launch-subset screen (U6). The
+     * fleet is what the caller counter-selected; the engine and the defender stay the host's.
+     */
+    public function estimateFleet(int $playerId, int $originPlanetId, int $targetPlanetId, UnitCollection $fleet, int $seed): RaidEstimate
+    {
+        return $this->screen($playerId, $originPlanetId, $targetPlanetId, $fleet, $seed, 1);
+    }
+
+    private function screen(int $playerId, int $originPlanetId, int $targetPlanetId, ?UnitCollection $fleet, int $seed, int $samples): RaidEstimate
+    {
         $player = $this->playerServiceFactory->make($playerId, true);
         $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
         $target = $this->planetServiceFactory->make($targetPlanetId, true);
@@ -60,7 +75,7 @@ class NativeRaidEstimator
             ]);
         }
 
-        $ships = $origin->getShipUnits();
+        $ships = $fleet ?? $origin->getShipUnits();
         if ($ships->units === []) {
             return app()->makeWith(RaidEstimate::class, [
                 'samples' => 0,
@@ -90,7 +105,7 @@ class NativeRaidEstimator
 
         // The screen is the one bounded pass the decision path may afford; the
         // confirmation is a wider sample on the winner only.
-        $sampled = $this->sample($engine, $seed, self::SCREEN_SAMPLES);
+        $sampled = $this->sample($engine, $seed, $samples);
 
         return app()->makeWith(RaidEstimate::class, [
             'samples' => count($sampled['netProfits']),

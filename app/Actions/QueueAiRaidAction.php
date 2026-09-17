@@ -9,11 +9,13 @@ use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\AttackMission;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
+use OGame\Services\ObjectService;
 use OGame\Services\PlayerGameStateService;
 
 /**
@@ -32,7 +34,7 @@ class QueueAiRaidAction implements QueueAiRaid
     ) {
     }
 
-    public function handle(int $playerId, int $originPlanetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType): AiActionResult
+    public function handle(int $playerId, int $originPlanetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType, ?array $launchUnits = null): AiActionResult
     {
         if (!Planet::query()->whereKey($originPlanetId)->where('user_id', $playerId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
@@ -74,7 +76,7 @@ class QueueAiRaidAction implements QueueAiRaid
                 $targetCoordinate,
                 PlanetType::from($targetType),
                 AttackMission::getTypeId(),
-                $origin->getShipUnits(),
+                $this->launchFleet($origin, $launchUnits),
                 new Resources(),
                 10,
             );
@@ -83,5 +85,27 @@ class QueueAiRaidAction implements QueueAiRaid
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * The fleet the raid flies: the counter-selected subset, or the whole origin fleet when the
+     * intent carried no subset (an older work item). The host still owns what the planet holds.
+     *
+     * @param array<string, int>|null $launchUnits
+     */
+    private function launchFleet(PlanetService $origin, ?array $launchUnits): UnitCollection
+    {
+        if ($launchUnits === null || $launchUnits === []) {
+            return $origin->getShipUnits();
+        }
+
+        $fleet = new UnitCollection();
+        foreach ($launchUnits as $machineName => $amount) {
+            if ($amount > 0) {
+                $fleet->addUnit(ObjectService::getUnitObjectByMachineName($machineName), $amount);
+            }
+        }
+
+        return $fleet->units === [] ? $origin->getShipUnits() : $fleet;
     }
 }
