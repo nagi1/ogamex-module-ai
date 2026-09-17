@@ -2178,3 +2178,12 @@ fleet through `JumpGateService::transferShips` + `setCooldown` instead of dispat
 cooldown-blocked jump falls back to the flight. Verified with `tests/Feature/JumpGateTest.php` (5 tests),
 the existing fleetsave suites (FleetSavePlannerTest, SaveDepthTest, ProactiveSaveTest) and a clean Gate 2
 pass.
+
+### P7-002 — semantic recall stays disabled; the held-out review is closed (18 September 2026)
+
+The 7B gate is a held-out review that shows native retrieval misses what exact/entity recall closes.
+The module's own real-stack benchmark (`scripts/e2e-agentos-recall-benchmark.php`) was run against the
+live AgentOS sidecar (10 trials, 30 facts per counterparty, 20-fact cut): external mode lifts the
+required-fact recall 70% → 100% but drops newest-fact survival 10/10 → 1/10 — substitution, not
+addition — and hybrid mode keeps newest-fact survival at 10/10 with every decision identical to native
+at both amounts. Native retrieval still wins, so 7B stays disabled and the row is closed on evidence.
