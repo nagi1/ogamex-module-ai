@@ -30,7 +30,7 @@ test('the unit planner sizes the cargo batch to the raid payload', function (): 
 });
 
 test('the unit planner does not grow cargo without a raidable report', function (): void {
-    compositionProfile($this->currentUserId);
+    compositionProfile($this->currentUserId, AiArchetype::Fleeter);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetSetObjectLevel('shipyard', 4);
     $this->playerSetResearchLevel('combustion_drive', 2);
@@ -62,11 +62,11 @@ test('a report whose defence is null does not break unit planning', function ():
         ->and($plan->reason)->toBe('role:cargo:payload');
 });
 
-function compositionProfile(int $playerId): AiProfile
+function compositionProfile(int $playerId, AiArchetype $archetype = AiArchetype::Miner): AiProfile
 {
     return AiProfile::create([
         'player_id' => $playerId,
-        'archetype' => AiArchetype::Miner,
+        'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 16_000 + $playerId,
         'enabled' => true,

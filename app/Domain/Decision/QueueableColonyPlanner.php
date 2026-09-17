@@ -89,11 +89,16 @@ class QueueableColonyPlanner
     }
 
     /**
-     * The first empty, colonisable coordinate from a seeded start, bounded.
+     * The largest empty, colonisable coordinate from a seeded start, bounded.
      *
-     * The per-account seed offsets the walk so two accounts do not claim the
-     * same slot; the host answers both reach (`canColonizePosition`) and
-     * emptiness (`makeForCoordinate` returns null).
+     * An experienced player colonises the bigger slots, not the first empty one:
+     * the host's own field range for each position is the planet's size, so the
+     * walk keeps the largest empty slot it sees and returns it. The per-account
+     * seed offsets the walk so two accounts do not claim the same slot, and it
+     * stays the tie-break: an equal-size slot later in the walk loses. The host
+     * answers reach (`canColonizePosition`) and emptiness (`makeForCoordinate`
+     * returns null); the field range is the host's `planetData`, never a
+     * position list.
      */
     private function emptySlot(PlayerService $player, int $seed): ?Coordinate
     {
@@ -104,6 +109,9 @@ class QueueableColonyPlanner
         // universe cannot stall a session and the bound never needs a per-check
         // branch.
         $systemsPerGalaxy = min($systems, max(1, intdiv(self::MAX_SCANS, 12 * $galaxies)));
+
+        $best = null;
+        $bestFields = -1.0;
 
         for ($galaxyOffset = 0; $galaxyOffset < $galaxies; $galaxyOffset++) {
             $galaxy = 1 + (($seed + $galaxyOffset) % $galaxies);
@@ -117,13 +125,23 @@ class QueueableColonyPlanner
                     }
 
                     $coordinate = new Coordinate($galaxy, $systemWithOffset, $position);
-                    if ($this->planetServiceFactory->makeForCoordinate($coordinate, false, PlanetType::Planet) === null) {
-                        return $coordinate;
+                    if ($this->planetServiceFactory->makeForCoordinate($coordinate, false, PlanetType::Planet) !== null) {
+                        continue;
+                    }
+
+                    // The size a planet at this position would get, from the host's
+                    // own field range (mid positions report the widest range). The
+                    // largest empty slot seen so far wins; strict > keeps the
+                    // seeded walk order as the tie-break.
+                    $fields = $this->planetServiceFactory->planetData($position, false)['fields'][1];
+                    if ($fields > $bestFields) {
+                        $best = $coordinate;
+                        $bestFields = (float) $fields;
                     }
                 }
             }
         }
 
-        return null;
+        return $best;
     }
 }

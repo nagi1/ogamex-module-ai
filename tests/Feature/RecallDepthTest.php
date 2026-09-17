@@ -37,7 +37,7 @@ beforeEach(function (): void {
 test('the recall action brings the parked save home', function (): void {
     recallProfile($this->currentUserId);
     $this->planetAddResources(new Resources(10_000, 10_000, 10_000));
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 1);
     recallSecondOwnPlanet($this->currentUserId);
 
     $save = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
@@ -75,7 +75,7 @@ test('the recall action refuses a deployment it does not own', function (): void
 test('the recall action withholds the recall while a hostile is inbound', function (): void {
     recallProfile($this->currentUserId);
     $this->planetAddResources(new Resources(10_000, 10_000, 10_000));
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 1);
     recallSecondOwnPlanet($this->currentUserId);
 
     $save = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);

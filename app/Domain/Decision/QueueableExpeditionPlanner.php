@@ -6,7 +6,9 @@ use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
+use OGame\GameMissions\ExpeditionMission;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\Models\FleetMission;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -25,6 +27,9 @@ class QueueableExpeditionPlanner
 {
     /** Slot 16 is the only coordinate the host's expedition mission accepts. */
     private const EXPEDITION_POSITION = 16;
+
+    /** The window over which a system's outgoing expedition load is counted for rotation. */
+    private const ROTATION_WINDOW_HOURS = 24;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -108,16 +113,100 @@ class QueueableExpeditionPlanner
     }
 
     /**
-     * The first own body carrying a disposable cargo ship.
+     * The strongest combat hull this body owns, by the host's attack value: the
+     * escort that survives a pirate (EXP-002).
      */
-    private function origin(PlayerService $player): ?PlanetService
+    public function combatHull(PlayerService $player, PlanetService $planet): ?UnitObject
     {
-        foreach ($player->planets->all() as $planet) {
-            if ($this->disposableShip($player, $planet) !== null) {
-                return $planet;
+        return $this->bestOwned($player, $planet, ObjectService::getMilitaryShipObjects(), 'attack');
+    }
+
+    /**
+     * The fastest civil hull this body owns, by the host's speed value: the
+     * pathfinder that shortens the trip (EXP-002). The probe and the colony ship
+     * are excluded by the host's own mission vocabulary.
+     */
+    public function fastestCivilHull(PlayerService $player, PlanetService $planet): ?UnitObject
+    {
+        return $this->bestOwned(
+            $player,
+            $planet,
+            ObjectService::getCivilShipObjects(),
+            'speed',
+            [...EspionageMission::getRequiredShipMachineNames(), ...ColonisationMission::getRequiredShipMachineNames()],
+        );
+    }
+
+    /**
+     * The best-owned hull for a role, by the host's own stat. Only hulls the
+     * body actually holds are candidates; the role is never a machine name.
+     *
+     * @param array<UnitObject> $objects
+     * @param 'attack'|'speed' $property
+     * @param list<string> $exclude
+     */
+    private function bestOwned(PlayerService $player, PlanetService $planet, array $objects, string $property, array $exclude = []): ?UnitObject
+    {
+        $owned = $planet->getShipUnits()->toArray();
+
+        $best = null;
+        $bestValue = -1.0;
+        foreach ($objects as $object) {
+            if (in_array($object->machine_name, $exclude, true) || ($owned[$object->machine_name] ?? 0) <= 0) {
+                continue;
+            }
+
+            $value = $object->properties->{$property}->calculate($player)->totalValue;
+            if ($value > $bestValue) {
+                $best = $object;
+                $bestValue = $value;
             }
         }
 
-        return null;
+        return $best;
+    }
+
+    /**
+     * The own body whose system has sent the fewest recent expeditions, so the
+     * account spreads expeditions across its systems instead of hammering one
+     * (EXP-003). The rotation falls out of the count; no hard threshold is named.
+     */
+    private function origin(PlayerService $player): ?PlanetService
+    {
+        $recent = $this->recentExpeditionsBySystem($player->getId());
+
+        $best = null;
+        foreach ($player->planets->all() as $planet) {
+            if ($this->disposableShip($player, $planet) === null) {
+                continue;
+            }
+
+            $coordinates = $planet->getPlanetCoordinates();
+            $count = $recent["{$coordinates->galaxy}:{$coordinates->system}"] ?? 0;
+
+            if ($best === null || $count < $best['count']) {
+                $best = ['planet' => $planet, 'count' => $count];
+            }
+        }
+
+        return $best['planet'] ?? null;
+    }
+
+    /**
+     * @return array<string, int> system key => outgoing expeditions in the rotation window
+     */
+    private function recentExpeditionsBySystem(int $playerId): array
+    {
+        $counts = [];
+        foreach (FleetMission::query()
+            ->where('user_id', $playerId)
+            ->where('mission_type', ExpeditionMission::getTypeId())
+            ->where('time_departure', '>=', now()->subHours(self::ROTATION_WINDOW_HOURS)->timestamp)
+            ->get(['galaxy_from', 'system_from']) as $mission) {
+            $key = "{$mission->galaxy_from}:{$mission->system_from}";
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+
+        return $counts;
     }
 }

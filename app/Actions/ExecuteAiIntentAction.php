@@ -267,6 +267,9 @@ class ExecuteAiIntentAction
             'destinationPlanetId' => $workItem->payload[self::PAYLOAD_DESTINATION_PLANET_ID] ?? null,
             'missionType' => $workItem->payload[self::PAYLOAD_MISSION_TYPE] ?? null,
             'shadowDestinationPlanetId' => (int) ($workItem->payload[self::PAYLOAD_SHADOW_DESTINATION_PLANET_ID] ?? 0),
+            'harvestGalaxy' => (int) ($workItem->payload[self::PAYLOAD_TARGET_GALAXY] ?? 0),
+            'harvestSystem' => (int) ($workItem->payload[self::PAYLOAD_TARGET_SYSTEM] ?? 0),
+            'harvestPosition' => (int) ($workItem->payload[self::PAYLOAD_TARGET_POSITION] ?? 0),
         ]) ?? app(QueueableFleetSavePlanner::class)->plan($workItem->player_id);
 
         if (!$step instanceof QueueableFleetSave) {
@@ -274,7 +277,15 @@ class ExecuteAiIntentAction
         }
 
         return [
-            app(QueueAiFleetSave::class)->handle($workItem->player_id, $step->originPlanetId, $step->destinationPlanetId, $step->shadowDestinationPlanetId),
+            app(QueueAiFleetSave::class)->handle(
+                $workItem->player_id,
+                $step->originPlanetId,
+                $step->destinationPlanetId,
+                $step->shadowDestinationPlanetId,
+                $step->harvestGalaxy,
+                $step->harvestSystem,
+                $step->harvestPosition,
+            ),
             ['destination_planet_id' => $step->destinationPlanetId, 'mission_type' => $step->missionType],
             $step->originPlanetId,
         ];

@@ -65,6 +65,43 @@ test('the colony planner gives up when every colonisable slot is taken', functio
     expect(app(QueueableColonyPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
+// An experienced player colonises the bigger slot, not the first empty one: with
+// positions 4 (large) and 12 (small) the only gaps, the planner takes 4.
+test('the colony planner prefers the larger empty slot', function (): void {
+    colonyProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 4);
+    $this->planetAddUnit('colony_ship', 1);
+    app(SettingsService::class)->set('number_of_systems', 1);
+    app(SettingsService::class)->set('number_of_galaxies', 1);
+
+    $foreign = test()->createForeignPlanet();
+    $foreignPlayer = $foreign->getPlayer();
+    expect($foreignPlayer)->not->toBeNull();
+
+    for ($position = 1; $position <= 15; $position++) {
+        if (in_array($position, [4, 12], true)) {
+            continue;
+        }
+
+        if (Planet::query()->where('galaxy', 1)->where('system', 1)->where('planet', $position)->exists()) {
+            continue;
+        }
+
+        Planet::factory()->create([
+            'user_id' => $foreignPlayer->getId(),
+            'galaxy' => 1,
+            'system' => 1,
+            'planet' => $position,
+            'time_last_update' => now()->timestamp,
+        ]);
+    }
+
+    $plan = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->not->toBeNull()
+        ->and($plan->position)->toBe(4);
+});
+
 test('the colony action launches the host colonisation mission', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));

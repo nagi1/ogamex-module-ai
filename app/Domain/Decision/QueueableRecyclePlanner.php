@@ -6,7 +6,6 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
-use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\RecycleMission;
 use OGame\Models\DebrisField;
@@ -37,7 +36,6 @@ class QueueableRecyclePlanner
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
-        private PlanetServiceFactory $planetServiceFactory,
     ) {
     }
 

@@ -92,7 +92,7 @@ test('a colonize selection schedules and executes a colony mission', function ()
 test('a fleet save selection schedules and executes a deployment', function (): void {
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
 
     $intent = intentSchedule($profile, AiCandidateActionType::FleetSave, $this->currentPlanetId);
 

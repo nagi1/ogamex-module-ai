@@ -8,8 +8,11 @@ use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\DeploymentMission;
+use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\Planet;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
@@ -36,8 +39,19 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
     ) {
     }
 
-    public function handle(int $playerId, int $originPlanetId, int $destinationPlanetId, int $shadowDestinationPlanetId = 0): AiActionResult
-    {
+    public function handle(
+        int $playerId,
+        int $originPlanetId,
+        int $destinationPlanetId,
+        int $shadowDestinationPlanetId = 0,
+        int $harvestGalaxy = 0,
+        int $harvestSystem = 0,
+        int $harvestPosition = 0,
+    ): AiActionResult {
+        if ($harvestPosition > 0) {
+            return $this->harvestSave($playerId, $originPlanetId, $harvestGalaxy, $harvestSystem, $harvestPosition);
+        }
+
         if (!Planet::query()->whereKey($originPlanetId)->where('user_id', $playerId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
         }
@@ -85,6 +99,52 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 DeploymentMission::getTypeId(),
                 $origin->getShipUnits(),
                 $cargo,
+                self::SAVE_SPEED,
+            );
+
+            return AiActionResult::queued($mission->id);
+        } catch (Exception $exception) {
+            return AiActionResult::rejected($exception->getMessage());
+        }
+    }
+
+    /**
+     * The single-planet fallback (FS-011): with no second own body the whole
+     * fleet rides a recycle mission to a host debris field, so it is in the air
+     * while the inbound hostile lands. The recycler the mission needs and the
+     * field are host-read; the slowest speed keeps the fleet away longest. The
+     * host stays the authority on whether the mission is legal.
+     */
+    private function harvestSave(int $playerId, int $originPlanetId, int $galaxy, int $system, int $position): AiActionResult
+    {
+        if (!Planet::query()->whereKey($originPlanetId)->where('user_id', $playerId)->exists()) {
+            return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
+        }
+
+        try {
+            $player = $this->playerGameStateService->advance($playerId, $originPlanetId);
+
+            if ($player->isBanned()) {
+                return AiActionResult::rejected(AiQueueActionReason::PlayerBanned);
+            }
+            if ($player->isInVacationMode()) {
+                return AiActionResult::rejected(AiQueueActionReason::VacationMode);
+            }
+
+            $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
+            $fleet = $origin->getShipUnits();
+            if ($fleet->units === []) {
+                return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
+            }
+
+            $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+            $mission = $fleetMissions->createNewFromPlanet(
+                $origin,
+                new Coordinate($galaxy, $system, $position),
+                PlanetType::DebrisField,
+                RecycleMission::getTypeId(),
+                $fleet,
+                new Resources(),
                 self::SAVE_SPEED,
             );
 

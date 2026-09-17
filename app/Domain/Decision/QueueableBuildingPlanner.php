@@ -100,6 +100,7 @@ class QueueableBuildingPlanner
             $step = $this->firstQueueable($planet, $profile, [
                 ...$this->energyCapacity->pending($planet),
                 ...$this->facilityChain->pending($planet),
+                ...$this->economyUpgrades->storageForPrice($planet, $profile),
                 ...$this->economyUpgrades->production($planet, $profile),
             ]);
             if ($step !== null) {

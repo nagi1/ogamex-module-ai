@@ -384,7 +384,24 @@ test('a raid estimate for a body that is not a planet is empty, not an error', f
     $estimate = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $debris->getPlanetId(), 1);
 
     expect($estimate->samples)->toBe(0)
-        ->and($estimate->p20NetProfit)->toBe(0.0);
+        ->and($estimate->p20NetProfit)->toBe(0.0)
+        ->and($estimate->p20Loot)->toBe(0.0)
+        ->and($estimate->pWin)->toBe(0.0);
+});
+
+// The survival floor reads the host's own outcome: a defenceless target is
+// survived every run, an overwhelming defence wipes the fleet every run.
+test('the estimator reports pWin as the survived fraction', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddUnit('small_cargo', 1);
+    $foreign = $this->createForeignPlanet();
+
+    $clear = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), 1);
+    expect($clear->pWin)->toBe(1.0);
+
+    $foreign->addUnit('rocket_launcher', 500);
+    $wiped = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), 1);
+    expect($wiped->pWin)->toBe(0.0);
 });
 
 function raidDepthProfile(int $playerId): AiProfile

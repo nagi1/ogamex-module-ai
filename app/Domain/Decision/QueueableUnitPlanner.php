@@ -2,11 +2,13 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Resources;
@@ -125,6 +127,16 @@ class QueueableUnitPlanner
             $cargoPlan = $this->cargoForPayload($player, $planet, $playerId);
             if ($cargoPlan !== null) {
                 return $cargoPlan;
+            }
+
+            // Standing defence: a turtle or miner keeps a baseline wall scaled to
+            // its fleet, so it is never naked between attacks — not only when the
+            // host already says a hostile is inbound.
+            if ($this->needsStandingDefense($planet, $profile->archetype)) {
+                $defense = $this->bestDefense($player, $planet);
+                if ($defense !== null) {
+                    return $this->unit($planet, $defense, 'role:defense:standing:' . $defense->machine_name);
+                }
             }
         }
 
@@ -269,6 +281,47 @@ class QueueableUnitPlanner
     private function bestDefense(PlayerService $player, PlanetService $planet): ?UnitObject
     {
         return $this->bestByProperty($player, $planet, ObjectService::getDefenseObjects(), 'attack');
+    }
+
+    /**
+     * Whether a turtle or miner should grow its standing wall now: the planet's
+     * defence value has fallen below the persona's fraction of its fleet value.
+     * The floor is taste over host data, never a hardcoded defence count.
+     */
+    private function needsStandingDefense(PlanetService $planet, AiArchetype $archetype): bool
+    {
+        $ratio = $this->standingDefenseFloor($archetype);
+        if ($ratio <= 0.0) {
+            return false;
+        }
+
+        $fleetValue = $this->unitValue($planet->getShipUnits());
+        if ($fleetValue <= 0.0) {
+            return false;
+        }
+
+        return $this->unitValue($planet->getDefenseUnits()) < $ratio * $fleetValue;
+    }
+
+    /** The standing-defence floor as a fraction of fleet value, per persona. */
+    private function standingDefenseFloor(AiArchetype $archetype): float
+    {
+        return match ($archetype) {
+            AiArchetype::Turtle => 0.5,
+            AiArchetype::Miner => 0.2,
+            default => 0.0,
+        };
+    }
+
+    /** The metal-equivalent value of a unit collection, from the host's own raw prices. */
+    private function unitValue(UnitCollection $units): float
+    {
+        $value = 0.0;
+        foreach ($units->toArray() as $machineName => $amount) {
+            $value += $this->metalEquivalent(ObjectService::getObjectRawPrice($machineName)) * $amount;
+        }
+
+        return $value;
     }
 
     /**

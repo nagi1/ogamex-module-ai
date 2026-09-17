@@ -12,7 +12,6 @@ use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
-use OGame\Services\CharacterClassService;
 use OGame\Services\FleetMissionService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -39,13 +38,17 @@ class RaidPlanner
 
     private const LOOT_TIER_DEFENDED = 2.0;
 
-    /** The metal-equivalent trade band the economy already prices in (M + 1.5C + 2D). */
-    private const CRYSTAL_WEIGHT = 1.5;
-
-    private const DEUTERIUM_WEIGHT = 2.0;
-
     /** RAID-009: the fleet raids on the storage-fill schedule, so the warehouse must be near full. */
     private const RAID_STORAGE_FILL_RATIO = 0.8;
+
+    /**
+     * The fraction of sampled runs the attacking fleet must survive before a
+     * raid flies. The fleet-loss rate is its complement (1 - SURVIVAL_FLOOR): a
+     * coin-flip that profits on paper still loses the fleet too often. ponytail:
+     * one unmeasured floor for every persona; per-archetype tightening is the
+     * upgrade path once play data shows it varies.
+     */
+    private const SURVIVAL_FLOOR = 0.8;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -121,7 +124,17 @@ class RaidPlanner
         }
 
         $estimate = $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
-        if ($estimate->samples === 0 || $estimate->p20NetProfit <= 0.0) {
+        if ($estimate->samples === 0) {
+            return null;
+        }
+
+        // A fleeter asks "will I survive?" before "does it profit?". Refuse when
+        // the sampled fleet is wiped more than 1 - SURVIVAL_FLOOR of the time.
+        if ($estimate->pWin < self::SURVIVAL_FLOOR) {
+            return null;
+        }
+
+        if ($estimate->p20NetProfit <= 0.0) {
             return null;
         }
 
@@ -131,7 +144,7 @@ class RaidPlanner
         // (RAID-006, RAID-011).
         $fuel = $this->roundTripFuel($player, $origin, $target);
         $defended = $target->getDefenseUnits()->units !== [];
-        if (!$this->clearsLootTier($this->expectedLoot($player, $origin, $report), $fuel, $defended)) {
+        if (!$this->clearsLootTier($estimate->p20Loot, $fuel, $defended)) {
             return null;
         }
 
@@ -169,24 +182,6 @@ class RaidPlanner
         $oneWay = $fleetMissions->calculateConsumption($origin, $origin->getShipUnits(), $target->getPlanetCoordinates(), 0, 10.0);
 
         return 2 * (int) $oneWay;
-    }
-
-    /**
-     * The loot the host would allow, as metal-equivalent: the report's visible
-     * resources at the host's own class loot fraction, capped by what the
-     * origin's fleet can actually carry back (RAID-012).
-     */
-    private function expectedLoot(PlayerService $player, PlanetService $origin, EspionageReport $report): float
-    {
-        $resources = $report->resources ?? [];
-        $metalEquivalent = (int) ($resources['metal'] ?? 0)
-            + self::CRYSTAL_WEIGHT * (int) ($resources['crystal'] ?? 0)
-            + self::DEUTERIUM_WEIGHT * (int) ($resources['deuterium'] ?? 0);
-
-        $lootFraction = app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
-        $cargoCapacity = $origin->getShipUnits()->getTotalCargoCapacity($player);
-
-        return min($metalEquivalent * $lootFraction, (float) $cargoCapacity);
     }
 
     /**

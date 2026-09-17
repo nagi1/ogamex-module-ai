@@ -29,7 +29,8 @@ test('the estimator reports no samples when there is no fleet', function (): voi
     $noFleet = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), 1);
 
     expect($noFleet->samples)->toBe(0)
-        ->and($noFleet->p20NetProfit)->toBe(0.0);
+        ->and($noFleet->p20NetProfit)->toBe(0.0)
+        ->and($noFleet->p20Loot)->toBe(0.0);
 });
 
 test('the raid planner plans nothing for an unmanaged account, a missing report or no fleet', function (): void {

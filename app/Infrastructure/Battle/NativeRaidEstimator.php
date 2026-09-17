@@ -50,6 +50,8 @@ class NativeRaidEstimator
             return app()->makeWith(RaidEstimate::class, [
                 'samples' => 0,
                 'p20NetProfit' => 0.0,
+                'p20Loot' => 0.0,
+                'pWin' => 0.0,
             ]);
         }
 
@@ -58,6 +60,8 @@ class NativeRaidEstimator
             return app()->makeWith(RaidEstimate::class, [
                 'samples' => 0,
                 'p20NetProfit' => 0.0,
+                'p20Loot' => 0.0,
+                'pWin' => 0.0,
             ]);
         }
 
@@ -76,32 +80,43 @@ class NativeRaidEstimator
 
         // The screen is the one bounded pass the decision path may afford; the
         // confirmation is a wider sample on the winner only.
-        $netProfits = $this->sample($engine, $seed, self::SCREEN_SAMPLES);
+        $sampled = $this->sample($engine, $seed, self::SCREEN_SAMPLES);
 
         return app()->makeWith(RaidEstimate::class, [
-            'samples' => count($netProfits),
-            'p20NetProfit' => $this->lowerQuantile($netProfits, 0.2),
+            'samples' => count($sampled['netProfits']),
+            'p20NetProfit' => $this->lowerQuantile($sampled['netProfits'], 0.2),
+            'p20Loot' => $this->lowerQuantile($sampled['loots'], 0.2),
+            'pWin' => $sampled['survived'] / max(1, count($sampled['netProfits'])),
         ]);
     }
 
     /**
-     * @return list<float>
+     * One bounded screen: the same seed + i stream yields the P20 net (survival),
+     * the P20 loot (worth-flying) and the survived-run count (fleet survival)
+     * from identical draws — never a second pass.
+     *
+     * @return array{netProfits: list<float>, loots: list<float>, survived: int}
      */
     private function sample(PhpBattleEngine $engine, int $seed, int $samples): array
     {
         $netProfits = [];
+        $loots = [];
+        $survived = 0;
 
         for ($i = 0; $i < $samples; $i++) {
             // One shared stream: seed + i, so a candidate is always compared
             // through the same sequence of draws.
             $result = $engine->simulateBattle($seed + $i, true);
 
-            $loot = $this->metalEquivalent($result->loot);
-            $loss = $this->metalEquivalent($result->attackerResourceLoss);
-            $netProfits[] = $loot - $loss;
+            $loots[] = $this->metalEquivalent($result->loot);
+            $netProfits[] = $loots[$i] - $this->metalEquivalent($result->attackerResourceLoss);
+
+            // getAmount(), not ->units === []: the round sanitizer keeps
+            // zero-amount entries, so a wiped fleet reads as an empty amount.
+            $survived += $result->attackerUnitsResult->getAmount() > 0 ? 1 : 0;
         }
 
-        return $netProfits;
+        return ['netProfits' => $netProfits, 'loots' => $loots, 'survived' => $survived];
     }
 
     /**

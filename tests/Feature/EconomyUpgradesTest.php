@@ -119,6 +119,46 @@ test('remembered outcomes never add or drop a candidate', function (): void {
     expect(economySorted(economyRanking($this->planetService, $profile)))->toBe(economySorted($baseline));
 });
 
+/**
+ * A young planet's next mine can cost more than its warehouse holds, so the build is never
+ * affordable however long the mines run. The store that raises the blocking resource is queued
+ * first (E8) -- a player upgrades the warehouse before the mine that will not fit.
+ */
+test('a build whose price exceeds storage is preceded by the store that raises it', function (): void {
+    $profile = economyProfile($this->currentUserId);
+
+    // Developed mines against floor-level warehouses: every next mine costs
+    // more than its store holds, so the store that raises the blocking resource
+    // (the cheapest next build, metal) is the answer.
+    $this->planetSetObjectLevel('metal_store', 0);
+    $this->planetSetObjectLevel('crystal_store', 0);
+    $this->planetSetObjectLevel('deuterium_store', 0);
+    $this->planetSetObjectLevel('metal_mine', 14);
+    $this->planetSetObjectLevel('crystal_mine', 14);
+    $this->planetSetObjectLevel('deuterium_synthesizer', 11);
+    $this->planetSetObjectLevel('solar_plant', 25);
+    economyRefresh($this->planetService);
+
+    $ids = economyStorageIds($this->planetService);
+    $candidates = app(EconomyUpgrades::class)->storageForPrice($this->planetService, $profile);
+
+    expect($candidates)->not->toBeEmpty()
+        ->and($candidates[0]->buildingId)->toBe($ids['metal'])
+        ->and($candidates[0]->reason)->toBe('storage:' . ObjectService::getObjectById($ids['metal'])->machine_name);
+});
+
+/** With a warehouse that already fits the next build, there is nothing to prepend. */
+test('a build whose price fits storage needs no storage prepend', function (): void {
+    $profile = economyProfile($this->currentUserId);
+
+    $this->planetSetObjectLevel('metal_store', 10);
+    $this->planetSetObjectLevel('metal_mine', 5);
+    $this->planetSetObjectLevel('solar_plant', 20);
+    economyRefresh($this->planetService);
+
+    expect(app(EconomyUpgrades::class)->storageForPrice($this->planetService, $profile))->toBe([]);
+});
+
 /** Weight zero is the ablation switch: with it off, evidence may not move anything. */
 test('the experience weight is the ablation switch', function (): void {
     $profile = economyProfile($this->currentUserId);

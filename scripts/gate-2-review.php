@@ -29,6 +29,7 @@ const ALLOWED_SINGLE_IMPLEMENTATION = [
     'QueueAiExpedition',
     'QueueAiFleetSave',
     'QueueAiRecall',
+    'QueueAiRecycle',
     'QueueAiRaid',
     'QueueAiSpy',
     'QueueAiTransfer',

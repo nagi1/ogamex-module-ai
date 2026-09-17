@@ -8,6 +8,7 @@ use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
+use OGame\GameMissions\EspionageMission;
 use OGame\GameMissions\ExpeditionMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
@@ -15,6 +16,7 @@ use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
+use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
 use OGame\Services\PlayerService;
@@ -81,17 +83,37 @@ class QueueAiExpeditionAction implements QueueAiExpedition
     }
 
     /**
-     * One hull of the disposable cargo ship the planner selected for this body.
+     * The expedition fleet: one of each role the body owns — the strongest combat
+     * hull (survive a pirate), the fastest civil hull (pathfinder), the smallest
+     * cargo (carry the find) and a probe — never the whole stock (EXP-002). Roles
+     * the body does not own are simply absent, and each hull flies once.
      */
     private function disposableFleet(PlayerService $player, PlanetService $origin): ?UnitCollection
     {
-        $ship = app(QueueableExpeditionPlanner::class)->disposableShip($player, $origin);
-        if ($ship === null) {
+        $planner = app(QueueableExpeditionPlanner::class);
+
+        $cargo = $planner->disposableShip($player, $origin);
+        if ($cargo === null) {
             return null;
         }
 
+        $hulls = [$cargo->machine_name => $cargo];
+
+        foreach ([$planner->combatHull($player, $origin), $planner->fastestCivilHull($player, $origin)] as $ship) {
+            if ($ship !== null) {
+                $hulls[$ship->machine_name] = $ship;
+            }
+        }
+
+        $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
+        if ($origin->getShipUnits()->getAmountByMachineName($probe->machine_name) > 0) {
+            $hulls[$probe->machine_name] = $probe;
+        }
+
         $fleet = new UnitCollection();
-        $fleet->addUnit($ship, 1);
+        foreach ($hulls as $ship) {
+            $fleet->addUnit($ship, 1);
+        }
 
         return $fleet;
     }

@@ -20,6 +20,7 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Models\FleetMission;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use Tests\IsolatedAccountTestCase;
 
@@ -60,10 +61,53 @@ test('the expedition action dispatches one small ship to slot 16', function (): 
     expect($mission->mission_type)->toBe(15)
         ->and($mission->position_to)->toBe(16)
         ->and($mission->small_cargo)->toBe(1)
-        ->and($mission->light_fighter)->toBe(0);
+        ->and($mission->light_fighter)->toBe(1);
 
     // The dispatched mission consumes the account's only expedition slot.
     expect(app(QueueableExpeditionPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+// After the home system has already sent a recent expedition, the planner
+// rotates to the own body whose system has sent the fewest (EXP-003).
+test('the expedition planner rotates to the least-used own system', function (): void {
+    expeditionProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 1);
+    $this->planetAddUnit('small_cargo', 1);
+
+    $far = Planet::factory()->create([
+        'user_id' => $this->currentUserId,
+        'galaxy' => 1,
+        'system' => 410,
+        'planet' => 15,
+        'time_last_update' => now()->subHour()->getTimestamp(),
+    ]);
+    app(OGame\Factories\PlanetServiceFactory::class)->make($far->id, true)->addUnit('small_cargo', 1);
+
+    // One recent expedition already left the home system.
+    $home = $this->planetService->getPlanetCoordinates();
+    $mission = new FleetMission();
+    $mission->user_id = $this->currentUserId;
+    $mission->planet_id_from = $this->currentPlanetId;
+    $mission->planet_id_to = $far->id;
+    $mission->galaxy_from = $home->galaxy;
+    $mission->system_from = $home->system;
+    $mission->position_from = $home->position;
+    $mission->galaxy_to = $far->galaxy;
+    $mission->system_to = $far->system;
+    $mission->position_to = 16;
+    $mission->mission_type = \OGame\GameMissions\ExpeditionMission::getTypeId();
+    $mission->time_departure = now()->subHour()->timestamp;
+    $mission->time_arrival = now()->subMinutes(30)->timestamp;
+    $mission->time_arrival_ms = 0;
+    $mission->processed = 1;
+    $mission->canceled = 0;
+    $mission->save();
+
+    $plan = app(QueueableExpeditionPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableExpedition::class)
+        ->and($plan->planetId)->toBe($far->id)
+        ->and($plan->system)->toBe(410);
 });
 
 test('the expedition action refuses when the account owns no disposable ship', function (): void {

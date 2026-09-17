@@ -208,6 +208,87 @@ class EconomyUpgrades
     }
 
     /**
+     * The storage upgrade a build needs before its price can even fit (E8).
+     *
+     * A young planet's next mine can cost more than its warehouse holds, so the
+     * build can never be afforded however long the mines run; the host rejects
+     * it and the account would stall. A player grows the store that raises the
+     * blocking resource first. Returns that store, cheapest first, or empty when
+     * the next build fits or no production candidate is worth building.
+     *
+     * @return list<BuildCandidate>
+     */
+    public function storageForPrice(PlanetService $planet, AiProfile $profile): array
+    {
+        $next = $this->production($planet, $profile)[0] ?? null;
+        if ($next === null) {
+            return [];
+        }
+
+        $price = ObjectService::getObjectPrice(
+            ObjectService::getObjectById($next->buildingId)->machine_name,
+            $planet,
+        );
+        $blocking = $this->blockingResources($planet, $price);
+        if ($blocking === []) {
+            return [];
+        }
+
+        $entries = [];
+        foreach (ObjectService::getBuildingObjectsWithStorage() as $object) {
+            if (!$this->raisesAny($planet, $object->machine_name, $blocking)) {
+                continue;
+            }
+
+            $entries[] = [
+                'price' => $this->metalEquivalent(ObjectService::getObjectPrice($object->machine_name, $planet)),
+                'candidate' => app()->makeWith(BuildCandidate::class, [
+                    'buildingId' => $object->id,
+                    'reason' => 'storage:' . $object->machine_name,
+                ]),
+            ];
+        }
+
+        usort($entries, static fn (array $left, array $right): int => $left['price'] <=> $right['price']);
+
+        return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $entries);
+    }
+
+    /** @return list<string> the resources whose next-build price exceeds this planet's storage */
+    private function blockingResources(PlanetService $planet, Resources $price): array
+    {
+        $blocking = [];
+        if ($price->metal->get() > $planet->metalStorage()->get()) {
+            $blocking[] = 'metal';
+        }
+        if ($price->crystal->get() > $planet->crystalStorage()->get()) {
+            $blocking[] = 'crystal';
+        }
+        if ($price->deuterium->get() > $planet->deuteriumStorage()->get()) {
+            $blocking[] = 'deuterium';
+        }
+
+        return $blocking;
+    }
+
+    /**
+     * Whether a storage object raises the capacity of at least one resource the
+     * next build is blocked on, by the host's own storage formula asked twice.
+     *
+     * @param list<string> $blocking
+     */
+    private function raisesAny(PlanetService $planet, string $machineName, array $blocking): bool
+    {
+        $level = $planet->getObjectLevel($machineName);
+        $added = $planet->getBuildingMaxStorage($machineName, $level + 1);
+        $current = $planet->getBuildingMaxStorage($machineName);
+
+        return (in_array('metal', $blocking, true) && $added->metal->get() > $current->metal->get())
+            || (in_array('crystal', $blocking, true) && $added->crystal->get() > $current->crystal->get())
+            || (in_array('deuterium', $blocking, true) && $added->deuterium->get() > $current->deuterium->get());
+    }
+
+    /**
      * Whether any resource is at or above this planet's storage capacity — the full-warehouse
      * state that makes production overflow a permanent loss (E7).
      */

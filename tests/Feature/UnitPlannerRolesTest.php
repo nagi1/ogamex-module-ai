@@ -103,7 +103,7 @@ test('it queues a combat escort for a fresh defended target', function (): void 
 });
 
 test('it does not queue an escort the account already matches', function (): void {
-    unitProfile($this->currentUserId);
+    unitProfile($this->currentUserId, AiArchetype::Fleeter);
     $this->planetAddResources(unitPlenty());
     $this->planetSetObjectLevel('shipyard', 1);
     $this->playerSetResearchLevel('combustion_drive', 1);
@@ -114,6 +114,22 @@ test('it does not queue an escort the account already matches', function (): voi
     unitDefendedTargetReport($this->currentUserId);
 
     expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+// A turtle keeps a standing wall scaled to its fleet, not only when the host
+// already says a hostile is inbound (barakis M34-M40).
+test('a turtle keeps a standing defence between attacks', function (): void {
+    unitProfile($this->currentUserId, AiArchetype::Turtle);
+    $this->planetAddResources(unitPlenty());
+    $this->planetSetObjectLevel('shipyard', 2);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddUnit('espionage_probe', 1);
+
+    $plan = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableUnit::class)
+        ->and($plan->reason)->toBe('role:defense:standing:rocket_launcher');
 });
 
 test('the save failure policy skips deterministically and names the gamble', function (): void {
@@ -134,11 +150,11 @@ test('the save failure policy skips deterministically and names the gamble', fun
         ->and($policy->shouldSkip($skipSeed, 7))->toBe('overnight_gamble');
 });
 
-function unitProfile(int $playerId): AiProfile
+function unitProfile(int $playerId, AiArchetype $archetype = AiArchetype::Miner): AiProfile
 {
     return AiProfile::create([
         'player_id' => $playerId,
-        'archetype' => AiArchetype::Miner,
+        'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
         'random_seed' => 8_000 + $playerId,
         'enabled' => true,

@@ -12,5 +12,13 @@ use Modules\AI\Support\AiActionResult;
  */
 interface QueueAiFleetSave
 {
-    public function handle(int $playerId, int $originPlanetId, int $destinationPlanetId, int $shadowDestinationPlanetId = 0): AiActionResult;
+    public function handle(
+        int $playerId,
+        int $originPlanetId,
+        int $destinationPlanetId,
+        int $shadowDestinationPlanetId = 0,
+        int $harvestGalaxy = 0,
+        int $harvestSystem = 0,
+        int $harvestPosition = 0,
+    ): AiActionResult;
 }

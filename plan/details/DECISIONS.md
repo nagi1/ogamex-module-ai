@@ -236,6 +236,27 @@ gained a last-priority standing-defence branch: when the planet's defence value 
 it queues the best attack-per-cost defence piece. The reactive `underAttack` branch stays first, and
 the floor is persona taste over host data, never a hardcoded defence count.
 
+## Expedition fleet composition + rotation (WP-009) — 17 September 2026
+
+Expeditions now send a real fleet, not one lone civil hull. `QueueAiExpeditionAction` composes one
+of each role the origin owns — the strongest combat hull (host attack among military ships), the
+fastest civil hull (host speed among civil ships), the smallest cargo, and a probe — with the
+disposable cargo still the hard requirement so a probe-only account remains refused. The planner
+also rotates the origin: `origin()` now picks the own body whose system has sent the fewest
+expeditions in the last 24 h, so the account spreads across its systems instead of hammering one
+(EXP-003). All roles are host-read (`getMilitaryShipObjects()`/`getCivilShipObjects()` and each
+hull's own attack/speed stats), never a machine name.
+
+## Colony slot scoring (WP-010) — 17 September 2026
+
+The colony planner now takes the biggest empty slot, not the first one it walks past.
+`QueueableColonyPlanner::emptySlot()` keeps the bounded seeded walk but remembers the empty slot
+with the largest host-reported field range (`PlanetServiceFactory::planetData(position)['fields']`),
+so mid/large positions win and the seeded order stays the tie-break. The abandon-and-recolonise half
+of the task is deferred: the host seam (`PlanetService::abandonPlanet()`, a soft `markAsDestroyed`)
+is verified to exist, but the abandon flow needs its own action/planner branch and was not in this
+slice's file list.
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human

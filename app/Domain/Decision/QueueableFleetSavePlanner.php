@@ -30,6 +30,7 @@ class QueueableFleetSavePlanner
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
+        private QueueableRecyclePlanner $queueableRecyclePlanner,
     ) {
     }
 
@@ -41,16 +42,16 @@ class QueueableFleetSavePlanner
         }
 
         $player = $this->playerServiceFactory->make($playerId, true);
+        $planets = $player->planets->all();
 
-        return $this->saveFor($player, $player->planets->all(), $profile->archetype);
+        return $this->saveFor($player, $planets, $profile->archetype);
     }
 
     /**
      * The save a player takes before logging off for a real absence, rather
      * than the reactive one an inbound hostile forces (V6). The absence must
-     * clear the routine's own inter-session gap and the fleet left behind must
-     * clear the persona's exposure band; either failing, the account simply
-     * carries on with its ordinary session.
+     * clear the routine's own inter-session gap; the fleet-value gate lives in
+     * saveFor, shared with the reactive plan.
      */
     public function proactivePlan(int $playerId, int $absenceMinutes): ?QueueableFleetSave
     {
@@ -64,13 +65,8 @@ class QueueableFleetSavePlanner
         }
 
         $player = $this->playerServiceFactory->make($playerId, true);
-        $planets = $player->planets->all();
-        $origin = $this->origin($planets);
-        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($profile->archetype)) {
-            return null;
-        }
 
-        return $this->saveFor($player, $planets, $profile->archetype);
+        return $this->saveFor($player, $player->planets->all(), $profile->archetype);
     }
 
     private function profile(int $playerId): ?AiProfile
@@ -84,13 +80,13 @@ class QueueableFleetSavePlanner
     private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype): ?QueueableFleetSave
     {
         $origin = $this->origin($planets);
-        if ($origin === null) {
+        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype)) {
             return null;
         }
 
         $ranked = $this->rankedDestinations($player, $planets, $origin);
         if ($ranked === []) {
-            return null;
+            return $this->harvestSaveFallback($player, $origin);
         }
 
         return app()->makeWith(QueueableFleetSave::class, [
@@ -98,6 +94,32 @@ class QueueableFleetSavePlanner
             'destinationPlanetId' => $ranked[0]->getPlanetId(),
             'missionType' => DeploymentMission::getTypeId(),
             'shadowDestinationPlanetId' => $this->shadowDestinationPlanetId($player, $origin, $ranked, $archetype),
+        ]);
+    }
+
+    /**
+     * The single-planet fallback (FS-011): with no other own body to deploy to,
+     * park the fleet on a host debris field via a recycle mission. The field and
+     * the recycler hull are the recycle planner's own answer; the fallback only
+     * retargets it as a full-fleet save when that planner's origin is this same
+     * body, so it never moves a different planet's fleet. ponytail: the recycle
+     * mission returns the fleet once it arrives, so a long absence is not fully
+     * covered — the speed/distance sweep is the upgrade path.
+     */
+    private function harvestSaveFallback(PlayerService $player, PlanetService $origin): ?QueueableFleetSave
+    {
+        $recycle = $this->queueableRecyclePlanner->plan($player->getId());
+        if ($recycle === null || $recycle->planetId !== $origin->getPlanetId()) {
+            return null;
+        }
+
+        return app()->makeWith(QueueableFleetSave::class, [
+            'originPlanetId' => $origin->getPlanetId(),
+            'destinationPlanetId' => 0,
+            'missionType' => $recycle->missionType,
+            'harvestGalaxy' => $recycle->targetGalaxy,
+            'harvestSystem' => $recycle->targetSystem,
+            'harvestPosition' => $recycle->targetPosition,
         ]);
     }
 
@@ -197,24 +219,35 @@ class QueueableFleetSavePlanner
     }
 
     /**
-     * Own destinations ranked by safety: moons first (the phalanx cannot see
-     * them), then by distance from the origin (a save that flies further is
-     * harder to phalanx-time) (CRASH-006, FS-005).
+     * Own destinations ranked by safety: a body a hostile is already inbound to
+     * is never a destination (FS-010), the origin's own same-coordinate moon is
+     * the phalanx-blind hop and ranks first (FS-005), then moons (the phalanx
+     * cannot see them), then by distance from the origin (a save that flies
+     * further is harder to phalanx-time) (CRASH-006).
      *
      * @param array<int, PlanetService> $planets
      * @return list<PlanetService>
      */
     private function rankedDestinations(PlayerService $player, array $planets, PlanetService $origin): array
     {
+        $unsafe = $this->unsafeDestinations($player);
+
         $destinations = array_values(array_filter(
             $planets,
-            static fn (PlanetService $planet): bool => $planet->getPlanetId() !== $origin->getPlanetId(),
+            static fn (PlanetService $planet): bool => $planet->getPlanetId() !== $origin->getPlanetId()
+                && !isset($unsafe[$planet->getPlanetId()]),
         ));
 
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
         usort(
             $destinations,
             function (PlanetService $left, PlanetService $right) use ($fleetMissions, $origin): int {
+                $sameCoordinateMoonPreference = $this->isSameCoordinateMoon($origin, $right)
+                    <=> $this->isSameCoordinateMoon($origin, $left);
+                if ($sameCoordinateMoonPreference !== 0) {
+                    return $sameCoordinateMoonPreference;
+                }
+
                 $moonPreference = $this->isMoon($right) <=> $this->isMoon($left);
                 if ($moonPreference !== 0) {
                     return $moonPreference;
@@ -226,6 +259,46 @@ class QueueableFleetSavePlanner
         );
 
         return $destinations;
+    }
+
+    /**
+     * Own bodies a hostile fleet is already inbound to. Parking the save on one
+     * of them is worse than holding, so they are not destinations (FS-010). The
+     * same active-mission source the inbound picture already reads, so this is
+     * the one authority for "under attack".
+     *
+     * @return array<int, true>
+     */
+    private function unsafeDestinations(PlayerService $player): array
+    {
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+        $unsafe = [];
+        foreach ($fleetMissions->getActiveFleetMissionsForCurrentPlayer() as $mission) {
+            if ($mission->user_id !== $player->getId()) {
+                $unsafe[(int) $mission->planet_id_to] = true;
+            }
+        }
+
+        return $unsafe;
+    }
+
+    /**
+     * A moon at the origin's own coordinate: the planet↔moon hop a phalanx
+     * cannot observe (FS-005). The single safest save, ranked ahead of any
+     * other moon.
+     */
+    private function isSameCoordinateMoon(PlanetService $origin, PlanetService $planet): bool
+    {
+        if ($planet->getPlanetType() !== PlanetType::Moon) {
+            return false;
+        }
+
+        $originCoordinate = $origin->getPlanetCoordinates();
+        $targetCoordinate = $planet->getPlanetCoordinates();
+
+        return $originCoordinate->galaxy === $targetCoordinate->galaxy
+            && $originCoordinate->system === $targetCoordinate->system
+            && $originCoordinate->position === $targetCoordinate->position;
     }
 
     private function isMoon(PlanetService $planet): bool

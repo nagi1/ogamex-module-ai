@@ -324,6 +324,9 @@ class ScheduleAiIntentAction
             self::PAYLOAD_DESTINATION_PLANET_ID => $plan->destinationPlanetId,
             self::PAYLOAD_SHADOW_DESTINATION_PLANET_ID => $plan->shadowDestinationPlanetId,
             self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_TARGET_GALAXY => $plan->harvestGalaxy,
+            self::PAYLOAD_TARGET_SYSTEM => $plan->harvestSystem,
+            self::PAYLOAD_TARGET_POSITION => $plan->harvestPosition,
             self::PAYLOAD_REASON => 'fleetsave',
         ]);
     }

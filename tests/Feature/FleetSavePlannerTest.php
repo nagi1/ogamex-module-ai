@@ -22,7 +22,7 @@ beforeEach(function (): void {
 
 test('the fleetsave planner picks the fleet planet and another own planet', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
 
     $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
 
@@ -48,7 +48,7 @@ test('the fleetsave planner plans nothing without a fleet or for an unmanaged ac
 test('the fleetsave action deploys the fleet to another own planet', function (): void {
     fleetProfile($this->currentUserId);
     $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
 
     $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
     expect($plan)->not->toBeNull();
@@ -62,7 +62,7 @@ test('the fleetsave action deploys the fleet to another own planet', function ()
 
 test('the fleetsave action refuses a planet it does not own', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
     $foreign = $this->createForeignPlanet();
 
     $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
@@ -85,7 +85,7 @@ test('a shadow split is withheld when fewer than two slots are free', function (
         'planet' => 15,
         'time_last_update' => now()->subHour()->getTimestamp(),
     ]);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
 
     // The account holds six slots (computer 5); spending five leaves one free, so the split is
     // withheld while the save itself still flies.
@@ -111,7 +111,7 @@ test('a shadow split is withheld when fewer than two slots are free', function (
 
 test('a save the policy skips is withheld and the gamble is named', function (): void {
     $profile = fleetProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
 
     $mission = fleetInboundHostileFleet($this->currentPlanetId);
     $skipSeed = fleetSkipSeed($mission->id);
@@ -126,7 +126,7 @@ test('a save the policy skips is withheld and the gamble is named', function ():
 
 test('a save the policy does not skip stays eligible', function (): void {
     $profile = fleetProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
     $mission = fleetInboundHostileFleet($this->currentPlanetId);
 
     $noSkipSeed = fleetNoSkipSeed($mission->id);
@@ -140,7 +140,7 @@ test('a save the policy does not skip stays eligible', function (): void {
 
 test('an inbound landing past the reaction window withholds the save and publishes the wake', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
     $mission = fleetInboundHostileFleet($this->currentPlanetId, 600);
 
     $state = app(PlayerObservationService::class)->ownedState($this->currentUserId);
@@ -152,13 +152,36 @@ test('an inbound landing past the reaction window withholds the save and publish
 
 test('an inbound inside the detector floor is not saved', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('large_cargo', 5);
     fleetInboundHostileFleet($this->currentPlanetId, 5);
 
     $state = app(PlayerObservationService::class)->ownedState($this->currentUserId);
 
     expect($state['fleetsave_eligible'])->toBeFalse()
         ->and($state['reaction_wake_at'])->toBeNull();
+});
+
+// A fleet below the persona's exposure band is not worth moving, so the reactive
+// save is skipped the same way the proactive save already is (FS-001).
+test('the reactive save skips a fleet below the exposure band', function (): void {
+    fleetProfile($this->currentUserId);
+    $this->planetAddUnit('small_cargo', 1);
+
+    expect(app(QueueableFleetSavePlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+// A spy probe alone is not a reason to move: only a non-espionage inbound is a
+// threat worth saving from (FS-012).
+test('a probe-only inbound does not trigger a save', function (): void {
+    $profile = fleetProfile($this->currentUserId);
+    $this->planetAddUnit('large_cargo', 5);
+    $mission = fleetInboundEspionageFleet($this->currentPlanetId);
+    $profile->update(['random_seed' => fleetNoSkipSeed($mission->id)]);
+
+    $state = app(PlayerObservationService::class)->ownedState($this->currentUserId);
+
+    expect($state['fleetsave_eligible'])->toBeFalse()
+        ->and($state['inbound_fleets'])->not->toBeEmpty();
 });
 
 function fleetProfile(int $playerId): AiProfile
@@ -194,6 +217,28 @@ function fleetInboundHostileFleet(int $targetPlanetId, int $leadSeconds = 150): 
     $mission->mission_type = 1;
     $mission->time_departure = now()->subMinute()->timestamp;
     $mission->time_arrival = now()->addSeconds($leadSeconds)->timestamp;
+    $mission->time_arrival_ms = 0;
+    $mission->processed = 0;
+    $mission->canceled = 0;
+    $mission->save();
+
+    return $mission;
+}
+
+function fleetInboundEspionageFleet(int $targetPlanetId): FleetMission
+{
+    $foreign = test()->createForeignPlanet();
+    $foreignPlayer = $foreign->getPlayer();
+    expect($foreignPlayer)->not->toBeNull();
+
+    $mission = new FleetMission();
+    $mission->user_id = $foreignPlayer->getId();
+    $mission->planet_id_from = $foreign->getPlanetId();
+    $mission->planet_id_to = $targetPlanetId;
+    $mission->mission_type = \OGame\GameMissions\EspionageMission::getTypeId();
+    $mission->espionage_probe = 1;
+    $mission->time_departure = now()->subMinute()->timestamp;
+    $mission->time_arrival = now()->addSeconds(150)->timestamp;
     $mission->time_arrival_ms = 0;
     $mission->processed = 0;
     $mission->canceled = 0;

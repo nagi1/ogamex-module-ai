@@ -21,6 +21,7 @@ use Modules\AI\Support\RandomSource;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\DeploymentMission;
+use OGame\GameMissions\EspionageMission;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
@@ -418,6 +419,7 @@ class PlayerObservationService
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
         $inbound = [];
+        $threatening = false;
         foreach ($fleetMissions->getActiveFleetMissionsForCurrentPlayer() as $mission) {
             if ($mission->user_id === $playerId) {
                 continue;
@@ -429,12 +431,18 @@ class PlayerObservationService
                 'time_arrival' => (int) $mission->time_arrival,
                 'planet_id_to' => (int) $mission->planet_id_to,
             ];
+
+            // A spy probe alone is not a reason to move: only a non-espionage
+            // inbound is a threat worth saving from (FS-012). The type is the
+            // host's own mission-type answer, never a module list.
+            $threatening = $threatening || $mission->mission_type !== EspionageMission::getTypeId();
         }
 
         // A fleetsave candidate is only offered when it is both needed and possible: the host
         // says a hostile is inbound, and the account has a fleet and a second body to move it
         // to. Offering it otherwise is how a trace claims an action the account cannot take.
         $saveable = $fleetMissions->currentPlayerUnderAttack()
+            && $threatening
             && $this->queueableFleetSavePlanner->plan($playerId) !== null;
         $seed = AiProfile::query()->where('player_id', $playerId)->value('random_seed');
         $seed = $seed === null ? null : (int) $seed;

@@ -3,11 +3,13 @@
 namespace Modules\AI\Domain\Decision;
 
 /**
- * A fleet this account can move off a threatened planet to another of its own.
+ * A fleet this account can move off a threatened planet.
  *
- * The destination is another planet the account already owns, so the save needs
- * no hostile target and no moon: a deployment between own planets is the classic
- * safe save, and it is what the second planet a colony provides finally enables.
+ * The ordinary save is a deployment to another planet the account owns. When it
+ * owns no other body (and no moon), the fallback is a harvest-save: the whole
+ * fleet rides a recycle mission to a host debris field, so it is in the air with
+ * no second planet required. A non-zero harvest coordinate marks that fallback
+ * (destinationPlanetId is then 0).
  */
 readonly class QueueableFleetSave
 {
@@ -16,6 +18,9 @@ readonly class QueueableFleetSave
         public int $destinationPlanetId,
         public int $missionType,
         public int $shadowDestinationPlanetId = 0,
+        public int $harvestGalaxy = 0,
+        public int $harvestSystem = 0,
+        public int $harvestPosition = 0,
     ) {
     }
 }
