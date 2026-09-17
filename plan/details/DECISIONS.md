@@ -2125,3 +2125,13 @@ So the sidecar is a thin Python 3.13 image carrying only the psychsim source; no
 **Proven by running** (17 September 2026): `psychsim/examples/forward_planning.py` runs end-to-end
 headless in a stock `python:3.13-slim` container with only the repo on `PYTHONPATH` — agents plan
 and step with no third-party import. The sidecar therefore needs no numpy/scipy/Qt image.
+
+### PsychSim sidecar ships and deploys (17 September 2026)
+
+Wave 3.2 is built, committed and running: `ogamex-ai-cognition-psychsim-1`
+(`:8094`, healthy) serves `/health` and `/evaluate`, where `/evaluate` runs the
+library's two-agent game-theory ToM pattern at depth 0 or 1 and returns each
+agent's decision. The image is `python:3.13-slim` + the pinned source + a stdlib
+HTTP server — no numpy/scipy/Qt. Wave 3.3 (module driver `PsychSimSocialCognition`
+behind `Contracts\SocialCognition`) and 3.4 (the OGame social-exchange consumer)
+are the remaining P7-003 work.
