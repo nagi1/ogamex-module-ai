@@ -2,9 +2,11 @@
 """Headless PsychSim sidecar: one bounded Theory-of-Mind step over HTTP.
 
 The module owns the OGame-to-PsychSim mapping; this service owns only the
-decision-theoretic step. It runs the library's own game-theory ToM pattern (two
-agents in a Chicken-style dilemma, each reasoning about the other at depth 1) and
-returns the action each agent chose on each step. Nothing here names a fleet,
+decision-theoretic step. It runs a sequential cooperation dilemma: the account
+decides first whether to cooperate, then the counterparty answers holding a
+depth-one mental model of the account. The answer is the account's depth-one
+decision — cooperate when it models the counterparty as not exploiting its
+cooperation, defect when it models exploitation. Nothing here names a fleet,
 resource or promise, and the served process has no provider, embedding or Qt.
 """
 
@@ -17,78 +19,72 @@ from psychsim.pwl import equalRow, makeTree, rewardKey, setToConstantMatrix
 from psychsim.world import World
 
 NOT_DECIDED = 'none'
-WENT_STRAIGHT = 'straight'
-SWERVED = 'swerved'
+COOPERATE = 'cooperate'
+DEFECT = 'defect'
 
-PAYOFF = {
-    'sucker': -1.0,
-    'temptation': 1.0,
-    'mutual': 0.0,
-    'punishment': -1000.0,
-    'invalid': -10000.0,
-}
+# Payoff cells, authored by the module's OGame-to-PsychSim mapping contract.
+COOPERATION_PAYOFF = 2.0    # both cooperate
+SUCKER_PAYOFF = -1.0        # cooperate while the counterparty defects
+MUTUAL_DEFECT_PAYOFF = 0.0  # both defect
+ACCOUNT_TEMPTATION = 3.0    # the account's own incentive to defect on a cooperator
+INVALID_PAYOFF = -10000.0   # deciding before the counterparty's move is not a play
 
 
-def reward_tree(agent, my_dec, other_dec):
-    """The proven game-theory payoff matrix from the library's own example."""
+def reward_tree(agent, mine, theirs, temptation):
+    """Payoff for ``agent`` as a function of both decisions."""
     key = rewardKey(agent.name)
-    return makeTree({'if': equalRow(my_dec, NOT_DECIDED),
-                     True: setToConstantMatrix(key, PAYOFF['invalid']),
-                     False: {'if': equalRow(other_dec, NOT_DECIDED),
-                             True: setToConstantMatrix(key, PAYOFF['invalid']),
-                             False: {'if': equalRow(my_dec, SWERVED),
-                                     True: {'if': equalRow(other_dec, SWERVED),
-                                            True: setToConstantMatrix(key, PAYOFF['mutual']),
-                                            False: setToConstantMatrix(key, PAYOFF['sucker'])},
-                                     False: {'if': equalRow(other_dec, SWERVED),
-                                             True: setToConstantMatrix(key, PAYOFF['temptation']),
-                                             False: setToConstantMatrix(key, PAYOFF['punishment'])}}}})
+    return makeTree({'if': equalRow(mine, NOT_DECIDED),
+                     True: setToConstantMatrix(key, INVALID_PAYOFF),
+                     False: {'if': equalRow(theirs, NOT_DECIDED),
+                             True: setToConstantMatrix(key, INVALID_PAYOFF),
+                             False: {'if': equalRow(mine, COOPERATE),
+                                     True: {'if': equalRow(theirs, COOPERATE),
+                                            True: setToConstantMatrix(key, COOPERATION_PAYOFF),
+                                            False: setToConstantMatrix(key, SUCKER_PAYOFF)},
+                                     False: {'if': equalRow(theirs, COOPERATE),
+                                             True: setToConstantMatrix(key, temptation),
+                                             False: setToConstantMatrix(key, MUTUAL_DEFECT_PAYOFF)}}}})
 
 
 def run(request):
-    """Step a two-agent ToM dilemma ``steps`` times and return each decision.
+    """Answer whether the account cooperates given the counterparty's ``temptation``.
 
-    ``request`` is ``{"steps": int, "depth": int}``; ``depth`` 0 keeps only the
-    true model, ``depth`` 1 lets each agent model the other.
+    ``temptation`` is the counterparty's payoff for defecting on a cooperator. The
+    account moves first and the counterparty responds, reasoning about the account at
+    depth one, so the account's own decision is the depth-one theory-of-mind stance:
+    it defects exactly when it models the counterparty as exploiting its cooperation.
     """
-    steps = max(1, min(10, int(request.get("steps", 1))))
-    depth = max(0, min(1, int(request.get("depth", 0))))
+    temptation = float(request.get("temptation", 1.0))
 
     world = World()
-    agent1 = Agent('Agent 1')
-    world.addAgent(agent1)
-    agent2 = Agent('Agent 2')
-    world.addAgent(agent2)
+    account = Agent('Account')
+    world.addAgent(account)
+    counterparty = Agent('Counterparty')
+    world.addAgent(counterparty)
 
     decisions = []
-    for agent in (agent1, agent2):
+    for agent in (account, counterparty):
         agent.setAttribute('discount', 1)
-        agent.setHorizon(1)
-        dec = world.defineState(agent.name, 'decision', list, [NOT_DECIDED, WENT_STRAIGHT, SWERVED])
+        agent.setHorizon(3)
+        dec = world.defineState(agent.name, 'decision', list, [NOT_DECIDED, COOPERATE, DEFECT])
         world.setFeature(dec, NOT_DECIDED)
         decisions.append(dec)
 
-        action = agent.addAction({'verb': '', 'action': 'go straight'})
-        world.setDynamics(dec, action, makeTree(setToConstantMatrix(dec, WENT_STRAIGHT)))
-        action = agent.addAction({'verb': '', 'action': 'swerve'})
-        world.setDynamics(dec, action, makeTree(setToConstantMatrix(dec, SWERVED)))
+        cooperate = agent.addAction({'verb': '', 'action': 'cooperate'})
+        world.setDynamics(dec, cooperate, makeTree(setToConstantMatrix(dec, COOPERATE)))
+        defect = agent.addAction({'verb': '', 'action': 'defect'})
+        world.setDynamics(dec, defect, makeTree(setToConstantMatrix(dec, DEFECT)))
 
-    agent1.setReward(reward_tree(agent1, decisions[0], decisions[1]), 1)
-    agent2.setReward(reward_tree(agent2, decisions[1], decisions[0]), 1)
+    account.setReward(reward_tree(account, decisions[0], decisions[1], ACCOUNT_TEMPTATION), 1)
+    counterparty.setReward(reward_tree(counterparty, decisions[1], decisions[0], temptation), 1)
 
-    world.setOrder([{agent1.name, agent2.name}])
+    # The account moves first; the counterparty answers with a depth-one model of it.
+    world.setOrder([{account.name}, {counterparty.name}])
+    world.setMentalModel(counterparty.name, account.name, Distribution({account.get_true_model(): 1}))
 
-    if depth >= 1:
-        world.setMentalModel(agent1.name, agent2.name, Distribution({agent2.get_true_model(): 1}))
-        world.setMentalModel(agent2.name, agent1.name, Distribution({agent1.get_true_model(): 1}))
+    world.step()
 
-    result = []
-    for _ in range(steps):
-        world.step()
-        for agent, dec in zip((agent1, agent2), decisions):
-            result.append({'agent': agent.name, 'action': world.getFeature(dec, unique=True)})
-
-    return {'decisions': result}
+    return {'decision': world.getFeature(decisions[0], unique=True)}
 
 
 class Handler(BaseHTTPRequestHandler):

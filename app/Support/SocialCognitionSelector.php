@@ -9,6 +9,8 @@ use Modules\AI\Enums\AiCognitionMode;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
 use Modules\AI\Infrastructure\Cognition\FatimaSocialCognition;
 use Modules\AI\Infrastructure\Cognition\HybridSocialCognition;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
+use Modules\AI\Infrastructure\Cognition\PsychSimSocialCognition;
 
 /**
  * Chooses the social-cognition engine from module configuration.
@@ -26,7 +28,18 @@ class SocialCognitionSelector
 
         // The affect selector already reports an unrecognised driver name, so this
         // selector stays silent to avoid logging the same misconfiguration twice.
-        if ($mode === AiCognitionMode::Native || $driver !== AiCognitionDriver::Fatima) {
+        if ($mode === AiCognitionMode::Native) {
+            return app(NativeSocialCognition::class);
+        }
+
+        // PsychSim only ever restrains an acceptance, so its adapter is already the hybrid
+        // shape — native runs first, the driver withholds. External and hybrid both resolve
+        // to that one adapter rather than a second combiner.
+        if ($driver === AiCognitionDriver::PsychSim) {
+            return $this->psychsim();
+        }
+
+        if ($driver !== AiCognitionDriver::Fatima) {
             return app(NativeSocialCognition::class);
         }
 
@@ -45,6 +58,18 @@ class SocialCognitionSelector
         return app()->makeWith(FatimaSocialCognition::class, [
             'fallback' => app(NativeSocialCognition::class),
             'session' => app(FatimaCognitionSession::class),
+        ]);
+    }
+
+    private function psychsim(): SocialCognition
+    {
+        return app()->makeWith(PsychSimSocialCognition::class, [
+            'fallback' => app(NativeSocialCognition::class),
+            'client' => app()->makeWith(PsychSimClient::class, [
+                'circuit' => app()->makeWith(DriverCircuitBreaker::class, [
+                    'driver' => AiCognitionDriver::PsychSim->value,
+                ]),
+            ]),
         ]);
     }
 }

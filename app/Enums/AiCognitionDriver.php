@@ -13,4 +13,5 @@ enum AiCognitionDriver: string
 {
     case Native = 'native';
     case Fatima = 'fatima';
+    case PsychSim = 'psychsim';
 }

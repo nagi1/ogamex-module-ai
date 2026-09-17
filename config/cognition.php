@@ -119,4 +119,10 @@ return [
         // to a single figure on the driver's scale.
         'rapport_scale' => (float) env('AI_COGNITION_FATIMA_RAPPORT_SCALE', 10.0),
     ],
+
+    'psychsim' => [
+        'base_url' => env('AI_COGNITION_PSYCHSIM_URL', 'http://host.docker.internal:8094'),
+        'connect_timeout_seconds' => (int) env('AI_COGNITION_PSYCHSIM_CONNECT_TIMEOUT_SECONDS', 2),
+        'timeout_seconds' => (int) env('AI_COGNITION_PSYCHSIM_TIMEOUT_SECONDS', 5),
+    ],
 ];
