@@ -2104,3 +2104,24 @@ a build ... Expecting null not to be null" — a pre-existing test-isolation iss
 regression. Four earlier pre-existing full-suite gaps surfacing on the same quality run were fixed
 in this session (throttle-mine assertion + replay fixture + raid `PlanetService` import + the
 mine-percent stale-energy read). The reserve-floor ordering failure is left for its slice owner.
+
+### PsychSim spike resolved (17 September 2026)
+
+The Wave 3.1 feasibility pins are closed, by reading the actual source (`usc-psychsim/psychsim`,
+MIT, `setup.py` has no `install_requires`):
+
+- **Headless entry point** is the library API — `psychsim.world.World`, `psychsim.agent.Agent`,
+  `psychsim.pwl`, `psychsim.reward` — never `python -m psychsim` (that is `__main__.py`, the PyQt5 GUI).
+- **Undeclared runtime imports**: the core (`world`, `agent`, `pwl`, `probability`, `reward`,
+  `action`, `graph`) is **pure Python + stdlib — zero third-party dependencies**. `numpy` appears
+  only in `helper_functions.py`, which no core module imports. `PyQt5`/`ui` is imported only by
+  `__main__.py` and a silent `try/except` in `world.py` (the `diagram` attribute stays None), so a
+  headless import never needs Qt.
+- **Python 3.13**: compatible — `agent.py`'s `cStringIO` is a Python-2 `try/except ImportError`
+  fallback to `io`, and the core has no C extensions to recompile.
+
+So the sidecar is a thin Python 3.13 image carrying only the psychsim source; no numpy/scipy/Qt.
+
+**Proven by running** (17 September 2026): `psychsim/examples/forward_planning.py` runs end-to-end
+headless in a stock `python:3.13-slim` container with only the repo on `PYTHONPATH` — agents plan
+and step with no third-party import. The sidecar therefore needs no numpy/scipy/Qt image.

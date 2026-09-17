@@ -61,3 +61,19 @@ services:
       start_period: 30s
       retries: 3
     restart: unless-stopped
+
+  # Bounded Theory-of-Mind social stance behind Modules\AI\Contracts\SocialCognition. The core is
+  # pure Python + stdlib, so the image carries only the pinned source and a stdlib HTTP server.
+  psychsim:
+    build:
+      context: ./psychsim
+    image: ogamex-ai-cognition-psychsim:1.0.0
+    ports:
+      - "${AI_PSYCHSIM_BIND:-0.0.0.0}:${AI_PSYCHSIM_PORT:-8094}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
