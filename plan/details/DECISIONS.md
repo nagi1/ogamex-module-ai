@@ -2166,3 +2166,15 @@ fleet on the way home or an ally in bound, and flying into it is a ninja, not a 
 candidate action (`AiCandidateActionType::Phalanx`) scheduled as its own work item (`AiWorkKind::Phalanx`)
 and executed like the other queue actions. Verified with `tests/Feature/SensorPhalanxTest.php` (5 tests)
 and a clean Gate 2 pass.
+
+### RV-009 — jump gate ships: move the save between own moons instead of flying it (18 September 2026)
+
+The account now uses the host's jump gate. `FacilityChain` proposes the `jump_gate` on a moon only once
+the account owns two moons (a gate is a destination pair; one moon is low value), with the host's
+requirement graph still putting the `lunar_base` first. `QueueableFleetSavePlanner` prefers the jump over
+a flight when the origin is a gated moon not on cooldown and another gated moon is eligible and free of an
+inbound hostile; the save carries `jumpGatePlanetId` and `QueueAiFleetSaveAction` transfers the transferable
+fleet through `JumpGateService::transferShips` + `setCooldown` instead of dispatching a deployment. A
+cooldown-blocked jump falls back to the flight. Verified with `tests/Feature/JumpGateTest.php` (5 tests),
+the existing fleetsave suites (FleetSavePlannerTest, SaveDepthTest, ProactiveSaveTest) and a clean Gate 2
+pass.
