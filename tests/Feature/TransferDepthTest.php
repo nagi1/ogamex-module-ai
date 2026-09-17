@@ -107,7 +107,6 @@ test('the ferry dispatches a transport mission over the host path', function ():
 // planet, the reverse direction of the need-driven ferry (E9/X2).
 test('a planet near its cap ships its surplus to the best-developed body', function (): void {
     transferProfile($this->currentUserId);
-    $this->planetAddUnit('large_cargo', 8);
     // The homeworld is the more developed body: it stays the drop.
     $this->planetSetObjectLevel('solar_plant', 20);
 
@@ -119,6 +118,8 @@ test('a planet near its cap ships its surplus to the best-developed body', funct
     $colony->updateResourceProductionStats(false);
     $colony->updateResourceStorageStats(false);
     $colony->addResources(new Resources(120_000, 120_000, 0));
+    // The cargo rides with the source: a surplus ferry leaves from where the hulls are.
+    $colony->addUnit('large_cargo', 8);
 
     $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
 
@@ -136,20 +137,8 @@ test('a source with no cargo hull cannot ferry', function (): void {
     $this->planetSetObjectLevel('crystal_store', 10);
     $this->planetSetObjectLevel('deuterium_store', 10);
 
-    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
-    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
-
-    $result = app(QueueAiTransfer::class)->handle(
-        $this->currentUserId,
-        $plan->sourcePlanetId,
-        $plan->targetPlanetId,
-        $plan->metal,
-        $plan->crystal,
-        $plan->deuterium,
-    );
-
-    expect($result->successful)->toBeFalse()
-        ->and($result->reason)->toBe(AiQueueActionReason::NoTransportFleet->value);
+    // No cargo anywhere: the planner does not publish a ferry that can never fly.
+    expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
 // The intent arm: a scheduled transfer carries its source, target and shipment, and the executor
@@ -220,11 +209,7 @@ test('a combat-only fleet cannot ferry', function (): void {
     // A hull with no cargo hold is never taken: the ferry never moves the combat fleet.
     $this->planetAddUnit('light_fighter', 1);
 
-    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
-    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
-
-    expect(app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $plan->targetPlanetId, $plan->metal, $plan->crystal, $plan->deuterium)->reason)
-        ->toBe(AiQueueActionReason::NoTransportFleet->value);
+    expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
 // A work item runs minutes after the session quoted the shipment, and at this game speed the source
@@ -331,23 +316,21 @@ test('a ferry the host refuses for fuel is reported, not thrown', function (): v
 // A hull with no cargo hold at all is skipped by the ferry loop rather than counted as capacity.
 test('a hull with no cargo hold is never taken on a ferry', function (): void {
     transferProfile($this->currentUserId);
-    transferTarget($this->secondPlanetService);
+    $targetId = transferTarget($this->secondPlanetService);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetSetObjectLevel('metal_store', 10);
     $this->planetSetObjectLevel('crystal_store', 10);
     $this->planetSetObjectLevel('deuterium_store', 10);
+    // A hull with no cargo hold is skipped by the dispatch loop, never counted as capacity.
     $this->planetAddUnit('solar_satellite', 1);
-
-    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
-    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
 
     expect(app(QueueAiTransfer::class)->handle(
         $this->currentUserId,
-        $plan->sourcePlanetId,
-        $plan->targetPlanetId,
-        $plan->metal,
-        $plan->crystal,
-        $plan->deuterium,
+        $this->currentPlanetId,
+        $targetId,
+        100_000,
+        100_000,
+        0,
     )->reason)->toBe(AiQueueActionReason::NoTransportFleet->value);
 });
 
@@ -392,6 +375,7 @@ test('a homeworld shortfall is funded from the colony', function (): void {
     transferProfile($this->currentUserId);
     $homeId = transferTarget($this->planetService);
     $this->secondPlanetService->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->secondPlanetService->addUnit('large_cargo', 8);
 
     $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
 

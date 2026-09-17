@@ -11,6 +11,7 @@ use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 
 /**
  * Whether this account should ferry resources from one of its bodies to another, and which.
@@ -76,7 +77,7 @@ class QueueableTransferPlanner
                 continue;
             }
 
-            $source = $this->source($planets, $target, $need);
+            $source = $this->source($planets, $target, $need, $player);
             if ($source === null) {
                 continue;
             }
@@ -90,7 +91,7 @@ class QueueableTransferPlanner
             ]);
         }
 
-        return $this->surplus($planets);
+        return $this->surplus($planets, $player);
     }
 
     /**
@@ -101,7 +102,7 @@ class QueueableTransferPlanner
      *
      * @param array<PlanetService> $planets
      */
-    private function surplus(array $planets): ?QueueableTransfer
+    private function surplus(array $planets, PlayerService $player): ?QueueableTransfer
     {
         $drop = $this->dropBody($planets);
         if ($drop === null) {
@@ -115,7 +116,7 @@ class QueueableTransferPlanner
 
             $floor = $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS);
             $shipment = $this->aboveFloor($source, $floor, $source->getPlanetType() === PlanetType::Moon);
-            if (!$this->worthShipping($shipment)) {
+            if (!$this->worthShipping($shipment) || !$this->hasCargo($source, $player)) {
                 continue;
             }
 
@@ -235,7 +236,7 @@ class QueueableTransferPlanner
      *
      * @param array<PlanetService> $planets
      */
-    private function source(array $planets, PlanetService $target, Resources $need): ?PlanetService
+    private function source(array $planets, PlanetService $target, Resources $need, PlayerService $player): ?PlanetService
     {
         foreach ($planets as $source) {
             if ($source->getPlanetId() === $target->getPlanetId()) {
@@ -254,12 +255,23 @@ class QueueableTransferPlanner
                 $need->deuterium->get() > 0 ? $need->deuterium->get() + $floor->deuterium->get() : 0,
             );
 
-            if ($source->hasResources($required)) {
+            if ($source->hasResources($required) && $this->hasCargo($source, $player)) {
                 return $source;
             }
         }
 
         return null;
+    }
+
+    /**
+     * A ferry needs a hull with a hold: a source with no cargo ships can never fly, so the planner
+     * does not publish that transfer. `ponytail:` asks "any cargo", not "enough" — an under-supplied
+     * source still refuses at dispatch (`NoTransportFleet`), bounded by the account building cargo;
+     * the upgrade is comparing `getTotalCargoCapacity` to the shipment here.
+     */
+    private function hasCargo(PlanetService $source, PlayerService $player): bool
+    {
+        return $source->getShipUnits()->getTotalCargoCapacity($player) > 0;
     }
 
     private function worthShipping(Resources $need): bool

@@ -2187,3 +2187,40 @@ live AgentOS sidecar (10 trials, 30 facts per counterparty, 20-fact cut): extern
 required-fact recall 70% → 100% but drops newest-fact survival 10/10 → 1/10 — substitution, not
 addition — and hybrid mode keeps newest-fact survival at 10/10 with every decision identical to native
 at both amounts. Native retrieval still wins, so 7B stays disabled and the row is closed on evidence.
+
+### P7-001 — 7A ordinary-universe consultation is blocked on three external inputs (18 September 2026)
+
+P7-001 was claimed and investigated against the live lane (grand cohort: `mode=observe`,
+`model=deepseek-flash`, the six campaign triggers allowed) and the host. It is blocked, not
+un-deferred: the two unbuilt events have no caller, and the shape change has no evidence.
+
+- **War declaration** has no host seam: a grep of the host `app/` for `declare-war` / `start-war` /
+  `DeclareWar` finds nothing, so there is no event to fire a `war_declaration` trigger on. Building
+  one would be a host change (a separate paired PR), not module work.
+- **New colony** has no module observation: the colony is planned (`QueueableColonyPlanner`) and
+  dispatched (`QueueAiColonyAction`), but the landing is a host mission return the module never
+  observes, so there is no point at which a `new_colony` trigger could fire.
+- **The ordinary-universe shape change** (de-campaigning `RequestCampaignConsultationAction` /
+  `BuildCampaignConsultationBriefAction`) is dead machinery under gate 2 until one of the two callers
+  exists, and Package 7's evidence gate — a review record naming a player-visible gap with its
+  baseline figure — is recorded as owner-supplied.
+
+Until the owner supplies a war seam, a colony-landing observation, or the evidence record, the
+deterministic pre-LLM baseline is complete and the only remaining `ready` rows are provenance
+(`RP-*`, do-not-start), `RV-011` (needs a named consumer), `RV-012` (needs a confidence source in
+the brief) and `RV-013` (cut).
+
+### Transfer planner ships only from a body that can carry it (18 September 2026)
+
+A live read of the grand cohort (2 h window) found 274 `no_transport_fleet` refusals — the largest
+refusal class — every one a surplus ferry the planner scheduled from a near-cap colony that owns no
+cargo ships (the account's cargo sits on the homeworld). The dispatch adapter already refused the
+flight safely, so nothing was lost but a work item and a receipt each session: the same unflyable
+ferry was re-planned forever.
+
+The planner now gates both source passes on the host's own answer — the source must own at least one
+cargo-capable hull (`UnitCollection::getTotalCargoCapacity > 0`) — before publishing a transfer, so
+an unflyable ferry is never planned. The dispatch refusal stays as the safety net for cargo that
+leaves between planning and dispatch. `tests/Feature/TransferDepthTest.php` updated (5 tests) to the
+new contract: a cargo-less or combat-only source is not planned, and the dispatch loop still skips
+hulls with no hold.
