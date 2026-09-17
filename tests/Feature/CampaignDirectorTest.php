@@ -105,3 +105,31 @@ test('a resolved campaign is never advanced again', function (): void {
 test('the advance command reports the campaigns it advanced', function (): void {
     $this->artisan('ai:advance-campaigns')->assertSuccessful();
 });
+
+test('the faction climbs one rung per pass while the campaign is active', function (): void {
+    $campaign = campaign(now()->subHour()->toImmutable(), now()->addHour()->toImmutable());
+    objective($campaign->id, $this->currentPlanetId);
+    objective($campaign->id, $this->createForeignPlanet()->getPlanetId());
+
+    expect(advance())->toBe(1)
+        ->and($campaign->refresh()->faction_momentum)->toBe(1)
+        ->and($campaign->state)->toBe(AiCampaignState::Active);
+});
+
+test('a campaign is lost to the faction when its momentum tops the ladder first', function (): void {
+    $campaign = campaign(now()->subHour()->toImmutable(), now()->addHour()->toImmutable());
+    objective($campaign->id, $this->currentPlanetId);
+    $campaign->update(['faction_momentum' => 1]);
+
+    expect(advance())->toBe(1)
+        ->and($campaign->refresh()->state)->toBe(AiCampaignState::FactionWon);
+});
+
+test('a completed ladder resolves before the faction tops out', function (): void {
+    $campaign = campaign(now()->subHour()->toImmutable(), now()->addHour()->toImmutable());
+    objective($campaign->id, $this->currentPlanetId)->update(['completed_at' => now()]);
+    $campaign->update(['faction_momentum' => 1]);
+
+    expect(advance())->toBe(1)
+        ->and($campaign->refresh()->state)->toBe(AiCampaignState::Resolved);
+});

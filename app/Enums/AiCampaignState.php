@@ -8,4 +8,5 @@ enum AiCampaignState: int
     case Active = 2;
     case Resolved = 3;
     case Failed = 4;
+    case FactionWon = 5;
 }

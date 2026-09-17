@@ -15,6 +15,7 @@ use Modules\AI\Enums\AiCampaignState;
  * @property AiCampaignState $state
  * @property Carbon|null $starts_at
  * @property Carbon|null $ends_at
+ * @property int $faction_momentum
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
@@ -23,7 +24,7 @@ class AiCampaign extends Model
 {
     protected function casts(): array
     {
-        return ['state' => AiCampaignState::class, 'starts_at' => 'datetime', 'ends_at' => 'datetime'];
+        return ['state' => AiCampaignState::class, 'starts_at' => 'datetime', 'ends_at' => 'datetime', 'faction_momentum' => 'integer'];
     }
 
     /**

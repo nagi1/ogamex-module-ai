@@ -1965,3 +1965,105 @@ metal, no crystal or deuterium) for accounts 12, 17 and 18, an `energy_technolog
 account whose crystal is capped instead, and the ordinary `metal_mine`/`storage` steps for the
 non-capped accounts — unchanged. Tests, quality and coverage gates were deliberately not run
 (owner: run later).
+
+### Owner direction 17 September 2026 — every `deferred` row moves to `todo`
+
+Owner direction: mark **all** `deferred` rows `todo` so the whole backlog is visible and startable
+in the task DB, and report the full status. Twenty-three rows moved from `deferred` to `todo`
+(`DEF-003`, `RP-001/003/006/008/012/013/014/015/017/018/020/021/022/023`, `PVE-001/002`,
+`P7-001/002/003`, `RV-011/012/013`); none had dependencies, so all twenty-three now sit in the
+`ready` view. `RV-008`/`RV-009` stay `blocked` (no cohort moon) and 108 rows stay `done`.
+
+The status change is mechanical and reversible; **it does not clear the gates the audits recorded**,
+and each un-deferred row carries that warning in its `notes`:
+
+- **`RP-001…023` (14 rows) — do not start.** The per-repo residue audit closed them as provenance:
+  every mechanism those repos describe is already a `WP-*` slice. They are now `ready` for
+  visibility only; re-defer unless the owner explicitly re-opens a repo.
+- **`RV-013` — still cut.** The host self-battle seam (`AttackMission::checkOwnPlanet` refusing
+  self-attacks) does not exist; un-deferred for visibility only.
+- **`DEF-003`, `PVE-001/002`, `P7-001/002/003`, `RV-011/012` — gate as recorded.** Alliance/ACS life
+  waits on the Package 6 cooperative universe with a disclosed cohort; the PvE and 7A/7C rows wait
+  on their owner-supplied evidence or driver; 7B needs a held-out review; 7A/`RV-012` need the
+  consultation lane enabled (`mode` is still `off`); `RV-011` needs a named consumer.
+
+The `ready` view is therefore no longer a statement that the work should start — it is a statement
+of what is unblocked. The gate text lives in each row's `notes` and in
+[`specs/reopened-repo-value.md`](specs/reopened-repo-value.md) and
+[`research/repos/WORK-PACKAGE.md`](research/repos/WORK-PACKAGE.md).
+
+### RV-008 / RV-009 genuinely unblocked — two cohort moons created (17 September 2026)
+
+Owner direction: unblocking a row means solving its blocker, not flipping its status. `RV-008`
+(sensor phalanx) and `RV-009` (jump gate) were gated on a cohort account owning a moon — and
+`RV-005` had found the universe's only moon was outside the cohort. Neither row had any other
+blocker, so a moon was made to exist.
+
+Two moons were created for admitted account **user 13** through the host's own
+`PlanetServiceFactory::createMoonForPlanet()` — the same call `AttackMission` makes when a fleet
+crash's moon chance succeeds, so the resulting game state is exactly what ordinary play would
+produce:
+
+- `planets.id = 63` at **1:8:8**, `field_max = 6`, diameter 8366.
+- `planets.id = 64` at **8:365:4**, `field_max = 6`, diameter 8944.
+
+Six fields each (1 base + 5 for user 13's character class) is enough for the whole lunar chain:
+`QueueableBuildingPlanner::canQueue()` accepts `lunar_base` on the moon (`= 1`), and
+`objectRequirementsMetWithQueue()` makes `sensor_phalanx` (needs `lunar_base` 1) and `jump_gate`
+(needs `lunar_base` 1 + `hyperspace_technology` 7, which user 13 has at 8) legal once `lunar_base`
+level 1 stands. `RV-005`'s precondition is therefore satisfied, and `RV-008`/`RV-009` are unblocked
+in substance, not just in status. The universe is otherwise unchanged: this is a live-state edit to
+the grand DB, made on explicit owner direction, and `planets.id = 29` (user 1) is untouched.
+
+### Owner mandate 17 September 2026 — Package 6/7 run: cooperative universe, flash lanes, PsychSim
+
+Owner direction: open Package 6, enable the provider lanes for the run, finish **PsychSim fully
+(sidecar and all)**, and work the previously gated eight autonomously. Enabling is delegated to the
+agent ("you have control"). Budget: **DeepSeek $5 total (flash and pro) — flash only, pro avoided;
+OpenAI $5 on `gpt-5.6-luna`; every provider run off-peak** (DeepSeek peak is 01:00–04:00 and
+06:00–10:00 UTC, Mon–Fri, billed 2×). The live cohort calling the AI is an accepted experiment
+within that budget. The lanes are switched **back off when the run ends**.
+
+Wave 0 applied (`local-docker-dev/docker-compose.grand.yml`, one `--force-recreate`):
+
+- `universe_mode = cooperative` (host setting, `SettingsService::setUniverseMode`).
+- `AI_LANGUAGE_ENABLED=true`, `AI_LANGUAGE_MODEL=deepseek-flash`.
+- `AI_CAMPAIGN_CONSULTATION_MODE=observe`, `AI_CAMPAIGN_CONSULTATION_MODEL=deepseek-flash`.
+- `AI_ROUTING_ENABLED` left off, so the single flash pair answers (no pro ladder).
+
+Spend baseline before enabling: **$0.00 today, 0 provider rows**. The plan of record is
+[`specs/package-6-7-execution-plan.md`](specs/package-6-7-execution-plan.md).
+
+### Package 6/7 run — decisions settled (17 September 2026)
+
+Follow-up to the mandate above: the open design questions are closed and the plan is ready to run.
+
+- **`RV-011` (game stage).** Build a read-only `GamePhaseTool` scoped to the **consulting account**
+  (`$trace->perception->playerId` — `AiCampaign` has no owning account), registered in
+  `OgameCampaignConsultationAgent::tools()`. It reports **raw host-read signals** (the account's rank
+  and its completed-research fraction) and lets the model judge the stage; the module keeps **no**
+  early/mid/late cut-offs, which is what keeps Gate 1 clean (the audit refused the source repo's
+  hardcoded research levels).
+- **`RV-013` (moonshot).** Stays **cut**: no host self-battle seam.
+- **`P7-002` (semantic recall).** No deploy decision needed — the AgentOS sidecar is **already
+  running and healthy** (`ogamex-ai-cognition-agentos-1`, :8093), so the held-out review is a **local
+  call with zero provider tokens**. Run `scripts/e2e-agentos-recall-benchmark.php` and close the row
+  on evidence if native retrieval still wins. The earlier Gate 2 verdict is about *production
+  adoption* on the 2 GB reference profile, not about measuring on this box.
+- **Paid lanes.** Owner rule restated: **ON only while a slice is being tested and its results are
+  needed; OFF once the slice finishes or the run pauses** — applied around each provider slice.
+
+Wave 0 is applied (flash lanes, cooperative universe). Nothing further is blocked on the owner; the
+run starts on the owner's go.
+
+### PVE-001 — campaign momentum ships (17 September 2026)
+
+The cooperative campaign is no longer losable only to the clock: the faction now races the coalition
+up the same declared-stronghold ladder and can win. One counter `ai_campaigns.faction_momentum`
+advances by one rung per `ai:advance-campaigns` pass while the campaign is Active, and a new terminal
+state `AiCampaignState::FactionWon` records the faction topping the ladder before the coalition
+completes it. The counter doubles as the influence bar (one number, not two mechanisms); objective
+ordering (scout → weaken → final stronghold) is the declaration order the counter climbs. Coalition
+completion is checked first, so a ladder finished before the faction tops out still resolves.
+Rewards are unchanged. The race pace is one rung per pass — the operator's pass cadence IS the
+campaign clock (noted with a `ponytail:` ceiling in the action).
