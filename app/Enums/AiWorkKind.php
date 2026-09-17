@@ -17,6 +17,7 @@ enum AiWorkKind: int
     case Transfer = 11;
     case Recycle = 12;
     case SetMinePercent = 13;
+    case Phalanx = 14;
 
     public function actionType(): AiActionType
     {
@@ -27,6 +28,7 @@ enum AiWorkKind: int
             self::FleetSave, self::Spy, self::Raid, self::Expedition, self::Transfer, self::Recycle => AiActionType::DispatchFleet,
             self::Recall => AiActionType::RecallFleet,
             self::SetMinePercent => AiActionType::SetMinePercent,
+            self::Phalanx => AiActionType::PhalanxScan,
             self::BuildFirstBuilding, self::RunSession => AiActionType::QueueBuilding,
         };
     }

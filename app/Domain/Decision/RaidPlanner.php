@@ -7,6 +7,7 @@ use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiRaidExperienceFeature;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiExperienceCase;
+use Modules\AI\Models\AiPhalanxScan;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -74,6 +75,9 @@ class RaidPlanner
 
     /** The wide confirmation the winning launch subset pays for; the screen is one draw per candidate. */
     private const CONFIRM_SAMPLES = 50;
+
+    /** A phalanx scan stays authoritative for the raid decision this long. */
+    private const PHALANX_SCAN_TTL_HOURS = 2;
 
     /**
      * The account's own player, loaded once per planner instance. A skill-pass
@@ -167,6 +171,13 @@ class RaidPlanner
         }
 
         if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
+            return null;
+        }
+
+        // A phalanx scan that saw a fleet arriving at the target is a ninja warning: the
+        // defender has ships on the way home or an ally in bound, so the raid is refused
+        // rather than flown into it (RV-008).
+        if ($this->phalanxRefuses($playerId, $target->getPlanetId())) {
             return null;
         }
 
@@ -553,6 +564,22 @@ class RaidPlanner
             ->value('time_departure');
 
         return $lastAttack === null || (int) $lastAttack <= now()->subHours(self::RAID_COOLDOWN_HOURS)->timestamp;
+    }
+
+    /**
+     * A recent phalanx scan that saw ships arriving at the target refuses the raid: the
+     * defender has a fleet on the way home or an ally in bound, and flying into it is a
+     * ninja, not a raid. The scan is the only window into a fleet the target holds inside
+     * its planet, which the espionage report cannot show.
+     */
+    private function phalanxRefuses(int $playerId, int $targetPlanetId): bool
+    {
+        return AiPhalanxScan::query()
+            ->where('player_id', $playerId)
+            ->where('target_planet_id', $targetPlanetId)
+            ->where('incoming_ship_count', '>', 0)
+            ->where('observed_at', '>=', now()->subHours(self::PHALANX_SCAN_TTL_HOURS))
+            ->exists();
     }
 
     /**

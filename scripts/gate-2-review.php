@@ -31,6 +31,7 @@ const ALLOWED_SINGLE_IMPLEMENTATION = [
     'QueueAiRecall',
     'QueueAiRecycle',
     'QueueAiRaid',
+    'QueueAiPhalanx',
     'QueueAiSpy',
     'QueueAiTransfer',
     'QueueAiMinePercent',

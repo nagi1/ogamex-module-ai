@@ -27,4 +27,6 @@ enum AiQueueActionReason: string
     case PercentRefused = 'percent_refused';
     case AllianceApplied = 'alliance_applied';
     case NoSuitableAlliance = 'no_suitable_alliance';
+    case PhalanxScanned = 'phalanx_scanned';
+    case PhalanxScanRefused = 'phalanx_scan_refused';
 }

@@ -18,6 +18,7 @@ class CandidateActionFactory
         private readonly QueueableTransferPlanner $queueableTransferPlanner,
         private readonly QueueableFleetSavePlanner $queueableFleetSavePlanner,
         private readonly QueueableRecyclePlanner $queueableRecyclePlanner,
+        private readonly QueueablePhalanxPlanner $queueablePhalanxPlanner,
     ) {
     }
 
@@ -36,6 +37,7 @@ class CandidateActionFactory
                 ...$this->eligibleExpeditionCandidates($perception),
                 ...$this->eligibleTransferCandidates($perception),
                 ...$this->eligibleRecycleCandidates($perception),
+                ...$this->phalanxCandidate($perception)->candidates,
                 ...$raidGeneration->candidates,
             ],
             'rejections' => $raidGeneration->rejections,
@@ -281,6 +283,32 @@ class CandidateActionFactory
         return app()->makeWith(CandidateGeneration::class, [
             'candidates' => $candidates,
             'rejections' => $rejections,
+        ]);
+    }
+
+    /**
+     * A phalanx scan is offered when the account owns a moon with a sensor phalanx and a
+     * raid target inside range: the scan runs first, and the raid decision later reads what
+     * it saw. A scan needs no fleet slot — it is a host read, not a dispatch.
+     */
+    private function phalanxCandidate(PerceptionSnapshot $perception): CandidateGeneration
+    {
+        if (!$this->queueablePhalanxPlanner->plan($perception->playerId) instanceof QueueablePhalanx) {
+            return app()->makeWith(CandidateGeneration::class, [
+                'candidates' => [],
+                'rejections' => [],
+            ]);
+        }
+
+        return app()->makeWith(CandidateGeneration::class, [
+            'candidates' => [app()->makeWith(CandidateAction::class, [
+                'type' => AiCandidateActionType::Phalanx,
+                'reason' => AiCandidateReason::PhalanxScanAvailable->value,
+                'parameters' => [],
+                'features' => $this->features(0.5, 0.2, 0.3, 0, $perception->recoveryFactor),
+                'sourceTimestamps' => $perception->sourceTimestamps,
+            ])],
+            'rejections' => [],
         ]);
     }
 

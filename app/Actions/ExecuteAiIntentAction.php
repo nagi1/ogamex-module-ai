@@ -7,6 +7,7 @@ use Modules\AI\Contracts\QueueAiColony;
 use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Contracts\QueueAiMinePercent;
+use Modules\AI\Contracts\QueueAiPhalanx;
 use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiRecycle;
@@ -22,6 +23,8 @@ use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
 use Modules\AI\Domain\Decision\QueueableMinePercent;
 use Modules\AI\Domain\Decision\QueueableMinePercentPlanner;
+use Modules\AI\Domain\Decision\QueueablePhalanx;
+use Modules\AI\Domain\Decision\QueueablePhalanxPlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecycle;
 use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
@@ -112,6 +115,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Raid => $this->raid($workItem, $planetId),
             AiWorkKind::Recycle => $this->recycle($workItem, $planetId),
             AiWorkKind::SetMinePercent => $this->minePercent($workItem, $planetId),
+            AiWorkKind::Phalanx => $this->phalanx($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -423,6 +427,27 @@ class ExecuteAiIntentAction
             app(QueueAiMinePercent::class)->handle($workItem->player_id, $step->planetId, $step->buildingId, $step->percentage),
             ['building_id' => $step->buildingId, 'percentage' => $step->percentage, 'mine_reason' => $step->reason],
             $step->planetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function phalanx(AiWorkItem $workItem, int $planetId): array
+    {
+        $step = $this->fromPayload(QueueablePhalanx::class, [
+            'moonPlanetId' => $planetId,
+            'targetPlanetId' => $workItem->payload[self::PAYLOAD_TARGET_PLANET_ID] ?? null,
+        ]) ?? app(QueueablePhalanxPlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueablePhalanx) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiPhalanx::class)->handle($workItem->player_id, $step->moonPlanetId, $step->targetPlanetId),
+            ['target_planet_id' => $step->targetPlanetId],
+            $step->moonPlanetId,
         ];
     }
 

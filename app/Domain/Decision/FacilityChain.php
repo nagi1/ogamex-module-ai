@@ -6,6 +6,7 @@ use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Calculations\CalculationType;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Enums\PlanetType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 
@@ -50,6 +51,9 @@ class FacilityChain
     /** The resources a planet mines; energy is absent because capacity has its own rule ahead of the chain. */
     private const MINED_RESOURCES = ['metal', 'crystal', 'deuterium'];
 
+    /** The moon station the account wants; module taste, never a source of truth for its requirements. */
+    private const PHALANX_STATION = 'sensor_phalanx';
+
     /** @return list<BuildCandidate> the unmet prerequisites of the one ambition in hand, easiest unlock first */
     public function pending(PlanetService $planet): array
     {
@@ -81,6 +85,16 @@ class FacilityChain
         // raises the ceiling, never named here (R11 publishes the object behind the value).
         foreach ($this->fleetSlotCeilingResearch($planet) as $machineName => $level) {
             $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'slot-ceiling');
+        }
+
+        // A moon the account owns wants its sensor phalanx: the station is module taste, and
+        // the host's own recursive requirement graph puts the lunar base first (RV-008).
+        if ($planet->getPlanetType() === PlanetType::Moon) {
+            $this->addRequirement($planet, self::PHALANX_STATION, 1, $ordered, $producers, 'moon-station');
+
+            foreach (ObjectService::getRecursiveRequirements(self::PHALANX_STATION) as $machineName => $level) {
+                $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'moon-station');
+            }
         }
 
         // A prerequisite requested at several levels appears once per level, so the account climbs
