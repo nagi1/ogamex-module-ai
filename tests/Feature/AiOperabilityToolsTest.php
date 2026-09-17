@@ -270,7 +270,7 @@ test('the pilot report counts outcomes, failures, lateness and provider tokens',
         ->and($report->work)->toBe(['created' => 4, 'completed' => 2, 'retried' => 1, 'stuck' => 1])
         ->and($report->actions)->toBe(['Accepted' => 1, 'Rejected' => 1])
         ->and($report->latencyMinutes)->toEqualCanonicalizing([3.0, 30.0])
-        ->and($report->language)->toBe(['attempts' => 1, 'tokens' => 1_200, 'cost' => 0.0])
+        ->and($report->language)->toBe(['attempts' => 1, 'tokens' => 1_200, 'cached_input_tokens' => 0, 'cache_hit_rate' => 0.0, 'cost' => 0.0])
         ->and($report->feedback)->toBeNull()
         ->and($report->latencyPercentile(50.0))->toBe(3.0)
         ->and($report->latencyPercentile(95.0))->toBe(30.0);

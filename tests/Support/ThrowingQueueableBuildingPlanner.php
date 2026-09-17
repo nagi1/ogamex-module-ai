@@ -4,6 +4,8 @@ namespace Modules\AI\Tests\Support;
 
 use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
+use Modules\AI\Domain\Decision\QueueableResearch;
+use OGame\Services\PlayerService;
 use RuntimeException;
 
 /**
@@ -18,7 +20,7 @@ class ThrowingQueueableBuildingPlanner extends QueueableBuildingPlanner
     {
     }
 
-    public function plan(int $playerId): ?QueueableBuilding
+    public function plan(int $playerId, ?PlayerService $player = null): QueueableBuilding|QueueableResearch|null
     {
         throw app()->makeWith(RuntimeException::class, ['message' => 'test decision failure']);
     }

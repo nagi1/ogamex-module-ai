@@ -250,6 +250,7 @@ class GenerateAiReplyAction
             $this->clock->now(),
             $result->provider,
             $result->model,
+            $result->cachedInputTokens,
         ) !== null;
     }
 

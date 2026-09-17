@@ -42,7 +42,7 @@ class QueueableColonyPlanner
     ) {
     }
 
-    public function plan(int $playerId): ?QueueableColony
+    public function plan(int $playerId, ?PlayerService $player = null): ?QueueableColony
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
         if ($profile === null) {
@@ -53,7 +53,7 @@ class QueueableColonyPlanner
             return null;
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $player ??= $this->playerServiceFactory->make($playerId, true);
         $origin = $this->colonyShipPlanet($player->planets->all());
         if ($origin === null) {
             return null;

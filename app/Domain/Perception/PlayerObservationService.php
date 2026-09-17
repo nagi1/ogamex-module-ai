@@ -99,6 +99,9 @@ class PlayerObservationService
     {
         $state = $this->accountStateResolver->resolve($playerId);
         $active = $state === AiAccountState::Active;
+        // One player for the whole perception: every reader below shares this
+        // instance instead of rebuilding it per call site (~12 rebuilds -> 1).
+        $player = $active ? $this->playerServiceFactory->make($playerId, true) : null;
 
         return [
             'player_id' => $playerId,
@@ -107,40 +110,38 @@ class PlayerObservationService
             // W9-2: the scorer has always read this signal; publish it so a live
             // decision carries the account's real, decaying recovery pressure.
             'recovery_factor' => $active ? $this->recoveryFactor($playerId) : 0.0,
-            'planets' => $state === AiAccountState::Final ? [] : $this->planets($playerId),
+            'planets' => $player === null ? [] : $this->planets($player),
             // A suspended account is not playing, and the host is the authority
             // on that state: a banned or vacationing account is offered nothing
             // rather than a capability it cannot act on, so its session records
             // that it did nothing instead of recording a decision the host
             // would refuse. An account with no planets, and one the host no
             // longer has, are offered nothing for the same reason.
-            'available_actions' => $active ? $this->availableActions($playerId) : [],
+            'available_actions' => $player === null ? [] : $this->availableActions($player),
             // The host's fleet-slot ceiling decides which dispatches may be published: a
             // colony, spy, raid, expedition or transfer the host would refuse for slot
             // exhaustion is never offered (SP8). Reaching the object that raises the
             // ceiling is a host obligation (R11), not a module-side object list.
-            'fleet_slots_free' => $active ? $this->freeFleetSlots($playerId) : 0,
+            'fleet_slots_free' => $player === null ? 0 : $this->freeFleetSlots($player),
             // CL3: a colony is founded only when the account's own production can bring it
             // online — a body the account cannot develop outranks nothing and sits at zero.
-            'colonize_eligible' => $active && $this->canDevelopColony($playerId),
+            'colonize_eligible' => $player !== null && $this->canDevelopColony($player),
             // Enemy intel arrives through the host's own espionage-report
             // messages, never from this module reaching into target state.
-            'target_reports' => $active ? $this->targetReports($playerId) : [],
+            'target_reports' => $player === null ? [] : $this->targetReports($playerId, $player),
             // Inbound fleets are assembled from the host's active fleet missions the same way
             // the fleet movement page does. IncomingFleetIntelService only redacts a row that
             // already exists; it is not the source of the inbound picture.
-            ...$this->inboundThreat($playerId, $active),
-            ...$this->recallState($playerId, $active),
+            ...$this->inboundThreat($playerId, $active, $player),
+            ...$this->recallState($playerId, $active, $player),
         ];
     }
 
     /**
      * The host's own fleet-slot answer, reduced to the free count a dispatch would need.
      */
-    private function freeFleetSlots(int $playerId): int
+    private function freeFleetSlots(PlayerService $player): int
     {
-        $player = $this->playerServiceFactory->make($playerId, true);
-
         return max(0, $player->getFleetSlotsMax() - $player->getFleetSlotsInUse());
     }
 
@@ -153,9 +154,8 @@ class PlayerObservationService
      * host supplies every object and price, so a mod that changes either changes this gate with no
      * module edit.
      */
-    private function canDevelopColony(int $playerId): bool
+    private function canDevelopColony(PlayerService $player): bool
     {
-        $player = $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
 
         $perHour = 0.0;
@@ -204,7 +204,7 @@ class PlayerObservationService
      *
      * @return array<int, array{report_id:int, observed_at:int, expires_at:int, confidence:float, travel_cost:float, activity:bool|null, attack_permitted:bool, score_viable:bool}>
      */
-    private function targetReports(int $playerId): array
+    private function targetReports(int $playerId, PlayerService $player): array
     {
         $now = now();
         $cutoff = $now->copy()->subHours(self::INTEL_TTL_HOURS);
@@ -227,7 +227,6 @@ class PlayerObservationService
             ->keyBy('id');
 
         $nowTimestamp = (int) $now->timestamp;
-        $player = $this->playerServiceFactory->make($playerId, true);
 
         // The public highscore is the one score both sides can see: a target
         // under ~⅕ of ours cannot defend its loot economically, so it is
@@ -238,8 +237,13 @@ class PlayerObservationService
             ? collect()
             : Highscore::query()->whereIn('player_id', $targetUserIds)->get()->keyBy('player_id');
 
+        // One fleet-mission service for the whole report set: each makeWith()
+        // rebuilds it (and the MessageService inside it), and the module reaches
+        // it once per report to price the trip.
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
         return $messages
-            ->map(function (Message $message) use ($reports, $nowTimestamp, $player, $ownScore, $targetScores): array {
+            ->map(function (Message $message) use ($reports, $nowTimestamp, $player, $ownScore, $targetScores, $fleetMissions): array {
                 // The messages column is a foreign key to espionage_reports with
                 // no cascade, so every message here has a report by construction.
                 /** @var EspionageReport $report */
@@ -261,7 +265,7 @@ class PlayerObservationService
                     // A normalized host distance: the planner enforces the exact
                     // fuel cost in its gate, and this lets the scorer prefer the
                     // closer target among what remains (RAID-006).
-                    'travel_cost' => $this->travelCost($player, $report),
+                    'travel_cost' => $this->travelCost($player, $fleetMissions, $report),
                     // The 15-minute activity star is galaxy-visible, so publishing
                     // it here is a legal observation, not a reach into target state.
                     'activity' => $this->targetActivity($report),
@@ -295,10 +299,9 @@ class PlayerObservationService
      * The distance from the account's nearest planet to the report's target,
      * normalized by the host's own galaxy span, as a 0..1 cost (RAID-006).
      */
-    private function travelCost(PlayerService $player, EspionageReport $report): float
+    private function travelCost(PlayerService $player, FleetMissionService $fleetMissions, EspionageReport $report): float
     {
         $target = new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position);
-        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
         $minDistance = null;
         foreach ($player->planets->all() as $planet) {
@@ -316,7 +319,7 @@ class PlayerObservationService
     {
         $target = $this->planetServiceFactory->makeForCoordinate(
             new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position),
-            false,
+            true,
             PlanetType::from((int) $report->planet_type),
         );
 
@@ -333,7 +336,7 @@ class PlayerObservationService
     {
         $target = $this->planetServiceFactory->makeForCoordinate(
             new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position),
-            false,
+            true,
             PlanetType::from((int) $report->planet_type),
         );
 
@@ -349,10 +352,10 @@ class PlayerObservationService
     }
 
     /** @return array<int, array{id:int, resources:array<string, float|int>}> */
-    private function planets(int $playerId): array
+    private function planets(PlayerService $player): array
     {
         $planets = [];
-        foreach ($this->playerServiceFactory->make($playerId, true)->planets->all() as $planet) {
+        foreach ($player->planets->all() as $planet) {
             $planets[] = [
                 'id' => $planet->getPlanetId(),
                 'resources' => [
@@ -377,16 +380,17 @@ class PlayerObservationService
      *
      * @return array<string, bool>
      */
-    private function availableActions(int $playerId): array
+    private function availableActions(PlayerService $player): array
     {
-        $step = $this->queueableBuildingPlanner->plan($playerId);
+        $playerId = $player->getId();
+        $step = $this->queueableBuildingPlanner->plan($playerId, $player);
 
         return [
             AiCapability::Build->value => $step instanceof QueueableBuilding,
             AiCapability::Research->value => $step instanceof QueueableResearch,
-            AiCapability::QueueUnits->value => $this->queueableUnitPlanner->plan($playerId) !== null,
-            AiCapability::Colonize->value => $this->queueableColonyPlanner->plan($playerId) !== null,
-            AiCapability::Spy->value => $this->queueableSpyPlanner->plan($playerId) !== null,
+            AiCapability::QueueUnits->value => $this->queueableUnitPlanner->plan($playerId, $player) !== null,
+            AiCapability::Colonize->value => $this->queueableColonyPlanner->plan($playerId, $player) !== null,
+            AiCapability::Spy->value => $this->queueableSpyPlanner->plan($playerId, $player) !== null,
         ];
     }
 
@@ -406,9 +410,9 @@ class PlayerObservationService
      *     reaction_wake_at:int|null
      * }
      */
-    private function inboundThreat(int $playerId, bool $active): array
+    private function inboundThreat(int $playerId, bool $active, ?PlayerService $player): array
     {
-        if (!$active) {
+        if (!$active || $player === null) {
             return [
                 'fleetsave_eligible' => false,
                 'fleetsave_skip_reason' => null,
@@ -417,7 +421,6 @@ class PlayerObservationService
             ];
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
         $inbound = [];
@@ -445,7 +448,7 @@ class PlayerObservationService
         // to. Offering it otherwise is how a trace claims an action the account cannot take.
         $saveable = $fleetMissions->currentPlayerUnderAttack()
             && $threatening
-            && $this->queueableFleetSavePlanner->plan($playerId) !== null;
+            && $this->queueableFleetSavePlanner->plan($playerId, $player) !== null;
         $seed = AiProfile::query()->where('player_id', $playerId)->value('random_seed');
         $seed = $seed === null ? null : (int) $seed;
 
@@ -511,13 +514,12 @@ class PlayerObservationService
      *
      * @return array{recall_eligible:bool}
      */
-    private function recallState(int $playerId, bool $active): array
+    private function recallState(int $playerId, bool $active, ?PlayerService $player): array
     {
-        if (!$active) {
+        if (!$active || $player === null) {
             return ['recall_eligible' => false];
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
         $deploymentInFlight = FleetMission::query()
             ->where('user_id', $playerId)
             ->where('mission_type', DeploymentMission::getTypeId())

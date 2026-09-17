@@ -334,3 +334,50 @@ baseline these rows are read against — ~430 queries per perception after them,
 
 - **The count is portable, the wall clock is not.** The same statement, interleaved in one process, measures a **45.8 ms median through raw PDO on the application's own handle and 2.5 ms through the query builder** — a stall attaches to whichever call runs after an idle gap, so this box inflates every query count by roughly an order of magnitude. MySQL's own profiler puts the server side at 0.08 ms. Treat 439 queries as the defect and the 20 s as a property of this WSL2 host; measure on the reference VPS before reasoning about seconds.
 - **The module can take a share without a host edit** (`IMPL-045`): the mission map is recomputed per chain instance instead of once per session, and 20 module call sites force a fresh player reload where one read per session would do. That is ours to fix and carries no host-semantics risk, so it goes first.
+
+**Read-back after IMPL-044 (17 September 2026).** Re-measured on the same `build(17, 45)`: **304 → 175 queries**
+(≈42 %). Five redundant-resolution defects were closed, each named by the live backtrace: (1)
+`PlanetListService::all()` re-queried every planet's moon per call — 80 queries — now pairs from the
+loaded moon list; (2) `targetActivity()`/`attackPermitted()` bypassed the planet cache
+(`makeForCoordinate(..., false)`), now cached; (3) `makeForCoordinate()` handed a `planet_id` to the
+resolver and re-read the row it already held, now passes the loaded model; (4) `QueueableSpyPlanner`
+did one report read + one `make($id, true)` per candidate, now one batch read + `makeFromModel`; (5)
+`PlayerObservationService::targetReports()` rebuilt a `FleetMissionService` (and the dummy
+`MessageService` player inside it) per report — 10 builds — now one hoisted service for the set. What
+remains is dominated by the per-owner foreign-target `PlayerService` builds (users + highscores + tech
++ planets per distinct owner — only the user is actually read), the per-planet building-queue read
+(`QueueableBuildingPlanner`, one query per planet), and the per-candidate experience-case read
+(`EconomyUpgrades` → CBR engine, one casebase fetch per building candidate). The literal `IMPL-044`
+memoise of a forced reload is **not** taken: the write-then-reread audit over the 30 host
+forced-reload sites is undone and the saving after the fixes above is small; the planet-list-lazy
+alternative is the lever if the foreign-owner builds must shrink further.
+`PersonaPolicyMechanicsTest`'s full-suite flake is settled by binding a random source that never fires
+the no-op idle override in its sessions.
+
+**Read-back after the session-cost pass (17 September 2026).** A whole-`RunAiSessionAction` read on the
+same account: **30.6 s → ~21 s, 398 → 335 queries**, and then — see below — **→ 6-9.6 s** once the
+deployment's prepared-statement overhead is removed.
+
+**The 45 ms query was prepared statements, not the database.** `SHOW PROFILES` reports 0.101 ms
+server-side for `select 1` against 45 ms app-side: native PDO prepares take three round trips per
+statement over the Docker host gateway. `.env.example` documents `DB_EMULATE_PREPARES=true` for exactly
+this case and `phpunit.xml` already sets it for the tests, so no suite ever showed it. With it set in
+`x-grand-env`, a query costs **0.7-1.2 ms** and a session's DB time falls **14.0 s → 0.34 s**. The query
+cuts below are still real, but they were second-order against a 40× multiplier.
+
+With emulation on, a session is **~97 % PHP** — the raid Monte-Carlo (50 seeded battle simulations per
+surviving espionage report) — and a session that screens no raid finishes in **under 1 s**.
+ The PHP half (13.8 s) was the raid screen, not the
+perception: `RaidPlanner::plan()` sampled all ten visible reports and rejected every one. Closed by
+memoising the defender's moon existence on the battle engine (250 queries), skipping the placeholder
+player's planet read in `PlanetListService` (151 queries), pricing fuel **and** the loot ceiling before
+the screen so a target that cannot pay for the flight is refused without a draw (7.4 s, four of ten
+screens, decision set verified unchanged), and memoising the account's own `PlayerService` per
+`RaidPlanner` instance. Live validation on four grand-test accounts (40 reports): 29 rejected by the
+pre-gate, **0 violations** against the old ordering, `p20Loot <= ceilingLoot` in all 40, and a
+nine-account scan of 81 reports still planned 2 viable raids. Live worker: slow-session avg
+**22.7 s → 14.6 s** (2,436 → 251 slow jobs, 0 errors, 0 failed jobs). The screens that survive are
+targets whose ceiling loot genuinely clears the tier. What remains is dominated by the foreign-target `PlayerService` builds (users + highscores +
+tech + planets per distinct owner, though only the owner's tech is read — the planet-list-lazy lever),
+the per-planet building-queue read (`QueueableBuildingPlanner`, the other agent's file), and the
+per-candidate experience-case read (`EconomyUpgrades` → CBR engine).

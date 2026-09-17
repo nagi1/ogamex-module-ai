@@ -55,6 +55,60 @@ test('settling a reservation releases unused token capacity once while retaining
         ->and(AiUsageBudget::query()->where('scope', AiUsageBudgetScope::Universe)->sole()->reserved_output_tokens)->toBe(30);
 });
 
+test('cached input is recorded, priced at the cached rate and released against the whole input', function (): void {
+    $reservation = app(ReserveAiUsageAction::class)->handle(
+        usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 200, 80),
+        usageBudgetLimits(),
+    );
+    expect($reservation)->not->toBeNull();
+
+    // 120 uncached at $0.15, 80 served from the provider's cache at $0.003 and 30 output at $0.60,
+    // per 1M tokens off-peak (a Sunday, so no multiplier).
+    $expectedCost = (120 * 0.15 + 80 * 0.003 + 30 * 0.60) / 1_000_000;
+
+    $settled = app(SettleAiUsageReservationAction::class)->handle(
+        $reservation->id,
+        120,
+        30,
+        CarbonImmutable::parse('2026-09-13 12:00 UTC'),
+        'deepseek',
+        'deepseek-flash',
+        80,
+    );
+
+    expect($settled?->state)->toBe(AiUsageReservationState::Settled)
+        ->and($settled?->actual_input_tokens)->toBe(120)
+        ->and($settled?->actual_cached_input_tokens)->toBe(80)
+        ->and($settled?->cost)->toEqualWithDelta($expectedCost, 1e-12)
+        // The cached half was billed too, so the release is measured against both halves: 200
+        // reserved minus 200 consumed leaves the budget whole rather than 80 short.
+        ->and(AiUsageBudget::query()->where('scope', AiUsageBudgetScope::Universe)->sole()->reserved_input_tokens)->toBe(200);
+});
+
+test('the input ceiling counts the cached input the provider served', function (): void {
+    $reservation = app(ReserveAiUsageAction::class)->handle(
+        usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 200, 80),
+        usageBudgetLimits(),
+    );
+    expect($reservation)->not->toBeNull();
+
+    // 190 uncached alone fits inside the 200 the reservation holds; the 20 cached tokens that came
+    // with it do not, so the settlement is refused instead of recorded short of what was billed.
+    $refused = app(SettleAiUsageReservationAction::class)->handle(
+        $reservation->id,
+        190,
+        10,
+        CarbonImmutable::parse('2026-09-13 12:00 UTC'),
+        'deepseek',
+        'deepseek-flash',
+        20,
+    );
+
+    expect($refused)->toBeNull()
+        ->and($reservation->refresh()->state)->toBe(AiUsageReservationState::Reserved)
+        ->and(AiUsageBudget::query()->where('scope', AiUsageBudgetScope::Universe)->sole()->reserved_input_tokens)->toBe(200);
+});
+
 test('invalid requested or actual token counts are refused without changing a budget', function (): void {
     $invalidReservation = app(ReserveAiUsageAction::class)->handle(
         usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', -1, 20),

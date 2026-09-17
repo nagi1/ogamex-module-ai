@@ -34,14 +34,14 @@ class QueueableFleetSavePlanner
     ) {
     }
 
-    public function plan(int $playerId): ?QueueableFleetSave
+    public function plan(int $playerId, ?PlayerService $player = null): ?QueueableFleetSave
     {
         $profile = $this->profile($playerId);
         if ($profile === null || !User::query()->whereKey($playerId)->exists()) {
             return null;
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $player ??= $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
 
         return $this->saveFor($player, $planets, $profile->archetype);

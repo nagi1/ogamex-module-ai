@@ -340,6 +340,171 @@ seam; `checkOwnPlanet` refuses self-attacks), archetype→class affinity is host
 defended-raid debris is deferred on the TP-004/RAID-014 doctrine, and the CRN ladder stays dead
 until U6 ships ≥2 launch subsets. The audit table is in `research/repos/WORK-PACKAGE.md`.
 
+## Resolve the player once per perception (IMPL-046, W10-2) — 17 September 2026
+
+The perception no longer rebuilds the account once per call site. `PlayerObservationService::ownedState()`
+resolves the `PlayerService` once (after the session's `advance()` has already forced a reload) and passes
+that instance down through its private readers and into the five planners it invokes, whose `plan()` now
+accept an optional `?PlayerService $player = null`. Forced player reloads per perception fell from ~12 to 2
+(the account-state resolver's own plus the perception's), measured live on the grand app container; the
+freshness test (`AiCapabilityPublicationTest`) stays green, so a host write inside a request is still visible.
+
+## Session-cost read: perception 304 → 175 queries (IMPL-044, W10-2) — 17 September 2026
+
+The grand-universe perception build was 304 queries (~17 s wall on the WSL2 host). Live profiling
+(`DB::listen` + backtrace) named five redundant-resolution defects, all now closed:
+
+1. `PlanetListService::all()` re-queried every planet's moon on every call (`hasMoon()` →
+   `makeMoonForCoordinate`), even though the constructor already holds the moon list — 80 queries.
+   It now pairs each planet with its moon from the loaded list, no DB read.
+2. `PlayerObservationService::targetActivity()`/`attackPermitted()` bypassed the planet cache
+   (`makeForCoordinate(..., false)`) — one target re-resolved per report per method. Cache is now
+   on: the factory is flushed per job, so a target read within one job is fresh.
+3. `PlanetServiceFactory::makeForCoordinate()` loaded the planet and then handed the resolver a
+   `planet_id`, forcing a second `Planet::where(id)` read. It now passes the already-loaded model.
+4. `QueueableSpyPlanner` did one report read and one `make($id, true)` per candidate (20×2 round
+   trips); both are now a single batch read and `makeFromModel`.
+5. `PlayerObservationService::targetReports()` rebuilt a `FleetMissionService` — and the dummy
+   `MessageService` player inside it — per report. One is now hoisted for the whole report set.
+
+After: **175 queries**. The remainder is dominated by the per-owner foreign-target `PlayerService`
+builds (users + highscores + tech + planets per distinct owner, though only the user is read), the
+per-planet building-queue read in `QueueableBuildingPlanner` (the other agent's file), and the
+per-candidate experience-case read in `EconomyUpgrades` → CBR engine. The literal "memoise a forced
+reload per generation" from IMPL-044 is deliberately not taken: the write-then-reread audit across
+the 30 host forced-reload sites is undone and the saving is now small; the planet-list-lazy
+alternative remains the lever if the foreign-owner builds must shrink further.
+
+`PersonaPolicyMechanicsTest`'s full-suite flake is settled: its sessions now bind a random source
+that never fires the rare no-op idle override (whose draw keys off the order-dependent work-item id),
+so the deterministic policy assertions no longer flip to `DoNothing`.
+
+## A session costs its raid screen, not its perception (W10-2) — 17 September 2026
+
+A whole-session read of the grand test's largest account (player 17: 10,601 ships on the fleet planet,
+10 visible espionage reports) split `RunAiSessionAction` into **DB 16.8 s (398 queries) + PHP 13.8 s**.
+The PHP was almost entirely the raid screen: `RaidPlanner::plan()` ran the full 50-sample battle
+Monte-Carlo for **all ten reports and rejected every one** — 16.98 s of a 30.6 s session spent
+screening targets the cheap data had already refused. Four defects, all closed:
+
+1. `BattleEngine::simulateBattle()` re-asked whether the defender planet had a moon on every sample
+   (`$this->defenderPlanet->hasMoon()` → a `planets` read). The planet is fixed for the engine's life
+   and no call site creates a moon mid-engine (the mission does, after the engine returns), so the
+   answer is memoised on the engine instance — 250 queries per screen pass.
+2. `PlanetListService`'s constructor queried the planets table for the placeholder player (id 0), which
+   `TacticalRetreatService` builds per sample only so a `MessageService` has an owner. Player 0 has no
+   planets by definition, so the read is skipped — 151 queries per screen pass.
+3. **The trip's price is knowable before a single draw is taken.** Fuel is a deterministic function of
+   the origin fleet and the target's coordinates, and the cargo-constrained plunder of what the planet
+   holds is a hard ceiling on any run's loot (`LootService`, the host's own authority). `RaidPlanner`
+   now prices both *before* the screen and refuses the target when even that ceiling cannot clear the
+   loot tier. Since `p20Loot <= ceilingLoot`, this rejects only runs the tier would have refused
+   anyway — the decision set is unchanged — and it removed four of the ten screens (7.4 s). It also
+   deletes the second `LootService::distributeLoot` call the defenceless path used to make.
+   Validated on **live** grand-test data across four AI accounts (players 12, 13, 16, 17): 40 visible
+   reports, **29 rejected by the new pre-gate with 0 violations** — every early rejection reproduces
+   the old ordering's rejection, and `p20Loot <= ceilingLoot` held in all 40, including the
+   exact-equality cases (12,501/12,501 and 72,279/72,280). On that population the pre-gate removes 72 %
+   of the screens; a scan of 81 reports over nine accounts still planned 2 viable raids, so the RAID
+   path is alive.
+4. `RaidPlanner` force-rebuilt the account's own `PlayerService` once per report (10 × 4 queries). The
+   decision pass is read-only and the host flushes the factory cache before every job, so the first
+   load is fresh and the planner now memoises it per instance.
+
+After: **session 30.6 s → ~21 s, queries 398 → 335**, with the two remaining screens (targets whose
+ceiling loot genuinely clears the tier) the only Monte-Carlo work left.
+
+The remaining DB cost is the foreign-target `PlayerService` builds: `PlayerService::load()` reads
+users + highscores + users_tech + planets for a target whose **tech levels are the only thing the
+battle engine needs**. Shrinking that means a lazy planet list (or an owner-less load) in
+`PlayerService`, a host-core change whose galaxy-view N+1 has to be weighed first — not taken here.
+
+## The grand stack's 45 ms query was prepared statements, not a slow database (17 September 2026)
+
+Every profile in this file so far reported ~45 ms per query on the grand stack and treated it as the
+price of a database reached over the Docker host gateway. That reading was wrong, and it was wrong in
+the direction that sends an optimiser after the wrong thing: query *count*.
+
+`SET profiling = 1` + `SHOW PROFILES` on the same connection that measured 45 ms app-side reports
+**0.101 ms** for `select 1` and **0.243 ms** for `select count(*) from planets`. The gap is not the
+link and not the workload — it is **native PDO prepared statements taking three round trips per
+statement** (prepare → execute → close) over that link. `config/database.php` reads
+`DB_EMULATE_PREPARES`; unset, Laravel's default `PDO::ATTR_EMULATE_PREPARES => false` applies.
+
+`.env.example` already names this exact case — "when the database is reached over a slow link (for
+example the Docker host gateway), enable client-side statement emulation" — and `phpunit.xml` already
+sets it for the test suites, which is precisely why no suite ever surfaced it. The grand stack now
+carries `DB_EMULATE_PREPARES: "true"` in `x-grand-env`.
+
+Measured on the same connection, same queries:
+
+| | native (as deployed) | emulated |
+|---|---|---|
+| `select 1` | 43.3 ms | 1.2 ms |
+| `count(*) from planets` | 44.8 ms | 0.7 ms |
+| whole session's DB time | 14.0 s (335 queries) | **0.34 s** (339 queries) |
+| whole session | 22.4 s | **6.0-9.6 s** |
+
+What this changes: the DB half of a session was never the module's query volume, and the query-count
+cuts in the entries above — real, but worth ~1-2 s each — sat on top of a 40× multiplier that one
+environment variable removes. With it, a session is **~97 % PHP**: the raid Monte-Carlo. Sessions that
+screen no raid (player 13: 765 queries) now finish in **0.9 s**.
+
+The dev stack has the same default `DB_HOST: host.docker.internal` and so pays the same 45 ms; it is
+left alone here because recreating another stack was outside this task, but the same one-line setting
+applies.
+
+## The screen asks the Rust engine too (R1's Rust half, 17 September 2026)
+
+With the database out of the way, the raid screen is almost the whole cost of a session — and the
+module was asking the *slow* engine. The host ships a Rust combat engine (`rust/battle_engine_ffi` →
+`storage/rust-libs/libbattle_engine_ffi.so`, driven through PHP FFI by `RustBattleEngine`) and
+`SettingsService::battleEngine()` defaults to `rust`, so the grand universe's live battles already ran
+on it. The estimator pinned `PhpBattleEngine` for one reason, recorded in
+`specs/host-change-request.md` R1: the FFI's round combat drew from `rand::thread_rng()`, so `$seed`
+could not make a screen replayable, and the module's screen compares candidates through one shared
+seed stream.
+
+Measured head-to-head on the AI's own workload (4,342-ship attacker against a 2,993-ship + 295-defence
+planet), same inputs, 20 runs each:
+
+| engine | per battle simulation |
+|---|---|
+| `PhpBattleEngine` | 20.1 ms |
+| `RustBattleEngine` | **2.7 ms** |
+
+Three small parts close it, none of them a reimplementation:
+
+- `BattleInput` (a serde struct, so this is a non-breaking addition) gains
+  `#[serde(default)] seed: Option<u64>`. A caller that sends no seed keeps `thread_rng()`, so the live
+  battle path is unchanged — verified, an unseeded pair still differs.
+- `phase_seed(seed, round_number, is_attacker)` derives one stream per side per round, so a single
+  caller seed does not replay one draw sequence six times over. `process_combat()` builds
+  `StdRng::seed_from_u64` from it.
+- `RustBattleEngine::prepareBattleInput()` sends the base class's `$this->seed` with the input, and
+  `NativeRaidEstimator` asks the engine the host fights with instead of pinning PHP — the module states
+  no preference, so an operator who pins `php` gets the same simulator their battles use.
+
+The module's decision set is unchanged in kind but not in draws: the Rust engine's RNG is not PHP's, so
+screens are statistically equivalent rather than identical. The rules are already pinned as equivalent
+(`RustBattleEngineTest` and `PhpBattleEngineTest` extend one abstract), and the module suite stays green
+(860 tests) on the Rust engine.
+
+**What was missing was the check, not just the code.** Nothing asserted the replay half of R1's contract
+on *either* engine — dropping the seed plumbing would have silently made every screen irreproducible
+with no test failing. `testSameSeedReturnsTheSameBattle` in `BattleEngineTestAbstract` now covers both
+engines with one shared test (92 battle-engine tests pass).
+
+Result on the grand universe, same account and reports:
+
+| | planner loop (10 reports) | session |
+|---|---|---|
+| PHP engine, before all of this | 16.98 s | ~45 s |
+| PHP engine, after the DB fix | 10.7 s | 6.0 s |
+| **Rust engine, after this** | **0.89 s** | **~1.4 s** |
+
+Live on the worker 13 s after the restart: session jobs averaging **1.0 s**, 0 errors.
+
 ## Decision criteria and memory mechanisms — 14 September 2026
 
 Two criteria are now checked before any material design choice: **the goal** (accounts a human

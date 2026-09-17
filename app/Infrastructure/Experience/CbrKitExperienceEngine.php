@@ -18,6 +18,18 @@ use Modules\AI\Models\AiExperienceCase;
  */
 class CbrKitExperienceEngine implements ExperienceEngine
 {
+    /**
+     * The eligible casebase, keyed by (owner, family, versions).
+     *
+     * A decision scores every candidate against the same casebase, so without
+     * this the fetch ran once per candidate (a building sweep reached it ~27×
+     * per perception). The engine is resolved per perception and the decision
+     * is read-only, so the cached rows cannot be stale within its life.
+     *
+     * @var array<string, array<int, AiExperienceCase>>
+     */
+    private array $casebaseCache = [];
+
     public function __construct(private readonly ExperienceEngine $fallback, private readonly CbrKitClient $client)
     {
     }
@@ -47,7 +59,9 @@ class CbrKitExperienceEngine implements ExperienceEngine
      */
     private function candidates(ExperienceQuery $query): array
     {
-        return AiExperienceCase::query()
+        $key = $query->playerId . ':' . $query->family->value . ':' . $query->featureVersion . ':' . $query->rulesetVersion;
+
+        return $this->casebaseCache[$key] ??= AiExperienceCase::query()
             ->where('player_id', $query->playerId)
             ->where('family', $query->family)
             ->where('feature_version', $query->featureVersion)

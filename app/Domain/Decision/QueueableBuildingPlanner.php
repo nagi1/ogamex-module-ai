@@ -10,6 +10,7 @@ use OGame\Models\User;
 use OGame\Services\BuildingQueueService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 use OGame\Services\ResearchQueueService;
 
 /**
@@ -48,7 +49,7 @@ class QueueableBuildingPlanner
     ) {
     }
 
-    public function plan(int $playerId): QueueableBuilding|QueueableResearch|null
+    public function plan(int $playerId, ?PlayerService $player = null): QueueableBuilding|QueueableResearch|null
     {
         // An account the module does not manage has no policy to apply, so it gets no capability.
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
@@ -66,7 +67,7 @@ class QueueableBuildingPlanner
         // Refresh every planet's live balance once: the candidate pass reads stored amounts and
         // energy, and a balance read stale is exactly the balance the queue later cancels on. The
         // refresh stays in memory -- the observation path must not write.
-        $planets = $this->playerServiceFactory->make($playerId, true)->planets->all();
+        $planets = ($player ?? $this->playerServiceFactory->make($playerId, true))->planets->all();
         foreach ($planets as $planet) {
             $planet->updateResources(false);
             $planet->updateResourceProductionStats(false);

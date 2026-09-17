@@ -13,7 +13,7 @@ Ordered by what it unblocks, not by size.
 
 | # | Ask | Size | Unblocks | Disposition |
 | --- | --- | --- | --- | --- |
-| R1 | A read-only, seedable battle question on the battle engine | medium | Raids and any estimator (`G6`), plus byte-stable replay for the offline corpus | **Implemented 14 September 2026** — `simulateBattle(?int $seed, bool $pure)` |
+| R1 | A read-only, seedable battle question on the battle engine | medium | Raids and any estimator (`G6`), plus byte-stable replay for the offline corpus | **Implemented 14 September 2026** — `simulateBattle(?int $seed, bool $pure)`; **Rust seed closed 17 September 2026**, so both engines answer the whole contract |
 | R2 | Queue-upgrade predicate: "may this object be upgraded now?" | small | Deletes `AiBuildingMachineName`, the last object-name list in module code (gate 1, `A3`/`B2`/`C3`) | **Implemented 15 September 2026** — `PlayerService::isObjectUpgradeBlocked(int $object_id)`; the controller reuses it and the module enum is deleted |
 | R3 | Vacation/ban refusal inside the queue **services**, not only the controllers | small | Correctness of every module-issued queue entry (`O2`) | **Decided 15 September 2026: keep the module-side re-check.** Every module queue action already refuses banned/vacationing players under its own lock; the host service change stays a future ask, not forced now |
 | R4 | `getGameObjectsWithStorage()` covering stations, not only buildings | trivial | Storage enumeration stays honest for a mod-added station (`C5`, gate 1) | **Closed by evidence 15 September 2026.** `StationObject` has no `storage` field, so no station can carry storage in this host; the enumeration over buildings is already complete |
@@ -73,6 +73,28 @@ events unchanged; the hostile-fleet path still behaves identically with `$pure` 
 - **Rust limitation, as allowed above:** the Rust engine's round combat runs in the `libbattle_engine_ffi.so`
   binary with its own RNG, so `$seed` does not seed the Rust rounds. Pure mode and the PHP-side Hamill roll
   still apply; a seeded, replayable estimator must use the PHP engine until the Rust FFI exposes a seed.
+
+**Rust seed closed 17 September 2026.** The FFI now carries the seed, so the limitation above is gone and
+the estimator is no longer pinned to PHP. The change is three parts:
+
+- `BattleInput` gains `#[serde(default)] seed: Option<u64>`, so an existing caller that sends no seed keeps
+  the thread RNG it has always used — the live path is byte-for-byte unchanged.
+- `phase_seed(seed, round_number, is_attacker)` derives one stream per side per round, so a single caller
+  seed does not replay one draw sequence six times over. `process_combat()` takes it and builds
+  `StdRng::seed_from_u64` when present, `thread_rng()` when absent.
+- `RustBattleEngine::prepareBattleInput()` sends the base class's `$this->seed` with the rest of the input.
+
+Measured on the grand universe (4,342-ship attacker against a 2,993-ship + 295-defence planet): the same
+workload costs **2.7 ms per simulation on Rust against 20.1 ms on PHP**, and the module's screen dropped
+from **~1.2 s to 0.18 s per 50-sample pass (6.7x)**. That matters because the screen is now almost all of a
+session's cost: see the prepared-statement entry in `DECISIONS.md`.
+
+**What lands in the module now.** `NativeRaidEstimator` asks the engine the host itself fights with
+(`SettingsService::battleEngine()`, default `rust`) instead of pinning PHP. The module expresses no
+preference — an operator who pins `php` gets the same simulator their battles use — and the screen stays
+replayable either way. `testSameSeedReturnsTheSameBattle` in `BattleEngineTestAbstract` now asserts the
+replay half of the contract on **both** engines; before it existed, dropping the seed plumbing would have
+silently made every screen irreproducible with nothing failing.
 
 **What the module can now do.** `T2` (the raid estimator) is unblocked: sample the engine with one shared
 seed stream (CRN), screen at n = 50, confirm at n = 200, and report losing-run count plus P20 net profit,

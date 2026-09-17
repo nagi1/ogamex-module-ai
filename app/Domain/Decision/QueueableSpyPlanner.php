@@ -57,7 +57,7 @@ class QueueableSpyPlanner
     ) {
     }
 
-    public function plan(int $playerId): ?QueueableSpy
+    public function plan(int $playerId, ?PlayerService $player = null): ?QueueableSpy
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
         if ($profile === null) {
@@ -68,7 +68,7 @@ class QueueableSpyPlanner
             return null;
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $player ??= $this->playerServiceFactory->make($playerId, true);
 
         $skip = $this->freshIntelCoordinates($playerId)
             + $this->inFlightCoordinates($playerId)
@@ -174,11 +174,10 @@ class QueueableSpyPlanner
                 continue;
             }
 
-            $target = $this->planetServiceFactory->make($planet->id, true);
-
-            if ($target === null) {
-                continue;
-            }
+            // The candidate model is already in hand; building a PlanetService
+            // from it skips the per-candidate Planet::find + refreshUser that
+            // make($id, true) would pay (20 candidates × 2 round trips).
+            $target = $this->planetServiceFactory->makeFromModel($planet);
 
             $owner = $target->getPlayer();
 
@@ -279,20 +278,35 @@ class QueueableSpyPlanner
      */
     private function knownYieldByCoordinate(iterable $candidates): array
     {
+        $planets = is_array($candidates) ? $candidates : iterator_to_array($candidates);
+        if ($planets === []) {
+            return [];
+        }
+
+        // One pass over the candidate coordinates instead of one report read per
+        // candidate: the newest report per coordinate wins, so keep the first
+        // (highest id) seen on the descending-id sweep.
+        $reports = EspionageReport::query()
+            ->where(function ($query) use ($planets): void {
+                foreach ($planets as $planet) {
+                    $query->orWhere(function ($coordinate) use ($planet): void {
+                        $coordinate->where('planet_galaxy', $planet->galaxy)
+                            ->where('planet_system', $planet->system)
+                            ->where('planet_position', $planet->planet);
+                    });
+                }
+            })
+            ->orderByDesc('id')
+            ->get(['id', 'planet_galaxy', 'planet_system', 'planet_position', 'resources']);
+
         $yield = [];
-        foreach ($candidates as $planet) {
-            $report = EspionageReport::query()
-                ->where('planet_galaxy', $planet->galaxy)
-                ->where('planet_system', $planet->system)
-                ->where('planet_position', $planet->planet)
-                ->orderByDesc('id')
-                ->first(['resources']);
-            if ($report === null) {
+        foreach ($reports as $report) {
+            $key = "{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}";
+            if (isset($yield[$key])) {
                 continue;
             }
 
-            $resources = $report->resources ?? [];
-            $yield["{$planet->galaxy}:{$planet->system}:{$planet->planet}"] = $this->yieldFromResources($resources);
+            $yield[$key] = $this->yieldFromResources($report->resources ?? []);
         }
 
         return $yield;

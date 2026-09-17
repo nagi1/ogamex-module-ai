@@ -153,6 +153,7 @@ class RequestCampaignConsultationAction
             $this->clock->now(),
             $recommendation->provider,
             $recommendation->model,
+            $recommendation->cachedInputTokens,
         );
     }
 

@@ -5,9 +5,11 @@ namespace Modules\AI\Infrastructure\Battle;
 use Modules\AI\Domain\Raid\RaidEstimate;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\BattleEngine\BattleEngine;
 use OGame\GameMissions\BattleEngine\Models\AttackerFleet;
 use OGame\GameMissions\BattleEngine\Models\DefenderFleet;
 use OGame\GameMissions\BattleEngine\PhpBattleEngine;
+use OGame\GameMissions\BattleEngine\RustBattleEngine;
 use OGame\Models\Resources;
 use OGame\Services\SettingsService;
 
@@ -16,10 +18,13 @@ use OGame\Services\SettingsService;
  * question.
  *
  * It is not a second battle implementation. Every run asks
- * `PhpBattleEngine::simulateBattle($seed, true)` — the pure, seeded shape R1
- * added — so the engine stays the authority on the rules and a "what if" never
- * touches the world. The PHP engine is used deliberately: the Rust FFI has its
- * own RNG and cannot be seeded yet.
+ * `simulateBattle($seed, true)` — the pure, seeded shape R1 added — on the engine
+ * the host itself fights with (`SettingsService::battleEngine()`), so the engine
+ * stays the authority on the rules and a "what if" never touches the world. Both
+ * engines are seeded: the Rust FFI carries the seed in its input and derives one
+ * stream per side per round, so a screen replays identically whichever engine the
+ * universe runs. Rust is roughly 7x faster per simulation, which is why the
+ * module no longer pins the PHP engine.
  *
  * The fleet is the account's own ships on the origin planet, and the defender is
  * the host's stationary picture of the target planet, so no unit, price or
@@ -76,7 +81,12 @@ class NativeRaidEstimator
 
         $defender = DefenderFleet::fromPlanet($target);
 
-        $engine = new PhpBattleEngine([$attacker], $target, [$defender], $this->settings);
+        // The engine the host fights with, not one the module prefers: an
+        // operator who pins `php` gets the same simulator their battles use.
+        $engine = match ($this->settings->battleEngine()) {
+            'php' => new PhpBattleEngine([$attacker], $target, [$defender], $this->settings),
+            default => new RustBattleEngine([$attacker], $target, [$defender], $this->settings),
+        };
 
         // The screen is the one bounded pass the decision path may afford; the
         // confirmation is a wider sample on the winner only.
@@ -97,7 +107,7 @@ class NativeRaidEstimator
      *
      * @return array{netProfits: list<float>, loots: list<float>, survived: int}
      */
-    private function sample(PhpBattleEngine $engine, int $seed, int $samples): array
+    private function sample(BattleEngine $engine, int $seed, int $samples): array
     {
         $netProfits = [];
         $loots = [];

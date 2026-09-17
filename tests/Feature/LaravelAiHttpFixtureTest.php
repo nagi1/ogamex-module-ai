@@ -71,6 +71,25 @@ test('the language gateway maps a real DeepSeek response replayed through Http::
         ->and($result->model)->toBe('deepseek-flash');
 });
 
+test('a replayed response reporting a cache hit splits the cached input from the uncached', function (): void {
+    app()->bind(LanguageGateway::class, LaravelAiLanguageGateway::class);
+
+    $recorded = llmFixture();
+    $body = $recorded['body'];
+    // DeepSeek reports the cache hit beside the prompt total and the SDK subtracts it out of
+    // `promptTokens`, so 128 prompt tokens with 100 served from cache are 28 uncached tokens the
+    // module used to record as the whole input.
+    $body['usage']['prompt_cache_hit_tokens'] = 100;
+
+    Http::fake(['api.deepseek.com/*' => Http::response($body, $recorded['status'])]);
+
+    $result = app(LanguageGateway::class)->generateConversationReply(deepseekLanguageRequest());
+
+    expect($result->status)->toBe(AiLanguageResultStatus::Completed)
+        ->and($result->inputTokens)->toBe(28)
+        ->and($result->cachedInputTokens)->toBe(100);
+});
+
 test('a provider failure through Http::fake maps to a failed result', function (): void {
     app()->bind(LanguageGateway::class, LaravelAiLanguageGateway::class);
 

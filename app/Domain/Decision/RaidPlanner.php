@@ -68,11 +68,25 @@ class RaidPlanner
      */
     private const SURVIVAL_FLOOR = 0.8;
 
+    /**
+     * The account's own player, loaded once per planner instance. A skill-pass
+     * screen is read-only and the host flushes the factory cache before every
+     * job, so the first load is fresh and the per-report repeats are not.
+     *
+     * @var array<int, PlayerService>
+     */
+    private array $players = [];
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
         private NativeRaidEstimator $raidEstimator,
     ) {
+    }
+
+    private function player(int $playerId): PlayerService
+    {
+        return $this->players[$playerId] ??= $this->playerServiceFactory->make($playerId, true);
     }
 
     /**
@@ -89,7 +103,7 @@ class RaidPlanner
             return true;
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $player = $this->player($playerId);
         $origin = $this->origin($player);
         if ($origin === null) {
             return true;
@@ -122,7 +136,7 @@ class RaidPlanner
             return null;
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $player = $this->player($playerId);
         $origin = $this->origin($player);
         if ($origin === null) {
             return null;
@@ -149,6 +163,18 @@ class RaidPlanner
             return null;
         }
 
+        // The trip is priced from the origin fleet alone and the hold caps what
+        // any run can bring home, so the best possible haul is known before a
+        // single draw is taken. When even that ceiling cannot pay for the flight
+        // the 50-sample screen is pure cost: p20Loot never exceeds it, so no run
+        // the screen would have kept is turned away here (RAID-006, RAID-011).
+        $fuel = $this->roundTripFuel($player, $origin, $target);
+        $defended = $target->getDefenseUnits()->units !== [];
+        $ceilingLoot = $this->raidEstimator->metalEquivalent($this->maximumLoot($player, $origin, $target));
+        if (!$this->clearsLootTier($ceilingLoot, $fuel, $defended)) {
+            return null;
+        }
+
         $estimate = $this->defencelessTarget($target)
             ? $this->defencelessEstimate($player, $origin, $target)
             : $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
@@ -170,8 +196,6 @@ class RaidPlanner
         // deuterium to fly there and back, so a distant farm that spends more
         // fuel than the tier allows is refused even when it would "profit"
         // (RAID-006, RAID-011).
-        $fuel = $this->roundTripFuel($player, $origin, $target);
-        $defended = $target->getDefenseUnits()->units !== [];
         if (!$this->clearsLootTier($estimate->p20Loot, $fuel, $defended)) {
             return null;
         }
@@ -217,19 +241,7 @@ class RaidPlanner
      */
     private function defencelessEstimate(PlayerService $player, PlanetService $origin, PlanetService $target): RaidEstimate
     {
-        $fraction = app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
-        $resources = $target->getResources();
-        $loot = LootService::distributeLoot(
-            new Resources(
-                $resources->metal->get() * $fraction,
-                $resources->crystal->get() * $fraction,
-                $resources->deuterium->get() * $fraction,
-                0,
-            ),
-            $origin->getShipUnits()->getTotalCargoCapacity($player),
-        );
-
-        $metalEquivalent = $this->raidEstimator->metalEquivalent($loot);
+        $metalEquivalent = $this->raidEstimator->metalEquivalent($this->maximumLoot($player, $origin, $target));
 
         return app()->makeWith(RaidEstimate::class, [
             'samples' => 1,
@@ -237,6 +249,27 @@ class RaidPlanner
             'p20Loot' => $metalEquivalent,
             'pWin' => 1.0,
         ]);
+    }
+
+    /**
+     * The most any run can bring home: the host's own cargo-constrained plunder
+     * of what the planet holds right now. A defended planet only yields it once
+     * its fleet dies, so it is a ceiling and never a promise.
+     */
+    private function maximumLoot(PlayerService $player, PlanetService $origin, PlanetService $target): Resources
+    {
+        $fraction = app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
+        $resources = $target->getResources();
+
+        return LootService::distributeLoot(
+            new Resources(
+                max(0, $resources->metal->get()) * $fraction,
+                max(0, $resources->crystal->get()) * $fraction,
+                max(0, $resources->deuterium->get()) * $fraction,
+                0,
+            ),
+            $origin->getShipUnits()->getTotalCargoCapacity($player),
+        );
     }
 
     /**

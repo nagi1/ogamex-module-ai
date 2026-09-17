@@ -11,13 +11,13 @@ use Modules\AI\Models\AiUsageReservation;
 
 class SettleAiUsageReservationAction
 {
-    public function handle(int $reservationId, int $actualInputTokens, int $actualOutputTokens, CarbonImmutable $settledAt, string|null $provider = null, string|null $model = null): AiUsageReservation|null
+    public function handle(int $reservationId, int $actualInputTokens, int $actualOutputTokens, CarbonImmutable $settledAt, string|null $provider = null, string|null $model = null, int $cachedInputTokens = 0): AiUsageReservation|null
     {
-        if ($actualInputTokens < 0 || $actualOutputTokens < 0) {
+        if ($actualInputTokens < 0 || $actualOutputTokens < 0 || $cachedInputTokens < 0) {
             return null;
         }
 
-        return DB::transaction(function () use ($reservationId, $actualInputTokens, $actualOutputTokens, $settledAt, $provider, $model): AiUsageReservation|null {
+        return DB::transaction(function () use ($reservationId, $actualInputTokens, $actualOutputTokens, $cachedInputTokens, $settledAt, $provider, $model): AiUsageReservation|null {
             $reservation = AiUsageReservation::query()->lockForUpdate()->find($reservationId);
 
             if ($reservation === null) {
@@ -28,16 +28,21 @@ class SettleAiUsageReservationAction
                 return $reservation;
             }
 
-            if ($actualInputTokens > $reservation->reserved_input_tokens || $actualOutputTokens > $reservation->reserved_output_tokens) {
+            // The provider charged for the cached input too, and the reservation's ceiling was
+            // taken on the whole prompt, so both halves count against it.
+            $consumedInputTokens = $actualInputTokens + $cachedInputTokens;
+
+            if ($consumedInputTokens > $reservation->reserved_input_tokens || $actualOutputTokens > $reservation->reserved_output_tokens) {
                 return null;
             }
 
-            $this->releaseUnusedTokens($reservation, $actualInputTokens, $actualOutputTokens);
+            $this->releaseUnusedTokens($reservation, $consumedInputTokens, $actualOutputTokens);
 
             $reservation->update([
                 'actual_input_tokens' => $actualInputTokens,
+                'actual_cached_input_tokens' => $cachedInputTokens,
                 'actual_output_tokens' => $actualOutputTokens,
-                'cost' => app(ResolveAiUsageCostAction::class)->handle($provider, $model, $actualInputTokens, 0, $actualOutputTokens, $settledAt),
+                'cost' => app(ResolveAiUsageCostAction::class)->handle($provider, $model, $actualInputTokens, $cachedInputTokens, $actualOutputTokens, $settledAt),
                 'state' => AiUsageReservationState::Settled,
                 'settled_at' => $settledAt,
             ]);
@@ -46,9 +51,9 @@ class SettleAiUsageReservationAction
         });
     }
 
-    private function releaseUnusedTokens(AiUsageReservation $reservation, int $actualInputTokens, int $actualOutputTokens): void
+    private function releaseUnusedTokens(AiUsageReservation $reservation, int $consumedInputTokens, int $actualOutputTokens): void
     {
-        $inputDifference = $reservation->reserved_input_tokens - $actualInputTokens;
+        $inputDifference = $reservation->reserved_input_tokens - $consumedInputTokens;
         $outputDifference = $reservation->reserved_output_tokens - $actualOutputTokens;
 
         if ($inputDifference === 0 && $outputDifference === 0) {

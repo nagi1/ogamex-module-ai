@@ -9,6 +9,7 @@ use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Resources;
@@ -52,7 +53,7 @@ class QueueableUnitPlanner
     ) {
     }
 
-    public function plan(int $playerId): ?QueueableUnit
+    public function plan(int $playerId, ?PlayerService $player = null): ?QueueableUnit
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
         if ($profile === null) {
@@ -63,7 +64,7 @@ class QueueableUnitPlanner
             return null;
         }
 
-        $player = $this->playerServiceFactory->make($playerId, true);
+        $player ??= $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
         if ($planets === []) {
             return null;
@@ -334,7 +335,7 @@ class QueueableUnitPlanner
         $escortRatio = $this->attackPerCost($player, $escort);
 
         foreach ($planet->getShipUnits()->units as $entry) {
-            /** @var \OGame\GameObjects\Models\Units\UnitEntry $entry */
+            /** @var UnitEntry $entry */
             if ($this->attackPerCost($player, $entry->unitObject) >= $escortRatio) {
                 return false;
             }

@@ -7,7 +7,11 @@ use Modules\AI\Enums\AiLanguageResultStatus;
 
 readonly class LanguageResult
 {
-    /** @param list<LanguageProposal> $proposals */
+    /**
+     * @param list<LanguageProposal> $proposals
+     * @param int $cachedInputTokens the part of the input the provider served from its own cache;
+     *        the SDK already excludes it from `inputTokens`, so it travels separately to be priced
+     */
     public function __construct(
         public AiLanguageResultStatus $status,
         public string|null $text,
@@ -18,6 +22,7 @@ readonly class LanguageResult
         public string|null $providerRequestId,
         public string|null $provider,
         public string|null $model,
+        public int $cachedInputTokens = 0,
     ) {
     }
 }

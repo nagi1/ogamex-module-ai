@@ -16,6 +16,7 @@ use Modules\AI\Enums\AiUsageReservationState;
  * @property int $reserved_input_tokens
  * @property int $reserved_output_tokens
  * @property int|null $actual_input_tokens
+ * @property int|null $actual_cached_input_tokens
  * @property int|null $actual_output_tokens
  * @property float|null $cost
  * @property AiUsageReservationState $state

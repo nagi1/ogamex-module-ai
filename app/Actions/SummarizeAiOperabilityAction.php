@@ -119,13 +119,20 @@ class SummarizeAiOperabilityAction
     {
         $reservations = AiUsageReservation::query()
             ->where('reserved_for', $now->toDateString())
-            ->get(['reserved_input_tokens', 'reserved_output_tokens', 'actual_input_tokens', 'actual_output_tokens', 'cost']);
+            ->get(['reserved_input_tokens', 'reserved_output_tokens', 'actual_input_tokens', 'actual_cached_input_tokens', 'actual_output_tokens', 'cost']);
+
+        // Cached input was billed, so it belongs in the actual total; the hit rate is its share of
+        // the input, which is the only measurement a stable prompt prefix can be judged by.
+        $inputTokens = (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_input_tokens + (int) $reservation->actual_cached_input_tokens);
+        $cachedInputTokens = (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_cached_input_tokens);
 
         return [
             'attempts' => AiLanguageRequest::query()->where('created_at', '>=', $now->startOfDay())->count(),
             'in_flight' => AiLanguageRequest::query()->where('state', AiLanguageRequestState::Generating)->count(),
             'reserved_tokens' => (int) $reservations->sum(static fn ($reservation): int => $reservation->reserved_input_tokens + $reservation->reserved_output_tokens),
-            'actual_tokens' => (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_input_tokens + (int) $reservation->actual_output_tokens),
+            'actual_tokens' => $inputTokens + (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_output_tokens),
+            'cached_input_tokens' => $cachedInputTokens,
+            'cache_hit_rate' => $inputTokens === 0 ? 0.0 : round($cachedInputTokens / $inputTokens, 4),
             'cost' => round((float) $reservations->sum(static fn ($reservation): float => (float) $reservation->cost), 8),
         ];
     }

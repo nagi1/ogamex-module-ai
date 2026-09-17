@@ -43,7 +43,22 @@ uses(IsolatedAccountTestCase::class);
 beforeEach(function (): void {
     Date::setTestNow(aiPersonaNow());
     $this->app->bind(AiClock::class, SystemAiClock::class);
-    $this->app->bind(RandomSource::class, SeededRandomSource::class);
+    // These cases assert a deterministic policy selection, so the rare no-op
+    // idle override (its own suite: IdleOverrideAndAntiBotCadenceTest) must not
+    // fire here — its draw keys off the work-item id, which shifts with suite
+    // ordering and would otherwise flip a clear winner to DoNothing at random.
+    $seeded = new SeededRandomSource();
+    $this->app->bind(RandomSource::class, fn (): RandomSource => new class($seeded) implements RandomSource
+    {
+        public function __construct(private SeededRandomSource $inner)
+        {
+        }
+
+        public function unitInterval(int $seed, string $context): float
+        {
+            return str_ends_with($context, ':idle') ? 1.0 : $this->inner->unitInterval($seed, $context);
+        }
+    });
     $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
     aiPersonaRegisterPolicies($this->app);
 });

@@ -187,11 +187,18 @@ class BuildAiPilotReportAction
     {
         $reservations = AiUsageReservation::query()
             ->whereBetween('reserved_for', [$from->toDateString(), $now->toDateString()])
-            ->get(['actual_input_tokens', 'actual_output_tokens', 'cost']);
+            ->get(['actual_input_tokens', 'actual_cached_input_tokens', 'actual_output_tokens', 'cost']);
+
+        // Cached input was billed, so it belongs in the token total; the hit rate is its share of
+        // the input, which is the only measurement a stable prompt prefix can be judged by.
+        $inputTokens = (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_input_tokens + (int) $reservation->actual_cached_input_tokens);
+        $cachedInputTokens = (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_cached_input_tokens);
 
         return [
             'attempts' => AiLanguageRequest::query()->whereBetween('created_at', [$from, $now])->count(),
-            'tokens' => (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_input_tokens + (int) $reservation->actual_output_tokens),
+            'tokens' => $inputTokens + (int) $reservations->sum(static fn ($reservation): int => (int) $reservation->actual_output_tokens),
+            'cached_input_tokens' => $cachedInputTokens,
+            'cache_hit_rate' => $inputTokens === 0 ? 0.0 : round($cachedInputTokens / $inputTokens, 4),
             'cost' => round((float) $reservations->sum(static fn ($reservation): float => (float) $reservation->cost), 8),
         ];
     }

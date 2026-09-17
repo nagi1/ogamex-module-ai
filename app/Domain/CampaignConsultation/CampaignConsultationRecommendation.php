@@ -13,6 +13,8 @@ readonly class CampaignConsultationRecommendation
 {
     /**
      * @param list<int> $evidenceIds
+     * @param int $cachedInputTokens the part of the input the provider served from its own cache;
+     *        the SDK already excludes it from `inputTokens`, so it travels separately to be priced
      */
     public function __construct(
         public AiCampaignConsultationStatus $status,
@@ -25,6 +27,7 @@ readonly class CampaignConsultationRecommendation
         public string|null $providerRequestId,
         public string|null $provider,
         public string|null $model,
+        public int $cachedInputTokens = 0,
     ) {
     }
 }
