@@ -2241,3 +2241,19 @@ plan then fails the launch-screen and returns null); `QueueableFleetSavePlanner`
 origin holds only satellites and times the save on the movable subset. Regression test added to
 `tests/Feature/RaidDepthTest.php`. Deployed to both grand and pve stacks (bind-mounted code, workers
 restarted); new failures stopped in both.
+
+### RV-011 closed, P7-001 re-blocked (18 September 2026)
+
+RV-011 (game-phase classification) was closed with the consumer the research named: `RaidPlanner`
+target-class escalation. `GamePhase` (early/mid/late) is derived from host reads only — astrophysics
+level and planet count — and `targetEligible()` refuses a raid whose target class the phase has not
+unlocked: inactives in every phase, active players once a colony exists, active fleets only at
+astrophysics 23. Inactivity is the host's own rule (`PlayerService::isInactive`, seven days), read
+fresh at decision time. Four tests in `tests/Feature/RaidDepthTest.php`; gate 2 and Pint clean.
+
+P7-001 (ordinary-universe consultation triggers) was re-blocked. Its colony trigger's only effect is a
+consultation signal, but the lane is campaign-keyed and both universes hold zero campaigns, so a
+`PlanetCreated` listener would be dead machinery (gate 2) with no runnable check. It needs one owner
+decision first: de-campaign the lane into an ordinary-universe shape (its own budget, caps and
+evidence gate), or open a campaign to give the trigger a caller. The war trigger still has no host
+seam, and the Package 7 evidence record is owner-supplied.
