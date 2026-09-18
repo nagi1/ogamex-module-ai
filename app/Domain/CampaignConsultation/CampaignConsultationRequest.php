@@ -26,6 +26,7 @@ readonly class CampaignConsultationRequest
         public int $maximumEvidenceIds,
         public int $campaignId,
         public array $candidates,
+        public array $evidenceIds,
     ) {
     }
 }

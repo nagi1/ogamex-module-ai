@@ -64,5 +64,6 @@ function promptGateConsultationRequest(array $candidateIds = []): CampaignConsul
         'maximumEvidenceIds' => 8,
         'campaignId' => 1,
         'candidates' => [],
+        'evidenceIds' => [],
     ]);
 }

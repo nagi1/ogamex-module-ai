@@ -106,6 +106,7 @@ class RequestCampaignConsultationAction
             'maximumEvidenceIds' => (int) config('ai.campaign-consultation.maximum_evidence_ids'),
             'campaignId' => $campaign->id,
             'candidates' => $brief->candidates,
+            'evidenceIds' => $brief->evidenceIds,
         ]);
 
         $recommendation = app(CampaignConsultationGateway::class)->recommend($request);

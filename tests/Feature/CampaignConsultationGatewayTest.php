@@ -33,6 +33,7 @@ function consultationRequest(bool $emptyLadder = false): CampaignConsultationReq
         8,
         5,
         [['id' => 3, 'action' => 'Build', 'reason' => 'fixture', 'score' => 2.0], ['id' => 6, 'action' => 'Research', 'reason' => 'fixture', 'score' => 1.0]],
+        [],
     );
 }
 
@@ -144,6 +145,29 @@ test('the agent declares its bounded schema, its read-only tools and tool-first 
     expect($agent->instructions())->not->toContain('3, 6')
         ->and($agent->schema(new JsonSchemaTypeFactory()))->toHaveKeys(['candidate_id', 'risk', 'confidence', 'reason', 'evidence_ids'])
         ->and($tools)->toBe([CampaignFactsTool::class, LegalCandidatesTool::class]);
+});
+
+test('an empty evidence list tells the agent to cite nothing', function (): void {
+    $agent = app()->makeWith(OgameCampaignConsultationAgent::class, ['request' => consultationRequest()]);
+
+    expect($agent->instructions())->toContain('return an empty evidence_ids list');
+});
+
+test('a non-empty evidence list names the exact citable ids', function (): void {
+    $request = new CampaignConsultationRequest(
+        AiCampaignConsultationTrigger::NewPhase,
+        'brief',
+        app()->makeWith(AiProviderLadder::class, ['rungs' => [['provider' => 'openai', 'model' => 'gpt-5-mini']]]),
+        20,
+        400,
+        8,
+        5,
+        [['id' => 3, 'action' => 'Build', 'reason' => 'fixture', 'score' => 2.0]],
+        [1, 2],
+    );
+    $agent = app()->makeWith(OgameCampaignConsultationAgent::class, ['request' => $request]);
+
+    expect($agent->instructions())->toContain('Cite only the supplied evidence IDs: 1, 2');
 });
 
 test('an enabled lane resolves the SDK gateway through the provider binding', function (): void {
