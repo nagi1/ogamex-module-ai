@@ -499,12 +499,19 @@ class RaidPlanner
 
     /**
      * The deuterium a raid burns flying there and back, host-quoted for the
-     * origin's own fleet at the slowest speed (RAID-006).
+     * origin's own fleet at the slowest speed (RAID-006). Stationary hulls
+     * are left out: the host divides by the slowest speed, so a solar
+     * satellite in the fleet is a division by zero, not a slower trip.
      */
     private function roundTripFuel(PlayerService $player, PlanetService $origin, PlanetService $target): int
     {
+        $fleet = MovableFleet::of($player, $origin->getShipUnits());
+        if ($fleet->units === []) {
+            return 0;
+        }
+
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
-        $oneWay = $fleetMissions->calculateConsumption($origin, $origin->getShipUnits(), $target->getPlanetCoordinates(), 0, 10.0);
+        $oneWay = $fleetMissions->calculateConsumption($origin, $fleet, $target->getPlanetCoordinates(), 0, 10.0);
 
         return 2 * (int) $oneWay;
     }

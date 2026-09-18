@@ -575,6 +575,22 @@ test('the subset estimator screens one draw by default and confirms wide on requ
         ->and($estimator->estimateFleet($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), $fleet, 1, 50)->samples)->toBe(50);
 });
 
+// A fleet holding solar satellites must still be priced for flight: the
+// stationary hulls are left out of the quote instead of making the host's
+// slowest-speed division by zero crash the raid decision.
+test('the raid planner prices a flight over a fleet holding solar satellites', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $this->planetAddUnit('solar_satellite', 13);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+});
+
 function raidDepthProfile(int $playerId): AiProfile
 {
     return AiProfile::create([

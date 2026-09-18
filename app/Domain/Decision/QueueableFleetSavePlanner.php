@@ -86,6 +86,12 @@ class QueueableFleetSavePlanner
             return null;
         }
 
+        // A save moves ships; a planet holding only solar satellites has
+        // nothing to move and must not plan a flight over an empty fleet.
+        if (MovableFleet::of($player, $origin->getShipUnits())->units === []) {
+            return null;
+        }
+
         // A jump gate moves the whole fleet between two owned moons with no flight time, so
         // it beats any flight in exposure: when it is available it is the save (RV-009).
         $jump = $this->jumpGateTarget($player, $origin);
@@ -127,7 +133,7 @@ class QueueableFleetSavePlanner
     {
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
         $absenceSeconds = $absenceMinutes * 60;
-        $units = $origin->getShipUnits();
+        $units = MovableFleet::of($player, $origin->getShipUnits());
 
         for ($speed = 10; $speed >= 1; $speed--) {
             $duration = $fleetMissions->calculateFleetMissionDuration($origin, $destination->getPlanetCoordinates(), $units, null, (float) $speed);
