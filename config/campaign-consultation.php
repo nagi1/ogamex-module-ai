@@ -35,6 +35,13 @@ return [
     'maximum_advice_age_seconds' => (int) env('AI_CAMPAIGN_CONSULTATION_MAXIMUM_ADVICE_AGE_SECONDS', 900),
 
     /*
+     * The self-reported confidence a recommendation must reach before it may move a ranking.
+     * The model's score is not calibrated, so it is a fail-safe only: below this floor (or when
+     * it is absent) the deterministic native decision stands rather than being nudged.
+     */
+    'minimum_confidence' => (float) env('AI_CAMPAIGN_CONSULTATION_MINIMUM_CONFIDENCE', 0.5),
+
+    /*
      * Hard per-day ceilings, read by the admission layer before any provider call and
      * settled by the receipt ledger after it.
      */

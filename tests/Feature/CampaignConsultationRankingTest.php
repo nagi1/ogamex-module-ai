@@ -43,7 +43,7 @@ function rankingProfile(AiSkillBand $skillBand): AiProfile
     ]);
 }
 
-function recommendation(int|null $candidateId): CampaignConsultationRecommendation
+function recommendation(int|null $candidateId, float|null $confidence = 0.9): CampaignConsultationRecommendation
 {
     return new CampaignConsultationRecommendation(
         AiCampaignConsultationStatus::Completed,
@@ -56,6 +56,8 @@ function recommendation(int|null $candidateId): CampaignConsultationRecommendati
         'inv-1',
         'openai',
         'gpt-5-mini',
+        0,
+        $confidence,
     );
 }
 
@@ -105,4 +107,33 @@ test('a non-completed recommendation leaves the ranking alone', function (): voi
     $adjusted = app(ApplyCampaignConsultationRankingAction::class)->handle($profile, [$fleetSave], recommendation(null));
 
     expect($adjusted[0]->score)->toBe(9.0);
+});
+
+// The self-reported confidence is a fail-safe: below the operator floor the nudge is dropped and
+// the deterministic ranking stands.
+test('a recommendation below the confidence floor does not nudge', function (): void {
+    $profile = rankingProfile(AiSkillBand::Standard);
+    $build = rankingCandidate(AiCandidateActionType::Build, 4.0);
+
+    $adjusted = app(ApplyCampaignConsultationRankingAction::class)->handle(
+        $profile,
+        [$build],
+        recommendation(AiCandidateActionType::Build->value, 0.1),
+    );
+
+    expect($adjusted[0]->score)->toBe(4.0);
+});
+
+// An absent confidence is not a confident one: the deterministic ranking stands.
+test('a recommendation without a confidence does not nudge', function (): void {
+    $profile = rankingProfile(AiSkillBand::Standard);
+    $build = rankingCandidate(AiCandidateActionType::Build, 4.0);
+
+    $adjusted = app(ApplyCampaignConsultationRankingAction::class)->handle(
+        $profile,
+        [$build],
+        recommendation(AiCandidateActionType::Build->value, null),
+    );
+
+    expect($adjusted[0]->score)->toBe(4.0);
 });

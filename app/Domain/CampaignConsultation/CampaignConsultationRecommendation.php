@@ -28,6 +28,20 @@ readonly class CampaignConsultationRecommendation
         public string|null $provider,
         public string|null $model,
         public int $cachedInputTokens = 0,
+        public float|null $confidence = null,
     ) {
+    }
+
+    /**
+     * Whether this recommendation may move a ranking: it completed, named a candidate, and its own
+     * self-reported confidence clears the floor. The score is not calibrated, so a low (or absent)
+     * confidence is a fail-safe — the deterministic decision stands rather than being nudged.
+     */
+    public function mayMoveRanking(float $minimumConfidence): bool
+    {
+        return $this->status === AiCampaignConsultationStatus::Completed
+            && $this->candidateId !== null
+            && $this->confidence !== null
+            && $this->confidence >= $minimumConfidence;
     }
 }

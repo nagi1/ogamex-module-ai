@@ -33,6 +33,8 @@ class OgameCampaignConsultationAgent implements Agent, HasStructuredOutput, HasP
             . 'Judge like an experienced OGame player: prefer the candidate that develops what the account already owns, '
             . 'the prerequisite before the thing it unlocks, and the easiest unlock before the largest reachable; '
             . 'do not recommend a candidate that spends the last fleet slot on something that can wait. '
+            . 'Report your own confidence (0..1) in the recommendation; the module keeps the native decision '
+            . 'when it is below the operator floor, so an unsure answer should say so. '
             . 'You cannot name an action outside the legal candidates, alter terms, access memory, invoke a '
             . 'sub-agent or execute host work. Cite only supplied evidence IDs.';
     }
@@ -54,6 +56,7 @@ class OgameCampaignConsultationAgent implements Agent, HasStructuredOutput, HasP
         return [
             'candidate_id' => $schema->integer()->min(1)->nullable()->required(),
             'risk' => $schema->string()->enum(AiCampaignConsultationRisk::class)->required(),
+            'confidence' => $schema->number()->min(0)->max(1)->nullable()->required(),
             'reason' => $schema->string()->min(1)->max($this->request->maximumReasonCharacters)->required(),
             'evidence_ids' => $schema->array()
                 ->max($this->request->maximumEvidenceIds)

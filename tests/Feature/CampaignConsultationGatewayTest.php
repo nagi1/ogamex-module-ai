@@ -88,6 +88,7 @@ test('a valid structured envelope maps to a completed recommendation', function 
     OgameCampaignConsultationAgent::fake([[
         'candidate_id' => 3,
         'risk' => 'low',
+        'confidence' => 0.8,
         'reason' => 'a reason',
         'evidence_ids' => [1],
     ]])->preventStrayPrompts();
@@ -97,6 +98,7 @@ test('a valid structured envelope maps to a completed recommendation', function 
     expect($recommendation->status)->toBe(AiCampaignConsultationStatus::Completed)
         ->and($recommendation->candidateId)->toBe(3)
         ->and($recommendation->risk)->toBe(AiCampaignConsultationRisk::Low)
+        ->and($recommendation->confidence)->toBe(0.8)
         ->and($recommendation->reason)->toBe('a reason')
         ->and($recommendation->evidenceIds)->toBe([1]);
 });
@@ -124,10 +126,11 @@ test('malformed structured envelopes are invalid and never name a candidate', fu
         ['candidate_id' => 'three', 'risk' => 'low', 'reason' => 'x', 'evidence_ids' => []],
         ['candidate_id' => null, 'risk' => 'low', 'reason' => 'x', 'evidence_ids' => ['a']],
         ['candidate_id' => null, 'risk' => 'low', 'reason' => 'x', 'evidence_ids' => [0]],
+        ['candidate_id' => null, 'risk' => 'low', 'reason' => 'x', 'evidence_ids' => [], 'confidence' => 2.0],
     ])->preventStrayPrompts();
     $gateway = app(LaravelAiCampaignConsultationGateway::class);
 
-    foreach (range(1, 7) as $ignored) {
+    foreach (range(1, 8) as $ignored) {
         $recommendation = $gateway->recommend(consultationRequest());
         expect($recommendation->status)->toBe(AiCampaignConsultationStatus::Invalid)
             ->and($recommendation->candidateId)->toBeNull();
@@ -139,7 +142,7 @@ test('the agent declares its bounded schema, its read-only tools and tool-first 
     $tools = collect($agent->tools())->map(static fn (object $tool): string => $tool::class)->all();
 
     expect($agent->instructions())->not->toContain('3, 6')
-        ->and($agent->schema(new JsonSchemaTypeFactory()))->toHaveKeys(['candidate_id', 'risk', 'reason', 'evidence_ids'])
+        ->and($agent->schema(new JsonSchemaTypeFactory()))->toHaveKeys(['candidate_id', 'risk', 'confidence', 'reason', 'evidence_ids'])
         ->and($tools)->toBe([CampaignFactsTool::class, LegalCandidatesTool::class]);
 });
 

@@ -49,10 +49,15 @@ class LaravelAiCampaignConsultationGateway implements CampaignConsultationGatewa
 
         $candidateId = $response['candidate_id'] ?? null;
         $risk = AiCampaignConsultationRisk::tryFrom((string) ($response['risk'] ?? ''));
+        $confidence = $response['confidence'] ?? null;
         $reason = $response['reason'] ?? null;
         $evidenceIds = $response['evidence_ids'] ?? null;
 
         if ($risk === null || !is_string($reason) || trim($reason) === '' || !is_array($evidenceIds)) {
+            return $this->invalid($request, $response);
+        }
+
+        if ($confidence !== null && (!is_int($confidence) && !is_float($confidence) || $confidence < 0 || $confidence > 1)) {
             return $this->invalid($request, $response);
         }
 
@@ -70,6 +75,7 @@ class LaravelAiCampaignConsultationGateway implements CampaignConsultationGatewa
             'status' => AiCampaignConsultationStatus::Completed,
             'candidateId' => $candidateId,
             'risk' => $risk,
+            'confidence' => $confidence === null ? null : (float) $confidence,
             'reason' => trim($reason),
             'evidenceIds' => $evidenceIds,
             'inputTokens' => $response->usage->promptTokens,

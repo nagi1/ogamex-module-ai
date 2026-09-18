@@ -42,6 +42,9 @@ enum AiStopReason: string
     /** As many consultations are in flight as the universe allows at once. */
     case ConsultationConcurrencyCap = 'consultation_concurrency_cap';
 
+    /** The recommendation's own reported confidence was below the floor, so the native decision stands. */
+    case ConsultationLowConfidence = 'consultation_low_confidence';
+
     /** A session's only candidate was DoNothing, so nothing else was available to choose. */
     case QuietDecision = 'quiet_decision';
 }

@@ -6,6 +6,7 @@ use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\UtilityScorer;
 use Modules\AI\Enums\AiCampaignConsultationStatus;
 use Modules\AI\Enums\AiCampaignState;
+use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiProfile;
@@ -59,6 +60,17 @@ class ConsultCampaignDecisionAction
         $signal->update(['consumed_at' => $this->clock->now()]);
 
         if ($recommendation->status !== AiCampaignConsultationStatus::Completed || $recommendation->candidateId === null) {
+            return $trace;
+        }
+
+        // A recommendation the model is not sure of does not move the ranking: the deterministic
+        // decision stands, and the suppression is recorded so the operator can see it.
+        if (!$recommendation->mayMoveRanking((float) config('ai.campaign-consultation.minimum_confidence', 0.5))) {
+            app(RecordAiStopReasonAction::class)->handle(AiStopReason::ConsultationLowConfidence, [
+                'campaign_id' => $campaign->id,
+                'confidence' => $recommendation->confidence,
+            ]);
+
             return $trace;
         }
 

@@ -4,7 +4,6 @@ namespace Modules\AI\Actions;
 
 use Modules\AI\Domain\CampaignConsultation\CampaignConsultationRecommendation;
 use Modules\AI\Domain\Decision\ScoredCandidate;
-use Modules\AI\Enums\AiCampaignConsultationStatus;
 use Modules\AI\Models\AiProfile;
 
 /**
@@ -14,7 +13,9 @@ use Modules\AI\Models\AiProfile;
  * by advice, a veteran barely at all, and the bound is exactly the near-equal window the native
  * selector already uses. A recommendation therefore can promote a candidate that was already in
  * contention, but it can never overtake a clearly superior native choice and can never touch a
- * candidate type that is not in the list — native policy still chooses and dispatches.
+ * candidate type that is not in the list — native policy still chooses and dispatches. A
+ * recommendation whose own reported confidence is below the operator floor does not nudge at all,
+ * so an unsure model leaves the deterministic decision untouched.
  */
 class ApplyCampaignConsultationRankingAction
 {
@@ -24,7 +25,7 @@ class ApplyCampaignConsultationRankingAction
      */
     public function handle(AiProfile $profile, array $candidates, CampaignConsultationRecommendation $recommendation): array
     {
-        if ($recommendation->status !== AiCampaignConsultationStatus::Completed || $recommendation->candidateId === null) {
+        if (!$recommendation->mayMoveRanking((float) config('ai.campaign-consultation.minimum_confidence', 0.5))) {
             return $candidates;
         }
 

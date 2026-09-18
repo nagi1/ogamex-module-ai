@@ -21,11 +21,13 @@ use Modules\AI\Enums\AiCampaignConsultationStatus;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationReceipt;
 use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiCampaignObjective;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiStopCounter;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\BattleReport;
@@ -114,7 +116,7 @@ function wiringTrace(int $playerId, array $scored): DecisionTrace
     ]);
 }
 
-function wiringCompleted(int $candidateId): CampaignConsultationRecommendation
+function wiringCompleted(int $candidateId, float|null $confidence = 0.9): CampaignConsultationRecommendation
 {
     return new CampaignConsultationRecommendation(
         AiCampaignConsultationStatus::Completed,
@@ -127,6 +129,8 @@ function wiringCompleted(int $candidateId): CampaignConsultationRecommendation
         'inv-1',
         'openai',
         'gpt-5-mini',
+        0,
+        $confidence,
     );
 }
 
@@ -211,6 +215,26 @@ test('an advice lane nudges the recommended candidate and consumes the signal', 
     expect($build->score)->toBe(1.0 + AiSkillBand::Standard->selectionMargin())
         ->and(AiCampaignConsultationSignal::query()->where('campaign_id', $campaign->id)->whereNull('consumed_at')->exists())->toBeFalse()
         ->and(AiCampaignConsultationReceipt::query()->sole()->changed_ranking)->toBeTrue();
+});
+
+test('an advice lane drops a low-confidence nudge and records why', function (): void {
+    config(['ai.campaign-consultation.mode' => 'advice']);
+    wiringActiveCampaign();
+    $profile = wiringProfile($this->currentUserId);
+    app()->bind(CampaignConsultationGateway::class, fn (): CampaignConsultationGateway => wiringGateway(wiringCompleted(AiCandidateActionType::Build->value, 0.1)));
+
+    $trace = app(ConsultCampaignDecisionAction::class)->handle(
+        $profile,
+        wiringTrace($this->currentUserId, [wiringCandidate(AiCandidateActionType::Research, 2.0), wiringCandidate(AiCandidateActionType::Build, 1.0)]),
+        'wiring-key',
+    );
+
+    $build = collect($trace->candidates)->first(fn (ScoredCandidate $candidate): bool => $candidate->candidate->type === AiCandidateActionType::Build);
+
+    // The nudge is dropped and the deterministic ranking stands, and the suppression is counted.
+    expect($build->score)->toBe(1.0)
+        ->and($trace->selected->candidate->type)->toBe(AiCandidateActionType::Research)
+        ->and(AiStopCounter::query()->where('reason', AiStopReason::ConsultationLowConfidence->value)->sole()->occurrences)->toBe(1);
 });
 
 test('a battle between two coalition members records a coalition-conflict signal', function (): void {
