@@ -69,24 +69,39 @@ class AdvanceAiCampaignStateAction
             return;
         }
 
-        // The faction climbs the same ladder on the published pass schedule; topping it first
-        // ends the campaign in the faction's favour instead of on the deadline. The counter is
-        // also the influence bar the campaign page displays, so the race stays one number.
-        // ponytail: one rung per pass means the operator's pass cadence IS the race clock — tune
-        // the cadence for the intended campaign length rather than adding a second rate.
-        if ($objectives->isNotEmpty() && $campaign->faction_momentum >= $objectives->count()) {
-            $campaign->state = AiCampaignState::FactionWon;
-            $campaign->save();
+        // The faction climbs the same ladder across the published window, so the
+        // momentum bar is the elapsed fraction of the window and can never outrun
+        // the schedule (IMPL-050): a seven-day campaign with three strongholds is
+        // still near the foot of the ladder after an hour, not three passes.
+        $campaign->faction_momentum = $this->momentum($campaign, $objectives->count(), $now);
+        $campaign->save();
 
-            return;
-        }
-
-        $campaign->increment('faction_momentum');
-
-        if ($campaign->ends_at !== null && $now->gt($campaign->ends_at)) {
-            $campaign->state = AiCampaignState::Failed;
+        if ($campaign->ends_at !== null && $now->gte($campaign->ends_at)) {
+            // The deadline is the faction's finish line: a ladder still standing is a
+            // faction win, an empty ladder has nothing to lose and just lapses.
+            $campaign->state = $objectives->isEmpty() ? AiCampaignState::Failed : AiCampaignState::FactionWon;
             $campaign->save();
         }
+    }
+
+    /**
+     * The faction's rung on the ladder, derived from how much of the window has
+     * elapsed — never from how many passes ran. Clamped to the ladder length.
+     */
+    private function momentum(AiCampaign $campaign, int $objectiveCount, CarbonImmutable $now): int
+    {
+        if ($objectiveCount === 0 || $campaign->starts_at === null || $campaign->ends_at === null) {
+            return 0;
+        }
+
+        $window = $campaign->ends_at->getTimestamp() - $campaign->starts_at->getTimestamp();
+        if ($window <= 0) {
+            return $objectiveCount;
+        }
+
+        $elapsed = max(0, $now->getTimestamp() - $campaign->starts_at->getTimestamp());
+
+        return min($objectiveCount, (int) floor($elapsed / $window * $objectiveCount));
     }
 
     private function completedOnTime(AiCampaign $campaign, Collection $objectives): bool
