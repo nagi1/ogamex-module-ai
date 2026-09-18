@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Domain\Raid\RaidEstimate;
 use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiRaidExperienceFeature;
+use Modules\AI\Enums\GamePhase;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiPhalanxScan;
@@ -58,6 +59,9 @@ class RaidPlanner
 
     /** RAID-011: loot-to-fuel ratio a raid must clear before it flies (metal-equivalent loot : deuterium). */
     private const LOOT_TIER_FARM = 3.0;
+
+    /** RV-011: astrophysics 23 is the researched late-game marker where mine ROI falls below fleet returns. */
+    private const LATE_PHASE_ASTROPHYSICS = 23;
 
     private const LOOT_TIER_DEFENDED = 2.0;
 
@@ -159,6 +163,15 @@ class RaidPlanner
 
         $target = $this->target($report);
         if ($target === null) {
+            return null;
+        }
+
+        // Target-class escalation (RV-011): the opening farms inactives only, a
+        // colonised account also raids active players, and only an
+        // astrophysics-23 account crashes fleets. The class is the host's own
+        // answer — the target's last activity and the report's ships — never a
+        // module list.
+        if (!$this->targetEligible($this->phase($player), $report)) {
             return null;
         }
 
@@ -538,6 +551,59 @@ class RaidPlanner
             false,
             PlanetType::from((int) $report->planet_type),
         );
+    }
+
+    /**
+     * The account's game phase, from host reads only (RV-011): one planet is the
+     * opening, a colony moves it mid, and astrophysics 23 makes it late.
+     */
+    private function phase(PlayerService $player): GamePhase
+    {
+        if ($player->getResearchLevel('astrophysics') >= self::LATE_PHASE_ASTROPHYSICS) {
+            return GamePhase::Late;
+        }
+
+        if ($player->planets->planetCount() >= 2) {
+            return GamePhase::Mid;
+        }
+
+        return GamePhase::Early;
+    }
+
+    /**
+     * Which targets a phase may raid (RV-011): inactives in every phase, active
+     * players once a colony exists, and their fleets only once astrophysics 23 is
+     * behind the account. A probed-empty active target (ships is []) is a farm;
+     * an active target with ships, or unseen ships (null), waits for the late phase.
+     */
+    private function targetEligible(GamePhase $phase, EspionageReport $report): bool
+    {
+        if ($phase === GamePhase::Late) {
+            return true;
+        }
+
+        if ($this->targetInactive($report)) {
+            return true;
+        }
+
+        return $phase === GamePhase::Mid && $report->ships === [];
+    }
+
+    /**
+     * Whether the report's target is a farm: idle long enough to hit, read from
+     * the host's own inactivity rule (last login at least seven days ago). A
+     * report without a known owner is refused, never raided.
+     */
+    private function targetInactive(EspionageReport $report): bool
+    {
+        $targetUserId = (int) $report->planet_user_id;
+        if ($targetUserId <= 0 || !User::query()->whereKey($targetUserId)->exists()) {
+            return false;
+        }
+
+        // Fresh load: the inactivity stamp is the decision input and a cached
+        // player would carry the stamp from whenever the factory first built it.
+        return $this->playerServiceFactory->make($targetUserId, true)->isInactive();
     }
 
     /**

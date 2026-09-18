@@ -38,6 +38,7 @@ use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\MessageService;
 use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -591,6 +592,79 @@ test('the raid planner prices a flight over a fleet holding solar satellites', f
     expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
 });
 
+// RV-011: target-class escalation. An active target is made active by touching
+// the owner's last-activity stamp; the factory default (time = null) already
+// reads as inactive, which is the farm every phase may hit.
+
+test('the opening phase raids inactives only, not active players', function (): void {
+    raidDepthProfile($this->currentUserId);
+    // The fixture starts with two planets (a colonised account); a one-planet
+    // opening is the phase under test, so every colony is removed first.
+    Planet::query()->where('user_id', $this->currentUserId)->where('id', '!=', $this->currentPlanetId)->update(['destroyed' => 1]);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    makeTargetActive($foreign);
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeNull();
+});
+
+test('a colonised account raids an active, fleet-less player', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $foreign = $this->createForeignPlanet();
+    makeTargetActive($foreign);
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+});
+
+test('an active fleet still waits for the late phase after colonising', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $this->planetAddUnit('cruiser', 10);
+    $foreign = $this->createForeignPlanet();
+    makeTargetActive($foreign);
+    $foreign->addUnit('light_fighter', 5);
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], null, ['light_fighter' => 5]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeNull();
+});
+
+test('an astrophysics-23 account crashes an active fleet', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 23);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $this->planetAddUnit('cruiser', 10);
+    $foreign = $this->createForeignPlanet();
+    makeTargetActive($foreign);
+    $foreign->addUnit('light_fighter', 5);
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], null, ['light_fighter' => 5]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+});
+
+// RV-011 helper: the owner's last-activity stamp sits in a non-fillable column,
+// so it is set directly on the model rather than mass-assigned.
+function makeTargetActive(PlanetService $foreign): void
+{
+    $user = User::query()->find($foreign->getPlayer()->getId());
+    $user->time = (string) now()->timestamp;
+    $user->save();
+}
+
 function raidDepthProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
@@ -602,19 +676,20 @@ function raidDepthProfile(int $playerId): AiProfile
     ]);
 }
 
-function raidDepthReport(int $playerId, int $galaxy, int $system, int $position, array $resources, ?int $targetUserId = null): int
+function raidDepthReport(int $playerId, int $galaxy, int $system, int $position, array $resources, ?int $targetUserId = null, array $ships = []): int
 {
     $report = new EspionageReport();
     $report->planet_galaxy = $galaxy;
     $report->planet_system = $system;
     $report->planet_position = $position;
     $report->planet_type = 1;
-    $report->planet_user_id = $targetUserId;
+    $report->planet_user_id = $targetUserId
+        ?? Planet::query()->where('galaxy', $galaxy)->where('system', $system)->where('planet', $position)->value('user_id');
     $report->resources = $resources + ['energy' => 0];
     $report->debris = [];
     $report->buildings = [];
     $report->research = [];
-    $report->ships = [];
+    $report->ships = $ships;
     $report->defense = [];
     $report->player_info = ['player_name' => 'Target', 'player_status' => 'inactive'];
     $report->save();

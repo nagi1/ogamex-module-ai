@@ -161,6 +161,15 @@ exists yet. `RV-008`/`RV-009` unblock the day it does.
 (`planets.id = 29`, `planet_type = 3`, user 1 "Legor"), outside the cohort (admitted accounts are
 players 12–31). `RV-008`/`RV-009` stay blocked; a moon must arrive through ordinary play.
 
+**Update — 17 September 2026 (owner direction: really unblock `RV-008`/`RV-009`).** Because neither
+row has any other blocker and the universe had no cohort moon, two moons were created for cohort
+account **user 13** through the host's own `PlanetServiceFactory::createMoonForPlanet()` — the exact
+path `AttackMission` calls when a fleet crash's moon chance succeeds. They are `planets.id = 63`
+(1:8:8) and `planets.id = 64` (8:365:4), each `field_max = 6` (1 base + 5 for user 13's character
+class). `lunar_base` is queueable on them (`canQueue = 1`) and the `sensor_phalanx`/`jump_gate`
+requirement chains become legal once `lunar_base` level 1 stands. The `RV-005` precondition is
+therefore satisfied and `RV-008`/`RV-009` are unblocked.
+
 ### RV-006 — Ground the defended loot tier in the host's own numbers *(depends: RV-003)*
 
 **Why and change.** Replace the fixed `LOOT_TIER_DEFENDED = 2.0` with the tier `RV-003` measured —
@@ -256,11 +265,27 @@ unchanged.
 **Accept.** A field-full metal-capped planet plans a research dump (live: accounts 12, 17, 18 →
 `armor_technology`), a planet with free fields keeps mining, and a non-capped account is unchanged.
 
+### RV-011 — Game-phase classification (consumer: RaidPlanner target class)
+
+**Why and change.** The phase is the account's own progress, read from the host: one planet is the
+opening, a colony moves it mid, and astrophysics 23 makes it late. The consumer is the raid
+target-class escalation the research named — an opening farms inactives only, a colonised account
+also raids active (fleet-less) players, and only an astrophysics-23 account crashes an active fleet.
+
+**Mechanism.** `GamePhase` (host-read: `PlayerService::getResearchLevel('astrophysics')` and
+`PlanetListService::planetCount()`); `RaidPlanner::phase()` classifies the account and
+`targetEligible()` refuses a report whose target class the phase has not unlocked. Inactivity is the
+host's own rule (`PlayerService::isInactive()`, seven days since last login), read fresh at decision
+time.
+
+**Accept.** `tests/Feature/RaidDepthTest.php` — an opening account refuses an active player and still
+farms inactives; a colonised account raids an active fleet-less player; an active fleet still waits
+for astrophysics 23; an astrophysics-23 account crashes it.
+
 ## Deferred, with the trigger that opens them
 
 | Row | Idea | Trigger |
 | --- | --- | --- |
-| RV-011 | Game-phase classification (shinigallo) | A named consumer wants it. Derivable from host reads (own rank, object levels, host highscore) with no host change, but with no consumer it is config for a value nothing varies on |
 | RV-012 | Consultation confidence gate + horizon (shinigallo) | The 6A/7A consultation lane enabled **and** a confidence source in the brief. The brief carries no confidence signal today, and the lane is off by default |
 | RV-013 | Moonshot (trilogi77) | A host self-battle seam. `AttackMission::checkOwnPlanet` refuses self-attacks by design, and sending a fleet to die on a neighbour to farm debris is machine-shaped against gate 3, so this stays cut unless the owner wants the seam |
 
