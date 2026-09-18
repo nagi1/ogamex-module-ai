@@ -2268,3 +2268,15 @@ lands a second-or-later planet. It is module-side only: the host already fires `
 war-declaration trigger is dropped (the host has no war-declaration feature, so it would be a paired
 host PR). The ordinary-universe de-campaigning shape change remains unbuilt and is tracked as
 `DEF-005` — gate 2 forbids it until a caller exists. 5 tests, Gate 2 and Pint clean.
+
+### Cohort measurement limits recorded (18 September 2026)
+
+DISC-010: fleet save/recall is unobservable in the accelerated cohorts — at `fleet_speed = 1000` an
+inbound attack averages 5.7s, so the reactive window is almost never sampled and the proactive path
+needs a two-hour absence the harness never gives. The planner is healthy (8/8 live grand accounts
+return a save), so this is recorded as a permanent limit of the 1000x cohort: the save-failure metric
+is only measurable in a 1x universe.
+
+DISC-011: the four coalition-side consultation triggers need a non-faction counterparty, and PVE holds
+one non-faction account against 19 AI profiles, so only `new_phase` and `rank_change` fire. Accepted as
+correctly scoped dormancy — the triggers fire when a real non-faction population exists.
