@@ -59,6 +59,16 @@ test('an account with no alliance applies through the host path', function (): v
         ->and(AllianceApplication::where('user_id', $this->currentUserId)->first()->application_message)->not->toBeEmpty();
 });
 
+test('a universe with no alliance has the first account found one', function (): void {
+    enableProfile($this->currentUserId);
+    rank($this->currentUserId, 1000, 1);
+
+    expect(app(AdvanceAiAllianceLifeAction::class)->handle())->toBe(1)
+        ->and(Alliance::query()->count())->toBe(1)
+        ->and(Alliance::query()->sole()->founder_user_id)->toBe($this->currentUserId)
+        ->and(User::query()->find($this->currentUserId)->alliance_id)->not->toBeNull();
+});
+
 test('an account already in an alliance is left alone', function (): void {
     enableProfile($this->currentUserId);
     rank($this->currentUserId, 1000, 1);

@@ -2,9 +2,12 @@
 
 namespace Modules\AI\Actions;
 
+use Exception;
 use Modules\AI\Models\AiProfile;
+use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\User;
+use OGame\Services\AllianceService;
 
 /**
  * Advances cooperative alliance life: an enabled account with no alliance and no outstanding
@@ -16,7 +19,7 @@ class AdvanceAiAllianceLifeAction
 {
     public function handle(): int
     {
-        $applied = 0;
+        $advanced = $this->foundFirstAlliance();
 
         foreach (AiProfile::query()->where('enabled', true)->pluck('player_id') as $playerId) {
             if ($this->alreadyEngaged($playerId)) {
@@ -24,11 +27,39 @@ class AdvanceAiAllianceLifeAction
             }
 
             if (app(ApplyAiAllianceAction::class)->handle($playerId)->successful) {
-                $applied++;
+                $advanced++;
             }
         }
 
-        return $applied;
+        return $advanced;
+    }
+
+    /**
+     * A universe with no alliance has nothing to apply to, so the first eligible
+     * account founds one — the same first-mover move a player makes — and the
+     * rest apply to it on later passes (DISC-012).
+     */
+    private function foundFirstAlliance(): int
+    {
+        if (Alliance::query()->exists()) {
+            return 0;
+        }
+
+        $founderId = AiProfile::query()->where('enabled', true)->orderBy('player_id')->value('player_id');
+
+        if ($founderId === null || $this->alreadyEngaged($founderId)) {
+            return 0;
+        }
+
+        try {
+            app(AllianceService::class)->createAlliance($founderId, 'ORBITAL', 'Orbital Pact');
+        } catch (Exception $exception) {
+            // A cooldown or tag collision leaves the universe unchanged; the next
+            // pass retries with the next eligible account.
+            return 0;
+        }
+
+        return 1;
     }
 
     private function alreadyEngaged(int $playerId): bool
