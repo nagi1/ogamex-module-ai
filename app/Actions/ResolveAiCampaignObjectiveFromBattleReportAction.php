@@ -4,6 +4,8 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
+use Modules\AI\Enums\AiCampaignState;
+use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignObjective;
 use OGame\Models\BattleReport;
 use OGame\Models\Planet;
@@ -44,6 +46,7 @@ class ResolveAiCampaignObjectiveFromBattleReportAction
         $objectives = AiCampaignObjective::query()
             ->where('planet_id', $planetId)
             ->whereNull('completed_at')
+            ->whereIn('campaign_id', AiCampaign::query()->where('state', AiCampaignState::Active)->pluck('id'))
             ->get(['id', 'campaign_id']);
 
         if ($objectives->isEmpty()) {

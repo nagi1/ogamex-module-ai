@@ -3,6 +3,9 @@
 use Modules\AI\Actions\DeclareAiCampaignObjectiveAction;
 use Modules\AI\Actions\OpenAiCampaignAction;
 use Modules\AI\Actions\ResolveAiCampaignObjectiveFromBattleReportAction;
+use Modules\AI\Enums\AiCampaignState;
+use Modules\AI\Models\AiCampaign;
+use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiCampaignObjective;
 use OGame\Models\BattleReport;
 use OGame\Models\Planet;
@@ -19,7 +22,8 @@ uses(IsolatedAccountTestCase::class);
  */
 function declareObjective(int $planetId): AiCampaignObjective
 {
-    $campaign = app(OpenAiCampaignAction::class)->handle(now()->toImmutable(), now()->addDay()->toImmutable());
+    $campaign = app(OpenAiCampaignAction::class)->handle(now()->subHour()->toImmutable(), now()->addDay()->toImmutable());
+    $campaign->update(['state' => AiCampaignState::Active]);
 
     return app(DeclareAiCampaignObjectiveAction::class)->handle($campaign->id, $planetId);
 }
@@ -150,4 +154,27 @@ test('a victory at coordinates with no planet resolves nothing', function (): vo
     ]));
 
     expect(app(ResolveAiCampaignObjectiveFromBattleReportAction::class)->handle($report->id))->toBe(0);
+});
+
+test('a victory at the stronghold of a dead campaign completes nothing', function (): void {
+    $planet = Planet::query()->find($this->createForeignPlanet()->getPlanetId());
+    $objective = declareObjective($planet->id);
+    AiCampaign::query()->whereKey($objective->campaign_id)->update(['state' => AiCampaignState::FactionWon]);
+
+    $report = reportAt($planet, ['rounds' => finalRound(['light_fighter' => 5], [])]);
+
+    expect(app(ResolveAiCampaignObjectiveFromBattleReportAction::class)->handle($report->id))->toBe(0)
+        ->and($objective->refresh()->completed_at)->toBeNull()
+        ->and(AiCampaignConsultationSignal::query()->count())->toBe(0);
+});
+
+test('a contested battle at the stronghold of a dead campaign writes no signal', function (): void {
+    $planet = Planet::query()->find($this->createForeignPlanet()->getPlanetId());
+    $objective = declareObjective($planet->id);
+    AiCampaign::query()->whereKey($objective->campaign_id)->update(['state' => AiCampaignState::Failed]);
+
+    $report = reportAt($planet, ['rounds' => finalRound(['light_fighter' => 5], ['light_fighter' => 2])]);
+
+    expect(app(ResolveAiCampaignObjectiveFromBattleReportAction::class)->handle($report->id))->toBe(0)
+        ->and(AiCampaignConsultationSignal::query()->count())->toBe(0);
 });
