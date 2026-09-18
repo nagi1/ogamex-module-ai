@@ -2224,3 +2224,20 @@ an unflyable ferry is never planned. The dispatch refusal stays as the safety ne
 leaves between planning and dispatch. `tests/Feature/TransferDepthTest.php` updated (5 tests) to the
 new contract: a cargo-less or combat-only source is not planned, and the dispatch loop still skips
 hulls with no hold.
+
+### Flight math must price only movable ships (18 September 2026)
+
+The grand cohort's failed-jobs table was filling with one error — `DivisionByZeroError` at
+`FleetMissionService::calculateFleetMissionDuration` — on every raid decision for accounts whose fleet
+planet also holds solar satellites. Solar satellites are host ship objects with speed 0, and
+`PlanetService::getShipUnits()` returns them alongside the movable hulls; the host divides by the slowest
+ship's speed, so the satellite turns the quote into a divide-by-zero (2530+ failed raid jobs, 0 lost
+work — the job retried and died, never writing a trace).
+
+The root cause is shared by every caller that passes the raw fleet into host flight math, so the fix is
+one helper, `Modules\AI\Domain\Decision\MovableFleet::of(player, units)`, which strips speed-0 hulls.
+`RaidPlanner::roundTripFuel` prices on the movable subset (and returns 0 fuel when there is none, so the
+plan then fails the launch-screen and returns null); `QueueableFleetSavePlanner` refuses a save whose
+origin holds only satellites and times the save on the movable subset. Regression test added to
+`tests/Feature/RaidDepthTest.php`. Deployed to both grand and pve stacks (bind-mounted code, workers
+restarted); new failures stopped in both.
