@@ -199,15 +199,16 @@ test('the ferry refuses an empty shipment and a fleet with no hold', function ()
         ->toBe(AiQueueActionReason::NoTransportFleet->value);
 });
 
-test('a combat-only fleet cannot ferry', function (): void {
+test('a fleet with no cargo hold is never planned as a ferry', function (): void {
     transferProfile($this->currentUserId);
     transferTarget($this->secondPlanetService);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetSetObjectLevel('metal_store', 10);
     $this->planetSetObjectLevel('crystal_store', 10);
     $this->planetSetObjectLevel('deuterium_store', 10);
-    // A hull with no cargo hold is never taken: the ferry never moves the combat fleet.
-    $this->planetAddUnit('light_fighter', 1);
+    // A hull with no cargo hold (an espionage probe) is never a ferry: the planner
+    // refuses a source that cannot carry anything, however full its warehouse is.
+    $this->planetAddUnit('espionage_probe', 1);
 
     expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
 });

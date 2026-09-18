@@ -16,7 +16,7 @@ use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
 
-function colonyProfile(int $playerId): AiProfile
+function colonyTriggerProfile(int $playerId): AiProfile
 {
     return AiProfile::create([
         'player_id' => $playerId,
@@ -27,7 +27,7 @@ function colonyProfile(int $playerId): AiProfile
     ]);
 }
 
-function colonyCampaign(AiCampaignState $state): AiCampaign
+function colonyTriggerCampaign(AiCampaignState $state): AiCampaign
 {
     $campaign = app(OpenAiCampaignAction::class)->handle(now()->subHour()->toImmutable(), now()->addDay()->toImmutable());
     $campaign->state = $state;
@@ -37,8 +37,8 @@ function colonyCampaign(AiCampaignState $state): AiCampaign
 }
 
 test('a coalition colony signals every active campaign', function (): void {
-    colonyCampaign(AiCampaignState::Active);
-    colonyProfile($this->currentUserId);
+    colonyTriggerCampaign(AiCampaignState::Active);
+    colonyTriggerProfile($this->currentUserId);
 
     app(RecordAiColonyCampaignSignalAction::class)->handle(new PlanetCreated(
         $this->secondPlanetService->getPlanetId(),
@@ -52,8 +52,8 @@ test('a coalition colony signals every active campaign', function (): void {
 });
 
 test('a homeworld is not a colony', function (): void {
-    colonyCampaign(AiCampaignState::Active);
-    colonyProfile($this->currentUserId);
+    colonyTriggerCampaign(AiCampaignState::Active);
+    colonyTriggerProfile($this->currentUserId);
     // Leave the account with its single homeworld only.
     Planet::query()->where('user_id', $this->currentUserId)->where('id', '!=', $this->currentPlanetId)->update(['destroyed' => 1]);
 
@@ -67,8 +67,8 @@ test('a homeworld is not a colony', function (): void {
 });
 
 test('a moon never signals a colony', function (): void {
-    colonyCampaign(AiCampaignState::Active);
-    colonyProfile($this->currentUserId);
+    colonyTriggerCampaign(AiCampaignState::Active);
+    colonyTriggerProfile($this->currentUserId);
 
     app(RecordAiColonyCampaignSignalAction::class)->handle(new PlanetCreated(
         $this->secondPlanetService->getPlanetId(),
@@ -80,7 +80,7 @@ test('a moon never signals a colony', function (): void {
 });
 
 test('a non-member colony does not signal', function (): void {
-    colonyCampaign(AiCampaignState::Active);
+    colonyTriggerCampaign(AiCampaignState::Active);
     // No profile: the account is not in the coalition.
 
     app(RecordAiColonyCampaignSignalAction::class)->handle(new PlanetCreated(
@@ -93,8 +93,8 @@ test('a non-member colony does not signal', function (): void {
 });
 
 test('a preparing campaign is not signalled', function (): void {
-    colonyCampaign(AiCampaignState::Preparing);
-    colonyProfile($this->currentUserId);
+    colonyTriggerCampaign(AiCampaignState::Preparing);
+    colonyTriggerProfile($this->currentUserId);
 
     app(RecordAiColonyCampaignSignalAction::class)->handle(new PlanetCreated(
         $this->secondPlanetService->getPlanetId(),
