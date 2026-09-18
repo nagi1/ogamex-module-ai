@@ -2257,3 +2257,14 @@ consultation signal, but the lane is campaign-keyed and both universes hold zero
 decision first: de-campaign the lane into an ordinary-universe shape (its own budget, caps and
 evidence gate), or open a campaign to give the trigger a caller. The war trigger still has no host
 seam, and the Package 7 evidence record is owner-supplied.
+
+### P7-001 colony trigger shipped, war trigger dropped, shape change deferred (18 September 2026)
+
+The earlier re-block was corrected: a colony trigger is no more dead machinery than the six shipped
+campaign triggers — all of them are dormant until a campaign opens. The colony half is now shipped as
+`AiCampaignConsultationTrigger::NewColony` plus a `PlanetCreated` listener
+(`RecordAiColonyCampaignSignal`) that signals every active campaign when an enabled coalition member
+lands a second-or-later planet. It is module-side only: the host already fires `PlanetCreated`. The
+war-declaration trigger is dropped (the host has no war-declaration feature, so it would be a paired
+host PR). The ordinary-universe de-campaigning shape change remains unbuilt and is tracked as
+`DEF-005` — gate 2 forbids it until a caller exists. 5 tests, Gate 2 and Pint clean.

@@ -13,5 +13,6 @@ enum AiCampaignConsultationTrigger: string
     case ContestedObjective = 'contested_objective';
     case CoalitionConflict = 'coalition_conflict';
     case NewPhase = 'new_phase';
+    case NewColony = 'new_colony';
     case RankChange = 'rank_change';
 }

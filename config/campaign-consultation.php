@@ -28,6 +28,7 @@ return [
         'contested_objective',
         'coalition_conflict',
         'new_phase',
+        'new_colony',
         'rank_change',
     ],
 

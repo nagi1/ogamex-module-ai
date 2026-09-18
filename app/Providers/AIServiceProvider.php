@@ -70,6 +70,7 @@ use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Listeners\RecordAiBuildingCompletionExperience;
+use Modules\AI\Listeners\RecordAiColonyCampaignSignal;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedBattleReport;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
@@ -87,6 +88,7 @@ use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use OGame\Events\Game\BuildingCompleted;
+use OGame\Events\Game\PlanetCreated;
 use OGame\Models\AllianceMember;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
@@ -131,6 +133,7 @@ class AIServiceProvider extends ModuleServiceProvider
         ChatMessage::observe(RedactDeletedChatMemory::class);
         AllianceMember::observe(ObserveCommittedAllianceMembership::class);
         Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
+        Event::listen(PlanetCreated::class, RecordAiColonyCampaignSignal::class);
 
         // The cooperative policy is a read-only answer the host guard consults at hostile
         // dispatch; the host enforces it. Registering here means a disabled module registers
