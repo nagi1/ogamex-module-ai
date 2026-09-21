@@ -2483,3 +2483,21 @@ Verified: `PersonaTasteTest` (3/3), `SocialInitiationTest` (4/4),
 `RoutineCadenceTest` (18/18), full suite 1003/1003, Gate 2 clean, PHPStan unchanged at 9
 pre-existing, Rector dry-run clean. Record:
 [`reviews/2026-09-21-persona-taste.md`](reviews/2026-09-21-persona-taste.md).
+
+### A member welcomes a newly-joined ally (21 September 2026)
+
+The one-hour live read (`DEF-029` watch) showed grand produced zero social exchanges in sixty
+minutes: the loop was alive (building completions flowed) but nobody spoke. The root cause was that
+`AllianceMembershipJoined` observations were written for every co-member and never consumed — the
+leader's application-accept welcome (`DEF-007`) is a different path, so an ordinary member never
+greeted a newcomer.
+
+`InitiateAiSocialContactAction` now welcomes a newly-joined member through the same authored
+pipeline it thanks a transfer through, gated on `sociability >= 0.5`: a chatty member says hello and
+a quiet one stays silent, so the same join reads as a greeting from some members and silence from
+others. The welcome is a `Greeting` exchange keyed on the membership observation, so the existing
+"an exchange is the marker" rule makes it fire once per joiner.
+
+Verified: `SocialInitiationTest` (6/6), full suite 1005/1005, Gate 2 clean, PHPStan unchanged at 9
+pre-existing. Record:
+[`reviews/2026-09-21-social-initiation-welcome.md`](reviews/2026-09-21-social-initiation-welcome.md).
