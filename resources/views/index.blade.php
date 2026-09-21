@@ -279,6 +279,17 @@
                     @endif
 
                     @if ($tab === 'monitoring')
+                        <p class="box_highlight textCenter no_buddies">{{ __('t_ai.situation_heading') }}</p>
+                        <div class="group bborder">
+                            @foreach ($situation->questions as $question)
+                                @include('ai::partials.metric', [
+                                    'label' => __('t_ai.situation_q', ['question' => __($question['question'])]),
+                                    'value' => $question['figure'],
+                                    'sub' => __('t_ai.evidence_' . $question['evidence']),
+                                ])
+                            @endforeach
+                        </div>
+
                         <p class="box_highlight textCenter no_buddies">{{ __('t_ai.account_switch_heading') }}</p>
                         <div class="group bborder">
                             <form method="post" action="{{ route('ai.account.switch') }}">

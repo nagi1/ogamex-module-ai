@@ -56,6 +56,17 @@ return [
     'account_resumed' => 'Account resumed.',
     'never' => 'never',
 
+    'situation_heading' => 'Situation — the five review questions',
+    'situation_q' => ':question',
+    'situation_q_capability' => 'Did the account reach the next stage of the capability chain?',
+    'situation_q_growth' => 'Is the growth explicable by visible behaviour?',
+    'situation_q_divergence' => 'Does the cohort diverge?',
+    'situation_q_reaction' => 'Does it react under pressure, and does a save ever fail?',
+    'situation_q_aliveness' => 'Is the server more alive?',
+    'evidence_measured' => 'measured',
+    'evidence_code-read' => 'code-read',
+    'evidence_inferred' => 'inferred',
+
     'liveness_heading' => 'Liveness and quiet diagnosis',
     'liveness_last_activity' => 'Last activity (any account)',
     'liveness_overdue' => 'Accounts past their next run',

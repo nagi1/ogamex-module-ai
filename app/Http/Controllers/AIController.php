@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\BuildAiProgressBoardAction;
+use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\ExplainAiDecisionAction;
 use Modules\AI\Actions\ReplayAiScenarioAction;
 use Modules\AI\Actions\SetAiAccountEnabledAction;
@@ -76,6 +77,9 @@ class AIController extends OGameController
         $providers = $tab === 'monitoring'
             ? app(SummarizeAiProviderVisibilityAction::class)->handle()
             : null;
+        $situation = $tab === 'monitoring'
+            ? app(BuildAiSituationPanelAction::class)->handle($days)
+            : null;
         $profiles = $tab === 'monitoring'
             ? AiProfile::query()->orderBy('player_id')->get(['player_id', 'archetype', 'skill_band', 'enabled'])
             : collect();
@@ -107,6 +111,7 @@ class AIController extends OGameController
             'liveness' => $liveness,
             'storage' => $storage,
             'providers' => $providers,
+            'situation' => $situation,
             'profiles' => $profiles,
             'board' => $board,
             'authenticity' => $authenticity,

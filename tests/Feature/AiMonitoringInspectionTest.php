@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\SetAiAccountEnabledAction;
 use Modules\AI\Actions\SummarizeAiLivenessAction;
 use Modules\AI\Actions\SummarizeAiProviderVisibilityAction;
@@ -94,6 +95,14 @@ test('provider visibility aggregates per vendor and reports an unconfigured ledg
         ->and($openaiRow['tokens'])->toBe(150)
         ->and($openaiRow['avgLatencyMs'])->toBe(300)
         ->and($openaiRow['cost'])->toEqualWithDelta(0.0042, 0.0001);
+});
+
+test('the situation panel answers the five review questions with an evidence class', function (): void {
+    $panel = app(BuildAiSituationPanelAction::class)->handle(7);
+
+    expect($panel->questions)->toHaveCount(5)
+        ->and(collect($panel->questions)->pluck('evidence')->all())->each->toBe('measured')
+        ->and(collect($panel->questions)->every(fn (array $row): bool => $row['question'] !== '' && $row['figure'] !== '' && $row['window'] === 7))->toBeTrue();
 });
 
 test('stopping one account records the reason and leaves the others running', function (): void {
