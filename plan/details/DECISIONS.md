@@ -2430,3 +2430,56 @@ Two changes, in the direction the owner had already set (chat like a real OGame 
 Verified: `LaravelAiLanguageTest` (11/11) and `ConversationEscalationTest` (17/17) updated and
 green, full suite 998/998, Gate 2 clean, PHPStan 9 pre-existing. Record:
 [`reviews/2026-09-21-social-loop-sides.md`](reviews/2026-09-21-social-loop-sides.md).
+
+### Persona taste — continuous seeded dimensions (21 September 2026)
+
+The owner's day-one acceptance is that 100 accounts must not be the same player 100 times, but the
+persona was categorical (5 archetypes × 3 skill bands), so two accounts of one archetype read as
+copies. `PersonaTaste` (`app/Domain/Persona/PersonaTaste.php`) adds the continuous half: three seeded
+dimensions — `diligence`, `aggression`, `sociability` — derived deterministically from the account's
+`random_seed` through `RandomSource`, each on 0..1.
+
+Only `aggression` is wired in this slice, into `QueueableFleetSavePlanner::exposureBand` as
+`base * (0.5 + aggression)` (neutral at 0.5), and only on the proactive save: a bold account leaves a
+larger fleet unsaved, a cautious one saves smaller fleets. The reactive save under an inbound keeps
+the base band, so "a save fires under attack" is never traded away (gate 3; the safety margin stays
+intact).
+
+`diligence` (→ `sessionsPerDay`) and `sociability` (→ response turns) were wired and then reverted,
+because the existing calibration caught both: the cadence suite failed the dark-period guarantee when
+a trader moved to five sessions and a casual dropped below its two-visit floor, and a second response
+turn broke the conversation loop-prevention test. Both remain derived-but-unwired, documented as
+follow-ups in `persona-taste.md` (diligence must be band-bounded inside each archetype's presence
+band; sociability belongs in initiation triggers, not a reply-count cap).
+
+Verified: `PersonaTasteTest` (2/2), `ProactiveSaveTest` (7/7, cargo count updated to clear the
+boldest band), full suite 1001/1001, Gate 2 clean, PHPStan unchanged at 9 pre-existing, Rector
+dry-run clean. Record:
+[`reviews/2026-09-21-persona-taste.md`](reviews/2026-09-21-persona-taste.md).
+
+### Persona taste — diligence and sociability wired (21 September 2026)
+
+`DEF-028` shipped only `aggression`; this closes the two remaining dimensions of `PersonaTaste`.
+
+- **diligence → cadence.** `RoutineProfile::sessionsPerDay` now places the account inside its own
+  archetype presence band (`[fewest, most]` from the analogue benchmark) instead of multiplying a
+  single calibrated base. The band itself is the guard: a lazy miner plays the floor and a diligent
+  one the ceiling, so a casual account never drops below its two-visit floor and a fleeter never
+  rises past its sixteen-visit ceiling. The earlier multiplier attempt was reverted because it broke
+  the cadence calibration; band-bounding is the correction, not a workaround.
+- **sociability → initiation.** `InitiateAiSocialContactAction` caps the thank-yous one session
+  sends at `round(5 × sociability)`, floored at one. A chatty account works through a whole pile of
+  senders; a quiet one thanks the first and leaves the rest. The reply-turn cap in
+  `RunAiConversationCycleAction` stays fixed, because sociability belongs on the *initiation*
+  surface, not inside the bounded reply protocol (the earlier reply-turn wiring broke
+  `ConversationCycleTest`'s loop-prevention).
+
+The dark-period measurement in `RoutineCadenceTest` also needed a real fix: the silence after the
+last simulated session is a night too, so the coverage now extends to the end of the run. This was
+the latent artifact the first diligence attempt tripped over (the last day's only session left no
+following gap), and it would have bitten any future cadence change.
+
+Verified: `PersonaTasteTest` (3/3), `SocialInitiationTest` (4/4),
+`RoutineCadenceTest` (18/18), full suite 1003/1003, Gate 2 clean, PHPStan unchanged at 9
+pre-existing, Rector dry-run clean. Record:
+[`reviews/2026-09-21-persona-taste.md`](reviews/2026-09-21-persona-taste.md).
