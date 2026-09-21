@@ -54,6 +54,20 @@ function receivedTransportObservation(int $playerId, int $senderId, int $sourceI
     ]);
 }
 
+function joinedObservation(int $playerId, int $joinerId, int $sourceId): AiObservation
+{
+    return AiObservation::query()->firstOrCreate([
+        'player_id' => $playerId,
+        'source_type' => AiObservationSource::AllianceMembershipJoined,
+        'source_id' => $sourceId,
+    ], [
+        'kind' => AiObservationKind::AllianceMembershipJoined,
+        'subject_player_id' => $joinerId,
+        'source_time' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC'),
+    ]);
+}
+
 test('a received transport earns exactly one thank-you to the sender', function (): void {
     $sender = $this->createUser();
     initiationProfile($this->currentUserId);
@@ -101,4 +115,37 @@ test('a chatty account thanks a whole pile of senders, a quiet one thanks one', 
 
     expect($action->handle($quiet->id, $now))->toBe(1)
         ->and($action->handle($chatty->id, $now))->toBe(3);
+});
+
+test('a chatty member welcomes a newcomer and a quiet one stays silent', function (): void {
+    $chatty = $this->createUser();
+    $quiet = $this->createUser();
+    $joiner = $this->createUser();
+    initiationProfile($chatty->id, 9);  // sociability 0.90 -> greets
+    initiationProfile($quiet->id, 5);   // sociability 0.10 -> silent
+    joinedObservation($chatty->id, $joiner->id, 8101);
+    joinedObservation($quiet->id, $joiner->id, 8102);
+
+    $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
+    $action = app(InitiateAiSocialContactAction::class);
+
+    expect($action->handle($chatty->id, $now))->toBe(1)
+        ->and(ChatMessage::query()->where('sender_id', $chatty->id)->where('recipient_id', $joiner->id)->exists())->toBeTrue()
+        ->and(AiSocialExchange::query()->where('player_id', $chatty->id)->where('counterparty_player_id', $joiner->id)->where('type', AiSocialExchangeType::Greeting)->exists())->toBeTrue()
+        ->and($action->handle($quiet->id, $now))->toBe(0)
+        ->and(ChatMessage::query()->where('sender_id', $quiet->id)->exists())->toBeFalse();
+});
+
+test('a newcomer is welcomed only once', function (): void {
+    $chatty = $this->createUser();
+    $joiner = $this->createUser();
+    initiationProfile($chatty->id, 9);
+    joinedObservation($chatty->id, $joiner->id, 8201);
+
+    $action = app(InitiateAiSocialContactAction::class);
+    $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
+
+    expect($action->handle($chatty->id, $now))->toBe(1)
+        ->and($action->handle($chatty->id, $now))->toBe(0)
+        ->and(ChatMessage::query()->where('sender_id', $chatty->id)->where('recipient_id', $joiner->id)->count())->toBe(1);
 });
