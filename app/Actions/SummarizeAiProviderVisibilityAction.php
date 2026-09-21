@@ -3,6 +3,7 @@
 namespace Modules\AI\Actions;
 
 use Modules\AI\Domain\Operability\AiProviderVisibilityOverview;
+use Modules\AI\Enums\AiUsageReservationState;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
@@ -52,6 +53,23 @@ class SummarizeAiProviderVisibilityAction
             ->values()
             ->all();
 
-        return app()->makeWith(AiProviderVisibilityOverview::class, ['configured' => true, 'vendors' => $vendors]);
+        return app()->makeWith(AiProviderVisibilityOverview::class, [
+            'configured' => true,
+            'vendors' => $vendors,
+            'monthToDateCost' => $this->monthToDateCost(),
+            'monthlyCeiling' => (float) config('ai.cognition.monthly_cost_usd', 0),
+        ]);
+    }
+
+    /**
+     * Settled spend since the first of the current month, across every generative lane.
+     * This is the figure the reservation admission layer compares against the wall.
+     */
+    private function monthToDateCost(): float
+    {
+        return (float) AiUsageReservation::query()
+            ->where('state', AiUsageReservationState::Settled)
+            ->where('reserved_for', '>=', $this->clock->now()->startOfMonth()->toDateString())
+            ->sum('cost');
     }
 }

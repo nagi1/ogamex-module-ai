@@ -67,6 +67,7 @@ return [
     'storage_oldest' => 'Oldest row age',
 
     'provider_heading' => 'Provider lanes (30 days)',
+    'budget_spend' => 'Month-to-date spend: :spent of :ceiling',
     'provider_unconfigured' => 'No provider configured.',
     'provider_vendor' => 'Vendor',
     'provider_attempts' => 'Attempts',

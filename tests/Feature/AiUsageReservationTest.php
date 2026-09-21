@@ -9,6 +9,7 @@ use Modules\AI\Domain\Conversation\UsageReservationRequest;
 use Modules\AI\Enums\AiUsageBudgetScope;
 use Modules\AI\Enums\AiUsageReservationState;
 use Modules\AI\Models\AiUsageBudget;
+use Modules\AI\Models\AiUsageReservation;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -174,3 +175,60 @@ function usageBudgetLimit(int $attempts, int $inputTokens, int $outputTokens): U
         'outputTokens' => $outputTokens,
     ]);
 }
+
+test('the monthly cost wall refuses a reservation once settled spend reaches it', function (): void {
+    config(['ai.cognition.monthly_cost_usd' => 10]);
+
+    AiUsageReservation::query()->create([
+        'universe_scope' => 'default',
+        'player_id' => $this->currentUserId,
+        'conversation_key' => 'spent',
+        'request_key' => 'spent-1',
+        'reserved_for' => '2026-09-01',
+        'reserved_input_tokens' => 100,
+        'reserved_output_tokens' => 40,
+        'state' => AiUsageReservationState::Settled,
+        'cost' => 10.0,
+    ]);
+
+    $reservation = app(ReserveAiUsageAction::class)->handle(
+        usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 100, 40),
+        usageBudgetLimits(),
+    );
+
+    expect($reservation)->toBeNull();
+});
+
+test('the monthly cost wall is disabled when the ceiling is zero', function (): void {
+    config(['ai.cognition.monthly_cost_usd' => 0]);
+
+    $reservation = app(ReserveAiUsageAction::class)->handle(
+        usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 100, 40),
+        usageBudgetLimits(),
+    );
+
+    expect($reservation)->not->toBeNull();
+});
+
+test('a settled spend below the wall still reserves', function (): void {
+    config(['ai.cognition.monthly_cost_usd' => 10]);
+
+    AiUsageReservation::query()->create([
+        'universe_scope' => 'default',
+        'player_id' => $this->currentUserId,
+        'conversation_key' => 'spent',
+        'request_key' => 'spent-1',
+        'reserved_for' => '2026-09-01',
+        'reserved_input_tokens' => 100,
+        'reserved_output_tokens' => 40,
+        'state' => AiUsageReservationState::Settled,
+        'cost' => 9.50,
+    ]);
+
+    $reservation = app(ReserveAiUsageAction::class)->handle(
+        usageReservationRequest($this->currentUserId, 'conversation-a', 'request-a', 100, 40),
+        usageBudgetLimits(),
+    );
+
+    expect($reservation)->not->toBeNull();
+});

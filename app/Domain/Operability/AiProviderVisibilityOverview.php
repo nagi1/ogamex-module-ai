@@ -7,6 +7,8 @@ namespace Modules\AI\Domain\Operability;
  * provider and never by account.
  *
  * @property bool $configured
+ * @property float $monthToDateCost
+ * @property float $monthlyCeiling
  * @property list<array{provider:string, attempts:int, avgLatencyMs:int|null, tokens:int, cost:float}> $vendors
  */
 readonly class AiProviderVisibilityOverview
@@ -14,7 +16,11 @@ readonly class AiProviderVisibilityOverview
     /**
      * @param list<array{provider:string, attempts:int, avgLatencyMs:int|null, tokens:int, cost:float}> $vendors
      */
-    public function __construct(public bool $configured = false, public array $vendors = [])
-    {
+    public function __construct(
+        public bool $configured = false,
+        public array $vendors = [],
+        public float $monthToDateCost = 0.0,
+        public float $monthlyCeiling = 0.0,
+    ) {
     }
 }

@@ -340,6 +340,12 @@
                                 <p>{{ __('t_ai.provider_unconfigured') }}</p>
                             @endif
                             @if ($providers->configured)
+                                <p class="box_highlight textCenter no_buddies">
+                                    {{ __('t_ai.budget_spend', [
+                                        'spent' => '$' . number_format($providers->monthToDateCost, 2),
+                                        'ceiling' => '$' . number_format($providers->monthlyCeiling, 2),
+                                    ]) }}
+                                </p>
                                 <table class="defaultTable">
                                     <tr>
                                         <th>{{ __('t_ai.provider_vendor') }}</th>

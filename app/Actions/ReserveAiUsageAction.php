@@ -32,6 +32,10 @@ class ReserveAiUsageAction
                 return $existing;
             }
 
+            if (!$this->withinMonthlyCostCeiling($request)) {
+                return null;
+            }
+
             if (!$this->canReserve($budgetRows, $limits, $request)) {
                 return null;
             }
@@ -101,6 +105,27 @@ class ReserveAiUsageAction
     private function canReserve(Collection $budgetRows, UsageBudgetLimits $limits, UsageReservationRequest $request): bool
     {
         return $budgetRows->every(fn (AiUsageBudget $budget): bool => $this->withinLimit($budget, $this->limitFor($budget->scope, $limits), $request));
+    }
+
+    /**
+     * The dollar wall: once the month's settled cost reaches the ceiling, no further
+     * reservation is admitted. Settled cost is a trailing figure, so one in-flight call
+     * can overshoot by at most its own reservation — the per-day token caps bound that.
+     */
+    private function withinMonthlyCostCeiling(UsageReservationRequest $request): bool
+    {
+        $ceiling = (float) config('ai.cognition.monthly_cost_usd', 0);
+
+        if ($ceiling <= 0) {
+            return true;
+        }
+
+        $spent = (float) AiUsageReservation::query()
+            ->where('state', AiUsageReservationState::Settled)
+            ->where('reserved_for', '>=', $request->reservedAt->startOfMonth()->toDateString())
+            ->sum('cost');
+
+        return $spent < $ceiling;
     }
 
     private function withinLimit(AiUsageBudget $budget, UsageBudgetLimit $limit, UsageReservationRequest $request): bool

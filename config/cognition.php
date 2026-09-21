@@ -18,6 +18,14 @@ return [
     // contributing alongside it (the default).
     'mode' => env('AI_COGNITION_MODE', 'hybrid'),
 
+    /*
+     * Hard monthly spend ceiling across every generative lane (campaign consultation and
+     * language chat). The per-day token/attempt limits in each lane's config are the
+     * operational caps; this is the dollar wall a bill can never cross, read by the
+     * reservation admission layer against the month's settled cost. 0 disables the wall.
+     */
+    'monthly_cost_usd' => (float) env('AI_MONTHLY_COST_USD', 10),
+
     'circuit' => [
         // Consecutive failures before the driver is skipped entirely.
         'failures' => (int) env('AI_COGNITION_CIRCUIT_FAILURES', 3),
