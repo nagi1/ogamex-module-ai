@@ -192,12 +192,13 @@ test('a job that dies before its receipt exists still answers with the authored 
         ->and(AiLanguageRequest::query()->count())->toBe(0);
 });
 
-test('an already automated counterparty never reaches a provider', function (): void {
+test('an automated counterparty now reaches the provider too', function (): void {
     config(['ai.language.enabled' => true]);
     [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'sorry about the raid, my bad', true);
+    bindFixedLanguageResult(languageResult(AiLanguageResultStatus::Completed, 'np man', 20, 5));
 
     app()->makeWith(GenerateAiReply::class, ['replyId' => $reply->id])->handle(app(GenerateAiReplyAction::class));
 
-    expect(escalationSentMessage($this->currentUserId))->toBe('Authored fallback.')
-        ->and(AiLanguageRequest::query()->count())->toBe(0);
+    expect(escalationSentMessage($this->currentUserId))->toBe('np man')
+        ->and(AiLanguageRequest::query()->count())->toBe(1);
 });

@@ -76,10 +76,6 @@ class GenerateAiReplyAction
 
     private function buildRequest(AiConversationReply $reply): LanguageRequest|null
     {
-        if (AiProfile::query()->where('player_id', $reply->counterparty_player_id)->where('enabled', true)->exists()) {
-            return null;
-        }
-
         $profile = AiProfile::query()->where('player_id', $reply->player_id)->where('enabled', true)->first();
 
         if ($profile === null) {

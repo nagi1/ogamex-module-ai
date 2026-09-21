@@ -171,23 +171,28 @@ test('an uncertain request redelivers its authored fallback without another prov
     OgameConversationReplyAgent::assertNeverPrompted();
 });
 
-test('provider-off and AI-to-AI replies keep the authored zero-prompt path', function (): void {
+test('provider-off replies keep the authored path, and AI-to-AI replies now reach the provider', function (): void {
     [$disabledReply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'Please answer.');
     config(['ai.language.enabled' => false]);
     OgameConversationReplyAgent::fake()->preventStrayPrompts();
 
     $disabledDelivery = app(GenerateAiReplyAction::class)->handle($disabledReply->id);
 
+    expect($disabledDelivery?->message)->toBe('Authored fallback.')
+        ->and(AiLanguageRequest::query()->count())->toBe(0);
+
     config(['ai.language.enabled' => true]);
+    OgameConversationReplyAgent::fake([[
+        'text' => 'u hit me first',
+        'interpretation' => 'none',
+        'candidates' => [],
+    ]]);
     [$aiReply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'Automated message.', true);
     $aiDelivery = app(GenerateAiReplyAction::class)->handle($aiReply->id);
 
-    OgameConversationReplyAgent::assertNeverPrompted();
+    OgameConversationReplyAgent::assertPrompted(fn (AgentPrompt $prompt): bool => $prompt->contains('Automated message.'));
 
-    expect($disabledDelivery?->message)->toBe('Authored fallback.')
-        ->and($aiDelivery?->message)->toBe('Authored fallback.')
-        ->and(AiLanguageRequest::query()->count())->toBe(0)
-        ->and(AiUsageReservation::query()->count())->toBe(0);
+    expect($aiDelivery?->message)->toBe('u hit me first');
 });
 
 test('the null gateway never loads provider configuration and the SDK gateway rejects malformed envelopes', function (): void {
