@@ -55,6 +55,7 @@ class BuildAuthoredSocialReplyAction
             AiSocialExchangeType::CooperationRequest => $this->cooperationReplyLines($response),
             AiSocialExchangeType::CompensationOffer => $this->compensationReplyLines($response),
             AiSocialExchangeType::AttackerNotice => $this->attackerNoticeLines(),
+            AiSocialExchangeType::TransportThanks => $this->transportThanksLines(),
         };
     }
 
@@ -202,5 +203,11 @@ class BuildAuthoredSocialReplyAction
     private function attackerNoticeLines(): array
     {
         return ['online :)', 'I saw that. :)', 'nice try ;)', 'still here. :)'];
+    }
+
+    /** @return list<string> */
+    private function transportThanksLines(): array
+    {
+        return ['Thanks for the resources.', 'Appreciate the shipment.', 'Received — thank you.'];
     }
 }
