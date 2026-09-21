@@ -30,7 +30,7 @@ use Modules\AI\Support\AiClock;
 class PruneAiRecordsAction
 {
     /** @var array<class-string<Model>, int> */
-    private const RETENTION_DAYS = [
+    public const RETENTION_DAYS = [
         AiWorkItem::class => 90,
         AiActionReceipt::class => 90,
         AiDecisionTrace::class => 30,

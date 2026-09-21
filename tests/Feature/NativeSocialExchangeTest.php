@@ -117,7 +117,7 @@ test('an overdue exchange expires without creating a commitment', function (): v
 test('an acknowledged low-threat apology is accepted without inventing a commitment', function (): void {
     $counterparty = $this->createUser();
     $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $counterparty->id, 5004, AiSocialExchangeType::Apology, [AiSocialTerm::AcknowledgesHarm->value => true]);
-    AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.3, 'affinity' => 0.3, 'threat' => 0.2, 'respect' => 0, 'social_importance' => 0, 'last_observation_id' => 5004, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
+    AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.6, 'affinity' => 0.3, 'threat' => 0.2, 'respect' => 0, 'social_importance' => 0, 'last_observation_id' => 5004, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
 
     $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, CarbonImmutable::parse('2026-09-11 11:00 UTC'));
 
@@ -131,7 +131,7 @@ test('current anger decides whether the same apology is accepted or answered wit
         'exchangeId' => 1,
         'type' => AiSocialExchangeType::Apology,
         'terms' => [AiSocialTerm::AcknowledgesHarm->value => true],
-        'trust' => 0.3,
+        'trust' => 0.6,
         'affinity' => 0.3,
         'threat' => 0.2,
         'outstandingCommitments' => 0,
@@ -142,7 +142,7 @@ test('current anger decides whether the same apology is accepted or answered wit
 
     expect($evaluation->response)->toBe($response);
 })->with([
-    // Earned standing is 0.6, so the same apology clears the threshold while calm.
+    // Earned trust is 0.6, so the same apology clears the floor while calm.
     'calm' => [0.0, AiSocialResponse::Accept],
     'still angry' => [0.2, AiSocialResponse::Counter],
 ]);
@@ -222,6 +222,27 @@ test('a safe but untrusted apology requests compensation without clearing prior 
     expect($evaluation->response)->toBe(AiSocialResponse::Counter)
         ->and($evaluation->reason)->toBe(AiSocialResponseReason::CompensationNeeded)
         ->and($evaluation->counterTerms)->toBe([AiSocialTerm::Repair->value => AiSocialRepair::Compensation->value]);
+});
+
+test('no amount of warmth forgives an apology without earned trust', function (): void {
+    $evaluation = app(SocialCognition::class)->evaluateSocialExchange(app()->makeWith(SocialExchangeContext::class, [
+        'exchangeId' => 1,
+        'type' => AiSocialExchangeType::Apology,
+        'terms' => [AiSocialTerm::AcknowledgesHarm->value => true],
+        'trust' => 0.0,
+        'affinity' => 0.9,
+        'threat' => 0.1,
+        'respect' => 0.9,
+        'socialImportance' => 0.9,
+        'outstandingCommitments' => 0,
+        'availableAmount' => 0,
+        'evaluatedAt' => CarbonImmutable::parse('2026-09-11 13:00:00 UTC'),
+    ]));
+
+    // Affinity and respect are cheap contact; they inflate with repeated apologies but must
+    // never forgive a betrayal. Only trust — earned by a kept promise — clears the floor.
+    expect($evaluation->response)->toBe(AiSocialResponse::Counter)
+        ->and($evaluation->reason)->toBe(AiSocialResponseReason::CompensationNeeded);
 });
 
 test('typed social protocols have bounded capability-safe native responses', function (AiSocialExchangeType $type, array $terms, CarbonImmutable|null $dueAt, float $threat, AiSocialResponse $response, AiSocialResponseReason $reason): void {
@@ -367,6 +388,42 @@ test('authored replies skip a recently delivered variant when one remains', func
     expect($firstReply)->toBeIn(['Greetings.', 'Hello.'])
         ->and($secondReply)->toBeIn(['Greetings.', 'Hello.'])
         ->and($secondReply)->not->toBe($firstReply);
+});
+
+test('the same apology decision is worded warmly for a friend and coldly for a foe', function (): void {
+    $counterparty = $this->createUser();
+
+    AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $counterparty->id, 'trust' => 0.6, 'affinity' => 0.5, 'threat' => 0.1, 'respect' => 0.5, 'social_importance' => 0.5, 'last_observation_id' => 1, 'last_interaction_at' => CarbonImmutable::parse('2026-09-11 10:00 UTC'), 'revision' => 1]);
+
+    $friend = app()->makeWith(AiSocialExchange::class, ['attributes' => [
+        'player_id' => $this->currentUserId,
+        'counterparty_player_id' => $counterparty->id,
+        'type' => AiSocialExchangeType::Apology,
+        'response' => AiSocialResponse::Accept,
+        'response_terms' => [],
+        'revision' => 1,
+    ]]);
+    $friend->id = 1;
+
+    $warm = app(BuildAuthoredSocialReplyAction::class)->handle($friend, socialReplyProfile($this->currentUserId));
+
+    // The same counterparty, now a foe: the wording flips, the decision is not touched here.
+    AiRelationship::query()->where('player_id', $this->currentUserId)->where('other_player_id', $counterparty->id)->update(['trust' => 0.0, 'threat' => 0.8]);
+
+    $foe = app()->makeWith(AiSocialExchange::class, ['attributes' => [
+        'player_id' => $this->currentUserId,
+        'counterparty_player_id' => $counterparty->id,
+        'type' => AiSocialExchangeType::Apology,
+        'response' => AiSocialResponse::Reject,
+        'response_terms' => [],
+        'revision' => 1,
+    ]]);
+    $foe->id = 2;
+
+    $cold = app(BuildAuthoredSocialReplyAction::class)->handle($foe, socialReplyProfile($this->currentUserId));
+
+    expect($warm)->toBeIn(['Apology accepted — we can move past this.', 'Thank you for saying that. Let us put it behind us.'])
+        ->and($cold)->toBeIn(['Keep your distance until the threat is gone.', 'Words will not undo this. Stay away.']);
 });
 
 test('authored replies are bounded to known response variants and never invent terms', function (AiSocialResponse|null $response, array|null $terms): void {

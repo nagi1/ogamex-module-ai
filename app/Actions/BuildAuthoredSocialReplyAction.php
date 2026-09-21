@@ -8,6 +8,7 @@ use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialTerm;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\RandomSource;
 
@@ -25,7 +26,7 @@ class BuildAuthoredSocialReplyAction
             return null;
         }
 
-        $lines = $this->replyLines($exchange->type, $exchange->response);
+        $lines = $this->replyLines($exchange->type, $exchange->response, $this->stanceFor($exchange));
         $eligibleLines = $this->withoutRecentDeliveredLines($exchange, $lines);
         $index = (int) floor($this->randomSource->unitInterval($profile->random_seed, 'social-exchange:' . $exchange->id . ':' . $exchange->revision) * count($eligibleLines));
         $line = $eligibleLines[$index];
@@ -41,11 +42,11 @@ class BuildAuthoredSocialReplyAction
      *
      * @return list<string>
      */
-    private function replyLines(AiSocialExchangeType $type, AiSocialResponse $response): array
+    private function replyLines(AiSocialExchangeType $type, AiSocialResponse $response, string $stance): array
     {
         return match ($type) {
             AiSocialExchangeType::HelpRequest => $this->helpReplyLines($response),
-            AiSocialExchangeType::Apology => $this->apologyReplyLines($response),
+            AiSocialExchangeType::Apology => $this->apologyReplyLines($response, $stance),
             AiSocialExchangeType::Greeting => $this->greetingReplyLines(),
             AiSocialExchangeType::Thanks => $this->thanksReplyLines(),
             AiSocialExchangeType::TradeOffer => $this->tradeReplyLines($response),
@@ -92,14 +93,43 @@ class BuildAuthoredSocialReplyAction
     /**
      * @return list<string>
      */
-    private function apologyReplyLines(AiSocialResponse $response): array
+    private function apologyReplyLines(AiSocialResponse $response, string $stance): array
     {
         return match ($response) {
-            AiSocialResponse::Accept => ['I accept your apology, but I remember what happened.', 'Your apology is acknowledged; trust will take time to rebuild.'],
-            AiSocialResponse::Reject => ['An apology alone does not repair this harm.', 'I cannot accept this apology while the threat remains.'],
-            AiSocialResponse::Counter => ['I need a concrete repair before we can move forward.', 'Show how you will repair this harm first.'],
+            AiSocialResponse::Accept => $stance === 'friend'
+                ? ['Apology accepted — we can move past this.', 'Thank you for saying that. Let us put it behind us.']
+                : ['I accept your apology, but I remember what happened.', 'Your apology is acknowledged; trust will take time to rebuild.'],
+            AiSocialResponse::Reject => $stance === 'foe'
+                ? ['Keep your distance until the threat is gone.', 'Words will not undo this. Stay away.']
+                : ['An apology alone does not repair this harm.', 'I cannot accept this apology while the threat remains.'],
+            AiSocialResponse::Counter => $stance === 'friend'
+                ? ['What will you do to make this right?', 'Tell me how you intend to repair it.']
+                : ['I need a concrete repair before we can move forward.', 'Show how you will repair this harm first.'],
             AiSocialResponse::Clarify => ['Please acknowledge the harm and explain how you will repair it.', 'I need a clearer acknowledgment before we discuss forgiveness.'],
         };
+    }
+
+    /**
+     * A coarse stance for wording only: the same decision to a friend and a foe is worded
+     * differently, but the decision itself is never changed here. Thresholds mirror the
+     * cognition gates — threat 0.75 is the refuse line, trust 0.5 the forgiveness floor.
+     */
+    private function stanceFor(AiSocialExchange $exchange): string
+    {
+        $relationship = AiRelationship::query()
+            ->where('player_id', $exchange->player_id)
+            ->where('other_player_id', $exchange->counterparty_player_id)
+            ->first();
+
+        if ((float) $relationship?->threat >= 0.75) {
+            return 'foe';
+        }
+
+        if ((float) $relationship?->trust >= 0.5) {
+            return 'friend';
+        }
+
+        return 'neutral';
     }
 
     /** @return list<string> */

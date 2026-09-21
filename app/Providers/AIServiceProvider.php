@@ -74,6 +74,7 @@ use Modules\AI\Listeners\RecordAiColonyCampaignSignal;
 use Modules\AI\Observers\ObserveCommittedAllianceMembership;
 use Modules\AI\Observers\ObserveCommittedBattleReport;
 use Modules\AI\Observers\ObserveCommittedChatMessage;
+use Modules\AI\Observers\ObserveCommittedFleetMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
@@ -92,6 +93,7 @@ use OGame\Events\Game\PlanetCreated;
 use OGame\Models\AllianceMember;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Models\Message;
 use OGame\Services\HostilityGuard;
 use OGame\Services\ModuleSlotService;
 
@@ -132,6 +134,7 @@ class AIServiceProvider extends ModuleServiceProvider
         ChatMessage::observe(ObserveCommittedChatMessage::class);
         ChatMessage::observe(RedactDeletedChatMemory::class);
         AllianceMember::observe(ObserveCommittedAllianceMembership::class);
+        Message::observe(ObserveCommittedFleetMessage::class);
         Event::listen(BuildingCompleted::class, RecordAiBuildingCompletionExperience::class);
         Event::listen(PlanetCreated::class, RecordAiColonyCampaignSignal::class);
 

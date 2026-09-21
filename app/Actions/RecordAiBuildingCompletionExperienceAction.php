@@ -54,7 +54,7 @@ class RecordAiBuildingCompletionExperienceAction
         /** @var BuildingQueue $queue */
         $queue = $matches->sole();
         $observedAt = $this->clock->now();
-        $observation = AiObservation::query()->firstOrCreate([
+        $observation = AiObservation::firstOrCreateAtomically([
             'player_id' => $planet->user_id,
             'source_type' => AiObservationSource::BuildingQueue,
             'source_id' => $queue->id,

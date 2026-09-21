@@ -25,6 +25,13 @@ class EvaluateAiSocialExchangeAction
     /** How many counterparty facts a help request recalls before weighing them. */
     private const HISTORY_RECALL_LIMIT = 20;
 
+    /**
+     * A compensation promise without a stated deadline gets this many hours to be kept,
+     * so the offer is a real promise instead of an open-ended debt that can never be
+     * declared broken. It is policy taste, not a fact the message can contradict.
+     */
+    private const COMPENSATION_DUE_WINDOW_HOURS = 48;
+
     public function handle(int $exchangeId, float $availableAmount, CarbonImmutable $evaluatedAt): AiSocialExchange|null
     {
         return DB::transaction(function () use ($exchangeId, $availableAmount, $evaluatedAt): AiSocialExchange|null {
@@ -45,6 +52,14 @@ class EvaluateAiSocialExchangeAction
                 ]);
 
                 return $exchange->refresh();
+            }
+
+            if ($exchange->type === AiSocialExchangeType::CompensationOffer && $exchange->due_at === null) {
+                $exchange->update([
+                    'due_at' => $evaluatedAt->addHours(self::COMPENSATION_DUE_WINDOW_HOURS),
+                    'revision' => $exchange->revision + 1,
+                ]);
+                $exchange->refresh();
             }
 
             $context = $this->context($exchange, $availableAmount, $evaluatedAt);

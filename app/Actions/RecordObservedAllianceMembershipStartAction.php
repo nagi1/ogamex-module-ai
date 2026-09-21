@@ -57,7 +57,7 @@ class RecordObservedAllianceMembershipStartAction
         $recordedCount = 0;
 
         foreach ($playerIds as $playerId) {
-            $observation = AiObservation::query()->firstOrCreate([
+            $observation = AiObservation::firstOrCreateAtomically([
                 'player_id' => $playerId,
                 'source_type' => AiObservationSource::AllianceMembershipJoined,
                 'source_id' => $membershipId,

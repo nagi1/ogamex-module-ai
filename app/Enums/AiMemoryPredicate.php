@@ -6,4 +6,5 @@ enum AiMemoryPredicate: int
 {
     case AllianceMembership = 1;
     case ResourceDebt = 2;
+    case AttackReceived = 3;
 }

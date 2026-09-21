@@ -19,6 +19,7 @@ use Modules\AI\Actions\RecordObservedAllianceMembershipStartAction;
 use Modules\AI\Actions\RecordObservedChatMessageAction;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCommitmentDirection;
 use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiMemoryEvidenceKind;
 use Modules\AI\Enums\AiMemoryPredicate;
@@ -588,6 +589,50 @@ test('terminal commitments and unknown identifiers cannot be transitioned again'
         ->and($acceptedAgain?->state)->toBe(AiCommitmentState::Accepted)
         ->and($fulfilled?->state)->toBe(AiCommitmentState::Fulfilled)
         ->and($fulfilledAgain?->state)->toBe(AiCommitmentState::Fulfilled);
+});
+
+test('a fulfilled counterparty promise earns trust back; an own promise does not', function (): void {
+    $owner = $this->createChatPlayer();
+    $counterparty = $this->createChatPlayer();
+
+    $source = AiObservation::create([
+        'player_id' => $owner->id,
+        'source_type' => AiObservationSource::ChatMessage,
+        'source_id' => 305,
+        'kind' => AiObservationKind::DirectChatMessageReceived,
+        'subject_player_id' => $counterparty->id,
+        'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+    ]);
+
+    $theirs = app(RecordAiCommitmentAction::class)->handle($owner->id, $counterparty->id, ['amount' => 10], $source->id, CarbonImmutable::parse('2026-09-12 12:00:00 UTC'), direction: AiCommitmentDirection::ExpectedFromCounterparty);
+    app(AcceptAiCommitmentAction::class)->handle($theirs->id);
+    app(FulfillAiCommitmentAction::class)->handle($theirs->id, $source->id, CarbonImmutable::parse('2026-09-11 14:00:00 UTC'));
+
+    $relationship = AiRelationship::query()
+        ->where('player_id', $owner->id)
+        ->where('other_player_id', $counterparty->id)
+        ->sole();
+
+    // A counterparty promise that is kept is the only thing that earns trust back.
+    expect((float) $relationship->trust)->toBeBetween(0.19, 0.21)
+        ->and((float) $relationship->threat)->toBe(0.0);
+
+    // The AI's own promise being kept says nothing about the counterparty: no further repair.
+    $ownSource = AiObservation::create([
+        'player_id' => $owner->id,
+        'source_type' => AiObservationSource::ChatMessage,
+        'source_id' => 306,
+        'kind' => AiObservationKind::DirectChatMessageReceived,
+        'subject_player_id' => $counterparty->id,
+        'source_time' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+    ]);
+    $own = app(RecordAiCommitmentAction::class)->handle($owner->id, $counterparty->id, ['amount' => 5], $ownSource->id);
+    app(AcceptAiCommitmentAction::class)->handle($own->id);
+    app(FulfillAiCommitmentAction::class)->handle($own->id, $ownSource->id, CarbonImmutable::parse('2026-09-11 15:00:00 UTC'));
+
+    expect((float) AiRelationship::query()->where('player_id', $owner->id)->where('other_player_id', $counterparty->id)->sole()->trust)->toBeBetween(0.19, 0.21);
 });
 
 test('a relationship is sourced, bounded, and cannot be revised by a late interaction', function (): void {

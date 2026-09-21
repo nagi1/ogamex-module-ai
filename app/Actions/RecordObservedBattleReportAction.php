@@ -14,6 +14,7 @@ use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
 use OGame\Models\BattleReport;
+use OGame\Models\User;
 
 /**
  * Reduces one committed battle report into observations for the AIs that took part.
@@ -81,7 +82,7 @@ class RecordObservedBattleReportAction
 
         foreach ($participants as $playerId) {
             // The unique source identity makes retrying an after-commit callback safe.
-            $observation = AiObservation::query()->firstOrCreate([
+            $observation = AiObservation::firstOrCreateAtomically([
                 'player_id' => $playerId,
                 'source_type' => AiObservationSource::BattleReport,
                 'source_id' => $battleReport->id,
@@ -102,6 +103,7 @@ class RecordObservedBattleReportAction
         }
 
         $this->recordRaidLoot($battleReport, $attackerPlayerId, $participants);
+        $this->recordAllyUnderAttackObservations($battleReport, $defenderPlayerId, $attackerPlayerId);
 
         return $recorded;
     }
@@ -130,6 +132,40 @@ class RecordObservedBattleReportAction
         }
 
         app(RecordAiRaidOutcomeAction::class)->handle($attackerPlayerId, $observation->id, $battleReport);
+    }
+
+    /**
+     * A committed attack on an alliance co-member is the trigger DEF-003 named for ACS-defend:
+     * the defender's AI co-members observe it, so a later defend decision has an
+     * "ally under attack" fact to act on. The defender itself already got a
+     * BattleReportObserved observation, and a defender with no alliance has no one to warn.
+     */
+    private function recordAllyUnderAttackObservations(BattleReport $battleReport, int $defenderPlayerId, int $attackerPlayerId): void
+    {
+        $allianceId = User::query()->whereKey($defenderPlayerId)->value('alliance_id');
+
+        if ($allianceId === null) {
+            return;
+        }
+
+        $allyIds = AiProfile::query()
+            ->where('enabled', true)
+            ->where('player_id', '!=', $defenderPlayerId)
+            ->whereIn('player_id', User::query()->where('alliance_id', $allianceId)->select('id'))
+            ->pluck('player_id');
+
+        foreach ($allyIds as $allyId) {
+            AiObservation::firstOrCreateAtomically([
+                'player_id' => $allyId,
+                'source_type' => AiObservationSource::BattleReport,
+                'source_id' => $battleReport->id,
+            ], [
+                'kind' => AiObservationKind::AllyUnderAttack,
+                'subject_player_id' => $attackerPlayerId,
+                'source_time' => $battleReport->created_at ?? $this->clock->now(),
+                'observed_at' => $this->clock->now(),
+            ]);
+        }
     }
 
     /**
@@ -248,6 +284,9 @@ class RecordObservedBattleReportAction
 
     private function playerId(mixed $value): int|null
     {
-        return is_numeric($value) ? (int) $value : null;
+        // The host names a deleted or abandoned account with a non-positive sentinel (-1, -2,
+        // 0); a report naming one has no real counterparty, so it is declined instead of being
+        // recorded with a subject id that overflows the unsigned column.
+        return is_numeric($value) && (int) $value > 0 ? (int) $value : null;
     }
 }

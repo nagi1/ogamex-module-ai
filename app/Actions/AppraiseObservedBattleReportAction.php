@@ -4,6 +4,8 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Contracts\AffectEngine;
+use Modules\AI\Enums\AiMemoryEvidenceKind;
+use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Models\AiEmotionalEpisode;
 use Modules\AI\Models\AiObservation;
@@ -82,8 +84,39 @@ class AppraiseObservedBattleReportAction
                 $appraisal->intensity,
                 $occurredAt,
             );
+
+            // Coming off worse in a battle is the durable social fact behind "friends don't
+            // forget": the relationship toward the attacker turns colder (the next social
+            // decision toward them already reads these scores), and the attack is remembered
+            // as an AttackReceived fact so later recall can weigh a betrayal or an apology.
+            $this->recordHostility($observation, $occurredAt);
         }
 
         return $episode;
+    }
+
+    private function recordHostility(AiObservation $observation, CarbonImmutable $occurredAt): void
+    {
+        $attackerPlayerId = (int) $observation->subject_player_id;
+
+        app(RecordAiRelationshipInteractionAction::class)->handle(
+            $observation->player_id,
+            $attackerPlayerId,
+            $observation->id,
+            $occurredAt,
+            trustChange: -0.20,
+            threatChange: 0.30,
+            affinityChange: -0.10,
+        );
+
+        app(RecordAiMemoryFactAction::class)->handle(
+            $observation->player_id,
+            $attackerPlayerId,
+            AiMemoryPredicate::AttackReceived,
+            AiMemoryEvidenceKind::Verified,
+            [],
+            $observation->id,
+            $occurredAt,
+        );
     }
 }

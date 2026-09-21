@@ -11,8 +11,13 @@ use Modules\AI\Enums\AiCommitmentState;
 /**
  * Exact terms remain immutable after acceptance; fulfillment is a separate evidence-backed transition.
  *
+ * @property int $player_id
+ * @property int $counterparty_player_id
+ * @property int $source_observation_id
+ * @property int|null $fulfillment_observation_id
  * @property AiCommitmentState $state
  * @property AiCommitmentDirection $direction
+ * @property array<string, mixed> $terms
  * @property int $revision
  * @property Carbon|null $due_at
  */

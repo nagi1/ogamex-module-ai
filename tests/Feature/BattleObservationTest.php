@@ -6,11 +6,14 @@ use Modules\AI\Actions\RecordObservedBattleReportAction;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiMemoryEvidenceKind;
+use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiEmotionalEpisode;
+use Modules\AI\Models\AiMemoryFact;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -132,6 +135,45 @@ test('an AI is never given a battle report it did not take part in', function ()
 
     expect(app(RecordObservedBattleReportAction::class)->handle($report->id))->toBe(0)
         ->and(AiObservation::query()->where('player_id', $bystander->id)->exists())->toBeFalse();
+});
+
+test('a report whose attacker is the host no-such-player sentinel is declined, not recorded as minus one', function (): void {
+    $defender = $this->createUser();
+    battleObservedAi($defender->id);
+
+    $report = battleReportRow($defender->id, battleSide(-1, 100.0));
+
+    expect(app(RecordObservedBattleReportAction::class)->handle($report->id))->toBe(0)
+        ->and(AiObservation::query()->where('player_id', $defender->id)->exists())->toBeFalse();
+});
+
+test('an AI that came off worse turns colder toward the attacker and remembers the attack', function (): void {
+    $defender = $this->createUser();
+    $attacker = $this->createUser();
+    battleObservedAi($defender->id, AiArchetype::Fleeter);
+
+    $report = battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0);
+
+    app(RecordObservedBattleReportAction::class)->handle($report->id);
+
+    $relationship = AiRelationship::query()
+        ->where('player_id', $defender->id)
+        ->where('other_player_id', $attacker->id)
+        ->sole();
+
+    // The first attack raises the threat toward the attacker; trust and affinity
+    // start at zero and are bounded, so the scar shows as a threat increase.
+    expect((float) $relationship->threat)->toBeGreaterThan(0.0)
+        ->and((float) $relationship->trust)->toBe(0.0)
+        ->and((float) $relationship->affinity)->toBe(0.0);
+
+    $fact = AiMemoryFact::query()
+        ->where('player_id', $defender->id)
+        ->where('subject_player_id', $attacker->id)
+        ->where('predicate', AiMemoryPredicate::AttackReceived)
+        ->sole();
+
+    expect($fact->evidence_kind)->toBe(AiMemoryEvidenceKind::Verified);
 });
 
 test('both participating AIs observe the battle, each naming the player it faced', function (): void {

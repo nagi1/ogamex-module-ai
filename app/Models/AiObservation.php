@@ -4,6 +4,7 @@ namespace Modules\AI\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
@@ -33,5 +34,26 @@ class AiObservation extends Model
             'source_time' => 'datetime',
             'observed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Create the observation if it does not exist, returning the existing row when a
+     * concurrent writer (or a duplicated host event) already inserted the same unique key.
+     *
+     * Laravel's own firstOrCreate retry re-reads with a consistent snapshot, which under
+     * REPEATABLE READ can miss the row a sibling transaction just committed and rethrow the
+     * 1062. A locking read is a current read, so it always sees the latest committed row; this
+     * is what stops a duplicate observation from failing the host's building-queue processor.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     */
+    public static function firstOrCreateAtomically(array $attributes, array $values = []): static
+    {
+        try {
+            return static::query()->firstOrCreate($attributes, $values);
+        } catch (UniqueConstraintViolationException) {
+            return static::query()->lockForUpdate()->where($attributes)->firstOrFail();
+        }
     }
 }

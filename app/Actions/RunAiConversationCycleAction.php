@@ -62,6 +62,12 @@ class RunAiConversationCycleAction
             }
         }
 
+        foreach ($this->unansweredAllianceObservations($playerId) as $observation) {
+            if ($this->answerAlliance($observation, $now)) {
+                $answered++;
+            }
+        }
+
         return $answered;
     }
 
@@ -130,6 +136,87 @@ class RunAiConversationCycleAction
         }
 
         app(DeliverAiDirectReplyAction::class)->handle($playerId, $attackerId, $message);
+
+        return true;
+    }
+
+    /**
+     * Alliance-channel messages this member observed but has not yet answered, in the same
+     * "an exchange is the marker that an observation was dealt with" spirit as direct messages.
+     *
+     * @return Collection<int, AiObservation>
+     */
+    private function unansweredAllianceObservations(int $playerId): Collection
+    {
+        return AiObservation::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiObservationKind::AllianceChatMessageReceived)
+            ->where('source_type', AiObservationSource::ChatMessage)
+            ->whereNotIn('id', AiSocialExchange::query()->whereNotNull('source_observation_id')->select('source_observation_id'))
+            ->oldest('id')
+            ->limit(self::MAXIMUM_PENDING_MESSAGES)
+            ->get();
+    }
+
+    /**
+     * Answers an alliance-channel message with the same authored protocol as a direct one, but
+     * delivered to the channel rather than to one player. Never answers its own message, and an
+     * unrecognised message stays silent, exactly as on the direct path.
+     */
+    private function answerAlliance(AiObservation $observation, CarbonImmutable $now): bool
+    {
+        $message = ChatMessage::query()->find($observation->source_id);
+
+        if ($message === null || $message->alliance_id === null) {
+            return false;
+        }
+
+        $classification = app(ClassifyInboundSocialExchangeAction::class)->handle($message->message);
+
+        if ($classification === null) {
+            return false;
+        }
+
+        $playerId = (int) $observation->player_id;
+        $senderId = (int) $observation->subject_player_id;
+
+        if ($senderId <= 0 || $playerId === $senderId) {
+            return false;
+        }
+
+        $exchange = app(RecordAiSocialExchangeAction::class)->handle(
+            $playerId,
+            $senderId,
+            $observation->id,
+            $classification->type,
+            $classification->terms,
+            null,
+            1,
+        );
+
+        if ($exchange === null) {
+            return false;
+        }
+
+        $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, $now);
+
+        if ($evaluated === null) {
+            return false;
+        }
+
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+
+        if ($profile === null) {
+            return false;
+        }
+
+        $text = app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, $profile);
+
+        if ($text === null) {
+            return false;
+        }
+
+        app(DeliverAiAllianceReplyAction::class)->handle($playerId, (int) $message->alliance_id, $text, $message->id);
 
         return true;
     }

@@ -38,12 +38,67 @@ class ClassifyInboundSocialExchangeAction
             return null;
         }
 
-        return $this->apology($normalised)
+        return $this->compensation($normalised)
+            ?? $this->apology($normalised)
             ?? $this->warning($normalised)
             ?? $this->ceasefire($normalised)
             ?? $this->cooperation($normalised)
             ?? $this->trade($normalised)
             ?? $this->acknowledgement($normalised);
+    }
+
+    /**
+     * An apology that also promises concrete amends is a compensation offer, not an apology:
+     * the offer creates the counterparty commitment that a later delivery fulfils. Harm must
+     * be named (the same acknowledgement an apology needs) and the offer must state a
+     * resource and an amount, because a promise with nothing promised is just cheap talk.
+     */
+    private function compensation(string $text): InboundSocialExchange|null
+    {
+        if (!$this->matches($text, 'compensat\w*|make (it )?up|reimburse|refund|repay|pay (you )?back|will send|sending you')) {
+            return null;
+        }
+
+        if (!$this->matches($text, 'attack\w*|raid\w*|hit|crash\w*|fleet|ninja\w*|farm\w*|spy|probe\w*|robbed|stole')) {
+            return null;
+        }
+
+        $terms = $this->compensationTerms($text);
+        if ($terms === null) {
+            return null;
+        }
+
+        return $this->exchange(AiSocialExchangeType::CompensationOffer, [AiSocialTerm::AcknowledgesHarm->value => true, ...$terms]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function compensationTerms(string $text): array|null
+    {
+        preg_match_all('/\b(?:' . self::RESOURCE_WORDS . ')\b/', $text, $resources);
+        $resource = $resources[0][0] ?? null;
+
+        if ($resource === null) {
+            return null;
+        }
+
+        preg_match_all('/\d[\d.,]*/', $text, $amounts);
+
+        foreach ($amounts[0] as $candidate) {
+            $amount = $this->number($candidate);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            return [
+                AiSocialTerm::Resource->value => $this->resource($resource),
+                AiSocialTerm::Amount->value => $amount,
+            ];
+        }
+
+        return null;
     }
 
     private function apology(string $text): InboundSocialExchange|null

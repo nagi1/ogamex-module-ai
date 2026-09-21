@@ -18,6 +18,9 @@ class NativeSocialCognition implements SocialCognition
     /** How much an outstanding counterparty debt cools a new help request. */
     private const OUTSTANDING_DEBT_PENALTY = 0.5;
 
+    /** An apology is accepted only once earned trust clears this floor after anger. */
+    private const FORGIVENESS_TRUST_FLOOR = 0.5;
+
     public function evaluateSocialExchange(SocialExchangeContext $exchange): SocialExchangeEvaluation
     {
         return match ($exchange->type) {
@@ -72,11 +75,22 @@ class NativeSocialCognition implements SocialCognition
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::HarmNotRepaired]);
         }
 
-        if ($this->standingWeight($exchange) >= 0.5) {
+        if ($this->forgivenessScore($exchange) >= self::FORGIVENESS_TRUST_FLOOR) {
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::ApologyAcknowledged]);
         }
 
         return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Counter, 'reason' => AiSocialResponseReason::CompensationNeeded, 'counterTerms' => [AiSocialTerm::Repair->value => AiSocialRepair::Compensation->value]]);
+    }
+
+    /**
+     * Forgiveness is earned, never spoken. Trust rises only when a promise is actually kept,
+     * so no volume of polite apologies — or any other cheap contact that inflates affinity and
+     * respect — forgives a betrayal. Anger still sustains a grudge while it is felt, so the
+     * same earned trust is accepted only once the AI is calm again.
+     */
+    private function forgivenessScore(SocialExchangeContext $exchange): float
+    {
+        return $exchange->trust - $exchange->anger;
     }
 
     private function requestedAmount(SocialExchangeContext $exchange): float|null
@@ -165,11 +179,10 @@ class NativeSocialCognition implements SocialCognition
     }
 
     /**
-     * The standing a counterparty has earned with this AI, reduced by current anger.
-     *
-     * Anger is transient state and is deliberately a term here rather than a write: a grudge
-     * changes how the same apology is answered without touching earned trust or an outstanding
-     * obligation, which is what keeps an emotion from quietly settling a debt.
+     * The standing a counterparty has earned with this AI, reduced by current anger. It gates
+     * cooperation (help and cooperation requests), never forgiveness: forgiveness reads trust
+     * alone, because affinity and respect inflate with cheap contact and must not forgive a
+     * betrayal. Anger is transient state and is deliberately a term here rather than a write.
      */
     private function standingWeight(SocialExchangeContext $exchange): float
     {

@@ -15,6 +15,7 @@ class ObserveCommittedChatMessage
         // A broadcast can occur before a transaction commits; cognition must not.
         DB::afterCommit(static function () use ($chatMessageId): void {
             app(RecordObservedChatMessageAction::class)->handle($chatMessageId);
+            app(RecordObservedChatMessageAction::class)->handleAlliance($chatMessageId);
         });
     }
 }
