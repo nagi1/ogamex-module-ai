@@ -15,22 +15,25 @@ the goal, never against the plan*.
 
 ## 1. The verification matrix — one assertion per signal
 
-Each of the eleven authenticity signals gets one deterministic replay scenario and one aggregate
-check. A signal with no named scenario is a gap, not an aspiration.
+Each of the eleven authenticity signals gets one named verification: the decision-engine signals
+ship a deterministic replay scenario (`resources/scenarios/`, replayed by `ReplayAiScenarioAction`
+at a frozen time and seed), and the signals owned by other mechanisms (social cognition, language,
+scheduler, transfers) are verified by their own feature tests, named in the same column. A signal
+with no named check is a gap, not an aspiration.
 
-| Signal | Replay scenario (`resources/scenarios/`) | Assertion | Aggregate check (cohort) |
+| Signal | Named verification | Assertion | Aggregate check (cohort) |
 |---|---|---|---|
-| 1 reaction latency + save | `fleetsave-under-inbound` | save fires 120–180 s pre-impact; a late notice is a doomed save | % reactions inside the 120–180 s window; save-failure rate > 0 |
-| 2 uptime shape | `routine-21-days` | 9 h dark period, wake drift, Weibull waits | population wake-time spread; no 18-distinct-hour week |
-| 3 growth curve | `economy-chain` | capability chain reaches the next stage | no unexplained hourly spike; no flatline |
-| 4 self-similarity | `divergence-two-accounts` | same host data, different seed → different choice | distinct decision reasons; action-sequence entropy |
-| 5 social breadth | `received-transport`, `alliance-application` | thank-you fires; leader decides | Shannon entropy over interaction types vs 0.84 human baseline |
-| 6 never losing a fleet | `save-failure-policy` | blessed skip rate fires | save outcomes show refusals, never 100 % |
-| 7 message content/timing | `authored-reply-variants` | authored line from pool, never instant | delivered variant diversity |
-| 8 request footprint | `activity-marker` | a session that queues nothing leaves `users.time` unmoved | — |
-| 9 transfers/timing | `transfer-net` | one transport per hole (in-flight netting) | transfer receipts human-scaled |
-| 10 identity at rest | `seed-cohort` | staggered joins, rename pool, varied dark matter | — |
-| 11 aggregate statistics | `spy-two-accounts` | two AI planets look different to a probe | military score not pinned at zero |
+| 1 reaction latency + save | `miner-under-visible-raid`, `late-notice-doomed-save` (replay) | the save fires under inbound; a late notice is a doomed save | % reactions inside the 120–180 s window; save-failure rate > 0 |
+| 2 uptime shape | `routine-21-days` (replay) | the dark period decides nothing | population wake-time spread; no 18-distinct-hour week |
+| 3 growth curve | `economy-chain`, `throttle-mine-when-short`, `colonize-needs-development` (replay) | scarcity makes the mine the answer; mining while short; a colony is withheld until developable | no unexplained hourly spike; no flatline |
+| 4 self-similarity | `divergence-two-accounts` (replay) | same observation, different persona → different decision | distinct decision reasons; action-sequence entropy |
+| 5 social breadth | `SocialInitiationTest`, `AllianceChatLifeTest`, `AllianceApplicationReviewTest`, `BuddyRequestReviewTest` (feature) | thank-you fires; leader decides | Shannon entropy over interaction types vs 0.84 human baseline |
+| 6 never losing a fleet | `late-notice-doomed-save` (replay) | a save that can fail is never 100 % | save outcomes show refusals, never 100 % |
+| 7 message content/timing | `ConversationCycleTest`, `DeliverAiDirectReplyTest`, `AiLanguageReconciliationTest` (feature) | authored line from pool, never instant | delivered variant diversity |
+| 8 request footprint | `AiActivityMarkerTest`, `DeterministicSessionLoopTest` (feature) | a session that queues nothing leaves `users.time` unmoved | — |
+| 9 transfers/timing | `TransferObservationTest`, `TransferDepthTest` (feature) | one transport per hole (in-flight netting) | transfer receipts human-scaled |
+| 10 identity at rest | seed-cohort (seed check) | staggered joins, rename pool, varied dark matter | — |
+| 11 aggregate statistics | `spy-two-accounts` (replay) | a free slot probes a neighbour | military score not pinned at zero |
 
 ## 2. The provocation harness — the adversarial neighbour
 

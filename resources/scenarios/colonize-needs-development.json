@@ -1,0 +1,41 @@
+{
+    "name": "colonize-needs-development",
+    "description": "A miner offered a colony it cannot yet develop: the colony is withheld until the existing production can bring a new body online, so growth stays an economy step rather than a leap into a colony the account could never bring up.",
+    "decision_key": "replay:colonize-needs-development",
+    "persona": {
+        "archetype": "Miner",
+        "skill_band": "Standard",
+        "random_seed": 7
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T08:00:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 2500000,
+                    "crystal": 1200000,
+                    "deuterium": 400000
+                }
+            }
+        ],
+        "target_reports": [],
+        "available_actions": {
+            "save_resources": false,
+            "build": false,
+            "research": false,
+            "queue_units": false,
+            "spy": false,
+            "colonize": true,
+            "throttle_mine": false
+        },
+        "fleetsave_eligible": false,
+        "recovery_factor": 0.0,
+        "fleet_slots_free": 2,
+        "colonize_eligible": false,
+        "source_timestamps": {
+            "resources": "2026-09-14T07:55:00+00:00"
+        }
+    }
+}

@@ -1,0 +1,51 @@
+{
+    "name": "late-notice-doomed-save",
+    "description": "A miner whose inbound-fleet report has already expired by the time of the session. The stale intel is refused and no fleetsave is available, so the save that would have fired is never offered: a late notice is a doomed save, and a save that can fail is a save that is not a bot timer.",
+    "decision_key": "replay:late-notice-doomed-save",
+    "persona": {
+        "archetype": "Miner",
+        "skill_band": "Standard",
+        "random_seed": 7
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T08:30:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 2500000,
+                    "crystal": 1200000,
+                    "deuterium": 400000
+                }
+            }
+        ],
+        "target_reports": [
+            {
+                "report_id": 77,
+                "attack_permitted": true,
+                "confidence": 0.8,
+                "travel_cost": 0.2,
+                "observed_at": 1789364400,
+                "expires_at": 1789372800
+            }
+        ],
+        "available_actions": {
+            "save_resources": false,
+            "build": false,
+            "research": false,
+            "queue_units": false,
+            "spy": false,
+            "colonize": false,
+            "throttle_mine": false
+        },
+        "fleetsave_eligible": false,
+        "recovery_factor": 0.0,
+        "fleet_slots_free": 2,
+        "colonize_eligible": true,
+        "source_timestamps": {
+            "resources": "2026-09-14T08:25:00+00:00",
+            "report:77": "2026-09-14T05:40:00+00:00"
+        }
+    }
+}

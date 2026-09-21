@@ -1,0 +1,41 @@
+{
+    "name": "throttle-mine-when-short",
+    "description": "An account short of everything that can still throttle a mine: the cheapest step a miner takes while short is to turn the mine setting down, never to spend what it lacks. Mining while short is the ordinary OGame answer to a depleted stockpile.",
+    "decision_key": "replay:throttle-mine-when-short",
+    "persona": {
+        "archetype": "Miner",
+        "skill_band": "Standard",
+        "random_seed": 7
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T08:00:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 300,
+                    "crystal": 100,
+                    "deuterium": 100
+                }
+            }
+        ],
+        "target_reports": [],
+        "available_actions": {
+            "save_resources": false,
+            "build": false,
+            "research": false,
+            "queue_units": false,
+            "spy": false,
+            "colonize": false,
+            "throttle_mine": true
+        },
+        "fleetsave_eligible": false,
+        "recovery_factor": 0.0,
+        "fleet_slots_free": 2,
+        "colonize_eligible": false,
+        "source_timestamps": {
+            "resources": "2026-09-14T07:55:00+00:00"
+        }
+    }
+}

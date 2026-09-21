@@ -1,0 +1,41 @@
+{
+    "name": "divergence-two-accounts",
+    "description": "Two accounts read the same observation and answer differently: the miner builds the mine it prefers, the fleeter queues the ships it prefers. The same host data must never produce two clones, so the persona is what makes one account unlike the next.",
+    "decision_key": "replay:divergence-two-accounts",
+    "persona": {
+        "archetype": "Miner",
+        "skill_band": "Standard",
+        "random_seed": 7
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T08:00:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 100000,
+                    "crystal": 100000,
+                    "deuterium": 100000
+                }
+            }
+        ],
+        "target_reports": [],
+        "available_actions": {
+            "save_resources": false,
+            "build": true,
+            "research": false,
+            "queue_units": true,
+            "spy": true,
+            "colonize": false,
+            "throttle_mine": false
+        },
+        "fleetsave_eligible": false,
+        "recovery_factor": 0.0,
+        "fleet_slots_free": 2,
+        "colonize_eligible": false,
+        "source_timestamps": {
+            "resources": "2026-09-14T07:55:00+00:00"
+        }
+    }
+}

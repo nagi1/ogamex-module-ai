@@ -1,0 +1,41 @@
+{
+    "name": "spy-two-accounts",
+    "description": "An account with a free fleet slot probes its neighbour before acting: the spy candidate is what makes two accounts read each other as distinct planets rather than as identical silhouettes, and a military score that is not pinned at zero.",
+    "decision_key": "replay:spy-two-accounts",
+    "persona": {
+        "archetype": "Fleeter",
+        "skill_band": "Standard",
+        "random_seed": 7
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T08:00:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 2000,
+                    "crystal": 2000,
+                    "deuterium": 2000
+                }
+            }
+        ],
+        "target_reports": [],
+        "available_actions": {
+            "save_resources": false,
+            "build": false,
+            "research": false,
+            "queue_units": false,
+            "spy": true,
+            "colonize": false,
+            "throttle_mine": false
+        },
+        "fleetsave_eligible": false,
+        "recovery_factor": 0.0,
+        "fleet_slots_free": 2,
+        "colonize_eligible": false,
+        "source_timestamps": {
+            "resources": "2026-09-14T07:55:00+00:00"
+        }
+    }
+}

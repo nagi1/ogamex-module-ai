@@ -1,0 +1,41 @@
+{
+    "name": "economy-chain",
+    "description": "A fleeter whose metal towers a thousand times over its crystal: the severe imbalance makes the mine the answer even for a ship habit. The build is the next step of the capability chain, read from the same host resource state any account would see.",
+    "decision_key": "replay:economy-chain",
+    "persona": {
+        "archetype": "Fleeter",
+        "skill_band": "Veteran",
+        "random_seed": 1
+    },
+    "input": {
+        "player_id": 1,
+        "observed_at": "2026-09-14T08:00:00+00:00",
+        "planets": [
+            {
+                "id": 1,
+                "resources": {
+                    "metal": 1000000,
+                    "crystal": 1000,
+                    "deuterium": 1000
+                }
+            }
+        ],
+        "target_reports": [],
+        "available_actions": {
+            "save_resources": false,
+            "build": true,
+            "research": false,
+            "queue_units": true,
+            "spy": false,
+            "colonize": false,
+            "throttle_mine": false
+        },
+        "fleetsave_eligible": false,
+        "recovery_factor": 0.1,
+        "fleet_slots_free": 2,
+        "colonize_eligible": false,
+        "source_timestamps": {
+            "resources": "2026-09-14T07:55:00+00:00"
+        }
+    }
+}
