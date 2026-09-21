@@ -76,6 +76,15 @@ class GenerateAiReplyAction
 
     private function buildRequest(AiConversationReply $reply): LanguageRequest|null
     {
+        // AI-to-AI chat is opt-in: off, a counterparty that is itself an AI keeps the
+        // authored zero-prompt path; on, it reaches the provider like a human reply.
+        // The flag is the spend gate for an all-AI universe, on top of the daily
+        // limits and the monthly wall.
+        if (!(bool) config('ai.language.ai_to_ai', false)
+            && AiProfile::query()->where('player_id', $reply->counterparty_player_id)->where('enabled', true)->exists()) {
+            return null;
+        }
+
         $profile = AiProfile::query()->where('player_id', $reply->player_id)->where('enabled', true)->first();
 
         if ($profile === null) {

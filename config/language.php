@@ -2,6 +2,10 @@
 
 return [
     'enabled' => env('AI_LANGUAGE_ENABLED', true),
+    // Opt-in: an AI replying to another AI may reach the provider. Off (default), an
+    // AI counterparty keeps the authored zero-prompt path, so an all-AI universe spends
+    // nothing unless the operator turns this on. Daily limits and the monthly wall still apply.
+    'ai_to_ai' => (bool) env('AI_LANGUAGE_AI_TO_AI', false),
     'provider' => env('AI_LANGUAGE_PROVIDER', 'deepseek'),
     'model' => env('AI_LANGUAGE_MODEL', 'deepseek-flash'),
     'timeout_seconds' => (int) env('AI_LANGUAGE_TIMEOUT_SECONDS', 20),

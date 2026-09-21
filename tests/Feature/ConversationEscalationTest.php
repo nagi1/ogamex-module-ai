@@ -193,7 +193,7 @@ test('a job that dies before its receipt exists still answers with the authored 
 });
 
 test('an automated counterparty now reaches the provider too', function (): void {
-    config(['ai.language.enabled' => true]);
+    config(['ai.language.enabled' => true, 'ai.language.ai_to_ai' => true]);
     [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'sorry about the raid, my bad', true);
     bindFixedLanguageResult(languageResult(AiLanguageResultStatus::Completed, 'np man', 20, 5));
 
