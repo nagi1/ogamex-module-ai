@@ -43,7 +43,7 @@ test('a persona never reaches the hours the host flags', function (AiArchetype $
 })->with(aiCadenceArchetypes());
 
 test('every day contains a dark period of at least six hours', function (AiArchetype $archetype) {
-    $uncovered = aiCadenceDatesWithoutDarkPeriod(aiCadenceWindows($archetype));
+    $uncovered = aiCadenceDatesWithoutDarkPeriod(aiCadenceWindows($archetype), aiCadenceStart()->addDays(AI_CADENCE_DAYS));
 
     expect($uncovered)->toBe([]);
 })->with(aiCadenceArchetypes());
@@ -91,12 +91,17 @@ test('session length is heavy-tailed, not a constant', function () {
         ->and($longest)->toBeGreaterThanOrEqual($median * 3);
 });
 
+function aiCadenceStart(): CarbonImmutable
+{
+    return CarbonImmutable::create(2026, 9, 1, 0, 0, 0, 'UTC');
+}
+
 /** @return array<int, array{0: CarbonImmutable, 1: CarbonImmutable}> */
 function aiCadenceWindows(AiArchetype $archetype, int $days = AI_CADENCE_DAYS): array
 {
     $profile = aiCadenceProfile($archetype);
     $planner = app(SessionPlanner::class);
-    $start = CarbonImmutable::create(2026, 9, 1, 0, 0, 0, 'UTC');
+    $start = aiCadenceStart();
     $end = $start->addDays($days);
     // The session starts when the previous plan said it would, which is exactly
     // the chain the schedule runs in production.
@@ -213,29 +218,41 @@ function aiCadenceDailyOccurrences(array $windows): array
 /**
  * The local days that no long silence covers. A night is the six hours or more
  * the account is away between two sessions, and it is what the host's own rule
- * asks for; the run's first day is partial by construction and is not one of the
- * days under test.
+ * asks for; the run's first day is partial by construction (it starts mid-night)
+ * and is not among the days under test. The silence after the last session is a
+ * night too, so it is measured up to the end of the run.
  *
  * @param array<int, array{0: CarbonImmutable, 1: CarbonImmutable}> $windows
  * @return array<int, string>
  */
-function aiCadenceDatesWithoutDarkPeriod(array $windows): array
+function aiCadenceDatesWithoutDarkPeriod(array $windows, CarbonImmutable $end): array
 {
     $covered = [];
     for ($index = 1; $index < count($windows); $index++) {
-        [$from, $to] = [$windows[$index - 1][1], $windows[$index][0]];
-        if ($from->diffInMinutes($to) < 360) {
-            continue;
-        }
-        for ($day = $from->setTimezone(AI_CADENCE_TIMEZONE)->startOfDay(); $day->lessThanOrEqualTo($to); $day = $day->addDay()) {
-            $covered[$day->toDateString()] = true;
-        }
+        aiCadenceCover($covered, $windows[$index - 1][1], $windows[$index][0]);
     }
+    aiCadenceCover($covered, $windows[count($windows) - 1][1], $end);
 
     $dates = aiCadenceDailyOccurrences($windows);
     array_shift($dates);
 
     return array_values(array_diff_key($dates, $covered));
+}
+
+/**
+ * Marks every local day a six-hour-or-longer silence touches. Shorter silences
+ * are not a night, so they cover nothing.
+ *
+ * @param array<string, true> $covered
+ */
+function aiCadenceCover(array &$covered, CarbonImmutable $from, CarbonImmutable $to): void
+{
+    if ($from->diffInMinutes($to) < 360) {
+        return;
+    }
+    for ($day = $from->setTimezone(AI_CADENCE_TIMEZONE)->startOfDay(); $day->lessThanOrEqualTo($to); $day = $day->addDay()) {
+        $covered[$day->toDateString()] = true;
+    }
 }
 
 /** @param array<int, array{0: CarbonImmutable, 1: CarbonImmutable}> $windows */

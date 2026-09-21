@@ -29,13 +29,13 @@ beforeEach(function (): void {
     app()->bind(AiClock::class, fn (): FixtureAiClock => app()->makeWith(FixtureAiClock::class, ['now' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC')]));
 });
 
-function initiationProfile(int $playerId): AiProfile
+function initiationProfile(int $playerId, int $randomSeed = 42): AiProfile
 {
     return AiProfile::create([
         'player_id' => $playerId,
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
-        'random_seed' => 42,
+        'random_seed' => $randomSeed,
         'enabled' => true,
     ]);
 }
@@ -83,4 +83,22 @@ test('a self-received transport is never thanked', function (): void {
 
     expect(app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, CarbonImmutable::parse('2024-01-01 00:00:00 UTC')))->toBe(0)
         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->exists())->toBeFalse();
+});
+
+test('a chatty account thanks a whole pile of senders, a quiet one thanks one', function (): void {
+    $quiet = $this->createUser();
+    $chatty = $this->createUser();
+    initiationProfile($quiet->id, 5);   // sociability 0.10 -> one thanks
+    initiationProfile($chatty->id, 9);  // sociability 0.90 -> thanks them all
+
+    foreach ([$this->createUser(), $this->createUser(), $this->createUser()] as $index => $sender) {
+        receivedTransportObservation($quiet->id, $sender->id, 7100 + $index);
+        receivedTransportObservation($chatty->id, $sender->id, 7200 + $index);
+    }
+
+    $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
+    $action = app(InitiateAiSocialContactAction::class);
+
+    expect($action->handle($quiet->id, $now))->toBe(1)
+        ->and($action->handle($chatty->id, $now))->toBe(3);
 });

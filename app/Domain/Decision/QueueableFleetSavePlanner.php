@@ -2,8 +2,10 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Persona\PersonaTaste;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\RandomSource;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\DeploymentMission;
 use OGame\Models\Enums\PlanetType;
@@ -46,6 +48,9 @@ class QueueableFleetSavePlanner
         $player ??= $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
 
+        // The reactive save (an inbound hostile) is not a matter of taste: a save under
+        // attack always wins, so it uses the base band. Aggression only moves the proactive
+        // save below, where the account chooses how much fleet it is willing to risk.
         return $this->saveFor($player, $planets, $profile->archetype);
     }
 
@@ -68,7 +73,7 @@ class QueueableFleetSavePlanner
 
         $player = $this->playerServiceFactory->make($playerId, true);
 
-        return $this->saveFor($player, $player->planets->all(), $profile->archetype, $absenceMinutes);
+        return $this->saveFor($player, $player->planets->all(), $profile->archetype, $this->aggression($profile), $absenceMinutes);
     }
 
     private function profile(int $playerId): ?AiProfile
@@ -76,13 +81,18 @@ class QueueableFleetSavePlanner
         return AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
     }
 
+    private function aggression(AiProfile $profile): float
+    {
+        return PersonaTaste::fromSeed((int) $profile->random_seed, app(RandomSource::class))->aggression;
+    }
+
     /**
      * @param array<int, PlanetService> $planets
      */
-    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, ?int $absenceMinutes = null): ?QueueableFleetSave
+    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null): ?QueueableFleetSave
     {
         $origin = $this->origin($planets);
-        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype)) {
+        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
             return null;
         }
 
@@ -118,7 +128,7 @@ class QueueableFleetSavePlanner
             'originPlanetId' => $origin->getPlanetId(),
             'destinationPlanetId' => $destination->getPlanetId(),
             'missionType' => DeploymentMission::getTypeId(),
-            'shadowDestinationPlanetId' => $this->shadowDestinationPlanetId($player, $origin, $ranked, $archetype),
+            'shadowDestinationPlanetId' => $this->shadowDestinationPlanetId($player, $origin, $ranked, $archetype, $aggression),
             'speed' => $speed,
         ]);
     }
@@ -179,7 +189,7 @@ class QueueableFleetSavePlanner
      *
      * @param list<PlanetService> $ranked
      */
-    private function shadowDestinationPlanetId(PlayerService $player, PlanetService $origin, array $ranked, AiArchetype $archetype): int
+    private function shadowDestinationPlanetId(PlayerService $player, PlanetService $origin, array $ranked, AiArchetype $archetype, float $aggression = 0.5): int
     {
         if (count($ranked) < 2) {
             return 0;
@@ -193,7 +203,7 @@ class QueueableFleetSavePlanner
             return 0;
         }
 
-        if ($this->fleetValue($origin) < 2 * $this->exposureBand($archetype)) {
+        if ($this->fleetValue($origin) < 2 * $this->exposureBand($archetype, $aggression)) {
             return 0;
         }
 
@@ -238,16 +248,21 @@ class QueueableFleetSavePlanner
     /**
      * The minimum fleet value a persona bothers to save (FS-001). A fleeter
      * saves anything real; a trader, miner, turtle or casual player only a
-     * fleet that is worth the trip. Persona taste over host data, never a
-     * gate-1 object list.
+     * fleet that is worth the trip. Aggression is risk appetite: a bold account
+     * tolerates a larger fleet unsaved, a cautious one saves smaller fleets.
+     * Persona taste over host data, never a gate-1 object list.
      */
-    private function exposureBand(AiArchetype $archetype): int
+    private function exposureBand(AiArchetype $archetype, float $aggression = 0.5): int
     {
-        return match ($archetype) {
+        $base = match ($archetype) {
             AiArchetype::Fleeter => 5_000,
             AiArchetype::Trader => 25_000,
             AiArchetype::Miner, AiArchetype::Turtle, AiArchetype::Casual => 50_000,
         };
+
+        // Neutral at aggression 0.5: the base band is what a middling account saves.
+        // A cautious account (0) saves half as much fleet; a bold one (1) half again as much.
+        return (int) round($base * (0.5 + $aggression));
     }
 
     /**

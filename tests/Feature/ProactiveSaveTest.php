@@ -44,8 +44,9 @@ test('the exposure band keeps a small fleet parked', function (): void {
     $this->planetAddUnit('large_cargo', 1);
     expect(app(QueueableFleetSavePlanner::class)->proactivePlan($this->currentUserId, 120))->toBeNull();
 
-    // Five large cargo clear it: the fleet is now worth saving.
-    $this->planetAddUnit('large_cargo', 4);
+    // Seven large cargo clear the boldest miner's bar too: the fleet is now
+    // worth saving whatever this account's aggression.
+    $this->planetAddUnit('large_cargo', 6);
     expect(app(QueueableFleetSavePlanner::class)->proactivePlan($this->currentUserId, 120))
         ->toBeInstanceOf(QueueableFleetSave::class);
 });

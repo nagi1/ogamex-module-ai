@@ -4,11 +4,13 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Modules\AI\Domain\Persona\PersonaTaste;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSocialExchange;
+use Modules\AI\Support\RandomSource;
 
 /**
  * Initiates contact the way a player does: after something happened. A received
@@ -31,9 +33,10 @@ class InitiateAiSocialContactAction
         }
 
         $sent = 0;
+        $maximum = $this->maximumInitiations($profile);
 
         foreach ($this->unthankedTransfers($playerId) as $observation) {
-            if ($sent >= self::MAXIMUM_INITIATIONS_PER_SESSION) {
+            if ($sent >= $maximum) {
                 break;
             }
 
@@ -43,6 +46,18 @@ class InitiateAiSocialContactAction
         }
 
         return $sent;
+    }
+
+    /**
+     * How many senders one session thanks. Sociability is the account's own: a
+     * chatty account works through a whole pile, a quiet one thanks the first
+     * sender and leaves the rest for a later session.
+     */
+    private function maximumInitiations(AiProfile $profile): int
+    {
+        $sociability = PersonaTaste::fromSeed((int) $profile->random_seed, app(RandomSource::class))->sociability;
+
+        return max(1, (int) round(self::MAXIMUM_INITIATIONS_PER_SESSION * $sociability));
     }
 
     /**
