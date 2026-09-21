@@ -3,6 +3,11 @@
 Written 18 September 2026. Owner: operability. Read with [the review loop](improvement-loop.md),
 [budgets](budgets.md), [product](product.md) and the [cognition gates](cognition-gates.md).
 
+> **Superseded in part, 21 September 2026.** The owner has since reversed the "config editor —
+> reject" verdict and asked for a full settings control surface with a DB/env split and centralised
+> env. See [owner-console-ux.md](owner-console-ux.md) for the current design. The readings
+> (OW-1…OW-7) in this file remain valid and are implemented.
+
 **Status: planned, not implemented.** Seven `IMPL` slices in two groups — the console's readings (OW-1
 to OW-3) and the monitoring and control surfaces the host cannot answer (OW-4 to OW-7) — plus one
 deferred gap. Nothing here adds a table, a job, a dependency, a JS build, a panel framework or a
