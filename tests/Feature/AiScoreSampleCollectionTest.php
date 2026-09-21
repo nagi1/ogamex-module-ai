@@ -8,6 +8,7 @@ use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\Highscore;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -102,7 +103,7 @@ test('an enabled account with no host score row is skipped and counted', functio
 });
 
 test('the switch stops the collection and says so', function (): void {
-    config(['ai.review.enabled' => false]);
+    app(SettingsService::class)->set('ai_review_enabled', '0');
     aiSampleProfile($this->currentUserId);
     aiSampleScore($this->currentUserId, general: 100);
 

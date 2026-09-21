@@ -38,6 +38,7 @@ use Modules\AI\Support\SystemAiClock;
 use Modules\AI\Tests\Support\InteractsWithCognitionFixtures;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__.'/../Support/InteractsWithCognitionFixtures.php';
@@ -78,10 +79,10 @@ function ablationNow(): CarbonImmutable
 beforeEach(function (): void {
     config([
         'ai.cognition.driver' => 'native',
-        'ai.cognition.affect.enrichment' => true,
-        'ai.cognition.experience.decision_weight' => 20,
         'ai.cognition.memory.driver' => AiMemoryDriver::Native->value,
     ]);
+    app(SettingsService::class)->set('ai_affect_enrichment', '1');
+    app(SettingsService::class)->set('ai_experience_decision_weight', '20');
     $this->app->bind(AiClock::class, SystemAiClock::class);
     $this->app->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
     $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
@@ -173,7 +174,8 @@ function runAblationScenario(int $ai, int $counterpartyPlayerId): array
 }
 
 test('configuration a keeps the reduced baseline: the harm is not felt and earned standing decides', function (): void {
-    config(['ai.cognition.affect.enrichment' => false, 'ai.cognition.experience.decision_weight' => 0]);
+    app(SettingsService::class)->set('ai_affect_enrichment', '0');
+    app(SettingsService::class)->set('ai_experience_decision_weight', '0');
 
     $counterparty = $this->createUser();
     $result = runAblationScenario($this->currentUserId, $counterparty->id);
@@ -202,10 +204,10 @@ test('configuration c leaves the economy order untouched when the enrichment is 
 
     // Weight zero is the ablation switch: no remembered outcome may move the order, and with no
     // evidence at all the enriched rule must also agree with itself exactly.
-    config(['ai.cognition.experience.decision_weight' => 0]);
+    app(SettingsService::class)->set('ai_experience_decision_weight', '0');
     $withoutEvidence = $order();
 
-    config(['ai.cognition.experience.decision_weight' => 20]);
+    app(SettingsService::class)->set('ai_experience_decision_weight', '20');
 
     expect($withoutEvidence)->toBe($order());
 });

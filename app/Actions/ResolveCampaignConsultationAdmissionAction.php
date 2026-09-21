@@ -7,6 +7,7 @@ use Modules\AI\Enums\AiCampaignConsultationMode;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiOperabilitySwitch;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * The fail-closed admission gate the campaign consultation lane must pass before any
@@ -22,8 +23,7 @@ class ResolveCampaignConsultationAdmissionAction
 {
     public function forConsultation(AiCampaignConsultationTrigger $trigger): CampaignConsultationAdmission
     {
-        $mode = AiCampaignConsultationMode::tryFrom((string) config('ai.campaign-consultation.mode', AiCampaignConsultationMode::Off->value))
-            ?? AiCampaignConsultationMode::Off;
+        $mode = app(AiRuntimeSettings::class)->campaignMode();
 
         if ($mode === AiCampaignConsultationMode::Off) {
             return $this->stopped($mode, AiStopReason::ConsultationDisabled, ['mode' => $mode->value]);

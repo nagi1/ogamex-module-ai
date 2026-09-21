@@ -12,6 +12,7 @@ use Modules\AI\Infrastructure\Language\LaravelAiCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\NullCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\Tools\CampaignFactsTool;
 use Modules\AI\Infrastructure\Language\Tools\LegalCandidatesTool;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -171,7 +172,7 @@ test('a non-empty evidence list names the exact citable ids', function (): void 
 });
 
 test('an enabled lane resolves the SDK gateway through the provider binding', function (): void {
-    config(['ai.campaign-consultation.mode' => 'observe']);
+    app(SettingsService::class)->set('ai_campaign_consultation_mode', 'observe');
 
     expect(app(CampaignConsultationGateway::class))->toBeInstanceOf(LaravelAiCampaignConsultationGateway::class);
 });

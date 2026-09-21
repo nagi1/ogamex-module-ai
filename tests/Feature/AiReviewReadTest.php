@@ -9,6 +9,7 @@ use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\Highscore;
 use OGame\Models\User;
+use OGame\Services\SettingsService;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\IsolatedAccountTestCase;
@@ -81,7 +82,7 @@ test('the human rendering tells an empty window apart from a switched-off collec
         ->expectsOutputToContain('score: 1 accounts · 1 samples · general delta min 0 · median 0 · max 0 · largest hour +0 · no growth 1 · military lost 0')
         ->assertSuccessful();
 
-    config(['ai.review.enabled' => false]);
+    app(SettingsService::class)->set('ai_review_enabled', '0');
 
     $this->artisan('ai:pilot-report', ['--days' => 1])
         ->expectsOutputToContain('score: not collected (ai.review.enabled is false)')

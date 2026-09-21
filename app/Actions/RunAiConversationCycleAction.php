@@ -16,6 +16,7 @@ use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSocialExchange;
+use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
 
@@ -362,7 +363,7 @@ class RunAiConversationCycleAction
 
     private function mayReachProvider(AiSocialExchange $exchange): bool
     {
-        if (!(bool) config('ai.language.enabled', false)) {
+        if (!app(AiRuntimeSettings::class)->languageEnabled()) {
             return false;
         }
 
@@ -375,6 +376,6 @@ class RunAiConversationCycleAction
      */
     private function replyExpiresAt(CarbonImmutable $now): CarbonImmutable
     {
-        return $now->addMinutes(max(1, (int) config('ai.cognition.conversation.reply_ttl_minutes', 180)));
+        return $now->addMinutes(app(AiRuntimeSettings::class)->conversationReplyTtlMinutes());
     }
 }

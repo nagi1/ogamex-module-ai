@@ -11,6 +11,7 @@ use Modules\AI\Enums\AiUsageBudgetScope;
 use Modules\AI\Enums\AiUsageReservationState;
 use Modules\AI\Models\AiUsageBudget;
 use Modules\AI\Models\AiUsageReservation;
+use Modules\AI\Support\AiRuntimeSettings;
 
 class ReserveAiUsageAction
 {
@@ -114,7 +115,7 @@ class ReserveAiUsageAction
      */
     private function withinMonthlyCostCeiling(UsageReservationRequest $request): bool
     {
-        $ceiling = (float) config('ai.cognition.monthly_cost_usd', 0);
+        $ceiling = app(AiRuntimeSettings::class)->monthlyCostUsd();
 
         if ($ceiling <= 0) {
             return true;

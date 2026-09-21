@@ -17,6 +17,7 @@ use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 use RuntimeException;
 
 /**
@@ -113,7 +114,7 @@ class BuildAiPilotReportAction
      */
     private function score(CarbonImmutable $from, CarbonImmutable $now): AiScoreReport
     {
-        $enabled = (bool) config('ai.review.enabled', true);
+        $enabled = app(AiRuntimeSettings::class)->reviewEnabled();
         $samples = AiScoreSample::query()
             ->whereBetween('sampled_at', [$from, $now])
             ->orderBy('player_id')

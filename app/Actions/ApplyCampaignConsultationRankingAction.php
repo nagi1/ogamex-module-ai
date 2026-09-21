@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Modules\AI\Domain\CampaignConsultation\CampaignConsultationRecommendation;
 use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Applies a validated recommendation as a profile-bounded nudge to a ranking.
@@ -25,7 +26,7 @@ class ApplyCampaignConsultationRankingAction
      */
     public function handle(AiProfile $profile, array $candidates, CampaignConsultationRecommendation $recommendation): array
     {
-        if (!$recommendation->mayMoveRanking((float) config('ai.campaign-consultation.minimum_confidence', 0.5))) {
+        if (!$recommendation->mayMoveRanking(app(AiRuntimeSettings::class)->campaignMinimumConfidence())) {
             return $candidates;
         }
 

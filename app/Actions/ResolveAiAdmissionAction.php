@@ -9,6 +9,7 @@ use Modules\AI\Models\AiOperabilitySwitch;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Decides how much work the module may start right now, and records why it stopped.
@@ -38,21 +39,21 @@ class ResolveAiAdmissionAction
             return $this->stopped(AiStopReason::StaffSwitch, ['pass' => 'dispatch']);
         }
 
-        $profileCap = max(0, (int) config('ai.population.profile_cap', 0));
+        $profileCap = app(AiRuntimeSettings::class)->profileCap();
         $enabledProfiles = AiProfile::query()->where('enabled', true)->count();
 
         if ($profileCap > 0 && $enabledProfiles > $profileCap) {
             return $this->stopped(AiStopReason::ProfileCap, ['profiles' => $enabledProfiles, 'cap' => $profileCap]);
         }
 
-        $sessionCap = max(0, (int) config('ai.population.active_session_cap', 0));
+        $sessionCap = app(AiRuntimeSettings::class)->activeSessionCap();
         $activeSessions = $this->activeSessionCount();
 
         if ($sessionCap > 0 && $activeSessions >= $sessionCap) {
             return $this->stopped(AiStopReason::ActiveSessionCap, ['active_sessions' => $activeSessions, 'cap' => $sessionCap]);
         }
 
-        $batchSize = max(1, (int) config('ai.population.dispatch_batch_size', 100));
+        $batchSize = app(AiRuntimeSettings::class)->dispatchBatchSize();
 
         if ($batchSize < $requestedLimit) {
             return $this->limited($batchSize, AiStopReason::DispatchLimit, ['requested' => $requestedLimit, 'cap' => $batchSize]);
@@ -85,7 +86,7 @@ class ResolveAiAdmissionAction
             return $this->stopped(AiStopReason::StaffSwitch, ['pass' => 'action']);
         }
 
-        $actionCap = (int) config('ai.population.session_action_cap', 1);
+        $actionCap = app(AiRuntimeSettings::class)->sessionActionCap();
 
         if ($actionCap < 1) {
             return $this->stopped(AiStopReason::SessionActionCap, ['cap' => $actionCap]);

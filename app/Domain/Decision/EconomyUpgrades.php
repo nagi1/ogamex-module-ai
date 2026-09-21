@@ -11,6 +11,7 @@ use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiExperienceFeatureVersion;
 use Modules\AI\Enums\AiExperienceRulesetVersion;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\Resource;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
@@ -493,7 +494,7 @@ class EconomyUpgrades
      */
     private function rememberedBias(AiProfile $profile, int $objectId): float
     {
-        $weight = (int) config('ai.cognition.experience.decision_weight', self::EXPERIENCE_WEIGHT_PERCENT);
+        $weight = app(AiRuntimeSettings::class)->experienceDecisionWeight();
 
         if ($weight === 0) {
             return 0.0;

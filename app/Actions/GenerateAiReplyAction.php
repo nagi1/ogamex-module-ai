@@ -20,6 +20,7 @@ use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\ChatMessage;
 
 class GenerateAiReplyAction
@@ -36,7 +37,7 @@ class GenerateAiReplyAction
             return null;
         }
 
-        if (!(bool) config('ai.language.enabled', false)) {
+        if (!app(AiRuntimeSettings::class)->languageEnabled()) {
             return app(DeliverAiSealedReplyAction::class)->handle($reply->id);
         }
 
@@ -80,7 +81,7 @@ class GenerateAiReplyAction
         // authored zero-prompt path; on, it reaches the provider like a human reply.
         // The flag is the spend gate for an all-AI universe, on top of the daily
         // limits and the monthly wall.
-        if (!(bool) config('ai.language.ai_to_ai', false)
+        if (!app(AiRuntimeSettings::class)->languageAiToAi()
             && AiProfile::query()->where('player_id', $reply->counterparty_player_id)->where('enabled', true)->exists()) {
             return null;
         }
@@ -110,7 +111,7 @@ class GenerateAiReplyAction
                 'value' => [
                     'reply_to_player_id' => $reply->counterparty_player_id,
                     'authorized_source_message_ids' => $messages->pluck('id')->all(),
-                    'maximum_reply_characters' => (int) config('ai.language.maximum_reply_characters', 1_200),
+                    'maximum_reply_characters' => app(AiRuntimeSettings::class)->languageMaximumReplyCharacters(),
                     'no_tools' => true,
                 ],
                 'isProtected' => true,
@@ -126,7 +127,7 @@ class GenerateAiReplyAction
                 'isProtected' => true,
             ]),
         ];
-        $context = app(ContextBuilder::class)->buildConversationContext($sections, (int) config('ai.language.context_characters', 8_000));
+        $context = app(ContextBuilder::class)->buildConversationContext($sections, app(AiRuntimeSettings::class)->languageContextCharacters());
 
         if (!$context->protectedContentFits) {
             return null;
@@ -148,8 +149,8 @@ class GenerateAiReplyAction
             'context' => $context,
             'authorizedSourceMessageIds' => $messages->pluck('id')->all(),
             'ladder' => $ladder,
-            'timeoutSeconds' => (int) config('ai.language.timeout_seconds', 20),
-            'maximumReplyCharacters' => (int) config('ai.language.maximum_reply_characters', 1_200),
+            'timeoutSeconds' => app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
+            'maximumReplyCharacters' => app(AiRuntimeSettings::class)->languageMaximumReplyCharacters(),
         ]);
     }
 
@@ -171,8 +172,8 @@ class GenerateAiReplyAction
                     'playerId' => $reply->player_id,
                     'conversationKey' => $reply->player_id . ':' . $reply->counterparty_player_id,
                     'requestKey' => $request->requestKey,
-                    'inputTokens' => (int) config('ai.language.maximum_input_tokens', 2_000),
-                    'outputTokens' => (int) config('ai.language.maximum_output_tokens', 320),
+                    'inputTokens' => app(AiRuntimeSettings::class)->languageMaximumInputTokens(),
+                    'outputTokens' => app(AiRuntimeSettings::class)->languageMaximumOutputTokens(),
                     'reservedAt' => $this->clock->now(),
                 ]),
                 $this->usageLimits(),

@@ -18,6 +18,7 @@ use Modules\AI\Enums\AiLanguageResultStatus;
 use Modules\AI\Enums\AiLanguageTaskKind;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * The opt-in provider run required by the language slice. It never runs in CI, only
@@ -34,7 +35,7 @@ class RunLanguageConformance extends Command
 
     public function handle(): int
     {
-        if (!(bool) config('ai.language.enabled', false)) {
+        if (!app(AiRuntimeSettings::class)->languageEnabled()) {
             $this->error('AI language is disabled for this environment. Set AI_LANGUAGE_ENABLED=true to run this opt-in check.');
 
             return self::FAILURE;
@@ -66,7 +67,7 @@ class RunLanguageConformance extends Command
             'generated_at' => app(AiClock::class)->now()->toIso8601String(),
             'provider' => (string) config('ai.language.provider', 'openai'),
             'model' => (string) config('ai.language.model', 'gpt-5-mini'),
-            'timeout_seconds' => (int) config('ai.language.timeout_seconds', 20),
+            'timeout_seconds' => app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
             'cases' => $results,
             'completed_cases' => $completed,
             'repeated_reply_count' => $this->repeatedReplyCount($results),
@@ -175,7 +176,7 @@ class RunLanguageConformance extends Command
                 'value' => [
                     'reply_to_player_id' => 2,
                     'authorized_source_message_ids' => [$sourceMessageId],
-                    'maximum_reply_characters' => (int) config('ai.language.maximum_reply_characters', 1_200),
+                    'maximum_reply_characters' => app(AiRuntimeSettings::class)->languageMaximumReplyCharacters(),
                     'no_tools' => true,
                 ],
                 'isProtected' => true,
@@ -200,8 +201,8 @@ class RunLanguageConformance extends Command
             'context' => $context,
             'authorizedSourceMessageIds' => [$sourceMessageId],
             'ladder' => $ladder,
-            'timeoutSeconds' => (int) config('ai.language.timeout_seconds', 20),
-            'maximumReplyCharacters' => (int) config('ai.language.maximum_reply_characters', 1_200),
+            'timeoutSeconds' => app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
+            'maximumReplyCharacters' => app(AiRuntimeSettings::class)->languageMaximumReplyCharacters(),
         ]);
     }
 

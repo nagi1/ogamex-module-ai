@@ -8,6 +8,7 @@ use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Builds the one redacted, bounded brief a campaign consultation is answered from.
@@ -98,7 +99,7 @@ class BuildCampaignConsultationBriefAction
      */
     private function healthyEvidence(array $evidence): array
     {
-        $deadline = $this->clock->now()->subSeconds(max(1, (int) config('ai.campaign-consultation.maximum_advice_age_seconds', 900)));
+        $deadline = $this->clock->now()->subSeconds(app(AiRuntimeSettings::class)->campaignMaximumAdviceAgeSeconds());
 
         return array_values(array_filter(
             $evidence,

@@ -15,6 +15,7 @@ use Modules\AI\Models\AiStopCounter;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Collects the operator's view of one universe: what is configured, what is running, what was
@@ -55,10 +56,10 @@ class SummarizeAiOperabilityAction
     private function limits(): array
     {
         return [
-            'profile_cap' => max(0, (int) config('ai.population.profile_cap', 0)),
-            'active_session_cap' => max(0, (int) config('ai.population.active_session_cap', 0)),
-            'dispatch_batch_size' => max(1, (int) config('ai.population.dispatch_batch_size', 100)),
-            'session_action_cap' => (int) config('ai.population.session_action_cap', 1),
+            'profile_cap' => app(AiRuntimeSettings::class)->profileCap(),
+            'active_session_cap' => app(AiRuntimeSettings::class)->activeSessionCap(),
+            'dispatch_batch_size' => app(AiRuntimeSettings::class)->dispatchBatchSize(),
+            'session_action_cap' => app(AiRuntimeSettings::class)->sessionActionCap(),
             // The language budget is a daily universe attempt count, so it belongs beside the
             // population caps even though the language slice owns its own configuration.
             'language_daily_attempts' => (int) config('ai.language.daily_limits.universe.attempts', 0),

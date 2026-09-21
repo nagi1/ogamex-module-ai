@@ -11,6 +11,7 @@ use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Services\SettingsService;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -71,7 +72,7 @@ test('the conformance run refuses to contact a provider without explicit confirm
 });
 
 test('the conformance run refuses while the language capability is disabled', function (): void {
-    config(['ai.language.enabled' => false]);
+    app(SettingsService::class)->set('ai_language_enabled', '0');
     OgameConversationReplyAgent::fake()->preventStrayPrompts();
 
     $this->artisan('ai:language-conformance --confirm')->assertExitCode(1);

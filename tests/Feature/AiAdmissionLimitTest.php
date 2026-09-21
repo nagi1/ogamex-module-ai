@@ -17,8 +17,10 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiStopCounter;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Services\SettingsService;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -86,11 +88,11 @@ function admissionStopContext(AiStopReason $reason, string $day = ADMISSION_DAY)
         ->last_context ?? [];
 }
 
-test('the module ships the pilot caps as configuration', function (): void {
-    expect(config('ai.population.profile_cap'))->toBe(0)
-        ->and(config('ai.population.active_session_cap'))->toBe(0)
-        ->and(config('ai.population.dispatch_batch_size'))->toBe(100)
-        ->and(config('ai.population.session_action_cap'))->toBe(1);
+test('the module ships the pilot caps as live defaults', function (): void {
+    expect(app(AiRuntimeSettings::class)->profileCap())->toBe(0)
+        ->and(app(AiRuntimeSettings::class)->activeSessionCap())->toBe(0)
+        ->and(app(AiRuntimeSettings::class)->dispatchBatchSize())->toBe(100)
+        ->and(app(AiRuntimeSettings::class)->sessionActionCap())->toBe(1);
 });
 
 test('an installation that never recorded a switch decision runs', function (): void {
@@ -130,7 +132,7 @@ test('a claimed session is left pending while the population is switched off', f
 
 test('one dispatch pass stops at its batch size and records the throttle', function (): void {
     Bus::fake();
-    config(['ai.population.dispatch_batch_size' => 1]);
+    app(SettingsService::class)->set('ai_population_dispatch_batch_size', '1');
     admissionProfile($this->currentUserId);
     $first = admissionWorkItem($this->currentUserId, AiWorkKind::RunSession, 'batch-first');
     // A later due time keeps the pass order deterministic while both items are already due.
@@ -149,7 +151,7 @@ test('one dispatch pass stops at its batch size and records the throttle', funct
 
 test('a population larger than the universe cap stops new work', function (): void {
     Bus::fake();
-    config(['ai.population.profile_cap' => 1]);
+    app(SettingsService::class)->set('ai_population_profile_cap', '1');
     $owner = $this->createUser();
     admissionProfile($this->currentUserId);
     admissionProfile($owner->id);
@@ -168,7 +170,7 @@ test('a population larger than the universe cap stops new work', function (): vo
 
 test('sessions in flight stop dispatch until their lease expires', function (): void {
     Bus::fake();
-    config(['ai.population.active_session_cap' => 1]);
+    app(SettingsService::class)->set('ai_population_active_session_cap', '1');
     admissionProfile($this->currentUserId);
     $leased = admissionWorkItem(
         $this->currentUserId,
@@ -197,7 +199,7 @@ test('sessions in flight stop dispatch until their lease expires', function (): 
 });
 
 test('a session action cap of zero lets a session decide and touch nothing', function (): void {
-    config(['ai.population.session_action_cap' => 0]);
+    app(SettingsService::class)->set('ai_population_session_action_cap', '0');
     admissionProfile($this->currentUserId);
     $work = admissionWorkItem($this->currentUserId, AiWorkKind::BuildFirstBuilding, 'no-action');
 

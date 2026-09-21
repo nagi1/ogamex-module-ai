@@ -24,111 +24,136 @@ final class AiRuntimeSettings
     {
     }
 
+    /**
+     * The default a live setting falls back to is the module's own config value, so a
+     * deployment that configures a guardrail through the environment keeps working, and the
+     * database value written by the console is the override on top of it.
+     */
+    private function intDefault(string $configKey, int $fallback): string
+    {
+        return (string) (int) config($configKey, $fallback);
+    }
+
+    private function floatDefault(string $configKey, float $fallback): string
+    {
+        return (string) (float) config($configKey, $fallback);
+    }
+
+    private function boolDefault(string $configKey, bool $fallback): string
+    {
+        return config($configKey, $fallback) ? '1' : '0';
+    }
+
+    private function stringDefault(string $configKey, string $fallback): string
+    {
+        return (string) config($configKey, $fallback);
+    }
+
     // -- Population admission -------------------------------------------------------------
 
     public function profileCap(): int
     {
-        return max(0, (int) $this->settings->get('ai_population_profile_cap', 0));
+        return max(0, (int) $this->settings->get('ai_population_profile_cap', $this->intDefault('ai.population.profile_cap', 0)));
     }
 
     public function activeSessionCap(): int
     {
-        return max(0, (int) $this->settings->get('ai_population_active_session_cap', 0));
+        return max(0, (int) $this->settings->get('ai_population_active_session_cap', $this->intDefault('ai.population.active_session_cap', 0)));
     }
 
     public function dispatchBatchSize(): int
     {
-        return max(1, (int) $this->settings->get('ai_population_dispatch_batch_size', 100));
+        return max(1, (int) $this->settings->get('ai_population_dispatch_batch_size', $this->intDefault('ai.population.dispatch_batch_size', 100)));
     }
 
     public function sessionActionCap(): int
     {
-        return (int) $this->settings->get('ai_population_session_action_cap', 1);
+        return (int) $this->settings->get('ai_population_session_action_cap', $this->intDefault('ai.population.session_action_cap', 1));
     }
 
     // -- Review sampling ------------------------------------------------------------------
 
     public function reviewEnabled(): bool
     {
-        return (bool) $this->settings->get('ai_review_enabled', '1');
+        return (bool) $this->settings->get('ai_review_enabled', $this->boolDefault('ai.review.enabled', true));
     }
 
     // -- Language lane --------------------------------------------------------------------
 
     public function languageEnabled(): bool
     {
-        return (bool) $this->settings->get('ai_language_enabled', '1');
+        return (bool) $this->settings->get('ai_language_enabled', $this->boolDefault('ai.language.enabled', true));
     }
 
     public function languageAiToAi(): bool
     {
-        return (bool) $this->settings->get('ai_language_ai_to_ai', '0');
+        return (bool) $this->settings->get('ai_language_ai_to_ai', $this->boolDefault('ai.language.ai_to_ai', false));
     }
 
     public function languageTimeoutSeconds(): int
     {
-        return max(1, (int) $this->settings->get('ai_language_timeout_seconds', 20));
+        return max(1, (int) $this->settings->get('ai_language_timeout_seconds', $this->intDefault('ai.language.timeout_seconds', 20)));
     }
 
     public function languageReconciliationMinutes(): int
     {
-        return max(1, (int) $this->settings->get('ai_language_reconciliation_minutes', 30));
+        return max(1, (int) $this->settings->get('ai_language_reconciliation_minutes', $this->intDefault('ai.language.reconciliation_minutes', 30)));
     }
 
     public function languageContextCharacters(): int
     {
-        return max(1, (int) $this->settings->get('ai_language_context_characters', 8_000));
+        return max(1, (int) $this->settings->get('ai_language_context_characters', $this->intDefault('ai.language.context_characters', 8_000)));
     }
 
     public function languageMaximumReplyCharacters(): int
     {
-        return max(1, (int) $this->settings->get('ai_language_maximum_reply_characters', 1_200));
+        return max(1, (int) $this->settings->get('ai_language_maximum_reply_characters', $this->intDefault('ai.language.maximum_reply_characters', 1_200)));
     }
 
     public function languageMaximumInputTokens(): int
     {
-        return max(1, (int) $this->settings->get('ai_language_maximum_input_tokens', 2_000));
+        return max(1, (int) $this->settings->get('ai_language_maximum_input_tokens', $this->intDefault('ai.language.maximum_input_tokens', 2_000)));
     }
 
     public function languageMaximumOutputTokens(): int
     {
-        return max(1, (int) $this->settings->get('ai_language_maximum_output_tokens', 320));
+        return max(1, (int) $this->settings->get('ai_language_maximum_output_tokens', $this->intDefault('ai.language.maximum_output_tokens', 320)));
     }
 
     // -- Conversation cycle ---------------------------------------------------------------
 
     public function conversationEnabled(): bool
     {
-        return (bool) $this->settings->get('ai_conversation_enabled', '1');
+        return (bool) $this->settings->get('ai_conversation_enabled', $this->boolDefault('ai.cognition.conversation.enabled', true));
     }
 
     public function conversationReplyTtlMinutes(): int
     {
-        return max(1, (int) $this->settings->get('ai_conversation_reply_ttl_minutes', 180));
+        return max(1, (int) $this->settings->get('ai_conversation_reply_ttl_minutes', $this->intDefault('ai.cognition.conversation.reply_ttl_minutes', 180)));
     }
 
     // -- Affect and experience weights ----------------------------------------------------
 
     public function affectEnrichment(): bool
     {
-        return (bool) $this->settings->get('ai_affect_enrichment', '1');
+        return (bool) $this->settings->get('ai_affect_enrichment', $this->boolDefault('ai.cognition.affect.enrichment', true));
     }
 
     public function affectDecisionWeight(): int
     {
-        return (int) $this->settings->get('ai_affect_decision_weight', 10);
+        return (int) $this->settings->get('ai_affect_decision_weight', $this->intDefault('ai.cognition.affect.decision_weight', 10));
     }
 
     public function experienceDecisionWeight(): int
     {
-        return (int) $this->settings->get('ai_experience_decision_weight', 20);
+        return (int) $this->settings->get('ai_experience_decision_weight', $this->intDefault('ai.cognition.experience.decision_weight', 20));
     }
 
     // -- Cost wall -------------------------------------------------------------------------
 
     public function monthlyCostUsd(): float
     {
-        return (float) $this->settings->get('ai_monthly_cost_usd', '10');
+        return (float) $this->settings->get('ai_monthly_cost_usd', $this->floatDefault('ai.cognition.monthly_cost_usd', 10.0));
     }
 
     // -- Campaign consultation -------------------------------------------------------------
@@ -136,57 +161,57 @@ final class AiRuntimeSettings
     public function campaignMode(): AiCampaignConsultationMode
     {
         return AiCampaignConsultationMode::tryFrom(
-            (string) $this->settings->get('ai_campaign_consultation_mode', AiCampaignConsultationMode::Off->value),
+            (string) $this->settings->get('ai_campaign_consultation_mode', $this->stringDefault('ai.campaign-consultation.mode', AiCampaignConsultationMode::Off->value)),
         ) ?? AiCampaignConsultationMode::Off;
     }
 
     public function campaignTimeoutSeconds(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_timeout_seconds', 20));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_timeout_seconds', $this->intDefault('ai.campaign-consultation.timeout_seconds', 20)));
     }
 
     public function campaignMaximumReasonCharacters(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_reason_characters', 400));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_reason_characters', $this->intDefault('ai.campaign-consultation.maximum_reason_characters', 400)));
     }
 
     public function campaignMaximumEvidenceIds(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_evidence_ids', 8));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_evidence_ids', $this->intDefault('ai.campaign-consultation.maximum_evidence_ids', 8)));
     }
 
     public function campaignMaximumInputTokens(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_input_tokens', 4_000));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_input_tokens', $this->intDefault('ai.campaign-consultation.maximum_input_tokens', 4_000)));
     }
 
     public function campaignMaximumOutputTokens(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_output_tokens', 640));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_output_tokens', $this->intDefault('ai.campaign-consultation.maximum_output_tokens', 640)));
     }
 
     public function campaignTriggerCooldownSeconds(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_trigger_cooldown_seconds', 3_600));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_trigger_cooldown_seconds', $this->intDefault('ai.campaign-consultation.trigger_cooldown_seconds', 3_600)));
     }
 
     public function campaignMaximumAdviceAgeSeconds(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_advice_age_seconds', 900));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_maximum_advice_age_seconds', $this->intDefault('ai.campaign-consultation.maximum_advice_age_seconds', 900)));
     }
 
     public function campaignMinimumConfidence(): float
     {
-        return (float) $this->settings->get('ai_campaign_consultation_minimum_confidence', '0.5');
+        return (float) $this->settings->get('ai_campaign_consultation_minimum_confidence', $this->floatDefault('ai.campaign-consultation.minimum_confidence', 0.5));
     }
 
     public function campaignConcurrencyCap(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_concurrency_cap', 1));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_concurrency_cap', $this->intDefault('ai.campaign-consultation.concurrency_cap', 1)));
     }
 
     public function campaignReconciliationMinutes(): int
     {
-        return max(1, (int) $this->settings->get('ai_campaign_consultation_reconciliation_minutes', 30));
+        return max(1, (int) $this->settings->get('ai_campaign_consultation_reconciliation_minutes', $this->intDefault('ai.campaign-consultation.reconciliation_minutes', 30)));
     }
 }

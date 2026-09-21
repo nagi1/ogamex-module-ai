@@ -17,12 +17,13 @@ use OGame\Models\AllianceMember;
 use OGame\Models\ChatMessage;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
-    config(['ai.language.enabled' => false]);
+    app(SettingsService::class)->set('ai_language_enabled', '0');
     app()->bind(AiClock::class, SystemAiClock::class);
     app()->bind(SocialCognition::class, NativeSocialCognition::class);
 });

@@ -7,6 +7,7 @@ use Modules\AI\Enums\AiUsageReservationState;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Closes a language attempt whose provider completion stopped being observable.
@@ -32,7 +33,7 @@ class ReconcileAiLanguageRequestsAction
      */
     public function handle(): int
     {
-        $deadline = $this->clock->now()->subMinutes(max(1, (int) config('ai.language.reconciliation_minutes', 30)));
+        $deadline = $this->clock->now()->subMinutes(app(AiRuntimeSettings::class)->languageReconciliationMinutes());
 
         $requests = AiLanguageRequest::query()
             ->whereIn('state', $this->openStates())

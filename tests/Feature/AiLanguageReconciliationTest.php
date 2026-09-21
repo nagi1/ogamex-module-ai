@@ -11,6 +11,7 @@ use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\ChatMessage;
+use OGame\Services\SettingsService;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -20,7 +21,7 @@ require_once __DIR__ . '/../Support/LanguageTestFixtures.php';
 uses(AiQueueModuleTestCase::class);
 
 beforeEach(function (): void {
-    config(['ai.language.reconciliation_minutes' => 30]);
+    app(SettingsService::class)->set('ai_language_reconciliation_minutes', '30');
     app()->bind(AiClock::class, fn (): FixtureAiClock => app()->makeWith(FixtureAiClock::class, [
         'now' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC'),
     ]));

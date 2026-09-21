@@ -22,6 +22,7 @@ use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationReceipt;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * The consultation lane's one entry point.
@@ -82,8 +83,8 @@ class RequestCampaignConsultationAction
                 'playerId' => $trace->perception->playerId,
                 'conversationKey' => 'campaign:' . $campaign->id,
                 'requestKey' => $requestKey,
-                'inputTokens' => (int) config('ai.campaign-consultation.maximum_input_tokens', 4_000),
-                'outputTokens' => (int) config('ai.campaign-consultation.maximum_output_tokens', 640),
+                'inputTokens' => app(AiRuntimeSettings::class)->campaignMaximumInputTokens(),
+                'outputTokens' => app(AiRuntimeSettings::class)->campaignMaximumOutputTokens(),
                 'reservedAt' => $this->clock->now(),
             ]),
             $this->usageLimits(),
@@ -101,9 +102,9 @@ class RequestCampaignConsultationAction
             'trigger' => $trigger,
             'serializedBrief' => $brief->serialized,
             'ladder' => $ladder,
-            'timeoutSeconds' => (int) config('ai.campaign-consultation.timeout_seconds'),
-            'maximumReasonCharacters' => (int) config('ai.campaign-consultation.maximum_reason_characters'),
-            'maximumEvidenceIds' => (int) config('ai.campaign-consultation.maximum_evidence_ids'),
+            'timeoutSeconds' => app(AiRuntimeSettings::class)->campaignTimeoutSeconds(),
+            'maximumReasonCharacters' => app(AiRuntimeSettings::class)->campaignMaximumReasonCharacters(),
+            'maximumEvidenceIds' => app(AiRuntimeSettings::class)->campaignMaximumEvidenceIds(),
             'campaignId' => $campaign->id,
             'candidates' => $brief->candidates,
             'evidenceIds' => $brief->evidenceIds,
@@ -149,8 +150,8 @@ class RequestCampaignConsultationAction
         $timedOut = $recommendation->status === AiCampaignConsultationStatus::TimedOut;
         app(SettleAiUsageReservationAction::class)->handle(
             $reservationId,
-            $timedOut ? (int) config('ai.campaign-consultation.maximum_input_tokens', 4_000) : $recommendation->inputTokens,
-            $timedOut ? (int) config('ai.campaign-consultation.maximum_output_tokens', 640) : $recommendation->outputTokens,
+            $timedOut ? app(AiRuntimeSettings::class)->campaignMaximumInputTokens() : $recommendation->inputTokens,
+            $timedOut ? app(AiRuntimeSettings::class)->campaignMaximumOutputTokens() : $recommendation->outputTokens,
             $this->clock->now(),
             $recommendation->provider,
             $recommendation->model,
@@ -186,7 +187,7 @@ class RequestCampaignConsultationAction
 
     private function withinCooldown(int $campaignId, AiCampaignConsultationTrigger $trigger): bool
     {
-        $since = $this->clock->now()->subSeconds(max(1, (int) config('ai.campaign-consultation.trigger_cooldown_seconds', 3600)));
+        $since = $this->clock->now()->subSeconds(app(AiRuntimeSettings::class)->campaignTriggerCooldownSeconds());
 
         return AiCampaignConsultationReceipt::query()
             ->where('campaign_id', $campaignId)
@@ -202,8 +203,8 @@ class RequestCampaignConsultationAction
      */
     private function acquireConcurrencySlot(): int|null
     {
-        $cap = max(1, (int) config('ai.campaign-consultation.concurrency_cap', 1));
-        $seconds = (int) config('ai.campaign-consultation.timeout_seconds', 20) + 5;
+        $cap = app(AiRuntimeSettings::class)->campaignConcurrencyCap();
+        $seconds = app(AiRuntimeSettings::class)->campaignTimeoutSeconds() + 5;
 
         for ($slot = 0; $slot < $cap; $slot++) {
             if (Cache::lock('ai:campaign-consultation:' . $slot, $seconds)->get()) {

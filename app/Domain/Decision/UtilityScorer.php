@@ -8,6 +8,7 @@ use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 use Modules\AI\Support\RandomSource;
 
 class UtilityScorer
@@ -36,7 +37,7 @@ class UtilityScorer
     public function score(AiProfile $profile, CandidateGeneration $generation, string $decisionKey): array
     {
         $policy = $this->policyRegistry->for($profile->archetype);
-        $affectWeight = (float) config('ai.cognition.affect.decision_weight', 0);
+        $affectWeight = (float) app(AiRuntimeSettings::class)->affectDecisionWeight();
         // One mood read per decision, never per candidate, and only when the opt-in weight is
         // on: the default path performs no affect query and changes no score.
         $appetite = $affectWeight > 0.0 ? $this->threatAppetite($profile) : 0.0;

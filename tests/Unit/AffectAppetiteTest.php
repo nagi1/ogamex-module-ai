@@ -23,6 +23,7 @@ use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -39,7 +40,7 @@ beforeEach(function (): void {
 });
 
 test('the default weight leaves every score untouched and performs no affect read', function (): void {
-    config(['ai.cognition.affect.decision_weight' => 0]);
+    app(SettingsService::class)->set('ai_affect_decision_weight', '0');
 
     $scored = scoreAffect(AiSkillBand::Novice, [AiCandidateActionType::Raid, AiCandidateActionType::FleetSave, AiCandidateActionType::Build]);
 
@@ -49,7 +50,7 @@ test('the default weight leaves every score untouched and performs no affect rea
 });
 
 test('an angry novice presses the attack and cools the save', function (): void {
-    config(['ai.cognition.affect.decision_weight' => 10]);
+    app(SettingsService::class)->set('ai_affect_decision_weight', '10');
     seedAffect(AiAffectEmotion::Anger, 1.0);
 
     $scored = scoreAffect(AiSkillBand::Novice, [AiCandidateActionType::Raid, AiCandidateActionType::FleetSave, AiCandidateActionType::Build]);
@@ -60,7 +61,7 @@ test('an angry novice presses the attack and cools the save', function (): void 
 });
 
 test('a frightened novice saves and avoids the raid', function (): void {
-    config(['ai.cognition.affect.decision_weight' => 10]);
+    app(SettingsService::class)->set('ai_affect_decision_weight', '10');
     seedAffect(AiAffectEmotion::Fear, 1.0);
 
     $scored = scoreAffect(AiSkillBand::Novice, [AiCandidateActionType::Raid, AiCandidateActionType::FleetSave, AiCandidateActionType::Build]);
@@ -71,7 +72,7 @@ test('a frightened novice saves and avoids the raid', function (): void {
 });
 
 test('a veteran reacts to the same mood with a fraction of the novice shift', function (): void {
-    config(['ai.cognition.affect.decision_weight' => 10]);
+    app(SettingsService::class)->set('ai_affect_decision_weight', '10');
     seedAffect(AiAffectEmotion::Anger, 1.0);
 
     $scored = scoreAffect(AiSkillBand::Veteran, [AiCandidateActionType::Raid]);
@@ -80,7 +81,7 @@ test('a veteran reacts to the same mood with a fraction of the novice shift', fu
 });
 
 test('the mood shift is bounded by the opt-in weight alone', function (): void {
-    config(['ai.cognition.affect.decision_weight' => 7]);
+    app(SettingsService::class)->set('ai_affect_decision_weight', '7');
     seedAffect(AiAffectEmotion::Anger, 5.0);
 
     $scored = scoreAffect(AiSkillBand::Novice, [AiCandidateActionType::Raid]);

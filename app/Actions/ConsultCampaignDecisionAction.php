@@ -11,6 +11,7 @@ use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Consumes one open campaign-consultation signal against the decision a session just made.
@@ -65,7 +66,7 @@ class ConsultCampaignDecisionAction
 
         // A recommendation the model is not sure of does not move the ranking: the deterministic
         // decision stands, and the suppression is recorded so the operator can see it.
-        if (!$recommendation->mayMoveRanking((float) config('ai.campaign-consultation.minimum_confidence', 0.5))) {
+        if (!$recommendation->mayMoveRanking(app(AiRuntimeSettings::class)->campaignMinimumConfidence())) {
             app(RecordAiStopReasonAction::class)->handle(AiStopReason::ConsultationLowConfidence, [
                 'campaign_id' => $campaign->id,
                 'confidence' => $recommendation->confidence,

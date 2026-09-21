@@ -6,6 +6,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Modules\AI\Actions\RecordAiScoreSamplesAction;
+use Modules\AI\Support\AiRuntimeSettings;
 
 #[Description('Record one hour of the cohort public score so the growth curve can be read back.')]
 #[Signature('ai:record-score-samples')]
@@ -15,7 +16,7 @@ class RecordAiScoreSamples extends Command
     {
         // The switch is read here, once per pass, so the scheduled run and a manual run behave
         // identically and nothing else in the module has to know the collection can be off.
-        if (!config('ai.review.enabled')) {
+        if (!app(AiRuntimeSettings::class)->reviewEnabled()) {
             $this->warn('Score sampling is disabled (ai.review.enabled is false); nothing was recorded.');
 
             return self::SUCCESS;

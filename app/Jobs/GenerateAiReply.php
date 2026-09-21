@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Modules\AI\Actions\DeliverAiSealedReplyAction;
 use Modules\AI\Actions\GenerateAiReplyAction;
 use Modules\AI\Enums\AiQueueName;
+use Modules\AI\Support\AiRuntimeSettings;
 use Throwable;
 
 /**
@@ -39,7 +40,7 @@ class GenerateAiReply implements ShouldQueue
     public function __construct(public int $replyId)
     {
         $this->onQueue(AiQueueName::AiLanguage->value);
-        $this->timeout = max(10, (int) config('ai.language.timeout_seconds', 20)) + 30;
+        $this->timeout = max(10, app(AiRuntimeSettings::class)->languageTimeoutSeconds()) + 30;
     }
 
     /** @return list<string> */

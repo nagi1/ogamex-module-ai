@@ -198,10 +198,10 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
         $this->app->bind(ContextBuilder::class, NativeContextBuilder::class);
         $this->app->bind(LongTermMemory::class, fn (): LongTermMemory => app(LongTermMemorySelector::class)->resolve());
-        $this->app->bind(LanguageGateway::class, fn (): LanguageGateway => (bool) config('ai.language.enabled', false)
+        $this->app->bind(LanguageGateway::class, fn (): LanguageGateway => app(AiRuntimeSettings::class)->languageEnabled()
             ? app(LaravelAiLanguageGateway::class)
             : app(NullLanguageGateway::class));
-        $this->app->bind(CampaignConsultationGateway::class, fn (): CampaignConsultationGateway => AiCampaignConsultationMode::tryFrom((string) config('ai.campaign-consultation.mode', AiCampaignConsultationMode::Off->value)) !== AiCampaignConsultationMode::Off
+        $this->app->bind(CampaignConsultationGateway::class, fn (): CampaignConsultationGateway => app(AiRuntimeSettings::class)->campaignMode() !== AiCampaignConsultationMode::Off
             ? app(LaravelAiCampaignConsultationGateway::class)
             : app(NullCampaignConsultationGateway::class));
         $this->app->bind(SocialCognition::class, fn (): SocialCognition => app(SocialCognitionSelector::class)->resolve());

@@ -38,6 +38,7 @@ use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -50,7 +51,7 @@ beforeEach(function (): void {
     // This file covers the authored conversation cycle: the reference profile ships with the
     // generative path off, so the cycle's own contract is asserted here and the escalated route
     // is asserted in ConversationEscalationTest, where the agent is faked.
-    config(['ai.language.enabled' => false]);
+    app(SettingsService::class)->set('ai_language_enabled', '0');
     $this->app->bind(AiClock::class, fn (): FixtureAiClock => $this->app->makeWith(FixtureAiClock::class, ['now' => CarbonImmutable::parse(CONVERSATION_NOW)]));
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
     $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
@@ -324,7 +325,7 @@ test('a session answers a pending message before it decides anything else', func
 });
 
 test('disabling the conversation switch leaves messages unanswered', function (): void {
-    config(['ai.cognition.conversation.enabled' => false]);
+    app(SettingsService::class)->set('ai_conversation_enabled', '0');
     $human = $this->createUser();
     enabledAiProfile($this->currentUserId);
     inboundMessage($this->currentUserId, $human->id, 'hello');

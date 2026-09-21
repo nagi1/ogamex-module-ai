@@ -7,6 +7,7 @@ use Modules\AI\Domain\Scheduling\SessionDecisionService;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\User;
 use OGame\Services\PlayerGameStateService;
 
@@ -39,7 +40,7 @@ class RunAiSessionAction implements RunAiSession
         // A message is answered when the account next wakes, not when it next thinks about
         // its economy: sessions are 34 to 56 minutes apart, and that is the whole window a
         // reply has to fit inside.
-        if ((bool) config('ai.cognition.conversation.enabled', true)) {
+        if (app(AiRuntimeSettings::class)->conversationEnabled()) {
             app(RunAiConversationCycleAction::class)->handle($profile->player_id, $this->clock->now());
         }
 

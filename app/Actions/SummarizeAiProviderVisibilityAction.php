@@ -7,6 +7,7 @@ use Modules\AI\Enums\AiUsageReservationState;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 
 /**
  * Per-vendor lane visibility: what each provider lane attempted, how slow it was, how many
@@ -57,7 +58,7 @@ class SummarizeAiProviderVisibilityAction
             'configured' => true,
             'vendors' => $vendors,
             'monthToDateCost' => $this->monthToDateCost(),
-            'monthlyCeiling' => (float) config('ai.cognition.monthly_cost_usd', 0),
+            'monthlyCeiling' => app(AiRuntimeSettings::class)->monthlyCostUsd(),
         ]);
     }
 

@@ -21,6 +21,7 @@ use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
 use OGame\Models\BattleReport;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -500,7 +501,7 @@ test('a battle the AI did not come off worse in never advances the affect state'
 });
 
 test('disabling affect enrichment keeps the observation and records no feeling', function (): void {
-    config(['ai.cognition.affect.enrichment' => false]);
+    app(SettingsService::class)->set('ai_affect_enrichment', '0');
 
     $defender = $this->createUser();
     $attacker = $this->createUser();
@@ -513,7 +514,7 @@ test('disabling affect enrichment keeps the observation and records no feeling',
         ->and(AiAffectState::query()->count())->toBe(0);
 
     // Nothing was deleted, so the same observation appraises normally once it is back on.
-    config(['ai.cognition.affect.enrichment' => true]);
+    app(SettingsService::class)->set('ai_affect_enrichment', '1');
     $observation = AiObservation::query()->where('player_id', $defender->id)->sole();
 
     expect(app(AppraiseObservedBattleReportAction::class)->handle($observation->id))->not->toBeNull()

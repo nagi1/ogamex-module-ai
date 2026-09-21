@@ -19,6 +19,7 @@ use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -167,7 +168,7 @@ test('the experience weight is the ablation switch', function (): void {
     $baseline = economyRanking($this->planetService, $profile);
     economySeedOutcome($this->currentUserId, 9003, $baseline[0], -1.0, 0.0, AiExperienceOutcome::Failed);
 
-    config(['ai.cognition.experience.decision_weight' => 0]);
+    app(SettingsService::class)->set('ai_experience_decision_weight', '0');
 
     expect(economyRanking($this->planetService, $profile))->toBe($baseline);
 });

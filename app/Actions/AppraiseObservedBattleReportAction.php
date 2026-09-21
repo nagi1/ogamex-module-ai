@@ -10,6 +10,7 @@ use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Models\AiEmotionalEpisode;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\BattleReport;
 
 /**
@@ -26,7 +27,7 @@ class AppraiseObservedBattleReportAction
         // Ablation seam: an enrichment-off baseline keeps the observation and every persisted
         // affect record, and simply does not turn an observation into a new emotion or advance
         // the running state. Nothing is deleted, so re-enabling resumes from the same records.
-        if (!(bool) config('ai.cognition.affect.enrichment', true)) {
+        if (!app(AiRuntimeSettings::class)->affectEnrichment()) {
             return null;
         }
 
