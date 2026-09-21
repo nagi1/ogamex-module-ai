@@ -31,6 +31,11 @@ class AdvanceAiAllianceLifeAction
             }
         }
 
+        // The leader half of the same social pass: decide pending applications (DEF-006/007)
+        // and answer buddy requests from known contacts (DEF-009).
+        $advanced += app(ReviewAiAllianceApplicationsAction::class)->handle();
+        $advanced += app(ReviewAiBuddyRequestsAction::class)->handle();
+
         return $advanced;
     }
 
