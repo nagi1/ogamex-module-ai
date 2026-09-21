@@ -79,6 +79,7 @@ use Modules\AI\Observers\ObserveCommittedFleetMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiRuntimeSettings;
 use Modules\AI\Support\AiSettings;
 use Modules\AI\Support\CooperativeHostilityPolicy;
 use Modules\AI\Support\DriverCircuitBreaker;
@@ -98,6 +99,7 @@ use OGame\Models\ChatMessage;
 use OGame\Models\Message;
 use OGame\Services\HostilityGuard;
 use OGame\Services\ModuleSlotService;
+use OGame\Services\SettingsService;
 
 class AIServiceProvider extends ModuleServiceProvider
 {
@@ -187,6 +189,9 @@ class AIServiceProvider extends ModuleServiceProvider
         parent::register();
 
         $this->app->singleton(AiSettings::class, static fn (): AiSettings => AiSettings::resolve());
+        // Resolve the host settings service explicitly so the module reads and writes the same
+        // cached instance the host seeded at boot, rather than a second copy of the table.
+        $this->app->singleton(AiRuntimeSettings::class, static fn ($app): AiRuntimeSettings => new AiRuntimeSettings($app->make(SettingsService::class)));
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
         $this->app->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
