@@ -4,12 +4,14 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Operability\AiAuthenticityOverview;
+use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiDecisionTrace;
 use Modules\AI\Models\AiObservation;
+use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\AiClock;
 
@@ -24,8 +26,16 @@ class BuildAiAuthenticityPanelAction
     private const REACTION_WINDOW_MIN_SECONDS = 120;
     private const REACTION_WINDOW_MAX_SECONDS = 180;
 
-    public function __construct(private readonly AiClock $clock)
-    {
+    /**
+     * The human reference for interaction-type entropy, measured in Aion over seven types
+     * (bot 0.43 vs human 0.84) — plan/details/research/veteran-play.md.
+     */
+    private const ENTROPY_BASELINE = 0.84;
+
+    public function __construct(
+        private readonly AiClock $clock,
+        private readonly SessionPlanner $sessionPlanner,
+    ) {
     }
 
     public function handle(int $days): AiAuthenticityOverview
@@ -68,6 +78,8 @@ class BuildAiAuthenticityPanelAction
         }
 
         $score = app(BuildAiPilotReportAction::class)->scoreFor($window);
+        $typeCounts = $this->interactionTypes($from, $now);
+        $wakeSpread = $this->wakeSpread($now);
 
         return app()->makeWith(AiAuthenticityOverview::class, [
             'reactionObservations' => $observations->count(),
@@ -82,7 +94,81 @@ class BuildAiAuthenticityPanelAction
             ],
             'distinctReasons' => AiDecisionTrace::query()->whereBetween('observed_at', [$from, $now])->distinct()->count('selected_reason'),
             'distinctContacts' => AiSocialExchange::query()->whereBetween('created_at', [$from, $now])->distinct()->count('counterparty_player_id'),
+            'interactionEntropy' => $this->entropy($typeCounts),
+            'entropyBaseline' => self::ENTROPY_BASELINE,
+            'interactionTypes' => $typeCounts,
+            'wakeSpread' => $wakeSpread,
         ]);
+    }
+
+    /**
+     * The interaction kinds a window actually used, as type names with counts. Shannon entropy
+     * over this distribution is the self-similarity figure: a uniform bot answers one type and
+     * scores near zero; a human spreads over several kinds (baseline 0.84).
+     *
+     * @return list<array{type: string, count: int}>
+     */
+    private function interactionTypes(CarbonImmutable $from, CarbonImmutable $now): array
+    {
+        return AiSocialExchange::query()
+            ->whereBetween('created_at', [$from, $now])
+            ->get(['type'])
+            ->countBy(static fn (AiSocialExchange $exchange): string => $exchange->type->name)
+            ->map(static fn (int $count, string $type): array => ['type' => $type, 'count' => $count])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param list<array{type: string, count: int}> $typeCounts
+     */
+    private function entropy(array $typeCounts): float
+    {
+        $total = array_sum(array_column($typeCounts, 'count'));
+
+        if ($total === 0) {
+            return 0.0;
+        }
+
+        $entropy = 0.0;
+        foreach ($typeCounts as $row) {
+            $probability = $row['count'] / $total;
+            $entropy -= $probability * log($probability, 2);
+        }
+
+        return round($entropy, 4);
+    }
+
+    /**
+     * The population's first-awake hour spread: a cohort that all wake in one hour reads as one
+     * machine, not many players. The scan is one day of one `isAwake` call per hour per account —
+     * bounded and deterministic, never a table read.
+     *
+     * @return array{spread: int, distinct: int}
+     */
+    private function wakeSpread(CarbonImmutable $now): array
+    {
+        $day = $now->startOfDay();
+        $firstAwakeHours = [];
+
+        foreach (AiProfile::query()->where('enabled', true)->get(['player_id', 'archetype', 'skill_band', 'random_seed', 'settings']) as $profile) {
+            for ($hour = 0; $hour < 24; $hour++) {
+                if ($this->sessionPlanner->isAwake($profile, $day->addHours($hour)->addMinutes(30))) {
+                    $firstAwakeHours[] = $hour;
+
+                    break;
+                }
+            }
+        }
+
+        if ($firstAwakeHours === []) {
+            return ['spread' => 0, 'distinct' => 0];
+        }
+
+        return [
+            'spread' => max($firstAwakeHours) - min($firstAwakeHours),
+            'distinct' => count(array_unique($firstAwakeHours)),
+        ];
     }
 
     /**

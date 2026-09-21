@@ -10,11 +10,14 @@ use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiSocialExchangeState;
+use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiDecisionTrace;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiScoreSample;
+use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 use Modules\AI\Tests\Support\FixtureAiClock;
@@ -81,6 +84,43 @@ test('the authenticity panel separates an in-window reactor from a late one', fu
     expect($panel->reactionObservations)->toBe(1)
         ->and($panel->reactionsInsideWindow)->toBe(1)
         ->and($panel->reactionsOutsideWindow)->toBe(0);
+});
+
+test('the authenticity panel measures interaction entropy against the human baseline', function (): void {
+    $counterparty = $this->createUser()->id;
+
+    foreach ([AiSocialExchangeType::Greeting, AiSocialExchangeType::Thanks] as $index => $type) {
+        AiSocialExchange::create([
+            'player_id' => $this->currentUserId,
+            'counterparty_player_id' => $counterparty,
+            'source_observation_id' => 9201 + $index,
+            'type' => $type,
+            'terms' => [],
+            'state' => AiSocialExchangeState::Proposed,
+            'revision' => 1,
+            'created_at' => CarbonImmutable::parse(ACCOUNTS_NOW)->subHour(),
+            'updated_at' => CarbonImmutable::parse(ACCOUNTS_NOW)->subHour(),
+        ]);
+    }
+
+    $panel = app(BuildAiAuthenticityPanelAction::class)->handle(7);
+
+    // Two equally-used kinds is one bit of entropy; a single kind would be zero.
+    expect($panel->interactionEntropy)->toBe(1.0)
+        ->and($panel->entropyBaseline)->toBe(0.84)
+        ->and(collect($panel->interactionTypes)->pluck('type')->all())->toContain('Greeting', 'Thanks');
+});
+
+test('the authenticity panel reports the population wake-time spread', function (): void {
+    // Seeds 0 and 2 wake in different hours (9 and 10); a uniform cohort would share one hour.
+    foreach ([0, 2] as $index => $seed) {
+        AiProfile::create(['player_id' => $this->currentUserId + $index, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => $seed, 'enabled' => true]);
+    }
+
+    $panel = app(BuildAiAuthenticityPanelAction::class)->handle(7);
+
+    expect($panel->wakeSpread['distinct'])->toBe(2)
+        ->and($panel->wakeSpread['spread'])->toBeGreaterThanOrEqual(1);
 });
 
 function aiAccountsSamples(int $playerId, int $firstGeneral, int $lastGeneral): void

@@ -13,12 +13,18 @@ namespace Modules\AI\Domain\Operability;
  * @property array<string, int|float> $growth
  * @property int $distinctReasons
  * @property int $distinctContacts
+ * @property float $interactionEntropy
+ * @property float $entropyBaseline
+ * @property list<array{type: string, count: int}> $interactionTypes
+ * @property array{spread: int, distinct: int} $wakeSpread
  */
 readonly class AiAuthenticityOverview
 {
     /**
      * @param array<string, int> $saveOutcomes
      * @param array<string, int|float> $growth
+     * @param list<array{type: string, count: int}> $interactionTypes
+     * @param array{spread: int, distinct: int} $wakeSpread
      */
     public function __construct(
         public int $reactionObservations = 0,
@@ -28,6 +34,10 @@ readonly class AiAuthenticityOverview
         public array $growth = [],
         public int $distinctReasons = 0,
         public int $distinctContacts = 0,
+        public float $interactionEntropy = 0.0,
+        public float $entropyBaseline = 0.84,
+        public array $interactionTypes = [],
+        public array $wakeSpread = ['spread' => 0, 'distinct' => 0],
     ) {
     }
 }
