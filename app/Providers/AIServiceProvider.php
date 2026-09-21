@@ -20,6 +20,7 @@ use Modules\AI\Actions\QueueAiUnitsAction;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\AdvanceAiAllianceLife;
 use Modules\AI\Console\Commands\AdvanceAiCampaigns;
+use Modules\AI\Console\Commands\BondExistingAllianceMembers;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
@@ -111,6 +112,7 @@ class AIServiceProvider extends ModuleServiceProvider
     protected array $commands = [
         AdvanceAiCampaigns::class,
         AdvanceAiAllianceLife::class,
+        BondExistingAllianceMembers::class,
         ExplainAiDecision::class,
         PruneAiRecords::class,
         ReconcileLanguageRequests::class,

@@ -274,6 +274,37 @@ test('joining an alliance bonds the member and its co-members both ways', functi
         ->and((float) $toCoMember->affinity)->toBe(0.20);
 });
 
+test('ai:bond-alliances raises existing alliance pairs to the floor, once', function (): void {
+    $a = $this->createChatPlayer();
+    $b = $this->createChatPlayer();
+    $alliance = $this->createAlliance($a);
+    $this->createProfile($a);
+    $this->createProfile($b);
+
+    // Join without the bond observer, the way members formed before the bond shipped.
+    AllianceMember::withoutEvents(fn () => DB::transaction(function () use ($alliance, $a, $b): void {
+        AllianceMember::create(['alliance_id' => $alliance->id, 'user_id' => $a->id, 'joined_at' => now()]);
+        AllianceMember::create(['alliance_id' => $alliance->id, 'user_id' => $b->id, 'joined_at' => now()]);
+        User::query()->whereKey($a->id)->update(['alliance_id' => $alliance->id]);
+        User::query()->whereKey($b->id)->update(['alliance_id' => $alliance->id]);
+    }));
+
+    $this->artisan('ai:bond-alliances')->assertExitCode(0);
+
+    $aToB = AiRelationship::query()->where('player_id', $a->id)->where('other_player_id', $b->id)->sole();
+    $bToA = AiRelationship::query()->where('player_id', $b->id)->where('other_player_id', $a->id)->sole();
+
+    expect((float) $aToB->trust)->toBe(0.15)
+        ->and((float) $aToB->affinity)->toBe(0.20)
+        ->and((float) $bToA->trust)->toBe(0.15)
+        ->and((float) $bToA->affinity)->toBe(0.20);
+
+    $this->artisan('ai:bond-alliances')->assertExitCode(0);
+
+    expect((float) $aToB->fresh()->trust)->toBe(0.15)
+        ->and((float) $aToB->fresh()->affinity)->toBe(0.20);
+});
+
 test('a rolled back alliance membership transition is not observed', function (): void {
     $joiningPlayer = $this->createChatPlayer();
     $alliance = $this->createAlliance($joiningPlayer);
