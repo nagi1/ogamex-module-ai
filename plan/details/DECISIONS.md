@@ -2383,3 +2383,29 @@ registered (so `yerd sites add` refuses, and a hand-written file is the only way
 a second checkout), and the container's pool needs `SCRIPT_FILENAME=/var/www/public/index.php` rather
 than nginx's own path. A YERD-owned `sites-enabled` file is also what a later `yerd sites …` regeneration
 cannot overwrite.
+
+### Social loop forms sides, not just contact (21 September 2026)
+
+The live read of both cohorts exposed the gap the feature tests could not: the trust/threat graph
+was flat (average trust 0.00, zero friends and zero enemies) despite 136 AI-vs-AI battles, 2–3
+alliances and hundreds of exchanges. The cause was structural, not a bug — trust only rose when a
+counterparty *delivered* promised compensation, and a battle only moved threat when the defender
+lost and the affect path fired. So the loop recorded contact without ever forming a side.
+
+Two bloc mechanics close it, both nameable as ordinary play (gate 3), derived from host events
+(gate 1), and added as small methods on existing actions (gate 2):
+
+- **Alliance bond** (`RecordObservedAllianceMembershipStartAction::bondAllies`) — joining an
+  alliance is the standing agreement, so the joiner and each co-member grow to trust (+0.15) and
+  like (+0.20) one another, both directions. This is the one cooperative path that grants trust
+  without a separately kept promise, and it makes a bloc internally cohesive.
+- **Shared enemy** (`RecordObservedBattleReportAction::recordAllyUnderAttackObservations`) — an
+  ally under attack marks the attacker as a threat (+0.20, trust −0.05) and warms the ally now
+  sharing a front (+0.10 affinity). Repeated attacks accumulate, which is what turns an incident
+  into a lasting side.
+
+`ponytail:` two members joining in one batch double-bond (each membership event sees both as
+current); real members join a session apart, so no pair-dedupe was added — the ceiling and upgrade
+path are named in the code. Verified: two new tests (alliance bond, shared enemy), full suite
+997/997, Gate 2 clean, PHPStan back to the 9 pre-existing findings. Record:
+[`reviews/2026-09-21-social-loop-sides.md`](reviews/2026-09-21-social-loop-sides.md).

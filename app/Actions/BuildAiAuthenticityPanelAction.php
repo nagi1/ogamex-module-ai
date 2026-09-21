@@ -110,13 +110,14 @@ class BuildAiAuthenticityPanelAction
      */
     private function interactionTypes(CarbonImmutable $from, CarbonImmutable $now): array
     {
-        return AiSocialExchange::query()
-            ->whereBetween('created_at', [$from, $now])
-            ->get(['type'])
-            ->countBy(static fn (AiSocialExchange $exchange): string => $exchange->type->name)
-            ->map(static fn (int $count, string $type): array => ['type' => $type, 'count' => $count])
-            ->values()
-            ->all();
+        return array_values(
+            AiSocialExchange::query()
+                ->whereBetween('created_at', [$from, $now])
+                ->get(['type'])
+                ->countBy(static fn (AiSocialExchange $exchange): string => $exchange->type->name)
+                ->map(static fn (int $count, string $type): array => ['type' => $type, 'count' => $count])
+                ->all(),
+        );
     }
 
     /**

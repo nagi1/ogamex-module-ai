@@ -246,6 +246,34 @@ test('committed alliance membership changes retain accepted facts only for legal
         ))->toBe(0);
 });
 
+test('joining an alliance bonds the member and its co-members both ways', function (): void {
+    $joiningPlayer = $this->createChatPlayer();
+    $coMember = $this->createChatPlayer();
+    $alliance = $this->createAlliance($joiningPlayer);
+    $this->createProfile($joiningPlayer);
+    $this->createProfile($coMember);
+
+    // Two separate joins, the way real members join one session apart: the first member
+    // joins alone (no one to bond with), the second bonds with it exactly once.
+    DB::transaction(function () use ($alliance, $joiningPlayer): void {
+        AllianceMember::create(['alliance_id' => $alliance->id, 'user_id' => $joiningPlayer->id, 'joined_at' => now()]);
+        User::query()->whereKey($joiningPlayer->id)->update(['alliance_id' => $alliance->id]);
+    });
+
+    DB::transaction(function () use ($alliance, $coMember): void {
+        AllianceMember::create(['alliance_id' => $alliance->id, 'user_id' => $coMember->id, 'joined_at' => now()]);
+        User::query()->whereKey($coMember->id)->update(['alliance_id' => $alliance->id]);
+    });
+
+    $toJoiner = AiRelationship::query()->where('player_id', $coMember->id)->where('other_player_id', $joiningPlayer->id)->sole();
+    $toCoMember = AiRelationship::query()->where('player_id', $joiningPlayer->id)->where('other_player_id', $coMember->id)->sole();
+
+    expect((float) $toJoiner->trust)->toBe(0.15)
+        ->and((float) $toJoiner->affinity)->toBe(0.20)
+        ->and((float) $toCoMember->trust)->toBe(0.15)
+        ->and((float) $toCoMember->affinity)->toBe(0.20);
+});
+
 test('a rolled back alliance membership transition is not observed', function (): void {
     $joiningPlayer = $this->createChatPlayer();
     $alliance = $this->createAlliance($joiningPlayer);

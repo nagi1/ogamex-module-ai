@@ -84,10 +84,43 @@ class RecordObservedAllianceMembershipStartAction
                 $occurredAt,
             );
 
+            $this->bondAllies($playerId, $subjectPlayerId, $observation->id, $occurredAt);
+
             $recordedCount++;
         }
 
         return $recordedCount;
+    }
+
+    /**
+     * Joining an alliance is how a bloc forms: the joiner and each co-member grow to trust
+     * and like one another. The alliance is itself the standing agreement, so this is the one
+     * cooperative path that grants trust without a separately kept promise. Both directions
+     * are written; the self-guard in the relationship action skips the joiner's own row.
+     *
+     * ponytail: two members joining in one batch double-bond (each membership event sees both
+     * as current members). Bounded and harmless — real members join a session apart — so there
+     * is no pair-dedupe; add a membership-scoped bond key only if a batch seeder ever appears.
+     */
+    private function bondAllies(int $playerId, int $subjectPlayerId, int $observationId, CarbonImmutable $occurredAt): void
+    {
+        app(RecordAiRelationshipInteractionAction::class)->handle(
+            $playerId,
+            $subjectPlayerId,
+            $observationId,
+            $occurredAt,
+            trustChange: 0.15,
+            affinityChange: 0.20,
+        );
+
+        app(RecordAiRelationshipInteractionAction::class)->handle(
+            $subjectPlayerId,
+            $playerId,
+            $observationId,
+            $occurredAt,
+            trustChange: 0.15,
+            affinityChange: 0.20,
+        );
     }
 
     private function closePreviousMembershipFacts(int $playerId, int $subjectPlayerId, int $sourceObservationId, CarbonImmutable $occurredAt): void

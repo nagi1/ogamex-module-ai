@@ -155,7 +155,7 @@ class RecordObservedBattleReportAction
             ->pluck('player_id');
 
         foreach ($allyIds as $allyId) {
-            AiObservation::firstOrCreateAtomically([
+            $observation = AiObservation::firstOrCreateAtomically([
                 'player_id' => $allyId,
                 'source_type' => AiObservationSource::BattleReport,
                 'source_id' => $battleReport->id,
@@ -165,6 +165,34 @@ class RecordObservedBattleReportAction
                 'source_time' => $battleReport->created_at ?? $this->clock->now(),
                 'observed_at' => $this->clock->now(),
             ]);
+
+            if (!$observation->wasRecentlyCreated) {
+                continue;
+            }
+
+            $occurredAt = CarbonImmutable::instance($battleReport->created_at ?? $this->clock->now());
+
+            // An ally attacked is a shared enemy: the observer marks the attacker, and grows
+            // closer to the ally it now shares a front with. Repeated attacks accumulate,
+            // which is what turns an incident into a lasting side (the WW2 bloc reflex).
+            app(RecordAiRelationshipInteractionAction::class)->handle(
+                $allyId,
+                $attackerPlayerId,
+                $observation->id,
+                $occurredAt,
+                trustChange: -0.05,
+                threatChange: 0.20,
+                affinityChange: -0.05,
+            );
+
+            app(RecordAiRelationshipInteractionAction::class)->handle(
+                $allyId,
+                $defenderPlayerId,
+                $observation->id,
+                $occurredAt,
+                affinityChange: 0.10,
+                socialImportanceChange: 0.05,
+            );
         }
     }
 

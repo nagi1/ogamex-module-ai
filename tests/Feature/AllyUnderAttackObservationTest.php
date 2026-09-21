@@ -8,6 +8,7 @@ use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
@@ -87,6 +88,35 @@ test('a co-member observes an attack on an ally', function (): void {
         ->exists())->toBeTrue()
         ->and(AiObservation::query()->where('player_id', $ally->id)->sole()->subject_player_id)->toBe($attacker->id)
         ->and(AiObservation::query()->where('player_id', $defender->id)->where('kind', AiObservationKind::AllyUnderAttack)->exists())->toBeFalse();
+});
+
+test('an ally under attack marks the attacker and warms the ally', function (): void {
+    $defender = $this->createUser();
+    $ally = $this->createUser();
+    $attacker = $this->createUser();
+    allyProfileAi($defender->id);
+    allyProfileAi($ally->id);
+
+    $founder = User::factory()->create();
+    $alliance = \OGame\Models\Alliance::unguarded(fn () => \OGame\Models\Alliance::create([
+        'alliance_tag' => 'BLOC',
+        'alliance_name' => 'Bloc Alliance',
+        'founder_user_id' => $founder->id,
+        'is_open' => true,
+    ]));
+    allyJoinAlliance($alliance->id, $defender->id);
+    allyJoinAlliance($alliance->id, $ally->id);
+
+    $report = allyBattleReport($defender->id, $attacker->id);
+    app(RecordObservedBattleReportAction::class)->handle($report->id);
+
+    $toAttacker = AiRelationship::query()->where('player_id', $ally->id)->where('other_player_id', $attacker->id)->sole();
+    $toDefender = AiRelationship::query()->where('player_id', $ally->id)->where('other_player_id', $defender->id)->sole();
+
+    expect((float) $toAttacker->threat)->toBe(0.20)
+        ->and((float) $toAttacker->trust)->toBe(0.0)
+        ->and((float) $toDefender->affinity)->toBe(0.10)
+        ->and((float) $toDefender->social_importance)->toBe(0.05);
 });
 
 test('a defender with no alliance warns no one', function (): void {
