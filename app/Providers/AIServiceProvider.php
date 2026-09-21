@@ -79,6 +79,7 @@ use Modules\AI\Observers\ObserveCommittedFleetMessage;
 use Modules\AI\Observers\RedactDeletedChatMemory;
 use Modules\AI\Support\AffectEngineSelector;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\AiSettings;
 use Modules\AI\Support\CooperativeHostilityPolicy;
 use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\ExperienceEngineSelector;
@@ -184,6 +185,8 @@ class AIServiceProvider extends ModuleServiceProvider
     public function register(): void
     {
         parent::register();
+
+        $this->app->singleton(AiSettings::class, static fn (): AiSettings => AiSettings::resolve());
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
         $this->app->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());

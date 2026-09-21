@@ -243,7 +243,21 @@ INSERT OR REPLACE INTO tasks
  (173,'DEF-027','AI-to-AI chat uses the LLM and speaks like a real player','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/GenerateAiReplyAction.php; app/Ai/Agents/OgameConversationReplyAgent.php; tests/Feature/LaravelAiLanguageTest.php; tests/Feature/ConversationEscalationTest.php','Live read: every AI-to-AI reply was authored text ("I cannot cooperate under the current relationship", "Hello.") because GenerateAiReplyAction refused a counterparty that is itself an AI. Removed the guard so substantive exchanges reach the language lane, and rewrote the reply agent instructions to demand natural OGame speech (short, casual, shorthand, persona-matched). Authored text stays the provider-off/budget/failure fallback; daily limits + the $10 wall bound spend. Gates: 3 (a player types like a player); 1 (no object lists in the prompt); 2 (one guard removed, one prompt rewritten).','2026-09-21 16:08:00'),
  (174,'DEF-028','Persona taste: continuous seeded dimensions (diligence, aggression, sociability)','impl','done','P1',NULL,NULL,NULL,NULL,'app/Domain/Persona/PersonaTaste.php; app/Domain/Decision/QueueableFleetSavePlanner.php; tests/Feature/PersonaTasteTest.php; tests/Feature/ProactiveSaveTest.php','Every account is a different player, not the same persona N times. PersonaTaste derives three seeded continuous dimensions (diligence, aggression, sociability). Aggression is wired into the fleetsave exposure band (proactive only, reactive save untouched); diligence and sociability are derived but unwired — both wirings (sessionsPerDay, response turns) were reverted because the cadence and conversation-loop tests are calibrated (follow-ups in the spec). Gates: 3 (some risk more); 1 (no object lists); 2 (one value object + one call site). Spec: plan/details/specs/persona-taste.md.','2026-09-21 17:10:17'),
  (175,'DEF-029','Wire diligence into session cadence and sociability into initiation','impl','done','P1',NULL,NULL,NULL,NULL,'app/Domain/Routine/RoutineProfile.php; app/Actions/InitiateAiSocialContactAction.php; tests/Feature/PersonaTasteTest.php; tests/Feature/RoutineCadenceTest.php','DEF-028 shipped only aggression. This closes the two remaining dimensions: diligence -> sessionsPerDay (band-bounded inside each archetype presence band) and sociability -> per-session initiation cap. Also fixes the dark-period test''s last-partial-day artifact that blocked the first diligence attempt. Gates: 3 (some play more, some reach out more); 1 (no object lists); 2 (two small call sites). Spec: plan/details/specs/persona-taste.md.','2026-09-21 17:45:53'),
- (176,'DEF-030','A member welcomes a newly-joined alliance member','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/InitiateAiSocialContactAction.php; tests/Feature/SocialInitiationTest.php','The live hour read found the social loop dead: grand had 0 exchanges in 60 minutes because nothing consumes the AllianceMembershipJoined observation. The leader''s application-accept welcome (DEF-007) is a different path, so an ordinary member never greets a newcomer. This adds a proactive welcome in InitiateAiSocialContactAction, gated by sociability (>=0.5), so a chatty member says hello and a quiet one stays silent. Gates: 3 (a member greets a new ally); 1 (no lists); 2 (one method + one loop, reuses the authored pipeline).','2026-09-21 20:01:01');
+ (176,'DEF-030','A member welcomes a newly-joined alliance member','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/InitiateAiSocialContactAction.php; tests/Feature/SocialInitiationTest.php','The live hour read found the social loop dead: grand had 0 exchanges in 60 minutes because nothing consumes the AllianceMembershipJoined observation. The leader''s application-accept welcome (DEF-007) is a different path, so an ordinary member never greets a newcomer. This adds a proactive welcome in InitiateAiSocialContactAction, gated by sociability (>=0.5), so a chatty member says hello and a quiet one stays silent. Gates: 3 (a member greets a new ally); 1 (no lists); 2 (one method + one loop, reuses the authored pipeline).','2026-09-21 20:01:01'),
+ (177,'UX-001','AiSettings YAML schema + symfony/yaml parse + boot validation + back-compat shim','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Support/AiSettings.php','One ai-settings.yaml file, one typed schema; every config file becomes a reader. Test: bad YAML fails with key+line; on/off quoted; missing key uses default.','2026-09-21 22:02:34'),
+ (178,'UX-002','AiRuntimeSettings accessors + move live scalars to host settings table','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Support/AiRuntimeSettings.php','DB half: ai_* keys via host SettingsService, typed accessors, defaults in code; call sites read accessors not config().','2026-09-21 22:02:45'),
+ (179,'UX-003','Effective-settings DTO + Settings screen (read-only, one DTO, no view queries)','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Actions/BuildAiSettingsPanelAction.php','Renders current YAML + DB state, classified; page settings == DTO.','2026-09-21 22:02:45'),
+ (180,'UX-004','Settings composer — client-side YAML edit, diff, reset, copy buttons','impl','todo','P1',NULL,NULL,NULL,NULL,'resources/js/ai-console.js','Module''s first justified JS; progressive enhancement; composed YAML schema-valid.','2026-09-21 22:02:45'),
+ (181,'UX-005','Docker services matrix + generated apply blocks','impl','todo','P1',NULL,NULL,NULL,NULL,'resources/views/partials/settings-deploy.blade.php','Derived from the composed file; up/down commands match driver selections.','2026-09-21 22:02:45'),
+ (182,'UX-006','Copy/language pass — rewrite t_ai strings, relabel Decisions to Why','impl','todo','P1',NULL,NULL,NULL,NULL,'lang/en/t_ai.php','Removes AI chatter; machine strings get labels; authored English only.','2026-09-21 22:02:45'),
+ (183,'UX-007','Health section — situation dashboard (budget, situation, authenticity, liveness, pilot)','impl','todo','P1',NULL,NULL,NULL,NULL,'resources/views/partials/health.blade.php','Reconciles DEF-024; two-renderings invariant.','2026-09-21 22:02:45'),
+ (184,'UX-008','Settings inventory + DB/YAML axis help doc','doc','todo','P2',NULL,NULL,NULL,NULL,'plan/details/specs/owner-console-ux.md','The inventory tables rendered as help.','2026-09-21 22:02:45'),
+ (185,'UX-009','Migration note — scattered AI_* removal after one release','doc','todo','P2',NULL,NULL,NULL,NULL,'plan/details/specs/owner-console-ux.md','Records the shim expiry.','2026-09-21 22:02:45'),
+ (186,'UX-010','Operations surface — run/prune/reconcile/sample/retry as audited queued jobs','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Actions/RunAiOperationAction.php','One action + one DTO per operation.','2026-09-21 22:02:45'),
+ (187,'UX-011','Definition cards — four-line pattern for every knob and operation','impl','todo','P1',NULL,NULL,NULL,NULL,'resources/views/partials/definition-card.blade.php','Single source of what/why/effect/restart.','2026-09-21 22:02:45'),
+ (188,'UX-012','Apply-now bridge — Clear caches + Restart worker buttons','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Actions/ApplyAiSettingsChangeAction.php','Reuse host endpoint if present.','2026-09-21 22:02:45'),
+ (189,'UX-013','Players roster — full listing, search/filters, View/View-as/Stop-Resume','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Actions/BuildAiPlayerRosterAction.php','Impersonation posts to host route.','2026-09-21 22:02:45'),
+ (190,'UX-014','Campaigns section — PvE operator controls (open/declare/advance/apply/bond)','impl','todo','P1',NULL,NULL,NULL,NULL,'app/Actions/BuildAiCampaignControlAction.php','Admin mirror of the player-facing board.','2026-09-21 22:02:45');
 -- ── dependencies ─────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
  (2, 1, 'all impl gated on review'),
@@ -307,4 +321,19 @@ INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
  (154, 163, 'alliance chat needs co-members; the ecosystem fix creates them'),
  (156, 152, NULL),
  (164, 163, NULL),
- (165, 163, NULL);
+ (165, 163, NULL),
+ (178, 177, NULL),
+ (179, 177, NULL),
+ (179, 178, NULL),
+ (180, 179, NULL),
+ (181, 179, NULL),
+ (183, 182, NULL),
+ (184, 177, NULL),
+ (185, 177, NULL),
+ (186, 182, NULL),
+ (187, 182, NULL),
+ (188, 186, NULL),
+ (189, 182, NULL),
+ (189, 187, NULL),
+ (190, 182, NULL),
+ (190, 186, NULL);
