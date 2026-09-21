@@ -128,10 +128,13 @@ def cmd_add(con, a):
     kinds = {"review", "doc", "impl", "deferred", "discovery"}
     if a.kind not in kinds:
         sys.exit(f"kind must be one of {sorted(kinds)}")
+    # A deferred row is born deferred: ready_tasks selects status='todo', so inserting one as
+    # todo would offer work the plan has deliberately not scheduled to the next agent.
+    status = "deferred" if a.kind == "deferred" else "todo"
     con.execute(
         "INSERT OR REPLACE INTO tasks (code,title,kind,status,priority,gap_ref,principle_refs,algorithm_ref,file_ref,notes) "
         "VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (a.code, a.title, a.kind, "todo", a.priority, a.gap, a.principles, a.alg, a.file, a.notes))
+        (a.code, a.title, a.kind, status, a.priority, a.gap, a.principles, a.alg, a.file, a.notes))
     for dep in (a.depends or "").split(","):
         dep = dep.strip()
         if dep:

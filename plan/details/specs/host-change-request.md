@@ -23,6 +23,7 @@ Ordered by what it unblocks, not by size.
 | R8 | *(optional)* a way to stop `advance()` stamping `last_ip` from a queue context | trivial | `last_ip` honesty for scheduled work (`A3`/`A5`) | **Decided 15 September 2026: no host change.** The queue-context address is the truthful stamp for a scheduled account (I7/AG3) |
 | R9 | A mission-required-ship query: "which unit does this mission type consume?" | small | Removes `colony_ship` / `espionage_probe` references from module code (gate 1) | **Implemented 15 September 2026** — `GameMission::getRequiredShipMachineNames()`; the module's role keys are deleted |
 | R10 | A mission-required-**research** query: "which technology does this mission wait on?" | small | Makes a capability a leaf technology gates reachable, without naming it in module code (gate 1, `R2`) | **Implemented 15 September 2026** — `GameMission::getRequiredResearch()`; the module's chain climbs it |
+| R11 | Keep the module's built assets out of the host repository | trivial | A clean host `git status` once the module's own frontend build writes to `public/modules/ai/build` | **Requested 18 September 2026.** Nothing is blocked on it: the fallback is untracked build artifacts in the host tree |
 
 ## R1 — A read-only, seedable battle question
 
@@ -253,11 +254,34 @@ accessor, declared by colonisation and expedition as `astrophysics => 1`. The de
 mission's own `isMissionPossible` check changes. `FacilityChain` reads it and queues the technology and
 its prerequisites as chain steps.
 
+## R11 — Keep the module's built assets out of the host repository
+
+**Where.** The host's `.gitignore`.
+
+**What is true today.** The host already ignores the whole module path — `.gitignore` carries `/Modules/AI/`,
+because the module is a separately-maintained checkout — but nothing ignores `public/modules/`.
+
+**Why the module needs it.** Under the owner's direction of 18 September 2026 all module frontend code is
+separated from the host: the module owns its `package.json`, its `vite.config.js` and its sources, and only
+its built artifacts land in the host tree at `public/modules/ai/build`, because a browser can only fetch
+what the web server serves. Without one ignore line, every module build adds untracked files to the host's
+working tree.
+
+**Minimal shape.** One line: `/public/modules/`.
+
+**What the module does if it never lands.** Everything works; the host's `git status` shows the built
+assets as untracked. No slice depends on this item, and the build never writes outside `public/modules/`,
+so the noise stays one namespaced directory rather than files scattered through the tree.
+
 ## Not requested — keep the host scope small
 
 - **No new `QueueName` lane.** `FleetArrivals` / `FleetArrivalsHeavy` and the module's own Horizon setup
   are sufficient.
 - **No new `ModuleSlotService::SLOTS` entry.** `admin.nav` is all the module registers.
+- **No module entry in the host's `vite.config.js` or its chunk manifest.** Owner direction 18 September
+  2026: module frontend code is separated from the host, so the module owns its own toolchain and only its
+  built artifacts reach `public/modules/ai/build`. The host's legacy bundle, its chunk manifest and
+  `scripts/validate-chunks.js` are therefore never touched.
 - **No new `app/Events/Game/*` event.** `FleetMissionArrived` plus a `FleetMission` model observer covers
   the inbound-fleet observation (G8); `FleetMission` is already observable.
 - **No marketplace, trade request or resource exchange.** None exists, the plan now says so plainly, and

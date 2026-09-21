@@ -2280,3 +2280,106 @@ is only measurable in a 1x universe.
 DISC-011: the four coalition-side consultation triggers need a non-faction counterparty, and PVE holds
 one non-faction account against 19 AI profiles, so only `new_phase` and `rank_change` fire. Accepted as
 correctly scoped dormancy — the triggers fire when a real non-faction population exists.
+
+### The owner console planned — seven slices, six rejections, one deferred gap (18 September 2026)
+
+The question was asked against what already ships, not from scratch: `admin/ai` is already a staff
+operator page (switch, caps, today's population, today's refusals, recent decisions, scenario replay)
+and the review loop already names the figures a *good* population would show. So
+[the owner console spec](specs/owner-ui.md) chooses its surfaces by an explicit value ranking and
+refuses more than it ships.
+
+**The readings ship as three slices.** OW-1 (`IMPL-051`) puts the pilot window on the page:
+`BuildAiPilotReportAction` already computes work outcomes, action states, p50/p95 lateness, language
+attempts, cache hit rate, provider cost, the growth curve and its own measured read cost, and
+`AiPilotReport::toArray()` is already what `ai:pilot-report --json` prints — so the section is a
+rendering, and the equality of the two renderings is the test. OW-2 (`IMPL-052`) is the authenticity
+panel, the only surface that can answer whether the accounts are distinguishable: reaction delay
+against the module's own 120–180 s reaction window, save outcomes that show refusals (a 100 % save rate
+is the finding, not a pass), the growth curve, and action breadth. OW-3 (`IMPL-053`) is the unified
+per-account progress board — the one reading the module had nowhere at all: every existing surface is a
+count or a cohort aggregate, and `BuildAiPilotReportAction::score()` already groups samples per account,
+computes each delta, then keeps only min/median/max and a count of zeros. The board keeps the row that
+loop already builds (one field on `AiScoreReport`) and gives it a per-account page, which needs one new
+GET because `ExplainAiDecisionAction::forPlayer()` has shipped with no link to it. Deriving growth in
+the page instead was refused as a second implementation of the growth rule.
+
+**Rejected, with reasons.** A config editor would make a web form a second source of truth for
+deployment state the operator already controls, and would expose it in a request. A multi-universe
+console is refused because the grand and pve stacks are separate deployments with separate databases:
+one page reads one universe. A log viewer is refused because the log is already on the box.
+
+**Deferred, `DEF-006`.** Driver and sidecar health cannot be shown today: the hybrids ask both engines
+and keep the driver's emotion, mood and intensity as evidence, but `ai_emotional_episodes` persists
+only the taxonomy's emotion and intensity, so "the driver degraded here" is written nowhere. The row
+starts with the field, not the page — a status page built first could only ever answer "unknown", which
+gate 2 refuses and a review would misread as a pass. It is deliberately kept out of the gap register,
+whose waves carry measured *gameplay* signal rather than operability surfaces.
+
+**One handoff-surface bug fixed.** `task.py add` inserted every row as `status='todo'` while
+`ready_tasks` selects exactly that status, so a `deferred`-kind row — `DEF-006` was the first created
+that way — appeared in `ready` and would have offered the next agent work the plan had deliberately not
+scheduled. A deferred row is now born `deferred`; verified by `ready` listing only `IMPL-051`, and
+`seed.sql` re-dumped (145 tasks).
+
+**A second group of surfaces, chosen the same way.** The monitoring and control question was answered
+reuse-first: Horizon is installed, admin-gated (`viewHorizon` → `hasRole('admin')`) and snapshots every
+five minutes, so queue depth, failures and retries are linked and never re-rendered — a second queue view
+would be a second source of truth for a number Horizon owns. What the host cannot answer became four
+slices (`IMPL-054` to `IMPL-057`): liveness and quiet diagnosis off `ai_schedules` (is the silence the
+game's or ours), storage and retention health, per-vendor provider visibility — the plan-committed R2-R5
+"operator visibility" item — and stopping a single account instead of the population. Retention health
+deliberately writes nothing: `ai:prune`'s count is printed to stdout and lost, but a stalled prune
+announces itself as an oldest row sitting outside its own declared window, so a stored counter would be a
+second source of truth for a fact the data already states. Admission-cap editing stays refused (it needs a
+hot-path read of a new table or a fragile write into a cached config), alerting is refused by the
+review loop's own "not a monitor. Nothing here pages anyone.", and a scheduled pause is refused because
+the switch already records who and why — an end time nobody watches is a stall with extra state.
+
+**The frontend is the module's own, and separated from the host (owner direction, 18 September 2026).**
+The design language is still reused and it is CSS rather than JavaScript: every module view extends
+`ingame.layouts.main`, which loads `ingame.css` through `@vite`, so the console inherits the host's own
+classes and its `fadeBox()` notice global. No module stylesheet and no new class is planned, and two
+surfaces that look like they need a client library do not — the growth curve is server-rendered SVG from
+the same `AiScoreReport` the CLI prints, and liveness is a timestamp comparison rather than a live widget.
+Where interactivity is real, the module owns its own `package.json`, `vite.config.js` and sources, and the
+host's build is not touched at all: `@vite($entries, $buildDirectory)` takes the build directory per call
+and `manifestPath()` resolves it under the host's `public/`, so module views read
+`public/modules/ai/build/manifest.json` while the host's own tags keep reading `public/build/manifest.json`.
+That needed no global `Vite::useBuildDirectory()`, which would have redirected the host's tags too. Sources
+stay in the module and only built artifacts reach `public/modules/ai/build` — the browser-fetchable half,
+and the reason `R11` shrank to a single `.gitignore` line. Development uses `vite build --watch` rather
+than a dev server, because the hot-file mechanism is global (`useHotFile()`, default `public_path('hot')`)
+and a module dev server would send the host's own `@vite` calls to it. Module code must not join the ingame
+bundle, which is concatenated legacy non-ESM text validated by `scripts/validate-chunks.js`. Nothing is
+built yet: no planned slice has a client-side requirement, so the toolchain would be machinery with no
+consumer, and `DEF-007` carries it with a named trigger.
+
+### IMPL-051 shipped, and the cohorts got an HTTP front (18 September 2026)
+
+The first owner-console slice is implemented: the operator page renders the pilot window from
+`BuildAiPilotReportAction`'s own `toArray()`, with a `days` parameter restricted to `1`, `7` and `30`
+and a fallback to one day for anything else. The view computes nothing, and the test asserts the growth
+line exactly as the report renders it, so a page that re-derived growth would fail. Pint, module
+PHPStan, Gate 2 and the route suite (8 passed, 44 assertions) are clean. Record:
+[`reviews/2026-09-18-implemented-051-pilot-window.md`](reviews/2026-09-18-implemented-051-pilot-window.md).
+
+The window read was measured live rather than assumed: **2.4 s and 9 queries** in `ogamex-grand`, almost
+all of it the lateness computation over 73 810 completed sessions in one day. That is the accelerated
+cohort's volume, not the reference profile's, so it is accepted now and the upgrade path is recorded —
+aggregate lateness where the row is written, per the review loop's own rule that a figure needing a scan
+is a missing counter.
+
+**The cohorts had no HTTP front at all**, which is why nothing was browsable: both stacks publish
+PHP-FPM only and the stack's README expects the host to be the web server, while the Windows checkout at
+`C:\code\OGameX` carries no `Modules/` directory and so can never show module UI. The first fix was a
+Docker nginx gateway; **it was removed on the owner's direction**, because the local web server is
+already there: **YERD** (native, `/usr/local/bin/yerd`, nginx on 80/443 inside WSL, with `herd` as a bash
+alias for it), and its nginx configs live in the user-writable `/opt/yerd/web/nginx`. The cohorts are now
+two YERD-served names in their own file there, `sites-enabled/ogame-module-cohorts.conf`, with
+certificates signed by YERD's own CA, FastCGI to `127.0.0.1:9001`/`:9002`, and static files from the
+shared checkout. Two constraints shaped that: YERD keys sites by directory and this repository is already
+registered (so `yerd sites add` refuses, and a hand-written file is the only way to add a domain without
+a second checkout), and the container's pool needs `SCRIPT_FILENAME=/var/www/public/index.php` rather
+than nginx's own path. A YERD-owned `sites-enabled` file is also what a later `yerd sites …` regeneration
+cannot overwrite.

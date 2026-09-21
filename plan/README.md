@@ -123,6 +123,13 @@ work is built on:
   same survey: eight asks ordered by what they unblock, each with the minimal shape that satisfies it,
   what lands in the module when it does, and what happens if it never does. One of them (a read-only,
   seedable battle question) is what makes the raid estimator executable at all.
+- [The owner's console](details/specs/owner-ui.md) — what a server owner actually needs to see, ranked by
+  value against what already ships: seven slices (three readings, four monitoring and control surfaces),
+  six rejections with their reasons, one deferred gap, and three host tools linked rather than rebuilt.
+  Every figure is read from an action, column or table that already exists, so the console adds no table,
+  job, dependency or panel framework. It also carries the module's whole UI inventory and the frontend
+  rule: module frontend code is separated from the host (own npm project and Vite config, built into
+  `public/modules/ai/build`), so the host's own build is never touched.
 
 The [gate audit](details/GATE-AUDIT.md) is the pass over the existing module against the three gates, and
 it is what turns this research into slices.
