@@ -91,6 +91,19 @@ class BuildAiPilotReportAction
     }
 
     /**
+     * The score alone, for a caller that wants the growth curve and per-account deltas without
+     * paying for the rest of the window. The board and the authenticity panel read this rather
+     * than deriving growth a second time.
+     */
+    public function scoreFor(int $days): AiScoreReport
+    {
+        $window = max(1, $days);
+        $now = $this->clock->now();
+
+        return $this->score($now->subDays($window), $now);
+    }
+
+    /**
      * What the cohort's public score did over the window, read from the module's own hourly samples
      * because the host keeps current points and no history.
      *
@@ -112,10 +125,11 @@ class BuildAiPilotReportAction
         }
 
         $deltas = [];
+        $perAccountDeltas = [];
         $largestJump = 0;
         $militaryLost = 0;
 
-        foreach ($samples->groupBy('player_id') as $accountSamples) {
+        foreach ($samples->groupBy('player_id') as $playerId => $accountSamples) {
             $rows = $accountSamples->values();
             $first = $rows->firstOrFail();
             $last = $first;
@@ -129,7 +143,9 @@ class BuildAiPilotReportAction
                 $last = $sample;
             }
 
-            $deltas[] = $last->general - $first->general;
+            $delta = $last->general - $first->general;
+            $deltas[] = $delta;
+            $perAccountDeltas[] = ['player_id' => (int) $playerId, 'delta' => $delta];
             $militaryLost += $last->military_lost - $first->military_lost;
         }
 
@@ -149,6 +165,7 @@ class BuildAiPilotReportAction
             'largestHourlyJump' => $largestJump,
             'zeroGrowthAccounts' => count(array_filter($deltas, static fn (int $delta): bool => $delta === 0)),
             'militaryLost' => $militaryLost,
+            'perAccountDeltas' => $perAccountDeltas,
         ]);
     }
 

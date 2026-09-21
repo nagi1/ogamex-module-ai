@@ -23,6 +23,8 @@ readonly class AiScoreReport
         public int $largestHourlyJump = 0,
         public int $zeroGrowthAccounts = 0,
         public int $militaryLost = 0,
+        /** @var list<array{player_id:int, delta:int}> $perAccountDeltas */
+        public array $perAccountDeltas = [],
     ) {
     }
 
@@ -43,6 +45,7 @@ readonly class AiScoreReport
             'largest_hourly_jump' => $this->largestHourlyJump,
             'zero_growth_accounts' => $this->zeroGrowthAccounts,
             'military_lost' => $this->militaryLost,
+            'per_account_deltas' => $this->perAccountDeltas,
         ];
     }
 }

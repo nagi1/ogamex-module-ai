@@ -322,7 +322,7 @@ test('the page lists recent decisions and replays a shipped scenario on request'
     $this->artisan('ogamex:admin:assign-role', ['username' => $this->currentUsername]);
     aiRecordedDecision($this->currentUserId);
 
-    $index = $this->get('/admin/ai');
+    $index = $this->get('/admin/ai?tab=decisions');
     $replayed = $this->get('/admin/ai?replay=' . INSPECTION_SCENARIO);
     $unknown = $this->get('/admin/ai?replay=' . urlencode('../config/config'));
 

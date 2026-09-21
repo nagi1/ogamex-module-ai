@@ -57,6 +57,10 @@ test('the JSON window carries the score movement the host cannot', function (): 
         'largest_hourly_jump' => 150,
         'zero_growth_accounts' => 1,
         'military_lost' => 40,
+        'per_account_deltas' => [
+            ['player_id' => $this->currentUserId, 'delta' => 300],
+            ['player_id' => $peerId, 'delta' => 0],
+        ],
     ])->and($payload['read_cost']['queries'])->toBeGreaterThan(0)
         ->and($payload['read_cost']['milliseconds'])->toBeGreaterThanOrEqual(0.0);
 });

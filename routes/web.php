@@ -12,6 +12,11 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
         // The staff switch is a POST because it changes module state, and every operator
         // action on this page has to leave a record of who did it.
         Route::post('/switch', [AIController::class, 'switch'])->name('switch');
+        // Stopping one account is a smaller move than the population switch, but it is still a
+        // state change and records its own who, why and when.
+        Route::post('/account/switch', [AIController::class, 'switchAccount'])->name('account.switch');
+        // The per-account drill-down is a read: the board links to it, it writes nothing.
+        Route::get('/account/{player}', [AIController::class, 'account'])->name('account');
     });
 
 // The coalition campaign page is a read-only situation log: any logged-in player can read it,

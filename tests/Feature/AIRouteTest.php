@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Application;
+use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\RecordAiStopReasonAction;
 use Modules\AI\Actions\RunAiSessionAction;
@@ -11,6 +12,7 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiOperabilitySwitch;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
 use OGame\Services\ModuleSlotService;
@@ -123,6 +125,81 @@ test('a player who is not an admin cannot change the switch', function (): void 
 
     expect(AiOperabilitySwitch::query()->count())->toBe(0)
         ->and($this->get('/admin/ai')->status())->toBe(302);
+});
+
+/**
+ * The page and `ai:pilot-report` must be one reading of one window. The delta line is asserted as the
+ * report renders it, so a page that recomputed growth for itself would fail here.
+ */
+test('the page renders the pilot window from the same answer the report command prints', function (): void {
+    aiRouteProfile($this->currentUserId);
+    AiScoreSample::create([
+        'player_id' => $this->currentUserId,
+        'sampled_at' => now()->subHours(2),
+        'general' => 500,
+        'military_lost' => 10,
+    ]);
+    AiScoreSample::create([
+        'player_id' => $this->currentUserId,
+        'sampled_at' => now(),
+        'general' => 560,
+        'military_lost' => 40,
+    ]);
+
+    $answer = app(BuildAiPilotReportAction::class)->handle(7)->toArray();
+    $content = $this->get('/admin/ai?tab=pilot&days=7')->getContent();
+
+    expect($answer['profiles'])->toBe(1)
+        ->and($answer['score']['accounts'])->toBe(1)
+        ->and($answer['score']['samples'])->toBe(2)
+        ->and($answer['score']['general_delta'])->toBe(['min' => 60, 'median' => 60, 'max' => 60])
+        ->and($answer['score']['military_lost'])->toBe(30)
+        ->and($content)->toContain('Pilot window')
+        ->toContain('7 days')
+        ->toContain('min 60 · median 60 · max 60')
+        ->toContain('This read');
+});
+
+test('a window that is not offered falls back to one day instead of erroring', function (): void {
+    aiRouteProfile($this->currentUserId);
+
+    $content = $this->get('/admin/ai?tab=pilot&days=999')->getContent();
+
+    expect($this->get('/admin/ai?tab=pilot&days=not-a-number')->status())->toBe(200)
+        ->and($content)->toContain('Pilot window')
+        ->toContain('1 day')
+        ->not->toContain('999 days');
+});
+
+test('the monitoring tab renders liveness, storage, provider and the account switch', function (): void {
+    aiRouteProfile($this->currentUserId);
+
+    $response = $this->get('/admin/ai?tab=monitoring');
+
+    expect($response->status())->toBe(200)
+        ->and($response->getContent())->toContain('Stop or resume one account')
+        ->toContain('Liveness and quiet diagnosis')
+        ->toContain('Storage and retention')
+        ->toContain('Provider lanes');
+});
+
+test('the accounts tab renders the authenticity panel and the board', function (): void {
+    aiRouteProfile($this->currentUserId);
+
+    $response = $this->get('/admin/ai?tab=accounts');
+
+    expect($response->status())->toBe(200)
+        ->and($response->getContent())->toContain('Authenticity')
+        ->toContain('Accounts');
+});
+
+test('the account page renders one account without error', function (): void {
+    aiRouteProfile($this->currentUserId);
+
+    $response = $this->get('/admin/ai/account/' . $this->currentUserId);
+
+    expect($response->status())->toBe(200)
+        ->and($response->getContent())->toContain('Account');
 });
 
 function aiRouteProfile(int $playerId): AiProfile

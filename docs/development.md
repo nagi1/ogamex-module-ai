@@ -167,6 +167,57 @@ Because the module checkout is physically inside the OGameX directory, the
 existing OGameX Docker bind mount includes the module without an additional
 mount or synchronization step.
 
+## Frontend assets
+
+Module frontend code is **separated from the host**: the module owns its own npm
+project, its own Vite config and its own sources, and the host's `vite.config.js`,
+its legacy bundle and its chunk manifest are never touched. Owner direction,
+18 September 2026.
+
+```text
+Modules/AI/                       # the module's own npm project
+├── package.json
+├── vite.config.js                # build.outDir -> <host>/public/modules/ai/build
+└── resources/
+    ├── js/ai-console.js
+    └── css/ai-console.css
+```
+
+| Task | Command |
+| --- | --- |
+| Install | `npm --prefix Modules/AI ci` |
+| Build once | `npm --prefix Modules/AI run build` |
+| Develop | `npm --prefix Modules/AI run watch` (`vite build --watch`) |
+
+A view renders its own manifest with a per-call build directory, so the host's
+`@vite` tags in `ingame.layouts.main` keep reading `public/build/manifest.json`
+while module views read `public/modules/ai/build/manifest.json`:
+
+```blade
+@vite(['resources/js/ai-console.js'], 'modules/ai/build')
+```
+
+- **Build artifacts only.** Sources stay in the module; the browser-fetchable half
+  lands under the host's `public/modules/ai/build`, which the host ignores via
+  `R11`. Nothing else in the host tree changes.
+- **No dev server, deliberately.** The hot-file mechanism is global
+  (`useHotFile()`, defaulting to `public_path('hot')`), so running a module Vite
+  dev server would make the host's own `@vite` calls look for host assets on the
+  module's server. `--watch` keeps the module's manifest current without
+  disturbing the host's dev experience.
+- **Not part of the host build.** `npm run build` at the host root does not build
+  module assets; deployments run the module's build as its own step.
+- **No host globals in new code.** The host's in-game bundle is concatenated
+  legacy jQuery text, so a module entry is a plain ES module and must not be
+  added to `resources/js/ingame/chunks/manifest.json`.
+- **Progressive enhancement.** Controls work as forms first; JavaScript only makes
+  an existing control faster. The page must stay usable with scripting off.
+
+The current console needs none of this: its views extend `ingame.layouts.main`,
+reuse the host's own CSS classes, and render charts as server-side SVG. The
+toolchain lands with the first slice that needs real client interactivity
+(`DEF-007`).
+
 ## Operator tooling
 
 The module's operator page lives at `admin/ai` and is reachable from the admin sidebar through
