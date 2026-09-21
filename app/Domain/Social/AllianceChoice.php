@@ -48,6 +48,12 @@ class AllianceChoice
         return $best;
     }
 
+    /** Whether the account has at least one open alliance it has not already been rejected by. */
+    public function hasOpenCandidate(int $playerId): bool
+    {
+        return $this->openCandidates($playerId) !== [];
+    }
+
     /** @return list<Alliance> */
     private function openCandidates(int $playerId): array
     {
