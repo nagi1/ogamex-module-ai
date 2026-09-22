@@ -8,7 +8,7 @@ import laravel from 'laravel-vite-plugin';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/js/ai-console.js'],
+            input: ['resources/css/ai-console.css', 'resources/js/ai-console.js'],
             publicDirectory: '../../public',
             buildDirectory: 'modules/ai/build',
             refresh: false,

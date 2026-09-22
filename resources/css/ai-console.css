@@ -1,0 +1,83 @@
+/* The console reuses the host's own classes, but the host's admin tables are dense
+   by design. This file only adds the air a long settings page needs: vertical rhythm
+   between sections, padding inside cards and tables, and room around the controls. */
+
+.ai-console .box_highlight {
+    margin: 18px 0 8px;
+    padding: 9px 12px;
+}
+
+.ai-console .box_highlight:first-child {
+    margin-top: 0;
+}
+
+.ai-console .group {
+    margin: 10px auto;
+    padding: 12px 14px;
+}
+
+.ai-console p {
+    margin: 6px 0;
+}
+
+.ai-console .btn_blue {
+    margin: 3px 4px;
+}
+
+.ai-console .fieldwrapper {
+    padding: 9px 0;
+}
+
+.ai-console .definition p {
+    margin: 5px 0;
+    line-height: 1.45;
+}
+
+.ai-console table.defaultTable {
+    width: 100%;
+    margin: 6px 0;
+}
+
+.ai-console table.defaultTable th,
+.ai-console table.defaultTable td {
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.ai-console table.defaultTable th {
+    color: #9fc8e8;
+    border-bottom: 1px solid #2a3542;
+}
+
+.ai-console pre {
+    margin: 8px 0;
+    padding: 12px 14px;
+    background: #12171d;
+    border: 1px solid #000;
+    border-radius: 3px;
+    line-height: 1.5;
+}
+
+.ai-console details {
+    margin: 6px 0;
+}
+
+.ai-console summary {
+    cursor: pointer;
+    color: #9fc8e8;
+}
+
+.ai-console form p {
+    margin: 8px 0;
+}
+
+.ai-console label {
+    margin-right: 6px;
+}
+
+.ai-console input[type="text"],
+.ai-console input[type="number"],
+.ai-console select {
+    margin: 0 4px;
+}

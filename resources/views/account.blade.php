@@ -1,6 +1,9 @@
 @extends('ingame.layouts.main')
 
 @section('content')
+    @if (file_exists(public_path('modules/ai/build/manifest.json')))
+        @vite(['resources/css/ai-console.css', 'resources/js/ai-console.js'], 'modules/ai/build')
+    @endif
     <div id="overviewcomponent" class="maincontent">
         <div id="planet" class="shortHeader">
             <h2>{{ $title }}</h2>
@@ -10,6 +13,7 @@
             <div class="header"><h2>{{ $title }}</h2></div>
             <div class="content">
                 <div class="buddylistContent">
+                    <div class="ai-console">
                     <p class="box_highlight textCenter no_buddies">
                         <a class="btn_blue" href="{{ route('ai.index', ['tab' => 'players']) }}">{{ __('t_ai.back_to_board') }}</a>
                     </p>
@@ -55,6 +59,7 @@
                             </table>
                         </div>
                     @endif
+                    </div>
                 </div>
             </div>
         </div>

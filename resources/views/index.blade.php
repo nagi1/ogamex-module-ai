@@ -2,7 +2,7 @@
 
 @section('content')
     @if (file_exists(public_path('modules/ai/build/manifest.json')))
-        @vite(['resources/js/ai-console.js'], 'modules/ai/build')
+        @vite(['resources/css/ai-console.css', 'resources/js/ai-console.js'], 'modules/ai/build')
     @endif
     @if (session('success'))
         <script>fadeBox(@json(session('success')), false);</script>
@@ -20,6 +20,7 @@
             <div class="header"><h2>{{ $title }}</h2></div>
             <div class="content">
                 <div class="buddylistContent">
+                    <div class="ai-console">
                     {{-- The page splits into the same tabs the host's activity log uses, so one view
                          answers one question and the heavy report never slows the default load. --}}
                     <p class="box_highlight textCenter no_buddies">
@@ -151,6 +152,7 @@
                     @if ($tab === 'campaigns')
                         @include('ai::partials.campaigns', ['campaigns' => $campaigns])
                     @endif
+                    </div>
                 </div>
             </div>
         </div>
