@@ -51,6 +51,20 @@ test('the retry operation reports when there is nothing to retry', function (): 
         ->and($log->result)->toBe('No failed jobs to retry.');
 });
 
+test('the operation allow-list is the seven audited operations', function (): void {
+    expect(array_column(AiOperation::cases(), 'value'))
+        ->toBe(['run-due-work', 'prune', 'reconcile-language', 'sample-scores', 'retry-failed-jobs', 'clear-caches', 'restart-worker']);
+});
+
+test('the apply bridge offers clear caches and restart worker as queued operations', function (): void {
+    Queue::fake();
+
+    $content = $this->get('/admin/ai?tab=operations')->getContent();
+
+    expect($content)->toContain('Clear caches')
+        ->toContain('Restart the AI worker');
+});
+
 test('the operations tab renders the buttons and the recent runs', function (): void {
     Queue::fake();
 

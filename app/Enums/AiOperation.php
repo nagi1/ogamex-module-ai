@@ -13,4 +13,6 @@ enum AiOperation: string
     case ReconcileLanguage = 'reconcile-language';
     case SampleScores = 'sample-scores';
     case RetryFailedJobs = 'retry-failed-jobs';
+    case ClearCaches = 'clear-caches';
+    case RestartWorker = 'restart-worker';
 }

@@ -54,6 +54,8 @@ class RunAiOperationJob implements ShouldQueue
             AiOperation::ReconcileLanguage => $this->command('ai:reconcile-language-requests'),
             AiOperation::SampleScores => $this->command('ai:record-score-samples'),
             AiOperation::RetryFailedJobs => $this->retryFailedJobs(),
+            AiOperation::ClearCaches => $this->command('optimize:clear'),
+            AiOperation::RestartWorker => $this->command('horizon:terminate'),
         };
     }
 
