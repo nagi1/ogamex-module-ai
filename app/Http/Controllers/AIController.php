@@ -47,11 +47,10 @@ class AIController extends OGameController
     private const RECENT_DECISIONS = 5;
 
     /**
-     * The three views an operator switches between. Splitting the page mirrors the host's
-     * activity-log tabs and keeps the heavy windowed report off the default load, so the page an
-     * operator opens first stays fast.
+     * The six sections of the operator console, ordered by how often the owner asks the question.
+     * Health is the one place "is it working, is it playing well, what does it cost" is read.
      */
-    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'players', 'settings', 'operations', 'campaigns'];
+    private const TABS = ['health', 'players', 'settings', 'operations', 'campaigns', 'decisions'];
 
     /**
      * The windows an operator may ask the pilot report for. A free number would let one page view
@@ -65,30 +64,35 @@ class AIController extends OGameController
         $this->setBodyId('overview');
         $tab = $this->tab($request);
         $days = $this->pilotDays($request);
+        $health = $tab === 'health';
 
-        // Each tab computes only what it renders: the pilot report scans the score history, so it
-        // is never paid for when an operator only wants today's overview.
-        $pilot = $tab === 'pilot'
+        // The Health tab is the whole situation dashboard: the overview, the pilot window, the
+        // five-question situation, liveness, storage, providers and authenticity are all read in
+        // one pass, so the heavy report is paid only when the operator asks for the dashboard.
+        $overview = $health
+            ? app(SummarizeAiOperabilityAction::class)->handle()
+            : null;
+        $pilot = $health
             ? app(BuildAiPilotReportAction::class)->handle($days)->toArray()
+            : null;
+        $liveness = $health
+            ? app(SummarizeAiLivenessAction::class)->handle()
+            : null;
+        $storage = $health
+            ? app(SummarizeAiStorageHealthAction::class)->handle()
+            : null;
+        $providers = $health
+            ? app(SummarizeAiProviderVisibilityAction::class)->handle()
+            : null;
+        $situation = $health
+            ? app(BuildAiSituationPanelAction::class)->handle($days)
+            : null;
+        $authenticity = $health
+            ? app(BuildAiAuthenticityPanelAction::class)->handle($days)
             : null;
         $decisions = $tab === 'decisions'
             ? app(ExplainAiDecisionAction::class)->latest(self::RECENT_DECISIONS)
             : [];
-        $overview = $tab === 'overview'
-            ? app(SummarizeAiOperabilityAction::class)->handle()
-            : null;
-        $liveness = $tab === 'monitoring'
-            ? app(SummarizeAiLivenessAction::class)->handle()
-            : null;
-        $storage = $tab === 'monitoring'
-            ? app(SummarizeAiStorageHealthAction::class)->handle()
-            : null;
-        $providers = $tab === 'monitoring'
-            ? app(SummarizeAiProviderVisibilityAction::class)->handle()
-            : null;
-        $situation = $tab === 'monitoring'
-            ? app(BuildAiSituationPanelAction::class)->handle($days)
-            : null;
         $roster = $tab === 'players'
             ? app(BuildAiPlayerRosterAction::class)->handle(
                 $days,
@@ -103,9 +107,6 @@ class AIController extends OGameController
             $roster['impersonated_username'] = $impersonate->isImpersonating() ? (Auth::user()?->username ?? null) : null;
             $roster['impersonate_leave_url'] = $impersonate->isImpersonating() ? route('impersonate.leave') : null;
         }
-        $authenticity = $tab === 'players'
-            ? app(BuildAiAuthenticityPanelAction::class)->handle($days)
-            : null;
         $settingsPanel = $tab === 'settings'
             ? app(BuildAiSettingsPanelAction::class)->handle()
             : null;
@@ -363,7 +364,7 @@ class AIController extends OGameController
 
         $requested = $request->query('tab');
 
-        return is_string($requested) && in_array($requested, self::TABS, true) ? $requested : 'overview';
+        return is_string($requested) && in_array($requested, self::TABS, true) ? $requested : 'health';
     }
 
     /**

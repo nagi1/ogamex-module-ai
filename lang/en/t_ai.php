@@ -15,11 +15,15 @@ return [
     'switch_stopped_notice' => 'Work stopped. Work already in flight finishes.',
     'unknown_actor' => 'unknown',
 
-    'tab_overview' => 'Overview',
-    'tab_pilot' => 'Pilot window',
-    'tab_decisions' => 'Why',
-    'tab_monitoring' => 'Monitoring',
+    'health_now_heading' => 'Now',
+    'health_budget_heading' => 'Budget',
+    'health_budget_wall_reached' => 'The monthly wall is reached — the paid lanes are off.',
+    'health_running_out_heading' => 'Is anything about to run out?',
+    'health_last_days_heading' => 'The last N days',
+
+    'tab_health' => 'Health',
     'tab_players' => 'Players',
+    'tab_decisions' => 'Why',
 
     'authenticity_heading' => 'Do the accounts read like players?',
     'authenticity_reactions_in_window' => 'Reactions inside the 120–180 s window',
@@ -111,17 +115,9 @@ return [
     'limit_session_action_cap' => 'Game actions per session',
     'limit_language_daily_attempts' => 'Provider attempts per day (universe)',
 
-    'population_heading' => 'Today',
     'count_profiles' => 'Players running',
     'count_due_work' => 'Work items due now',
     'count_sessions_in_flight' => 'Sessions in flight',
-    'count_attempts' => 'Replies attempted',
-    'count_in_flight' => 'Calls in flight',
-    'count_reserved_tokens' => 'Provider tokens reserved',
-    'count_actual_tokens' => 'Provider tokens used',
-    'count_cached_input_tokens' => 'Provider cached input tokens',
-    'count_cache_hit_rate' => 'Provider cache hit rate',
-    'count_cost' => 'Provider cost (today)',
 
     'actions_heading' => 'Recorded actions',
     'no_actions_today' => 'No actions recorded today.',

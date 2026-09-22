@@ -148,14 +148,14 @@ test('the page renders the pilot window from the same answer the report command 
     ]);
 
     $answer = app(BuildAiPilotReportAction::class)->handle(7)->toArray();
-    $content = $this->get('/admin/ai?tab=pilot&days=7')->getContent();
+    $content = $this->get('/admin/ai?days=7')->getContent();
 
     expect($answer['profiles'])->toBe(1)
         ->and($answer['score']['accounts'])->toBe(1)
         ->and($answer['score']['samples'])->toBe(2)
         ->and($answer['score']['general_delta'])->toBe(['min' => 60, 'median' => 60, 'max' => 60])
         ->and($answer['score']['military_lost'])->toBe(30)
-        ->and($content)->toContain('Pilot window')
+        ->and($content)->toContain('The last N days')
         ->toContain('7 days')
         ->toContain('min 60 · median 60 · max 60')
         ->toContain('This read');
@@ -164,33 +164,35 @@ test('the page renders the pilot window from the same answer the report command 
 test('a window that is not offered falls back to one day instead of erroring', function (): void {
     aiRouteProfile($this->currentUserId);
 
-    $content = $this->get('/admin/ai?tab=pilot&days=999')->getContent();
+    $content = $this->get('/admin/ai?days=999')->getContent();
 
-    expect($this->get('/admin/ai?tab=pilot&days=not-a-number')->status())->toBe(200)
-        ->and($content)->toContain('Pilot window')
+    expect($this->get('/admin/ai?days=not-a-number')->status())->toBe(200)
+        ->and($content)->toContain('The last N days')
         ->toContain('1 day')
         ->not->toContain('999 days');
 });
 
-test('the monitoring tab renders liveness, storage and provider', function (): void {
+test('the health tab renders the situation dashboard in one page', function (): void {
     aiRouteProfile($this->currentUserId);
 
-    $response = $this->get('/admin/ai?tab=monitoring');
+    $content = $this->get('/admin/ai')->getContent();
 
-    expect($response->status())->toBe(200)
-        ->and($response->getContent())->toContain('Is it running right now?')
-        ->toContain('Storage and retention')
-        ->toContain('Provider use');
+    expect($content)->toContain('Now')
+        ->toContain('Budget')
+        ->toContain('How is it playing?')
+        ->toContain('Do the accounts read like players?')
+        ->toContain('Is anything about to run out?')
+        ->toContain('The last N days');
 });
 
-test('the players tab renders the roster and the authenticity panel', function (): void {
+test('the players tab renders the roster', function (): void {
     aiRouteProfile($this->currentUserId);
 
     $response = $this->get('/admin/ai?tab=players');
 
     expect($response->status())->toBe(200)
-        ->and($response->getContent())->toContain('Do the accounts read like players?')
-        ->toContain('View as');
+        ->and($response->getContent())->toContain('View as')
+        ->toContain('Stop');
 });
 
 test('the account page renders one account without error', function (): void {
