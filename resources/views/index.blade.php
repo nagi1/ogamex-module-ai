@@ -27,6 +27,7 @@
                         <a class="btn_blue {{ $tab === 'players' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'players']) }}">{{ __('t_ai.tab_players') }}</a>
                         <a class="btn_blue {{ $tab === 'settings' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'settings']) }}">{{ __('t_ai.tab_settings') }}</a>
                         <a class="btn_blue {{ $tab === 'operations' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'operations']) }}">{{ __('t_ai.tab_operations') }}</a>
+                        <a class="btn_blue {{ $tab === 'campaigns' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'campaigns']) }}">{{ __('t_ai.tab_campaigns') }}</a>
                     </p>
 
                     @if ($tab === 'overview')
@@ -389,6 +390,10 @@
 
                     @if ($tab === 'operations')
                         @include('ai::partials.operations', ['operations' => $operations])
+                    @endif
+
+                    @if ($tab === 'campaigns')
+                        @include('ai::partials.campaigns', ['campaigns' => $campaigns])
                     @endif
                 </div>
             </div>

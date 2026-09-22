@@ -176,6 +176,21 @@ return [
     'coalition' => 'Coalition',
     'faction' => 'Faction',
 
+    'tab_campaigns' => 'Campaigns',
+    'campaigns_heading' => 'Coalition campaign',
+    'campaigns_controls_heading' => 'Run a campaign control',
+    'campaigns_runs_heading' => 'Recent runs',
+    'campaign_control_open' => 'Open a campaign',
+    'campaign_control_declare' => 'Declare a stronghold',
+    'campaign_control_advance' => 'Advance the campaign',
+    'campaign_control_apply_alliances' => 'Apply accounts to alliances',
+    'campaign_control_bond_alliances' => 'Bond existing alliances',
+    'campaign_control_queued' => ':control queued. It runs in the background.',
+    'campaign_starts' => 'Starts',
+    'campaign_ends' => 'Ends',
+    'campaign_select' => 'Campaign',
+    'campaign_planet' => 'Planet id',
+
     // The pilot window. Every figure below comes from the same answer `ai:pilot-report` prints, so
     // the page never disagrees with the command about a window.
     'pilot_note' => 'Growth and activity over the chosen window, read once.',

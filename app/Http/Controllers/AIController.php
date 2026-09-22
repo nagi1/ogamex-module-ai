@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
+use Modules\AI\Actions\BuildAiCampaignControlAction;
 use Modules\AI\Actions\BuildAiOperationsPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\BuildAiPlayerRosterAction;
@@ -16,6 +17,7 @@ use Modules\AI\Actions\BuildAiSettingsPanelAction;
 use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\ExplainAiDecisionAction;
 use Modules\AI\Actions\ReplayAiScenarioAction;
+use Modules\AI\Actions\RunAiCampaignControlAction;
 use Modules\AI\Actions\RunAiOperationAction;
 use Modules\AI\Actions\SetAiAccountEnabledAction;
 use Modules\AI\Actions\SetAiWorkSwitchAction;
@@ -24,6 +26,7 @@ use Modules\AI\Actions\SummarizeAiOperabilityAction;
 use Modules\AI\Actions\SummarizeAiProviderVisibilityAction;
 use Modules\AI\Actions\SummarizeAiStorageHealthAction;
 use Modules\AI\Domain\Operability\AiScenarioReplay;
+use Modules\AI\Enums\AiCampaignControl;
 use Modules\AI\Enums\AiOperation;
 use Modules\AI\Models\AiProfile;
 use OGame\Http\Controllers\OGameController;
@@ -48,7 +51,7 @@ class AIController extends OGameController
      * activity-log tabs and keeps the heavy windowed report off the default load, so the page an
      * operator opens first stays fast.
      */
-    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'players', 'settings', 'operations'];
+    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'players', 'settings', 'operations', 'campaigns'];
 
     /**
      * The windows an operator may ask the pilot report for. A free number would let one page view
@@ -109,6 +112,9 @@ class AIController extends OGameController
         $operations = $tab === 'operations'
             ? app(BuildAiOperationsPanelAction::class)->handle()
             : null;
+        $campaigns = $tab === 'campaigns'
+            ? app(BuildAiCampaignControlAction::class)->handle()
+            : null;
         $replay = $this->replayRequest($request);
 
         /** @var view-string $view */
@@ -135,6 +141,7 @@ class AIController extends OGameController
             'authenticity' => $authenticity,
             'settingsPanel' => $settingsPanel,
             'operations' => $operations,
+            'campaigns' => $campaigns,
         ]);
     }
 
@@ -226,6 +233,58 @@ class AIController extends OGameController
             'success',
             __('t_ai.operation_queued', ['operation' => __('t_ai.operation_'.$operation->value)]),
         );
+    }
+
+    /**
+     * Queues one campaign control and returns immediately. Opening and declaring validate their
+     * inputs here; the three no-input controls queue straight through. Every control runs on the
+     * AI lane and is audited, so a click never mutates a campaign inside the request.
+     */
+    public function campaigns(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'control' => ['required', Rule::enum(AiCampaignControl::class)],
+        ]);
+
+        $control = AiCampaignControl::from($validated['control']);
+        $actorId = Auth::id();
+
+        app(RunAiCampaignControlAction::class)->handle(
+            $control,
+            $this->campaignParams($control, $request),
+            $actorId === null ? null : (int) $actorId,
+        );
+
+        return redirect()->route('ai.index', ['tab' => 'campaigns'])->with(
+            'success',
+            __('t_ai.campaign_control_queued', ['control' => __('t_ai.'.$this->campaignControlLabel($control))]),
+        );
+    }
+
+    private function campaignControlLabel(AiCampaignControl $control): string
+    {
+        return 'campaign_control_'.str_replace('-', '_', substr($control->value, strlen('campaign:')));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function campaignParams(AiCampaignControl $control, Request $request): array
+    {
+        return match ($control) {
+            AiCampaignControl::Open => $request->validate([
+                'starts_at' => ['required', 'date'],
+                'ends_at' => ['required', 'date', 'after:starts_at'],
+            ]),
+            AiCampaignControl::Declare => array_map(
+                'intval',
+                $request->validate([
+                    'campaign_id' => ['required', 'integer', 'exists:ai_campaigns,id'],
+                    'planet_id' => ['required', 'integer', 'exists:planets,id'],
+                ]),
+            ),
+            default => [],
+        };
     }
 
     /**
