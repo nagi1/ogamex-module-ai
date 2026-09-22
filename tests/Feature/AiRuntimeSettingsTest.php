@@ -38,3 +38,7 @@ it('reads a changed value on the next read, with no restart', function () {
         ->and($settings->monthlyCostUsd())->toBe(25.0)
         ->and($settings->languageEnabled())->toBeFalse();
 });
+
+it('resolves the campaign reconciliation window', function () {
+    expect(app(AiRuntimeSettings::class)->campaignReconciliationMinutes())->toBe(30);
+});

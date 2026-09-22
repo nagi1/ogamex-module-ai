@@ -1,6 +1,8 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Modules\AI\Actions\RunAiOperationAction;
 use Modules\AI\Enums\AiOperation;
 use Modules\AI\Jobs\RunAiOperationJob;
@@ -79,4 +81,80 @@ test('the operations tab renders the buttons and the recent runs', function (): 
         ->toContain('Sweep old records now')
         ->toContain('Recent runs')
         ->toContain('queued');
+});
+
+test('the operation job records a failure', function (): void {
+    Queue::fake();
+
+    $log = app(RunAiOperationAction::class)->handle(AiOperation::Prune, $this->currentUserId);
+
+    (new RunAiOperationJob($log->operation, $log->id))->failed(new RuntimeException('boom'));
+
+    $log->refresh();
+
+    expect($log->status)->toBe('failed')
+        ->and($log->result)->toBe('boom');
+});
+
+test('the operation job runs a command and records the result', function (): void {
+    Queue::fake();
+
+    $log = app(RunAiOperationAction::class)->handle(AiOperation::Prune, $this->currentUserId);
+
+    (new RunAiOperationJob($log->operation, $log->id))->handle();
+
+    $log->refresh();
+
+    expect($log->status)->toBe('completed')
+        ->and($log->result)->toContain('pruned');
+});
+
+test('the operation job carries the lane tag', function (): void {
+    expect((new RunAiOperationJob('prune', 1))->tags())->toContain('ai:operation');
+});
+
+test('the operation job runs every command operation', function (): void {
+    Queue::fake();
+
+    foreach ([AiOperation::RunDueWork, AiOperation::ReconcileLanguage, AiOperation::SampleScores, AiOperation::ClearCaches, AiOperation::RestartWorker] as $operation) {
+        $log = app(RunAiOperationAction::class)->handle($operation, $this->currentUserId);
+
+        (new RunAiOperationJob($log->operation, $log->id))->handle();
+
+        expect($log->refresh()->status)->toBe('completed');
+    }
+});
+
+test('the retry operation retries failed jobs on the module lanes', function (): void {
+    Queue::fake();
+
+    $log = app(RunAiOperationAction::class)->handle(AiOperation::RetryFailedJobs, $this->currentUserId);
+
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(),
+        'connection' => 'sync',
+        'queue' => 'ai',
+        'payload' => json_encode([
+            'uuid' => (string) Str::uuid(),
+            'displayName' => RunAiOperationJob::class,
+            'job' => 'Illuminate\\Queue\\CallQueuedHandler@call',
+            'maxTries' => null,
+            'maxExceptions' => null,
+            'failOnTimeout' => false,
+            'backoff' => null,
+            'timeout' => null,
+            'retryUntil' => null,
+            'data' => [
+                'commandName' => RunAiOperationJob::class,
+                'command' => serialize(new RunAiOperationJob('prune', $log->id)),
+            ],
+        ]),
+        'exception' => 'boom',
+        'failed_at' => now(),
+    ]);
+
+    (new RunAiOperationJob($log->operation, $log->id))->handle();
+
+    expect($log->refresh()->status)->toBe('completed')
+        ->and($log->result)->toContain('Retried');
 });

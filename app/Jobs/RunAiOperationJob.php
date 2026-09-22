@@ -62,9 +62,8 @@ class RunAiOperationJob implements ShouldQueue
     private function command(string $name): string
     {
         Artisan::call($name);
-        $output = trim((string) Artisan::output());
 
-        return $output === '' ? "Ran {$name}." : $output;
+        return trim((string) Artisan::output());
     }
 
     private function retryFailedJobs(): string

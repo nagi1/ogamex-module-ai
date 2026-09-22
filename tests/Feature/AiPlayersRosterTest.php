@@ -1,9 +1,16 @@
 <?php
 
+use Illuminate\Support\Str;
 use Modules\AI\Actions\BuildAiPlayerRosterAction;
+use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Tests\Support\AiQueueModuleTestCase;
 
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
@@ -80,4 +87,44 @@ test('stopping an account from the roster records who, why and when', function (
         ->and($record['reason'])->toBe('Stopped from the Players roster.')
         ->and($record['actor_player_id'])->toBe($this->currentUserId)
         ->and($record['changed_at'])->not->toBeNull();
+});
+
+test('the roster falls back to the player id when no user row exists', function (): void {
+    aiRosterProfile(999999);
+
+    $roster = app(BuildAiPlayerRosterAction::class)->handle(7);
+
+    expect($roster['rows'][0]['username'])->toBe('999999');
+});
+
+test('the roster filters to accounts with alerts only', function (): void {
+    aiRosterProfile($this->currentUserId);
+    $quiet = $this->createUser();
+    aiRosterProfile($quiet->id);
+
+    AiActionReceipt::create(['player_id' => $quiet->id, 'idempotency_key' => 'quiet', 'action_type' => AiActionType::QueueBuilding, 'state' => AiReceiptState::Completed, 'result' => []]);
+
+    $alertsOnly = app(BuildAiPlayerRosterAction::class)->handle(7, '', 'all', true);
+
+    expect(collect($alertsOnly['rows'])->pluck('player_id')->all())->toBe([$this->currentUserId]);
+});
+
+test('the roster flags stuck work', function (): void {
+    aiRosterProfile($this->currentUserId);
+
+    AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::RunSession,
+        'due_at' => now()->subHour(),
+        'attempts' => 0,
+        'idempotency_key' => 'stuck-' . Str::random(8),
+        'schedule_generation' => 1,
+        'state' => AiWorkState::Leased,
+        'lease_token' => 'lease',
+        'lease_until' => now()->subMinute(),
+    ]);
+
+    $roster = app(BuildAiPlayerRosterAction::class)->handle(7);
+
+    expect($roster['rows'][0]['alerts'])->toContain('stuck');
 });
