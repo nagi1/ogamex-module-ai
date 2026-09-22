@@ -62,8 +62,8 @@ test('an admin can open the AI module page', function (): void {
     $response = $this->get('/admin/ai');
 
     expect($response->status())->toBe(200)
-        ->and($response->getContent())->toContain('AI Players')
-        ->toContain('AI module is loaded')
+        ->and($response->getContent())->toContain('Players')
+        ->toContain('Work switch')
         ->and(app(RunAiSession::class))->toBeInstanceOf(RunAiSessionAction::class);
     expect(app(QueueAiBuilding::class))->toBeInstanceOf(QueueAiBuildingAction::class);
 });
@@ -86,7 +86,7 @@ test('the page reports the switch, the configured caps and today\'s refusals', f
 
     expect($content)->toContain('Universe profile cap')
         ->toContain('Actions dispatched per scheduler pass')
-        ->toContain('Enabled AI profiles')
+        ->toContain('Players running')
         ->toContain('Sessions in flight reached the cap')
         ->toContain('active_sessions');
 });
@@ -94,18 +94,18 @@ test('the page reports the switch, the configured caps and today\'s refusals', f
 test('staff can stop and resume new work from the page', function (): void {
     $this->post(route('ai.switch'), ['enabled' => '0', 'reason' => 'pilot paused'])
         ->assertRedirect(route('ai.index'))
-        ->assertSessionHas('success', 'AI work stopped. Work already in flight finishes.');
+        ->assertSessionHas('success', 'Work stopped. Work already in flight finishes.');
 
     $stopped = AiOperabilitySwitch::query()->sole();
 
     expect($stopped->enabled)->toBeFalse()
         ->and($stopped->reason)->toBe('pilot paused')
         ->and($stopped->actor_player_id)->toBe($this->currentUserId)
-        ->and($this->get('/admin/ai')->getContent())->toContain('New AI work is stopped.');
+        ->and($this->get('/admin/ai')->getContent())->toContain('New work is stopped.');
 
     $this->post(route('ai.switch'), ['enabled' => '1', 'reason' => 'pilot resumed'])
         ->assertRedirect(route('ai.index'))
-        ->assertSessionHas('success', 'AI work resumed.');
+        ->assertSessionHas('success', 'Work resumed.');
 
     expect(AiOperabilitySwitch::query()->count())->toBe(2)
         ->and(AiOperabilitySwitch::query()->orderByDesc('id')->first()->enabled)->toBeTrue();
@@ -179,9 +179,9 @@ test('the monitoring tab renders liveness, storage, provider and the account swi
 
     expect($response->status())->toBe(200)
         ->and($response->getContent())->toContain('Stop or resume one account')
-        ->toContain('Liveness and quiet diagnosis')
+        ->toContain('Is it running right now?')
         ->toContain('Storage and retention')
-        ->toContain('Provider lanes');
+        ->toContain('Provider use');
 });
 
 test('the accounts tab renders the authenticity panel and the board', function (): void {
@@ -190,7 +190,7 @@ test('the accounts tab renders the authenticity panel and the board', function (
     $response = $this->get('/admin/ai?tab=accounts');
 
     expect($response->status())->toBe(200)
-        ->and($response->getContent())->toContain('Authenticity')
+        ->and($response->getContent())->toContain('Do the accounts read like players?')
         ->toContain('Accounts');
 });
 

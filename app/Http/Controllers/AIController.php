@@ -101,7 +101,6 @@ class AIController extends OGameController
 
         return view($view, [
             'title' => __('t_ai.title'),
-            'welcome' => __('t_ai.welcome'),
             'tab' => $tab,
             'overview' => $overview,
             // The page shows the report's own answer rather than a second reading of the same

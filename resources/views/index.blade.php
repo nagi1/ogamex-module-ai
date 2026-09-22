@@ -40,7 +40,6 @@
 
                         <p class="box_highlight textCenter no_buddies">{{ __('t_ai.switch_heading') }}</p>
                         <div class="group bborder">
-                            <p>{{ $welcome }}</p>
                             @if ($overview->switchedAt !== null)
                                 <p>{{ __('t_ai.switch_last_change', [
                                     'actor' => $overview->switchedByPlayerId ?? __('t_ai.unknown_actor'),
@@ -211,22 +210,23 @@
                                     <tr>
                                         <th>{{ __('t_ai.decision_trace') }}</th>
                                         <th>{{ __('t_ai.decision_chosen') }}</th>
-                                        <th>{{ __('t_ai.decision_decided_by') }}</th>
-                                        <th>{{ __('t_ai.decision_ranked') }}</th>
                                     </tr>
                                     @foreach ($decisions as $decision)
                                         <tr>
                                             <td>{{ $decision->traceId }} · {{ $decision->playerId }}</td>
                                             <td>{{ $decision->selectedAction }} ({{ $decision->selectedReason }})</td>
-                                            <td>
-                                                @foreach ($decision->components as $name => $value)
-                                                    <div>{{ $name }}: {{ number_format($value, 2) }}</div>
-                                                @endforeach
-                                            </td>
-                                            <td>
-                                                @foreach ($decision->alternatives as $alternative)
-                                                    <div>{{ $alternative['action'] }}: {{ number_format($alternative['score'], 2) }}</div>
-                                                @endforeach
+                                        </tr>
+                                        <tr>
+                                            <td colspan="2">
+                                                <details>
+                                                    <summary>{{ __('t_ai.decision_weights') }}</summary>
+                                                    @foreach ($decision->components as $name => $value)
+                                                        <div>{{ $name }}: {{ number_format($value, 2) }}</div>
+                                                    @endforeach
+                                                    @foreach ($decision->alternatives as $alternative)
+                                                        <div>{{ $alternative['action'] }}: {{ number_format($alternative['score'], 2) }}</div>
+                                                    @endforeach
+                                                </details>
                                             </td>
                                         </tr>
                                     @endforeach
