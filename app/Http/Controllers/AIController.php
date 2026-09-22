@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
 use Modules\AI\Actions\BuildAiOperationsPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
-use Modules\AI\Actions\BuildAiProgressBoardAction;
+use Modules\AI\Actions\BuildAiPlayerRosterAction;
 use Modules\AI\Actions\BuildAiSettingsPanelAction;
 use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\ExplainAiDecisionAction;
@@ -48,7 +48,7 @@ class AIController extends OGameController
      * activity-log tabs and keeps the heavy windowed report off the default load, so the page an
      * operator opens first stays fast.
      */
-    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'accounts', 'settings', 'operations'];
+    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'players', 'settings', 'operations'];
 
     /**
      * The windows an operator may ask the pilot report for. A free number would let one page view
@@ -86,13 +86,21 @@ class AIController extends OGameController
         $situation = $tab === 'monitoring'
             ? app(BuildAiSituationPanelAction::class)->handle($days)
             : null;
-        $profiles = $tab === 'monitoring'
-            ? AiProfile::query()->orderBy('player_id')->get(['player_id', 'archetype', 'skill_band', 'enabled'])
-            : collect();
-        $board = $tab === 'accounts'
-            ? app(BuildAiProgressBoardAction::class)->handle($days)
+        $roster = $tab === 'players'
+            ? app(BuildAiPlayerRosterAction::class)->handle(
+                $days,
+                trim((string) $request->query('search', '')),
+                in_array($request->query('state'), ['enabled', 'stopped'], true) ? $request->query('state') : 'all',
+                $request->boolean('alerts'),
+            )
             : null;
-        $authenticity = $tab === 'accounts'
+        if ($roster !== null) {
+            $impersonate = app('impersonate');
+            $roster['impersonating'] = $impersonate->isImpersonating();
+            $roster['impersonated_username'] = $impersonate->isImpersonating() ? (Auth::user()?->username ?? null) : null;
+            $roster['impersonate_leave_url'] = $impersonate->isImpersonating() ? route('impersonate.leave') : null;
+        }
+        $authenticity = $tab === 'players'
             ? app(BuildAiAuthenticityPanelAction::class)->handle($days)
             : null;
         $settingsPanel = $tab === 'settings'
@@ -123,8 +131,7 @@ class AIController extends OGameController
             'storage' => $storage,
             'providers' => $providers,
             'situation' => $situation,
-            'profiles' => $profiles,
-            'board' => $board,
+            'roster' => $roster,
             'authenticity' => $authenticity,
             'settingsPanel' => $settingsPanel,
             'operations' => $operations,
@@ -191,7 +198,7 @@ class AIController extends OGameController
             $actorId === null ? null : (int) $actorId,
         );
 
-        return redirect()->route('ai.index', ['tab' => 'monitoring'])->with(
+        return redirect()->route('ai.index', ['tab' => 'players'])->with(
             'success',
             $validated['enabled'] ? __('t_ai.account_resumed') : __('t_ai.account_stopped'),
         );

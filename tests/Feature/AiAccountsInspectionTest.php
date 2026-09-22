@@ -2,7 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
-use Modules\AI\Actions\BuildAiProgressBoardAction;
+use Modules\AI\Actions\BuildAiPlayerRosterAction;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
@@ -35,7 +35,7 @@ beforeEach(function (): void {
     ]));
 });
 
-test('the progress board lists accounts with real deltas and orders failures first', function (): void {
+test('the roster lists accounts with real deltas and orders failures first', function (): void {
     $growing = $this->currentUserId;
     $flat = $this->createUser()->id;
     $silent = $this->createUser()->id;
@@ -50,8 +50,8 @@ test('the progress board lists accounts with real deltas and orders failures fir
     AiActionReceipt::create(['player_id' => $growing, 'idempotency_key' => 'growing', 'action_type' => AiActionType::QueueBuilding, 'state' => AiReceiptState::Completed, 'result' => []]);
     AiActionReceipt::create(['player_id' => $flat, 'idempotency_key' => 'flat', 'action_type' => AiActionType::QueueBuilding, 'state' => AiReceiptState::Rejected, 'result' => []]);
 
-    $board = app(BuildAiProgressBoardAction::class)->handle(7);
-    $rows = collect($board->rows);
+    $roster = app(BuildAiPlayerRosterAction::class)->handle(7);
+    $rows = collect($roster['rows']);
     $orderedIds = $rows->pluck('player_id')->all();
 
     expect($rows)->toHaveCount(3)

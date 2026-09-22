@@ -24,7 +24,7 @@
                         <a class="btn_blue {{ $tab === 'pilot' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'pilot']) }}">{{ __('t_ai.tab_pilot') }}</a>
                         <a class="btn_blue {{ $tab === 'decisions' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'decisions']) }}">{{ __('t_ai.tab_decisions') }}</a>
                         <a class="btn_blue {{ $tab === 'monitoring' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'monitoring']) }}">{{ __('t_ai.tab_monitoring') }}</a>
-                        <a class="btn_blue {{ $tab === 'accounts' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'accounts']) }}">{{ __('t_ai.tab_accounts') }}</a>
+                        <a class="btn_blue {{ $tab === 'players' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'players']) }}">{{ __('t_ai.tab_players') }}</a>
                         <a class="btn_blue {{ $tab === 'settings' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'settings']) }}">{{ __('t_ai.tab_settings') }}</a>
                         <a class="btn_blue {{ $tab === 'operations' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'operations']) }}">{{ __('t_ai.tab_operations') }}</a>
                     </p>
@@ -292,33 +292,6 @@
                             @endforeach
                         </div>
 
-                        <p class="box_highlight textCenter no_buddies">{{ __('t_ai.account_switch_heading') }}</p>
-                        <div class="group bborder">
-                            <form method="post" action="{{ route('ai.account.switch') }}">
-                                @csrf
-                                <p>
-                                    <label for="ai-account-player">{{ __('t_ai.account_switch_profile') }}</label>
-                                    <select id="ai-account-player" name="player_id" required>
-                                        @foreach ($profiles as $profile)
-                                            <option value="{{ $profile->player_id }}">{{ $profile->player_id }} · {{ $profile->archetype->name }} · {{ $profile->enabled ? __('t_ai.account_enabled') : __('t_ai.account_disabled') }}</option>
-                                        @endforeach
-                                    </select>
-                                </p>
-                                <p>
-                                    <label for="ai-account-enabled">{{ __('t_ai.account_switch_action') }}</label>
-                                    <select id="ai-account-enabled" name="enabled" required>
-                                        <option value="0">{{ __('t_ai.account_stop') }}</option>
-                                        <option value="1">{{ __('t_ai.account_resume') }}</option>
-                                    </select>
-                                </p>
-                                <p>
-                                    <label for="ai-account-reason">{{ __('t_ai.switch_reason_label') }}</label>
-                                    <input id="ai-account-reason" type="text" name="reason" maxlength="255" required>
-                                    <input type="submit" class="btn_blue" value="{{ __('t_ai.account_switch_submit') }}">
-                                </p>
-                            </form>
-                        </div>
-
                         <p class="box_highlight textCenter no_buddies">{{ __('t_ai.liveness_heading') }}</p>
                         <div class="group bborder">
                             @include('ai::partials.metric', ['label' => __('t_ai.liveness_last_activity'), 'value' => $liveness->lastActivityAt ?? __('t_ai.never')])
@@ -381,7 +354,7 @@
                         </div>
                     @endif
 
-                    @if ($tab === 'accounts')
+                    @if ($tab === 'players')
                         <p class="box_highlight textCenter no_buddies">{{ __('t_ai.authenticity_heading') }}</p>
                         <div class="group bborder">
                             @include('ai::partials.metric', ['label' => __('t_ai.authenticity_reactions_in_window'), 'value' => $authenticity->reactionsInsideWindow])
@@ -395,27 +368,7 @@
                             @endforeach
                         </div>
 
-                        <p class="box_highlight textCenter no_buddies">{{ __('t_ai.board_heading') }}</p>
-                        <div class="group bborder">
-                            <table class="defaultTable">
-                                <tr>
-                                    <th>{{ __('t_ai.board_account') }}</th>
-                                    <th>{{ __('t_ai.board_delta') }}</th>
-                                    <th>{{ __('t_ai.board_work') }}</th>
-                                    <th>{{ __('t_ai.board_last_action') }}</th>
-                                    <th>{{ __('t_ai.board_alerts') }}</th>
-                                </tr>
-                                @foreach ($board->rows as $row)
-                                    <tr>
-                                        <td><a href="{{ route('ai.account', ['player' => $row['player_id']]) }}">{{ $row['player_id'] }} · {{ $row['archetype'] }}</a></td>
-                                        <td>{{ $row['delta'] === null ? '—' : $row['delta'] }}</td>
-                                        <td>{{ $row['due_work'] }} / {{ $row['in_flight'] }} / {{ $row['stuck'] }}</td>
-                                        <td>{{ $row['last_action'] ?? '—' }}{{ $row['last_state'] !== null ? ' (' . $row['last_state'] . ')' : '' }}</td>
-                                        <td>{{ implode(', ', $row['alerts']) }}</td>
-                                    </tr>
-                                @endforeach
-                            </table>
-                        </div>
+                        @include('ai::partials.players-roster', ['roster' => $roster])
                     @endif
 
                     @if ($tab === 'settings')

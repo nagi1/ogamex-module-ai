@@ -172,26 +172,25 @@ test('a window that is not offered falls back to one day instead of erroring', f
         ->not->toContain('999 days');
 });
 
-test('the monitoring tab renders liveness, storage, provider and the account switch', function (): void {
+test('the monitoring tab renders liveness, storage and provider', function (): void {
     aiRouteProfile($this->currentUserId);
 
     $response = $this->get('/admin/ai?tab=monitoring');
 
     expect($response->status())->toBe(200)
-        ->and($response->getContent())->toContain('Stop or resume one account')
-        ->toContain('Is it running right now?')
+        ->and($response->getContent())->toContain('Is it running right now?')
         ->toContain('Storage and retention')
         ->toContain('Provider use');
 });
 
-test('the accounts tab renders the authenticity panel and the board', function (): void {
+test('the players tab renders the roster and the authenticity panel', function (): void {
     aiRouteProfile($this->currentUserId);
 
-    $response = $this->get('/admin/ai?tab=accounts');
+    $response = $this->get('/admin/ai?tab=players');
 
     expect($response->status())->toBe(200)
         ->and($response->getContent())->toContain('Do the accounts read like players?')
-        ->toContain('Accounts');
+        ->toContain('View as');
 });
 
 test('the account page renders one account without error', function (): void {

@@ -11,7 +11,7 @@
             <div class="content">
                 <div class="buddylistContent">
                     <p class="box_highlight textCenter no_buddies">
-                        <a class="btn_blue" href="{{ route('ai.index', ['tab' => 'accounts']) }}">{{ __('t_ai.back_to_board') }}</a>
+                        <a class="btn_blue" href="{{ route('ai.index', ['tab' => 'players']) }}">{{ __('t_ai.back_to_board') }}</a>
                     </p>
 
                     <p class="box_highlight textCenter no_buddies">{{ __('t_ai.account_heading') }}</p>
