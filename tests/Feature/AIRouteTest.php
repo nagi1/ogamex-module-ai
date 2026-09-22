@@ -208,7 +208,9 @@ test('the settings tab shows the live controls and the deployment YAML', functio
 
     expect($content)->toContain('Live controls')
         ->toContain('Deployment (one YAML file)')
-        ->toContain('profile_cap');
+        ->toContain('profile_cap')
+        ->toContain('Apply on the server')
+        ->toContain('fatima');
 });
 
 test('staff can save a live setting', function (): void {

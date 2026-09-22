@@ -40,15 +40,55 @@ class BuildAiSettingsPanelAction
     ];
 
     /**
-     * @return array{live: list<array<string, mixed>>, deployment: string}
+     * @return array{live: list<array<string, mixed>>, deployment: string, services: list<array<string, mixed>>, up: ?string, down: ?string}
      */
     public function handle(): array
     {
         $runtime = app(AiRuntimeSettings::class);
+        $deployment = app(AiSettings::class);
+        $compose = $this->compose($deployment);
 
         return [
             'live' => $this->live($runtime),
-            'deployment' => Yaml::dump(app(AiSettings::class)->toArray(), 6, 2),
+            'deployment' => Yaml::dump($deployment->toArray(), 6, 2),
+            'services' => $compose['rows'],
+            'up' => $compose['up'],
+            'down' => $compose['down'],
+        ];
+    }
+
+    /**
+     * The sidecar matrix and the up/down commands, derived from the same driver selects that
+     * decide which service answers. A service is up when its select is chosen and the mode is
+     * not native; the stop command names every other service. The commands are generated from
+     * one object so they can never disagree with the matrix.
+     *
+     * @return array{rows: list<array{service: string, job: string, selects: string, needed: bool}>, up: ?string, down: ?string}
+     */
+    private function compose(AiSettings $settings): array
+    {
+        $external = $settings->get('drivers.mode') !== 'native';
+
+        $needed = [
+            'fatima' => $external && $settings->get('drivers.cognition') === 'fatima',
+            'psychsim' => $external && $settings->get('drivers.cognition') === 'psychsim',
+            'cbrkit' => $external && $settings->get('drivers.experience') === 'cbrkit',
+            'agentos' => $external && $settings->get('drivers.memory') === 'agentos',
+        ];
+
+        $up = array_keys(array_filter($needed));
+        $down = array_keys(array_filter($needed, static fn (bool $needed): bool => !$needed));
+        $command = 'docker compose -f Modules/AI/docker/cognition/docker-compose.yml';
+
+        return [
+            'rows' => [
+                ['service' => 'fatima', 'job' => 'Appraisal and social', 'selects' => 'cognition = fatima', 'needed' => $needed['fatima']],
+                ['service' => 'psychsim', 'job' => 'Theory-of-mind stance', 'selects' => 'cognition = psychsim', 'needed' => $needed['psychsim']],
+                ['service' => 'cbrkit', 'job' => 'Structured case recall', 'selects' => 'experience = cbrkit', 'needed' => $needed['cbrkit']],
+                ['service' => 'agentos', 'job' => 'Ranked memory', 'selects' => 'memory = agentos', 'needed' => $needed['agentos']],
+            ],
+            'up' => $up === [] ? null : $command.' up -d '.implode(' ', $up),
+            'down' => $down === [] ? null : $command.' stop '.implode(' ', $down),
         ];
     }
 

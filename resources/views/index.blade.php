@@ -430,11 +430,7 @@
                             <p class="textCenter"><input type="submit" class="btn_blue" value="{{ __('t_ai.settings_save') }}"></p>
                         </form>
 
-                        <p class="box_highlight textCenter no_buddies">{{ __('t_ai.settings_deploy_heading') }}</p>
-                        <p>{{ __('t_ai.settings_deploy_note') }}</p>
-                        <div class="group bborder">
-                            <pre style="white-space: pre-wrap;">{{ $settingsPanel['deployment'] }}</pre>
-                        </div>
+                        @include('ai::partials.settings-deploy', ['settingsPanel' => $settingsPanel])
                     @endif
                 </div>
             </div>
