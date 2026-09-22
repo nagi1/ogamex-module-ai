@@ -14,6 +14,8 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
         Route::post('/switch', [AIController::class, 'switch'])->name('switch');
         // Live settings write the host settings table; deployment settings stay in the YAML file.
         Route::post('/settings', [AIController::class, 'settings'])->name('settings');
+        // Operations are queued, never run inline; the POST only records and dispatches.
+        Route::post('/operations', [AIController::class, 'operations'])->name('operations');
         // Stopping one account is a smaller move than the population switch, but it is still a
         // state change and records its own who, why and when.
         Route::post('/account/switch', [AIController::class, 'switchAccount'])->name('account.switch');

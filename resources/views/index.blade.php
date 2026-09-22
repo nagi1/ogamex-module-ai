@@ -26,6 +26,7 @@
                         <a class="btn_blue {{ $tab === 'monitoring' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'monitoring']) }}">{{ __('t_ai.tab_monitoring') }}</a>
                         <a class="btn_blue {{ $tab === 'accounts' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'accounts']) }}">{{ __('t_ai.tab_accounts') }}</a>
                         <a class="btn_blue {{ $tab === 'settings' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'settings']) }}">{{ __('t_ai.tab_settings') }}</a>
+                        <a class="btn_blue {{ $tab === 'operations' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'operations']) }}">{{ __('t_ai.tab_operations') }}</a>
                     </p>
 
                     @if ($tab === 'overview')
@@ -431,6 +432,10 @@
                         </form>
 
                         @include('ai::partials.settings-deploy', ['settingsPanel' => $settingsPanel])
+                    @endif
+
+                    @if ($tab === 'operations')
+                        @include('ai::partials.operations', ['operations' => $operations])
                     @endif
                 </div>
             </div>

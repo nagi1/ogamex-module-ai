@@ -7,13 +7,16 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
+use Modules\AI\Actions\BuildAiOperationsPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\BuildAiProgressBoardAction;
 use Modules\AI\Actions\BuildAiSettingsPanelAction;
 use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\ExplainAiDecisionAction;
 use Modules\AI\Actions\ReplayAiScenarioAction;
+use Modules\AI\Actions\RunAiOperationAction;
 use Modules\AI\Actions\SetAiAccountEnabledAction;
 use Modules\AI\Actions\SetAiWorkSwitchAction;
 use Modules\AI\Actions\SummarizeAiLivenessAction;
@@ -21,6 +24,7 @@ use Modules\AI\Actions\SummarizeAiOperabilityAction;
 use Modules\AI\Actions\SummarizeAiProviderVisibilityAction;
 use Modules\AI\Actions\SummarizeAiStorageHealthAction;
 use Modules\AI\Domain\Operability\AiScenarioReplay;
+use Modules\AI\Enums\AiOperation;
 use Modules\AI\Models\AiProfile;
 use OGame\Http\Controllers\OGameController;
 use OGame\Services\SettingsService;
@@ -44,7 +48,7 @@ class AIController extends OGameController
      * activity-log tabs and keeps the heavy windowed report off the default load, so the page an
      * operator opens first stays fast.
      */
-    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'accounts', 'settings'];
+    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'accounts', 'settings', 'operations'];
 
     /**
      * The windows an operator may ask the pilot report for. A free number would let one page view
@@ -94,6 +98,9 @@ class AIController extends OGameController
         $settingsPanel = $tab === 'settings'
             ? app(BuildAiSettingsPanelAction::class)->handle()
             : null;
+        $operations = $tab === 'operations'
+            ? app(BuildAiOperationsPanelAction::class)->handle()
+            : null;
         $replay = $this->replayRequest($request);
 
         /** @var view-string $view */
@@ -120,6 +127,7 @@ class AIController extends OGameController
             'board' => $board,
             'authenticity' => $authenticity,
             'settingsPanel' => $settingsPanel,
+            'operations' => $operations,
         ]);
     }
 
@@ -186,6 +194,30 @@ class AIController extends OGameController
         return redirect()->route('ai.index', ['tab' => 'monitoring'])->with(
             'success',
             $validated['enabled'] ? __('t_ai.account_resumed') : __('t_ai.account_stopped'),
+        );
+    }
+
+    /**
+     * Queues one console operation and returns immediately. The command runs on the AI lane, so
+     * a click never executes artisan inside the request, and the run is audited.
+     */
+    public function operations(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'operation' => ['required', Rule::enum(AiOperation::class)],
+        ]);
+
+        $operation = AiOperation::from($validated['operation']);
+        $actorId = Auth::id();
+
+        app(RunAiOperationAction::class)->handle(
+            $operation,
+            $actorId === null ? null : (int) $actorId,
+        );
+
+        return redirect()->route('ai.index', ['tab' => 'operations'])->with(
+            'success',
+            __('t_ai.operation_queued', ['operation' => __('t_ai.operation_'.$operation->value)]),
         );
     }
 
