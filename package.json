@@ -1,0 +1,13 @@
+{
+    "name": "nagi1/ogamex-module-ai-console",
+    "private": true,
+    "description": "The AI console's own frontend toolchain — separated from the host build.",
+    "scripts": {
+        "build": "vite build",
+        "watch": "vite build --watch"
+    },
+    "devDependencies": {
+        "laravel-vite-plugin": "^3.2",
+        "vite": "^8.3"
+    }
+}

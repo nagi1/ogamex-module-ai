@@ -211,7 +211,9 @@ test('the settings tab shows the live controls and the deployment YAML', functio
         ->toContain('Deployment (one YAML file)')
         ->toContain('profile_cap')
         ->toContain('Apply on the server')
-        ->toContain('fatima');
+        ->toContain('fatima')
+        ->toContain('data-copy-target')
+        ->toContain('data-reset-for');
 });
 
 test('staff can save a live setting', function (): void {

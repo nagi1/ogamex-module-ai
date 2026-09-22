@@ -26,20 +26,23 @@
 
 <div class="group bborder">
     <p class="textBeefy">{{ __('t_ai.deploy_step_file') }}</p>
-    <pre style="white-space: pre-wrap;">{{ $settingsPanel['deployment'] }}</pre>
+    <pre id="deploy-file" style="white-space: pre-wrap;">{{ $settingsPanel['deployment'] }}</pre>
+    <button type="button" class="btn_blue" data-copy-target="deploy-file">{{ __('t_ai.deploy_copy') }}</button>
 </div>
 
 @if ($settingsPanel['up'] !== null)
     <div class="group bborder">
         <p class="textBeefy">{{ __('t_ai.deploy_step_up') }}</p>
-        <pre style="white-space: pre-wrap;">{{ $settingsPanel['up'] }}</pre>
+        <pre id="deploy-up" style="white-space: pre-wrap;">{{ $settingsPanel['up'] }}</pre>
+        <button type="button" class="btn_blue" data-copy-target="deploy-up">{{ __('t_ai.deploy_copy') }}</button>
     </div>
 @endif
 
 @if ($settingsPanel['down'] !== null)
     <div class="group bborder">
         <p class="textBeefy">{{ __('t_ai.deploy_step_down') }}</p>
-        <pre style="white-space: pre-wrap;">{{ $settingsPanel['down'] }}</pre>
+        <pre id="deploy-down" style="white-space: pre-wrap;">{{ $settingsPanel['down'] }}</pre>
+        <button type="button" class="btn_blue" data-copy-target="deploy-down">{{ __('t_ai.deploy_copy') }}</button>
     </div>
 @endif
 

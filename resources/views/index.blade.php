@@ -1,6 +1,9 @@
 @extends('ingame.layouts.main')
 
 @section('content')
+    @if (file_exists(public_path('modules/ai/build/manifest.json')))
+        @vite(['resources/js/ai-console.js'], 'modules/ai/build')
+    @endif
     @if (session('success'))
         <script>fadeBox(@json(session('success')), false);</script>
     @endif
