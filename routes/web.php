@@ -12,6 +12,8 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
         // The staff switch is a POST because it changes module state, and every operator
         // action on this page has to leave a record of who did it.
         Route::post('/switch', [AIController::class, 'switch'])->name('switch');
+        // Live settings write the host settings table; deployment settings stay in the YAML file.
+        Route::post('/settings', [AIController::class, 'settings'])->name('settings');
         // Stopping one account is a smaller move than the population switch, but it is still a
         // state change and records its own who, why and when.
         Route::post('/account/switch', [AIController::class, 'switchAccount'])->name('account.switch');

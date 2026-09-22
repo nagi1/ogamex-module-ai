@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\BuildAiProgressBoardAction;
+use Modules\AI\Actions\BuildAiSettingsPanelAction;
 use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\ExplainAiDecisionAction;
 use Modules\AI\Actions\ReplayAiScenarioAction;
@@ -22,6 +23,7 @@ use Modules\AI\Actions\SummarizeAiStorageHealthAction;
 use Modules\AI\Domain\Operability\AiScenarioReplay;
 use Modules\AI\Models\AiProfile;
 use OGame\Http\Controllers\OGameController;
+use OGame\Services\SettingsService;
 use RuntimeException;
 
 /**
@@ -42,7 +44,7 @@ class AIController extends OGameController
      * activity-log tabs and keeps the heavy windowed report off the default load, so the page an
      * operator opens first stays fast.
      */
-    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'accounts'];
+    private const TABS = ['overview', 'pilot', 'decisions', 'monitoring', 'accounts', 'settings'];
 
     /**
      * The windows an operator may ask the pilot report for. A free number would let one page view
@@ -89,6 +91,9 @@ class AIController extends OGameController
         $authenticity = $tab === 'accounts'
             ? app(BuildAiAuthenticityPanelAction::class)->handle($days)
             : null;
+        $settingsPanel = $tab === 'settings'
+            ? app(BuildAiSettingsPanelAction::class)->handle()
+            : null;
         $replay = $this->replayRequest($request);
 
         /** @var view-string $view */
@@ -115,6 +120,7 @@ class AIController extends OGameController
             'profiles' => $profiles,
             'board' => $board,
             'authenticity' => $authenticity,
+            'settingsPanel' => $settingsPanel,
         ]);
     }
 
@@ -182,6 +188,44 @@ class AIController extends OGameController
             'success',
             $validated['enabled'] ? __('t_ai.account_resumed') : __('t_ai.account_stopped'),
         );
+    }
+
+    /**
+     * Writes the live settings through the host's own settings table. The values are cast here
+     * rather than trusted from the request, and the deployment half (the YAML file) is never
+     * touched by a web request — the owner composes it and copies it out.
+     */
+    public function settings(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'profile_cap' => ['required', 'integer', 'min:0'],
+            'active_session_cap' => ['required', 'integer', 'min:0'],
+            'dispatch_batch_size' => ['required', 'integer', 'min:1'],
+            'session_action_cap' => ['required', 'integer', 'min:0'],
+            'monthly_cost_usd' => ['required', 'numeric', 'min:0'],
+            'conversation_reply_ttl_minutes' => ['required', 'integer', 'min:1'],
+            'affect_decision_weight' => ['required', 'integer', 'min:0'],
+            'experience_decision_weight' => ['required', 'integer', 'min:0'],
+            'campaign_mode' => ['required', 'in:off,observe,advice'],
+        ]);
+
+        $settings = app(SettingsService::class);
+
+        foreach (BuildAiSettingsPanelAction::LIVE_SETTINGS as $field => $meta) {
+            $settings->set($meta['key'], $this->castSetting($meta['type'], $request->input($field), $request->boolean($field)));
+        }
+
+        return redirect()->route('ai.index', ['tab' => 'settings'])->with('success', __('t_ai.settings_saved'));
+    }
+
+    private function castSetting(string $type, mixed $value, bool $checked): string
+    {
+        return match ($type) {
+            'bool' => $checked ? '1' : '0',
+            'int' => (string) max(0, (int) $value),
+            'float' => (string) max(0, (float) $value),
+            default => (string) $value,
+        };
     }
 
     /**

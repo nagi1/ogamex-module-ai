@@ -25,6 +25,7 @@
                         <a class="btn_blue {{ $tab === 'decisions' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'decisions']) }}">{{ __('t_ai.tab_decisions') }}</a>
                         <a class="btn_blue {{ $tab === 'monitoring' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'monitoring']) }}">{{ __('t_ai.tab_monitoring') }}</a>
                         <a class="btn_blue {{ $tab === 'accounts' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'accounts']) }}">{{ __('t_ai.tab_accounts') }}</a>
+                        <a class="btn_blue {{ $tab === 'settings' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'settings']) }}">{{ __('t_ai.tab_settings') }}</a>
                     </p>
 
                     @if ($tab === 'overview')
@@ -413,6 +414,26 @@
                                     </tr>
                                 @endforeach
                             </table>
+                        </div>
+                    @endif
+
+                    @if ($tab === 'settings')
+                        <p class="box_highlight textCenter no_buddies">{{ __('t_ai.settings_live_heading') }}</p>
+                        <p>{{ __('t_ai.settings_live_note') }}</p>
+                        <form method="post" action="{{ route('ai.settings') }}">
+                            @csrf
+                            <div class="group bborder">
+                                @foreach ($settingsPanel['live'] as $setting)
+                                    @include('ai::partials.setting-control', ['setting' => $setting])
+                                @endforeach
+                            </div>
+                            <p class="textCenter"><input type="submit" class="btn_blue" value="{{ __('t_ai.settings_save') }}"></p>
+                        </form>
+
+                        <p class="box_highlight textCenter no_buddies">{{ __('t_ai.settings_deploy_heading') }}</p>
+                        <p>{{ __('t_ai.settings_deploy_note') }}</p>
+                        <div class="group bborder">
+                            <pre style="white-space: pre-wrap;">{{ $settingsPanel['deployment'] }}</pre>
                         </div>
                     @endif
                 </div>

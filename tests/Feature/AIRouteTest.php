@@ -16,6 +16,7 @@ use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\SystemAiClock;
 use OGame\Services\ModuleSlotService;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 class AiRouteModuleTestCase extends IsolatedAccountTestCase
@@ -200,6 +201,39 @@ test('the account page renders one account without error', function (): void {
 
     expect($response->status())->toBe(200)
         ->and($response->getContent())->toContain('Account');
+});
+
+test('the settings tab shows the live controls and the deployment YAML', function (): void {
+    $content = $this->get('/admin/ai?tab=settings')->getContent();
+
+    expect($content)->toContain('Live controls')
+        ->toContain('Deployment (one YAML file)')
+        ->toContain('profile_cap');
+});
+
+test('staff can save a live setting', function (): void {
+    $this->post(route('ai.settings'), [
+        'profile_cap' => '7',
+        'active_session_cap' => '0',
+        'dispatch_batch_size' => '10',
+        'session_action_cap' => '0',
+        'monthly_cost_usd' => '5',
+        'conversation_reply_ttl_minutes' => '60',
+        'affect_decision_weight' => '0',
+        'experience_decision_weight' => '0',
+        'campaign_mode' => 'observe',
+    ])->assertRedirect(route('ai.index', ['tab' => 'settings']))
+        ->assertSessionHas('success', 'Settings saved.');
+
+    expect(app(SettingsService::class)->get('ai_population_profile_cap'))->toBe('7');
+});
+
+test('a live setting with an invalid value is refused', function (): void {
+    $this->post(route('ai.settings'), [
+        'profile_cap' => '-1',
+    ])->assertSessionHasErrors('profile_cap');
+
+    expect(app(SettingsService::class)->get('ai_population_profile_cap'))->not->toBe('7');
 });
 
 function aiRouteProfile(int $playerId): AiProfile
