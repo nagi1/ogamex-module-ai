@@ -330,6 +330,10 @@ The rule that assigns each setting, stated once so the inventory needs no per-ro
   settings table stores flat strings and a ladder serialised into a string is worse than the YAML
   it came from.
 
+This axis, plus the three inventory tables below, is the Settings screen's help text: the axis is
+printed at the top of the tab, and each inventory table (deployment drivers, structured policy,
+live scalars) renders as the help that names every knob and its class.
+
 ## The settings inventory
 
 Every setting the module reads today, classified by the rule above. `Type` is the control the
@@ -468,6 +472,15 @@ The contract:
    exactly — the module's reviewed defaults (principle 5). The UI always shows the resolved value,
    so "not set" and "set to the default" read the same, and a fresh owner never has to write the
    file to run.
+
+### Migration note — the env shim expires after one release
+
+`Modules\AI\Support\AiSettings::ENV_OVERRIDES` maps the scattered `AI_*` variables to the file for
+one release only. It is the back-compat bridge: an existing deployment keeps working while its
+`config/*.php` files become readers of the one parsed object. The shim, and the scattered `AI_*`
+reads it papers over, are removed in the following release. Deployments must move to
+`ai-settings.yaml` (deployment wiring) and the host `settings` table (live scalars) before that
+release lands, because the removal is a code cut, not a settings migration.
 
 **The Docker wrinkle, resolved by derivation.** Docker Compose reads flat variables, not YAML, so
 the service toggles need flat forms. The plan keeps one source of truth and *derives* the flat
