@@ -2501,3 +2501,27 @@ others. The welcome is a `Greeting` exchange keyed on the membership observation
 Verified: `SocialInitiationTest` (6/6), full suite 1005/1005, Gate 2 clean, PHPStan unchanged at 9
 pre-existing. Record:
 [`reviews/2026-09-21-social-initiation-welcome.md`](reviews/2026-09-21-social-initiation-welcome.md).
+
+### The owner console v2 ships (22 September 2026)
+
+The owner asked for a console a non-technical operator can actually run — informational copy, full
+control over settings with a hard DB/env split, deployment config in one place, console buttons for
+the commands, and per-player control. The previous page was developer-facing and missed PvE controls
+entirely. The plan (`owner-console-ux.md`, fourteen slices UX-001..014) was implemented end to end.
+
+The split is now real: `AiSettings` is the single YAML schema (deployment wiring, parsed with the
+host's `symfony/yaml`, env shim for one release) and `AiRuntimeSettings` is the typed-accessor half
+over the host `settings` table (`ai_*` keys, restart-free). The deployment half renders as a Docker
+services matrix plus generated copy-paste apply commands, derived from the one object so they cannot
+disagree. Operations and campaign controls run as audited, queued jobs over the existing commands
+and actions — never inline artisan in a request. Every knob and operation carries a four-line
+definition card. The page collapsed to six tabs — Health, Players, Settings, Operations, Campaigns,
+Why — with Health as the default situation dashboard. Copy buttons and reset-to-default are the
+module's first justified client JS, behind its own Vite build (output to the host's
+`public/modules/ai/build`, gitignored per R11).
+
+Deferred, recorded in the spec: the full live-YAML editor (the copy/reset enhancement ships instead)
+and the server-rendered SVG growth curve (no per-day series exists in `AiScoreReport`).
+
+Verified: full suite 1040/1040, Gate 2 clean, PHPStan 0, Rector dry-run 0 changes, Pint clean.
+Record: [`reviews/2026-09-22-owner-console-v2.md`](reviews/2026-09-22-owner-console-v2.md).
