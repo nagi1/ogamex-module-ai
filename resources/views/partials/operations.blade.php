@@ -7,12 +7,10 @@
         <form method="post" action="{{ route('ai.operations') }}">
             @csrf
             <input type="hidden" name="operation" value="{{ $operation->value }}">
-            <p>
-                <strong>{{ __('t_ai.operation_' . $operation->value) }}</strong>
-                — {{ __('t_ai.operation_' . $operation->value . '_effect') }}
-            </p>
+            <p class="textBeefy">{{ __('t_ai.operation_' . $operation->value) }}</p>
             <p class="textCenter"><input type="submit" class="btn_blue" value="{{ __('t_ai.operation_run') }}"></p>
         </form>
+        @include('ai::partials.definition-card', ['definition' => $operations['definitions'][$operation->value]])
     </div>
 @endforeach
 

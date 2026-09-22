@@ -17,4 +17,7 @@
             <span class="undermark">{{ __('t_ai.default_label', ['default' => $setting['default']]) }}</span>
         @endif
     </div>
+    <div class="definition">
+        @include('ai::partials.definition-card', ['definition' => $setting['definition']])
+    </div>
 </div>
