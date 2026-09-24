@@ -66,6 +66,7 @@ use Modules\AI\Enums\AiCampaignConsultationMode;
 use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Infrastructure\Cognition\FatimaClient;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Infrastructure\Language\LaravelAiCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullCampaignConsultationGateway;
@@ -148,9 +149,9 @@ class AIServiceProvider extends ModuleServiceProvider
         // nothing, and the guard's fail-closed path blocks hostility instead of unlocking PvP.
         app(HostilityGuard::class)->register(app(CooperativeHostilityPolicy::class));
 
-        // The module's operator page is reachable from the admin sidebar through the host's
-        // documented slot, so the module adds a link instead of replacing the menu template.
-        ModuleSlotService::register('admin.nav', static function (array $data): string {
+        // The module's operator page is reachable from the host's Modules admin page through
+        // the documented slot, so the module adds a link there instead of cluttering the top bar.
+        ModuleSlotService::register('admin.modules', static function (array $data): string {
             return view('ai::partials.admin-nav')->render();
         });
     }
@@ -213,6 +214,11 @@ class AIServiceProvider extends ModuleServiceProvider
             ->needs(DriverCircuitBreaker::class)
             ->give(fn (): DriverCircuitBreaker => $this->app->makeWith(DriverCircuitBreaker::class, [
                 'driver' => AiCognitionDriver::Fatima->value,
+            ]));
+        $this->app->when(PsychSimClient::class)
+            ->needs(DriverCircuitBreaker::class)
+            ->give(fn (): DriverCircuitBreaker => $this->app->makeWith(DriverCircuitBreaker::class, [
+                'driver' => AiCognitionDriver::PsychSim->value,
             ]));
         $this->app->singleton(FatimaScenarioTemplate::class);
         $this->app->singleton(FatimaCognitionSession::class);

@@ -5,7 +5,6 @@ namespace Modules\AI\Actions;
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Operability\AiOperabilityOverview;
 use Modules\AI\Enums\AiLanguageRequestState;
-use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiLanguageRequest;
@@ -108,8 +107,12 @@ class SummarizeAiOperabilityAction
     {
         return AiActionReceipt::query()
             ->where('created_at', '>=', $now->startOfDay())
-            ->pluck('state')
-            ->countBy(static fn (AiReceiptState $state): string => $state->name)
+            ->groupBy('state')
+            ->select('state')
+            ->selectRaw('COUNT(*) AS occurrences')
+            ->get()
+            ->mapWithKeys(static fn (AiActionReceipt $receipt): array => [$receipt->state->name => (int) $receipt->getAttribute('occurrences')])
+            ->sortKeys()
             ->all();
     }
 

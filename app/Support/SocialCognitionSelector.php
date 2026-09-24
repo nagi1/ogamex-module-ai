@@ -9,7 +9,6 @@ use Modules\AI\Enums\AiCognitionMode;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
 use Modules\AI\Infrastructure\Cognition\FatimaSocialCognition;
 use Modules\AI\Infrastructure\Cognition\HybridSocialCognition;
-use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Infrastructure\Cognition\PsychSimSocialCognition;
 
 /**
@@ -65,11 +64,7 @@ class SocialCognitionSelector
     {
         return app()->makeWith(PsychSimSocialCognition::class, [
             'fallback' => app(NativeSocialCognition::class),
-            'client' => app()->makeWith(PsychSimClient::class, [
-                'circuit' => app()->makeWith(DriverCircuitBreaker::class, [
-                    'driver' => AiCognitionDriver::PsychSim->value,
-                ]),
-            ]),
+            'theory' => app(PsychSimTheoryOfMind::class),
         ]);
     }
 }

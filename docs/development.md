@@ -220,8 +220,8 @@ toolchain lands with the first slice that needs real client interactivity
 
 ## Operator tooling
 
-The module's operator page lives at `admin/ai` and is reachable from the admin sidebar through
-the host's `admin.nav` slot. It shows the staff switch, the configured limits, today's counters,
+The module's operator page lives at `admin/ai` and is reachable from the admin sidebar's Modules page
+through the host's `admin.modules` slot. It shows the staff switch, the configured limits, today's counters,
 today's refusals and the newest recorded decisions, and it can replay a scenario shipped with
 the module — a read that writes nothing.
 

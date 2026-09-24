@@ -1,12 +1,19 @@
 <?php
 
+use Illuminate\Support\Facades\Http;
 use Modules\AI\Actions\AdvanceAiAllianceLifeAction;
 use Modules\AI\Actions\ApplyAiAllianceAction;
 use Modules\AI\Domain\Social\AllianceChoice;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
+use Modules\AI\Support\AiClock;
+use Modules\AI\Support\DriverCircuitBreaker;
+use Modules\AI\Support\SystemAiClock;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
@@ -259,4 +266,62 @@ test('an account without a profile sends the generic message', function (): void
 
 test('the advance command reports the accounts it applied', function (): void {
     $this->artisan('ai:advance-alliance-life')->assertSuccessful();
+});
+
+test('a wary account skips an alliance whose founder it reads as exploitative', function (): void {
+    config(['ai.cognition.mode' => 'external']);
+    config(['ai.cognition.driver' => AiCognitionDriver::PsychSim->value]);
+    app()->bind(AiClock::class, SystemAiClock::class);
+    app()->when(PsychSimClient::class)
+        ->needs(DriverCircuitBreaker::class)
+        ->give(fn (): DriverCircuitBreaker => app()->makeWith(DriverCircuitBreaker::class, [
+            'driver' => AiCognitionDriver::PsychSim->value,
+        ]));
+    Http::fake(['*/evaluate' => Http::response(['decision' => 'defect'])]);
+
+    $hostileFounder = User::factory()->create();
+    $hostile = openAlliance($hostileFounder->id, 'HOSTIL', 'Active players welcome');
+    $safeFounder = User::factory()->create();
+    $safe = openAlliance($safeFounder->id, 'SAFE', 'Active players welcome');
+
+    // Both alliances score equally, so the first one created would win on ties; the
+    // theory-of-mind read is the only reason the account lands on SAFE.
+    rank($this->currentUserId, 1000, 1);
+    rank($hostileFounder->id, 500, 2);
+    rank($safeFounder->id, 100, 3);
+
+    AiRelationship::unguarded(fn () => AiRelationship::create([
+        'player_id' => $this->currentUserId,
+        'other_player_id' => $hostileFounder->id,
+        'threat' => '0.7500',
+        'revision' => 0,
+    ]));
+
+    expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($safe->id);
+});
+
+test('a cooperate read keeps the alliance in the running', function (): void {
+    config(['ai.cognition.mode' => 'external']);
+    config(['ai.cognition.driver' => AiCognitionDriver::PsychSim->value]);
+    app()->bind(AiClock::class, SystemAiClock::class);
+    app()->when(PsychSimClient::class)
+        ->needs(DriverCircuitBreaker::class)
+        ->give(fn (): DriverCircuitBreaker => app()->makeWith(DriverCircuitBreaker::class, [
+            'driver' => AiCognitionDriver::PsychSim->value,
+        ]));
+    Http::fake(['*/evaluate' => Http::response(['decision' => 'cooperate'])]);
+
+    $founder = User::factory()->create();
+    $alliance = openAlliance($founder->id, 'TEST', 'Active players welcome');
+    rank($this->currentUserId, 1000, 1);
+    rank($founder->id, 100, 2);
+
+    AiRelationship::unguarded(fn () => AiRelationship::create([
+        'player_id' => $this->currentUserId,
+        'other_player_id' => $founder->id,
+        'threat' => '0.7500',
+        'revision' => 0,
+    ]));
+
+    expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($alliance->id);
 });

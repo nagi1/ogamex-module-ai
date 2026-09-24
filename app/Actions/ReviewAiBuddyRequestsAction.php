@@ -3,9 +3,11 @@
 namespace Modules\AI\Actions;
 
 use Illuminate\Support\Collection;
+use Modules\AI\Enums\AiToMStance;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
+use Modules\AI\Support\PsychSimTheoryOfMind;
 use OGame\Models\BuddyRequest;
 use OGame\Services\BuddyService;
 
@@ -23,6 +25,10 @@ class ReviewAiBuddyRequestsAction
         foreach (AiProfile::query()->where('enabled', true)->pluck('player_id') as $playerId) {
             foreach ($this->pendingRequests((int) $playerId) as $request) {
                 if (!$this->knowsContact((int) $playerId, (int) $request->sender_user_id)) {
+                    continue;
+                }
+
+                if ($this->readsAsExploitative((int) $playerId, (int) $request->sender_user_id)) {
                     continue;
                 }
 
@@ -56,5 +62,14 @@ class ReviewAiBuddyRequestsAction
                     ->where('player_id', $playerId)->where('counterparty_player_id', $otherPlayerId)
                     ->orWhere('player_id', $otherPlayerId)->where('counterparty_player_id', $playerId))
                 ->exists();
+    }
+
+    /**
+     * A known contact is not enough when the account models the sender as exploitative: a wary
+     * account leaves that request pending instead of welcoming a likely raider.
+     */
+    private function readsAsExploitative(int $playerId, int $otherPlayerId): bool
+    {
+        return app(PsychSimTheoryOfMind::class)->stanceToward($playerId, $otherPlayerId) === AiToMStance::Defect;
     }
 }

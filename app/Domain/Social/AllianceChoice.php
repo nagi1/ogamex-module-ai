@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Domain\Social;
 
+use Modules\AI\Enums\AiToMStance;
+use Modules\AI\Support\PsychSimTheoryOfMind;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
@@ -57,13 +59,26 @@ class AllianceChoice
     /** @return list<Alliance> */
     private function openCandidates(int $playerId): array
     {
-        return Alliance::query()
-            ->where('is_open', true)
-            ->whereDoesntHave('applications', fn ($query) => $query
-                ->where('user_id', $playerId)
-                ->where('status', AllianceApplication::STATUS_REJECTED))
-            ->get()
-            ->all();
+        return array_values(
+            Alliance::query()
+                ->where('is_open', true)
+                ->whereDoesntHave('applications', fn ($query) => $query
+                    ->where('user_id', $playerId)
+                    ->where('status', AllianceApplication::STATUS_REJECTED))
+                ->get()
+                ->reject(fn (Alliance $alliance): bool => $this->readsFounderAsExploitative($playerId, $alliance))
+                ->all(),
+        );
+    }
+
+    /**
+     * A wary account will not join a club whose founder it models as likely to exploit it, so a
+     * Defect read removes that alliance from the account's candidates. An absent relationship or
+     * an absent driver read keeps the alliance in the running, exactly as the native choice did.
+     */
+    private function readsFounderAsExploitative(int $playerId, Alliance $alliance): bool
+    {
+        return app(PsychSimTheoryOfMind::class)->stanceToward($playerId, (int) $alliance->founder_user_id) === AiToMStance::Defect;
     }
 
     private function score(Alliance $alliance, float $rankRatio): float

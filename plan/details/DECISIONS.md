@@ -2525,3 +2525,31 @@ and the server-rendered SVG growth curve (no per-day series exists in `AiScoreRe
 
 Verified: full suite 1040/1040, Gate 2 clean, PHPStan 0, Rector dry-run 0 changes, Pint clean.
 Record: [`reviews/2026-09-22-owner-console-v2.md`](reviews/2026-09-22-owner-console-v2.md).
+
+### AI exploitation guard rails pinned in tests (23 September 2026)
+
+The owner asked for the accounts to be un-exploitable: no free resources, no talking the account
+into lowering its defences or attacking someone, no leaking account/alliance state to a model, no
+becoming a farm, and no alliance-mate turning an account into a bank. The research pass found the
+safety is real but **implicit** — it lives in the absence of capabilities, not in guards:
+
+- no cross-player resource path (`QueueAiTransferAction` accepts only own planets; the social
+  evaluator is fed `availableAmount=0` at every call site), so a help request can never grant;
+- the inbound classifier has no help/beg matcher, so a begging message answers with silence;
+- no chat-to-action wiring, so a cooperation request yields `Clarify` and never a fleet;
+- the provider-facing context is least-privilege (`constraints`/`persona`/`messages` only,
+  `no_tools=true`, no planet/fleet/resource/alliance/memory state).
+
+The gap was that none of this was pinned: a future executor (cross-player transfer, ACS,
+retaliation) would reopen a hole with nothing failing. Two test files now pin it —
+`AiExploitationGuardTest` (10) and `LanguageContextIsolationTest` (2) — no production code changed.
+
+Two decisions remain for the owner (recorded, not implemented): (1) the official **pushing rule**
+(rule 5: no profit from a lower-ranked account, ratio band, nothing-in-return refusal, 72 h
+completion) must ship *with* any future cross-player transfer executor — today's safety is pure
+absence of the feature; (2) the account fleetsaves and defends but never **counter-attacks**, and
+ACS-defend (`DEF-010` sibling) is deferred.
+
+Verified: both files 12/12, Pint clean; full `ogamex test` 791/792 with the one failure a
+pre-existing, in-progress `LaravelAiLanguageTest` case from the concurrent writer.
+Record: [`reviews/2026-09-23-exploitation-guards.md`](reviews/2026-09-23-exploitation-guards.md).

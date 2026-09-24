@@ -1,5 +1,3 @@
-<li>
-    <a class="{{ Request::is('admin/ai*') ? 'active' : '' }}" href="{{ route('ai.index') }}">
-        {{ __('t_ai.title') }}
-    </a>
-</li>
+<a class="btn_blue" href="{{ route('ai.index') }}">
+    {{ __('t_ai.admin_nav') }}
+</a>

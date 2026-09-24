@@ -18,9 +18,11 @@ use Modules\AI\Enums\AiLanguageTaskKind;
 use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\AiRuntimeSettings;
+use Modules\AI\Support\PsychSimTheoryOfMind;
 use OGame\Models\ChatMessage;
 
 class GenerateAiReplyAction
@@ -121,12 +123,22 @@ class GenerateAiReplyAction
                 'value' => ['archetype' => $profile->archetype->value, 'skill_band' => $profile->skill_band->value],
                 'isProtected' => true,
             ]),
-            app()->makeWith(ConversationContextSection::class, [
-                'name' => 'messages',
-                'value' => $messages->map(fn (ChatMessage $message): array => ['source_message_id' => $message->id, 'text' => $message->message])->all(),
-                'isProtected' => true,
-            ]),
         ];
+
+        $relationship = $this->relationshipRead($reply);
+        if ($relationship !== []) {
+            $sections[] = app()->makeWith(ConversationContextSection::class, [
+                'name' => 'relationship',
+                'value' => $relationship,
+                'isProtected' => true,
+            ]);
+        }
+
+        $sections[] = app()->makeWith(ConversationContextSection::class, [
+            'name' => 'messages',
+            'value' => $messages->map(fn (ChatMessage $message): array => ['source_message_id' => $message->id, 'text' => $message->message])->all(),
+            'isProtected' => true,
+        ]);
         $context = app(ContextBuilder::class)->buildConversationContext($sections, app(AiRuntimeSettings::class)->languageContextCharacters());
 
         if (!$context->protectedContentFits) {
@@ -152,6 +164,39 @@ class GenerateAiReplyAction
             'timeoutSeconds' => app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
             'maximumReplyCharacters' => app(AiRuntimeSettings::class)->languageMaximumReplyCharacters(),
         ]);
+    }
+
+    /**
+     * The account's read of the counterparty, so the generated wording matches how wary or warm
+     * the account is. An absent relationship carries nothing, and the theory-of-mind read rides
+     * along only when the PsychSim driver is selected; trust and threat are the native social
+     * state either way.
+     *
+     * @return array{trust?: float, threat?: float, read?: string}
+     */
+    private function relationshipRead(AiConversationReply $reply): array
+    {
+        $relationship = AiRelationship::query()
+            ->where('player_id', $reply->player_id)
+            ->where('other_player_id', $reply->counterparty_player_id)
+            ->first();
+
+        if ($relationship === null) {
+            return [];
+        }
+
+        $read = [
+            'trust' => (float) $relationship->trust,
+            'threat' => (float) $relationship->threat,
+        ];
+
+        $stance = app(PsychSimTheoryOfMind::class)->stanceFor((float) $relationship->threat);
+
+        if ($stance !== null) {
+            $read['read'] = $stance->word();
+        }
+
+        return $read;
     }
 
     private function acquireRequest(AiConversationReply $reply, LanguageRequest $request): AiLanguageRequest|null

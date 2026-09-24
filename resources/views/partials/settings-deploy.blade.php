@@ -14,7 +14,7 @@
             <tr>
                 <td>{{ $service['service'] }}</td>
                 <td>{{ $service['job'] }}</td>
-                <td>{{ $service['needed'] ? $service['selects'] : '—' }}</td>
+                <td>{{ $service['needed'] ? $service['selects'] : '–' }}</td>
                 <td>{{ $service['needed'] ? __('t_ai.deploy_up') : __('t_ai.deploy_not_needed') }}</td>
             </tr>
         @endforeach

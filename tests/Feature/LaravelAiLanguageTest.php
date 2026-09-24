@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Modules\AI\Actions\GenerateAiReplyAction;
 use Modules\AI\Actions\RecordAiLanguageProposalAction;
@@ -10,6 +11,7 @@ use Modules\AI\Contracts\LanguageGateway;
 use Modules\AI\Domain\Conversation\LanguageRequest;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiConversationReplyState;
 use Modules\AI\Enums\AiLanguageProposalRejectionReason;
 use Modules\AI\Enums\AiLanguageProposalState;
@@ -21,6 +23,7 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialResource;
 use Modules\AI\Enums\AiUsageBudgetScope;
 use Modules\AI\Enums\AiUsageReservationState;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullLanguageGateway;
 use Modules\AI\Models\AiCommitment;
@@ -29,10 +32,12 @@ use Modules\AI\Models\AiLanguageRequest;
 use Modules\AI\Models\AiMemoryFact;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiUsageBudget;
 use Modules\AI\Models\AiUsageReservation;
 use Modules\AI\Providers\AIServiceProvider;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Tests\Support\ConcurrentLanguageRequestContextBuilder;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use Modules\AI\Tests\Support\TimeoutOgameConversationReplyAgent;
@@ -394,4 +399,42 @@ test('proposal persistence rejects unauthorized evidence and retains only explic
         ->and($missingTerms->terms)->toBe([])
         ->and($commitment->state)->toBe(AiLanguageProposalState::Accepted)
         ->and(AiCommitment::query()->where('player_id', $this->currentUserId)->count())->toBe(1);
+});
+
+test('the theory-of-mind read of the counterparty reaches the generated reply', function (): void {
+    [$reply, $source] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'I owe you 500 metal.');
+
+    AiRelationship::unguarded(fn () => AiRelationship::create([
+        'player_id' => $this->currentUserId,
+        'other_player_id' => $reply->counterparty_player_id,
+        'trust' => '1.0000',
+        'threat' => '0.7500',
+        'revision' => 0,
+    ]));
+
+    config(['ai.cognition.mode' => 'external']);
+    config(['ai.cognition.driver' => AiCognitionDriver::PsychSim->value]);
+    app()->when(PsychSimClient::class)
+        ->needs(DriverCircuitBreaker::class)
+        ->give(fn (): DriverCircuitBreaker => app()->makeWith(DriverCircuitBreaker::class, [
+            'driver' => AiCognitionDriver::PsychSim->value,
+        ]));
+    Http::fake(['*/evaluate' => Http::response(['decision' => 'defect'])]);
+
+    OgameConversationReplyAgent::fake([[
+        'text' => 'I recorded your stated debt of 500 metal.',
+        'interpretation' => 'claim',
+        'candidates' => [[
+            'type' => 'claim',
+            'source_message_id' => $source->id,
+            'resource' => 'metal',
+            'amount' => 500,
+            'due_at' => null,
+        ]],
+    ]])->preventStrayPrompts();
+
+    app(GenerateAiReplyAction::class)->handle($reply->id);
+
+    OgameConversationReplyAgent::assertPrompted(fn (AgentPrompt $prompt): bool => $prompt->contains('wary')
+        && $prompt->contains('0.75'));
 });

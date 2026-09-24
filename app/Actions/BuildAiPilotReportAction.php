@@ -3,12 +3,10 @@
 namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use JsonException;
 use Modules\AI\Domain\Operability\AiPilotReport;
 use Modules\AI\Domain\Review\AiScoreReport;
-use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiLanguageRequest;
@@ -49,16 +47,15 @@ class BuildAiPilotReportAction
         try {
             $now = $this->clock->now();
             $from = $now->subDays($window);
-            $completed = AiWorkItem::query()
-                ->where('state', AiWorkState::Completed)
-                ->whereBetween('updated_at', [$from, $now])
-                ->get(['due_at', 'updated_at']);
+            $latencyMinutes = $this->lateness($from, $now);
 
             $readings = [
                 'profiles' => AiProfile::query()->where('enabled', true)->count(),
                 'work' => [
                     'created' => AiWorkItem::query()->whereBetween('created_at', [$from, $now])->count(),
-                    'completed' => $completed->count(),
+                    // The lateness scan already read every completed row in the window; its length
+                    // is the completed count, so counting again would scan the same rows twice.
+                    'completed' => count($latencyMinutes),
                     'retried' => AiWorkItem::query()->whereBetween('created_at', [$from, $now])->where('attempts', '>', 1)->count(),
                     'stuck' => AiWorkItem::query()
                         ->where('state', AiWorkState::Leased)
@@ -66,7 +63,7 @@ class BuildAiPilotReportAction
                         ->count(),
                 ],
                 'actions' => $this->actions($from, $now),
-                'latencyMinutes' => $this->lateness($completed),
+                'latencyMinutes' => $latencyMinutes,
                 'language' => $this->language($from, $now),
                 'score' => $this->score($from, $now),
                 'feedback' => $feedbackPath === null ? null : $this->feedback($feedbackPath),
@@ -177,8 +174,12 @@ class BuildAiPilotReportAction
     {
         return AiActionReceipt::query()
             ->whereBetween('created_at', [$from, $now])
-            ->pluck('state')
-            ->countBy(static fn (AiReceiptState $state): string => $state->name)
+            ->groupBy('state')
+            ->select('state')
+            ->selectRaw('COUNT(*) AS occurrences')
+            ->get()
+            ->mapWithKeys(static fn (AiActionReceipt $receipt): array => [$receipt->state->name => (int) $receipt->getAttribute('occurrences')])
+            ->sortKeys()
             ->all();
     }
 
@@ -187,13 +188,20 @@ class BuildAiPilotReportAction
      * not a server tick: this host progresses resources lazily and delivers fleet arrivals
      * through queued jobs, so there is no tick to measure against.
      *
-     * @param Collection<int, AiWorkItem> $completed
+     * Computed in SQL rather than by loading every completed work item into an Eloquent model:
+     * a busy universe completes hundreds of thousands of sessions per window, and the panel only
+     * needs the minute diffs for its percentiles, not the rows.
+     *
      * @return array<int, float>
      */
-    private function lateness($completed): array
+    private function lateness(CarbonImmutable $from, CarbonImmutable $now): array
     {
-        return $completed
-            ->map(static fn (AiWorkItem $item): float => max(0.0, $item->due_at->diffInMinutes($item->updated_at)))
+        return DB::table('ai_work_items')
+            ->where('state', AiWorkState::Completed->value)
+            ->whereBetween('updated_at', [$from, $now])
+            ->selectRaw('ABS(TIMESTAMPDIFF(MINUTE, due_at, updated_at)) AS minutes_late')
+            ->pluck('minutes_late')
+            ->map(static fn (int|string $minutes): float => (float) $minutes)
             ->values()
             ->all();
     }

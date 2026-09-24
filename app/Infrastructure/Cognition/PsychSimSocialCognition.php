@@ -8,6 +8,8 @@ use Modules\AI\Domain\Conversation\SocialExchangeContext;
 use Modules\AI\Domain\Conversation\SocialExchangeEvaluation;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
+use Modules\AI\Enums\AiToMStance;
+use Modules\AI\Support\PsychSimTheoryOfMind;
 
 /**
  * Consults the PsychSim driver before accepting a social exchange.
@@ -26,7 +28,7 @@ class PsychSimSocialCognition implements SocialCognition
 {
     public function __construct(
         private readonly SocialCognition $fallback,
-        private readonly PsychSimClient $client,
+        private readonly PsychSimTheoryOfMind $theory,
     ) {
     }
 
@@ -51,12 +53,12 @@ class PsychSimSocialCognition implements SocialCognition
             return null;
         }
 
-        $decision = $this->client->decide($this->temptation($exchange));
+        $stance = $this->theory->stanceFor($exchange->threat);
 
-        // An absent answer, a cooperate stance or a contract deviation leaves the native
-        // stance in place; only a modelled defect withholds it — the wary account that will
-        // not warm to a counterparty the theory-of-mind step says would exploit it.
-        if ($decision !== 'defect') {
+        // An absent answer or a cooperate stance leaves the native stance in place; only a
+        // modelled defect withholds it — the wary account that will not warm to a counterparty
+        // the theory-of-mind step says would exploit it.
+        if ($stance !== AiToMStance::Defect) {
             return null;
         }
 
@@ -71,16 +73,5 @@ class PsychSimSocialCognition implements SocialCognition
             'reason' => AiSocialResponseReason::SocialExchangeVolition,
             'step' => 'psychsim-depth-1',
         ]);
-    }
-
-    /**
-     * The counterparty's payoff for defecting on a cooperator, on the same scale as the
-     * sidecar's cooperation payoff of 2. The module's threat rating (0..1) doubles into that
-     * 0..2 incentive, so the depth-one model cooperates below half and defects above it: the
-     * account does not accept from a counterparty it rates more than half threatening.
-     */
-    private function temptation(SocialExchangeContext $exchange): float
-    {
-        return $exchange->threat * 2.0;
     }
 }

@@ -107,6 +107,33 @@ test('a warehouse about to fill is offered before the next upgrade', function ()
 });
 
 /**
+ * A warehouse that takes longer to build than it has until it overflows cannot catch that overflow,
+ * so it is not offered: the one queue slot is better used elsewhere and the surplus is the spend
+ * signal's to handle. Storage cost doubles each level while its build-time factor collapses, so at a
+ * high level a warehouse upgrade takes days and would park the whole build queue.
+ */
+test('a warehouse that cannot finish before it overflows is not offered', function (): void {
+    $this->planetSetObjectLevel('solar_plant', 25);
+    $this->planetSetObjectLevel('metal_mine', 20);
+    $this->planetSetObjectLevel('crystal_mine', 20);
+    $this->planetSetObjectLevel('metal_store', 15);
+    $this->planetSetObjectLevel('crystal_store', 15);
+    $this->planetSetObjectLevel('deuterium_store', 15);
+    economyRefresh($this->planetService);
+
+    // Stored just under capacity, so the metal warehouse would overflow inside any absence window and
+    // the old trigger would offer it; the next level's build is far longer than the absence, so it
+    // must now be withheld.
+    $this->planetAddResources(new Resources($this->planetService->metalStorage()->get() - 1, 0, 0));
+
+    $ids = economyStorageIds($this->planetService);
+    $candidates = app(EconomyUpgrades::class)->storage($this->planetService, economyProfile($this->currentUserId));
+
+    expect(array_map(static fn (BuildCandidate $candidate): int => $candidate->buildingId, $candidates))
+        ->not->toContain($ids['metal']);
+});
+
+/**
  * Remembered outcomes reach a real decision, and they stay inside their bound: the term may move a
  * payback by at most a fifth either way, which is deliberately smaller than the gap between two
  * different mines on a fresh planet. Evidence therefore resolves the near-tie between two nearly equal

@@ -19,7 +19,7 @@
                     <p>
                         {{ __('t_ai.campaign_state_' . strtolower($campaign['state']->name)) }}
                         @if ($campaign['startsAt'] !== null && $campaign['endsAt'] !== null)
-                            <span class="lime">{{ $campaign['startsAt']->toDateTimeString() }} — {{ $campaign['endsAt']->toDateTimeString() }}</span>
+                            <span class="lime">{{ $campaign['startsAt']->toDateTimeString() }} to {{ $campaign['endsAt']->toDateTimeString() }}</span>
                         @endif
                     </p>
                 </div>

@@ -78,21 +78,17 @@ class QueueableBuildingPlanner
         // every routine step on every other planet. Without this pass the first planet always won:
         // it always has a queueable step, and the newest colonies filled to the cap while the
         // homeworld kept buying.
-        foreach ($planets as $planet) {
-            $step = $this->firstQueueable($planet, $profile, $this->economyUpgrades->storage($planet, $profile));
-            if ($step !== null) {
-                return $step;
-            }
+        $step = $this->firstQueueableAcross($planets, $profile, fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile));
+        if ($step !== null) {
+            return $step;
         }
 
         // E7: a full warehouse is a spend signal, and the surplus is a permanent loss while a
         // deferred routine step is not — so it outranks the chain and the routine mine. The
         // pass is empty for a planet whose warehouse still has room.
-        foreach ($planets as $planet) {
-            $step = $this->firstQueueable($planet, $profile, $this->economyUpgrades->spendSurplus($planet, $profile));
-            if ($step !== null) {
-                return $step;
-            }
+        $step = $this->firstQueueableAcross($planets, $profile, fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile));
+        if ($step !== null) {
+            return $step;
         }
 
         // The routine economy, planet by planet in the account's own order: the energy a planet
@@ -117,6 +113,26 @@ class QueueableBuildingPlanner
      *
      * @param list<BuildCandidate> $candidates
      */
+    /**
+     * The first candidate any planet can queue from one list — the cross-planet sweep behind the
+     * blocking passes. The list is built per planet, but the planet that wins is whichever the
+     * list returns first in account order.
+     *
+     * @param list<PlanetService> $planets
+     * @param callable(PlanetService): list<BuildCandidate> $list
+     */
+    private function firstQueueableAcross(array $planets, AiProfile $profile, callable $list): QueueableBuilding|QueueableResearch|null
+    {
+        foreach ($planets as $planet) {
+            $step = $this->firstQueueable($planet, $profile, $list($planet));
+            if ($step !== null) {
+                return $step;
+            }
+        }
+
+        return null;
+    }
+
     private function firstQueueable(PlanetService $planet, AiProfile $profile, array $candidates): QueueableBuilding|QueueableResearch|null
     {
         foreach ($candidates as $candidate) {

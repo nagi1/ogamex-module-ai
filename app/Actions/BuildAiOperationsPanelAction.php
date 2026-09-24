@@ -23,9 +23,9 @@ class BuildAiOperationsPanelAction
         'prune' => ['what' => 'Deletes records older than their retention window.', 'why' => 'Free disk now instead of waiting for the nightly sweep.', 'effect' => 'Only records past their window are removed; no accounts or game data are touched.', 'restart' => 'No.'],
         'reconcile-language' => ['what' => 'Closes provider calls that timed out and settles their cost.', 'why' => 'Close out a stuck provider charge now.', 'effect' => 'A call with no answer is settled against the budget.', 'restart' => 'No.'],
         'sample-scores' => ['what' => 'Records each account\'s current score.', 'why' => 'Refresh the growth curve after a big change.', 'effect' => 'Adds one sample per account; the next board read shows the new curve.', 'restart' => 'No.'],
-        'retry-failed-jobs' => ['what' => 'Pushes the module lanes\' failed jobs back onto the queue.', 'why' => 'A blip parked a job — try it again.', 'effect' => 'Only jobs on the module\'s own lanes are retried.', 'restart' => 'No.'],
+        'retry-failed-jobs' => ['what' => 'Pushes the module lanes\' failed jobs back onto the queue.', 'why' => 'A blip parked a job. Try it again.', 'effect' => 'Only jobs on the module\'s own lanes are retried.', 'restart' => 'No.'],
         'clear-caches' => ['what' => 'Clears the cached config and routes.', 'why' => 'Make a pasted setting live without a full redeploy.', 'effect' => 'The next few page loads are slower while the cache rebuilds; no accounts or game data are touched.', 'restart' => 'No.'],
-        'restart-worker' => ['what' => 'Loads the new code into the worker.', 'why' => 'The worker is running old code — load the new code.', 'effect' => 'In-flight sessions finish first; new work continues on the fresh process.', 'restart' => 'This is the restart.'],
+        'restart-worker' => ['what' => 'Loads the new code into the worker.', 'why' => 'The worker is running old code. Load the new code.', 'effect' => 'In-flight sessions finish first; new work continues on the fresh process.', 'restart' => 'This is the restart.'],
     ];
 
     /**

@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Domain\Operability\AiAuthenticityOverview;
 use Modules\AI\Domain\Operability\AiSituationOverview;
 
 /**
@@ -14,10 +15,14 @@ class BuildAiSituationPanelAction
 {
     private const MEASURED = 'measured';
 
-    public function handle(int $days): AiSituationOverview
+    /**
+     * @param AiAuthenticityOverview|null $authenticity the health tab already computed; pass it
+     *        in to avoid scanning the trace tables a second time in one request
+     */
+    public function handle(int $days, ?AiAuthenticityOverview $authenticity = null): AiSituationOverview
     {
         $window = max(1, $days);
-        $authenticity = app(BuildAiAuthenticityPanelAction::class)->handle($window);
+        $authenticity ??= app(BuildAiAuthenticityPanelAction::class)->handle($window);
         $liveness = app(SummarizeAiLivenessAction::class)->handle();
         $saveStates = $authenticity->saveOutcomes === []
             ? '—'

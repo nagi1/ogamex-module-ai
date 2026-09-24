@@ -257,7 +257,17 @@ INSERT OR REPLACE INTO tasks
  (187,'UX-011','Definition cards — four-line pattern for every knob and operation','impl','done','P1',NULL,NULL,NULL,NULL,'resources/views/partials/definition-card.blade.php','Single source of what/why/effect/restart.','2026-09-22 15:02:44'),
  (188,'UX-012','Apply-now bridge — Clear caches + Restart worker buttons','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/ApplyAiSettingsChangeAction.php','Reuse host endpoint if present.','2026-09-22 14:57:54'),
  (189,'UX-013','Players roster — full listing, search/filters, View/View-as/Stop-Resume','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/BuildAiPlayerRosterAction.php','Impersonation posts to host route.','2026-09-22 15:12:09'),
- (190,'UX-014','Campaigns section — PvE operator controls (open/declare/advance/apply/bond)','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/BuildAiCampaignControlAction.php','Admin mirror of the player-facing board.','2026-09-22 15:21:06');
+ (190,'UX-014','Campaigns section — PvE operator controls (open/declare/advance/apply/bond)','impl','done','P1',NULL,NULL,NULL,NULL,'app/Actions/BuildAiCampaignControlAction.php','Admin mirror of the player-facing board.','2026-09-22 15:21:06'),
+ (191,'IMPL-058','PsychSim theory-of-mind: shared stance enum, translation service, selector refactor','impl','done','P1',NULL,NULL,NULL,NULL,NULL,'Owner 23 Sep 2026: fully utilise PsychSim. Centralise threat->temptation->stance so every consumer shares one mapping. Gate 2: one service, many consumers. Gate 3: a wary account names who it trusts.','2026-09-23 15:14:59'),
+ (192,'IMPL-059','PsychSim restrains alliance and buddy acceptances','impl','done','P1',NULL,NULL,NULL,NULL,NULL,'Wary leader/buddy withholds an accept from a counterparty the ToM read models as exploitative.','2026-09-23 15:19:04'),
+ (193,'IMPL-060','PsychSim relationship stance feeds the LLM conversation reply','impl','done','P1',NULL,NULL,NULL,NULL,NULL,'Add a protected relationship section (trust/threat/read) so the LLM wording matches the account''s read of the counterparty.','2026-09-23 15:23:31'),
+ (194,'IMPL-061','PsychSim coalition read feeds PvE campaign consultation evidence','impl','done','P2',NULL,NULL,NULL,NULL,NULL,'Add a ToM evidence item to the campaign brief from the account''s read of its coalition partners.','2026-09-23 15:28:38'),
+ (195,'IMPL-062','Trim owner console: drop read-cost diagnostics from the health view','impl','done','P2',NULL,NULL,NULL,NULL,NULL,'Remove the developer-only ''this read ms/queries'' line from the owner-facing pilot panel.','2026-09-23 18:29:53'),
+ (196,'DEF-031','Pushing-rule guard for any cross-player transfer (official rule 5)','deferred','deferred','P2',NULL,NULL,NULL,NULL,'app/Actions/QueueAiTransferAction.php','Recorded 23 Sep 2026 in reviews/2026-09-23-exploitation-guards.md. Blocked on the owner wiring a cross-player transfer executor; today''s bank-safety is pure absence of the feature. When wired, ship: recipient rank <= AI rank (host highscore), ratio band, nothing-in-return refusal, 72h completion, outgoing cap.','2026-09-23 16:04:48'),
+ (197,'DEF-032','Retaliation / ACS-defend executor','deferred','deferred','P3',NULL,NULL,NULL,NULL,'plan/details/specs/alliance-social-completion.md','Recorded 23 Sep 2026 in reviews/2026-09-23-exploitation-guards.md. The AI fleetsaves and defends but never counter-attacks; DEF-010 observes an ally under attack, the defend action is deferred. Needs a plan slice before implementation.','2026-09-23 16:04:49'),
+ (198,'IMPL-063','Rebuild the economy path on the single payback score','impl','done','P1',NULL,NULL,'E1,E3,Y1,E7,E2',NULL,'app/Domain/Decision/EconomyUpgrades.php,app/Domain/Decision/QueueableBuildingPlanner.php','Fold the three building-planner passes (storage -> spendSurplus -> energy/chain/mine) and buildScarcityBoost into one ranked payback list with the storage fill-time trigger and queue-occupancy tie-break. Delete the 23 Sep storage build-time guard once folded. Doc: specs/decision-doctrine.md. Gate: full Pest + 100% PCOV + ogamex gate + Pint.','2026-09-23 18:15:39'),
+ (199,'IMPL-064','Rebuild session scoring on host-derived features','impl','done','P1',NULL,NULL,'SP1,SP2,SP3,SP4,SP5,SP6',NULL,'app/Domain/Decision/CandidateActionFactory.php,app/Domain/Decision/UtilityScorer.php,app/Domain/Decision/DecisionEngine.php','Delete per-type feature constants; derive features from host facts normalized against daily income. Fold idleOverride and threatAppetite into one attention/commitment term (affect stays opt-in). Doc: specs/decision-doctrine.md. Gate: full Pest + 100% PCOV + ogamex gate + Pint.','2026-09-23 18:15:39'),
+ (200,'REV-007','Review the rebuilt decision core against the doctrine','review','done','P1',NULL,NULL,NULL,NULL,NULL,'Gate-2 review of the single-spine rebuild: confirm the D1-D11 doctrine table is the only ordering authority, no ad-hoc layer remains, and each row has a scenario test. Doc: specs/decision-doctrine.md.','2026-09-23 18:29:07');
 -- ── dependencies ─────────────────────────────────────────────────────────────────────────────────────
 INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
  (2, 1, 'all impl gated on review'),
@@ -336,4 +346,9 @@ INSERT OR REPLACE INTO dependencies (task_id, depends_on, reason) VALUES
  (189, 182, NULL),
  (189, 187, NULL),
  (190, 182, NULL),
- (190, 186, NULL);
+ (190, 186, NULL),
+ (192, 191, NULL),
+ (193, 191, NULL),
+ (194, 191, NULL),
+ (200, 198, NULL),
+ (200, 199, NULL);

@@ -168,7 +168,7 @@
                 <tr>
                     <td>{{ $vendor['provider'] }}</td>
                     <td>{{ $vendor['attempts'] }}</td>
-                    <td>{{ $vendor['avgLatencyMs'] === null ? '—' : $vendor['avgLatencyMs'] . 'ms' }}</td>
+                    <td>{{ $vendor['avgLatencyMs'] === null ? '–' : $vendor['avgLatencyMs'] . 'ms' }}</td>
                     <td>{{ $vendor['tokens'] }}</td>
                     <td>${{ number_format($vendor['cost'], 6) }}</td>
                 </tr>
@@ -249,14 +249,4 @@
     @foreach ($pilot['actions'] as $state => $value)
         @include('ai::partials.metric', ['label' => __('t_ai.action_state_' . $state), 'value' => $value])
     @endforeach
-</div>
-
-<div class="group bborder">
-    @include('ai::partials.metric', [
-        'label' => __('t_ai.pilot_read_cost'),
-        'value' => __('t_ai.pilot_read_cost_figures', [
-            'milliseconds' => $pilot['read_cost']['milliseconds'],
-            'queries' => $pilot['read_cost']['queries'],
-        ]),
-    ])
 </div>

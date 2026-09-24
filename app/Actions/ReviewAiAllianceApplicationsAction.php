@@ -5,8 +5,10 @@ namespace Modules\AI\Actions;
 use Carbon\CarbonImmutable;
 use Exception;
 use Illuminate\Support\Collection;
+use Modules\AI\Enums\AiToMStance;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\PsychSimTheoryOfMind;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
@@ -93,6 +95,12 @@ class ReviewAiAllianceApplicationsAction
             }
 
             if (!$this->shouldAccept($ratio, $alliance)) {
+                $decided += $this->reject($alliance, $application);
+
+                continue;
+            }
+
+            if ($this->readsAsExploitative($alliance, (int) $application->user_id)) {
                 $decided += $this->reject($alliance, $application);
 
                 continue;
@@ -190,5 +198,15 @@ class ReviewAiAllianceApplicationsAction
         } catch (Exception) {
             return false;
         }
+    }
+
+    /**
+     * A wary leader will not admit a player it models as likely to exploit the alliance, even
+     * when the rank rule would take them. Only a recorded relationship can carry that read; a
+     * stranger is decided on rank alone.
+     */
+    private function readsAsExploitative(Alliance $alliance, int $applicantId): bool
+    {
+        return app(PsychSimTheoryOfMind::class)->stanceToward((int) $alliance->founder_user_id, $applicantId) === AiToMStance::Defect;
     }
 }

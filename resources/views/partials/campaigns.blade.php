@@ -9,7 +9,7 @@
         <p>
             {{ __('t_ai.campaign_state_' . strtolower($campaigns['campaign']['state']->name)) }}
             @if ($campaigns['campaign']['startsAt'] !== null && $campaigns['campaign']['endsAt'] !== null)
-                <span class="lime">{{ $campaigns['campaign']['startsAt']->toDateTimeString() }} — {{ $campaigns['campaign']['endsAt']->toDateTimeString() }}</span>
+                <span class="lime">{{ $campaigns['campaign']['startsAt']->toDateTimeString() }} to {{ $campaigns['campaign']['endsAt']->toDateTimeString() }}</span>
             @endif
         </p>
         <p>{{ $campaigns['campaign']['completed'] }} / {{ $campaigns['campaign']['total'] }} {{ __('t_ai.objective_progress_label') }}</p>

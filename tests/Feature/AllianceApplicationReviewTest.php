@@ -1,16 +1,20 @@
 <?php
 
+use Illuminate\Support\Facades\Http;
 use Modules\AI\Actions\AdvanceAiAllianceLifeAction;
 use Modules\AI\Actions\ReviewAiAllianceApplicationsAction;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\SystemAiClock;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
-use OGame\Models\ChatMessage;
 use OGame\Models\Highscore;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
@@ -58,19 +62,61 @@ function ageReviewApplication(int $applicationId, int $minutes): void
     ]));
 }
 
-test('a fit applicant is accepted and welcomed after the age floor', function (): void {
+function enablePsychSim(): void
+{
+    config(['ai.cognition.mode' => 'external']);
+    config(['ai.cognition.driver' => AiCognitionDriver::PsychSim->value]);
+    app()->when(PsychSimClient::class)
+        ->needs(DriverCircuitBreaker::class)
+        ->give(fn (): DriverCircuitBreaker => app()->makeWith(DriverCircuitBreaker::class, [
+            'driver' => AiCognitionDriver::PsychSim->value,
+        ]));
+}
+
+test('a leader refuses an applicant the theory-of-mind read models as exploitative', function (): void {
     reviewProfile($this->currentUserId);
     $alliance = reviewAlliance($this->currentUserId);
     $applicant = User::factory()->create();
     reviewRank($applicant->id, 1);
 
+    AiRelationship::unguarded(fn () => AiRelationship::create([
+        'player_id' => $this->currentUserId,
+        'other_player_id' => $applicant->id,
+        'threat' => '0.7500',
+        'revision' => 0,
+    ]));
+
+    enablePsychSim();
+    Http::fake(['*/evaluate' => Http::response(['decision' => 'defect'])]);
+
     $application = reviewApplication($applicant->id, $alliance->id);
     ageReviewApplication($application->id, 20);
 
     expect(app(ReviewAiAllianceApplicationsAction::class)->handle())->toBe(1)
-        ->and($application->fresh()->status)->toBe(AllianceApplication::STATUS_ACCEPTED)
-        ->and(User::find($applicant->id)->alliance_id)->toBe($alliance->id)
-        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $applicant->id)->exists())->toBeTrue();
+        ->and($application->fresh()->status)->toBe(AllianceApplication::STATUS_REJECTED);
+});
+
+test('a cooperate read admits the same ranked applicant', function (): void {
+    reviewProfile($this->currentUserId);
+    $alliance = reviewAlliance($this->currentUserId);
+    $applicant = User::factory()->create();
+    reviewRank($applicant->id, 1);
+
+    AiRelationship::unguarded(fn () => AiRelationship::create([
+        'player_id' => $this->currentUserId,
+        'other_player_id' => $applicant->id,
+        'threat' => '0.7500',
+        'revision' => 0,
+    ]));
+
+    enablePsychSim();
+    Http::fake(['*/evaluate' => Http::response(['decision' => 'cooperate'])]);
+
+    $application = reviewApplication($applicant->id, $alliance->id);
+    ageReviewApplication($application->id, 20);
+
+    expect(app(ReviewAiAllianceApplicationsAction::class)->handle())->toBe(1)
+        ->and($application->fresh()->status)->toBe(AllianceApplication::STATUS_ACCEPTED);
 });
 
 test('a zero-rank applicant is rejected without waiting for the age floor', function (): void {

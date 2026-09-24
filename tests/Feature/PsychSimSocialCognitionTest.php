@@ -7,11 +7,14 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\SocialExchangeContext;
+use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Infrastructure\Cognition\PsychSimSocialCognition;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
 use Tests\IsolatedAccountTestCase;
@@ -37,6 +40,11 @@ beforeEach(function (): void {
     // here exactly as the provider wires it. Routing through the selector keeps the
     // real selection logic under test rather than a test-local copy.
     app()->bind(SocialCognition::class, fn (): SocialCognition => app(SocialCognitionSelector::class)->resolve());
+    app()->when(PsychSimClient::class)
+        ->needs(DriverCircuitBreaker::class)
+        ->give(fn (): DriverCircuitBreaker => app()->makeWith(DriverCircuitBreaker::class, [
+            'driver' => AiCognitionDriver::PsychSim->value,
+        ]));
 });
 
 function psychsimExchange(float $threat, int|null $counterparty = 7, AiSocialExchangeType $type = AiSocialExchangeType::Greeting): SocialExchangeContext

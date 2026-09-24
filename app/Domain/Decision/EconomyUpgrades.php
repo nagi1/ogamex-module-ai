@@ -264,6 +264,16 @@ class EconomyUpgrades
                 continue;
             }
 
+            // A warehouse that takes longer to build than the absence it is meant to cover cannot
+            // be ready before the account returns, so it is not worth the one queue slot: storage
+            // cost doubles each level while its build-time factor collapses, so a high-level
+            // warehouse takes days and would park the whole build queue. The surplus is then the
+            // spend signal's to handle.
+            $buildHours = $planet->getBuildingConstructionTime($object->machine_name) / 3600.0;
+            if ($buildHours >= $absence) {
+                continue;
+            }
+
             $entries[] = ['hours' => $hours, 'candidate' => app()->makeWith(BuildCandidate::class, [
                 'buildingId' => $object->id,
                 'reason' => 'storage:' . $object->machine_name,

@@ -34,7 +34,24 @@ class RunAiSessionAction implements RunAiSession
         // Scheduled actors have no HTTP page load to advance completed host queues. Use the host
         // seam without stamping activity when the session later decides to do nothing.
         if (User::query()->whereKey($profile->player_id)->exists()) {
-            $this->playerGameStateService->advance($profile->player_id, null, false);
+            $player = $this->playerGameStateService->advance($profile->player_id, null, false);
+
+            // advance() drains the queues of the player's current planet alone; every other planet
+            // is advanced only on a page visit that never happens for a scheduled actor. A colony the
+            // account settles therefore fills its five queue slots and stays full forever, so it never
+            // builds a shipyard, a ship or a defence. Drain each remaining planet the same way the
+            // host's own page load does.
+            if ($player->planets->all() !== []) {
+                $currentPlanetId = $player->planets->current()->getPlanetId();
+
+                foreach ($player->planets->all() as $planet) {
+                    if ($planet->getPlanetId() === $currentPlanetId) {
+                        continue;
+                    }
+
+                    $planet->update();
+                }
+            }
         }
 
         // A message is answered when the account next wakes, not when it next thinks about

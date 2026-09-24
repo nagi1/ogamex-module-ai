@@ -7,7 +7,6 @@ use Modules\AI\Domain\Operability\AiAuthenticityOverview;
 use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiObservationKind;
-use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiDecisionTrace;
 use Modules\AI\Models\AiObservation;
@@ -50,22 +49,19 @@ class BuildAiAuthenticityPanelAction
             ->orderBy('observed_at')
             ->get(['player_id', 'observed_at']);
 
-        $tracesByPlayer = AiDecisionTrace::query()
-            ->whereBetween('observed_at', [$from, $now])
-            ->orderBy('observed_at')
-            ->get(['player_id', 'observed_at'])
-            ->groupBy('player_id');
-
-        // ponytail: each observation scans its own account's traces once; a hostile universe with
-        // many observations per account could reach O(observations × traces/account). Upgrade path:
-        // a per-account next-decision cursor written at session time, if this ever shows up in the
-        // panel's own read cost.
+        // ponytail: one index lookup per observation instead of loading every trace in the window.
+        // The old shape fetched the whole trace table into PHP to group it, which grew with the
+        // table; this stays bounded by the hostile-observation count (a player only sees so many
+        // reports) and each lookup uses the (player_id, observed_at) index.
         $inside = 0;
         $outside = 0;
 
         foreach ($observations as $observation) {
-            $next = $tracesByPlayer->get($observation->player_id, collect())
-                ->first(fn (AiDecisionTrace $trace): bool => $trace->observed_at >= $observation->observed_at);
+            $next = AiDecisionTrace::query()
+                ->where('player_id', $observation->player_id)
+                ->where('observed_at', '>=', $observation->observed_at)
+                ->orderBy('observed_at')
+                ->value('observed_at');
 
             if ($next === null) {
                 $outside++;
@@ -73,7 +69,7 @@ class BuildAiAuthenticityPanelAction
                 continue;
             }
 
-            $seconds = $observation->observed_at->diffInSeconds($next->observed_at);
+            $seconds = $observation->observed_at->diffInSeconds($next);
             $seconds >= self::REACTION_WINDOW_MIN_SECONDS && $seconds <= self::REACTION_WINDOW_MAX_SECONDS ? $inside++ : $outside++;
         }
 
@@ -113,9 +109,11 @@ class BuildAiAuthenticityPanelAction
         return array_values(
             AiSocialExchange::query()
                 ->whereBetween('created_at', [$from, $now])
-                ->get(['type'])
-                ->countBy(static fn (AiSocialExchange $exchange): string => $exchange->type->name)
-                ->map(static fn (int $count, string $type): array => ['type' => $type, 'count' => $count])
+                ->groupBy('type')
+                ->select('type')
+                ->selectRaw('COUNT(*) AS occurrences')
+                ->get()
+                ->map(static fn (AiSocialExchange $exchange): array => ['type' => $exchange->type->name, 'count' => (int) $exchange->getAttribute('occurrences')])
                 ->all(),
         );
     }
@@ -183,8 +181,12 @@ class BuildAiAuthenticityPanelAction
         return AiActionReceipt::query()
             ->whereIn('action_type', [AiActionType::DispatchFleet, AiActionType::RecallFleet])
             ->whereBetween('created_at', [$from, $now])
-            ->pluck('state')
-            ->countBy(static fn (AiReceiptState $state): string => $state->name)
+            ->groupBy('state')
+            ->select('state')
+            ->selectRaw('COUNT(*) AS occurrences')
+            ->get()
+            ->mapWithKeys(static fn (AiActionReceipt $receipt): array => [$receipt->state->name => (int) $receipt->getAttribute('occurrences')])
+            ->sortKeys()
             ->all();
     }
 }

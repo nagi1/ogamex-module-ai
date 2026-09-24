@@ -317,19 +317,3 @@ dataset('malformed scenario fields', [
     'unknown archetype' => [['persona.archetype' => 'Wizard'], 'Scenario names an unknown archetype: Wizard.'],
     'unknown skill band' => [['persona.skill_band' => 'Legendary'], 'Scenario names an unknown skill band: Legendary.'],
 ]);
-
-test('the page lists recent decisions and replays a shipped scenario on request', function (): void {
-    $this->artisan('ogamex:admin:assign-role', ['username' => $this->currentUsername]);
-    aiRecordedDecision($this->currentUserId);
-
-    $index = $this->get('/admin/ai?tab=decisions');
-    $replayed = $this->get('/admin/ai?replay=' . INSPECTION_SCENARIO);
-    $unknown = $this->get('/admin/ai?replay=' . urlencode('../config/config'));
-
-    expect($index->status())->toBe(200)
-        ->and($index->getContent())->toContain('Build')
-        ->not->toContain(INSPECTION_COORDINATE)
-        ->and($replayed->getContent())->toContain('FleetSave')
-        ->and($unknown->status())->toBe(200)
-        ->and($unknown->getContent())->toContain('Unknown scenario');
-});

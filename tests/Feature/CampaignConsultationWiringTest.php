@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Http;
 use Modules\AI\Actions\AdvanceAiCampaignStateAction;
 use Modules\AI\Actions\ConsultCampaignDecisionAction;
 use Modules\AI\Actions\DeclareAiCampaignObjectiveAction;
@@ -20,15 +21,20 @@ use Modules\AI\Enums\AiCampaignConsultationRisk;
 use Modules\AI\Enums\AiCampaignConsultationStatus;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Enums\AiCandidateActionType;
+use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiStopReason;
+use Modules\AI\Infrastructure\Cognition\PsychSimClient;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationReceipt;
 use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiCampaignObjective;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiStopCounter;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\DriverCircuitBreaker;
+use Modules\AI\Support\SystemAiClock;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\BattleReport;
 use OGame\Models\Highscore;
@@ -326,4 +332,52 @@ test('a rank that moves between samples records a rank-change signal', function 
         ->where('trigger', AiCampaignConsultationTrigger::RankChange)
         ->whereNull('consumed_at')
         ->exists())->toBeTrue();
+});
+
+test('a wary theory-of-mind read of the top threat reaches the consultation brief', function (): void {
+    config(['ai.campaign-consultation.mode' => 'advice']);
+    config(['ai.cognition.mode' => 'external']);
+    config(['ai.cognition.driver' => AiCognitionDriver::PsychSim->value]);
+    app()->bind(AiClock::class, SystemAiClock::class);
+    app()->when(PsychSimClient::class)
+        ->needs(DriverCircuitBreaker::class)
+        ->give(fn (): DriverCircuitBreaker => app()->makeWith(DriverCircuitBreaker::class, [
+            'driver' => AiCognitionDriver::PsychSim->value,
+        ]));
+    Http::fake(['*/evaluate' => Http::response(['decision' => 'defect'])]);
+
+    wiringActiveCampaign();
+    $profile = wiringProfile($this->currentUserId);
+    $foe = $this->createUser();
+
+    AiRelationship::unguarded(fn () => AiRelationship::create([
+        'player_id' => $this->currentUserId,
+        'other_player_id' => $foe->id,
+        'threat' => '0.7500',
+        'revision' => 0,
+    ]));
+
+    $captured = new stdClass();
+    $captured->brief = null;
+    app()->bind(CampaignConsultationGateway::class, fn (): CampaignConsultationGateway => new class ($captured) implements CampaignConsultationGateway {
+        public function __construct(private stdClass $captured)
+        {
+        }
+
+        public function recommend(CampaignConsultationRequest $request): CampaignConsultationRecommendation
+        {
+            $this->captured->brief = $request->serializedBrief;
+
+            return wiringCompleted(AiCandidateActionType::Build->value);
+        }
+    });
+
+    app(ConsultCampaignDecisionAction::class)->handle(
+        $profile,
+        wiringTrace($this->currentUserId, [wiringCandidate(AiCandidateActionType::Research, 2.0), wiringCandidate(AiCandidateActionType::Build, 1.0)]),
+        'wiring-key',
+    );
+
+    expect($captured->brief)->toContain('foe_read')
+        ->and($captured->brief)->toContain('wary');
 });

@@ -64,5 +64,5 @@ test('an objective whose planet is gone renders a placeholder coordinate', funct
 
     $summary = app(SummarizeAiCampaignAction::class)->handle();
 
-    expect($summary['strongholds'][0]['coordinates'])->toBe('—');
+    expect($summary['strongholds'][0]['coordinates'])->toBe('–');
 });

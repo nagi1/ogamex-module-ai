@@ -47,8 +47,8 @@
                     <td>{{ $row['archetype'] }} · {{ $row['skill_band'] }}</td>
                     <td>{{ $row['enabled'] ? __('t_ai.account_enabled') : __('t_ai.account_disabled') }}</td>
                     <td>{{ $row['due_work'] }} / {{ $row['in_flight'] }} / {{ $row['stuck'] }}</td>
-                    <td>{{ $row['delta'] === null ? '—' : $row['delta'] }}</td>
-                    <td>{{ $row['last_action'] ?? '—' }}{{ $row['last_state'] !== null ? ' (' . $row['last_state'] . ')' : '' }}</td>
+                    <td>{{ $row['delta'] === null ? '–' : $row['delta'] }}</td>
+                    <td>{{ $row['last_action'] ?? '–' }}{{ $row['last_state'] !== null ? ' (' . $row['last_state'] . ')' : '' }}</td>
                     <td>
                         @foreach ($row['alerts'] as $alert)
                             <div>{{ __('t_ai.alert_' . $alert) }}</div>

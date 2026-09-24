@@ -173,8 +173,8 @@ overwritten, so the newest row says whether new work starts and the rows before 
 stopped it, when and why. Stopping work never abandons work in flight: a claim that is refused
 leaves the work item pending for the first pass after the switch returns.
 
-The operator page is `admin/ai`, reachable from the admin sidebar through the host's documented
-`admin.nav` slot. It shows the switch, the configured limits, the population and provider
+The operator page is `admin/ai`, reachable from the admin sidebar's Modules page through the host's
+documented `admin.modules` slot. It shows the switch, the configured limits, the population and provider
 counters for today, today's refusals and the newest recorded decisions, and it can replay a
 scenario shipped with the module. Replay is a GET that writes nothing.
 

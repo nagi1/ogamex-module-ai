@@ -78,7 +78,7 @@ class CandidateActionFactory
                 'type' => $type,
                 'reason' => AiCandidateReason::publishedCapability($capability),
                 'parameters' => [],
-                'features' => $this->features($need, 0.2, 0, 0, $perception->recoveryFactor),
+                'features' => $this->features($type, $need, 0, 0, $perception->recoveryFactor),
                 'sourceTimestamps' => $perception->sourceTimestamps,
             ]);
         }
@@ -125,7 +125,7 @@ class CandidateActionFactory
                 'type' => AiCandidateActionType::FleetSave,
                 'reason' => AiCandidateReason::EligibleFleetSave->value,
                 'parameters' => [],
-                'features' => $this->features(0, 1, 0, 0, $perception->recoveryFactor),
+                'features' => $this->features(AiCandidateActionType::FleetSave, 0, 0, 0, $perception->recoveryFactor),
                 'sourceTimestamps' => $perception->sourceTimestamps,
             ])];
         }
@@ -145,7 +145,7 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::FleetSave,
             'reason' => AiCandidateReason::ProactiveSave->value,
             'parameters' => [],
-            'features' => $this->features(0, 1, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::FleetSave, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -161,7 +161,7 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::Recall,
             'reason' => AiCandidateReason::EligibleRecall->value,
             'parameters' => [],
-            'features' => $this->features(0, 0.7, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::Recall, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -177,7 +177,7 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::Expedition,
             'reason' => AiCandidateReason::EligibleExpedition->value,
             'parameters' => [],
-            'features' => $this->features(0.3, 0.6, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::Expedition, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -193,7 +193,7 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::Transfer,
             'reason' => AiCandidateReason::EligibleTransfer->value,
             'parameters' => [],
-            'features' => $this->features(0.4, 0.3, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::Transfer, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -209,7 +209,7 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::Recycle,
             'reason' => AiCandidateReason::EligibleRecycle->value,
             'parameters' => [],
-            'features' => $this->features(0.4, 0.3, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::Recycle, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -275,7 +275,7 @@ class CandidateActionFactory
                 'type' => AiCandidateActionType::Raid,
                 'reason' => AiCandidateReason::FreshVisibleReport->value,
                 'parameters' => ['report_id' => $report['report_id']],
-                'features' => $this->features(0.7, 0.1, $report['confidence'], $report['travel_cost'], $perception->recoveryFactor),
+                'features' => $this->features(AiCandidateActionType::Raid, 0, $report['confidence'], $report['travel_cost'], $perception->recoveryFactor),
                 'sourceTimestamps' => [AiCandidateReason::reportSource($report['report_id']) => date(DATE_ATOM, $report['observed_at'])],
             ]);
         }
@@ -305,7 +305,7 @@ class CandidateActionFactory
                 'type' => AiCandidateActionType::Phalanx,
                 'reason' => AiCandidateReason::PhalanxScanAvailable->value,
                 'parameters' => [],
-                'features' => $this->features(0.5, 0.2, 0.3, 0, $perception->recoveryFactor),
+                'features' => $this->features(AiCandidateActionType::Phalanx, 0, 0, 0, $perception->recoveryFactor),
                 'sourceTimestamps' => $perception->sourceTimestamps,
             ])],
             'rejections' => [],
@@ -318,19 +318,37 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::DoNothing,
             'reason' => AiCandidateReason::AlwaysAvailable->value,
             'parameters' => [],
-            'features' => $this->features(0, 0.1, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::DoNothing, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ]);
     }
 
-    /** @return array{resource_need:float,safety:float,target_confidence:float,travel_cost:float,recovery:float} */
-    private function features(float $resourceNeed, float $safety, float $targetConfidence, float $travelCost, float $recovery): array
+    /**
+     * The feature profile per action intent, in one table (specs/decision-doctrine.md D-table):
+     * resource_need is economy pressure, safety is exposure removed, target_confidence intel
+     * quality, travel_cost fuel, recovery the post-loss appetite. The taste values live here in one
+     * place; the host-derived values (confidence, travel_cost, recovery) arrive per candidate.
+     *
+     * @return array{resource_need:float,safety:float,target_confidence:float,travel_cost:float,recovery:float}
+     */
+    private function features(AiCandidateActionType $type, float $resourceNeed, float $confidence, float $travelCost, float $recovery): array
     {
+        [$need, $safety, $targetConfidence, $travel] = match ($type) {
+            AiCandidateActionType::DoNothing => [0.0, 0.1, 0.0, 0.0],
+            AiCandidateActionType::FleetSave => [0.0, 1.0, 0.0, 0.0],
+            AiCandidateActionType::Recall => [0.0, 0.7, 0.0, 0.0],
+            AiCandidateActionType::Expedition => [0.3, 0.6, 0.0, 0.0],
+            AiCandidateActionType::Transfer, AiCandidateActionType::Recycle => [0.4, 0.3, 0.0, 0.0],
+            AiCandidateActionType::Phalanx => [0.5, 0.2, 0.3, 0.0],
+            AiCandidateActionType::Raid => [0.7, 0.1, $confidence, $travelCost],
+            default => [$resourceNeed, 0.2, 0.0, 0.0],
+        };
+
         return [
-            'resource_need' => $resourceNeed,
+            'resource_need' => $need,
             'safety' => $safety,
             'target_confidence' => $targetConfidence,
-            'travel_cost' => $travelCost,
+            'travel_cost' => $travel,
             'recovery' => $recovery,
         ];
     }

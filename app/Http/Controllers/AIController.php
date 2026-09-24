@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
 use Modules\AI\Actions\BuildAiCampaignControlAction;
+use Modules\AI\Actions\BuildAiLlmPanelAction;
 use Modules\AI\Actions\BuildAiOperationsPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\BuildAiPlayerRosterAction;
 use Modules\AI\Actions\BuildAiSettingsPanelAction;
 use Modules\AI\Actions\BuildAiSituationPanelAction;
 use Modules\AI\Actions\ExplainAiDecisionAction;
-use Modules\AI\Actions\ReplayAiScenarioAction;
 use Modules\AI\Actions\RunAiCampaignControlAction;
 use Modules\AI\Actions\RunAiOperationAction;
 use Modules\AI\Actions\SetAiAccountEnabledAction;
@@ -25,13 +25,11 @@ use Modules\AI\Actions\SummarizeAiLivenessAction;
 use Modules\AI\Actions\SummarizeAiOperabilityAction;
 use Modules\AI\Actions\SummarizeAiProviderVisibilityAction;
 use Modules\AI\Actions\SummarizeAiStorageHealthAction;
-use Modules\AI\Domain\Operability\AiScenarioReplay;
 use Modules\AI\Enums\AiCampaignControl;
 use Modules\AI\Enums\AiOperation;
 use Modules\AI\Models\AiProfile;
 use OGame\Http\Controllers\OGameController;
 use OGame\Services\SettingsService;
-use RuntimeException;
 
 /**
  * The module's operator page.
@@ -50,7 +48,7 @@ class AIController extends OGameController
      * The six sections of the operator console, ordered by how often the owner asks the question.
      * Health is the one place "is it working, is it playing well, what does it cost" is read.
      */
-    private const TABS = ['health', 'players', 'settings', 'operations', 'campaigns', 'decisions'];
+    private const TABS = ['health', 'llm', 'players', 'settings', 'operations', 'campaigns'];
 
     /**
      * The windows an operator may ask the pilot report for. A free number would let one page view
@@ -84,15 +82,12 @@ class AIController extends OGameController
         $providers = $health
             ? app(SummarizeAiProviderVisibilityAction::class)->handle()
             : null;
-        $situation = $health
-            ? app(BuildAiSituationPanelAction::class)->handle($days)
-            : null;
         $authenticity = $health
             ? app(BuildAiAuthenticityPanelAction::class)->handle($days)
             : null;
-        $decisions = $tab === 'decisions'
-            ? app(ExplainAiDecisionAction::class)->latest(self::RECENT_DECISIONS)
-            : [];
+        $situation = $health
+            ? app(BuildAiSituationPanelAction::class)->handle($days, $authenticity)
+            : null;
         $roster = $tab === 'players'
             ? app(BuildAiPlayerRosterAction::class)->handle(
                 $days,
@@ -116,7 +111,9 @@ class AIController extends OGameController
         $campaigns = $tab === 'campaigns'
             ? app(BuildAiCampaignControlAction::class)->handle()
             : null;
-        $replay = $this->replayRequest($request);
+        $llm = $tab === 'llm'
+            ? app(BuildAiLlmPanelAction::class)->handle()
+            : null;
 
         /** @var view-string $view */
         $view = 'ai::index';
@@ -129,11 +126,7 @@ class AIController extends OGameController
             // tables, so the page and `ai:pilot-report` can never disagree about a window.
             'pilot' => $pilot,
             'pilotDays' => $days,
-            'decisions' => $decisions,
-            'scenarios' => $tab === 'decisions' ? app(ReplayAiScenarioAction::class)->names() : [],
-            'replay' => $replay['replay'],
-            'replayName' => $replay['name'],
-            'replayError' => $replay['error'],
+            'llm' => $llm,
             'liveness' => $liveness,
             'storage' => $storage,
             'providers' => $providers,
@@ -316,6 +309,27 @@ class AIController extends OGameController
         return redirect()->route('ai.index', ['tab' => 'settings'])->with('success', __('t_ai.settings_saved'));
     }
 
+    /**
+     * Writes the LLM budget controls through the host settings table: the monthly wall and the
+     * three lane toggles. The per-day limits and the model stay in config; they are read-only here.
+     */
+    public function llm(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'monthly_cost_usd' => ['required', 'numeric', 'min:0'],
+            'campaign_mode' => ['required', 'in:off,observe,advice'],
+        ]);
+
+        $settings = app(SettingsService::class);
+
+        $settings->set('ai_monthly_cost_usd', $this->castSetting('float', $request->input('monthly_cost_usd'), false));
+        $settings->set('ai_language_enabled', $this->castSetting('bool', '1', $request->boolean('language_enabled')));
+        $settings->set('ai_language_ai_to_ai', $this->castSetting('bool', '1', $request->boolean('language_ai_to_ai')));
+        $settings->set('ai_campaign_consultation_mode', (string) $request->input('campaign_mode'));
+
+        return redirect()->route('ai.index', ['tab' => 'llm'])->with('success', __('t_ai.settings_saved'));
+    }
+
     private function castSetting(string $type, mixed $value, bool $checked): string
     {
         return match ($type) {
@@ -352,42 +366,12 @@ class AIController extends OGameController
     }
 
     /**
-     * The requested tab, or the overview when the value is not one of the offered ones. A replay
-     * URL is a decisions-tab URL even when the tab is not stated, so a pasted replay link lands
-     * where its answer is shown.
+     * The requested tab, or the overview when the value is not one of the offered ones.
      */
     private function tab(Request $request): string
     {
-        if ($request->query('replay') !== null) {
-            return 'decisions';
-        }
-
         $requested = $request->query('tab');
 
         return is_string($requested) && in_array($requested, self::TABS, true) ? $requested : 'health';
-    }
-
-    /**
-     * A replay is a read, so it is a GET and it writes nothing. A stale or unknown scenario name
-     * is reported on the page rather than thrown: the form is a convenience, and an operator
-     * looking for something else should not lose the screen.
-     *
-     * @return array{replay: AiScenarioReplay|null, name: string|null, error: string|null}
-     */
-    private function replayRequest(Request $request): array
-    {
-        $requested = $request->query('replay');
-
-        if (!is_string($requested) || $requested === '') {
-            return ['replay' => null, 'name' => null, 'error' => null];
-        }
-
-        $scenarios = app(ReplayAiScenarioAction::class);
-
-        try {
-            return ['replay' => $scenarios->handle($scenarios->pathFor($requested)), 'name' => $requested, 'error' => null];
-        } catch (RuntimeException $exception) {
-            return ['replay' => null, 'name' => $requested, 'error' => $exception->getMessage()];
-        }
     }
 }

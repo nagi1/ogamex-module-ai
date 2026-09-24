@@ -65,7 +65,7 @@ class SummarizeAiCampaignAction
     private function coordinates(?Planet $planet): string
     {
         if ($planet === null) {
-            return '—';
+            return '–';
         }
 
         return sprintf('%d:%d:%d', $planet->galaxy, $planet->system, $planet->planet);

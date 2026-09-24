@@ -40,26 +40,49 @@ class BuildAiSettingsPanelAction
     ];
 
     /**
+     * The group each live setting renders under, so the page labels the LLM budget controls
+     * separately from the population caps and the affect/experience weights.
+     *
+     * @var array<string, string>
+     */
+    private const GROUPS = [
+        'profile_cap' => 'population',
+        'active_session_cap' => 'population',
+        'dispatch_batch_size' => 'population',
+        'session_action_cap' => 'population',
+        'monthly_cost_usd' => 'llm',
+        'language_enabled' => 'llm',
+        'language_ai_to_ai' => 'llm',
+        'conversation_enabled' => 'llm',
+        'conversation_reply_ttl_minutes' => 'llm',
+        'campaign_mode' => 'llm',
+        'affect_enrichment' => 'feel',
+        'affect_decision_weight' => 'feel',
+        'experience_decision_weight' => 'feel',
+        'review_enabled' => 'review',
+    ];
+
+    /**
      * The four-line definition for every live setting, in the field order. `restart` is uniform
      * because a live setting is, by definition, the kind that changes on the next read.
      *
      * @var array<string, array{what: string, why: string, effect: string, restart: string}>
      */
     private const DEFINITIONS = [
-        'profile_cap' => ['what' => 'The most accounts that may run at once.', 'why' => 'Raise it to let more accounts play; lower it to shrink the fleet.', 'effect' => '0 = no limit. A new account waits until one stops.', 'restart' => 'No — picked up on the next read.'],
-        'active_session_cap' => ['what' => 'The most sessions that may run at the same time.', 'why' => 'Lower it to stop one account crowding the others with a burst.', 'effect' => '0 = no limit. Work queues until a session frees up.', 'restart' => 'No — picked up on the next read.'],
-        'dispatch_batch_size' => ['what' => 'How many work items one scheduler pass leases and enqueues.', 'why' => 'Lower it to smooth load spikes; raise it to work through a backlog faster.', 'effect' => 'Must be at least 1. Each pass takes at most this many items.', 'restart' => 'No — picked up on the next read.'],
-        'session_action_cap' => ['what' => 'The most game actions one session may queue.', 'why' => 'Lower it to make each account take smaller, slower steps.', 'effect' => '0 = no actions. A session stops after reaching the cap.', 'restart' => 'No — picked up on the next read.'],
-        'monthly_cost_usd' => ['what' => 'The most the paid provider lanes may spend in a month.', 'why' => 'Set it to the budget you are willing to pay.', 'effect' => '0 = off. At the wall the paid lanes stop and accounts fall back to authored replies.', 'restart' => 'No — picked up on the next read.'],
-        'review_enabled' => ['what' => 'Whether the growth and review samples the board reads are recorded.', 'why' => 'Turn off to stop the extra sampling while you investigate.', 'effect' => 'Off = no new growth figures; the existing ones stay.', 'restart' => 'No — picked up on the next read.'],
-        'language_enabled' => ['what' => 'Whether accounts answer player messages through the paid lane.', 'why' => 'Turn off to stop paid replies while you investigate an account.', 'effect' => 'Off = accounts read but never answer; memory and relationships are kept.', 'restart' => 'No — picked up on the next read.'],
-        'language_ai_to_ai' => ['what' => 'Whether a reply between two accounts may reach the paid provider.', 'why' => 'Turn on only when account-to-account chat should use the paid lane.', 'effect' => 'Off = account-to-account replies stay authored and free.', 'restart' => 'No — picked up on the next read.'],
-        'conversation_enabled' => ['what' => 'Whether accounts answer pending messages from other players.', 'why' => 'Turn off to stop replying while you investigate an account.', 'effect' => 'Off = accounts read but never answer; memory and relationships are kept.', 'restart' => 'No — picked up on the next read.'],
-        'conversation_reply_ttl_minutes' => ['what' => 'How long an unanswered message may wait before its reply expires.', 'why' => 'Raise it to give slow accounts longer to answer.', 'effect' => 'A reply older than this is not sent.', 'restart' => 'No — picked up on the next read.'],
-        'affect_enrichment' => ['what' => 'Whether decisions carry the account\'s mood and social stance.', 'why' => 'Turn off to compare decisions without the mood layer.', 'effect' => 'Off = decisions use the plain weights only.', 'restart' => 'No — picked up on the next read.'],
-        'affect_decision_weight' => ['what' => 'How strongly the account\'s mood sways a decision.', 'why' => 'Raise it to make personality count more.', 'effect' => '0 = mood has no effect.', 'restart' => 'No — picked up on the next read.'],
-        'experience_decision_weight' => ['what' => 'How strongly remembered outcomes sway a decision.', 'why' => 'Raise it to make an account repeat what worked before.', 'effect' => '0 = memory has no effect.', 'restart' => 'No — picked up on the next read.'],
-        'campaign_mode' => ['what' => 'Whether campaign consultations may call a provider.', 'why' => 'Use observe to watch the advice, advice to act on it.', 'effect' => 'off = no consultations; observe = read-only; advice = suggestions may be acted on.', 'restart' => 'No — picked up on the next read.'],
+        'profile_cap' => ['what' => 'The most accounts that may run at once.', 'why' => 'Raise it to let more accounts play; lower it to shrink the fleet.', 'effect' => '0 = no limit. A new account waits until one stops.', 'restart' => 'No. Picked up on the next read.'],
+        'active_session_cap' => ['what' => 'The most sessions that may run at the same time.', 'why' => 'Lower it to stop one account crowding the others with a burst.', 'effect' => '0 = no limit. Work queues until a session frees up.', 'restart' => 'No. Picked up on the next read.'],
+        'dispatch_batch_size' => ['what' => 'How many work items one scheduler pass leases and enqueues.', 'why' => 'Lower it to smooth load spikes; raise it to work through a backlog faster.', 'effect' => 'Must be at least 1. Each pass takes at most this many items.', 'restart' => 'No. Picked up on the next read.'],
+        'session_action_cap' => ['what' => 'The most game actions one session may queue.', 'why' => 'Lower it to make each account take smaller, slower steps.', 'effect' => '0 = no actions. A session stops after reaching the cap.', 'restart' => 'No. Picked up on the next read.'],
+        'monthly_cost_usd' => ['what' => 'The most the paid provider lanes may spend in a month.', 'why' => 'Set it to the budget you are willing to pay.', 'effect' => '0 = off. At the wall the paid lanes stop and accounts fall back to authored replies.', 'restart' => 'No. Picked up on the next read.'],
+        'review_enabled' => ['what' => 'Whether the growth and review samples the board reads are recorded.', 'why' => 'Turn off to stop the extra sampling while you investigate.', 'effect' => 'Off = no new growth figures; the existing ones stay.', 'restart' => 'No. Picked up on the next read.'],
+        'language_enabled' => ['what' => 'Whether accounts answer player messages through the paid lane.', 'why' => 'Turn off to stop paid replies while you investigate an account.', 'effect' => 'Off = accounts read but never answer; memory and relationships are kept.', 'restart' => 'No. Picked up on the next read.'],
+        'language_ai_to_ai' => ['what' => 'Whether a reply between two accounts may reach the paid provider.', 'why' => 'Turn on only when account-to-account chat should use the paid lane.', 'effect' => 'Off = account-to-account replies stay authored and free.', 'restart' => 'No. Picked up on the next read.'],
+        'conversation_enabled' => ['what' => 'Whether accounts answer pending messages from other players.', 'why' => 'Turn off to stop replying while you investigate an account.', 'effect' => 'Off = accounts read but never answer; memory and relationships are kept.', 'restart' => 'No. Picked up on the next read.'],
+        'conversation_reply_ttl_minutes' => ['what' => 'How long an unanswered message may wait before its reply expires.', 'why' => 'Raise it to give slow accounts longer to answer.', 'effect' => 'A reply older than this is not sent.', 'restart' => 'No. Picked up on the next read.'],
+        'affect_enrichment' => ['what' => 'Whether decisions carry the account\'s mood and social stance.', 'why' => 'Turn off to compare decisions without the mood layer.', 'effect' => 'Off = decisions use the plain weights only.', 'restart' => 'No. Picked up on the next read.'],
+        'affect_decision_weight' => ['what' => 'How strongly the account\'s mood sways a decision.', 'why' => 'Raise it to make personality count more.', 'effect' => '0 = mood has no effect.', 'restart' => 'No. Picked up on the next read.'],
+        'experience_decision_weight' => ['what' => 'How strongly remembered outcomes sway a decision.', 'why' => 'Raise it to make an account repeat what worked before.', 'effect' => '0 = memory has no effect.', 'restart' => 'No. Picked up on the next read.'],
+        'campaign_mode' => ['what' => 'Whether campaign consultations may call a provider.', 'why' => 'Use observe to watch the advice, advice to act on it.', 'effect' => 'off = no consultations; observe = read-only; advice = suggestions may be acted on.', 'restart' => 'No. Picked up on the next read.'],
     ];
 
     /**
@@ -87,7 +110,10 @@ class BuildAiSettingsPanelAction
     private function definitions(array $rows): array
     {
         return array_map(
-            static fn (array $row): array => $row + ['definition' => self::DEFINITIONS[$row['field']]],
+            static fn (array $row): array => $row + [
+                'definition' => self::DEFINITIONS[$row['field']],
+                'group' => self::GROUPS[$row['field']],
+            ],
             $rows,
         );
     }

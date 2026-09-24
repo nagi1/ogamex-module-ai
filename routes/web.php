@@ -14,6 +14,8 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
         Route::post('/switch', [AIController::class, 'switch'])->name('switch');
         // Live settings write the host settings table; deployment settings stay in the YAML file.
         Route::post('/settings', [AIController::class, 'settings'])->name('settings');
+        // The LLM budget writes the same host settings table; the page is a focused surface, not a second store.
+        Route::post('/llm', [AIController::class, 'llm'])->name('llm');
         // Operations are queued, never run inline; the POST only records and dispatches.
         Route::post('/operations', [AIController::class, 'operations'])->name('operations');
         // Campaign controls are queued and audited the same way; open/declare validate inputs here.

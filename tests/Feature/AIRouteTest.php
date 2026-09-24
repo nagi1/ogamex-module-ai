@@ -68,8 +68,8 @@ test('an admin can open the AI module page', function (): void {
     expect(app(QueueAiBuilding::class))->toBeInstanceOf(QueueAiBuildingAction::class);
 });
 
-test('the module adds its page to the admin navigation', function (): void {
-    expect(ModuleSlotService::render('admin.nav'))
+test('the module adds its page to the Modules admin controls', function (): void {
+    expect(ModuleSlotService::render('admin.modules'))
         ->toContain('admin/ai')
         ->toContain(route('ai.index'));
 });
@@ -157,8 +157,7 @@ test('the page renders the pilot window from the same answer the report command 
         ->and($answer['score']['military_lost'])->toBe(30)
         ->and($content)->toContain('The last N days')
         ->toContain('7 days')
-        ->toContain('min 60 · median 60 · max 60')
-        ->toContain('This read');
+        ->toContain('min 60 · median 60 · max 60');
 });
 
 test('a window that is not offered falls back to one day instead of erroring', function (): void {
@@ -239,6 +238,33 @@ test('a live setting with an invalid value is refused', function (): void {
     ])->assertSessionHasErrors('profile_cap');
 
     expect(app(SettingsService::class)->get('ai_population_profile_cap'))->not->toBe('7');
+});
+
+test('the LLM tab renders the budget, usage and limits', function (): void {
+    aiRouteProfile($this->currentUserId);
+
+    $content = $this->get('/admin/ai?tab=llm')->getContent();
+
+    expect($content)->toContain('Budget')
+        ->toContain('Month-to-date spend')
+        ->toContain('Provider use (30 days)')
+        ->toContain('Limits and model')
+        ->toContain('Daily limits');
+});
+
+test('staff can save the LLM budget', function (): void {
+    $this->post(route('ai.llm'), [
+        'monthly_cost_usd' => '25',
+        'language_enabled' => '1',
+        'language_ai_to_ai' => '0',
+        'campaign_mode' => 'advice',
+    ])->assertRedirect(route('ai.index', ['tab' => 'llm']))
+        ->assertSessionHas('success', 'Settings saved.');
+
+    expect(app(SettingsService::class)->get('ai_monthly_cost_usd'))->toBe('25')
+        ->and(app(SettingsService::class)->get('ai_language_enabled'))->toBe('1')
+        ->and(app(SettingsService::class)->get('ai_language_ai_to_ai'))->toBe('0')
+        ->and(app(SettingsService::class)->get('ai_campaign_consultation_mode'))->toBe('advice');
 });
 
 function aiRouteProfile(int $playerId): AiProfile

@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Domain\CampaignConsultation\CampaignConsultationEvidence;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\UtilityScorer;
 use Modules\AI\Enums\AiCampaignConsultationStatus;
@@ -10,8 +11,10 @@ use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\AiRuntimeSettings;
+use Modules\AI\Support\PsychSimTheoryOfMind;
 
 /**
  * Consumes one open campaign-consultation signal against the decision a session just made.
@@ -56,7 +59,7 @@ class ConsultCampaignDecisionAction
             return $trace;
         }
 
-        $recommendation = app(RequestCampaignConsultationAction::class)->handle($signal->trigger, $campaign, $trace);
+        $recommendation = app(RequestCampaignConsultationAction::class)->handle($signal->trigger, $campaign, $trace, $this->theoryOfMindEvidence($profile));
 
         $signal->update(['consumed_at' => $this->clock->now()]);
 
@@ -85,5 +88,40 @@ class ConsultCampaignDecisionAction
             'rejections' => $trace->rejections,
             'inputHash' => $trace->inputHash,
         ]);
+    }
+
+    /**
+     * The account's read of the player it rates most threatening, as one bounded evidence item
+     * for the consultation. A wary read advises holding back; no relationship or no driver read
+     * adds nothing, so a native consultation is never bloated by an empty signal.
+     *
+     * @return list<CampaignConsultationEvidence>
+     */
+    private function theoryOfMindEvidence(AiProfile $profile): array
+    {
+        $threat = AiRelationship::query()
+            ->where('player_id', $profile->player_id)
+            ->where('threat', '>', 0)
+            ->orderByDesc('threat')
+            ->value('threat');
+
+        if ($threat === null) {
+            return [];
+        }
+
+        $stance = app(PsychSimTheoryOfMind::class)->stanceFor((float) $threat);
+
+        if ($stance === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CampaignConsultationEvidence::class, [
+            'source' => 'psychsim',
+            'kind' => 'foe_read',
+            'value' => $stance->word(),
+            'version' => 'depth-1',
+            'collectedAt' => $this->clock->now(),
+            'authorized' => true,
+        ])];
     }
 }
