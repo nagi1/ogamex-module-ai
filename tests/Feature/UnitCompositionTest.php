@@ -38,8 +38,9 @@ test('the unit planner does not grow cargo without a raidable report', function 
     $this->planetAddUnit('colony_ship', 1);
     $this->planetAddUnit('espionage_probe', 1);
 
-    // No report: the opening roles are satisfied and nothing asks for more cargo.
-    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId))->toBeNull();
+    // No report: the opening roles are satisfied and nothing asks for more cargo. The planet's own
+    // exposure is a different question and may ask for a standing wall (PERS-004).
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->not->toContain('role:cargo');
 });
 
 test('a report whose defence is null does not break unit planning', function (): void {

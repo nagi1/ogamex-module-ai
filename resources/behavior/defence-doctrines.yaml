@@ -1,0 +1,133 @@
+# Defence doctrines — the wall an AI account builds, taken from real strategies.
+#
+# Every number here is copied from an ingested source and cites it. Nothing is authored.
+# A doctrine is *taste over host data*: units are named as the source names them and are
+# resolved against the host object registry at planning time (gate 1 — no object ids, no
+# prices, no requirements are encoded here). A name that does not resolve is an error, not
+# a default.
+#
+# Anchors: each doctrine is stated per N of one anchor unit. The planner scales the anchor
+# to what the account can afford and derives every other unit from the ratio, so a bigger
+# wall is the same doctrine, not a new one.
+#
+# Provenance: `sources` ids resolve in plan/research/ogame/SOURCE-REGISTRY.yaml.
+# claim_type follows the corpus vocabulary; these are CONTESTED player doctrines, never
+# mechanics.
+
+version: 1
+
+# Mechanics that constrain every doctrine below. Confirmed against the host, so the planner
+# may rely on them; the object universe itself is still the host's.
+constraints:
+  defence_repair_fraction: 0.70 # GF-007: 70% of destroyed defence is restored after combat
+  abm_per_ipm: 1 # GF-007: Anti-Ballistic Missiles neutralise IPMs one to one
+  bounce_shield_fraction: 0.01 # WIK-030 + rust/battle_engine_ffi: a shot under 1% of the
+  # defender's max shield is absorbed with no effect — while the shield holds
+  constraints_source: [GF-007, WIK-030]
+
+# The floor under the exposure-derived need, from the publisher's own early-phase advice:
+# "In the early phase, Rocket Launchers and Light Lasers suffice as initial deterrents. They
+# cost little and make your planet unattractive to other beginners." Measured on the three
+# seeded accounts, exposure alone yields 381-714 — below the ~2,000 metal of a single Rocket
+# Launcher — so without a floor no account ever builds its first wall, which no experienced
+# player does: the first few units are bought against probes, not against a modelled attack.
+#
+# NOT READ BY CODE YET: the evaluator still derives need from exposure alone, so this value is
+# recorded evidence awaiting the change that consumes it. Do not treat it as live behaviour.
+minimum_deterrent:
+  value: 4000 # two Rocket Launchers, the smallest thing the host will accept as a wall
+  reason: defense:need:minimum-deterrent
+  applies_when: planet has no defence at all
+  sources: [GF-007]
+  claim_type: DOCUMENTED
+
+
+doctrines:
+  early_game:
+    label: Early Game Defense
+    anchor: {unit: Light Laser, count: 200}
+    ratio:
+      Rocket Launcher: 350 # stated 300-400; the midpoint of what the source prints
+      Heavy Laser: 20
+      Ion Cannon: 10
+      Gauss Cannon: 4
+      Small Shield Dome: 1
+      Large Shield Dome: 1
+      Anti-ballistic Missile: 20
+    stop_rule: swap to big_gun_heavy once the wall passes 200 Light Lasers
+    stated_ceiling: keeps away fleets without Battleships and Bombers
+    sources: [WIK-013]
+    claim_type: CONTESTED
+
+  big_gun_heavy:
+    label: Big Gun Heavy
+    anchor: {unit: Rocket Launcher, count: 1000}
+    ratio:
+      Light Laser: 500
+      Heavy Laser: 100
+      Ion Cannon: 40
+      Gauss Cannon: 20
+      Plasma Turret: 10
+      Small Shield Dome: 1
+      Large Shield Dome: 1
+    rationale: upper-tier ships (Battleships, Bombers, Destroyers) break a wall that has no
+      big guns, so Gauss and Plasma are the point of this doctrine
+    sources: [WIK-013]
+    claim_type: CONTESTED
+
+  fodder_heavy:
+    label: Fodder Heavy
+    anchor: {unit: Rocket Launcher, count: 500}
+    ratio:
+      Light Laser: 100
+      Heavy Laser: 25
+      Ion Cannon: 8
+      Gauss Cannon: 3
+      Plasma Turret: 1
+      Small Shield Dome: 1
+      Large Shield Dome: 1
+    rationale: fodder supports a fleet held in orbit rather than replacing it
+    known_weakness: vulnerable when the attacker brings Death Stars, because those shots
+      ignore fodder
+    sources: [WIK-013]
+    claim_type: CONTESTED
+
+  balanced:
+    label: Balanced Defense
+    anchor: {unit: Light Laser, count: 100}
+    ratio:
+      Rocket Launcher: 20
+      Ion Cannon: 20
+      Heavy Laser: 10
+      Gauss Cannon: 10
+      Plasma Turret: 5
+    rationale: mixes fodder types so Cruiser and Destroyer rapid fire cannot chew one type
+      away; the domes and ABMs are added as they become affordable
+    sources: [WIK-013]
+    claim_type: CONTESTED
+
+  endgame_against_rips:
+    label: Endgame (against rips)
+    anchor: {unit: Light Laser, count: 3000}
+    ratio:
+      Heavy Laser: 1000
+      Ion Cannon: 1000
+      Gauss Cannon: 750
+      Plasma Turret: 600
+      Small Shield Dome: 1
+      Large Shield Dome: 1
+    rationale: Plasma Turrets and Shield Domes are the only defence units a Death Star does
+      not rapid-fire, so they must be numerous enough to be hit rather than hidden behind
+      fodder; the source states the resulting plasma-to-fodder ratio is about 1 to 10
+    sources: [WIK-013]
+    claim_type: CONTESTED
+
+  late_game_turtle:
+    label: Late Game Turtle
+    anchor: {unit: Plasma Turret, count: 1}
+    ratio:
+      Rocket Launcher: 50 # stated 50, "up to 100 depending on resources"
+      Small Shield Dome: 1
+      Large Shield Dome: 1
+    sources: [WIK-013]
+    claim_type: CONTESTED

@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Enums\AiActionType;
@@ -22,8 +23,8 @@ use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\ChatMessage;
 use OGame\Models\User;
 
-require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
-require_once __DIR__ . '/../Support/FixtureAiClock.php';
+require_once __DIR__.'/../Support/AiQueueModuleTestCase.php';
+require_once __DIR__.'/../Support/FixtureAiClock.php';
 
 uses(AiQueueModuleTestCase::class);
 
@@ -43,7 +44,7 @@ function pilotWorkItem(string $suffix, AiWorkState $state, int $lateMinutes, int
         'player_id' => 987_001,
         'kind' => AiWorkKind::RunSession,
         'due_at' => CarbonImmutable::parse(PILOT_NOW)->subMinutes($lateMinutes),
-        'idempotency_key' => 'pilot:' . $suffix,
+        'idempotency_key' => 'pilot:'.$suffix,
         'state' => $state,
         'attempts' => $attempts,
     ]);
@@ -53,7 +54,7 @@ function pilotReceipt(string $suffix, AiReceiptState $state): AiActionReceipt
 {
     return AiActionReceipt::create([
         'player_id' => 987_001,
-        'idempotency_key' => 'pilot-receipt:' . $suffix,
+        'idempotency_key' => 'pilot-receipt:'.$suffix,
         'action_type' => AiActionType::QueueBuilding,
         'state' => $state,
     ]);
@@ -128,7 +129,7 @@ function clearSeededPilotAccounts(): void
     DB::statement('SET FOREIGN_KEY_CHECKS = 1');
 }
 
-/** @return \Illuminate\Support\Collection<int, User> */
+/** @return Collection<int, User> */
 function seededPilotUsers()
 {
     $ids = AiProfile::query()->where('settings->pilot', true)->pluck('player_id');
@@ -165,7 +166,7 @@ test('seeding creates ordinary accounts with an enabled profile and a first sess
 
         expect($work->kind)->toBe(AiWorkKind::RunSession)
             ->and($work->state)->toBe(AiWorkState::Pending)
-            ->and($work->idempotency_key)->toBe('session:' . $profile->player_id . ':1');
+            ->and($work->idempotency_key)->toBe('session:'.$profile->player_id.':1');
     }
 });
 
@@ -215,7 +216,11 @@ test('grand seeding creates fresh accounts and remains idempotent', function ():
     expect($accounts)->toHaveCount(2)
         ->and($messages)->toBe(2)
         ->and(User::query()->count())->toBe($userCount)
-        ->and(AiProfile::query()->where('settings->pilot', true)->count())->toBe(2);
+        ->and(AiProfile::query()->where('settings->pilot', true)->count())->toBe(2)
+        ->and(AiProfile::query()->where('settings->pilot', true)->whereNull('activity_band')->count())->toBe(0)
+        ->and(AiProfile::query()->where('settings->pilot', true)->whereNull('defense_doctrine')->count())->toBe(0)
+        ->and(AiProfile::query()->where('settings->pilot', true)->whereNull('stockpile_strategy')->count())->toBe(0)
+        ->and(AiProfile::query()->where('settings->pilot', true)->whereNull('economic_role')->count())->toBe(0);
 });
 
 test('grand seeding tolerates a universe with no human neighbour', function (): void {
@@ -296,7 +301,7 @@ test('an empty window reports zeroes instead of failing', function (): void {
 });
 
 test('human feedback is read from the operator file, and a bad one is refused', function (): void {
-    $path = sys_get_temp_dir() . '/ai-feedback-' . uniqid('', true) . '.json';
+    $path = sys_get_temp_dir().'/ai-feedback-'.uniqid('', true).'.json';
     file_put_contents($path, json_encode(['pressure' => 'manageable', 'recovery' => 'fine'], JSON_THROW_ON_ERROR));
 
     $this->artisan('ai:pilot-report', ['--feedback' => $path])
@@ -314,7 +319,7 @@ test('human feedback is read from the operator file, and a bad one is refused', 
 });
 
 test('a feedback file that is not a JSON object is refused', function (): void {
-    $path = sys_get_temp_dir() . '/ai-feedback-' . uniqid('', true) . '.json';
+    $path = sys_get_temp_dir().'/ai-feedback-'.uniqid('', true).'.json';
 
     file_put_contents($path, 'not json');
     $this->artisan('ai:pilot-report', ['--feedback' => $path])

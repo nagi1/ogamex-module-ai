@@ -113,11 +113,13 @@ test('it does not queue an escort the account already matches', function (): voi
     $this->planetAddUnit('espionage_probe', 1);
     unitDefendedTargetReport($this->currentUserId);
 
-    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId))->toBeNull();
+    // The escort is the question here, and the account already matches it. Whether the planet's own
+    // exposure wants a standing wall (PERS-004) is a different question and may answer instead.
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->not->toContain('role:escort');
 });
 
-// A turtle keeps a standing wall scaled to its fleet, not only when the host
-// already says a hostile is inbound (barakis M34-M40).
+// A wall is wanted because of what the planet stands to lose, not because of its class, so any
+// persona keeps one between attacks (barakis M34-M40) and the doctrine decides its shape.
 test('a turtle keeps a standing defence between attacks', function (): void {
     unitProfile($this->currentUserId, AiArchetype::Turtle);
     $this->planetAddResources(unitPlenty());
@@ -182,7 +184,12 @@ test('a deficit the building queue can answer is not a yard order', function ():
     $this->planetSetObjectLevel('metal_mine', 20);
     $this->planetSetObjectLevel('crystal_mine', 18);
 
-    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId))->toBeNull();
+    // The yard stays out of the capacity question; the standing wall the planet's own exposure
+    // asks for is a different question and is what answers here.
+    $plan = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableUnit::class)
+        ->and($plan->reason)->toBe('role:defense:standing:rocket_launcher');
 });
 
 function unitProfile(int $playerId, AiArchetype $archetype = AiArchetype::Miner): AiProfile

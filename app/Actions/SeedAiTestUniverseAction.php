@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Modules\AI\Domain\Persona\AiPersonaFactory;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
@@ -12,7 +13,6 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use OGame\Actions\Fortify\CreateNewUser;
-use OGame\Enums\CharacterClass;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\User;
 use RuntimeException;
@@ -81,8 +81,8 @@ class SeedAiTestUniverseAction
     public function __construct(
         private readonly AiClock $clock,
         private readonly PlayerServiceFactory $playerServiceFactory,
-    ) {
-    }
+        private readonly AiPersonaFactory $personaFactory,
+    ) {}
 
     /**
      * @return list<array{player_id: int, archetype: string, created: bool}>
@@ -116,13 +116,20 @@ class SeedAiTestUniverseAction
             'password' => Str::password(32),
         ]);
         $archetype = $this->archetype($index);
+        $skill = $this->skillBand($index);
         $seed = $this->randomSeed($index);
+        $persona = $this->personaFactory->create($archetype, $skill, $seed);
 
         AiProfile::query()->firstOrCreate(
             ['player_id' => $user->id],
             [
                 'archetype' => $archetype,
-                'skill_band' => $this->skillBand($index),
+                'skill_band' => $skill,
+                'activity_band' => $persona->activityBand,
+                'defense_doctrine' => $persona->defenseDoctrine,
+                'stockpile_strategy' => $persona->stockpileStrategy,
+                'economic_role' => $persona->economicRole,
+                'persona_version' => 1,
                 'random_seed' => $seed,
                 'enabled' => true,
                 'settings' => ['pilot' => true, 'pilot_index' => $index],
@@ -130,12 +137,12 @@ class SeedAiTestUniverseAction
         );
 
         if ($created) {
-            $this->personalise($user, $index, $seed, $now, $archetype);
+            $this->personalise($user, $index, $seed, $now, $archetype, $skill);
         }
 
         // Generation one is the first session; the session action schedules every later one.
         AiWorkItem::query()->firstOrCreate(
-            ['idempotency_key' => 'session:' . $user->id . ':1'],
+            ['idempotency_key' => 'session:'.$user->id.':1'],
             [
                 'player_id' => $user->id,
                 'kind' => AiWorkKind::RunSession,
@@ -151,7 +158,7 @@ class SeedAiTestUniverseAction
      * The identity tells a cohort shares when provisioning is uniform: same dark matter, same
      * join minute, a Homeworld that was never renamed, and a username that has never been touched.
      */
-    private function personalise(User $user, int $index, int $seed, CarbonImmutable $now, AiArchetype $archetype): void
+    private function personalise(User $user, int $index, int $seed, CarbonImmutable $now, AiArchetype $archetype, AiSkillBand $skill): void
     {
         // Index participates so two nearby crc32 values cannot collapse a small cohort onto one
         // day or one dark-matter balance.
@@ -170,7 +177,7 @@ class SeedAiTestUniverseAction
             'username_updated_at' => $joinedAt,
             // A human picks a class at registration; the seeded account picks the one its persona
             // would and has used its free selection, so no AI account sits classless forever.
-            'character_class' => $this->characterClass($archetype)->value,
+            'character_class' => $this->personaFactory->characterClass($archetype, $skill, $seed)->value,
             'character_class_free_used' => true,
             'character_class_changed_at' => $joinedAt,
         ])->save();
@@ -193,16 +200,16 @@ class SeedAiTestUniverseAction
     {
         // Deterministic and unique per index, but not a sequential local-part an operator can scan
         // for. The domain rotates so a cohort does not share one mailbox provider either.
-        $local = 'u' . substr(hash('sha256', 'ai-pilot:' . $index), 0, 10);
+        $local = 'u'.substr(hash('sha256', 'ai-pilot:'.$index), 0, 10);
         $domain = self::EMAIL_DOMAINS[($index - 1) % count(self::EMAIL_DOMAINS)];
 
-        return $local . '@' . $domain;
+        return $local.'@'.$domain;
     }
 
     private function randomSeed(int $index): int
     {
         // Uncorrelated with the index: two neighbouring accounts must not share nearby seeds.
-        return (int) sprintf('%u', crc32('ai-persona:' . $index . ':v1'));
+        return (int) sprintf('%u', crc32('ai-persona:'.$index.':v1'));
     }
 
     private function darkMatter(int $seed, int $index): int
@@ -210,20 +217,6 @@ class SeedAiTestUniverseAction
         $offset = (($seed + ($index * 97)) % (self::DARK_MATTER_SPREAD * 2 + 1)) - self::DARK_MATTER_SPREAD;
 
         return self::DARK_MATTER_BASE + $offset;
-    }
-
-    /**
-     * The character class a persona would pick: mines and economy for the miner and the casual,
-     * combat for the fleeter and the turtle, expeditions for the trader. The class itself is the
-     * host's; only the persona-to-class taste lives here.
-     */
-    private function characterClass(AiArchetype $archetype): CharacterClass
-    {
-        return match ($archetype) {
-            AiArchetype::Miner, AiArchetype::Casual => CharacterClass::COLLECTOR,
-            AiArchetype::Turtle, AiArchetype::Fleeter => CharacterClass::GENERAL,
-            AiArchetype::Trader => CharacterClass::DISCOVERER,
-        };
     }
 
     /**

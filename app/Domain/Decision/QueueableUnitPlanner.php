@@ -2,13 +2,11 @@
 
 namespace Modules\AI\Domain\Decision;
 
-use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameObjects\Models\UnitObject;
-use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
@@ -27,8 +25,9 @@ use OGame\Services\PlayerService;
  * fleet action needs somewhere to put loot and resources, then the colony ship that unlocks a
  * second planet, which is what fleetsave, transport and scouting all wait on. The two intel-driven
  * roles come after the opening, because each waits on an observation: defence when the host says a
- * hostile is inbound, and a combat escort when a fresh report shows a defended target the account's
- * own fleet is not expected to crack.
+ * hostile is inbound or when the planet has something the need evaluator says is worth a wall, and
+ * a combat escort when a fresh report shows a defended target the account's own fleet is not
+ * expected to crack.
  *
  * Power is the one role the building queue shares: a planet that is short and whose capacity the
  * building queue cannot take buys it from the yard instead, which is what a player does when the
@@ -36,10 +35,10 @@ use OGame\Services\PlayerService;
  * gate says no, so the two never compete over the same shortfall.
  *
  * Which object fills each role is read from the host: cargo is the ship with the largest cargo
- * capacity per metal-equivalent cost the planet can actually queue, combat and defence are the
- * hulls with the best attack per metal-equivalent cost, and the colony ship is the ship the host's
- * own colonisation mission consumes. A mod-added hull with a better ratio becomes its role's unit
- * with no edit here.
+ * capacity per metal-equivalent cost the planet can actually queue, combat is the hull with the best
+ * attack per metal-equivalent cost, the colony ship is the ship the host's own colonisation mission
+ * consumes, and defence is the component `DefenseCompositionPlanner` says this account's doctrine is
+ * most behind on. A mod-added hull with a better ratio becomes its role's unit with no edit here.
  */
 class QueueableUnitPlanner
 {
@@ -57,6 +56,8 @@ class QueueableUnitPlanner
         private PlayerServiceFactory $playerServiceFactory,
         private EnergyCapacity $energyCapacity,
         private QueueableBuildingPlanner $buildingPlanner,
+        private DefenseCompositionPlanner $defenseComposition,
+        private DefenseNeedEvaluator $defenseNeed,
     ) {
     }
 
@@ -97,6 +98,10 @@ class QueueableUnitPlanner
         foreach ($planets as $planet) {
             $planet->updateResources(false);
 
+            // Whether this planet wants a wall, and how big. Asked before the wall is composed so
+            // the same answer sizes both the reactive and the standing defence below.
+            $need = $this->defenseNeed->evaluate($player, $planet);
+
             // Cargo first, and only while the account owns no ship at all: a fleet begins with
             // one hull that can carry, and nothing else is worth building before that exists.
             if ($this->ownsNoShip($planet)) {
@@ -112,9 +117,9 @@ class QueueableUnitPlanner
             // before anything else on this planet, and the host's own "under attack" is the
             // trigger, so the module keeps no mission-type list.
             if ($underAttack) {
-                $defense = $this->bestDefense($player, $planet);
+                $defense = $this->defenseComposition->plan($player, $planet, $need);
                 if ($defense !== null) {
-                    return $this->unit($planet, $defense, 'role:defense:' . $defense->machine_name);
+                    return $this->unit($planet, $defense->unit, 'role:defense:' . $defense->unit->machine_name, $defense->amount);
                 }
             }
 
@@ -152,14 +157,16 @@ class QueueableUnitPlanner
                 return $cargoPlan;
             }
 
-            // Standing defence: a turtle or miner keeps a baseline wall scaled to
-            // its fleet, so it is never naked between attacks — not only when the
-            // host already says a hostile is inbound.
-            if ($this->needsStandingDefense($planet, $profile->archetype)) {
-                $defense = $this->bestDefense($player, $planet);
-                if ($defense !== null) {
-                    return $this->unit($planet, $defense, 'role:defense:standing:' . $defense->machine_name);
-                }
+            // Standing defence: what the planet stands to lose decides whether it wants a wall and
+            // how big, so it is never naked between attacks -- not only when the host already says
+            // a hostile is inbound. A planet whose wall already covers its exposure wants nothing.
+            if ($need === null) {
+                continue;
+            }
+
+            $defense = $this->defenseComposition->plan($player, $planet, $need);
+            if ($defense !== null) {
+                return $this->unit($planet, $defense->unit, 'role:defense:standing:' . $defense->unit->machine_name, $defense->amount);
             }
         }
 
@@ -298,15 +305,6 @@ class QueueableUnitPlanner
     }
 
     /**
-     * The defence piece with the best attack per metal-equivalent cost — the doctrine verbatim:
-     * defence exists to make an attack unprofitable by inflicting maximum possible damage.
-     */
-    private function bestDefense(PlayerService $player, PlanetService $planet): ?UnitObject
-    {
-        return $this->bestByProperty($player, $planet, ObjectService::getDefenseObjects(), 'attack');
-    }
-
-    /**
      * The yard's answer to a power shortfall, or null when the yard is not the answer.
      *
      * Only a planet the building queue cannot cover has a shortfall left to buy here, and how many
@@ -389,47 +387,6 @@ class QueueableUnitPlanner
         }
 
         return $best;
-    }
-
-    /**
-     * Whether a turtle or miner should grow its standing wall now: the planet's
-     * defence value has fallen below the persona's fraction of its fleet value.
-     * The floor is taste over host data, never a hardcoded defence count.
-     */
-    private function needsStandingDefense(PlanetService $planet, AiArchetype $archetype): bool
-    {
-        $ratio = $this->standingDefenseFloor($archetype);
-        if ($ratio <= 0.0) {
-            return false;
-        }
-
-        $fleetValue = $this->unitValue($planet->getShipUnits());
-        if ($fleetValue <= 0.0) {
-            return false;
-        }
-
-        return $this->unitValue($planet->getDefenseUnits()) < $ratio * $fleetValue;
-    }
-
-    /** The standing-defence floor as a fraction of fleet value, per persona. */
-    private function standingDefenseFloor(AiArchetype $archetype): float
-    {
-        return match ($archetype) {
-            AiArchetype::Turtle => 0.5,
-            AiArchetype::Miner => 0.2,
-            default => 0.0,
-        };
-    }
-
-    /** The metal-equivalent value of a unit collection, from the host's own raw prices. */
-    private function unitValue(UnitCollection $units): float
-    {
-        $value = 0.0;
-        foreach ($units->toArray() as $machineName => $amount) {
-            $value += $this->metalEquivalent(ObjectService::getObjectRawPrice($machineName)) * $amount;
-        }
-
-        return $value;
     }
 
     /**
