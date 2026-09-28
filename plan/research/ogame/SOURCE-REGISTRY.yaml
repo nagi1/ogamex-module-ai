@@ -1,0 +1,1129 @@
+# OGame source registry — personality/behaviour workflow.
+#
+# Canonical id namespace: plan/details/research/strategy/sources.yaml. Reuse its ids verbatim.
+# This file registers ONLY sources that do not yet exist there, in the same id families
+# (FOR-/ORG-/GF-/TP-/WIK-/BOT-/SIM-/RDT-/STA-/ACA-/PLW-/DEW-/DEF-/FRB-). When a source here
+# feeds strategy research too, promote it to the canonical store and delete the row here —
+# never keep two rows for one source.
+
+version: 1
+
+# Per-source fields a raw-evidence file and a synthesis claim must be able to resolve:
+#   id            stable id (canonical family prefix + number)
+#   title         source title as published
+#   url           original URL (or the board thread anchor)
+#   capture_url   Wayback/archive capture used when the live URL moved (may be empty)
+#   family        id family (official-gameforge-forum, gameforge, third-party, fandom, bot,
+#                 sim, reddit, stats, academic, non-english)
+#   domains       what the source evidences (personas, authenticity, routine, communication, …)
+#   retrieved_at  ISO date the source was fetched
+#   license       accessibility note (public page, archive replay, login-gated, …)
+
+sources:
+- id: WIK-013
+  title: Defense Build Strategies
+  url: ogame.fandom.com `Defense_Build_Strategies`
+  capture_url: ''
+  family: wiki
+  domains: [defence-layering, fodder-ratios, rapid-fire]
+  retrieved_at: 2026-09-28
+  license: public page (direct fetch and `?action=raw` return 403; captured via browser render)
+  raw: raw/wiki/ogame.fandom.com/def-layering/WIK-013.md
+- id: GF-007
+  title: OGame Defence Building — Defensive Structures in OGame
+  url: gameforge.com "en-GB/games/strategy-game-with-defence-building.html"
+  capture_url: ''
+  family: gameforge-official
+  domains: [defence-costs, defence-repair-70pct, ABM-1-to-1, layering]
+  retrieved_at: 2026-09-28
+  license: public page
+  raw: raw/gameforge/gameforge.com/def-layering/GF-007.md
+- id: TP-021
+  title: 'OGame Defense Ratio Guide: The Best Defense Strategies That Work'
+  url: ogame.life "ogame/blog/ogame-defense-ratio-guide-the-best-defense-strategies-that-work"
+  capture_url: ''
+  family: third-party-guides
+  domains: [defence-layering]
+  retrieved_at: 2026-09-28
+  license: public page (private-server operator blog; derivative of WIK-013)
+  raw: raw/third-party/ogame.life/def-layering/TP-021.md
+- id: WIK-014
+  title: Miner
+  url: ogame.fandom.com `Miner`
+  capture_url: ''
+  family: wiki
+  domains: [miner-play-style, roi-upgrades, play-style-definition]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-miner/WIK-014.md
+- id: WIK-015
+  title: Profit
+  url: ogame.fandom.com `Profit`
+  capture_url: ''
+  family: wiki
+  domains: [profit-formula, fleet-slots, fleetcrashing, resource-valuation]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-miner/WIK-015.md
+- id: WIK-016
+  title: Gaining resources
+  url: ogame.fandom.com `Gaining_resources`
+  capture_url: ''
+  family: wiki
+  domains: [resource-sources, basic-income, expeditions]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-miner/WIK-016.md
+- id: WIK-017
+  title: Turtle
+  url: ogame.fandom.com `Turtle`
+  capture_url: ''
+  family: wiki
+  domains: [turtle-play-style, ipm-etiquette, play-style-definition]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-turtle/WIK-017.md
+- id: WIK-018
+  title: Uber-Turtle
+  url: ogame.fandom.com `Uber-Turtle`
+  capture_url: ''
+  family: wiki
+  domains: [uber-turtle, defence-stockpile, play-style-definition]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-turtle/WIK-018.md
+- id: WIK-019
+  title: Vault Planet
+  url: ogame.fandom.com `Vault_Planet`
+  capture_url: ''
+  family: wiki
+  domains: [vault-planet, field-count, mine-efficiency]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-turtle/WIK-019.md
+- id: WIK-020
+  title: Evaluation of Defense
+  url: ogame.fandom.com `Evaluation_of_Defense`
+  capture_url: ''
+  family: wiki
+  domains: [defence-cost-effectiveness, fodder, rapid-fire, ipm]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-turtle/WIK-020.md
+- id: WIK-021
+  title: Fleeter
+  url: ogame.fandom.com `Fleeter`
+  capture_url: ''
+  family: wiki
+  domains: [fleeter-play-style, fleetsave-discipline, play-style-definition]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-none-fleeter/WIK-021.md
+- id: WIK-022
+  title: Save
+  url: ogame.fandom.com `Save`
+  capture_url: ''
+  family: wiki
+  domains: [saving, fleetsave, vacation-mode, cancel-refund]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-none-fleeter/WIK-022.md
+- id: WIK-023
+  title: Canceling
+  url: ogame.fandom.com `Canceling`
+  capture_url: ''
+  family: wiki
+  domains: [cancel-refund, resource-saving]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-reactive/WIK-023.md
+- id: WIK-024
+  title: Safety Probe
+  url: ogame.fandom.com `Safety_Probe`
+  capture_url: ''
+  family: wiki
+  domains: [safety-probe, acs, ninja-detection]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-reactive/WIK-024.md
+- id: WIK-025
+  title: Interplanetary Missile
+  url: ogame.fandom.com `Interplanetary_Missile`
+  capture_url: ''
+  family: wiki
+  domains: [ipm-mechanics, missile-silo, range-formula]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-ipm/WIK-025.md
+- id: WIK-026
+  title: Anti-ballistic Missile
+  url: ogame.fandom.com `Anti-ballistic_Missile`
+  capture_url: ''
+  family: wiki
+  domains: [abm-mechanics, ipm-counter, missile-silo]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-ipm/WIK-026.md
+- id: WIK-027
+  title: Resource Saving
+  url: ogame.fandom.com `Resource_Saving`
+  capture_url: ''
+  family: wiki
+  domains: [resource-saving, cancel-refund, stockpile]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-stockpile/WIK-027.md
+- id: WIK-028
+  title: Resource Hiding
+  url: ogame.fandom.com `Resource_Hiding`
+  capture_url: ''
+  family: wiki
+  domains: [resource-hiding, cancel-refund, stockpile]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-stockpile/WIK-028.md
+- id: WIK-029
+  title: Moonchance Strategy
+  url: ogame.fandom.com `Moonchance_Strategy`
+  capture_url: ''
+  family: wiki
+  domains: [moonshot, debris-field, pushing-rules, moonchance]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: raw/wiki/ogame.fandom.com/def-layering/WIK-029.md
+- id: WIK-030
+  title: Bouncing Effect
+  url: ogame.fandom.com `Bouncing_Effect` (the `1% Rule (The bounce effect)` URL is a redirect to it)
+  capture_url: ''
+  family: wiki
+  domains: [bounce-mechanic, shield-percentiles, defence-layering, raid-selection]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA) — mechanics confirmed against the host, see the raw file
+  raw: raw/wiki/ogame.fandom.com/def-layering/WIK-030.md
+- id: WIK-035
+  title: Lunar Base
+  url: ogame.fandom.com `Lunar_Base`
+  capture_url: ''
+  family: wiki
+  domains: [moon]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/moon/WIK-035.md
+- id: WIK-036
+  title: Heavy Laser
+  url: ogame.fandom.com `Heavy_Laser`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-036.md
+- id: WIK-037
+  title: Gauss Cannon
+  url: ogame.fandom.com `Gauss_Cannon`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-037.md
+- id: WIK-038
+  title: Defense
+  url: ogame.fandom.com `Defense`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-038.md
+- id: WIK-039
+  title: Combat
+  url: ogame.fandom.com `Combat`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-039.md
+- id: WIK-041
+  title: Hull Plating
+  url: ogame.fandom.com `Hull_Plating`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-041.md
+- id: WIK-045
+  title: Newbie Protection
+  url: ogame.fandom.com `Newbie_Protection`
+  capture_url: ''
+  family: wiki
+  domains: [rules]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/rules/WIK-045.md
+- id: WIK-046
+  title: Jump Gate
+  url: ogame.fandom.com `Jump_Gate`
+  capture_url: ''
+  family: wiki
+  domains: [moon]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/moon/WIK-046.md
+- id: WIK-051
+  title: Large Shield Dome
+  url: ogame.fandom.com `Large_Shield_Dome`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-051.md
+- id: WIK-052
+  title: Moonchance
+  url: ogame.fandom.com `Moonchance`
+  capture_url: ''
+  family: wiki
+  domains: [moon]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/moon/WIK-052.md
+- id: WIK-053
+  title: Light Laser
+  url: ogame.fandom.com `Light_Laser`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-053.md
+- id: WIK-054
+  title: Ion Cannon
+  url: ogame.fandom.com `Ion_Cannon`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-054.md
+- id: WIK-061
+  title: Quick Start Guide
+  url: ogame.fandom.com `Quick_Start_Guide`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-061.md
+- id: WIK-062
+  title: Inactive Players
+  url: ogame.fandom.com `Inactive_Players`
+  capture_url: ''
+  family: wiki
+  domains: [rules]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/rules/WIK-062.md
+- id: WIK-064
+  title: Plasma Turret
+  url: ogame.fandom.com `Plasma_Turret`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-064.md
+- id: WIK-068
+  title: Blind phalanx
+  url: ogame.fandom.com `Blind_phalanx`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-068.md
+- id: WIK-071
+  title: Dependency Tree
+  url: ogame.fandom.com `Dependency_Tree`
+  capture_url: ''
+  family: wiki
+  domains: [moon]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/moon/WIK-071.md
+- id: WIK-076
+  title: Collector
+  url: ogame.fandom.com `Collector`
+  capture_url: ''
+  family: wiki
+  domains: [class]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/class/WIK-076.md
+- id: WIK-077
+  title: General
+  url: ogame.fandom.com `General`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-077.md
+- id: WIK-078
+  title: Reaper
+  url: ogame.fandom.com `Reaper`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-078.md
+- id: WIK-079
+  title: Discoverer
+  url: ogame.fandom.com `Discoverer`
+  capture_url: ''
+  family: wiki
+  domains: [class]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/class/WIK-079.md
+- id: WIK-080
+  title: Researcher
+  url: ogame.fandom.com `Researcher`
+  capture_url: ''
+  family: wiki
+  domains: [class]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/class/WIK-080.md
+- id: WIK-081
+  title: Structural Integrity
+  url: ogame.fandom.com `Structural_Integrity`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-081.md
+- id: WIK-082
+  title: Weapon Power
+  url: ogame.fandom.com `Weapon_Power`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-082.md
+- id: WIK-083
+  title: Shield Power
+  url: ogame.fandom.com `Shield_Power`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-083.md
+- id: WIK-085
+  title: Small Shield Dome
+  url: ogame.fandom.com `Small_Shield_Dome`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-085.md
+- id: WIK-088
+  title: Rules
+  url: ogame.fandom.com `Rules`
+  capture_url: ''
+  family: wiki
+  domains: [rules]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/rules/WIK-088.md
+- id: WIK-089
+  title: Rocket Launcher
+  url: ogame.fandom.com `Rocket_Launcher`
+  capture_url: ''
+  family: wiki
+  domains: [defence]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/defence/WIK-089.md
+- id: WIK-090
+  title: Tips
+  url: ogame.fandom.com `Tips`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-090.md
+- id: WIK-091
+  title: Wavefarming
+  url: ogame.fandom.com `Wavefarming`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-091.md
+- id: WIK-093
+  title: Space Dock
+  url: ogame.fandom.com `Space_Dock`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-093.md
+- id: WIK-094
+  title: Tips for Picking a Universe
+  url: ogame.fandom.com `Tips_for_Picking_a_Universe`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-094.md
+- id: WIK-095
+  title: Trader
+  url: ogame.fandom.com `Trader`
+  capture_url: ''
+  family: wiki
+  domains: [class]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/class/WIK-095.md
+- id: WIK-096
+  title: System phalanx
+  url: ogame.fandom.com `System_phalanx`
+  capture_url: ''
+  family: wiki
+  domains: [moon]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/moon/WIK-096.md
+- id: WIK-097
+  title: Warrior
+  url: ogame.fandom.com `Warrior`
+  capture_url: ''
+  family: wiki
+  domains: [combat]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/combat/WIK-097.md
+- id: WIK-103
+  title: Farm
+  url: ogame.fandom.com `Farm`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-103.md
+- id: WIK-113
+  title: Headhunt
+  url: ogame.fandom.com `Headhunt`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-113.md
+- id: WIK-117
+  title: Mobile Attack Base
+  url: ogame.fandom.com `Mobile_Attack_Base`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-117.md
+- id: WIK-118
+  title: Prat
+  url: ogame.fandom.com `Prat`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-118.md
+- id: WIK-119
+  title: Herscheling
+  url: ogame.fandom.com `Herscheling`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-119.md
+- id: WIK-122
+  title: Wave
+  url: ogame.fandom.com `Wave`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-122.md
+- id: WIK-124
+  title: Tips For Creating An Alliance
+  url: ogame.fandom.com `Tips_For_Creating_An_Alliance`
+  capture_url: ''
+  family: wiki
+  domains: [strategy]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/strategy/WIK-124.md
+- id: WIK-126
+  title: Alliance Combat System
+  url: ogame.fandom.com `Alliance_Combat_System`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-126.md
+- id: WIK-132
+  title: Galaxy
+  url: ogame.fandom.com `Galaxy`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-132.md
+- id: WIK-133
+  title: Construction Queue
+  url: ogame.fandom.com `Construction_Queue`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-133.md
+- id: WIK-134
+  title: Fuel Consumption
+  url: ogame.fandom.com `Fuel_Consumption`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-134.md
+- id: WIK-139
+  title: Colony
+  url: ogame.fandom.com `Colony`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-139.md
+- id: WIK-145
+  title: Planet
+  url: ogame.fandom.com `Planet`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-145.md
+- id: WIK-146
+  title: Raid
+  url: ogame.fandom.com `Raid`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-146.md
+- id: WIK-148
+  title: Energy
+  url: ogame.fandom.com `Energy`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-148.md
+- id: WIK-149
+  title: Research
+  url: ogame.fandom.com `Research`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-149.md
+- id: WIK-151
+  title: Formulas
+  url: ogame.fandom.com `Formulas`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-151.md
+- id: WIK-159
+  title: Empire view
+  url: ogame.fandom.com `Empire_view`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-159.md
+- id: WIK-161
+  title: Counterespionage
+  url: ogame.fandom.com `Counterespionage`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-161.md
+- id: WIK-162
+  title: Deployment
+  url: ogame.fandom.com `Deployment`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-162.md
+- id: WIK-164
+  title: Planet Size
+  url: ogame.fandom.com `Planet_Size`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-164.md
+- id: WIK-168
+  title: Research Screen
+  url: ogame.fandom.com `Research_Screen`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-168.md
+- id: WIK-169
+  title: Defense Screen
+  url: ogame.fandom.com `Defense_Screen`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-169.md
+- id: WIK-173
+  title: Expedition
+  url: ogame.fandom.com `Expedition`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-173.md
+- id: WIK-175
+  title: OGame
+  url: ogame.fandom.com `OGame`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-175.md
+- id: WIK-176
+  title: Distance
+  url: ogame.fandom.com `Distance`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-176.md
+- id: WIK-177
+  title: Game Concepts
+  url: ogame.fandom.com `Game_Concepts`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-177.md
+- id: WIK-178
+  title: Redesigned Universe
+  url: ogame.fandom.com `Redesigned_Universe`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-178.md
+- id: WIK-183
+  title: Colonizing in Old Universes
+  url: ogame.fandom.com `Colonizing_in_Old_Universes`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-183.md
+- id: WIK-184
+  title: Coordinates
+  url: ogame.fandom.com `Coordinates`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-184.md
+- id: WIK-187
+  title: Destroy
+  url: ogame.fandom.com `Destroy`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-187.md
+- id: WIK-188
+  title: Attack
+  url: ogame.fandom.com `Attack`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-188.md
+- id: WIK-189
+  title: Mass Alliance
+  url: ogame.fandom.com `Mass_Alliance`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-189.md
+- id: WIK-190
+  title: Harvest
+  url: ogame.fandom.com `Harvest`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-190.md
+- id: WIK-192
+  title: Espionage
+  url: ogame.fandom.com `Espionage`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-192.md
+- id: WIK-193
+  title: Position
+  url: ogame.fandom.com `Position`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-193.md
+- id: WIK-196
+  title: Diameter
+  url: ogame.fandom.com `Diameter`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-196.md
+- id: WIK-197
+  title: Disband
+  url: ogame.fandom.com `Disband`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-197.md
+- id: WIK-198
+  title: Planet Name
+  url: ogame.fandom.com `Planet_Name`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-198.md
+- id: WIK-199
+  title: NAP
+  url: ogame.fandom.com `NAP`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-199.md
+- id: WIK-205
+  title: Diplomacy
+  url: ogame.fandom.com `Diplomacy`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-205.md
+- id: WIK-206
+  title: Galaxy view
+  url: ogame.fandom.com `Galaxy_view`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-206.md
+- id: WIK-208
+  title: Diplomat
+  url: ogame.fandom.com `Diplomat`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-208.md
+- id: WIK-209
+  title: Help
+  url: ogame.fandom.com `Help`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-209.md
+- id: WIK-212
+  title: Mission
+  url: ogame.fandom.com `Mission`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-212.md
+- id: WIK-215
+  title: Destroyed planet
+  url: ogame.fandom.com `Destroyed_planet`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-215.md
+- id: WIK-218
+  title: History Of OGame
+  url: ogame.fandom.com `History_Of_OGame`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-218.md
+- id: WIK-220
+  title: Member
+  url: ogame.fandom.com `Member`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-220.md
+- id: WIK-221
+  title: Ogame Expedition time
+  url: ogame.fandom.com `Ogame_Expedition_time`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-221.md
+- id: WIK-222
+  title: Honor Points
+  url: ogame.fandom.com `Honor_Points`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-222.md
+- id: WIK-223
+  title: Fleet Union
+  url: ogame.fandom.com `Fleet_Union`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-223.md
+- id: WIK-225
+  title: Events
+  url: ogame.fandom.com `Events`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-225.md
+- id: WIK-226
+  title: Changelog version 7.0.0
+  url: ogame.fandom.com `Changelog_version_7.0.0`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-226.md
+- id: WIK-227
+  title: Changelog version 7.1
+  url: ogame.fandom.com `Changelog_version_7.1`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-227.md
+- id: WIK-228
+  title: Class
+  url: ogame.fandom.com `Class`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-228.md
+- id: WIK-229
+  title: OGame Starter Aid
+  url: ogame.fandom.com `OGame_Starter_Aid`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-229.md
+- id: WIK-230
+  title: Rewards
+  url: ogame.fandom.com `Rewards`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-230.md
+- id: WIK-231
+  title: Lifeform
+  url: ogame.fandom.com `Lifeform`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-231.md
+- id: WIK-232
+  title: Expedition/Logs
+  url: ogame.fandom.com `Expedition/Logs`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-232.md
+- id: WIK-233
+  title: Outlaw
+  url: ogame.fandom.com `Outlaw`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-233.md
+- id: WIK-234
+  title: NIGO Clan Alliance
+  url: ogame.fandom.com `NIGO_Clan_Alliance`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-234.md
+- id: WIK-235
+  title: Universe
+  url: ogame.fandom.com `Universe`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-235.md
+- id: WIK-237
+  title: Temperature
+  url: ogame.fandom.com `Temperature`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-237.md
+- id: WIK-239
+  title: Surrender colony
+  url: ogame.fandom.com `Surrender_colony`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-239.md
+- id: WIK-241
+  title: Solar System
+  url: ogame.fandom.com `Solar_System`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-241.md
+- id: WIK-242
+  title: Transport
+  url: ogame.fandom.com `Transport`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-242.md
+- id: WIK-243
+  title: Shipyard Screen
+  url: ogame.fandom.com `Shipyard_Screen`
+  capture_url: ''
+  family: wiki
+  domains: [concept]
+  retrieved_at: 2026-09-28
+  license: public page (CC-BY-SA)
+  raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-243.md
+# Example (delete before use — the id must not already exist in strategy/sources.yaml):
+# - id: RDT-005
+#   title: Example community thread
+#   url: reddit.com/r/OGame/<post-id>
+#   capture_url: web.archive.org/web/<timestamp>/https://reddit.com/r/OGame/<post-id>
+#   family: reddit
+#   domains: [personas]
+#   retrieved_at: 2026-09-24
+#   license: public page
