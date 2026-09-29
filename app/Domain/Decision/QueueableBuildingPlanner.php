@@ -202,6 +202,13 @@ class QueueableBuildingPlanner
     {
         $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
 
+        // A technology already in research anywhere on the account is not offered again: the host
+        // would take the row and then cancel it, so the capability is withheld instead of the
+        // decision being spent on a refusal.
+        if ($this->researchQueueService->activeResearchQueueItemCount($planet->getPlayer(), $candidate->buildingId) > 0) {
+            return null;
+        }
+
         $queueable = !$this->researchQueueService->retrieveQueue($planet)->isQueueFull()
             && ObjectService::objectRequirementsMetWithQueue($machineName, ($planet->getPlayer()?->getResearchLevel($machineName) ?? 0) + 1, $planet)
             && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::RESEARCH_HOURS));

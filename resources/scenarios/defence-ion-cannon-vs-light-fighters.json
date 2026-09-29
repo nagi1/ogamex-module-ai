@@ -1,0 +1,20 @@
+{
+    "name": "defence-ion-cannon-vs-light-fighters",
+    "description": "25 Ion Cannons against 150 Light Fighters at equal technology on both sides. Each Ion Cannon absorbs 500 damage per round, enough to hold the light fleet to a draw and to cost the attacker roughly 65 Light Fighters. Battleship class or heavier hulls erase the same stack instead of being drawn by it, so this scenario only covers the light fleet the shield fodder rule scores.",
+    "ion_cannon_shield_absorbed_per_round": 500,
+    "techs": "equal on both sides",
+    "attacker": {
+        "ships": {
+            "light_fighter": 150
+        }
+    },
+    "defender": {
+        "defences": {
+            "ion_cannon": 25
+        }
+    },
+    "expected": {
+        "outcome": "draw",
+        "attacker_losses": 65
+    }
+}

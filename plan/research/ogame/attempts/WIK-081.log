@@ -1,0 +1,45 @@
+DefenseStructuralIntegrityTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (8 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\DefenseStructuralIntegrityTest
+  ✓ it derives structural integrity as metal plus crystal and hull plat… 0.37s  
+  ⨯ it fills the doctrine gap that buys the greater hull plating rather… 0.06s  
+  ⨯ it fills the gap the planet can pay for when the hull-heavy unit is… 0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseStructuralIntegrityTes…  TypeError   
+  OGame\Models\Resources::__construct(): Argument #1 ($metal) must be of type int|float, array given, called in /var/www/Modules/AI/tests/Feature/DefenseStructuralIntegrityTest.php on line 62
+
+  at app/Models/Resources.php:12
+      8▕     public Resource $crystal;
+      9▕     public Resource $deuterium;
+     10▕     public Resource $energy;
+     11▕ 
+  ➜  12▕     public function __construct(int|float $metal = 0, int|float $crystal = 0, int|float $deuterium = 0, int|float $energy = 0)
+     13▕     {
+     14▕         $this->metal = new Resource($metal);
+     15▕         $this->crystal = new Resource($crystal);
+     16▕         $this->deuterium = new Resource($deuterium);
+
+  1   app/Models/Resources.php:12
+  2   Modules/AI/tests/Feature/DefenseStructuralIntegrityTest.php:62
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseStructuralIntegrityTes…  TypeError   
+  OGame\Models\Resources::__construct(): Argument #1 ($metal) must be of type int|float, array given, called in /var/www/Modules/AI/tests/Feature/DefenseStructuralIntegrityTest.php on line 62
+
+  at app/Models/Resources.php:12
+      8▕     public Resource $crystal;
+      9▕     public Resource $deuterium;
+     10▕     public Resource $energy;
+     11▕ 
+  ➜  12▕     public function __construct(int|float $metal = 0, int|float $crystal = 0, int|float $deuterium = 0, int|float $energy = 0)
+     13▕     {
+     14▕         $this->metal = new Resource($metal);
+     15▕         $this->crystal = new Resource($crystal);
+     16▕         $this->deuterium = new Resource($deuterium);
+
+  1   app/Models/Resources.php:12
+  2   Modules/AI/tests/Feature/DefenseStructuralIntegrityTest.php:62
+
+
+  Tests:    2 failed, 1 passed (8 assertions)
+  Duration: 0.90s

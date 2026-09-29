@@ -1,0 +1,63 @@
+EspionageConceptSpecTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (1 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\EspionageConceptSpecTest
+  ⨯ the espionage concept is recorded under the research concept direct… 0.37s  
+  ⨯ every espionage statement carries the documented provenance tag      0.05s  
+  ⨯ the espionage note invents no numeric constant the source does not…  0.09s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EspionageConceptSpecTest > the espionage…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/EspionageConceptSpecTest.php:45
+     41▕     return $statements;
+     42▕ }
+     43▕ 
+     44▕ test('the espionage concept is recorded under the research concept directory', function () {
+  ➜  45▕     expect(is_file(espionageConceptSpecPath()))->toBeTrue();
+     46▕ });
+     47▕ 
+     48▕ test('every espionage statement carries the documented provenance tag', function () {
+     49▕     $statements = espionageConceptStatements(espionageConceptSpec());
+
+  1   Modules/AI/tests/Feature/EspionageConceptSpecTest.php:45
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EspionageConceptSpecTest…  ErrorException   
+  file_get_contents(/var/www/plan/research/ogame/concept/WIK-192-espionage.md): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/EspionageConceptSpecTest.php:26
+     22▕ }
+     23▕ 
+     24▕ function espionageConceptSpec(): string
+     25▕ {
+  ➜  26▕     return (string) file_get_contents(espionageConceptSpecPath());
+     27▕ }
+     28▕ 
+     29▕ function espionageConceptStatements(string $spec): array
+     30▕ {
+
+  1   Modules/AI/tests/Feature/EspionageConceptSpecTest.php:49
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EspionageConceptSpecTest…  ErrorException   
+  file_get_contents(/var/www/plan/research/ogame/concept/WIK-192-espionage.md): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/EspionageConceptSpecTest.php:26
+     22▕ }
+     23▕ 
+     24▕ function espionageConceptSpec(): string
+     25▕ {
+  ➜  26▕     return (string) file_get_contents(espionageConceptSpecPath());
+     27▕ }
+     28▕ 
+     29▕ function espionageConceptStatements(string $spec): array
+     30▕ {
+
+  1   Modules/AI/tests/Feature/EspionageConceptSpecTest.php:59
+
+
+  Tests:    3 failed (1 assertions)
+  Duration: 0.94s
+
+These files from your answer were refused and NOT written:
+- plan/research/ogame/concept/WIK-192-espionage.md (named after a source page — name it for what it does)

@@ -70,7 +70,7 @@ class ReplayAiScenarioAction
         $decisionKey = (string) $this->scalar($scenario, 'decision_key');
         $trace = app(DecisionEngine::class)->decide($persona, $perception, $decisionKey);
         $selected = $trace->selected;
-        return app()->makeWith(AiScenarioReplay::class, [
+        $replay = app()->makeWith(AiScenarioReplay::class, [
             'name' => (string) $this->scalar($scenario, 'name'),
             'persona' => $persona->archetype->name . '/' . $persona->skill_band->name . ' seed ' . $persona->random_seed,
             'observedAt' => $perception->observedAt,
@@ -82,6 +82,48 @@ class ReplayAiScenarioAction
             'refusals' => $trace->rejections,
             'alternatives' => $this->alternatives($trace->candidates),
         ]);
+
+        $this->assertExpected($scenario, $replay);
+
+        return $replay;
+    }
+
+    /**
+     * Fail the replay when the engine did not do what the scenario says it must.
+     *
+     * Without `expect` a scenario only reports what happened. With it, the scenario becomes an
+     * acceptance check for one rule under the exact conditions it describes -- a player in this
+     * situation must take this action -- which is the difference between proving the rule works and
+     * proving a class exists.
+     *
+     * @param array<string, mixed> $scenario
+     */
+    private function assertExpected(array $scenario, AiScenarioReplay $replay): void
+    {
+        $expect = $scenario['expect'] ?? null;
+        if (!is_array($expect)) {
+            return;
+        }
+
+        $action = $expect['action'] ?? null;
+        if (is_string($action) && strcasecmp($action, $replay->selectedAction) !== 0) {
+            throw new RuntimeException(sprintf(
+                'Scenario expected action %s but the engine chose %s (%s). Alternatives: %s',
+                $action,
+                $replay->selectedAction,
+                $replay->selectedReason,
+                json_encode($replay->alternatives)
+            ));
+        }
+
+        $reason = $expect['reason_contains'] ?? null;
+        if (is_string($reason) && !str_contains(strtolower($replay->selectedReason), strtolower($reason))) {
+            throw new RuntimeException(sprintf(
+                'Scenario expected the selected reason to contain "%s" but it was "%s".',
+                $reason,
+                $replay->selectedReason
+            ));
+        }
     }
 
     /**

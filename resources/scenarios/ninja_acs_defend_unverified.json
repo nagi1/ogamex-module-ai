@@ -1,0 +1,26 @@
+{
+    "id": "ninja_acs_defend_unverified",
+    "title": "Ninja bait while alliance combat support is only assumed",
+    "principle": "NIN-005",
+    "source": {
+        "kind": "wiki",
+        "confidence": "unverified",
+        "official": false
+    },
+    "situation": {
+        "attacker_intent": "raid",
+        "defender_posture": "ninja_bait",
+        "alliance_combat_support": {
+            "assumed": true,
+            "confirmed": false,
+            "confidence": "unverified",
+            "why": "the wiki describes alliance combat support only informally and states no mechanics the host has confirmed"
+        }
+    },
+    "expect": {
+        "verdict": "bait",
+        "bait_permitted": true,
+        "acs_flag": "unverified",
+        "acs_confirmed": false
+    }
+}

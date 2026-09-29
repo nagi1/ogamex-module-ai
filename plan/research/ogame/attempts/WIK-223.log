@@ -1,0 +1,26 @@
+FleetUnionDeferralTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (3 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Ai\FleetUnionDeferralTest
+  ⨯ it leaves fleet union joining to the host instead of planning a uni… 0.37s  
+  ✓ it ships no union specific plan or number for the account to act on  0.06s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\FleetUnionDeferralTest > i…  TypeError   
+  Modules\AI\Actions\RunAiSessionAction::handle(): Argument #1 ($profile) must be of type Modules\AI\Models\AiProfile, array given, called in /var/www/Modules/AI/tests/Feature/Ai/FleetUnionDeferralTest.php on line 57
+
+  at Modules/AI/app/Actions/RunAiSessionAction.php:32
+     28▕         private PlayerGameStateService $playerGameStateService,
+     29▕     ) {
+     30▕     }
+     31▕ 
+  ➜  32▕     public function handle(AiProfile $profile, AiWorkItem $workItem): void
+     33▕     {
+     34▕         // Scheduled actors have no HTTP page load to advance completed host queues. Use the host
+     35▕         // seam without stamping activity when the session later decides to do nothing.
+     36▕         if (User::query()->whereKey($profile->player_id)->exists()) {
+
+  1   Modules/AI/app/Actions/RunAiSessionAction.php:32
+  2   Modules/AI/tests/Feature/Ai/FleetUnionDeferralTest.php:57
+
+
+  Tests:    1 failed, 1 passed (3 assertions)
+  Duration: 0.84s

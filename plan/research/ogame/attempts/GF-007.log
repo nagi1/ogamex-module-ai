@@ -1,0 +1,52 @@
+DefenceRebuildValuationTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+   691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
+    692▕                     $key, get_class($this)
+    693▕                 ));
+    694▕
+
+      +7 vendor frames 
+  8   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:48
+  9   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:103
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenceRebuildV…  MassAssignmentException   
+  Add [name] to fillable property to allow mass assignment on [OGame\Models\Planet].
+
+  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
+    686▕             // the model, and all others will just get ignored for security reasons.
+    687▕             if ($this->isFillable($key)) {
+    688▕                 $this->setAttribute($key, $value);
+    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
+  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
+    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
+    692▕                     $key, get_class($this)
+    693▕                 ));
+    694▕
+
+      +7 vendor frames 
+  8   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:48
+  9   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:111
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenceRebuildV…  MassAssignmentException   
+  Add [name] to fillable property to allow mass assignment on [OGame\Models\Planet].
+
+  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
+    686▕             // the model, and all others will just get ignored for security reasons.
+    687▕             if ($this->isFillable($key)) {
+    688▕                 $this->setAttribute($key, $value);
+    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
+  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
+    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
+    692▕                     $key, get_class($this)
+    693▕                 ));
+    694▕
+
+      +7 vendor frames 
+  8   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:48
+  9   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:125
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 0.93s

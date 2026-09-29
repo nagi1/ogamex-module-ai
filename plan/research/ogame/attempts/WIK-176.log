@@ -1,0 +1,44 @@
+FleetFlightDistanceTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Ai\FleetFlightDistanceTest
+  ⨯ fleet target selection is deterministic for a repeated fixed situat… 0.36s  
+  ⨯ fleet target selection stays empty when no target lies in range      0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\FleetFlightDi…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:76
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\FleetFlightDi…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:88
+
+
+  Tests:    2 failed (0 assertions)
+  Duration: 0.83s

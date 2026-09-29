@@ -65,3 +65,5 @@ The 3H PR is accepted only when it proves all of the following:
 ## Later SDK capabilities
 
 Laravel AI embeddings, reranking, vector stores, files and provider tools are not implied by this decision. Consider each only in its existing semantic-retrieval or driver experiment after a measured need, a privacy/retention design and a separate budget/conformance gate. Streaming and broadcasting are likewise unnecessary for delayed AI-player replies unless a later player-facing UX explicitly needs token streaming.
+
+Classification — the TypeSafe **Jev** decision model, added in SDK v1.0 — is studied in [the Jev research note](../research/jev-decision-model.md). It is a paid provider call like any other, so the reservation, budget, provider-off and "one foreground request, no separate classifier chain" rules above apply to it unchanged, and it is not available in the SDK version this application currently pins.

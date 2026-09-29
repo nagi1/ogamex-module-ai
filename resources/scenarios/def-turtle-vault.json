@@ -1,0 +1,23 @@
+{
+    "doctrine": "def-turtle",
+    "planet": "vault",
+    "documented": {
+        "vault": {
+            "definition": "The vault planet is a colony whose stockpile is held behind its defences instead of being spent on further expansion, so the resources are still there after an attack rather than being rebuilt afterwards.",
+            "source": "plan/research/ogame/raw/wiki/ogame.fandom.com/def-turtle/WIK-019.md"
+        },
+        "mine_efficiency": {
+            "rule": "Mine levels on the vault planet are only raised while the production they add can be protected by the defences standing on the planet.",
+            "source": "plan/research/ogame/raw/wiki/ogame.fandom.com/def-turtle/WIK-019.md"
+        }
+    },
+    "contested": [
+        {
+            "id": "slot-8",
+            "claim": "The vault planet is also used to run slot-8 production.",
+            "confidence": "low",
+            "source": "unsourced",
+            "actionable": false
+        }
+    ]
+}

@@ -1,0 +1,24 @@
+WeaponPowerInputTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m (0 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Combat\WeaponPowerInputTest
+  ⨯ weapon power follows the weapon technology of the fleet owner        0.37s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Combat\WeaponPowerInputTest > wea…  Error   
+  Call to undefined method OGame\Factories\PlayerServiceFactory::createForUserId()
+
+  at Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:145
+    141▕     return null;
+    142▕ }
+    143▕ 
+    144▕ test('weapon power follows the weapon technology of the fleet owner', function () {
+  ➜ 145▕     $owner = $this->playerService ?? app(PlayerServiceFactory::class)->createForUserId($this->user->id);
+    146▕     $planet = $this->planetService ?? app(PlanetServiceFactory::class)->createForUserId($this->user->id);
+    147▕ 
+    148▕     $planet->addUnit(WEAPON_POWER_TEST_UNIT, 1);
+    149▕     $units = $planet->getShipUnits();
+
+  1   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:145
+
+
+  Tests:    1 failed (0 assertions)
+  Duration: 0.79s

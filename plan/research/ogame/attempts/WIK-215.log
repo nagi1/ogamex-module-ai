@@ -1,0 +1,16 @@
+DestroyedPlanetTest: suite not collectable
+
+Error 
+
+  Class "IsolatedAccountTestCase" not found
+
+  at Modules/AI/tests/Feature/Ai/DestroyedPlanetTest.php:10
+      6▕ use OGame\Models\Planet;
+      7▕ use OGame\Models\User;
+      8▕ use OGame\Services\ModuleSlotService;
+      9▕ 
+  ➜  10▕ class AiDestroyedPlanetTestCase extends IsolatedAccountTestCase
+     11▕ {
+     12▕     private const PILOT_POSITION = [1, 1, 1];
+     13▕ 
+     14▕     private const HOSTILE_POSITION = [1, 1, 9];

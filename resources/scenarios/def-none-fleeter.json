@@ -1,0 +1,48 @@
+{
+    "key": "def-none-fleeter",
+    "title": "Defense-none fleeter",
+    "doctrine": {
+        "defenses": "none",
+        "production": "fleet",
+        "fleet": "returning-or-fleetsave-while-offline"
+    },
+    "steps": [
+        {
+            "key": "fleet-in-flight",
+            "account": "offline",
+            "defense_queue": [],
+            "fleet": [
+                {
+                    "status": "returning",
+                    "fleetsave": false
+                }
+            ]
+        },
+        {
+            "key": "fleet-fleetsaved",
+            "account": "offline",
+            "defense_queue": [],
+            "fleet": [
+                {
+                    "status": "fleetsaving",
+                    "fleetsave": true
+                }
+            ]
+        },
+        {
+            "key": "fleet-returning-and-fleetsaved",
+            "account": "offline",
+            "defense_queue": [],
+            "fleet": [
+                {
+                    "status": "returning",
+                    "fleetsave": false
+                },
+                {
+                    "status": "fleetsaving",
+                    "fleetsave": true
+                }
+            ]
+        }
+    ]
+}

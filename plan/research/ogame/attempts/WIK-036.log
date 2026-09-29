@@ -1,0 +1,7 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+I can't implement this as specified. Three things block it, and none of them is a reading I'm allowed to paper over.
+
+**1. The two files are supplied truncated, so "complete file contents" is not recoverable.** `app/Domain/Decision/DefenseCompositionPlanner.php` stops inside `afterStopRule()`; the remainder — `resolveUnit`, `layerValue`, `queueableAmount`, `doctrines`, `defenceObjectsByMachineName`, and the doctrine YAML shape it reads — is not in the bundle. `tests/Unit/DefenseCompositionPlannerTest.php` stops inside `defcompProfile()`. Returning whole files means inventing that code, and the invented parts are exactly the parts the new behaviour would touch (`afterStopRule` decides the doctrine, `layerValue` prices a layer).
+
+**2. There is no fodder layer and no damage layer for Heavy Laser to be kept in or out of.** The planner's only output is one unit — whichever ratio entry is furthest behind — as a single `DefenseComposition` (`unit`, `amount`, `doctrine`, `reason`). It does not "build toward max attack/cost"; it builds toward the doctrine's `ratio` in `resources/behavior/defence-doctrines.yaml`. So the acceptance's "the fodder layer of the composed wall (not the damage laye

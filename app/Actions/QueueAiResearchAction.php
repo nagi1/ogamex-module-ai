@@ -53,6 +53,16 @@ class QueueAiResearchAction implements QueueAiResearch
                 return AiActionResult::rejected(AiQueueActionReason::NotAResearch);
             }
 
+            // Research is one technology at a time for the whole account, and the host derives the
+            // target level from the count of rows already active for that technology. Two sessions
+            // queueing the same technology therefore both aim at the same level, and the host cancels
+            // the loser as "requirements not met" the moment the first one lands -- which is how 205
+            // of the newest 300 rows on the grand cohort ended up cancelled. A player does not queue a
+            // technology that is already in research, so neither does this.
+            if ($this->researchQueueService->activeResearchQueueItemCount($player, $researchId) > 0) {
+                return AiActionResult::rejected(AiQueueActionReason::AlreadyResearching);
+            }
+
             $this->researchQueueService->add($player, $planet, $researchId);
             $queueId = ResearchQueue::query()
                 ->where('planet_id', $planetId)

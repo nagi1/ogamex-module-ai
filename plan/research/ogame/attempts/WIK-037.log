@@ -1,0 +1,13 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+I cannot produce the file: the acceptance cannot be satisfied as written, and the fix the task asks for would require me to invent something.
+
+What I know from the failed run:
+
+- `app(Modules\AI\Domain\Defense\DefenseCompositionPlanner::class)` on line 49 of the test threw `BindingResolutionException: Target class [...] does not exist.` The class is not in `Modules/AI` — this is not a container binding or `uses(...)` problem, `class_exists()` fails outright.
+- The plan's own bundle is 2316 bytes of wiki text with no code context, and WIK-037's DECISION says Section 2 states no numbers and Section 7 lists no doctrine variant. So `DefenseCompositionPlanner` has no source in the module to be derived from: it is the plan model's name for a concept ("defence composition"), not a class the module owns.
+- The only file I am allowed to touch is `tests/Unit/Ai/DefenceCompositionPlannerTest.php`. I cannot add the planner, and I cannot make an existing class appear by naming it differently.
+
+Why I will not "fix exactly that":
+
+1. Renaming the reference to another guessed FQN (`Defence...`, different sub-namespace, `...Planner` variants) just moves the same invention one guess along; the run f

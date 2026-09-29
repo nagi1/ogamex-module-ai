@@ -1,0 +1,16 @@
+{
+    "headhunt": {
+        "name": "Headhunt",
+        "kind": "doctrine",
+        "source": "community-wiki",
+        "confidence": "medium",
+        "summary": "Community doctrine: farm inactive or abandoned empires whose holdings are undefended and can be carried away before the owner returns.",
+        "conditions": [
+            "target_is_inactive_or_abandoned",
+            "target_is_undefended",
+            "target_holds_harvestable_resources",
+            "hauling_capacity_covers_holdings",
+            "owner_response_risk_is_low"
+        ]
+    }
+}

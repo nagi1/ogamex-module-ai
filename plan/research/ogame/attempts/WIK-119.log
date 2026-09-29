@@ -1,0 +1,64 @@
+UnconfirmedWikiNoteTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+d
+  ⨯ it names no doctrine variant from this unconfirmed source
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\UnconfirmedWikiNoteTes…  RuntimeException   
+  The unconfirmed source note is missing from /var/www/Modules/AI/plan/research/ogame/strategy/WIK-119.md and /var/www/plan/research/ogame/strategy/WIK-119.md
+
+  at Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:25
+     21▕             return $candidate;
+     22▕         }
+     23▕     }
+     24▕ 
+  ➜  25▕     throw new RuntimeException('The unconfirmed source note is missing from ' . implode(' and ', $candidates));
+     26▕ }
+     27▕ 
+     28▕ function unconfirmedNoteText(): string
+     29▕ {
+
+  1   Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:25
+  2   Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:30
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\UnconfirmedWikiNoteTes…  RuntimeException   
+  The unconfirmed source note is missing from /var/www/Modules/AI/plan/research/ogame/strategy/WIK-119.md and /var/www/plan/research/ogame/strategy/WIK-119.md
+
+  at Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:25
+     21▕             return $candidate;
+     22▕         }
+     23▕     }
+     24▕ 
+  ➜  25▕     throw new RuntimeException('The unconfirmed source note is missing from ' . implode(' and ', $candidates));
+     26▕ }
+     27▕ 
+     28▕ function unconfirmedNoteText(): string
+     29▕ {
+
+  1   Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:25
+  2   Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:53
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\UnconfirmedWikiNoteTes…  RuntimeException   
+  The unconfirmed source note is missing from /var/www/Modules/AI/plan/research/ogame/strategy/WIK-119.md and /var/www/plan/research/ogame/strategy/WIK-119.md
+
+  at Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:25
+     21▕             return $candidate;
+     22▕         }
+     23▕     }
+     24▕ 
+  ➜  25▕     throw new RuntimeException('The unconfirmed source note is missing from ' . implode(' and ', $candidates));
+     26▕ }
+     27▕ 
+     28▕ function unconfirmedNoteText(): string
+     29▕ {
+
+  1   Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:25
+  2   Modules/AI/tests/Feature/UnconfirmedWikiNoteTest.php:30
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 0.43s
+
+These files from your answer were refused and NOT written:
+- plan/research/ogame/strategy/WIK-119.md (named after a source page — name it for what it does)

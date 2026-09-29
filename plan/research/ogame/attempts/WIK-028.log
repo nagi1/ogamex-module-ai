@@ -1,0 +1,66 @@
+RecommendResourceHidingTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (0 assertions)[39m
+
+throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RecommendResourceHidingTest.php:35
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RecommendRes…  BindingResolutionException   
+  Target class [Modules\AI\Actions\RecommendResourceHiding] does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
+    1143▕             }
+    1144▕         }
+    1145▕ 
+    1146▕         try {
+  ➜ 1147▕             $reflector = new ReflectionClass($concrete);
+    1148▕         } catch (ReflectionException $e) {
+    1149▕             throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RecommendResourceHidingTest.php:45
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RecommendRes…  BindingResolutionException   
+  Target class [Modules\AI\Actions\RecommendResourceHiding] does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
+    1143▕             }
+    1144▕         }
+    1145▕ 
+    1146▕         try {
+  ➜ 1147▕             $reflector = new ReflectionClass($concrete);
+    1148▕         } catch (ReflectionException $e) {
+    1149▕             throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RecommendResourceHidingTest.php:57
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RecommendRes…  BindingResolutionException   
+  Target class [Modules\AI\Actions\RecommendResourceHiding] does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
+    1143▕             }
+    1144▕         }
+    1145▕ 
+    1146▕         try {
+  ➜ 1147▕             $reflector = new ReflectionClass($concrete);
+    1148▕         } catch (ReflectionException $e) {
+    1149▕             throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RecommendResourceHidingTest.php:74
+
+
+  Tests:    6 failed (0 assertions)
+  Duration: 0.57s

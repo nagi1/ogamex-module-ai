@@ -1,0 +1,68 @@
+MoonChanceCalculatorTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (2 assertions)[39m
+
+resources/behavior/moon_chance.php';
+     81▕ 
+     82▕         return $values;
+     83▕     }
+     84▕ }
+
+  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
+  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MoonChanceCalculatorTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moon_chance.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/MoonChanceCalculator.php:80
+     76▕     private static function behavior(): array
+     77▕     {
+     78▕         static $values = null;
+     79▕ 
+  ➜  80▕         $values ??= require dirname(__DIR__, 2) . '/resources/behavior/moon_chance.php';
+     81▕ 
+     82▕         return $values;
+     83▕     }
+     84▕ }
+
+  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
+  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MoonChanceCalculatorTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moon_chance.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/MoonChanceCalculator.php:80
+     76▕     private static function behavior(): array
+     77▕     {
+     78▕         static $values = null;
+     79▕ 
+  ➜  80▕         $values ??= require dirname(__DIR__, 2) . '/resources/behavior/moon_chance.php';
+     81▕ 
+     82▕         return $values;
+     83▕     }
+     84▕ }
+
+  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
+  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MoonChanceCalculatorTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moon_chance.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/MoonChanceCalculator.php:80
+     76▕     private static function behavior(): array
+     77▕     {
+     78▕         static $values = null;
+     79▕ 
+  ➜  80▕         $values ??= require dirname(__DIR__, 2) . '/resources/behavior/moon_chance.php';
+     81▕ 
+     82▕         return $values;
+     83▕     }
+     84▕ }
+
+  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
+  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+
+
+  Tests:    5 failed, 1 passed (2 assertions)
+  Duration: 1.05s

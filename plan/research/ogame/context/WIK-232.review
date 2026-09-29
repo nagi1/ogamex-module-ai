@@ -1,0 +1,2 @@
+failed validation twice; retried automatically after the cool-off:
+- file tests/Unit/Ai/ExpeditionLogsAbsenceTest.php: unit tests are not accepted — write a Feature test instead

@@ -1,0 +1,68 @@
+RaidProfitGateTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+thodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RaidProfitGateTest.php:66
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RaidProfitGateTe…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RaidProfitGateTest.php:66
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RaidProfitGateTe…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RaidProfitGateTest.php:66
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RaidProfitGateTe…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/RaidProfitGateTest.php:66
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 1.02s

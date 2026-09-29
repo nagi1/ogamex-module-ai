@@ -1,0 +1,58 @@
+DefenseValuationTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+efense/DefenseValuation.php:44
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseValuationTest > i…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/defense_valuation.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/Defense/DefenseValuation.php:57
+     53▕      * @return array{metal_weighting: array<string, float>, efficiency_scale: int|float}
+     54▕      */
+     55▕     private function behavior(): array
+     56▕     {
+  ➜  57▕         return require dirname(__DIR__, 3) . '/resources/behavior/defense_valuation.php';
+     58▕     }
+     59▕ }
+     60▕
+
+  1   Modules/AI/app/Support/Defense/DefenseValuation.php:57
+  2   Modules/AI/app/Support/Defense/DefenseValuation.php:44
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseValuationTest > i…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/defense_valuation.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/Defense/DefenseValuation.php:57
+     53▕      * @return array{metal_weighting: array<string, float>, efficiency_scale: int|float}
+     54▕      */
+     55▕     private function behavior(): array
+     56▕     {
+  ➜  57▕         return require dirname(__DIR__, 3) . '/resources/behavior/defense_valuation.php';
+     58▕     }
+     59▕ }
+     60▕
+
+  1   Modules/AI/app/Support/Defense/DefenseValuation.php:57
+  2   Modules/AI/app/Support/Defense/DefenseValuation.php:44
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseValuationTest > i…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/defense_valuation.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/DefenseValuationTest.php:124
+    120▕         ->and($ranked[1]['weapons_per_cost'])->toBeNull();
+    121▕ });
+    122▕ 
+    123▕ it('takes the metal weighting and the efficiency scale from the behaviour data file', function () {
+  ➜ 124▕     $behavior = require dirname(__DIR__, 2) . '/resources/behavior/defense_valuation.php';
+    125▕ 
+    126▕     $ranked = app(RankDefenseCandidatesAction::class)->execute([
+    127▕         [
+    128▕             'key' => 'candidate',
+
+  1   Modules/AI/tests/Feature/DefenseValuationTest.php:124
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 0.94s

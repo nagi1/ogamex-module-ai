@@ -1,0 +1,29 @@
+DiplomacyConceptAbsenceTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (4 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\DiplomacyConceptAbsenceTest
+  ✓ it exposes no diplomacy contract anywhere in the module source       0.01s  
+  ✓ it detects a diplomacy contract as soon as one is added, so the absence check bites
+  ⨯ it records the source as an unconfirmed community wiki entry with u… 0.01s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DiplomacyConceptAbsenceTest > it records…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/DiplomacyConceptAbsenceTest.php:163
+    159▕ 
+    160▕ it('records the source as an unconfirmed community wiki entry with unresolved mechanics', function () {
+    161▕     $specPath = aiDiplomacySpecPath();
+    162▕ 
+  ➜ 163▕     expect(is_file($specPath))->toBeTrue();
+    164▕ 
+    165▕     $facts = aiDiplomacySpecFacts($specPath);
+    166▕ 
+    167▕     expect($facts['source'] ?? null)->toBe('WIK-205')
+
+  1   Modules/AI/tests/Feature/DiplomacyConceptAbsenceTest.php:163
+
+
+  Tests:    1 failed, 2 passed (4 assertions)
+  Duration: 0.46s
+
+These files from your answer were refused and NOT written:
+- plan/ogame/WIK-205-diplomacy.md (named after a source page — name it for what it does)

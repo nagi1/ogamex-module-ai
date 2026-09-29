@@ -1,0 +1,61 @@
+EvaluateRaidPillageCapTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (1 assertions)[39m
+
+Action.php:26
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EvaluateRaidPillageCapTe…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/raid_pillage_cap.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:47
+     43▕      * without reading the rule.
+     44▕      */
+     45▕     private function lootFraction(): float
+     46▕     {
+  ➜  47▕         $behaviour = require dirname(__DIR__, 2) . '/resources/behavior/raid_pillage_cap.php';
+     48▕ 
+     49▕         return (float) $behaviour['loot_fraction'];
+     50▕     }
+     51▕ }
+
+  1   Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:47
+  2   Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:26
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EvaluateRaidPillageCapTe…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/raid_pillage_cap.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:47
+     43▕      * without reading the rule.
+     44▕      */
+     45▕     private function lootFraction(): float
+     46▕     {
+  ➜  47▕         $behaviour = require dirname(__DIR__, 2) . '/resources/behavior/raid_pillage_cap.php';
+     48▕ 
+     49▕         return (float) $behaviour['loot_fraction'];
+     50▕     }
+     51▕ }
+
+  1   Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:47
+  2   Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:26
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EvaluateRaidPillageCapTe…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/raid_pillage_cap.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:47
+     43▕      * without reading the rule.
+     44▕      */
+     45▕     private function lootFraction(): float
+     46▕     {
+  ➜  47▕         $behaviour = require dirname(__DIR__, 2) . '/resources/behavior/raid_pillage_cap.php';
+     48▕ 
+     49▕         return (float) $behaviour['loot_fraction'];
+     50▕     }
+     51▕ }
+
+  1   Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:47
+  2   Modules/AI/app/Actions/EvaluateRaidPillageCapAction.php:26
+
+
+  Tests:    5 failed, 1 passed (1 assertions)
+  Duration: 1.04s

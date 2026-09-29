@@ -1,0 +1,62 @@
+EspionageTargetRankingTest: [90mTests:[39m    [31;1m7 failed[39;22m[90m (0 assertions)[39m
+
+──────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EspionageTargetRankingTe…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/planet_field_limits.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Espionage/EspionageTargetRanking.php:92
+     88▕ 
+     89▕     private function documentedLimits(): array
+     90▕     {
+     91▕         if ($this->documentedLimits === null) {
+  ➜  92▕             $this->documentedLimits = require dirname(__DIR__, 2) . '/resources/behavior/planet_field_limits.php';
+     93▕         }
+     94▕ 
+     95▕         return $this->documentedLimits;
+     96▕     }
+
+  1   Modules/AI/app/Espionage/EspionageTargetRanking.php:92
+  2   Modules/AI/app/Espionage/EspionageTargetRanking.php:50
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EspionageTargetRankingTe…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/planet_field_limits.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Espionage/EspionageTargetRanking.php:92
+     88▕ 
+     89▕     private function documentedLimits(): array
+     90▕     {
+     91▕         if ($this->documentedLimits === null) {
+  ➜  92▕             $this->documentedLimits = require dirname(__DIR__, 2) . '/resources/behavior/planet_field_limits.php';
+     93▕         }
+     94▕ 
+     95▕         return $this->documentedLimits;
+     96▕     }
+
+  1   Modules/AI/app/Espionage/EspionageTargetRanking.php:92
+  2   Modules/AI/app/Espionage/EspionageTargetRanking.php:50
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EspionageTargetRankingTe…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/planet_field_limits.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Espionage/EspionageTargetRanking.php:92
+     88▕ 
+     89▕     private function documentedLimits(): array
+     90▕     {
+     91▕         if ($this->documentedLimits === null) {
+  ➜  92▕             $this->documentedLimits = require dirname(__DIR__, 2) . '/resources/behavior/planet_field_limits.php';
+     93▕         }
+     94▕ 
+     95▕         return $this->documentedLimits;
+     96▕     }
+
+  1   Modules/AI/app/Espionage/EspionageTargetRanking.php:92
+  2   Modules/AI/app/Espionage/EspionageTargetRanking.php:50
+
+
+  Tests:    7 failed (0 assertions)
+  Duration: 1.09s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/planet_field_limits.php (data must be YAML or JSON so a modder can edit it without code)

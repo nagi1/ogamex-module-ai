@@ -1,0 +1,27 @@
+CanReclaimQueuedResourcesTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (2 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\CanReclaimQueuedResourcesTest
+  ⨯ it blocks reclaiming queued resources while the cancel refund is un… 0.37s  
+  ✓ it allows reclaiming queued resources once an official source verif… 0.06s  
+  ✓ it blocks reclaiming queued resources when canceling returns nothin… 0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\CanReclaimQueuedResource…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/defense_cancel_refund.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Ai/Doctrine/DefenseCancelRefundClaim.php:28
+     24▕      */
+     25▕     public static function fromBehavior(?string $behaviorFile = null): self
+     26▕     {
+     27▕         $path = $behaviorFile ?? dirname(__DIR__, 3) . '/resources/behavior/defense_cancel_refund.php';
+  ➜  28▕         $behavior = require $path;
+     29▕ 
+     30▕         return new self(
+     31▕             refundsResources: (bool) $behavior['refunds_resources'],
+     32▕             confidence: (string) $behavior['confidence'],
+
+  1   Modules/AI/app/Ai/Doctrine/DefenseCancelRefundClaim.php:28
+  2   Modules/AI/tests/Feature/CanReclaimQueuedResourcesTest.php:10
+
+
+  Tests:    1 failed, 2 passed (2 assertions)
+  Duration: 0.90s

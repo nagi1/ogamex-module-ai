@@ -1,0 +1,42 @@
+ShieldPowerSpecTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (2 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Domain\Combat\ShieldPowerSpecTest
+  ⨯ it records the shield power claim as an unconfirmed medium confiden… 0.37s  
+  ⨯ it records no shield value constant, because the source states no n… 0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Domain\Combat\ShieldPowerSpecTest > it r…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:24
+     20▕ 
+     21▕ it('records the shield power claim as an unconfirmed medium confidence claim', function () {
+     22▕     $path = shieldPowerSpecPath();
+     23▕ 
+  ➜  24▕     expect(is_file($path))->toBeTrue();
+     25▕ 
+     26▕     $spec = (string) file_get_contents($path);
+     27▕ 
+     28▕     expect($spec)->toMatch('/provenance:\s*WIK-083/')
+
+  1   Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:24
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Domain\Combat\ShieldPowerSpecTest > it r…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:36
+     32▕ 
+     33▕ it('records no shield value constant, because the source states no number', function () {
+     34▕     $path = shieldPowerSpecPath();
+     35▕ 
+  ➜  36▕     expect(is_file($path))->toBeTrue();
+     37▕ 
+     38▕     $spec = (string) file_get_contents($path);
+     39▕ 
+     40▕     expect($spec)->toMatch('/shield/i')
+
+  1   Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:36
+
+
+  Tests:    2 failed (2 assertions)
+  Duration: 0.85s

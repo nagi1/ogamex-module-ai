@@ -1,0 +1,7 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+I cannot deliver WIK-220, and I am not shipping a file for it. This is not a workaround of the rejection — it is the rejection being correct about a plan that has no implementable content.
+
+**The source states no behaviour.** Section 2 carries no numbers, section 7 no doctrine, section 4 no existing principle, and the plan itself records `PRINCIPLES: - none`. Everything the module is built on — a ratio, a cap, a cost, a threshold — is absent, so there is nothing to put in a `resources/behavior/` file, nothing for a modder to tune, and nothing for the planner or engine to branch on. A rule whose only output is "here are the members" does not change any decision, which is why the previous attempt's `MemberRoster` could only ever be dead weight: with no stated weighing, no existing runtime path has a reason to read it, and the plan offers no candidate consumer to wire it into. The RISKS entry says as much ("a roster reader with no consumers is dead weight") and then declines to name a consumer.
+
+**A scenario cannot be written.** A scenario must assert the action this rule produces, e.g. `"expect": {"action": "Build", "reason_contains": "defense"}`. The rule produces no action, so any 

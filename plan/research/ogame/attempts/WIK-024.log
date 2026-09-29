@@ -1,0 +1,59 @@
+SafetyProbeWindowTest: [90mTests:[39m    [31;1m8 failed[39;22m[90m (0 assertions)[39m
+
+───────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Unit\SafetyProbeWindowTest > it probes on…  Error   
+  Failed opening required '/var/www/Modules/AI/resources/behavior/safety_probe_window.php' (include_path='.:/usr/local/lib/php')
+
+  at Modules/AI/app/Support/SafetyProbeWindow.php:43
+     39▕      */
+     40▕     private static function offsets(): array
+     41▕     {
+     42▕         /** @var array{probe_offset_minutes: int, delayed_return_offset_minutes: int} $offsets */
+  ➜  43▕         $offsets = require dirname(__DIR__, 2) . '/resources/behavior/' . self::BEHAVIOUR_FILE;
+     44▕ 
+     45▕         return $offsets;
+     46▕     }
+     47▕ }
+
+  1   Modules/AI/app/Support/SafetyProbeWindow.php:43
+  2   Modules/AI/app/Support/SafetyProbeWindow.php:29
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Unit\SafetyProbeWindowTest > it shifts bo…  Error   
+  Failed opening required '/var/www/Modules/AI/resources/behavior/safety_probe_window.php' (include_path='.:/usr/local/lib/php')
+
+  at Modules/AI/app/Support/SafetyProbeWindow.php:43
+     39▕      */
+     40▕     private static function offsets(): array
+     41▕     {
+     42▕         /** @var array{probe_offset_minutes: int, delayed_return_offset_minutes: int} $offsets */
+  ➜  43▕         $offsets = require dirname(__DIR__, 2) . '/resources/behavior/' . self::BEHAVIOUR_FILE;
+     44▕ 
+     45▕         return $offsets;
+     46▕     }
+     47▕ }
+
+  1   Modules/AI/app/Support/SafetyProbeWindow.php:43
+  2   Modules/AI/app/Support/SafetyProbeWindow.php:29
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Unit\SafetyProbeWindowTest > it keeps the…  Error   
+  Failed opening required '/var/www/Modules/AI/resources/behavior/safety_probe_window.php' (include_path='.:/usr/local/lib/php')
+
+  at Modules/AI/app/Support/SafetyProbeWindow.php:43
+     39▕      */
+     40▕     private static function offsets(): array
+     41▕     {
+     42▕         /** @var array{probe_offset_minutes: int, delayed_return_offset_minutes: int} $offsets */
+  ➜  43▕         $offsets = require dirname(__DIR__, 2) . '/resources/behavior/' . self::BEHAVIOUR_FILE;
+     44▕ 
+     45▕         return $offsets;
+     46▕     }
+     47▕ }
+
+  1   Modules/AI/app/Support/SafetyProbeWindow.php:43
+  2   Modules/AI/app/Support/SafetyProbeWindow.php:29
+
+
+  Tests:    8 failed (0 assertions)
+  Duration: 1.10s

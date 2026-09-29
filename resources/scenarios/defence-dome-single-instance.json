@@ -1,0 +1,48 @@
+{
+    "name": "defence-dome-single-instance",
+    "source": "Only one Small Shield Dome and one Large Shield Dome may be built on a planet; a dome is one unit of fodder.",
+    "planets": [
+        {
+            "name": "neither-built-nor-queued",
+            "built": {},
+            "queued": {},
+            "requested": ["SmallShieldDome", "SmallShieldDome", "LargeShieldDome", "LargeShieldDome"],
+            "expected": ["SmallShieldDome", "LargeShieldDome"]
+        },
+        {
+            "name": "both-dome-types-already-built",
+            "built": {"SmallShieldDome": 1, "LargeShieldDome": 1},
+            "queued": {},
+            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "expected": []
+        },
+        {
+            "name": "large-dome-already-in-the-build-queue",
+            "built": {},
+            "queued": {"LargeShieldDome": 1},
+            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "expected": ["SmallShieldDome"]
+        },
+        {
+            "name": "small-dome-queued-and-large-dome-built",
+            "built": {"LargeShieldDome": 1},
+            "queued": {"SmallShieldDome": 1},
+            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "expected": []
+        },
+        {
+            "name": "past-the-single-instance-limit",
+            "built": {"SmallShieldDome": 3, "LargeShieldDome": 2},
+            "queued": {},
+            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "expected": []
+        },
+        {
+            "name": "the-guard-is-dome-only",
+            "built": {"RocketLauncher": 10},
+            "queued": {},
+            "requested": ["RocketLauncher", "RocketLauncher", "RocketLauncher"],
+            "expected": ["RocketLauncher", "RocketLauncher", "RocketLauncher"]
+        }
+    ]
+}

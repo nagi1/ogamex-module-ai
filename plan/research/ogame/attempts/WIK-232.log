@@ -1,0 +1,46 @@
+ExpeditionLogsAbsenceTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (5 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\ExpeditionLogsAbsenceTest
+  ⨯ it has no expedition-log decision branch in the AI runtime sources   0.36s  
+  ✓ it has no expedition-log case on the values the planner decides wit… 0.06s  
+  ✓ it keeps the expedition-log spec note free of numeric mechanics      0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ExpeditionLogsAbsenceTest > it has no ex…   
+  Failed asserting that two arrays are identical.
+  -Array &0 []
+  +Array &0 [
+  +    0 => '/var/www/Modules/AI/app/Actions/QueueAiExpeditionAction.php',
+  +    1 => '/var/www/Modules/AI/app/Actions/ScheduleAiIntentAction.php',
+  +    2 => '/var/www/Modules/AI/app/Actions/ExecuteAiIntentAction.php',
+  +    3 => '/var/www/Modules/AI/app/Ai/Knowledge/IncomeSourceLimitations.php',
+  +    4 => '/var/www/Modules/AI/app/Providers/AIServiceProvider.php',
+  +    5 => '/var/www/Modules/AI/app/Domain/Decision/QueueableExpedition.php',
+  +    6 => '/var/www/Modules/AI/app/Domain/Decision/CandidateActionFactory.php',
+  +    7 => '/var/www/Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php',
+  +    8 => '/var/www/Modules/AI/app/Domain/Decision/FacilityChain.php',
+  +    9 => '/var/www/Modules/AI/app/Domain/Decision/QueueableRecyclePlanner.php',
+  +    10 => '/var/www/Modules/AI/app/Domain/Decision/Policies/ExpeditionDurationPolicy.php',
+  +    11 => '/var/www/Modules/AI/app/Domain/Perception/PlayerObservationService.php',
+  +    12 => '/var/www/Modules/AI/app/Contracts/QueueAiExpedition.php',
+  +    13 => '/var/www/Modules/AI/app/Enums/AiCandidateActionType.php',
+  +    14 => '/var/www/Modules/AI/app/Enums/AiCandidateReason.php',
+  +    15 => '/var/www/Modules/AI/app/Enums/AiWorkKind.php',
+  +]
+  
+
+  at Modules/AI/tests/Feature/ExpeditionLogsAbsenceTest.php:84
+     80▕         $this->decisionSources(),
+     81▕         fn (string $path) => str_contains(strtolower((string) file_get_contents($path)), 'expedition')
+     82▕     ));
+     83▕ 
+  ➜  84▕     expect($offenders)->toBe([]);
+     85▕ });
+     86▕ 
+     87▕ it('has no expedition-log case on the values the planner decides with', function () {
+     88▕     $cases = [
+
+  1   Modules/AI/tests/Feature/ExpeditionLogsAbsenceTest.php:84
+
+
+  Tests:    1 failed, 2 passed (5 assertions)
+  Duration: 0.90s

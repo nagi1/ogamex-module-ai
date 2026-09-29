@@ -58,8 +58,7 @@ class QueueableUnitPlanner
         private QueueableBuildingPlanner $buildingPlanner,
         private DefenseCompositionPlanner $defenseComposition,
         private DefenseNeedEvaluator $defenseNeed,
-    ) {
-    }
+    ) {}
 
     public function plan(int $playerId, ?PlayerService $player = null): ?QueueableUnit
     {
@@ -68,7 +67,7 @@ class QueueableUnitPlanner
             return null;
         }
 
-        if (!User::query()->whereKey($playerId)->exists()) {
+        if (! User::query()->whereKey($playerId)->exists()) {
             return null;
         }
 
@@ -80,13 +79,19 @@ class QueueableUnitPlanner
 
         $underAttack = $this->underAttack($player);
 
+        // Standing defence is collected across the account and chosen once at the end. Returning on
+        // the first planet that wanted anything let the planet with the most to lose take every order:
+        // need grows with production, so the homeworld's need was never satisfied and its colonies were
+        // never reached -- 125 of 158 grand-test planets sat at zero defence while one held 40,643.
+        $standing = [];
+
         // Power outranks the habits below but not an incoming attack. A planet that is throttling
         // loses production every hour it stays short, wherever it sits on the account, so it is
         // answered before a habit on another planet gets its turn -- the same reason the building
         // planner runs its storage pass before its routine. The building planner has already
         // refreshed every planet's balance earlier in this perception, so the shortfall read here
         // is the session's own.
-        if (!$underAttack) {
+        if (! $underAttack) {
             foreach ($planets as $planet) {
                 $power = $this->powerFromYard($planet);
                 if ($power !== null) {
@@ -107,7 +112,7 @@ class QueueableUnitPlanner
             if ($this->ownsNoShip($planet)) {
                 $cargo = $this->bestCargo($player, $planet);
                 if ($cargo !== null) {
-                    return $this->unit($planet, $cargo, 'role:cargo:' . $cargo->machine_name);
+                    return $this->unit($planet, $cargo, 'role:cargo:'.$cargo->machine_name);
                 }
 
                 continue;
@@ -119,13 +124,13 @@ class QueueableUnitPlanner
             if ($underAttack) {
                 $defense = $this->defenseComposition->plan($player, $planet, $need);
                 if ($defense !== null) {
-                    return $this->unit($planet, $defense->unit, 'role:defense:' . $defense->unit->machine_name, $defense->amount);
+                    return $this->unit($planet, $defense->unit, 'role:defense:'.$defense->unit->machine_name, $defense->amount);
                 }
             }
 
             // Expansion: a colony ship once a fleet exists, the account has room, and none is
             // already owned. One colony ship is the second planet every later fleet move needs.
-            if (!$this->ownsColonyShip($planet) && $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
+            if (! $this->ownsColonyShip($planet) && $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
                 $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $colonyShip)) {
                     return $this->unit($planet, $colonyShip, 'role:colony');
@@ -133,7 +138,7 @@ class QueueableUnitPlanner
             }
 
             // Scouting: a probe once a fleet exists, so the account can start seeing neighbours.
-            if (!$this->ownsProbe($planet)) {
+            if (! $this->ownsProbe($planet)) {
                 $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $probe)) {
                     return $this->unit($planet, $probe, 'role:probe');
@@ -146,7 +151,7 @@ class QueueableUnitPlanner
             if ($this->observedDefendedTarget($playerId)) {
                 $escort = $this->bestEscort($player, $planet);
                 if ($escort !== null && $this->needsEscort($player, $planet, $escort)) {
-                    return $this->unit($planet, $escort, 'role:escort:' . $escort->machine_name);
+                    return $this->unit($planet, $escort, 'role:escort:'.$escort->machine_name);
                 }
             }
 
@@ -160,14 +165,26 @@ class QueueableUnitPlanner
             // Standing defence: what the planet stands to lose decides whether it wants a wall and
             // how big, so it is never naked between attacks -- not only when the host already says
             // a hostile is inbound. A planet whose wall already covers its exposure wants nothing.
+            // Candidates are collected rather than returned: the choice between them is made below,
+            // where the whole account is visible.
             if ($need === null) {
                 continue;
             }
 
             $defense = $this->defenseComposition->plan($player, $planet, $need);
             if ($defense !== null) {
-                return $this->unit($planet, $defense->unit, 'role:defense:standing:' . $defense->unit->machine_name, $defense->amount);
+                $standing[] = [$planet, $defense];
             }
+        }
+
+        if ($standing !== []) {
+            // The least-defended planet that still wants a wall takes the next order, so a wall rises
+            // everywhere it is wanted instead of forever in one place. Counting units rather than
+            // pricing them keeps this one comparison and no second valuation.
+            usort($standing, static fn (array $a, array $b): int => $a[0]->getDefenseUnits()->getAmount() <=> $b[0]->getDefenseUnits()->getAmount());
+            [$planet, $defense] = $standing[0];
+
+            return $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $defense->amount);
         }
 
         return null;
@@ -260,8 +277,8 @@ class QueueableUnitPlanner
      * can queue. Cargo ranks capacity, combat and defence rank attack: both are "most X per unit
      * of resources", and both numbers come from the host.
      *
-     * @param array<int, UnitObject> $units
-     * @param 'capacity'|'attack' $property
+     * @param  array<int, UnitObject>  $units
+     * @param  'capacity'|'attack'  $property
      */
     private function bestByProperty(PlayerService $player, PlanetService $planet, array $units, string $property): ?UnitObject
     {
@@ -274,7 +291,7 @@ class QueueableUnitPlanner
                 continue;
             }
 
-            if (!$this->queueable($planet, $unit)) {
+            if (! $this->queueable($planet, $unit)) {
                 continue;
             }
 
@@ -329,7 +346,7 @@ class QueueableUnitPlanner
         return $this->unit(
             $planet,
             $producer,
-            'role:energy:' . $producer->machine_name,
+            'role:energy:'.$producer->machine_name,
             min((int) ceil($shortfall / $perUnit), $affordable)
         );
     }
@@ -364,11 +381,11 @@ class QueueableUnitPlanner
         $bestRatio = 0.0;
 
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
-            if (!$object instanceof UnitObject) {
+            if (! $object instanceof UnitObject) {
                 continue;
             }
 
-            if (!$this->queueable($planet, $object)) {
+            if (! $this->queueable($planet, $object)) {
                 continue;
             }
 
@@ -455,8 +472,8 @@ class QueueableUnitPlanner
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool
     {
-        if (!ObjectService::objectRequirementsMet($unit->machine_name, $planet)
-            || !ObjectService::objectCharacterClassMet($unit->machine_name, $planet)) {
+        if (! ObjectService::objectRequirementsMet($unit->machine_name, $planet)
+            || ! ObjectService::objectCharacterClassMet($unit->machine_name, $planet)) {
             return false;
         }
 

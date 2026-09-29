@@ -1,0 +1,2 @@
+the scenario alliance-creation did not hold:
+Scenario is missing "name": /var/www/Modules/AI/resources/scenarios/alliance-creation.json

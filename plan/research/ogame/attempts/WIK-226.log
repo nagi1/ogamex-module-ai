@@ -1,0 +1,31 @@
+MarketRatioOfferTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m7 passed[39;22m[90m (15 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\MarketRatioOfferTest
+  ✓ it documents the marketplace bounds the Planner trades against       0.42s  
+  ✓ it executes a search offer that sits exactly on the search band edg… 0.07s  
+  ✓ it refuses a search offer one percent past the search band edge      0.06s  
+  ✓ it refuses a search offer that returns nothing at all                0.07s  
+  ⨯ it keeps a ratio on the adjustable band edge and drops one past it   0.06s  
+  ✓ it re-evaluates the market only once the documented interval has ru… 0.07s  
+  ✓ it answers the documented market situations the way the search band… 0.07s  
+  ✓ it answers the documented market situations the way the search band… 0.07s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MarketRatioOfferTest > it keeps a ratio…    
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/MarketRatioOfferTest.php:113
+    109▕ it('keeps a ratio on the adjustable band edge and drops one past it', function () {
+    110▕     $band = app(MarketRatioBand::class);
+    111▕     $edge = (float) $band->adjustableBandPercent();
+    112▕ 
+  ➜ 113▕     expect($band->isAdjustableRatio(marketRatioDriftedBy($edge)))->toBeTrue()
+    114▕         ->and($band->isAdjustableRatio(marketRatioDriftedBy(-$edge)))->toBeTrue()
+    115▕         ->and($band->isAdjustableRatio(marketRatioDriftedBy($edge + 1.0)))->toBeFalse();
+    116▕ });
+    117▕
+
+  1   Modules/AI/tests/Feature/MarketRatioOfferTest.php:113
+
+
+  Tests:    1 failed, 7 passed (15 assertions)
+  Duration: 1.38s

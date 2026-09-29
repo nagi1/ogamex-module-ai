@@ -1,0 +1,72 @@
+FarmTargetSelectionTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m (0 assertions)[39m
+
+orde…  Error   
+  Call to undefined method Illuminate\Foundation\Console\Kernel::resolveCommands()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php:364
+    360▕         if (! $instance) {
+    361▕             throw new RuntimeException('A facade root has not been set.');
+    362▕         }
+    363▕ 
+  ➜ 364▕         return $instance->$method(...$args);
+    365▕     }
+    366▕ }
+    367▕
+
+      +1 vendor frames 
+  2   Modules/AI/tests/Feature/FarmTargetSelectionTest.php:54
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\FarmTargetSelectionTest > it trea…  Error   
+  Call to undefined method Illuminate\Foundation\Console\Kernel::resolveCommands()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php:364
+    360▕         if (! $instance) {
+    361▕             throw new RuntimeException('A facade root has not been set.');
+    362▕         }
+    363▕ 
+  ➜ 364▕         return $instance->$method(...$args);
+    365▕     }
+    366▕ }
+    367▕
+
+      +1 vendor frames 
+  2   Modules/AI/tests/Feature/FarmTargetSelectionTest.php:54
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\FarmTargetSelectionTest > it neve…  Error   
+  Call to undefined method Illuminate\Foundation\Console\Kernel::resolveCommands()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php:364
+    360▕         if (! $instance) {
+    361▕             throw new RuntimeException('A facade root has not been set.');
+    362▕         }
+    363▕ 
+  ➜ 364▕         return $instance->$method(...$args);
+    365▕     }
+    366▕ }
+    367▕
+
+      +1 vendor frames 
+  2   Modules/AI/tests/Feature/FarmTargetSelectionTest.php:54
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\FarmTargetSelectionTest > it refu…  Error   
+  Call to undefined method Illuminate\Foundation\Console\Kernel::resolveCommands()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Facades/Facade.php:364
+    360▕         if (! $instance) {
+    361▕             throw new RuntimeException('A facade root has not been set.');
+    362▕         }
+    363▕ 
+  ➜ 364▕         return $instance->$method(...$args);
+    365▕     }
+    366▕ }
+    367▕
+
+      +1 vendor frames 
+  2   Modules/AI/tests/Feature/FarmTargetSelectionTest.php:54
+
+
+  Tests:    5 failed (0 assertions)
+  Duration: 1.09s

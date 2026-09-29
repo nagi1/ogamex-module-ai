@@ -1,0 +1,56 @@
+AllianceAcademyTierTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+───────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTierTest > it e…  Error   
+  Call to undefined method Modules\AI\Actions\ReplayAiScenarioAction::execute()
+
+  at Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:45
+     41▕ 
+     42▕ uses(AllianceAcademyTierModuleTestCase::class);
+     43▕ 
+     44▕ it('excludes an academy-tier member from main-alliance intel sharing', function () {
+  ➜  45▕     $outcome = app(ReplayAiScenarioAction::class)->execute('alliance_academy_tier');
+     46▕ 
+     47▕     $members = collect($outcome->members)->keyBy('handle');
+     48▕ 
+     49▕     expect($members->get('Recruit')->sharesIntel)->toBeFalse()
+
+  1   Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:45
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTierTest > it a…  Error   
+  Call to undefined method Modules\AI\Actions\ReplayAiScenarioAction::execute()
+
+  at Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:54
+     50▕         ->and($members->get('Veteran')->sharesIntel)->toBeTrue();
+     51▕ });
+     52▕ 
+     53▕ it('assigns the espionage role only to the branch marked with that orientation', function () {
+  ➜  54▕     $outcome = app(ReplayAiScenarioAction::class)->execute('alliance_academy_tier');
+     55▕ 
+     56▕     $members = collect($outcome->members)->keyBy('handle');
+     57▕ 
+     58▕     expect($members->get('Watcher')->role)->toBe('espionage')
+
+  1   Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:54
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTierTest > it r…  Error   
+  Call to undefined method Modules\AI\Actions\ReplayAiScenarioAction::execute()
+
+  at Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:68
+     64▕         (string) file_get_contents(dirname(__DIR__, 3) . '/resources/scenarios/alliance_academy_tier.json'),
+     65▕         true
+     66▕     );
+     67▕ 
+  ➜  68▕     $outcome = app(ReplayAiScenarioAction::class)->execute($scenario['name']);
+     69▕ 
+     70▕     expect($outcome->action)->toBe($scenario['expect']['action'])
+     71▕         ->and($outcome->reason)->toContain($scenario['expect']['reason_contains']);
+     72▕ });
+
+  1   Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:68
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 1.07s

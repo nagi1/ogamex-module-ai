@@ -1,0 +1,2 @@
+these values decide behaviour but were written into PHP: app/Ai/Defense/InterplanetaryMissile.php: 5.
+Put them in a file under resources/behavior/ (extend one that exists when it covers the topic) and read them from there, so a modder can change the behaviour without editing code. Say which file in FILES.

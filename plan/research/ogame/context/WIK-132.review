@@ -1,0 +1,3 @@
+failed validation twice; retried automatically after the cool-off:
+- file tests/Unit/SolarSystemSlotsTest.php: unit tests are not accepted — write a Feature test instead
+- proposal adds a per-account constant (gate 1)

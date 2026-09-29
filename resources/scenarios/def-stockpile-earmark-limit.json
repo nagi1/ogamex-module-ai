@@ -1,0 +1,17 @@
+{
+    "scenario": "def-stockpile-earmark-limit",
+    "source": "WIK-027",
+    "saving": {
+        "kind": "def-stockpile",
+        "resources": {
+            "metal": 100,
+            "crystal": 50,
+            "deuterium": 0
+        },
+        "queueItem": {
+            "id": 1,
+            "type": "building",
+            "status": "pending"
+        }
+    }
+}

@@ -307,6 +307,25 @@ test('the real research action queues a technology the host accepts and refuses 
         ->and($invalidObject->reason)->toBeString()->not->toBeEmpty();
 });
 
+test('the real research action refuses a technology already in research', function (): void {
+    $this->planetSetObjectLevel('research_lab', 1);
+    $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]));
+
+    $first = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('energy_technology'));
+    // The host cancels a second row for the same technology as soon as the first lands, because it
+    // derives the target level from the rows already active. Refusing here stops a decision being
+    // spent on a row the host throws away -- 205 of the newest 300 live rows were cancelled so.
+    $second = app(QueueAiResearch::class)->handle($this->currentUserId, $this->currentPlanetId, hostObjectId('energy_technology'));
+
+    expect($first->successful)->toBeTrue()
+        ->and($second->successful)->toBeFalse()
+        ->and($second->reason)->toBe(AiQueueActionReason::AlreadyResearching->value)
+        ->and(DB::table('research_queues')
+            ->where('planet_id', $this->currentPlanetId)
+            ->where('object_id', hostObjectId('energy_technology'))
+            ->count())->toBe(1);
+});
+
 test('the real research action rejects banned and vacation players', function (): void {
     Ban::create(['user_id' => $this->currentUserId, 'reason' => 'test ban', 'banned_until' => now()->addHour(), 'canceled' => false]);
 

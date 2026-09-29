@@ -1,0 +1,61 @@
+AiInactivityMarkingTest: [90mTests:[39m    [31;1m13 failed[39;22m[90m (0 assertions)[39m
+
+ (I) at exactly 28 days of inactivity', function (): void {
+     24▕     $overview = app(AiSituationOverview::class);
+     25▕ 
+  ➜  26▕     expect($overview->inactivityMarkerFor(28))->toBe('(I)');
+     27▕ });
+     28▕ 
+     29▕ it('keeps (I) past the fourth week of inactivity', function (int $days): void {
+     30▕     $overview = app(AiSituationOverview::class);
+
+  1   Modules/AI/tests/Feature/AiInactivityMarkingTest.php:26
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiInactivityMarkingTest > it keep…  Error   
+  Call to undefined method Modules\AI\Domain\Operability\AiSituationOverview::inactivityMarkerFor()
+
+  at Modules/AI/tests/Feature/AiInactivityMarkingTest.php:32
+     28▕ 
+     29▕ it('keeps (I) past the fourth week of inactivity', function (int $days): void {
+     30▕     $overview = app(AiSituationOverview::class);
+     31▕ 
+  ➜  32▕     expect($overview->inactivityMarkerFor($days))->toBe('(I)');
+     33▕ })->with([29, 35, 365]);
+     34▕
+
+  1   Modules/AI/tests/Feature/AiInactivityMarkingTest.php:32
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiInactivityMarkingTest > it keep…  Error   
+  Call to undefined method Modules\AI\Domain\Operability\AiSituationOverview::inactivityMarkerFor()
+
+  at Modules/AI/tests/Feature/AiInactivityMarkingTest.php:32
+     28▕ 
+     29▕ it('keeps (I) past the fourth week of inactivity', function (int $days): void {
+     30▕     $overview = app(AiSituationOverview::class);
+     31▕ 
+  ➜  32▕     expect($overview->inactivityMarkerFor($days))->toBe('(I)');
+     33▕ })->with([29, 35, 365]);
+     34▕
+
+  1   Modules/AI/tests/Feature/AiInactivityMarkingTest.php:32
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiInactivityMarkingTest > it keep…  Error   
+  Call to undefined method Modules\AI\Domain\Operability\AiSituationOverview::inactivityMarkerFor()
+
+  at Modules/AI/tests/Feature/AiInactivityMarkingTest.php:32
+     28▕ 
+     29▕ it('keeps (I) past the fourth week of inactivity', function (int $days): void {
+     30▕     $overview = app(AiSituationOverview::class);
+     31▕ 
+  ➜  32▕     expect($overview->inactivityMarkerFor($days))->toBe('(I)');
+     33▕ })->with([29, 35, 365]);
+     34▕
+
+  1   Modules/AI/tests/Feature/AiInactivityMarkingTest.php:32
+
+
+  Tests:    13 failed (0 assertions)
+  Duration: 0.61s

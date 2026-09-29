@@ -1,0 +1,58 @@
+DefenseNeedEvaluatorTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m,[39m[39m [39m[32;1m8 passed[39;22m[90m (23 assertions)[39m
+
+n   
+  setObjectLevel() can only be used for buildings and stations, not: ion_cannon
+
+  at app/Services/PlanetService.php:1785
+    1781▕     {
+    1782▕         $object = ObjectService::getObjectById($object_id);
+    1783▕ 
+    1784▕         if ($object->type !== GameObjectType::Building && $object->type !== GameObjectType::Station) {
+  ➜ 1785▕             throw new RuntimeException('setObjectLevel() can only be used for buildings and stations, not: ' . $object->machine_name);
+    1786▕         }
+    1787▕ 
+    1788▕         $this->planet->{$object->machine_name} = $level;
+    1789▕         if ($save_planet) {
+
+  1   app/Services/PlanetService.php:1785
+  2   tests/Traits/ManagesPlanetState.php:61
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseNeedEvaluatorTe…  RuntimeException   
+  setObjectLevel() can only be used for buildings and stations, not: ion_cannon
+
+  at app/Services/PlanetService.php:1785
+    1781▕     {
+    1782▕         $object = ObjectService::getObjectById($object_id);
+    1783▕ 
+    1784▕         if ($object->type !== GameObjectType::Building && $object->type !== GameObjectType::Station) {
+  ➜ 1785▕             throw new RuntimeException('setObjectLevel() can only be used for buildings and stations, not: ' . $object->machine_name);
+    1786▕         }
+    1787▕ 
+    1788▕         $this->planet->{$object->machine_name} = $level;
+    1789▕         if ($save_planet) {
+
+  1   app/Services/PlanetService.php:1785
+  2   tests/Traits/ManagesPlanetState.php:61
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseNeedEvaluatorTe…  RuntimeException   
+  setObjectLevel() can only be used for buildings and stations, not: ion_cannon
+
+  at app/Services/PlanetService.php:1785
+    1781▕     {
+    1782▕         $object = ObjectService::getObjectById($object_id);
+    1783▕ 
+    1784▕         if ($object->type !== GameObjectType::Building && $object->type !== GameObjectType::Station) {
+  ➜ 1785▕             throw new RuntimeException('setObjectLevel() can only be used for buildings and stations, not: ' . $object->machine_name);
+    1786▕         }
+    1787▕ 
+    1788▕         $this->planet->{$object->machine_name} = $level;
+    1789▕         if ($save_planet) {
+
+  1   app/Services/PlanetService.php:1785
+  2   tests/Traits/ManagesPlanetState.php:61
+
+
+  Tests:    3 failed, 8 passed (23 assertions)
+  Duration: 1.49s

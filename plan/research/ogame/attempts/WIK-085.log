@@ -1,0 +1,29 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+### FILE: tests/Unit/DefenseCompositionPlannerTest.php
+```php
+<?php
+
+use Modules\AI\Domain\Decision\DefenseComposition;
+use Modules\AI\Domain\Decision\DefenseCompositionPlanner;
+use Modules\AI\Domain\Decision\DefenseNeed;
+use Modules\AI\Enums\AiDefenseDoctrine;
+use Modules\AI\Models\AiProfile;
+use OGame\Models\Resources;
+use Tests\IsolatedAccountTestCase;
+
+uses(IsolatedAccountTestCase::class);
+
+// Plenty of resources and the whole defence tech tree, so requirements never mask the ratio choice.
+beforeEach(function (): void {
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetSetObjectLevel('shipyard', 12);
+
+    foreach (['laser_technology' => 12, 'energy_technology' => 6, 'ion_technology' => 4, 'weapon_technology' => 3, 'shielding_technology' => 2, 'plasma_technology' => 7] as $machineName => $level) {
+        $this->playerSetResearchLevel($machineName, $level);
+    }
+});
+
+// A balanced wall (100 light lasers anchor) at its ratio except Gauss Cannon: the one component the
+// doctrine is behind on is chosen, even though Rocket Launcher is ahead of its own ratio.
+test('a wall behind on Gauss Cannon but ahead on Rocket Launcher chooses Gauss

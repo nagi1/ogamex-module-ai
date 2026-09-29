@@ -1,0 +1,25 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+### FILE: resources/behavior/expedition.php
+```php
+<?php
+
+/**
+ * The dispatch contract the account plays by when it sends an expedition.
+ *
+ * The source states an expedition's gains do not grow with the time the fleet
+ * is away: a longer flight only raises the probability of the positive *and*
+ * the negative outcomes (EXP-001), and the return on every delay is the
+ * universe's own holding-time division rather than a reward for staying out
+ * (EXP-002). The host would scale the duration by the relevant technology
+ * level, so the account pins every dispatch to the one-hour default and lets
+ * the flight-speed division run on that capped duration.
+ */
+return [
+    // Slot 16 is the only coordinate the host's expedition mission accepts.
+    'target_position' => 16,
+
+    // The one-hour default the source states, in seconds.
+    'duration_seconds' => 3600,
+];
+```

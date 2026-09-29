@@ -1,0 +1,60 @@
+PlanetTemperatureTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+the documented maximum of 65       0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PlanetTemperatureTest >…   ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/planet_temperature.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/PlanetTemperature.php:56
+     52▕ 
+     53▕     /** @return array<string, int> */
+     54▕     private static function behavior(): array
+     55▕     {
+  ➜  56▕         return self::$behavior ??= require dirname(__DIR__, 2) . '/resources/behavior/planet_temperature.php';
+     57▕     }
+     58▕ }
+     59▕
+
+  1   Modules/AI/app/Support/PlanetTemperature.php:56
+  2   Modules/AI/app/Support/PlanetTemperature.php:23
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PlanetTemperatureTest >…   ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/planet_temperature.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/PlanetTemperatureTest.php:54
+     50▕         ->and($cold->isSolarLeaning())->toBeFalse();
+     51▕ });
+     52▕ 
+     53▕ it('treats both leaning bounds as inclusive and stays neutral between them', function () {
+  ➜  54▕     $behavior = require dirname(__DIR__, 2) . '/resources/behavior/planet_temperature.php';
+     55▕     $solarBound = $behavior['solar_leaning_min_temperature'];
+     56▕     $deuteriumBound = $behavior['deuterium_leaning_max_temperature'];
+     57▕ 
+     58▕     expect(assessPlanetTemperature($solarBound)->isSolarLeaning())->toBeTrue()
+
+  1   Modules/AI/tests/Feature/PlanetTemperatureTest.php:54
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PlanetTemperatureTest >…   ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/planet_temperature.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/PlanetTemperature.php:56
+     52▕ 
+     53▕     /** @return array<string, int> */
+     54▕     private static function behavior(): array
+     55▕     {
+  ➜  56▕         return self::$behavior ??= require dirname(__DIR__, 2) . '/resources/behavior/planet_temperature.php';
+     57▕     }
+     58▕ }
+     59▕
+
+  1   Modules/AI/app/Support/PlanetTemperature.php:56
+  2   Modules/AI/app/Support/PlanetTemperature.php:41
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 0.89s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/planet_temperature.php (data must be YAML or JSON so a modder can edit it without code)

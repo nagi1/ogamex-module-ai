@@ -3,6 +3,14 @@
 use Illuminate\Support\Facades\Route;
 use Modules\AI\Http\Controllers\AIController;
 use Modules\AI\Http\Controllers\CampaignController;
+use Modules\AI\Http\Controllers\HarnessStatusController;
+
+// The harness page watches the build-time pipeline, not the game, so it sits outside the player auth
+// gate and is refused outright unless the app is local.
+Route::prefix('ai-harness')->name('ai.harness.')->group(function (): void {
+    Route::get('/', [HarnessStatusController::class, 'index'])->name('index');
+    Route::get('/poll', [HarnessStatusController::class, 'poll'])->name('poll');
+});
 
 Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admin'])
     ->prefix('admin/ai')

@@ -1,0 +1,11 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+This task cannot be delivered as written, and I am not going to reinterpret it to make it look deliverable.
+
+**What WIK-168 asks for.** Its own plan says it "states no numbers" and encodes "no mechanics" — the deliverable is a facts-only markdown note plus a test that reads that markdown. Nothing here changes what the account does.
+
+**Why the acceptance line cannot hold in this module.**
+
+1. `ACCEPTANCE` names `tests/Unit/Ai/ResearchScreenSpecTest.php`. Unit tests are rejected before they run in this module: a test over a bare artifact can pass while the behaviour it claims to describe is wrong. I cannot place the test where the plan puts it, and moving it to `tests/Feature` does not rescue it — see (2).
+2. The only assertion available is "this markdown file exists and contains no digits". That asserts the *artifact*, not behaviour. It is the documentation-shaped version of "assert the method exists": it stays green whether or not the AI ever makes a research decision, because no code path reads the file. There is no planner, engine or action to drive, so a Feature test has nothing to exercise.
+3. `FILES` lists `plan/research/ogame/specs/research-screen.md`. Relative to the module 

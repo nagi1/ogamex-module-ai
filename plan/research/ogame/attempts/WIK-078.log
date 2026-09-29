@@ -1,0 +1,41 @@
+UnmodelledFleetEntryIsIgnoredTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\UnmodelledFleetEntryIsIgnoredTest
+  ⨯ it produces an identical report whether or not an unmodelled fleet…  0.36s  
+  ⨯ it produces an identical report when the unmodelled entry carries a… 0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\UnmodelledFleetEntryIsIgnoredTest…  Error   
+  Call to undefined method Modules\AI\Actions\BuildAiPilotReportAction::execute()
+
+  at Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:62
+     58▕         ['ship' => 'Cruiser', 'amount' => 10],
+     59▕         ['ship' => 'Reaper', 'amount' => 1],
+     60▕     ];
+     61▕ 
+  ➜  62▕     expect(json_encode($report->execute($modelledFleet)))
+     63▕         ->toBe(json_encode($report->execute($fleetWithUnmodelledEntry)));
+     64▕ });
+     65▕ 
+     66▕ it('produces an identical report when the unmodelled entry carries a zero amount', function () {
+
+  1   Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:62
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\UnmodelledFleetEntryIsIgnoredTest…  Error   
+  Call to undefined method Modules\AI\Actions\BuildAiPilotReportAction::execute()
+
+  at Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:80
+     76▕         ['ship' => 'Cruiser', 'amount' => 10],
+     77▕         ['ship' => 'Reaper', 'amount' => 0],
+     78▕     ];
+     79▕ 
+  ➜  80▕     expect(json_encode($report->execute($modelledFleet)))
+     81▕         ->toBe(json_encode($report->execute($fleetWithZeroAmountEntry)));
+     82▕ });
+     83▕
+
+  1   Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:80
+
+
+  Tests:    2 failed (0 assertions)
+  Duration: 0.84s

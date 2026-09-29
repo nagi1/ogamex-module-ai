@@ -91,6 +91,30 @@ foreach ($profiles as $profile) {
                     ? 'nothing queueable at this need'
                     : $composition->unit . ' x' . $composition->amount . ' (' . $composition->reason . ')'
             );
+
+            // When nothing is queueable, the host's own per-unit answers say which wall is in the
+            // way: an unmet requirement, a class the planet is not, or simply an empty treasury.
+            if ($composition !== null) {
+                continue;
+            }
+
+            $resources = $planet->getResources();
+            printf(
+                "      resources: metal %d crystal %d deuterium %d\n",
+                $resources->metal->get(),
+                $resources->crystal->get(),
+                $resources->deuterium->get()
+            );
+
+            foreach (ObjectService::getDefenseObjects() as $object) {
+                printf(
+                    "      %-24s req %s  class %s  affordable %d\n",
+                    $object->machine_name,
+                    ObjectService::objectRequirementsMet($object->machine_name, $planet) ? 'yes' : 'NO',
+                    ObjectService::objectCharacterClassMet($object->machine_name, $planet) ? 'yes' : 'NO',
+                    ObjectService::getObjectMaxBuildAmount($object->machine_name, $planet, true)
+                );
+            }
         } catch (Throwable $exception) {
             printf("  planet %d  measurement failed: %s\n", $planetId, $exception->getMessage());
         }

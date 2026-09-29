@@ -1,0 +1,22 @@
+HarvestScenarioReplayTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m (0 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\HarvestScenarioReplayTest
+  ⨯ it replays the harvest scenario as a single cargo-fleet order to th… 0.35s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\HarvestScenarioReplayTes…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\HarvestScenarioReplayTest::$user
+
+  at Modules/AI/tests/Feature/HarvestScenarioReplayTest.php:51
+     47▕         true,
+     48▕         flags: JSON_THROW_ON_ERROR,
+     49▕     );
+     50▕ 
+  ➜  51▕     $user = $this->user;
+     52▕     AiProfile::create(['user_id' => $user->id]);
+     53▕ 
+     54▕     app(RunAiSessionAction::class)->execute($user);
+     55▕
+
+
+  Tests:    1 failed (0 assertions)
+  Duration: 0.77s

@@ -1,0 +1,13 @@
+{
+    "source": "WIK-078",
+    "claim_type": "DOCUMENTED",
+    "confidence": "medium",
+    "topic": "combat",
+    "subject": "reaper",
+    "claim": "Section 7 documents the Reaper in a combat context only: it lists no doctrine variants, no mechanics and no numbers, so the claim stays unconfirmed.",
+    "payload": {
+        "status": "unconfirmed",
+        "mechanics": null,
+        "note": "No numeric stats recorded for the Reaper; numbers may only be added once the host confirms the mechanics. Hull plating adds no numeric modifier of its own: the combat contribution of a hull is the structural integrity already recorded for the ship, which is its metal cost plus its crystal cost. No hull-plating value may be encoded until Armour Technology is ingested."
+    }
+}

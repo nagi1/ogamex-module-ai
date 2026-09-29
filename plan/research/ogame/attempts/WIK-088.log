@@ -1,0 +1,2 @@
+the scenario alliance_war_declaration_matured did not hold:
+Scenario is missing "persona": /var/www/Modules/AI/resources/scenarios/alliance_war_declaration_matured.json

@@ -1,0 +1,2 @@
+these values decide behaviour but were written into PHP: app/Defense/FodderHeavyDefenseDoctrine.php: 100, app/Defense/FodderHeavyDefenseDoctrine.php: 20, app/Defense/FodderHeavyDefenseDoctrine.php: 5, app/Defense/FodderHeavyDefenseDoctrine.php: 50.
+Put them in a file under resources/behavior/ (extend one that exists when it covers the topic) and read them from there, so a modder can change the behaviour without editing code. Say which file in FILES.

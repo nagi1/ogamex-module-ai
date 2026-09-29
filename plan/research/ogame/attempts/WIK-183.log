@@ -1,0 +1,2 @@
+the scenario young_colony_awaiting_resupply did not hold:
+Scenario is missing "persona": /var/www/Modules/AI/resources/scenarios/young_colony_awaiting_resupply.json

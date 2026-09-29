@@ -1,0 +1,55 @@
+EnergyUnconstrainedCandidateActionsTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+ependency resolving [$parameter] in class {$parameter->getDeclaringClass()->getName()}";
+    1453▕ 
+  ➜ 1454▕         throw new BindingResolutionException($message);
+    1455▕     }
+    1456▕ 
+    1457▕     /**
+    1458▕      * Register a new before resolving callback for all types.
+
+      +9 vendor frames 
+  10  Modules/AI/tests/Feature/EnergyUnconstrainedCandidateActionsTest.php:106
+  11  Modules/AI/tests/Feature/EnergyUnconstrainedCandidateActionsTest.php:118
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EnergyUncons…  BindingResolutionException   
+  Unresolvable dependency resolving [Parameter #0 [ <required> int $playerId ]] in class Modules\AI\Domain\Perception\PerceptionSnapshot
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1454
+    1450▕     protected function unresolvablePrimitive(ReflectionParameter $parameter)
+    1451▕     {
+    1452▕         $message = "Unresolvable dependency resolving [$parameter] in class {$parameter->getDeclaringClass()->getName()}";
+    1453▕ 
+  ➜ 1454▕         throw new BindingResolutionException($message);
+    1455▕     }
+    1456▕ 
+    1457▕     /**
+    1458▕      * Register a new before resolving callback for all types.
+
+      +9 vendor frames 
+  10  Modules/AI/tests/Feature/EnergyUnconstrainedCandidateActionsTest.php:106
+  11  Modules/AI/tests/Feature/EnergyUnconstrainedCandidateActionsTest.php:126
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\EnergyUncons…  BindingResolutionException   
+  Unresolvable dependency resolving [Parameter #0 [ <required> int $playerId ]] in class Modules\AI\Domain\Perception\PerceptionSnapshot
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1454
+    1450▕     protected function unresolvablePrimitive(ReflectionParameter $parameter)
+    1451▕     {
+    1452▕         $message = "Unresolvable dependency resolving [$parameter] in class {$parameter->getDeclaringClass()->getName()}";
+    1453▕ 
+  ➜ 1454▕         throw new BindingResolutionException($message);
+    1455▕     }
+    1456▕ 
+    1457▕     /**
+    1458▕      * Register a new before resolving callback for all types.
+
+      +9 vendor frames 
+  10  Modules/AI/tests/Feature/EnergyUnconstrainedCandidateActionsTest.php:106
+  11  Modules/AI/tests/Feature/EnergyUnconstrainedCandidateActionsTest.php:126
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 0.87s

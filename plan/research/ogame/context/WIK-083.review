@@ -1,0 +1,3 @@
+failed validation twice; retried automatically after the cool-off:
+- file plan/specs/WIK-083-shield-power.md: named after a source page — name it for what it does
+- file tests/Unit/Domain/Combat/ShieldPowerSpecTest.php: unit tests are not accepted — write a Feature test instead

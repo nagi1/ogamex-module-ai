@@ -1,0 +1,72 @@
+AiDailyAttackBudgetTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+get.php:79
+     75▕     private static function behaviour(): array
+     76▕     {
+     77▕         static $data = null;
+     78▕ 
+  ➜  79▕         return $data ??= require dirname(__DIR__, 3) . self::BEHAVIOUR_FILE;
+     80▕     }
+     81▕ }
+     82▕
+
+  1   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+  2   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:69
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiDailyAttackBudgetTest…   ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/attack_budget.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+     75▕     private static function behaviour(): array
+     76▕     {
+     77▕         static $data = null;
+     78▕ 
+  ➜  79▕         return $data ??= require dirname(__DIR__, 3) . self::BEHAVIOUR_FILE;
+     80▕     }
+     81▕ }
+     82▕
+
+  1   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+  2   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:69
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiDailyAttackBudgetTest…   ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/attack_budget.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+     75▕     private static function behaviour(): array
+     76▕     {
+     77▕         static $data = null;
+     78▕ 
+  ➜  79▕         return $data ??= require dirname(__DIR__, 3) . self::BEHAVIOUR_FILE;
+     80▕     }
+     81▕ }
+     82▕
+
+  1   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+  2   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:69
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiDailyAttackBudgetTest…   ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/attack_budget.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+     75▕     private static function behaviour(): array
+     76▕     {
+     77▕         static $data = null;
+     78▕ 
+  ➜  79▕         return $data ??= require dirname(__DIR__, 3) . self::BEHAVIOUR_FILE;
+     80▕     }
+     81▕ }
+     82▕
+
+  1   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:79
+  2   Modules/AI/app/Ai/Targets/DailyAttackBudget.php:69
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 0.94s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/attack_budget.php (data must be YAML or JSON so a modder can edit it without code)

@@ -1,0 +1,64 @@
+RecordObservedShipyardQueueTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+ILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+
+  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
+     84▕ }
+     85▕ 
+     86▕ beforeEach(function () {
+     87▕     $this->profile = AiProfile::query()->create([
+  ➜  88▕         'user_id' => $this->user->id,
+     89▕     ]);
+     90▕ 
+     91▕     $this->payload = shipyardObservationPayload(
+     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+
+  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
+     84▕ }
+     85▕ 
+     86▕ beforeEach(function () {
+     87▕     $this->profile = AiProfile::query()->create([
+  ➜  88▕         'user_id' => $this->user->id,
+     89▕     ]);
+     90▕ 
+     91▕     $this->payload = shipyardObservationPayload(
+     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+
+  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
+     84▕ }
+     85▕ 
+     86▕ beforeEach(function () {
+     87▕     $this->profile = AiProfile::query()->create([
+  ➜  88▕         'user_id' => $this->user->id,
+     89▕     ]);
+     90▕ 
+     91▕     $this->payload = shipyardObservationPayload(
+     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+
+  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
+     84▕ }
+     85▕ 
+     86▕ beforeEach(function () {
+     87▕     $this->profile = AiProfile::query()->create([
+  ➜  88▕         'user_id' => $this->user->id,
+     89▕     ]);
+     90▕ 
+     91▕     $this->payload = shipyardObservationPayload(
+     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 0.92s

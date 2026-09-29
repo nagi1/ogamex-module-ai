@@ -1,0 +1,11 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+This task cannot be implemented as written, so I am delivering no files.
+
+**Why the plan fails**
+
+1. **The source states nothing to implement, and the plan says so.** WIK-209 is a Help concept page with no numbers and no doctrine; the plan's own DECISION is "nothing may be implemented from it". There is no ratio, cap, cost or threshold to place in a `resources/behavior/` data file, and no rule for a planner, engine or action to act on.
+
+2. **The only file the plan names is rejected before it runs.** `tests/Unit/Ai/HelpConceptHasNoDerivedBehaviourTest.php` sits under `tests/Unit`, which this module does not accept: every test belongs in `tests/Feature` and must drive the real path (the action, engine or planner an account actually runs). A test at that path is discarded, not executed, so shipping it delivers nothing.
+
+3. **The ACCEPTANCE is an assertion of absence, not behaviour.** "the AI namespace contains no class, enum case, or exported constant referencing Help-wiki-derived identifiers" is a test that a name does not exist. It cannot fail when an account plays wrongly, and it is exactly the shape the module forbids ("assert the behaviour, not that a method exists"). Its own RIS

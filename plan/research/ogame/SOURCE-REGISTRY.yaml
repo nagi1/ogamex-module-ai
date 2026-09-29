@@ -1118,6 +1118,36 @@ sources:
   retrieved_at: 2026-09-28
   license: public page (CC-BY-SA)
   raw: plan/research/ogame/raw/wiki/ogame.fandom.com/concept/WIK-243.md
+- id: TP-022
+  title: Multi-Planet Logistics — Running a 9-Planet Empire
+  url: ogames.net/blog/ogame-multi-planet-logistics
+  capture_url: ''
+  family: third-party
+  domains: [empire, logistics, planet-roles, build-queues, cargo-sizing]
+  retrieved_at: 2026-09-29
+  license: public page (marketing blog for a separate speed-server project)
+  raw: plan/research/ogame/raw/third-party/ogames.net/empire/TP-022.md
+
+- id: FOR-013
+  title: Recommended colony setup? (Official OGame board, Help & Questions)
+  url: board.en.ogame.gameforge.com `thread/822246`
+  capture_url: ''
+  family: official-gameforge-forum
+  domains: [empire, colony-placement, spread-vs-stacked, fields]
+  retrieved_at: 2026-09-29
+  license: public page (community posts)
+  raw: plan/research/ogame/raw/gameforge/board.en.ogame.gameforge.com/empire/FOR-013.md
+
+- id: FOR-014
+  title: FAQ — Colonization (Official OGame board, FAQs & Guides)
+  url: board.en.ogame.gameforge.com `thread/827458`
+  capture_url: ''
+  family: official-gameforge-forum
+  domains: [empire, colonisation-gating, required-tech]
+  retrieved_at: 2026-09-29
+  license: public page (official board FAQ)
+  raw: plan/research/ogame/raw/gameforge/board.en.ogame.gameforge.com/empire/FOR-014.md
+
 # Example (delete before use — the id must not already exist in strategy/sources.yaml):
 # - id: RDT-005
 #   title: Example community thread

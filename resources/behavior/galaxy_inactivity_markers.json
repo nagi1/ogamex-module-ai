@@ -1,0 +1,12 @@
+{
+    "inactivity_markers": [
+        {
+            "from_days": 7,
+            "marker": "(i)"
+        },
+        {
+            "from_days": 28,
+            "marker": "(I)"
+        }
+    ]
+}

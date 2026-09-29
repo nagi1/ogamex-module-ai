@@ -1,0 +1,31 @@
+NapConceptTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (6 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Ai\NapConceptTest
+  ⨯ it ships no NAP-named PHP file, because NAP mechanics are unconfirm… 0.02s  
+  ✓ it declares no NAP enum case, because NAP mechanics are unconfirmed  0.01s  
+  ✓ it exposes no NAP config key, because NAP mechanics are unconfirmed
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\NapConceptTest > it ships no NAP-name…   
+  Failed asserting that two arrays are identical.
+  -Array &0 []
+  +Array &0 [
+  +    0 => 'app/Ai/Policies/NapPolicy.php',
+  +]
+  
+
+  at Modules/AI/tests/Feature/Ai/NapConceptTest.php:90
+     86▕ 
+     87▕         $offenders[] = $moduleRelative($file);
+     88▕     }
+     89▕ 
+  ➜  90▕     expect($offenders)->toBe([]);
+     91▕ });
+     92▕ 
+     93▕ it('declares no NAP enum case, because NAP mechanics are unconfirmed', function () use ($moduleRoot, $phpFilesUnder, $namesNap, $enumsDeclaredIn) {
+     94▕     expect(is_dir($moduleRoot))->toBeTrue();
+
+  1   Modules/AI/tests/Feature/Ai/NapConceptTest.php:90
+
+
+  Tests:    1 failed, 2 passed (6 assertions)
+  Duration: 0.46s

@@ -1,0 +1,44 @@
+GalaxyViewIntakeTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Ai\GalaxyViewIntakeTest
+  ⨯ it records galaxy-view-only observations as unverified intel and ta… 0.45s  
+  ⨯ it takes the same observation in as intel once a confirmed source b… 0.06s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\GalaxyViewInt…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/Ai/GalaxyViewIntakeTest.php:51
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\GalaxyViewInt…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/Ai/GalaxyViewIntakeTest.php:71
+
+
+  Tests:    2 failed (0 assertions)
+  Duration: 0.95s

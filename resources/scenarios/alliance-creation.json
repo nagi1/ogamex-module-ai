@@ -1,0 +1,42 @@
+{
+    "name": "alliance-creation",
+    "situation": "An account holds spare resources and belongs to no alliance; the module has no opinion on whether founding one is worth doing.",
+    "status": "unverified",
+    "checklist": [
+        {
+            "topic": "founding-cost",
+            "question": "Does founding an alliance cost resources, dark matter, or nothing at all?",
+            "status": "unverified"
+        },
+        {
+            "topic": "who-may-found",
+            "question": "May any account found an alliance, or is founding gated by rank, research or account age?",
+            "status": "unverified"
+        },
+        {
+            "topic": "membership-floor",
+            "question": "Is a minimum membership required before the alliance appears in the highscore?",
+            "status": "unverified"
+        },
+        {
+            "topic": "application-flow",
+            "question": "Does joining require an application that an alliance rank has to approve?",
+            "status": "unverified"
+        },
+        {
+            "topic": "diplomacy-state",
+            "question": "Can an alliance declare war, peace or a trade pact, and does the host store those states?",
+            "status": "unverified"
+        },
+        {
+            "topic": "member-benefit",
+            "question": "What does membership give the account: protection, shared research, depot sharing, or nothing mechanical?",
+            "status": "unverified"
+        },
+        {
+            "topic": "leaving-cost",
+            "question": "Is there a cooldown or penalty for leaving or disbanding an alliance?",
+            "status": "unverified"
+        }
+    ]
+}

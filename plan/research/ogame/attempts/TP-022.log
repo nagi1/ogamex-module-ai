@@ -1,0 +1,2 @@
+these files are not called by any runtime code, so no account can ever execute them: app/Actions/PlanCargoDispatch.php.
+Wire the rule into the planner, engine or action that acts on it, add that file to FILES, and have the Feature test drive that path instead of constructing your class directly.

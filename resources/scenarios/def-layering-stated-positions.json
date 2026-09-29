@@ -1,0 +1,33 @@
+{
+    "scenario": "def-layering-stated-positions",
+    "positions": {
+        "balanced": {
+            "light_laser": 100,
+            "rocket_launcher": 20,
+            "ion_cannon": 20,
+            "heavy_laser": 10,
+            "gauss_cannon": 10,
+            "plasma_turret": 5
+        },
+        "early_game": {
+            "light_laser": 200,
+            "rocket_launcher": {
+                "min": 300,
+                "max": 400
+            },
+            "heavy_laser": 20,
+            "ion_cannon": 10,
+            "gauss_cannon": 4,
+            "small_shield_dome": 1,
+            "large_shield_dome": 1,
+            "anti_ballistic_missile": 20
+        }
+    },
+    "provenance": {
+        "source": "TP-021",
+        "derivative_of": "WIK-013",
+        "confidence": "low",
+        "anecdotal": true,
+        "cited_as_corroboration": false
+    }
+}

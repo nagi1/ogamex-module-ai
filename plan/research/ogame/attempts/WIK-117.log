@@ -1,0 +1,2 @@
+the scenario mobile_attack_base did not hold:
+Scenario is missing "persona": /var/www/Modules/AI/resources/scenarios/mobile_attack_base.json

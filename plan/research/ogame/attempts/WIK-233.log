@@ -1,0 +1,67 @@
+OutlawStatusExpiryTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+Start))->toEqual($this->missionStart->addDays(7));
+     20▕ });
+
+  1   Modules/AI/tests/Feature/OutlawStatusExpiryTest.php:16
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\OutlawStatusExpiryTest >…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/outlaw_status.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:36
+     32▕ 
+     33▕     private function durationDays(): int
+     34▕     {
+     35▕         /** @var array{duration_days: int} $behavior */
+  ➜  36▕         $behavior = require dirname(__DIR__, 3) . self::BEHAVIOR_FILE;
+     37▕ 
+     38▕         return (int) $behavior['duration_days'];
+     39▕     }
+     40▕ }
+
+  1   Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:36
+  2   Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:21
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\OutlawStatusExpiryTest >…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/outlaw_status.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:36
+     32▕ 
+     33▕     private function durationDays(): int
+     34▕     {
+     35▕         /** @var array{duration_days: int} $behavior */
+  ➜  36▕         $behavior = require dirname(__DIR__, 3) . self::BEHAVIOR_FILE;
+     37▕ 
+     38▕         return (int) $behavior['duration_days'];
+     39▕     }
+     40▕ }
+
+  1   Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:36
+  2   Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:21
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\OutlawStatusExpiryTest >…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/outlaw_status.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:36
+     32▕ 
+     33▕     private function durationDays(): int
+     34▕     {
+     35▕         /** @var array{duration_days: int} $behavior */
+  ➜  36▕         $behavior = require dirname(__DIR__, 3) . self::BEHAVIOR_FILE;
+     37▕ 
+     38▕         return (int) $behavior['duration_days'];
+     39▕     }
+     40▕ }
+
+  1   Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:36
+  2   Modules/AI/app/Domain/Outlaw/OutlawStatusRule.php:21
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 1.06s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/outlaw_status.php (data must be YAML or JSON so a modder can edit it without code)

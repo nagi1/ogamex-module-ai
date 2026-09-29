@@ -1,0 +1,3 @@
+failed validation twice; retried automatically after the cool-off:
+- file plan/research/ogame/concept/WIK-192-espionage.md: named after a source page — name it for what it does
+- file tests/Unit/Ai/EspionageConceptSpecTest.php: unit tests are not accepted — write a Feature test instead

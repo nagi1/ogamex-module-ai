@@ -1,0 +1,15 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+I can't fix this by adding FILE blocks, and the reason isn't the formatting — it's that there is no honest content to put in them.
+
+**1. The planner file is truncated, so "complete file contents" is impossible.**
+`app/Domain/Decision/QueueableColonyPlanner.php` is reproduced only as far as:
+
+```php
+for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= Univ
+```
+
+Everything after that — the rest of `emptySlot()`, every method that follows, the class's closing brace — I have never seen. The format demands the *whole* file. Any block I emit for that path is a reconstruction that would silently overwrite real code I can't read. That is precisely the failure the "never a fragment" rule exists to prevent.
+
+**2. The rule has no home in the class the plan names.**
+`QueueableColonyPlanner::plan()` returns `?QueueableColony`, carrying `planetId`/`galaxy`/`system`/`position`/`missionType` for a `ColonisationMission`. It reads the host's planet cap, the idle colony ship, and the settings' galaxy/system counts. It never reads a mine level and never returns "the next upgrade". The ACCEPTANCE ("the planner next queues the metal mine", "no mine is queued") describes a value object t

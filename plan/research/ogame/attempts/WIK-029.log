@@ -1,0 +1,72 @@
+PlanMoonshotTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m (0 assertions)[39m
+
+eature\PlanMoonshotTest > it re…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moonshot_plan.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/PlanMoonshot.php:68
+     64▕      * }
+     65▕      */
+     66▕     private function planData(): array
+     67▕     {
+  ➜  68▕         return require dirname(__DIR__, 2) . '/' . self::PLAN_FILE;
+     69▕     }
+     70▕ }
+     71▕
+
+  1   Modules/AI/app/Actions/PlanMoonshot.php:68
+  2   Modules/AI/app/Actions/PlanMoonshot.php:35
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PlanMoonshotTest > it ca…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moonshot_plan.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/PlanMoonshot.php:68
+     64▕      * }
+     65▕      */
+     66▕     private function planData(): array
+     67▕     {
+  ➜  68▕         return require dirname(__DIR__, 2) . '/' . self::PLAN_FILE;
+     69▕     }
+     70▕ }
+     71▕
+
+  1   Modules/AI/app/Actions/PlanMoonshot.php:68
+  2   Modules/AI/app/Actions/PlanMoonshot.php:35
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PlanMoonshotTest > it ke…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moonshot_plan.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/PlanMoonshot.php:68
+     64▕      * }
+     65▕      */
+     66▕     private function planData(): array
+     67▕     {
+  ➜  68▕         return require dirname(__DIR__, 2) . '/' . self::PLAN_FILE;
+     69▕     }
+     70▕ }
+     71▕
+
+  1   Modules/AI/app/Actions/PlanMoonshot.php:68
+  2   Modules/AI/app/Actions/PlanMoonshot.php:35
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PlanMoonshotTest > it pl…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/moonshot_plan.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/PlanMoonshot.php:68
+     64▕      * }
+     65▕      */
+     66▕     private function planData(): array
+     67▕     {
+  ➜  68▕         return require dirname(__DIR__, 2) . '/' . self::PLAN_FILE;
+     69▕     }
+     70▕ }
+     71▕
+
+  1   Modules/AI/app/Actions/PlanMoonshot.php:68
+  2   Modules/AI/app/Actions/PlanMoonshot.php:35
+
+
+  Tests:    5 failed (0 assertions)
+  Duration: 1.12s

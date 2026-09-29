@@ -1,0 +1,48 @@
+Wik218ProvenanceTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (443 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\Wik218ProvenanceTest
+  ⨯ Wik218ProvenanceTest: the spec declares DOCUMENTED, medium confiden… 0.35s  
+  ⨯ Wik218ProvenanceTest: the page stays community-documented and never… 0.05s  
+  ✓ Wik218ProvenanceTest: no behaviour data file is sourced from WIK-21… 0.08s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Wik218ProvenanceTest > Wik218ProvenanceT…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Wik218ProvenanceTest.php:64
+     60▕ function wik218SpecContents(): string
+     61▕ {
+     62▕     $path = wik218SpecPath();
+     63▕ 
+  ➜  64▕     expect(is_file($path))->toBeTrue();
+     65▕ 
+     66▕     return (string) file_get_contents($path);
+     67▕ }
+     68▕
+
+  1   Modules/AI/tests/Feature/Wik218ProvenanceTest.php:64
+  2   Modules/AI/tests/Feature/Wik218ProvenanceTest.php:106
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Wik218ProvenanceTest > Wik218ProvenanceT…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Wik218ProvenanceTest.php:64
+     60▕ function wik218SpecContents(): string
+     61▕ {
+     62▕     $path = wik218SpecPath();
+     63▕ 
+  ➜  64▕     expect(is_file($path))->toBeTrue();
+     65▕ 
+     66▕     return (string) file_get_contents($path);
+     67▕ }
+     68▕
+
+  1   Modules/AI/tests/Feature/Wik218ProvenanceTest.php:64
+  2   Modules/AI/tests/Feature/Wik218ProvenanceTest.php:114
+
+
+  Tests:    2 failed, 1 passed (443 assertions)
+  Duration: 0.90s
+
+These files from your answer were refused and NOT written:
+- plan/research/ogame/concept/WIK-218.md (named after a source page — name it for what it does)

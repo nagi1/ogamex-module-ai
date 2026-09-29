@@ -12,6 +12,7 @@ enum AiQueueActionReason: string
     case VacationMode = 'vacation_mode';
     case NotABuilding = 'not_a_building';
     case NotAResearch = 'not_a_research';
+    case AlreadyResearching = 'already_researching';
     case NotAUnit = 'not_a_unit';
     case ShipyardBusy = 'shipyard_busy';
     case QueueNotCreated = 'queue_not_created';

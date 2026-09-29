@@ -1,0 +1,16 @@
+ReaperDocumentedCombatOnlyTest: suite not collectable
+
+Pest\Exceptions\FatalException 
+
+  Cannot redeclare function reaperDocumentedCombatScenarioPath() (previously declared in /var/www/Modules/AI/tests/Feature/HullPlatingDocumentationTest.php:12)
+
+  at Modules/AI/tests/Feature/ReaperDocumentedCombatOnlyTest.php:52
+     48▕ uses(ReaperClaimDocumentedOnlyTestCase::class);
+     49▕ 
+     50▕ // The pinned artifact is read from the module root, derived from this file so the scenario is
+     51▕ // found wherever the module is installed.
+  ➜  52▕ function reaperDocumentedCombatScenarioPath(): string
+     53▕ {
+     54▕     return dirname(__DIR__, 2) . '/resources/scenarios/reaper-documented-combat-only.json';
+     55▕ }
+     56▕

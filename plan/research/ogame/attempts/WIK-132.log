@@ -1,0 +1,62 @@
+SolarSystemSlotsTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (0 assertions)[39m
+
+arSystemSlots.php:106
+  2   Modules/AI/app/Support/SolarSystemSlots.php:61
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SolarSystemSlotsTest > i…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/solar_system_slots.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/SolarSystemSlots.php:106
+    102▕      * @return array{first_colonizable_position:int,last_colonizable_position:int,outer_space_slot:int,outer_space_label:string}
+    103▕      */
+    104▕     private function layout(): array
+    105▕     {
+  ➜ 106▕         return $this->layout ??= require dirname(__DIR__, 2) . self::LAYOUT_PATH;
+    107▕     }
+    108▕ }
+    109▕
+
+  1   Modules/AI/app/Support/SolarSystemSlots.php:106
+  2   Modules/AI/app/Support/SolarSystemSlots.php:61
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SolarSystemSlotsTest > i…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/solar_system_slots.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/SolarSystemSlots.php:106
+    102▕      * @return array{first_colonizable_position:int,last_colonizable_position:int,outer_space_slot:int,outer_space_label:string}
+    103▕      */
+    104▕     private function layout(): array
+    105▕     {
+  ➜ 106▕         return $this->layout ??= require dirname(__DIR__, 2) . self::LAYOUT_PATH;
+    107▕     }
+    108▕ }
+    109▕
+
+  1   Modules/AI/app/Support/SolarSystemSlots.php:106
+  2   Modules/AI/app/Support/SolarSystemSlots.php:61
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SolarSystemSlotsTest > i…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/solar_system_slots.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/SolarSystemSlots.php:106
+    102▕      * @return array{first_colonizable_position:int,last_colonizable_position:int,outer_space_slot:int,outer_space_label:string}
+    103▕      */
+    104▕     private function layout(): array
+    105▕     {
+  ➜ 106▕         return $this->layout ??= require dirname(__DIR__, 2) . self::LAYOUT_PATH;
+    107▕     }
+    108▕ }
+    109▕
+
+  1   Modules/AI/app/Support/SolarSystemSlots.php:106
+  2   Modules/AI/app/Support/SolarSystemSlots.php:61
+
+
+  Tests:    6 failed (0 assertions)
+  Duration: 1.00s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/solar_system_slots.php (data must be YAML or JSON so a modder can edit it without code)

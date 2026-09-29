@@ -1,0 +1,52 @@
+QueueSystemPhalanxActionTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (0 assertions)[39m
+
+ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +21 vendor frames 
+  22  Modules/AI/tests/Feature/QueueSystemPhalanxActionTest.php:85
+  23  Modules/AI/tests/Feature/QueueSystemPhalanxActionTest.php:178
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\QueueSystemPhalanxAction…  QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'skill_band' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `enabled`, `archetype`, `updated_at`, `created_at`) values (9522, 1, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +21 vendor frames 
+  22  Modules/AI/tests/Feature/QueueSystemPhalanxActionTest.php:85
+  23  Modules/AI/tests/Feature/QueueSystemPhalanxActionTest.php:192
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\QueueSystemPhalanxAction…  QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'skill_band' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `enabled`, `archetype`, `updated_at`, `created_at`) values (9523, 1, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +21 vendor frames 
+  22  Modules/AI/tests/Feature/QueueSystemPhalanxActionTest.php:85
+  23  Modules/AI/tests/Feature/QueueSystemPhalanxActionTest.php:203
+
+
+  Tests:    6 failed (0 assertions)
+  Duration: 1.01s

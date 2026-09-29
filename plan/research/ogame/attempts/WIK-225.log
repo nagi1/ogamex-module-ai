@@ -1,0 +1,83 @@
+Wik225FactsOnlyTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m (6 assertions)[39m
+
+─────────────  
+   FAILED  Modules\AI\tests\Feature\Wik225FactsOnlyTest > it states no numer…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:22
+     18▕ function wik225Record(): string
+     19▕ {
+     20▕     $path = wik225RecordPath();
+     21▕ 
+  ➜  22▕     expect(is_file($path))->toBeTrue();
+     23▕ 
+     24▕     return (string) file_get_contents($path);
+     25▕ }
+     26▕
+
+  1   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:22
+  2   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:89
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Wik225FactsOnlyTest > it names no doctri…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:22
+     18▕ function wik225Record(): string
+     19▕ {
+     20▕     $path = wik225RecordPath();
+     21▕ 
+  ➜  22▕     expect(is_file($path))->toBeTrue();
+     23▕ 
+     24▕     return (string) file_get_contents($path);
+     25▕ }
+     26▕
+
+  1   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:22
+  2   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:96
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Wik225FactsOnlyTest > it records dark ma…   
+  Failed asserting that false is true.
+
+  at Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:22
+     18▕ function wik225Record(): string
+     19▕ {
+     20▕     $path = wik225RecordPath();
+     21▕ 
+  ➜  22▕     expect(is_file($path))->toBeTrue();
+     23▕ 
+     24▕     return (string) file_get_contents($path);
+     25▕ }
+     26▕
+
+  1   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:22
+  2   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:100
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Wik225FactsOnlyTest > it keeps events an…   
+  Failed asserting that two arrays are identical.
+  -Array &0 []
+  +Array &0 [
+  +    0 => '/var/www/Modules/AI/app/Actions/SeedAiTestUniverseAction.php',
+  +    1 => '/var/www/Modules/AI/app/Http/Controllers/HarnessStatusController.php',
+  +]
+  
+
+  at Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:118
+    114▕ 
+    115▕         $offenders[] = $path;
+    116▕     }
+    117▕ 
+  ➜ 118▕     expect($offenders)->toBe([]);
+    119▕ });
+    120▕
+
+  1   Modules/AI/tests/Feature/Wik225FactsOnlyTest.php:118
+
+
+  Tests:    5 failed (6 assertions)
+  Duration: 1.23s
+
+These files from your answer were refused and NOT written:
+- plan/research/ogame/WIK-225.md (named after a source page — name it for what it does)
