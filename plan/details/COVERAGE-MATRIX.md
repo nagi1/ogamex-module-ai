@@ -12,6 +12,10 @@ It is not a wish list. Coverage here means the whole chain: policy → candidate
 executor → host action, with a test on the end-to-end path. Everything else is a hole, and each hole is
 labelled so nobody has to guess which kind it is.
 
+**A `Wired` verdict means the chain exists, not that the behaviour has been observed.** Whether an aspect
+has ever actually happened in live play is the other half of coverage, measured on both cohorts in
+[play coverage](../specs/play-coverage.md) — see §12.
+
 | Verdict | Means |
 | --- | --- |
 | **Wired** | The whole chain exists and is exercised end to end |
@@ -185,3 +189,20 @@ can join but never leave, an ally it can watch but never help, an enemy it can d
 and **dead branches** (waves, ABM/IPM, moon destruction, ACS) that exist as code or as a host API with no
 caller. The first three are queueable work; the fourth needs a decision per branch, which is why `DISC-14`
 asks for one.
+
+---
+
+## 12. Two layers, and why both are needed
+
+- **This document** answers *can it happen*: the chain exists in code and a test exercises the end-to-end
+  path. It is static, and it covers every aspect whether or not a universe has ever exercised it.
+- **[Play coverage](../specs/play-coverage.md)** answers *has it happened*: P1 rows measured on both live
+  cohorts — no attack mission in 24 h, no social exchange in 24 h, one fleetsave in a cohort's lifetime, no
+  account owning a recycler.
+- Neither substitutes for the other, and they fail in opposite directions. An aspect whose chain is
+  complete but which never runs is `Wired` here and broken there: raids are wired in §3 and have not flown
+  since 28 September (`ATK-001`). An aspect that does run but whose *result* is thrown away is invisible
+  there and visible here: nothing reads an expedition outcome (`IMPL-67`) and the mine-ratio doctrine is
+  read only by its own test (`IMPL-68`).
+- **Read them together.** A `Wired` verdict means "nothing is missing in code", not "this works in the
+  universe"; the live ledger is the authority on the second and this table is the authority on the first.
