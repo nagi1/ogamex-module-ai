@@ -176,9 +176,18 @@ class AIServiceProvider extends ModuleServiceProvider
         }
         $dueWork->withoutOverlapping(5);
         $schedule->command('ai:advance-campaigns')->everyMinute()->withoutOverlapping(5);
-        $schedule->command('ai:advance-alliance-life')->everyTenMinutes()->withoutOverlapping(5);
-        $schedule->command('ai:reconcile-language-requests')->everyTenMinutes()->withoutOverlapping(5);
-        $schedule->command('ai:record-score-samples')->hourly()->withoutOverlapping(5);
+        // These three used to be every-ten-minutes and hourly, and stopped firing altogether: the
+        // container's scheduler loop is `schedule:run; sleep 60`, so its phase drifts and an event
+        // whose cron names a minute (0, 10, 20 ...) is simply never due when the loop lands. The
+        // growth curve was dead for a day on grand and four on pve before anyone could see it
+        // (found 30 Sep 2026). Each of them is idempotent by state -- the sampler buckets on
+        // `startOfHour()` and updates that hour's row, alliance life skips an account that is
+        // already engaged or already applied, and reconciliation only settles reservations -- so
+        // running them when the loop happens to tick costs nothing and misses nothing. The root
+        // cause stays the entrypoint's loop: see HARNESS-003.
+        $schedule->command('ai:advance-alliance-life')->everyMinute()->withoutOverlapping(5);
+        $schedule->command('ai:reconcile-language-requests')->everyMinute()->withoutOverlapping(5);
+        $schedule->command('ai:record-score-samples')->everyMinute()->withoutOverlapping(5);
         // Retention is enforced on a quiet hour rather than at the moment a row
         // expires: a nightly sweep is one delete per table instead of a job per
         // row, and the windows are measured in days.

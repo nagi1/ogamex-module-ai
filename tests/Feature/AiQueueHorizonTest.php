@@ -94,6 +94,27 @@ test('the module schedules the due work dispatcher every minute', function (): v
         ->and($events->first()->expression)->toBe('* * * * *');
 });
 
+/**
+ * The container's scheduler loop is `schedule:run; sleep 60`, so its phase drifts through the minute
+ * and an event whose cron names a minute -- `hourly()`, `everyTenMinutes()` -- can go a whole day
+ * without ever being due while every `*`-minute event keeps running. These three are idempotent by
+ * state (the sampler buckets on `startOfHour()`, alliance life skips an account already engaged,
+ * reconciliation only settles reservations), so they run every minute and stop caring when the loop
+ * ticks. Found 30 Sep 2026: the growth curve was dead for a day on grand and four on pve, and
+ * alliance life had not advanced since 29 Sep 11:50.
+ */
+test('the state-idempotent passes never depend on the loop landing on a particular minute', function (string $command): void {
+    $events = collect(app(Schedule::class)->events())
+        ->filter(static fn (object $event): bool => str_contains((string) $event->command, $command));
+
+    expect($events)->toHaveCount(1)
+        ->and($events->first()->expression)->toBe('* * * * *');
+})->with([
+    'alliance life' => ['ai:advance-alliance-life'],
+    'language reconciliation' => ['ai:reconcile-language-requests'],
+    'score sampling' => ['ai:record-score-samples'],
+]);
+
 test('Horizon accepts the module plan for production, local and an unlisted environment', function (string $environment): void {
     // ProvisioningPlan is what the Horizon master supervisor builds on start.
     $plan = ProvisioningPlan::get('test-master');
