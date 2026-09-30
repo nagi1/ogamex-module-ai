@@ -467,6 +467,27 @@ def sections(text):
     return out
 
 
+def affected_tests(written):
+    """Test files that name a class this attempt wrote or edited, other than its own test.
+
+    A slice checked only by its own test can still break the module. The harness rewrote
+    `BuildAiPilotReportAction::handle()` away, the slice's own test passed, and the operator console
+    answered 500 to every page while nothing noticed (found 30 Sep 2026). The tests that name the
+    touched classes are the ones that can feel the change, so they run with it.
+    """
+    names = [os.path.basename(path)[:-4] for path in written
+             if path.startswith("app/") and path.endswith(".php")]
+    if not names:
+        return []
+
+    hits = subprocess.run(
+        ["grep", "-rlE", "|".join(re.escape(name) for name in names), "tests/", "--include=*.php"],
+        cwd=MODULE, capture_output=True, text=True,
+    ).stdout.split()
+
+    return [os.path.basename(hit)[:-4] for hit in hits]
+
+
 def duplicate_class(content, clean):
     """Why this file may not be written because the module already has that class, or None.
 
@@ -1982,7 +2003,9 @@ def implement(code):
         return 1
     # One lane for everything that touches the shared test database: the Pest runs below and the
     # scenario replay at the end both go through `run_in_app`, which holds the lane for each one.
-    for name in tests:
+    # The slice's own tests first, then every test that names a class the slice touched: a shared
+    # action rewritten in place has to keep the pages and flows that already call it working.
+    for name in tests + [name for name in affected_tests(written) if name not in tests]:
         code_rc, output = run_in_app(f"./vendor/bin/pest --testsuite=Modules --filter={name}")
         summary = [line.strip() for line in output.splitlines() if "Tests:" in line]
         # A summary line only means the suite RAN: six failed tests still print one. The exit code is
