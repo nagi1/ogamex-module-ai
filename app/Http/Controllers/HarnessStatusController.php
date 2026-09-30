@@ -68,6 +68,26 @@ class HarnessStatusController
     }
 
     /**
+     * The whole task ledger, every column and every row.
+     *
+     * The overview answers "what is moving"; this answers "what is in the store and what does each row
+     * wait on". It is fetched on load and on demand rather than on the poll, because a table that
+     * re-sorts itself under the reader while they search it is worse than one a refresh behind.
+     */
+    public function tasks(): JsonResponse
+    {
+        $this->localOnly();
+
+        $tasks = $this->taskRows();
+
+        return response()->json([
+            'at' => now()->format('H:i:s'),
+            'total' => count($tasks),
+            'tasks' => $tasks,
+        ]);
+    }
+
+    /**
      * Build-time tooling has no business answering outside a development machine, where it would
      * expose the plan directory and the run log to anyone who guessed the URL.
      */
@@ -276,7 +296,8 @@ class HarnessStatusController
 
         try {
             $connection = new PDO('sqlite:'.$this->taskDatabase(), null, null, [PDO::ATTR_TIMEOUT => 2]);
-            $rows = $connection->query('SELECT code, title FROM tasks')->fetchAll(PDO::FETCH_KEY_PAIR);
+            /** @var array<string, string> $rows */
+            $rows = $this->queryRows($connection, 'SELECT code, title FROM tasks', PDO::FETCH_KEY_PAIR);
         } catch (Throwable) {
             return [];
         }
@@ -384,19 +405,103 @@ class HarnessStatusController
             // Read-only by construction: this page may only ever look at the task store.
             $connection = new PDO('sqlite:'.$this->taskDatabase(), null, null, [PDO::ATTR_TIMEOUT => 2]);
 
-            foreach ($connection->query('SELECT status, COUNT(*) AS total FROM tasks GROUP BY status') as $row) {
+            foreach ($this->queryRows($connection, 'SELECT status, COUNT(*) AS total FROM tasks GROUP BY status') as $row) {
                 $counts[(string) $row['status']] = (int) $row['total'];
                 $counts['total'] += (int) $row['total'];
             }
 
-            $counts['promoted'] = (int) $connection->query(
-                "SELECT COUNT(*) FROM tasks WHERE notes LIKE '%auto-promoted%'"
-            )->fetchColumn();
+            $promoted = $this->queryRows($connection, "SELECT COUNT(*) AS total FROM tasks WHERE notes LIKE '%auto-promoted%'");
+            $counts['promoted'] = (int) ($promoted[0]['total'] ?? 0);
         } catch (Throwable) {
             return $counts;
         }
 
         return $counts;
+    }
+
+    /**
+     * Every column of every task, plus what the row waits on and what the harness already did to it.
+     *
+     * Read-only by construction: the ledger belongs to a person, and this page may only look at it. A
+     * dependency edge is stored as ids, so both ends are joined back to codes here rather than leaving
+     * the page to resolve numbers, and readiness comes from the store's own view so this page can never
+     * disagree with `task.py ready` about what is next.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function taskRows(): array
+    {
+        if (!is_file($this->taskDatabase())) {
+            return [];
+        }
+
+        try {
+            $connection = new PDO('sqlite:'.$this->taskDatabase(), null, null, [PDO::ATTR_TIMEOUT => 2]);
+            // The ledger is a person's to edit; this window may only ever read it, whatever is added here
+            // later. SQLite enforces that rather than this comment.
+            $connection->exec('PRAGMA query_only = 1');
+
+            /** @var array<int, array<string, mixed>> $rows */
+            $rows = $this->queryRows($connection, 'SELECT * FROM tasks ORDER BY priority, code');
+            $needs = $this->taskNeeds($connection);
+            $ready = array_flip($this->queryRows($connection, 'SELECT code FROM ready_tasks', PDO::FETCH_COLUMN));
+        } catch (Throwable) {
+            return [];
+        }
+
+        return array_map(fn (array $row): array => [
+            ...$row,
+            'deps' => $needs[(string) $row['code']] ?? [],
+            'ready' => isset($ready[(string) $row['code']]),
+            'attempts' => $this->attempts((string) $row['code']),
+            'proved' => is_file($this->path('plan/research/ogame/implemented/'.$row['code'].'.md')),
+        ], $rows);
+    }
+
+    /**
+     * What each row waits on, as the code it waits for and that code's current status.
+     *
+     * @return array<string, array<int, array<string, string>>>
+     */
+    private function taskNeeds(PDO $connection): array
+    {
+        $needs = [];
+
+        foreach ($this->queryRows(
+            $connection,
+            'SELECT t.code AS task, d.code AS needs, d.status AS status FROM dependencies e
+             JOIN tasks t ON t.id = e.task_id JOIN tasks d ON d.id = e.depends_on ORDER BY d.code'
+        ) as $edge) {
+            $needs[(string) $edge['task']][] = ['code' => (string) $edge['needs'], 'status' => (string) $edge['status']];
+        }
+
+        return $needs;
+    }
+
+    /**
+     * One read against the task store, with `PDO::query`'s failure answered once.
+     *
+     * A driver error has the same sensible answer at every call site here -- no rows -- so the guard
+     * lives in one place instead of being repeated per query.
+     *
+     * @return array<int|string, mixed>
+     */
+    private function queryRows(PDO $connection, string $sql, int $mode = PDO::FETCH_ASSOC): array
+    {
+        $statement = $connection->query($sql);
+
+        return $statement === false ? [] : $statement->fetchAll($mode);
+    }
+
+    /**
+     * Failed attempts the retry loop has counted for this task, so the ledger shows the same number the
+     * harness acts on rather than a second opinion about how hard a slice has been.
+     */
+    private function attempts(string $code): int
+    {
+        $counter = $this->path("plan/research/ogame/attempts/{$code}.count");
+
+        return is_file($counter) ? (int) trim((string) file_get_contents($counter)) : 0;
     }
 
     /**
@@ -454,6 +559,11 @@ class HarnessStatusController
         }
 
         $idle = $newest === null ? $heartbeat : (int) (time() - (int) filemtime($newest));
+        // A model call writes nothing to the log for minutes, so a quiet log is not a stopped harness.
+        // The status file the pass republishes is the other clock, and liveness is whichever is fresher:
+        // "waiting on the model" used to read as "idle for 153s" while a call was in flight.
+        $ages = array_filter([$idle, $heartbeat], static fn (?int $age): bool => $age !== null);
+        $idle = $ages === [] ? null : min($ages);
         // Pest colours its output; the escape codes reach the log and would show as noise on the page.
         $lines = array_map(
             static fn (string $line): string => preg_replace('/\x1b\[[0-9;]*m/', '', $line) ?? $line,
