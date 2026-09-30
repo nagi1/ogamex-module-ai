@@ -24,6 +24,7 @@ use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\ReserveFloor;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Domain\Perception\PlayerObservationService;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Services\ObjectService;
@@ -165,7 +166,12 @@ if (Schema::hasTable('research_queues')) {
 
 printf(
     "due now: %s   leased: %s   pending: %s\n",
-    number_format(DB::table('ai_work_items')->whereIn('player_id', $playerIds)->where('due_at', '<=', now())->count()),
+    // Only work that is still waiting: without the state filter this counts the million rows that
+    // are already completed and past their due time, so it read "1,089,229 due" about a cohort with
+    // fifty items outstanding and made a healthy queue look like a backlog (found 30 Sep 2026).
+    number_format(DB::table('ai_work_items')->whereIn('player_id', $playerIds)
+        ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value])
+        ->where('due_at', '<=', now())->count()),
     number_format($states[2] ?? 0),
     number_format($states[1] ?? 0)
 );
