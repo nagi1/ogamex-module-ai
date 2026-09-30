@@ -63,6 +63,31 @@ python3 plan/tasks/task.py add IMPL-021 "title" impl P2 --depends IMPL-017,REV-0
 - `ready_tasks` view — `todo` tasks whose dependencies are all `done`.
 - `blocked_tasks` view — `todo` tasks with at least one unmet dependency.
 
+## What the priorities mean
+
+Priority is the **severity of observable badness**, not effort and not plan order: how wrong the
+account looks to another player, or to anyone reading its growth. Judged 30 September 2026 against the
+measurements in `plan/details/specs/play-coverage.md`, which is the ledger of what the cohorts did.
+
+| Tier | Meaning | Examples measured on 30 Sep 2026 |
+| --- | --- | --- |
+| `P0` | The account is not playing. Nothing else matters until these are true. | `HARNESS-003` (growth curve dead for a day on grand, four on pve), `ATK-001` (0 raids in days), `FLEET-001` (one fleet save in the cohort's lifetime) |
+| `P1` | It plays, but visibly wrongly: a defence shape a neighbour can scan, a lane that never fires, growth that stalls, or the harness breaking its own runtime. | `QUAL-003` (17/20 grand accounts naked beside a walled planet), `DEF-001` (1.28M units on one planet, 50.8M paid unbuilt), `FLEET-002` (0 recyclers owned) |
+| `P2` | The module is wrong in ways that make the next defect cheap to produce or invisible: missing policy, unwired data, a measurement that lies, acceptance that ignores the quality verdict. | `DEF-038` (unwired floor), `HARNESS-002` (the canary fails half the passes for no defect), `DEF-003` |
+| `P3` | New capability and corpus work: improvements to make later, not fixes for badness now. | the `WIK-*`/`GF-*`/`TP-*` tail, `JEV-*` (which wait behind `REV-9`) |
+
+Three rules that follow from it:
+
+- A row raised from a **live cohort invariant** is at least `P1`: it exists because the accounts were
+  observed failing. `scripts/verify-cohorts.php` raises them at `P1` for exactly that reason.
+- The harness starts at the worst tier that has attemptable rows (`order by priority, id`), so a
+  re-grade changes what it touches next pass. Within one tier the order is the order rows were raised,
+  which is why a tier is a judgement and not a sort key.
+- A row whose notes still say a decision is **open** cannot be finished by writing code. Either decide
+  it in the row's own words — a judged default plus an override line, as `ATK-001`, `DEF-001` and
+  `DEF-002` now carry — or take it out of the queue: `file_ref` empty means the work is a run, not a
+  change (`FLEET-001`). Leaving it both queued and undecided is what burns three attempts a pass.
+
 ## Everyday queries
 
 ```sql
