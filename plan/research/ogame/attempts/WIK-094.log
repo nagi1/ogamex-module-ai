@@ -1,11 +1,11 @@
 MinerUnderVisibleRaidTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\MinerUnderVisibleRaidTest
-  ⨯ it banks the fleet instead of the pending economy upgrade while a h… 0.42s  
-  ⨯ it funds the pending economy upgrade again once the raider is no lo… 0.06s  
+  ⨯ it banks the fleet instead of the pending economy upgrade while a h… 0.39s  
+  ⨯ it funds the next economy upgrade once the hostile fleet is no long… 0.05s  
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\MinerUnderVi…  BindingResolutionException   
-  Target class [Modules\AI\Actions\RunAiDecisionAction] does not exist.
+  Target class [Modules\AI\Actions\RunDecisionStepAction] does not exist.
 
   at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
     1143▕             }
@@ -19,11 +19,12 @@ FAIL  Modules\AI\tests\Feature\MinerUnderVisibleRaidTest
     1151▕
 
       +6 vendor frames 
-  7   Modules/AI/tests/Feature/MinerUnderVisibleRaidTest.php:59
+  7   Modules/AI/tests/Feature/MinerUnderVisibleRaidTest.php:83
+  8   Modules/AI/tests/Feature/MinerUnderVisibleRaidTest.php:89
 
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\MinerUnderVi…  BindingResolutionException   
-  Target class [Modules\AI\Actions\RunAiDecisionAction] does not exist.
+  Target class [Modules\AI\Actions\RunDecisionStepAction] does not exist.
 
   at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
     1143▕             }
@@ -37,8 +38,9 @@ FAIL  Modules\AI\tests\Feature\MinerUnderVisibleRaidTest
     1151▕
 
       +6 vendor frames 
-  7   Modules/AI/tests/Feature/MinerUnderVisibleRaidTest.php:66
+  7   Modules/AI/tests/Feature/MinerUnderVisibleRaidTest.php:83
+  8   Modules/AI/tests/Feature/MinerUnderVisibleRaidTest.php:101
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.91s
+  Duration: 0.94s

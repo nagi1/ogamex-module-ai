@@ -1,0 +1,15 @@
+# Reaper: the source documents the unit only as a combat ship and states no numbers for it.
+# There is no cost, no speed and no rapid-fire figure to model, so nothing below may be read
+# as a stat line.
+#
+# Until the host confirms the mechanics the AI withholds the unit from fleet composition
+# rather than issuing it on a guess. A modder whose host has confirmed the mechanics flips
+# fleet_composition.enabled and changes no PHP.
+
+unit: reaper
+
+fleet_composition:
+  enabled: false
+
+# Deliberately empty: the source carries no numbers for this unit.
+stats: {}

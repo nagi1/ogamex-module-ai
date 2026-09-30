@@ -1,0 +1,28 @@
+# Declared diplomacy policy.
+#
+# The AI module holds no diplomacy code: how the account reads another account's
+# relation is a value, so a modder changes how the account plays here and not in PHP.
+# Read this file's `provenance` block before letting any stance drive a decision.
+
+# The closed set of relation kinds. A key under `relations` that is not listed here
+# is not a declared relation and must be rejected rather than guessed at.
+relation_kinds:
+  - pact
+  - nap
+  - war
+
+# Returned whenever a relation is absent from `relations`.
+default_stance: neutral
+
+relations:
+  pact: friendly
+  nap: neutral
+  war: hostile
+
+# The entry these stances come from states no numbers and no behaviour, so the stances
+# above are host-supplied placeholders until the host confirms them.
+provenance:
+  source_kind: community_wiki
+  confirmed: false
+  host_supplied: true
+  unresolved_mechanics: true

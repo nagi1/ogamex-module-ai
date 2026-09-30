@@ -1,0 +1,58 @@
+RaidBashingCapTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+eBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/RaidBashingCapTest.php:113
+  18  Modules/AI/tests/Feature/RaidBashingCapTest.php:165
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RaidBashingCapTest > it…   QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'archetype' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `enabled`, `updated_at`, `created_at`) values (15674, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/RaidBashingCapTest.php:113
+  18  Modules/AI/tests/Feature/RaidBashingCapTest.php:172
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\RaidBashingCapTest > it…   QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'archetype' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `enabled`, `updated_at`, `created_at`) values (15676, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/RaidBashingCapTest.php:113
+  18  Modules/AI/tests/Feature/RaidBashingCapTest.php:179
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 0.91s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/raid_policy.php (data must be YAML or JSON so a modder can edit it without code)

@@ -1,0 +1,33 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+### FILE: resources/behavior/alliance_lane.php
+```php
+<?php
+
+/*
+ * The alliance lane: the values that decide how an AI-led alliance recruits.
+ *
+ * The leader's review pass reads every threshold from here, so retuning the lane — how long an
+ * application waits, how many the leader takes in one pass, and how selective the alliance is
+ * by rank and by points-per-member — is a data edit, not a code edit.
+ */
+
+$review = [
+    // An application sits this long before the leader looks at it, so membership grows like a
+    // leader deciding, not a script draining a queue.
+    'minimum_application_age_minutes' => 15,
+
+    // The leader takes at most this many per pass; the rest wait for the next one.
+    'maximum_accepts_per_pass' => 1,
+
+    // The top share of the population a leader takes without another thought.
+    'strong_rank_ratio' => 0.15,
+
+    // The bottom share that only a mass or still-recruiting alliance will take.
+    'newbie_rank_ratio' => 0.5,
+
+    // Points per member at or above which the alliance reads as an elite core, and takes only
+    // the strongest applicants.
+    'elite_points_per_member' => 1_000_000,
+
+    // Points per member at or below which the alliance re

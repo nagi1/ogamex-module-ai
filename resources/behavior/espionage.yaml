@@ -1,0 +1,19 @@
+# Espionage policy surface for the AI module.
+#
+# The source is a concept page: it describes espionage as a reconnaissance mission
+# and names what a report reveals, but states no probe counts, no ranges and no
+# cooldowns. Nothing numeric is declared here, because the source states nothing
+# numeric -- a modder who later receives host-confirmed thresholds adds them to
+# this file, and the module reads them from here rather than from PHP.
+espionage:
+  mission: espionage
+  stance: observe_only
+  requires_unit: espionage_probe
+  resolution: host_mission_engine
+  reveals:
+    - resources
+    - fleet
+    - defence
+    - research
+    - buildings
+  outcome: espionage_report

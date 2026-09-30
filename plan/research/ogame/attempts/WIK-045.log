@@ -1,59 +1,19 @@
-AiSituationProtectionBandTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (2 assertions)[39m
+AiSituationProtectionBandTest: suite not collectable
 
-erability/AiSituationOverview.php:76
-  2   Modules/AI/app/Domain/Operability/AiSituationOverview.php:62
+Pest\Exceptions\FatalException 
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AiSituationProtectionBan…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/newbie_protection.php): Failed to open stream: No such file or directory
+  Cannot redeclare class AiSituationOverviewModuleTestCase (previously declared in /var/www/Modules/AI/tests/Feature/AiSituationOverviewTest.php:8)
 
-  at Modules/AI/app/Domain/Operability/AiSituationOverview.php:76
-     72▕      * @return list<array{max_points: int, label: string, ratio: string}>
-     73▕      */
-     74▕     private static function protectionBands(): array
-     75▕     {
-  ➜  76▕         return require dirname(__DIR__, 3) . self::PROTECTION_BANDS;
-     77▕     }
-     78▕ }
-     79▕
+  at Modules/AI/tests/Feature/AiSituationProtectionBandTest.php:8
+      4▕ use Modules\AI\Domain\Operability\AiSituationOverview;
+      5▕ use OGame\Services\ModuleSlotService;
+      6▕ use Tests\IsolatedAccountTestCase;
+      7▕ 
+  ➜   8▕ class AiSituationOverviewModuleTestCase extends IsolatedAccountTestCase
+      9▕ {
+     10▕     private string $statusesFile;
+     11▕ 
+     12▕     public function createApplication(): Application
 
-  1   Modules/AI/app/Domain/Operability/AiSituationOverview.php:76
-  2   Modules/AI/app/Domain/Operability/AiSituationOverview.php:62
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AiSituationProtectionBan…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/newbie_protection.php): Failed to open stream: No such file or directory
-
-  at Modules/AI/app/Domain/Operability/AiSituationOverview.php:76
-     72▕      * @return list<array{max_points: int, label: string, ratio: string}>
-     73▕      */
-     74▕     private static function protectionBands(): array
-     75▕     {
-  ➜  76▕         return require dirname(__DIR__, 3) . self::PROTECTION_BANDS;
-     77▕     }
-     78▕ }
-     79▕
-
-  1   Modules/AI/app/Domain/Operability/AiSituationOverview.php:76
-  2   Modules/AI/app/Domain/Operability/AiSituationOverview.php:62
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AiSituationProtectionBan…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/newbie_protection.php): Failed to open stream: No such file or directory
-
-  at Modules/AI/app/Domain/Operability/AiSituationOverview.php:76
-     72▕      * @return list<array{max_points: int, label: string, ratio: string}>
-     73▕      */
-     74▕     private static function protectionBands(): array
-     75▕     {
-  ➜  76▕         return require dirname(__DIR__, 3) . self::PROTECTION_BANDS;
-     77▕     }
-     78▕ }
-     79▕
-
-  1   Modules/AI/app/Domain/Operability/AiSituationOverview.php:76
-  2   Modules/AI/app/Domain/Operability/AiSituationOverview.php:62
-
-
-  Tests:    5 failed, 1 passed (2 assertions)
-  Duration: 1.11s
+These files from your answer were refused and NOT written:
+- resources/behavior/newbie_protection.php (data must be YAML or JSON so a modder can edit it without code)

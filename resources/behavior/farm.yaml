@@ -1,0 +1,25 @@
+# Community wiki "Farm" doctrine, kept as data so a modder can change how the account
+# farms without touching code.
+#
+# The page states no numbers: a planet is worth farming because its owner has gone
+# inactive and the planet is undefended, never because some ratio crossed a line. When a
+# host wants a threshold, it belongs here, next to the signal it applies to.
+
+# The intent the planner sees. Farming rides the existing raid flow instead of a fleet
+# flow of its own, which is why the raid action is the value named here.
+intent: farm
+action: raid
+
+# Signals that make a planet worth farming.
+target_signals:
+  inactive_owner: true
+  no_defences: true
+  resources_on_planet: true
+
+# Signals that disqualify a planet that otherwise looks rich.
+avoid_signals:
+  alliance_member: true
+  defended_target: true
+
+# The doctrine scouts before it commits a cargo fleet.
+scout_before_attack: true

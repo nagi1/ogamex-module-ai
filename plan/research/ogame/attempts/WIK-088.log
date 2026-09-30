@@ -1,2 +1,62 @@
-the scenario alliance_war_declaration_matured did not hold:
-Scenario is missing "persona": /var/www/Modules/AI/resources/scenarios/alliance_war_declaration_matured.json
+AllianceWarExceptionTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+─────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceWarExceptionTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/alliance_war_exception.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
+    245▕      * where a modder edits it without reading this action.
+    246▕      */
+    247▕     private function warWindowHours(): int
+    248▕     {
+  ➜ 249▕         $exception = require dirname(__DIR__, 2) . self::WAR_EXCEPTION_FILE;
+    250▕ 
+    251▕         return (int) $exception['window_hours'];
+    252▕     }
+    253▕
+
+  1   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
+  2   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:195
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceWarExceptionTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/alliance_war_exception.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
+    245▕      * where a modder edits it without reading this action.
+    246▕      */
+    247▕     private function warWindowHours(): int
+    248▕     {
+  ➜ 249▕         $exception = require dirname(__DIR__, 2) . self::WAR_EXCEPTION_FILE;
+    250▕ 
+    251▕         return (int) $exception['window_hours'];
+    252▕     }
+    253▕
+
+  1   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
+  2   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:195
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceWarExceptionTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/alliance_war_exception.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
+    245▕      * where a modder edits it without reading this action.
+    246▕      */
+    247▕     private function warWindowHours(): int
+    248▕     {
+  ➜ 249▕         $exception = require dirname(__DIR__, 2) . self::WAR_EXCEPTION_FILE;
+    250▕ 
+    251▕         return (int) $exception['window_hours'];
+    252▕     }
+    253▕
+
+  1   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
+  2   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:195
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 1.26s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/alliance_war_exception.php (data must be YAML or JSON so a modder can edit it without code)

@@ -1,27 +1,2 @@
-ExpeditionTimeNotEncodedTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m (2 assertions)[39m
-
-FAIL  Modules\AI\tests\Feature\ExpeditionTimeNotEncodedTest
-  ⨯ it encodes no expedition timing value in module code or config       0.03s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\ExpeditionTimeNotEncodedTest > it encode…   
-  Failed asserting that two arrays are identical.
-  -Array &0 []
-  +Array &0 [
-  +    0 => '/var/www/Modules/AI/app/Actions/QueueAiExpeditionAction.php:37',
-  +]
-  
-
-  at Modules/AI/tests/Feature/ExpeditionTimeNotEncodedTest.php:80
-     76▕ 
-     77▕     // A scan that read nothing would pass for the wrong reason.
-     78▕     expect(count($files))->toBeGreaterThan(0);
-     79▕ 
-  ➜  80▕     expect(aiModuleExpeditionTimingOffenders($files))->toBe([]);
-     81▕ });
-     82▕
-
-  1   Modules/AI/tests/Feature/ExpeditionTimeNotEncodedTest.php:80
-
-
-  Tests:    1 failed (2 assertions)
-  Duration: 0.48s
+these files are not called by any runtime code, so no account can ever execute them: app/Actions/ResolveExpeditionDurationAction.php.
+Wire the rule into the planner, engine or action that acts on it, add that file to FILES, and have the Feature test drive that path instead of constructing your class directly.

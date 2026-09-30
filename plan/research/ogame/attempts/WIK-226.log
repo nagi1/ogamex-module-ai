@@ -1,31 +1,37 @@
-MarketRatioOfferTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m7 passed[39;22m[90m (15 assertions)[39m
+MarketplaceRatioDocumentedScenarioTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m10 passed[39;22m[90m (22 assertions)[39m
 
-FAIL  Modules\AI\tests\Feature\MarketRatioOfferTest
-  ✓ it documents the marketplace bounds the Planner trades against       0.42s  
-  ✓ it executes a search offer that sits exactly on the search band edg… 0.07s  
-  ✓ it refuses a search offer one percent past the search band edge      0.06s  
-  ✓ it refuses a search offer that returns nothing at all                0.07s  
-  ⨯ it keeps a ratio on the adjustable band edge and drops one past it   0.06s  
-  ✓ it re-evaluates the market only once the documented interval has ru… 0.07s  
-  ✓ it answers the documented market situations the way the search band… 0.07s  
-  ✓ it answers the documented market situations the way the search band… 0.07s  
+FAIL  Modules\AI\tests\Feature\MarketplaceRatioDocumentedScenarioTest
+  ✓ it trades by the ratio, offer band and readjust period the behaviou… 0.38s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it accepts offers inside the offer band and rejects offers past it…  0.05s  
+  ✓ it holds an offer to the offer band, not to the wider server adjust… 0.05s  
+  ⨯ it prices an offer against the ratio the server is running now       0.07s  
+  ✓ it reads the ratio and the offer band from the behaviour file rathe… 0.05s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\MarketRatioOfferTest > it keeps a ratio…    
-  Failed asserting that false is true.
+   FAILED  Modules\AI\tests\Feature\MarketplaceRatioDocumentedScenarioTest >…   
+  Failed asserting that two variables reference the same object.
+  -Modules\AI\Enums\MarketOfferVerdict Enum #18767 (Reject, 'reject')
+  +Modules\AI\Enums\MarketOfferVerdict Enum #18768 (Accept, 'accept')
+  
 
-  at Modules/AI/tests/Feature/MarketRatioOfferTest.php:113
-    109▕ it('keeps a ratio on the adjustable band edge and drops one past it', function () {
-    110▕     $band = app(MarketRatioBand::class);
-    111▕     $edge = (float) $band->adjustableBandPercent();
-    112▕ 
-  ➜ 113▕     expect($band->isAdjustableRatio(marketRatioDriftedBy($edge)))->toBeTrue()
-    114▕         ->and($band->isAdjustableRatio(marketRatioDriftedBy(-$edge)))->toBeTrue()
-    115▕         ->and($band->isAdjustableRatio(marketRatioDriftedBy($edge + 1.0)))->toBeFalse();
-    116▕ });
-    117▕
+  at Modules/AI/tests/Feature/MarketplaceRatioDocumentedScenarioTest.php:101
+     97▕     $shiftedRatio['metal'] = $shiftedRatio['metal'] * (1.0 - $policy->adjustmentPercent() / 100.0);
+     98▕ 
+     99▕     // The same offer is a loss against the shifted ratio and a bargain against the standard one.
+    100▕     expect(evaluateMarketplaceShift(0.0, $shiftedRatio))->toBe(MarketOfferVerdict::Accept)
+  ➜ 101▕         ->and(evaluateMarketplaceShift(0.0))->toBe(MarketOfferVerdict::Reject);
+    102▕ });
+    103▕ 
+    104▕ it('reads the ratio and the offer band from the behaviour file rather than from PHP', function () {
+    105▕     $document = <<<YAML
 
-  1   Modules/AI/tests/Feature/MarketRatioOfferTest.php:113
+  1   Modules/AI/tests/Feature/MarketplaceRatioDocumentedScenarioTest.php:101
 
 
-  Tests:    1 failed, 7 passed (15 assertions)
-  Duration: 1.38s
+  Tests:    1 failed, 10 passed (22 assertions)
+  Duration: 1.40s

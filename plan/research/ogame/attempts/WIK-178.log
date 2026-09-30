@@ -1,2 +1,58 @@
-the scenario storage_at_redesigned_crossover did not hold:
-Scenario is missing "input": /var/www/Modules/AI/resources/scenarios/storage_at_redesigned_crossover.json
+AiStorageCapacityReadoutTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (0 assertions)[39m
+
+rageHealthAction.php:191
+    187▕      * @return array{starting_capacity:int|float, redesigned: array<int, int|float>, legacy: array<int, int|float>}
+    188▕      */
+    189▕     private function storageCurve(): array
+    190▕     {
+  ➜ 191▕         return require dirname(__DIR__, 2) . self::STORAGE_CURVE_FILE;
+    192▕     }
+    193▕ 
+    194▕     /**
+    195▕      * ponytail: information_schema.table_rows is an InnoDB estimate, not an exact count, but the
+
+  1   Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:191
+  2   Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:47
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiStorageCapacityReadout…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/storage_curve.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:191
+    187▕      * @return array{starting_capacity:int|float, redesigned: array<int, int|float>, legacy: array<int, int|float>}
+    188▕      */
+    189▕     private function storageCurve(): array
+    190▕     {
+  ➜ 191▕         return require dirname(__DIR__, 2) . self::STORAGE_CURVE_FILE;
+    192▕     }
+    193▕ 
+    194▕     /**
+    195▕      * ponytail: information_schema.table_rows is an InnoDB estimate, not an exact count, but the
+
+  1   Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:191
+  2   Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:47
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiStorageCapacityReadout…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/storage_curve.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:191
+    187▕      * @return array{starting_capacity:int|float, redesigned: array<int, int|float>, legacy: array<int, int|float>}
+    188▕      */
+    189▕     private function storageCurve(): array
+    190▕     {
+  ➜ 191▕         return require dirname(__DIR__, 2) . self::STORAGE_CURVE_FILE;
+    192▕     }
+    193▕ 
+    194▕     /**
+    195▕      * ponytail: information_schema.table_rows is an InnoDB estimate, not an exact count, but the
+
+  1   Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:191
+  2   Modules/AI/app/Actions/SummarizeAiStorageHealthAction.php:47
+
+
+  Tests:    6 failed (0 assertions)
+  Duration: 1.08s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/storage_curve.php (data must be YAML or JSON so a modder can edit it without code)

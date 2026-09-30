@@ -1,29 +1,69 @@
-your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
---- your previous answer began:
-### FILE: tests/Unit/DefenseCompositionPlannerTest.php
-```php
-<?php
+ShieldDomeRapidFireBlockTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
 
-use Modules\AI\Domain\Decision\DefenseComposition;
-use Modules\AI\Domain\Decision\DefenseCompositionPlanner;
-use Modules\AI\Domain\Decision\DefenseNeed;
-use Modules\AI\Enums\AiDefenseDoctrine;
-use Modules\AI\Models\AiProfile;
-use OGame\Models\Resources;
-use Tests\IsolatedAccountTestCase;
+et class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
 
-uses(IsolatedAccountTestCase::class);
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/Defence/ShieldDomeRapidFireBlockTest.php:43
 
-// Plenty of resources and the whole defence tech tree, so requirements never mask the ratio choice.
-beforeEach(function (): void {
-    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
-    $this->planetSetObjectLevel('shipyard', 12);
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Defence\Shie…  BindingResolutionException   
+  Target class [Modules\AI\Actions\DefenseCompositionPlanner] does not exist.
 
-    foreach (['laser_technology' => 12, 'energy_technology' => 6, 'ion_technology' => 4, 'weapon_technology' => 3, 'shielding_technology' => 2, 'plasma_technology' => 7] as $machineName => $level) {
-        $this->playerSetResearchLevel($machineName, $level);
-    }
-});
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
+    1143▕             }
+    1144▕         }
+    1145▕ 
+    1146▕         try {
+  ➜ 1147▕             $reflector = new ReflectionClass($concrete);
+    1148▕         } catch (ReflectionException $e) {
+    1149▕             throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
 
-// A balanced wall (100 light lasers anchor) at its ratio except Gauss Cannon: the one component the
-// doctrine is behind on is chosen, even though Rocket Launcher is ahead of its own ratio.
-test('a wall behind on Gauss Cannon but ahead on Rocket Launcher chooses Gauss
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/Defence/ShieldDomeRapidFireBlockTest.php:49
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Defence\Shie…  BindingResolutionException   
+  Target class [Modules\AI\Actions\DefenseCompositionPlanner] does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
+    1143▕             }
+    1144▕         }
+    1145▕ 
+    1146▕         try {
+  ➜ 1147▕             $reflector = new ReflectionClass($concrete);
+    1148▕         } catch (ReflectionException $e) {
+    1149▕             throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
+
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/Defence/ShieldDomeRapidFireBlockTest.php:56
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Defence\Shie…  BindingResolutionException   
+  Target class [Modules\AI\Actions\DefenseCompositionPlanner] does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Container/Container.php:1147
+    1143▕             }
+    1144▕         }
+    1145▕ 
+    1146▕         try {
+  ➜ 1147▕             $reflector = new ReflectionClass($concrete);
+    1148▕         } catch (ReflectionException $e) {
+    1149▕             throw new BindingResolutionException("Target class [$concrete] does not exist.", 0, $e);
+    1150▕         }
+    1151▕
+
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/Defence/ShieldDomeRapidFireBlockTest.php:64
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 1.20s
+
+These files from your answer were refused and NOT written:
+- app/Actions/DefenseCompositionPlanner.php (app/Domain/Decision/DefenseCompositionPlanner.php already declares class DefenseCompositionPlanner — edit it instead of writing a second one)

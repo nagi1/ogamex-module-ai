@@ -1,2 +1,47 @@
-these values decide behaviour but were written into PHP: app/Defense/FodderHeavyDefenseDoctrine.php: 100, app/Defense/FodderHeavyDefenseDoctrine.php: 20, app/Defense/FodderHeavyDefenseDoctrine.php: 5, app/Defense/FodderHeavyDefenseDoctrine.php: 50.
-Put them in a file under resources/behavior/ (extend one that exists when it covers the topic) and read them from there, so a modder can change the behaviour without editing code. Say which file in FILES.
+FodderHeavyDefenseDoctrineTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m3 passed[39;22m[90m (21 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\FodderHeavyDefenseDoctrineTest
+  ✓ it returns the ratio wall the source states for a fodder anchor of…  0.48s  
+  ✓ it truncates every count to whole units one fodder short of the rat… 0.06s  
+  ✓ it claims no fodder unit at a fodder anchor of zero but keeps both…  0.06s  
+  ⨯ it bounds the anti ballistic missiles by the missile silo level and… 0.07s  
+  ⨯ it follows the ratios in the behavior file instead of any number in… 0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\FodderHeavyDefenseDoctrineTes…  TypeError   
+  Modules\AI\Defense\FodderHeavyDefenseDoctrine::forFodder(): Argument #2 ($threatHulls) must be of type array, int given, called in /var/www/Modules/AI/tests/Feature/FodderHeavyDefenseDoctrineTest.php on line 93
+
+  at Modules/AI/app/Ai/Defense/FodderHeavyDefenseDoctrine.php:94
+     90▕ 
+     91▕     /**
+     92▕      * @param  list<string>  $threatHulls  hulls seen in the incoming fleet; this rule ignores them
+     93▕      */
+  ➜  94▕     public static function forFodder(int $fodder, array $threatHulls = [], int $missileSiloLevel = 0): self
+     95▕     {
+     96▕         $policy = self::policy();
+     97▕ 
+     98▕         return new self(
+
+  1   Modules/AI/app/Ai/Defense/FodderHeavyDefenseDoctrine.php:94
+  2   Modules/AI/tests/Feature/FodderHeavyDefenseDoctrineTest.php:93
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\FodderHeavyDefenseDoctrineTes…  TypeError   
+  Modules\AI\Defense\FodderHeavyDefenseDoctrine::forFodder(): Argument #2 ($threatHulls) must be of type array, int given, called in /var/www/Modules/AI/tests/Feature/FodderHeavyDefenseDoctrineTest.php on line 121
+
+  at Modules/AI/app/Ai/Defense/FodderHeavyDefenseDoctrine.php:94
+     90▕ 
+     91▕     /**
+     92▕      * @param  list<string>  $threatHulls  hulls seen in the incoming fleet; this rule ignores them
+     93▕      */
+  ➜  94▕     public static function forFodder(int $fodder, array $threatHulls = [], int $missileSiloLevel = 0): self
+     95▕     {
+     96▕         $policy = self::policy();
+     97▕ 
+     98▕         return new self(
+
+  1   Modules/AI/app/Ai/Defense/FodderHeavyDefenseDoctrine.php:94
+  2   Modules/AI/tests/Feature/FodderHeavyDefenseDoctrineTest.php:121
+
+
+  Tests:    2 failed, 3 passed (21 assertions)
+  Duration: 1.24s

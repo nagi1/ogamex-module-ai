@@ -1,0 +1,11 @@
+# Relation policy the account reads before it picks an attack target.
+#
+# Every top-level key names a relation the acting alliance can have with another player:
+#   hostile: true   the player may be selected as an attack target
+#   hostile: false  the player is classified non-hostile and is never returned as an attack target
+#
+# member is fail-closed on purpose: when the membership edge cannot be read, the account treats the
+# player as a member rather than as free loot. Editing this file is how a modder makes members
+# raidable again; no code change is needed.
+member:
+  hostile: false

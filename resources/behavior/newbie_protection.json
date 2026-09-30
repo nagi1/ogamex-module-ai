@@ -1,0 +1,15 @@
+{
+    "unknown_label": "unknown",
+    "protection_bands": [
+        {
+            "from_points": 0,
+            "to_points": 49999,
+            "label": "general protection with a 1:5 ratio"
+        },
+        {
+            "from_points": 50000,
+            "to_points": 500000,
+            "label": "general protection with a 1:10 ratio"
+        }
+    ]
+}

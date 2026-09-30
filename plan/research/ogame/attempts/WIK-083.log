@@ -1,42 +1,43 @@
-ShieldPowerSpecTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (2 assertions)[39m
+ShieldPowerTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
-FAIL  Modules\AI\tests\Feature\Domain\Combat\ShieldPowerSpecTest
-  ⨯ it records the shield power claim as an unconfirmed medium confiden… 0.37s  
-  ⨯ it records no shield value constant, because the source states no n… 0.05s  
+FAIL  Modules\AI\tests\Feature\ShieldPowerTest
+  ⨯ it values two fleets alike while the host has confirmed no shield p… 0.40s  
+  ⨯ it lowers expected damage as the supplied shield value rises         0.07s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Domain\Combat\ShieldPowerSpecTest > it r…   
-  Failed asserting that false is true.
+   FAILED  Modules\AI\tests\Feature\ShieldPowerTest > it values two f…  Error   
+  Class "Modules\AI\Combat\ShieldPower" not found
 
-  at Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:24
+  at Modules/AI/app/Actions/EstimateCombatDamageAction.php:18
+     14▕ final class EstimateCombatDamageAction
+     15▕ {
+     16▕     public function handle(float $rawDamage, float $shieldValue): float
+     17▕     {
+  ➜  18▕         return $this->withShieldPower(ShieldPower::fromHostConfiguration(), $rawDamage, $shieldValue);
+     19▕     }
      20▕ 
-     21▕ it('records the shield power claim as an unconfirmed medium confidence claim', function () {
-     22▕     $path = shieldPowerSpecPath();
-     23▕ 
-  ➜  24▕     expect(is_file($path))->toBeTrue();
-     25▕ 
-     26▕     $spec = (string) file_get_contents($path);
-     27▕ 
-     28▕     expect($spec)->toMatch('/provenance:\s*WIK-083/')
+     21▕     /**
+     22▕      * The same valuation against an explicitly supplied shield power, for a caller that holds
 
-  1   Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:24
+  1   Modules/AI/app/Actions/EstimateCombatDamageAction.php:18
+  2   Modules/AI/tests/Feature/ShieldPowerTest.php:47
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Domain\Combat\ShieldPowerSpecTest > it r…   
-  Failed asserting that false is true.
+   FAILED  Modules\AI\tests\Feature\ShieldPowerTest > it lowers expec…  Error   
+  Class "Modules\AI\Combat\ShieldPower" not found
 
-  at Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:36
-     32▕ 
-     33▕ it('records no shield value constant, because the source states no number', function () {
-     34▕     $path = shieldPowerSpecPath();
-     35▕ 
-  ➜  36▕     expect(is_file($path))->toBeTrue();
-     37▕ 
-     38▕     $spec = (string) file_get_contents($path);
-     39▕ 
-     40▕     expect($spec)->toMatch('/shield/i')
+  at Modules/AI/tests/Feature/ShieldPowerTest.php:56
+     52▕ });
+     53▕ 
+     54▕ it('lowers expected damage as the supplied shield value rises', function () {
+     55▕     $valuation = app(EstimateCombatDamageAction::class);
+  ➜  56▕     $confirmed = ShieldPower::confirmed(0.05);
+     57▕ 
+     58▕     $unshielded = $valuation->withShieldPower($confirmed, 1000.0, 0.0);
+     59▕     $lightlyShielded = $valuation->withShieldPower($confirmed, 1000.0, 5.0);
+     60▕     $heavilyShielded = $valuation->withShieldPower($confirmed, 1000.0, 500.0);
 
-  1   Modules/AI/tests/Feature/Domain/Combat/ShieldPowerSpecTest.php:36
+  1   Modules/AI/tests/Feature/ShieldPowerTest.php:56
 
 
-  Tests:    2 failed (2 assertions)
-  Duration: 0.85s
+  Tests:    2 failed (0 assertions)
+  Duration: 0.97s

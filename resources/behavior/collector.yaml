@@ -1,0 +1,19 @@
+# Collector crawler economy. The figures are community-documented (see the plan, section 2), not the
+# game's own tables, so they live here where a modder can retune an account's crawler wing in one place.
+crawler:
+  # Share of base production a single crawler adds before any class or efficiency bonus, in percent.
+  base_bonus_percent: 0.02
+  # The Collector class raises the crawler bonus by half.
+  collector_class_multiplier: 1.5
+  # However many crawlers are built, they never add more than this share of base production.
+  max_bonus_percent: 50.0
+
+# Crawler efficiency settings. 150% efficiency lifts the per-crawler bonus by half and doubles what
+# the crawler wing draws from the grid.
+efficiency:
+  100:
+    production_multiplier: 1.0
+    energy_multiplier: 1.0
+  150:
+    production_multiplier: 1.5
+    energy_multiplier: 2.0

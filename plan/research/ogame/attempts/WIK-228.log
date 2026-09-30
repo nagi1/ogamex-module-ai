@@ -1,38 +1,44 @@
 ClassDmSpendGuardTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest
-  ⨯ it plans research work and names no class or dark matter cost while class and dark matter facts are unconfirmed
-  ⨯ it plans no class selection or dark matter purchase even when the account is rich in dark matter
+  ⨯ it plans research and never names a class or a dark matter cost      0.44s  
+  ⨯ it plans no class selection or dark matter purchase when the accoun… 0.06s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest::$user
+   FAILED  Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest > it…  TypeError   
+  Modules\AI\Actions\RunAiSessionAction::handle(): Argument #1 ($profile) must be of type Modules\AI\Models\AiProfile, OGame\Models\User given, called in /var/www/Modules/AI/tests/Feature/Ai/ClassDmSpendGuardTest.php on line 74
 
-  at Modules/AI/tests/Feature/Ai/ClassDmSpendGuardTest.php:83
-     79▕ }
-     80▕ 
-     81▕ beforeEach(function () {
-     82▕     $this->scenario = unconfirmedClassDmScenario();
-  ➜  83▕     $this->profile = AiProfile::forceCreate(['user_id' => $this->user->id]);
-     84▕ });
-     85▕ 
-     86▕ it('plans research work and names no class or dark matter cost while class and dark matter facts are unconfirmed', function () {
-     87▕     $plan = replayUnconfirmedClassDmScenario($this->profile, $this->scenario);
+  at Modules/AI/app/Actions/RunAiSessionAction.php:32
+     28▕         private PlayerGameStateService $playerGameStateService,
+     29▕     ) {
+     30▕     }
+     31▕ 
+  ➜  32▕     public function handle(AiProfile $profile, AiWorkItem $workItem): void
+     33▕     {
+     34▕         // Scheduled actors have no HTTP page load to advance completed host queues. Use the host
+     35▕         // seam without stamping activity when the session later decides to do nothing.
+     36▕         if (User::query()->whereKey($profile->player_id)->exists()) {
+
+  1   Modules/AI/app/Actions/RunAiSessionAction.php:32
+  2   Modules/AI/tests/Feature/Ai/ClassDmSpendGuardTest.php:74
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest::$user
+   FAILED  Modules\AI\tests\Feature\Ai\ClassDmSpendGuardTest > it…  TypeError   
+  Modules\AI\Actions\RunAiSessionAction::handle(): Argument #1 ($profile) must be of type Modules\AI\Models\AiProfile, OGame\Models\User given, called in /var/www/Modules/AI/tests/Feature/Ai/ClassDmSpendGuardTest.php on line 74
 
-  at Modules/AI/tests/Feature/Ai/ClassDmSpendGuardTest.php:83
-     79▕ }
-     80▕ 
-     81▕ beforeEach(function () {
-     82▕     $this->scenario = unconfirmedClassDmScenario();
-  ➜  83▕     $this->profile = AiProfile::forceCreate(['user_id' => $this->user->id]);
-     84▕ });
-     85▕ 
-     86▕ it('plans research work and names no class or dark matter cost while class and dark matter facts are unconfirmed', function () {
-     87▕     $plan = replayUnconfirmedClassDmScenario($this->profile, $this->scenario);
+  at Modules/AI/app/Actions/RunAiSessionAction.php:32
+     28▕         private PlayerGameStateService $playerGameStateService,
+     29▕     ) {
+     30▕     }
+     31▕ 
+  ➜  32▕     public function handle(AiProfile $profile, AiWorkItem $workItem): void
+     33▕     {
+     34▕         // Scheduled actors have no HTTP page load to advance completed host queues. Use the host
+     35▕         // seam without stamping activity when the session later decides to do nothing.
+     36▕         if (User::query()->whereKey($profile->player_id)->exists()) {
+
+  1   Modules/AI/app/Actions/RunAiSessionAction.php:32
+  2   Modules/AI/tests/Feature/Ai/ClassDmSpendGuardTest.php:74
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.94s
+  Duration: 1.08s

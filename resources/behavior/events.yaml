@@ -1,0 +1,9 @@
+# Why: the community wiki page this policy comes from states no verbatim numbers for events
+# (its number block is empty) and no doctrine variant, so no event sourced modifier may be
+# applied on its authority. The events entry therefore ships unconfirmed and with no modifier
+# values, and scheduling ignores it entirely. A host confirmed mechanic must flip `confirmed`
+# and add its own modifier values and its own modifier path at the same time; flipping the
+# flag alone leaves `event_modifiers` empty and changes how no account plays.
+events:
+  confirmed: false
+  event_modifiers: []

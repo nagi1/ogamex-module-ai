@@ -18,8 +18,17 @@ use RuntimeException;
  * unverified and reports no return time, instead of printing an inferred timing as if it had been
  * observed.
  *
+ * A scanned player is banded by points as well: the source states general protection with a 1:5
+ * ratio up to 50.000 points and a 1:10 ratio up to 500.000, so a target that is out of reach is
+ * visible before an attack is planned rather than discovered in the combat report. The source
+ * bands overlap at 50.000 points; the reading taken here gives that point to the higher band, and
+ * the bounds that resolve the overlap live in resources/behavior/newbie_protection.json so a
+ * modder retunes them without touching this class. Above 500.000 points the source states nothing,
+ * so no band is claimed there.
+ *
  * @property list<array{question: string, figure: string, evidence: string, window: int}> $questions
  * @property list<array{label: string, source: string, return_at?: int}> $observations
+ * @property list<array{name?: string, points?: int}> $scannedPlayers
  */
 readonly class AiSituationOverview
 {
@@ -52,14 +61,18 @@ readonly class AiSituationOverview
 
     private const MARKER_STEPS_FILE = '/resources/behavior/galaxy_inactivity_markers.json';
 
+    private const PROTECTION_BANDS_FILE = '/resources/behavior/newbie_protection.json';
+
     /**
      * @param list<array{question: string, figure: string, evidence: string, window: int}> $questions
      * @param list<array{label: string, source: string, return_at?: int}> $observations
+     * @param list<array{name?: string, points?: int}> $scannedPlayers
      */
     public function __construct(
         public int $days = 1,
         public array $questions = [],
         public array $observations = [],
+        public array $scannedPlayers = [],
     ) {
     }
 
@@ -95,7 +108,41 @@ readonly class AiSituationOverview
     }
 
     /**
-     * @param array{label?: string, source?: string, return_at?: int} $observation
+     * The protection band a player at $points falls into, or the unknown label when the source
+     * states no band for that many points.
+     */
+    public function protectionBandFor(int $points): string
+    {
+        $data = self::protectionData();
+
+        // The bands are ordered by points, so the first band not yet reached ends the walk.
+        foreach ($data['protection_bands'] as $band) {
+            if ($points < $band['from_points']) {
+                return $data['unknown_label'];
+            }
+
+            if ($points <= $band['to_points']) {
+                return $band['label'];
+            }
+        }
+
+        return $data['unknown_label'];
+    }
+
+    /**
+     * The scanned players as the view renders them: each one carries the protection band its
+     * points put it in, so a target that cannot be attacked is visible before an attack is
+     * planned.
+     *
+     * @return list<array{name: string, points: int, protection_band: string}>
+     */
+    public function scannedPlayersWithProtectionBand(): array
+    {
+        return array_map($this->renderScannedPlayer(...), $this->scannedPlayers);
+    }
+
+    /**
+     * @param array{name?: string, points?: int} $observation
      * @return array{label: string, provenance: string, return_at: ?int}
      */
     private function renderObservation(array $observation): array
@@ -116,6 +163,21 @@ readonly class AiSituationOverview
             'label' => $label,
             'provenance' => self::NO_PROVENANCE_MARKER,
             'return_at' => $observation['return_at'] ?? null,
+        ];
+    }
+
+    /**
+     * @param array{name?: string, points?: int} $player
+     * @return array{name: string, points: int, protection_band: string}
+     */
+    private function renderScannedPlayer(array $player): array
+    {
+        $points = (int) ($player['points'] ?? 0);
+
+        return [
+            'name' => (string) ($player['name'] ?? ''),
+            'points' => $points,
+            'protection_band' => $this->protectionBandFor($points),
         ];
     }
 
@@ -146,5 +208,38 @@ readonly class AiSituationOverview
             ],
             $decoded['inactivity_markers'],
         ));
+    }
+
+    /**
+     * @return array{unknown_label: string, protection_bands: list<array{from_points: int, to_points: int, label: string}>}
+     */
+    private static function protectionData(): array
+    {
+        static $data = null;
+
+        if ($data !== null) {
+            return $data;
+        }
+
+        $path = dirname(__DIR__, 3) . self::PROTECTION_BANDS_FILE;
+        $contents = file_get_contents($path);
+
+        if ($contents === false) {
+            throw new RuntimeException('Missing newbie protection data file: ' . $path);
+        }
+
+        $decoded = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
+
+        return $data = [
+            'unknown_label' => (string) $decoded['unknown_label'],
+            'protection_bands' => array_values(array_map(
+                static fn (array $band): array => [
+                    'from_points' => (int) $band['from_points'],
+                    'to_points' => (int) $band['to_points'],
+                    'label' => (string) $band['label'],
+                ],
+                $decoded['protection_bands'],
+            )),
+        ];
     }
 }

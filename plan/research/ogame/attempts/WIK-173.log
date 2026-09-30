@@ -1,25 +1,61 @@
-your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
---- your previous answer began:
-### FILE: resources/behavior/expedition.php
-```php
-<?php
+ExpeditionDurationCapTest: [90mTests:[39m    [31;1m9 failed[39;22m[90m (0 assertions)[39m
 
-/**
- * The dispatch contract the account plays by when it sends an expedition.
- *
- * The source states an expedition's gains do not grow with the time the fleet
- * is away: a longer flight only raises the probability of the positive *and*
- * the negative outcomes (EXP-001), and the return on every delay is the
- * universe's own holding-time division rather than a reward for staying out
- * (EXP-002). The host would scale the duration by the relevant technology
- * level, so the account pins every dispatch to the one-hour default and lets
- * the flight-speed division run on that capped duration.
- */
-return [
-    // Slot 16 is the only coordinate the host's expedition mission accepts.
-    'target_position' => 16,
+nner.php:96
 
-    // The one-hour default the source states, in seconds.
-    'duration_seconds' => 3600,
-];
-```
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ExpeditionDurationCapTes…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/expedition.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:237
+    233▕      * @return array{target_position: int, duration_seconds: int, seconds_per_technology_level: int}
+    234▕      */
+    235▕     private function behavior(): array
+    236▕     {
+  ➜ 237▕         return require dirname(__DIR__, 3) . '/resources/behavior/expedition.php';
+    238▕     }
+    239▕ }
+    240▕
+
+  1   Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:237
+  2   Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:96
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ExpeditionDurationCapTes…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/expedition.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:237
+    233▕      * @return array{target_position: int, duration_seconds: int, seconds_per_technology_level: int}
+    234▕      */
+    235▕     private function behavior(): array
+    236▕     {
+  ➜ 237▕         return require dirname(__DIR__, 3) . '/resources/behavior/expedition.php';
+    238▕     }
+    239▕ }
+    240▕
+
+  1   Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:237
+  2   Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:96
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ExpeditionDurationCapTes…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/expedition.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:237
+    233▕      * @return array{target_position: int, duration_seconds: int, seconds_per_technology_level: int}
+    234▕      */
+    235▕     private function behavior(): array
+    236▕     {
+  ➜ 237▕         return require dirname(__DIR__, 3) . '/resources/behavior/expedition.php';
+    238▕     }
+    239▕ }
+    240▕
+
+  1   Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:237
+  2   Modules/AI/app/Domain/Decision/QueueableExpeditionPlanner.php:96
+
+
+  Tests:    9 failed (0 assertions)
+  Duration: 1.25s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/expedition.php (data must be YAML or JSON so a modder can edit it without code)

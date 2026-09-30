@@ -1,0 +1,20 @@
+# The Fodder Heavy wall, stated as the ratios it is played by, so a modder retunes the wall here
+# instead of in PHP.
+#
+# fodder_per: how many fodder units (rocket launchers) buy one of the named unit. A count that does
+# not divide exactly truncates, because a wall is built from whole units.
+fodder_per:
+  heavy_laser: 5
+  gauss_cannon: 20
+  ion_cannon: 20
+  plasma_turret: 50
+
+# domes_per_wall: the page asks for both domes whatever the fodder count, so these are counts and
+# not ratios; they must not grow with the fodder anchor.
+domes_per_wall:
+  small_shield_dome: 1
+  large_shield_dome: 1
+
+# The page asks for "maximum ABMs" and names only the missile silo as the ceiling, so the count is
+# the silo level times this capacity and a planet without a silo stores none.
+anti_ballistic_missiles_per_missile_silo_level: 20

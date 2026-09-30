@@ -1,2 +1,51 @@
-these files are not called by any runtime code, so no account can ever execute them: app/Actions/OrderFleetSaveAction.php.
-Wire the rule into the planner, engine or action that acts on it, add that file to FILES, and have the Feature test drive that path instead of constructing your class directly.
+SaveFleetWhileAttackedTest: [90mTests:[39m    [31;1m10 failed[39;22m[90m (0 assertions)[39m
+
+etPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/SaveFleetWhileAttackedTest.php:82
+  12  Modules/AI/tests/Feature/SaveFleetWhileAttackedTest.php:144
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SaveFleetWhileAttackedTe…  QueryException   
+  SQLSTATE[42S22]: Column not found: 1054 Unknown column 'name' in 'field list' (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`name`, `email`, `password`, `updated_at`, `created_at`) values (defender, defender-6abce58e0c076@example.com, save-fleet-secret, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/SaveFleetWhileAttackedTest.php:82
+  12  Modules/AI/tests/Feature/SaveFleetWhileAttackedTest.php:144
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SaveFleetWhileAttackedTe…  QueryException   
+  SQLSTATE[42S22]: Column not found: 1054 Unknown column 'name' in 'field list' (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`name`, `email`, `password`, `updated_at`, `created_at`) values (defender, defender-6abce58e18761@example.com, save-fleet-secret, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/SaveFleetWhileAttackedTest.php:82
+  12  Modules/AI/tests/Feature/SaveFleetWhileAttackedTest.php:144
+
+
+  Tests:    10 failed (0 assertions)
+  Duration: 1.35s

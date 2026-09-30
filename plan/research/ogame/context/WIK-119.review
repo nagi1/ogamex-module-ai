@@ -1,3 +1,2 @@
 failed validation twice; retried automatically after the cool-off:
-- file plan/research/ogame/strategy/WIK-119.md: named after a source page — name it for what it does
-- file tests/Unit/Strategy/Wik119SpecTest.php: unit tests are not accepted — write a Feature test instead
+- file plan/specs/WIK-119.md: named after a source page — name it for what it does

@@ -1,0 +1,58 @@
+DefenseDeterrentFloorTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+
+loor       0.07s  
+  ⨯ it wants nothing further when the wall already outweighs the floor   0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\DefenseDeterrentFloorTest::$playerService
+
+  at Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:52
+     48▕     /** The account the evaluator reasons about: without a profile a planet is nobody's business. */
+     49▕     protected function aiAccount(): void
+     50▕     {
+     51▕         AiProfile::query()->create([
+  ➜  52▕             'player_id' => $this->playerService->getId(),
+     53▕             'activity_band' => AiActivityBand::Regular,
+     54▕         ]);
+     55▕     }
+     56▕
+
+  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:119
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\DefenseDeterrentFloorTest::$playerService
+
+  at Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:52
+     48▕     /** The account the evaluator reasons about: without a profile a planet is nobody's business. */
+     49▕     protected function aiAccount(): void
+     50▕     {
+     51▕         AiProfile::query()->create([
+  ➜  52▕             'player_id' => $this->playerService->getId(),
+     53▕             'activity_band' => AiActivityBand::Regular,
+     54▕         ]);
+     55▕     }
+     56▕
+
+  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:128
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  ErrorException   
+  Undefined property: P\Modules\AI\tests\Feature\DefenseDeterrentFloorTest::$playerService
+
+  at Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:52
+     48▕     /** The account the evaluator reasons about: without a profile a planet is nobody's business. */
+     49▕     protected function aiAccount(): void
+     50▕     {
+     51▕         AiProfile::query()->create([
+  ➜  52▕             'player_id' => $this->playerService->getId(),
+     53▕             'activity_band' => AiActivityBand::Regular,
+     54▕         ]);
+     55▕     }
+     56▕
+
+  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:139
+
+
+  Tests:    3 failed (0 assertions)
+  Duration: 1.05s

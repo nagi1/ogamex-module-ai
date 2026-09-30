@@ -1,0 +1,24 @@
+# Anti-ballistic missile policy.
+#
+# Every number below is stated by the source. Defensive decisions read this file
+# instead of hardcoding the values; change one here to retune the account's
+# defensive missile budget.
+
+# Storage the Missile Silo grants, and the interplanetary missiles it already
+# holds against which anti-ballistic storage is budgeted.
+abm_per_missile_silo_level: 10
+ipm_per_missile_silo_level: 5
+ipm_to_abm_capacity_ratio: 1:2
+
+# Cost of one anti-ballistic missile.
+abm_cost_metal: 8000
+abm_cost_crystal: 0
+abm_cost_deuterium: 2000
+
+# Stats of one anti-ballistic missile.
+abm_integrity: 8000
+abm_shield: 1
+abm_weapon: 1
+
+# Anti-ballistic missiles cannot be stored below Missile Silo level 2.
+abm_prerequisite_missile_silo_level: 2

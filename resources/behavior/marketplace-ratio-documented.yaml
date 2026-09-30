@@ -1,0 +1,20 @@
+# Marketplace ratio policy the AI trader reads when it prices an offer.
+#
+# It lives in a behaviour file rather than in PHP so a modder can retune the trader: the AI
+# reads this at trade time, because the server re-adjusts its own ratio on a schedule and a
+# ratio cached in code would silently go stale.
+#
+# standard_ratio:            the reference ratio, 2.5 metal = 1.5 crystal = 1 deuterium.
+# server_adjustment_percent: how far the server may run its own ratio above or below standard.
+#                            This is the server's band, not the band an offer is judged by.
+# server_readjust_hours:     how often the server re-adjusts its ratio.
+# offer_band_percent:        how far above or below the ratio the server runs *now* an offer may
+#                            sit and still be actionable. It is narrower than the adjustment
+#                            band, it is symmetric, and an offer exactly on the edge is inside.
+standard_ratio:
+  metal: 2.5
+  crystal: 1.5
+  deuterium: 1.0
+server_adjustment_percent: 30
+server_readjust_hours: 48
+offer_band_percent: 25

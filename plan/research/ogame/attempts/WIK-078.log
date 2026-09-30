@@ -1,41 +1,44 @@
-UnmodelledFleetEntryIsIgnoredTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
+ReaperPolicyTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
-FAIL  Modules\AI\tests\Feature\UnmodelledFleetEntryIsIgnoredTest
-  ⨯ it produces an identical report whether or not an unmodelled fleet…  0.36s  
-  ⨯ it produces an identical report when the unmodelled entry carries a… 0.05s  
+FAIL  Modules\AI\tests\Feature\ReaperPolicyTest
+  ⨯ it leaves an unmodelled reaper entry out of the fleet report         0.37s  
+  ⨯ it leaves a zero amount reaper entry out of the fleet report         0.05s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\UnmodelledFleetEntryIsIgnoredTest…  Error   
-  Call to undefined method Modules\AI\Actions\BuildAiPilotReportAction::execute()
+   FAILED  Modules\AI\tests\Feature\ReaperPolicyTest > it leaves…   TypeError   
+  Modules\AI\Actions\BuildAiPilotReportAction::handle(): Argument #1 ($days) must be of type int, array given, called in /var/www/Modules/AI/tests/Feature/ReaperPolicyTest.php on line 49
 
-  at Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:62
-     58▕         ['ship' => 'Cruiser', 'amount' => 10],
-     59▕         ['ship' => 'Reaper', 'amount' => 1],
-     60▕     ];
-     61▕ 
-  ➜  62▕     expect(json_encode($report->execute($modelledFleet)))
-     63▕         ->toBe(json_encode($report->execute($fleetWithUnmodelledEntry)));
-     64▕ });
-     65▕ 
-     66▕ it('produces an identical report when the unmodelled entry carries a zero amount', function () {
+  at Modules/AI/app/Actions/BuildAiPilotReportAction.php:36
+     32▕     public function __construct(private readonly AiClock $clock)
+     33▕     {
+     34▕     }
+     35▕ 
+  ➜  36▕     public function handle(int $days, string|null $feedbackPath = null): AiPilotReport
+     37▕     {
+     38▕         $window = max(1, $days);
+     39▕         $connection = DB::connection();
+     40▕         $wasLogging = $connection->logging();
 
-  1   Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:62
+  1   Modules/AI/app/Actions/BuildAiPilotReportAction.php:36
+  2   Modules/AI/tests/Feature/ReaperPolicyTest.php:49
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\UnmodelledFleetEntryIsIgnoredTest…  Error   
-  Call to undefined method Modules\AI\Actions\BuildAiPilotReportAction::execute()
+   FAILED  Modules\AI\tests\Feature\ReaperPolicyTest > it leaves…   TypeError   
+  Modules\AI\Actions\BuildAiPilotReportAction::handle(): Argument #1 ($days) must be of type int, array given, called in /var/www/Modules/AI/tests/Feature/ReaperPolicyTest.php on line 55
 
-  at Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:80
-     76▕         ['ship' => 'Cruiser', 'amount' => 10],
-     77▕         ['ship' => 'Reaper', 'amount' => 0],
-     78▕     ];
-     79▕ 
-  ➜  80▕     expect(json_encode($report->execute($modelledFleet)))
-     81▕         ->toBe(json_encode($report->execute($fleetWithZeroAmountEntry)));
-     82▕ });
-     83▕
+  at Modules/AI/app/Actions/BuildAiPilotReportAction.php:36
+     32▕     public function __construct(private readonly AiClock $clock)
+     33▕     {
+     34▕     }
+     35▕ 
+  ➜  36▕     public function handle(int $days, string|null $feedbackPath = null): AiPilotReport
+     37▕     {
+     38▕         $window = max(1, $days);
+     39▕         $connection = DB::connection();
+     40▕         $wasLogging = $connection->logging();
 
-  1   Modules/AI/tests/Feature/UnmodelledFleetEntryIsIgnoredTest.php:80
+  1   Modules/AI/app/Actions/BuildAiPilotReportAction.php:36
+  2   Modules/AI/tests/Feature/ReaperPolicyTest.php:55
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.84s
+  Duration: 0.91s

@@ -1,8 +1,8 @@
 GalaxyViewIntakeTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\Ai\GalaxyViewIntakeTest
-  ⨯ it records galaxy-view-only observations as unverified intel and ta… 0.45s  
-  ⨯ it takes the same observation in as intel once a confirmed source b… 0.06s  
+  ⨯ it records a galaxy-view-only observation as unverified intel and targets nothing from it
+  ⨯ it admits the same observation as intake once a confirmed source backs it
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\Ai\GalaxyViewInt…  BadMethodCallException   
   Call to undefined method Modules\AI\Models\AiProfile::factory()
@@ -19,7 +19,7 @@ FAIL  Modules\AI\tests\Feature\Ai\GalaxyViewIntakeTest
      71▕ }
 
       +4 vendor frames 
-  5   Modules/AI/tests/Feature/Ai/GalaxyViewIntakeTest.php:51
+  5   Modules/AI/tests/Feature/Ai/GalaxyViewIntakeTest.php:48
 
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\Ai\GalaxyViewInt…  BadMethodCallException   
@@ -37,8 +37,8 @@ FAIL  Modules\AI\tests\Feature\Ai\GalaxyViewIntakeTest
      71▕ }
 
       +4 vendor frames 
-  5   Modules/AI/tests/Feature/Ai/GalaxyViewIntakeTest.php:71
+  5   Modules/AI/tests/Feature/Ai/GalaxyViewIntakeTest.php:48
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.95s
+  Duration: 0.85s

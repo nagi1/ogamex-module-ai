@@ -1,2 +1,25 @@
-these files are not called by any runtime code, so no account can ever execute them: app/Actions/ResolvePlanetLifeformAction.php.
-Wire the rule into the planner, engine or action that acts on it, add that file to FILES, and have the Feature test drive that path instead of constructing your class directly.
+LifeformUnconfirmedClaimTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m (0 assertions)[39m
+
+FAIL  Modules\AI\tests\Feature\LifeformUnconfirmedClaimTest
+  ⨯ it chooses no lifeform-derived action while the claim is unconfirme… 0.35s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\LifeformUnconfirmedClaim…  QueryException   
+  SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_id' in 'where clause' (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: select * from `ai_profiles` where (`user_id` = 15399) limit 1)
+
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:440
+    436▕             );
+    437▕ 
+    438▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+    439▕ 
+  ➜ 440▕             $statement->execute();
+    441▕ 
+    442▕             return $statement->fetchAll(...$fetchUsing);
+    443▕         });
+    444▕     }
+
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/LifeformUnconfirmedClaimTest.php:48
+
+
+  Tests:    1 failed (0 assertions)
+  Duration: 0.81s

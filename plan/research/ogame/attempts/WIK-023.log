@@ -1,27 +1,16 @@
-CanReclaimQueuedResourcesTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (2 assertions)[39m
+DefReactiveCancelTest: suite not collectable
 
-FAIL  Modules\AI\tests\Feature\CanReclaimQueuedResourcesTest
-  ⨯ it blocks reclaiming queued resources while the cancel refund is un… 0.37s  
-  ✓ it allows reclaiming queued resources once an official source verif… 0.06s  
-  ✓ it blocks reclaiming queued resources when canceling returns nothin… 0.05s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\CanReclaimQueuedResource…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/defense_cancel_refund.php): Failed to open stream: No such file or directory
+ParseError 
 
-  at Modules/AI/app/Ai/Doctrine/DefenseCancelRefundClaim.php:28
-     24▕      */
-     25▕     public static function fromBehavior(?string $behaviorFile = null): self
-     26▕     {
-     27▕         $path = $behaviorFile ?? dirname(__DIR__, 3) . '/resources/behavior/defense_cancel_refund.php';
-  ➜  28▕         $behavior = require $path;
-     29▕ 
-     30▕         return new self(
-     31▕             refundsResources: (bool) $behavior['refunds_resources'],
-     32▕             confidence: (string) $behavior['confidence'],
+  Unmatched '}'
 
-  1   Modules/AI/app/Ai/Doctrine/DefenseCancelRefundClaim.php:28
-  2   Modules/AI/tests/Feature/CanReclaimQueuedResourcesTest.php:10
-
-
-  Tests:    1 failed, 2 passed (2 assertions)
-  Duration: 0.90s
+  at Modules/AI/tests/Unit/DefenseCompositionPlannerTest.php:119
+    115▕             ->toThrow(RuntimeException::class, 'no host defence object named "Plasma Cannon"');
+    116▕     } finally {
+    117▕         unlink($path);
+    118▕     }
+  ➜ 119▕ });
+    120▕ 
+    121▕ // The early-game doctrine hands over to the big-gun doctrine once the wall passes its stated anchor.
+    122▕ test('a wall past the stop rule hands over to the next doctrine', function (): void {
+    123▕     defcompProfile($this->currentUserId, AiDefenseDoctrine::ProductionShell);

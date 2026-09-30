@@ -1,57 +1,41 @@
-DefenseNeedEvaluatorTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m,[39m[39m [39m[32;1m14 passed[39;22m[90m (46 assertions)[39m
+DefenseNeedExposureTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
-gs and stations, not: rocket_launcher
+sizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 167, 17, 96, 0, 0, 0, 0, 0, 0, 10147, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
-  at app/Services/PlanetService.php:1785
-    1781▕     {
-    1782▕         $object = ObjectService::getObjectById($object_id);
-    1783▕ 
-    1784▕         if ($object->type !== GameObjectType::Building && $object->type !== GameObjectType::Station) {
-  ➜ 1785▕             throw new RuntimeException('setObjectLevel() can only be used for buildings and stations, not: ' . $object->machine_name);
-    1786▕         }
-    1787▕ 
-    1788▕         $this->planet->{$object->machine_name} = $level;
-    1789▕         if ($save_planet) {
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
 
-  1   app/Services/PlanetService.php:1785
-  2   tests/Traits/ManagesPlanetState.php:61
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseNeedEvaluatorTe…  RuntimeException   
-  defence-doctrines: "Light Laser" is not a defence unit the host defines.
-
-  at Modules/AI/app/Domain/Decision/DefenseCompositionPlanner.php:223
-    219▕      * @param  array<string, UnitObject>  $defenceObjects
-    220▕      */
-    221▕     private function resolveUnit(string $machineName, array $defenceObjects): UnitObject
-    222▕     {
-  ➜ 223▕         return $defenceObjects[$machineName] ?? throw new RuntimeException(
-    224▕             sprintf('defence-doctrines: "%s" is not a defence unit the host defines.', $machineName)
-    225▕         );
-    226▕     }
-    227▕
-
-  1   Modules/AI/app/Domain/Decision/DefenseCompositionPlanner.php:223
-  2   Modules/AI/app/Domain/Decision/DefenseCompositionPlanner.php:71
+      +15 vendor frames 
+  16  Modules/AI/tests/Feature/DefenseNeedExposureTest.php:63
+  17  Modules/AI/tests/Feature/DefenseNeedExposureTest.php:116
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseNeedEvaluatorTe…  RuntimeException   
-  defence-doctrines: "Light Laser" is not a defence unit the host defines.
+   FAILED  Modules\AI\tests\Feature\DefenseNeedExposureTest…   QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'galaxy' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `planets` (`name`, `metal_mine`, `metal_mine_percent`, `solar_plant`, `solar_plant_percent`, `deuterium_synthesizer`, `deuterium_synthesizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 148, 54, 115, 0, 0, 0, 0, 0, 0, 10149, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
-  at Modules/AI/app/Domain/Decision/DefenseCompositionPlanner.php:223
-    219▕      * @param  array<string, UnitObject>  $defenceObjects
-    220▕      */
-    221▕     private function resolveUnit(string $machineName, array $defenceObjects): UnitObject
-    222▕     {
-  ➜ 223▕         return $defenceObjects[$machineName] ?? throw new RuntimeException(
-    224▕             sprintf('defence-doctrines: "%s" is not a defence unit the host defines.', $machineName)
-    225▕         );
-    226▕     }
-    227▕
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
 
-  1   Modules/AI/app/Domain/Decision/DefenseCompositionPlanner.php:223
-  2   Modules/AI/app/Domain/Decision/DefenseCompositionPlanner.php:71
+      +15 vendor frames 
+  16  Modules/AI/tests/Feature/DefenseNeedExposureTest.php:86
+  17  Modules/AI/tests/Feature/DefenseNeedExposureTest.php:138
 
 
-  Tests:    5 failed, 14 passed (46 assertions)
-  Duration: 2.06s
+  Tests:    2 failed (0 assertions)
+  Duration: 1.05s

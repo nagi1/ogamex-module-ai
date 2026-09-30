@@ -1,0 +1,30 @@
+# Mine-level doctrine, WIK-061: how the three mines are kept in step.
+#
+# This is data so a modder can retune mine play without touching PHP:
+#   * metal mine level = crystal mine level + metal_level_offset
+#   * deuterium level  = floor(crystal mine level / crystal_levels_per_deuterium_level)
+#
+# `levels` are the doctrine worked out. They are listed rather than computed on the
+# fly so the targets the doctrine produces are visible, and so a change to either
+# ratio above breaks these examples instead of silently retargeting every mine.
+#
+# `milestone` is quoted verbatim from the source. Where the milestone and the ratios
+# disagree the milestone wins, so it is never recomputed from the ratios above.
+metal_level_offset: 2
+crystal_levels_per_deuterium_level: 2
+
+levels:
+  # First odd crystal level past the milestone: pins that deuterium rounds down.
+  - metal: 19
+    crystal: 17
+    deuterium: 8
+  # Where the deuterium ratio catches up with the source's own deuterium milestone.
+  - metal: 22
+    crystal: 20
+    deuterium: 10
+
+# The source's own trio: 17 metal / 15 crystal / 10 deuterium.
+milestone:
+  metal: 17
+  crystal: 15
+  deuterium: 10

@@ -1,68 +1,55 @@
-MoonChanceCalculatorTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (2 assertions)[39m
+MoonChanceCalculatorTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m,[39m[39m [39m[32;1m3 passed[39;22m[90m (4 assertions)[39m
 
-resources/behavior/moon_chance.php';
-     81▕ 
-     82▕         return $values;
-     83▕     }
-     84▕ }
+dCallException   
+  Method [toBeWithDelta] does not exist in [double].
 
-  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
-  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+  at Modules/AI/tests/Feature/MoonChanceCalculatorTest.php:65
+     61▕ it('leaves a fleet computed for the reference ratio untouched', function () {
+     62▕     $referenceFleetSize = 2000.0;
+     63▕ 
+     64▕     expect($this->calculator->scaleFleetSize($referenceFleetSize, MoonChanceCalculator::REFERENCE_DEBRIS_RATIO))
+  ➜  65▕         ->toBeWithDelta($referenceFleetSize, 1e-9);
+     66▕ });
+     67▕ 
+     68▕ it('keeps shrinking the fleet as the debris ratio rises past the reference', function () {
+     69▕     expect($this->calculator->scaleFleetSize(1000.0, 0.60))->toBeWithDelta(500.0, 1e-9);
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\MoonChanceCalculatorTest…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/moon_chance.php): Failed to open stream: No such file or directory
-
-  at Modules/AI/app/Support/MoonChanceCalculator.php:80
-     76▕     private static function behavior(): array
-     77▕     {
-     78▕         static $values = null;
-     79▕ 
-  ➜  80▕         $values ??= require dirname(__DIR__, 2) . '/resources/behavior/moon_chance.php';
-     81▕ 
-     82▕         return $values;
-     83▕     }
-     84▕ }
-
-  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
-  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+  1   Modules/AI/tests/Feature/MoonChanceCalculatorTest.php:65
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\MoonChanceCalculatorTest…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/moon_chance.php): Failed to open stream: No such file or directory
+   FAILED  Modules\AI\tests\Feature\MoonChanceCalcul…  BadMethodCallException   
+  Method [toBeWithDelta] does not exist in [double].
 
-  at Modules/AI/app/Support/MoonChanceCalculator.php:80
-     76▕     private static function behavior(): array
-     77▕     {
-     78▕         static $values = null;
-     79▕ 
-  ➜  80▕         $values ??= require dirname(__DIR__, 2) . '/resources/behavior/moon_chance.php';
-     81▕ 
-     82▕         return $values;
-     83▕     }
-     84▕ }
+  at Modules/AI/tests/Feature/MoonChanceCalculatorTest.php:69
+     65▕         ->toBeWithDelta($referenceFleetSize, 1e-9);
+     66▕ });
+     67▕ 
+     68▕ it('keeps shrinking the fleet as the debris ratio rises past the reference', function () {
+  ➜  69▕     expect($this->calculator->scaleFleetSize(1000.0, 0.60))->toBeWithDelta(500.0, 1e-9);
+     70▕ });
+     71▕ 
+     72▕ it('demands a fleet proportional to the moon chance asked for', function () {
+     73▕     expect($this->calculator->requiredLightFighters(10.0, 0.40))->toBeWithDelta(625.0, 1e-9);
 
-  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
-  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+  1   Modules/AI/tests/Feature/MoonChanceCalculatorTest.php:69
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\MoonChanceCalculatorTest…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/moon_chance.php): Failed to open stream: No such file or directory
+   FAILED  Modules\AI\tests\Feature\MoonChanceCalcul…  BadMethodCallException   
+  Method [toBeWithDelta] does not exist in [double].
 
-  at Modules/AI/app/Support/MoonChanceCalculator.php:80
-     76▕     private static function behavior(): array
-     77▕     {
-     78▕         static $values = null;
-     79▕ 
-  ➜  80▕         $values ??= require dirname(__DIR__, 2) . '/resources/behavior/moon_chance.php';
-     81▕ 
-     82▕         return $values;
-     83▕     }
-     84▕ }
+  at Modules/AI/tests/Feature/MoonChanceCalculatorTest.php:73
+     69▕     expect($this->calculator->scaleFleetSize(1000.0, 0.60))->toBeWithDelta(500.0, 1e-9);
+     70▕ });
+     71▕ 
+     72▕ it('demands a fleet proportional to the moon chance asked for', function () {
+  ➜  73▕     expect($this->calculator->requiredLightFighters(10.0, 0.40))->toBeWithDelta(625.0, 1e-9);
+     74▕     expect($this->calculator->requiredLightFighters(0.0, 0.40))->toBe(0.0);
+     75▕ });
+     76▕ 
+     77▕ it('refuses a debris ratio of zero, which no fleet size can satisfy', function () {
 
-  1   Modules/AI/app/Support/MoonChanceCalculator.php:80
-  2   Modules/AI/app/Support/MoonChanceCalculator.php:23
+  1   Modules/AI/tests/Feature/MoonChanceCalculatorTest.php:73
 
 
-  Tests:    5 failed, 1 passed (2 assertions)
-  Duration: 1.05s
+  Tests:    5 failed, 3 passed (4 assertions)
+  Duration: 1.23s

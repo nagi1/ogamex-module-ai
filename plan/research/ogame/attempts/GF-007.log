@@ -1,52 +1,46 @@
-DefenceRebuildValuationTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+DefenceAttritionTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m4 passed[39;22m[90m (7 assertions)[39m
 
-   691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
+FAIL  Modules\AI\tests\Feature\DefenceAttritionTest
+  ⨯ it rebuilds only the share of the destroyed defence that repair doe… 0.37s  
+  ⨯ it rebuilds the same share when the losses are larger                0.05s  
+  ✓ it sizes a partial rebuild as a whole unit                           0.05s  
+  ✓ it plans no rebuild and no interceptors when the battle cost nothin… 0.05s  
+  ✓ it needs one anti-ballistic missile for one incoming interplanetary… 0.05s  
+  ✓ it trades interceptors one for one against a larger incoming wave    0.05s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DefenceAttritionTest > it rebuilds only…    
+  Failed asserting that 31 is identical to 30.
 
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:48
-  9   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:103
+  at Modules/AI/tests/Feature/DefenceAttritionTest.php:47
+     43▕         destroyedDefenceUnits: 100,
+     44▕         incomingMissiles: 0,
+     45▕     );
+     46▕ 
+  ➜  47▕     expect($plan[PlanDefenceRebuildAction::REPLACEMENTS])->toBe(30);
+     48▕ });
+     49▕ 
+     50▕ it('rebuilds the same share when the losses are larger', function () {
+     51▕     $plan = app(PlanDefenceRebuildAction::class)->execute(
+
+  1   Modules/AI/tests/Feature/DefenceAttritionTest.php:47
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenceRebuildV…  MassAssignmentException   
-  Add [name] to fillable property to allow mass assignment on [OGame\Models\Planet].
+   FAILED  Modules\AI\tests\Feature\DefenceAttritionTest > it rebuilds the s…   
+  Failed asserting that 76 is identical to 75.
 
-  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
-    686▕             // the model, and all others will just get ignored for security reasons.
-    687▕             if ($this->isFillable($key)) {
-    688▕                 $this->setAttribute($key, $value);
-    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
-  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
+  at Modules/AI/tests/Feature/DefenceAttritionTest.php:56
+     52▕         destroyedDefenceUnits: 250,
+     53▕         incomingMissiles: 0,
+     54▕     );
+     55▕ 
+  ➜  56▕     expect($plan[PlanDefenceRebuildAction::REPLACEMENTS])->toBe(75);
+     57▕ });
+     58▕ 
+     59▕ it('sizes a partial rebuild as a whole unit', function () {
+     60▕     $plan = app(PlanDefenceRebuildAction::class)->execute(
 
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:48
-  9   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:111
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenceRebuildV…  MassAssignmentException   
-  Add [name] to fillable property to allow mass assignment on [OGame\Models\Planet].
-
-  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
-    686▕             // the model, and all others will just get ignored for security reasons.
-    687▕             if ($this->isFillable($key)) {
-    688▕                 $this->setAttribute($key, $value);
-    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
-  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
-
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:48
-  9   Modules/AI/tests/Feature/DefenceRebuildValuationTest.php:125
+  1   Modules/AI/tests/Feature/DefenceAttritionTest.php:56
 
 
-  Tests:    4 failed (0 assertions)
-  Duration: 0.93s
+  Tests:    2 failed, 4 passed (7 assertions)
+  Duration: 1.12s

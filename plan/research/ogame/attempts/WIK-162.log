@@ -1,16 +1,11 @@
-DeploymentRecallTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+DeploymentRecallTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
-Id($sequence);
-     56▕ 
-     57▕             return $result;
-
-      +18 vendor frames 
-  19  Modules/AI/tests/Feature/DeploymentRecallTest.php:58
-  20  Modules/AI/tests/Feature/DeploymentRecallTest.php:103
-
+FAIL  Modules\AI\tests\Feature\DeploymentRecallTest
+  ⨯ it recalls a deployment parked on one of the account own planets     0.37s  
+  ⨯ it refuses a deployment bound for a foreign coordinate               0.05s  
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\DeploymentRecallTest > i…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'lang' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`username`, `email`, `password`, `updated_at`, `created_at`) values (recall-owner-6abbdb9d85e53, recall-owner-6abbdb9d85e54@example.test, deployment-recall, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+  SQLSTATE[HY000]: General error: 1364 Field 'lang' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`username`, `email`, `password`, `updated_at`, `created_at`) values (ai-recall-own, ai-recall-own@example.com, password, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
   at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
      49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
@@ -23,13 +18,13 @@ Id($sequence);
      56▕ 
      57▕             return $result;
 
-      +18 vendor frames 
-  19  Modules/AI/tests/Feature/DeploymentRecallTest.php:58
-  20  Modules/AI/tests/Feature/DeploymentRecallTest.php:114
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/DeploymentRecallTest.php:26
+  12  Modules/AI/tests/Feature/DeploymentRecallTest.php:80
 
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\DeploymentRecallTest > i…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'lang' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`username`, `email`, `password`, `updated_at`, `created_at`) values (recall-owner-6abbdb9d94e47, recall-owner-6abbdb9d94e49@example.test, deployment-recall, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+  SQLSTATE[HY000]: General error: 1364 Field 'lang' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`username`, `email`, `password`, `updated_at`, `created_at`) values (ai-recall-visitor, ai-recall-visitor@example.com, password, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
   at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
      49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
@@ -42,10 +37,10 @@ Id($sequence);
      56▕ 
      57▕             return $result;
 
-      +18 vendor frames 
-  19  Modules/AI/tests/Feature/DeploymentRecallTest.php:58
-  20  Modules/AI/tests/Feature/DeploymentRecallTest.php:127
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/DeploymentRecallTest.php:26
+  12  Modules/AI/tests/Feature/DeploymentRecallTest.php:91
 
 
-  Tests:    3 failed (0 assertions)
-  Duration: 0.92s
+  Tests:    2 failed (0 assertions)
+  Duration: 0.88s

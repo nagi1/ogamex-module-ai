@@ -1,0 +1,62 @@
+StrategyPlanProposalValidationTest: [90mTests:[39m    [31;1m21 failed[39;22m[90m (0 assertions)[39m
+
+────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\StrategyPlanProposalVali…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/strategy_plan_rules.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:49
+     45▕  * @return array<string, mixed>
+     46▕  */
+     47▕ function strategyPlanRules(): array
+     48▕ {
+  ➜  49▕     return require dirname(__DIR__, 2) . '/resources/behavior/strategy_plan_rules.php';
+     50▕ }
+     51▕ 
+     52▕ /**
+     53▕  * Spread the plan's total weight over a number of phases.
+
+  1   Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:49
+  2   Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:319
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\StrategyPlanProposalVali…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/strategy_plan_rules.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:49
+     45▕  * @return array<string, mixed>
+     46▕  */
+     47▕ function strategyPlanRules(): array
+     48▕ {
+  ➜  49▕     return require dirname(__DIR__, 2) . '/resources/behavior/strategy_plan_rules.php';
+     50▕ }
+     51▕ 
+     52▕ /**
+     53▕  * Spread the plan's total weight over a number of phases.
+
+  1   Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:49
+  2   Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:329
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\StrategyPlanProposalVali…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/strategy_plan_rules.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:49
+     45▕  * @return array<string, mixed>
+     46▕  */
+     47▕ function strategyPlanRules(): array
+     48▕ {
+  ➜  49▕     return require dirname(__DIR__, 2) . '/resources/behavior/strategy_plan_rules.php';
+     50▕ }
+     51▕ 
+     52▕ /**
+     53▕  * Spread the plan's total weight over a number of phases.
+
+  1   Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:49
+  2   Modules/AI/tests/Feature/StrategyPlanProposalValidationTest.php:342
+
+
+  Tests:    21 failed (0 assertions)
+  Duration: 1.84s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/strategy_plan_rules.php (data must be YAML or JSON so a modder can edit it without code)

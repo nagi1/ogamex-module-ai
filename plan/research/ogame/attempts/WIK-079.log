@@ -1,46 +1,46 @@
 DiscovererClassNeutralPlanningTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\DiscovererClassNeutralPlanningTest
-  ⨯ it queues the same research for a Discoverer account and a classles… 0.37s  
-  ⨯ it seeds the same colonies for a Discoverer account and a classless… 0.06s  
+  ⨯ it queues the same research for a Discoverer-class account as for a… 0.35s  
+  ⨯ it queues the same expansion for a Discoverer-class account as for…  0.05s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DiscovererClassN…  BadMethodCallException   
-  Call to undefined method Modules\AI\Models\AiProfile::factory()
+   FAILED  Modules\AI\tests\Feature\DiscovererClassNeutralPl…  QueryException   
+  SQLSTATE[HY000]: General error: 1366 Incorrect integer value: 'discoverer' for column 'character_class' at row 1 (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: update `users` set `character_class` = discoverer, `users`.`updated_at` = 2024-01-01 00:00:00 where `id` = 15348)
 
-  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
-     63▕      * @throws \BadMethodCallException
-     64▕      */
-     65▕     protected static function throwBadMethodCallException($method)
-     66▕     {
-  ➜  67▕         throw new BadMethodCallException(sprintf(
-     68▕             'Call to undefined method %s::%s()', static::class, $method
-     69▕         ));
-     70▕     }
-     71▕ }
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:626
+    622▕             $statement = $this->getPdo()->prepare($query);
+    623▕ 
+    624▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+    625▕ 
+  ➜ 626▕             $statement->execute();
+    627▕ 
+    628▕             $this->recordsHaveBeenModified(
+    629▕                 ($count = $statement->rowCount()) > 0
+    630▕             );
 
-      +4 vendor frames 
-  5   Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:68
-  6   Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:90
+      +9 vendor frames 
+  10  Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:93
+  11  Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:74
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DiscovererClassN…  BadMethodCallException   
-  Call to undefined method Modules\AI\Models\AiProfile::factory()
+   FAILED  Modules\AI\tests\Feature\DiscovererClassNeutralPl…  QueryException   
+  SQLSTATE[HY000]: General error: 1366 Incorrect integer value: 'discoverer' for column 'character_class' at row 1 (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: update `users` set `character_class` = discoverer, `users`.`updated_at` = 2024-01-01 00:00:00 where `id` = 15350)
 
-  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
-     63▕      * @throws \BadMethodCallException
-     64▕      */
-     65▕     protected static function throwBadMethodCallException($method)
-     66▕     {
-  ➜  67▕         throw new BadMethodCallException(sprintf(
-     68▕             'Call to undefined method %s::%s()', static::class, $method
-     69▕         ));
-     70▕     }
-     71▕ }
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:626
+    622▕             $statement = $this->getPdo()->prepare($query);
+    623▕ 
+    624▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+    625▕ 
+  ➜ 626▕             $statement->execute();
+    627▕ 
+    628▕             $this->recordsHaveBeenModified(
+    629▕                 ($count = $statement->rowCount()) > 0
+    630▕             );
 
-      +4 vendor frames 
-  5   Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:68
-  6   Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:100
+      +9 vendor frames 
+  10  Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:93
+  11  Modules/AI/tests/Feature/DiscovererClassNeutralPlanningTest.php:74
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.85s
+  Duration: 0.87s

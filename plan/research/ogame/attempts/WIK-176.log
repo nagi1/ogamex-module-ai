@@ -1,44 +1,42 @@
 FleetFlightDistanceTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\Ai\FleetFlightDistanceTest
-  ⨯ fleet target selection is deterministic for a repeated fixed situat… 0.36s  
-  ⨯ fleet target selection stays empty when no target lies in range      0.05s  
+  ⨯ it keeps the pilot fleet target ordering stable across repeated run… 0.37s  
+  ⨯ it selects no fleet target for an account whose only planet is its…  0.07s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\FleetFlightDi…  BadMethodCallException   
-  Call to undefined method Modules\AI\Models\AiProfile::factory()
+   FAILED  Modules\AI\tests\Feature\Ai\FleetFlightDistanceTest > it k…  Error   
+  Call to undefined method Modules\AI\Actions\BuildAiPilotReportAction::build()
 
-  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
-     63▕      * @throws \BadMethodCallException
-     64▕      */
-     65▕     protected static function throwBadMethodCallException($method)
-     66▕     {
-  ➜  67▕         throw new BadMethodCallException(sprintf(
-     68▕             'Call to undefined method %s::%s()', static::class, $method
-     69▕         ));
-     70▕     }
-     71▕ }
+  at Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:49
+     45▕ // with the same ordered target selection every time, so a later distance rule has a baseline to move.
+     46▕ it('keeps the pilot fleet target ordering stable across repeated runs', function () {
+     47▕     $pilotReport = app(BuildAiPilotReportAction::class);
+     48▕ 
+  ➜  49▕     $firstRun = $pilotReport->build($this->player);
+     50▕     $secondRun = $pilotReport->build($this->player);
+     51▕ 
+     52▕     expect($secondRun)->toEqual($firstRun);
+     53▕ });
 
-      +4 vendor frames 
-  5   Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:76
+  1   Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:49
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\FleetFlightDi…  BadMethodCallException   
-  Call to undefined method Modules\AI\Models\AiProfile::factory()
+   FAILED  Modules\AI\tests\Feature\Ai\FleetFlightDistanceTest > it s…  Error   
+  Call to undefined method Modules\AI\Actions\RunAiSessionAction::run()
 
-  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
-     63▕      * @throws \BadMethodCallException
-     64▕      */
-     65▕     protected static function throwBadMethodCallException($method)
-     66▕     {
-  ➜  67▕         throw new BadMethodCallException(sprintf(
-     68▕             'Call to undefined method %s::%s()', static::class, $method
-     69▕         ));
-     70▕     }
-     71▕ }
+  at Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:56
+     52▕     expect($secondRun)->toEqual($firstRun);
+     53▕ });
+     54▕ 
+     55▕ it('selects no fleet target for an account whose only planet is its own', function () {
+  ➜  56▕     app(RunAiSessionAction::class)->run($this->player);
+     57▕ 
+     58▕     expect(FleetMission::query()->count())->toBe(0);
+     59▕ });
+     60▕
 
-      +4 vendor frames 
-  5   Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:88
+  1   Modules/AI/tests/Feature/Ai/FleetFlightDistanceTest.php:56
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.83s
+  Duration: 0.91s

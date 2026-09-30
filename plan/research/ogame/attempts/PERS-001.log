@@ -1,0 +1,53 @@
+PersonaDecompositionTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+
+dsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/PersonaDecompositionTest.php:65
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PersonaDecompositionTest…  QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'player_id' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`created_at`, `updated_at`) values (2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/PersonaDecompositionTest.php:84
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PersonaDecompositionTest…  QueryException   
+  SQLSTATE[HY000]: General error: 1366 Incorrect integer value: 'regular' for column 'activity_band' at row 1 (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`activity_band`, `defense_doctrine`, `stockpile_strategy`, `economic_role`, `persona_version`, `updated_at`, `created_at`) values (regular, balanced, stockpile, miner, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/PersonaDecompositionTest.php:99
+  18  Modules/AI/tests/Feature/PersonaDecompositionTest.php:107
+
+
+  Tests:    4 failed (0 assertions)
+  Duration: 0.97s

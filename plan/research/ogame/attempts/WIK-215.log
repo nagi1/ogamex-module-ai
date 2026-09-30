@@ -1,16 +1,46 @@
-DestroyedPlanetTest: suite not collectable
+DestroyedPlanetTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
-Error 
+FAIL  Modules\AI\tests\Feature\Ai\DestroyedPlanetTest
+  ⨯ the pilot sends nothing to a destroyed planet while it still raids…  0.36s  
+  ⨯ a destroyed planet does not silence the pilot for the live target i… 0.06s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\DestroyedPlan…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
 
-  Class "IsolatedAccountTestCase" not found
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
 
-  at Modules/AI/tests/Feature/Ai/DestroyedPlanetTest.php:10
-      6▕ use OGame\Models\Planet;
-      7▕ use OGame\Models\User;
-      8▕ use OGame\Services\ModuleSlotService;
-      9▕ 
-  ➜  10▕ class AiDestroyedPlanetTestCase extends IsolatedAccountTestCase
-     11▕ {
-     12▕     private const PILOT_POSITION = [1, 1, 1];
-     13▕ 
-     14▕     private const HOSTILE_POSITION = [1, 1, 9];
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/Ai/DestroyedPlanetTest.php:60
+  6   Modules/AI/tests/Feature/Ai/DestroyedPlanetTest.php:129
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\DestroyedPlan…  BadMethodCallException   
+  Call to undefined method Modules\AI\Models\AiProfile::factory()
+
+  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
+     63▕      * @throws \BadMethodCallException
+     64▕      */
+     65▕     protected static function throwBadMethodCallException($method)
+     66▕     {
+  ➜  67▕         throw new BadMethodCallException(sprintf(
+     68▕             'Call to undefined method %s::%s()', static::class, $method
+     69▕         ));
+     70▕     }
+     71▕ }
+
+      +4 vendor frames 
+  5   Modules/AI/tests/Feature/Ai/DestroyedPlanetTest.php:60
+  6   Modules/AI/tests/Feature/Ai/DestroyedPlanetTest.php:142
+
+
+  Tests:    2 failed (0 assertions)
+  Duration: 0.89s

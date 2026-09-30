@@ -1,0 +1,64 @@
+DecisionWeightCalibrationTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (0 assertions)[39m
+
+hp:41
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DecisionWeightCalibratio…  ErrorException   
+  require(/var/www/resources/behavior/decision_weights.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/DecisionWeightTable.php:29
+     25▕ 
+     26▕     /** @return array<string, mixed> */
+     27▕     public function settings(): array
+     28▕     {
+  ➜  29▕         return $this->settings ??= require $this->dataFile();
+     30▕     }
+     31▕ 
+     32▕     /** @return array<string, float> the starting values, exactly as the data file writes them */
+     33▕     public function starting(): array
+
+  1   Modules/AI/app/Support/DecisionWeightTable.php:29
+  2   Modules/AI/app/Support/DecisionWeightTable.php:41
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DecisionWeightCalibratio…  ErrorException   
+  require(/var/www/resources/behavior/decision_weights.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/DecisionWeightTable.php:29
+     25▕ 
+     26▕     /** @return array<string, mixed> */
+     27▕     public function settings(): array
+     28▕     {
+  ➜  29▕         return $this->settings ??= require $this->dataFile();
+     30▕     }
+     31▕ 
+     32▕     /** @return array<string, float> the starting values, exactly as the data file writes them */
+     33▕     public function starting(): array
+
+  1   Modules/AI/app/Support/DecisionWeightTable.php:29
+  2   Modules/AI/app/Support/DecisionWeightTable.php:41
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\DecisionWeightCalibratio…  ErrorException   
+  require(/var/www/resources/behavior/decision_weights.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Support/DecisionWeightTable.php:29
+     25▕ 
+     26▕     /** @return array<string, mixed> */
+     27▕     public function settings(): array
+     28▕     {
+  ➜  29▕         return $this->settings ??= require $this->dataFile();
+     30▕     }
+     31▕ 
+     32▕     /** @return array<string, float> the starting values, exactly as the data file writes them */
+     33▕     public function starting(): array
+
+  1   Modules/AI/app/Support/DecisionWeightTable.php:29
+  2   Modules/AI/app/Support/DecisionWeightTable.php:41
+
+
+  Tests:    6 failed (0 assertions)
+  Duration: 1.18s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/decision_weights.php (data must be YAML or JSON so a modder can edit it without code)

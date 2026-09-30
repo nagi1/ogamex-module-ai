@@ -1,0 +1,25 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+### FILE: resources/behavior/harvest.php
+```php
+<?php
+
+/*
+ * Harvester policy for the AI pilot.
+ *
+ * A lost fleet leaves debris, but debris is only worth buying a recycler for
+ * when it is heavy enough to pay for the hull. These are the knobs a modder
+ * turns to change when the pilot buys harvesters and how many it buys at once;
+ * keep them integers, the module reads them as ints.
+ */
+return [
+    // Lighter fields are left in space: collecting them costs more than they return.
+    'worthwhile_mass' => 5000,
+
+    // Hulls the pilot keeps back from any single build.
+    'reserve_hulls' => 2,
+
+    // Ceiling on the hulls one build order may add.
+    'max_hulls_per_order' => 5,
+];
+```
