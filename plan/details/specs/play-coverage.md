@@ -54,3 +54,20 @@ importantly, making the absence visible in the cohort read instead of reading as
   application decided, an exchange written, a fleet save executed, a debris field collected.
 - The cohort read (`scripts/verify-cohorts.php`) is the instrument. Its invariants already raise a
   row per violation; the aspects here that have no invariant are the ones this file adds.
+
+## `file_ref` decides who does the work
+
+The harness attempts any ready row that carries a **proposal** or a **`file_ref`**, and it delivers
+by writing files. So `file_ref` is not a hint, it is an assignment:
+
+- **`file_ref` set** — the work is code, the named file owns the decision, and the harness will write
+  it. The row must be closable by a code change plus a test.
+- **`file_ref` empty** — the work is a run, not a change: open a campaign, provoke an attack, read a
+  cohort back. The harness skips it and an operator or the Plan Executor picks it up.
+
+Getting this wrong is not harmless. `CAMPAIGN-001` was raised as an operator run ("open a campaign on
+pve and read it back") and was given a `file_ref` to make it visible to the harness; the harness
+returned a new test for `OpenAiCampaignAction`, every campaign test passed, and it wrote an
+`implemented` marker while the campaign was never opened. The marker was deleted and the `file_ref`
+removed (30 Sep 2026). A row whose work is an observation must never carry one.
+
