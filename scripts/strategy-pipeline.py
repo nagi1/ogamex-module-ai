@@ -1054,8 +1054,14 @@ def publish(phase, detail=""):
 
     stale = time.time() - 3600
     for path in glob.glob(os.path.join(WORKERS, "*.json")):
-        if os.path.getmtime(path) < stale:
-            os.remove(path)
+        # Shards sweep the same directory at once, so a file can be gone between the glob and the
+        # read, and again between the read and the remove. Losing that race is not an error: it left
+        # a traceback in the harness log every pass that two shards ended together.
+        try:
+            if os.path.getmtime(path) < stale:
+                os.remove(path)
+        except FileNotFoundError:
+            continue
 
 
 def self_check():
