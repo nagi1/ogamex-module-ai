@@ -1086,6 +1086,20 @@ def self_check():
     assert [t for t, _ in dependencies("[[Ninja]] [[Category:X]] [[Ninja]]")] == ["Ninja"]
     assert [v for v in doctrine_variants("## Early Game\nBuild 1 Heavy Laser for every 10 Light Lasers.\n")] == ["Early Game"]
     assert doctrine_variants("## Limitations\nNothing buildable here at all.\n") == []
+
+    # The writer is sent the row's evidence and a real fixture, not a bare title: 22 rows spent three
+    # attempts each inventing the columns of a table a test in this suite already builds.
+    long_notes = notes_block("evidence " * 2000)
+    assert long_notes.endswith("(notes truncated)") and len(long_notes) < 4100, "notes are bounded, not dropped"
+    assert fixture_examples(["app/Models/AiProfile.php"], skip="tests/Feature/AIRouteTest.php"), \
+        "a slice that edits a model must be shown a test that already builds it"
+    model_task = {"title": "AiProfile persona", "notes": "", "file_ref": "app/Models/AiProfile.php"}
+    assert migrations_for(model_task, ["app/Models/AiProfile.php"]), \
+        "a slice that edits a model must be shown the migration that defines its table"
+    notes_task = {"title": "exchanges", "notes": "ai_social_exchanges is empty", "file_ref": "app/Actions/X.php"}
+    assert migrations_for(notes_task, ["app/Actions/X.php"]), \
+        "a table the evidence names must be shown even with no model in the slice"
+    assert test_support_files(), "the suite's base test case must be in the context"
     assert_window_matches_config()
     def at(day, hour, minute):
         return datetime.datetime(2026, 9, day, hour, minute, tzinfo=datetime.timezone.utc)
@@ -1413,6 +1427,13 @@ Rules:
 - The test must fail if the behaviour breaks — assert the behaviour, not that a method exists.
 - Tests are Pest, not PHPUnit classes: no `extends`, never invent a base class. See the EXAMPLE TEST
   below for the exact shape this module uses.
+- Build fixtures the way the suite already builds them: use the test base case and the tests below that
+  already exercise these classes. Never hand-write an insert into a host table (`users`, `players`, any
+  `ai_*` table) -- their required columns are not in this prompt, so an invented insert fails before a
+  single assertion runs. Measured 30 Sep 2026: 22 rows spent three attempts each on
+  `Field 'player_id' doesn't have a default value` and its siblings, every attempt refused and restored.
+- A model's required columns come from its migration, which is below when the slice names a model. If a
+  table you need is not shown, build it the way the tests below do rather than from memory.
 - Every test goes in `tests/Feature`. **Unit tests are not accepted.** A test over a bare value
   object can pass while the behaviour it describes is wrong, and nothing would notice. A Feature test
   drives the real path -- the action, the host services and the database -- so it fails when the
@@ -1493,14 +1514,20 @@ def plan_paths(blocks, fallback=""):
     every lookup miss, so the model was never shown the existing files it was asked to change -- and
     then proposed them as new ones, which is exactly the "edit-only plan" dead end the driver kept
     hitting.
+
+    A hand-written row puts several files in `file_ref`, separated by `;`. Read as one line, that whole
+    string became a single path that exists nowhere, so the writer was told to *create* it and never saw
+    the contents of any file it was asked to edit: measured 30 Sep 2026 on `PERS-001`, which rewrote
+    `AiProfile` from a blank page and failed three attempts on that table's own required columns.
     """
     lines = blocks.get("FILES", []) or ([fallback] if fallback else [])
     paths = []
 
     for line in lines:
-        clean = re.sub(r"\s*\((new|edit)\)\s*$", "", line.strip("- ").replace("`", "")).strip()
-        if clean:
-            paths.append(clean)
+        for piece in str(line).split(";"):
+            clean = re.sub(r"\s*\((new|edit)\)\s*$", "", piece.strip("- ").replace("`", "")).strip()
+            if clean:
+                paths.append(clean)
 
     return paths
 
@@ -1517,7 +1544,17 @@ def implement_context(code):
     blocks = sections(read(proposal_path)) if proposal_path else {}
     paths = plan_paths(blocks, task["file_ref"])
 
-    parts = [f"TASK {task['code']} — {task['title']}", "", "THE PLAN:",
+    parts = [f"TASK {task['code']} — {task['title']}", ""]
+
+    # The row's own evidence. Hand-written rows carry what was measured, what is required and -- where a
+    # decision was open -- the default that was decided, and the writer used to be sent none of it: for a
+    # row with no proposal it saw a bare title. Two slices then spent three attempts each inventing a
+    # schema the row's own notes already described.
+    if task["notes"].strip():
+        parts += ["THE ROW'S OWN NOTES (authoritative: measurements, constraints, already-decided defaults):",
+                  notes_block(task["notes"]), ""]
+
+    parts += ["THE PLAN:",
              read(proposal_path) if proposal_path else "(the task has no proposal attached)", ""]
 
     # One real test from the module, so the harness copies the house style instead of inventing a
@@ -1526,7 +1563,30 @@ def implement_context(code):
     for example in sorted(glob.glob(os.path.join(MODULE, "tests/Feature/*Test.php"))):
         parts += [f"EXAMPLE TEST {os.path.relpath(example, MODULE)} (copy this shape):",
                   "```php", read(example)[:1800], "```", ""]
+        example_test = os.path.relpath(example, MODULE)
         break
+    else:
+        example_test = ""
+
+    # Tests that already build the very classes this slice touches: the house way to make a profile, an
+    # exchange, a work item, with the columns the real tables require. The alphabetical example above is
+    # the only shape the writer saw, and it had never built an `ai_profiles` row -- so the writer guessed.
+    for fixture in fixture_examples(paths, skip=example_test):
+        parts += [f"TEST THAT ALREADY USES THESE CLASSES {os.path.relpath(fixture, MODULE)} "
+                  "(build your fixtures the way this one does):",
+                  "```php", read(fixture)[:3000], "```", ""]
+
+    for support in test_support_files():
+        parts += [f"TEST BASE CASE {os.path.relpath(support, MODULE)} (this is the class a Feature test "
+                  "extends; it already makes the player and the account):",
+                  "```php", read(support)[:3000], "```", ""]
+
+    # The tables this row's own words name, from the migrations that define them. A required column is what
+    # every invented insert got wrong, and the migration is that column's source of record.
+    for migration in migrations_for(task, paths):
+        parts += [f"MIGRATION THAT DEFINES A TABLE THIS TASK TOUCHES "
+                  f"{os.path.relpath(migration, MODULE)} (required columns are NOT NULL here):",
+                  "```php", read(migration)[:3000], "```", ""]
 
     for path in paths[:6]:
         full = os.path.join(MODULE, path)
@@ -1544,6 +1604,81 @@ def implement_context(code):
               "\n".join(f"- {name}" for name in host_class_names()), ""]
 
     return task, paths, "\n".join(parts)
+
+
+def notes_block(notes, limit=4000):
+    """The row's own evidence, trimmed to a bound the prompt can carry."""
+    text = notes.strip()
+
+    return text if len(text) <= limit else text[:limit].rstrip() + "\n… (notes truncated)"
+
+
+def fixture_examples(paths, skip="", limit=2):
+    """Tests that already build the classes this slice touches.
+
+    A slice that edits `AiProfile` needs to be shown a test that builds an AiProfile, not whichever test
+    sorts first alphabetically: the required columns are visible in a working fixture, and nowhere else
+    the writer can see.
+    """
+    names = [os.path.basename(path)[:-4] for path in paths if path.endswith(".php")]
+    found = []
+
+    for path in sorted(glob.glob(os.path.join(MODULE, "tests/Feature/**/*Test.php"), recursive=True)):
+        relative = os.path.relpath(path, MODULE)
+        if relative == skip:
+            continue
+        if any(name in read(path) for name in names):
+            found.append(path)
+        if len(found) >= limit:
+            break
+
+    return found
+
+
+def test_support_files(limit=1):
+    """The module's own base test case, so a fixture is made the way the suite makes it."""
+    cases = sorted(glob.glob(os.path.join(MODULE, "tests/Support/*TestCase.php")))
+
+    return cases[:limit]
+
+
+def migrations_for(task, paths, limit=2):
+    """The migrations that create the tables this row touches, found from the row's own words.
+
+    Two sources, because the failing insert named a table in both ways: a model among the files the slice
+    edits (`AiProfile` -> `ai_profiles`), and a table the evidence names outright (`ai_social_exchanges`
+    in a defect about exchanges, with no model file in the slice at all).
+    """
+    tables = []
+    for path in paths:
+        if re.match(r"app/Models/\w+\.php$", path):
+            body = read(os.path.join(MODULE, path))
+            declared = re.search(r"protected\s+\$table\s*=\s*'([^']+)'", body)
+            # AiProfile -> ai_profile(s): the class name snake-cased, because Laravel's own inference is
+            # what named the table in the first place.
+            name = declared.group(1) if declared else re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", os.path.basename(path)[:-4]).lower()
+            tables += [name, name + "s"]
+
+    everywhere = f"{task['title']} {task['notes']} {task['file_ref']}"
+    tables += [name.lower() for name in re.findall(r"\bai_[a-z_]+?\b(?=[^_a-z]|$)", everywhere, re.I)]
+
+    migrations = sorted(glob.glob(os.path.join(MODULE, "database/migrations/*.php")))
+    found = []
+
+    # In the order the row names them, because a defect row lists the table it is about first
+    # (`ai_social_exchanges` before the relationship tables it also mentions).
+    for table in dict.fromkeys(tables):
+        if len(found) >= limit:
+            break
+
+        for migration in migrations:
+            if migration in found:
+                continue
+            if f"Schema::create('{table}'" in read(migration):
+                found.append(migration)
+                break
+
+    return found
 
 
 def host_class_names():
@@ -1878,8 +2013,11 @@ def implement(code):
 
     # Never pay to redo finished work. If every file the plan names already exists and its own test
     # passes, the slice is delivered -- and the previous "edit-only plan" label was hiding finished
-    # slices behind a paid call every pass to rediscover them.
-    if paths and all(os.path.exists(os.path.join(MODULE, path)) for path in paths):
+    # slices behind a paid call every pass to rediscover them. Only a row that came from a plan can be
+    # read this way: a hand-written defect row names the files that exist *because* the behaviour is
+    # wrong, so their existence proves nothing, and a row that happens to name its own test would
+    # otherwise be marked delivered for free.
+    if proposal_path and paths and all(os.path.exists(os.path.join(MODULE, path)) for path in paths):
         delivered = next((path for path in paths
                           if path.startswith("tests/Feature/")
                           and os.path.exists(os.path.join(MODULE, path))), None)
