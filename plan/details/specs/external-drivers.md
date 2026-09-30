@@ -187,3 +187,16 @@ Closed by decision, not code (16 September 2026):
   newest fact in 29 of 30 trials, and the only production reader sits behind an
   `availableAmount = 0` branch with no query text. Gate 2 therefore stays unmet; closed as disabled
   on evidence: [driver decision record](../research/phase-3-driver-decisions.md).
+
+## Hosted classification beside a driver (proposed, not adopted)
+
+A model that reads text and returns a decision is **not a fifth driver**: it owns no mechanism. If
+TypeSafe's Jev is ever adopted (see [hosted classification](hosted-classification.md)), it belongs in
+the module's **perception layer that feeds a driver** — the event-to-stimulus mapping and the
+message-to-exchange recognition — and never beside a driver as a second opinion on the same question.
+That boundary is what keeps the three hybrid combiners (`HybridAffectEngine`, `HybridSocialCognition`,
+`HybridExperienceEngine`) untouched and stops a third merge rule appearing. Refused explicitly, with
+reasons, in the [opportunity map](../research/jev-opportunity-map.md): choosing the emotion label,
+filling `mood`/`driverEmotion`/`driverIntensity`, a second similarity measure beside CBRKit, a third
+memory ranker, and write-time memory importance. The driver-side experiments that would compose with it
+are in [Jev with our cognition drivers](../research/jev-with-cognition-drivers.md).

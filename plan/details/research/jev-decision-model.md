@@ -8,7 +8,10 @@ from marketing text, and nothing here changes behaviour on its own. Sources are 
 
 Read with: [Laravel AI SDK integration](../specs/laravel-ai-sdk.md) (our rules for using the SDK),
 [budgets](budgets.md) (the model-call policy), and
-[laravel-ai-tools.md](laravel-ai-tools.md) (the same kind of study for SDK tools).
+[laravel-ai-tools.md](laravel-ai-tools.md) (the same kind of study for SDK tools). For how Jev composes
+with the cognition drivers we already run — FAtiMA/CiF, CBRKit, AgentOS and PsychSim — see
+[jev-with-cognition-drivers.md](jev-with-cognition-drivers.md); for the whole-module inventory of
+hand-made judgements, see [jev-opportunity-map.md](jev-opportunity-map.md).
 
 ---
 

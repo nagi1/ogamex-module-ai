@@ -279,3 +279,18 @@ the order 13–18 recorded in
 [gameplay-algorithms.md](details/specs/gameplay-algorithms.md#delivery-order), gated per reviewed
 cluster by the integration gates in the mining spec — they never precede the package they depend on,
 and none is executable until its cluster passes review.
+
+## Side work packages
+
+Two workstreams sit outside the numbered packages and merge beside them, because they enrich existing
+mechanisms rather than completing a package:
+
+- [LLM full utilisation](details/specs/llm-full-utilisation.md) — Package S, shipped 16 September 2026.
+- [Hosted classification](details/specs/hosted-classification.md) — **studied, gated, not adopted.**
+  TypeSafe's Jev answers bounded questions with calibrated probabilities, which is the right shape for
+  the handful of judgements this module currently encodes as a regex, a cutoff or a non-empty test. It
+  is off by default, blocked on the owner decision and credential (`REV-8`) and on the SDK version that
+  carries it (`IMPL-65`), and its slices are `JEV-1…JEV-7` in the task DB. Read the three research notes
+  before proposing any use: [what Jev is](details/research/jev-decision-model.md), [how it composes with
+  the drivers](details/research/jev-with-cognition-drivers.md), and [every judgement it could serve and
+  the ones it must not](details/research/jev-opportunity-map.md).
