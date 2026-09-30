@@ -85,3 +85,20 @@ test('the harness refuses to answer outside a local machine', function (): void 
     $this->get(route('ai.harness.index'))->assertNotFound();
     $this->getJson(route('ai.harness.tasks'))->assertNotFound();
 });
+
+test('the overview snapshot reports what the pipeline is doing', function (): void {
+    $snapshot = null;
+
+    withLocalEnvironment(function () use (&$snapshot): void {
+        // No cursor, so the poll answers on its first pass instead of holding the connection open.
+        $snapshot = $this->getJson(route('ai.harness.poll'))->json();
+    });
+
+    expect($snapshot['fingerprint'])->not->toBe('')
+        ->and($snapshot['tasks']['total'])->toBeGreaterThan(0)
+        ->and($snapshot['sources'])->toHaveKeys(['raw', 'proposals', 'validated', 'implemented', 'edit_only', 'stuck'])
+        ->and($snapshot['harness'])->toHaveKeys(['active', 'idle', 'phase', 'detail', 'heartbeat', 'log', 'lines'])
+        ->and($snapshot['activity'])->toHaveKeys(['recent', 'provedLastHour', 'attempts', 'unproved'])
+        ->and($snapshot['workers'])->toBeArray()
+        ->and($snapshot['feed'])->toBeArray();
+});
