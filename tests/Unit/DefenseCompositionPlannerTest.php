@@ -8,6 +8,8 @@ use Modules\AI\Enums\AiDefenseDoctrine;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
 use OGame\Models\Resources;
+use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -53,6 +55,46 @@ test('a doctrine built to its own ratio chooses nothing further', function (): v
     $this->planetAddUnit('plasma_turret', 5);
 
     expect(app(DefenseCompositionPlanner::class)->plan($this->planetService->getPlayer(), $this->planetService))->toBeNull();
+});
+
+// The host takes the whole price when an order is placed, so a wall already paid for and waiting in
+// the yard is a wall the account owns: the same shortfall must not be bought again next session.
+// Measured live on 29 Sep 2026, sizing on built units alone left 21.8M paid rocket launchers queued
+// on grand while only 2.9M were built in a day.
+test('units already in the yard count as held', function (): void {
+    defcompProfile($this->currentUserId, AiDefenseDoctrine::BalancedMixed);
+
+    $this->planetAddUnit('light_laser', 100);
+    defcompQueueUnits($this->planetService, [
+        'rocket_launcher' => 20,
+        'ion_cannon' => 20,
+        'heavy_laser' => 10,
+        'gauss_cannon' => 10,
+        'plasma_turret' => 5,
+    ]);
+
+    expect(app(DefenseCompositionPlanner::class)->plan($this->planetService->getPlayer(), $this->planetService))->toBeNull();
+});
+
+// Half the shortfall in the yard is half the shortfall already bought: the doctrine buys only the
+// remainder, so a fast universe cannot outrun its own shipyard.
+test('a partly built order shrinks what the doctrine buys next', function (): void {
+    defcompProfile($this->currentUserId, AiDefenseDoctrine::BalancedMixed);
+
+    $this->planetAddUnit('light_laser', 100);
+    defcompQueueUnits($this->planetService, [
+        'rocket_launcher' => 12,
+        'ion_cannon' => 20,
+        'heavy_laser' => 10,
+        'gauss_cannon' => 10,
+        'plasma_turret' => 5,
+    ]);
+
+    $composition = app(DefenseCompositionPlanner::class)->plan($this->planetService->getPlayer(), $this->planetService);
+
+    expect($composition)->toBeInstanceOf(DefenseComposition::class)
+        ->and($composition->unit->machine_name)->toBe('rocket_launcher')
+        ->and($composition->amount)->toBe(8);
 });
 
 // A doctrine that names a unit the host does not have is an error, not a silent fall back to some
@@ -138,4 +180,20 @@ function defcompProfile(int $playerId, ?AiDefenseDoctrine $doctrine): AiProfile
         'random_seed' => 24_000 + $playerId,
         'enabled' => true,
     ]);
+}
+
+/** Orders in the yard, the way the module's own executor leaves them: paid for, not yet built. */
+function defcompQueueUnits(PlanetService $planet, array $unitsByMachineName): void
+{
+    foreach ($unitsByMachineName as $machineName => $amount) {
+        DB::table('unit_queues')->insert([
+            'planet_id' => $planet->getPlanetId(),
+            'object_id' => ObjectService::getObjectByMachineName($machineName)->id,
+            'object_amount' => $amount,
+            'time_duration' => 60,
+            'time_start' => now()->getTimestamp(),
+            'time_end' => now()->addMinute()->getTimestamp(),
+            'processed' => false,
+        ]);
+    }
 }

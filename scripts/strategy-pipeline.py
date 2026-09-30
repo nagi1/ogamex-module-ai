@@ -467,6 +467,31 @@ def sections(text):
     return out
 
 
+def duplicate_class(content, clean):
+    """Why this file may not be written because the module already has that class, or None.
+
+    Two classes that own one decision are two authorities, and the pair drifts: the harness wrote
+    `app/Ai/Defense/DefenseCompositionPlanner.php` beside the real `Domain/Decision` planner and
+    started planning walls from whichever one the test happened to load (found 30 Sep 2026).
+    Wiring a rule in means editing the class that owns it, not writing a rival next to it.
+    """
+    declared = re.search(r"^(?:final\s+|abstract\s+|readonly\s+)*class\s+(\w+)", content, re.M)
+    if declared is None:
+        return None
+
+    name = declared.group(1)
+    hits = subprocess.run(
+        ["grep", "-rlE", rf"^[a-z ]*class {name}\b", "app/", "--include=*.php"],
+        cwd=MODULE, capture_output=True, text=True,
+    ).stdout.split()
+
+    for hit in hits:
+        if os.path.abspath(os.path.join(MODULE, hit)) != os.path.abspath(os.path.join(MODULE, clean)):
+            return f"{hit} already declares class {name} — edit it instead of writing a second one"
+
+    return None
+
+
 def path_refusal(clean):
     """Why this path may not be written, or None. One rule, used by the validator and the writer.
 
@@ -901,13 +926,21 @@ def inlined_policy(paths, numbers):
     return found
 
 
-def unreachable_files(paths):
+def unreachable_files(paths, backups):
     """Module code files that no runtime code calls.
 
     A class nothing calls cannot be executed by a cohort, so it cannot be validated live and is not a
     delivery -- it is dead code. This is the deterministic half of "it must run on the accounts":
     the other half is the Feature test driving the wired path rather than constructing the class.
+
+    A file this attempt created is not a caller. A slice that writes two classes calling each other
+    has wired nothing into the account, and counting them kept a whole parallel tree of dead classes
+    alive under app/Ai/ (found 30 Sep 2026, including a second DefenseCompositionPlanner shadowing
+    the real one). Only code that already existed before the attempt counts as the runtime caller.
     """
+    created = {os.path.abspath(os.path.join(MODULE, clean)) for clean in paths
+               if os.path.join(MODULE, clean) not in backups}
+
     unreachable = []
 
     for clean in paths:
@@ -921,7 +954,8 @@ def unreachable_files(paths):
         hits = subprocess.run(["grep", "-rl", klass, "app/", "--include=*.php"],
                               cwd=MODULE, capture_output=True, text=True).stdout.split()
         callers = [hit for hit in hits
-                   if os.path.abspath(os.path.join(MODULE, hit)) != os.path.abspath(full)]
+                   if os.path.abspath(os.path.join(MODULE, hit)) != os.path.abspath(full)
+                   and os.path.abspath(os.path.join(MODULE, hit)) not in created]
 
         if not callers:
             unreachable.append(clean)
@@ -1860,6 +1894,10 @@ def implement(code):
         if refusal:
             refused.append(f"{clean} ({refusal})")
             continue
+        shadowed = duplicate_class(content, clean)
+        if shadowed:
+            refused.append(f"{clean} ({shadowed})")
+            continue
         full = os.path.join(MODULE, clean)
         # The answer may name a file the plan never listed, and the claim was taken from the plan. Claim
         # it here, before the write, because an unclaimed write is how two workers get into one file:
@@ -1965,7 +2003,7 @@ def implement(code):
     # Live validation starts here: if no runtime code calls this, no cohort can execute it, so the
     # Feature test proves only that the class exists. Refused and rolled back, with the reason the
     # retry needs: name the runtime file that uses the rule and edit it too.
-    unreachable = unreachable_files(written)
+    unreachable = unreachable_files(written, backups)
     if unreachable:
         print(f"  nothing calls {', '.join(unreachable)} — not a delivery, restored")
         record_failure(code, "these files are not called by any runtime code, so no account can ever "

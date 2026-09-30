@@ -145,28 +145,20 @@ PY
       continue
     fi
 
-    # The half that scenarios cannot prove: that a real account actually plays. A fresh isolated
-    # universe (never grand or pve) with the real scheduler, worker and host queues, then assertions
-    # on what happened -- orders accepted, orders in the queues, nothing rejected or failed.
     # The half that scenarios cannot prove: that a real account actually plays. A persistent canary
     # universe (never grand or pve) has been working while this pass wrote code; it is reloaded onto
     # that code, then asked what it did since the last check. Booting and sleeping out a window inside
-    # every pass made the verification the bottleneck, which is why it is incremental now.
-    echo "--- live canary verification $(date -u '+%F %T') UTC ---"
-    HARNESS_WORKER=pass python3 -u scripts/strategy-pipeline.py publish live-verification || true
-    bash scripts/canary.sh restart >> "$LOG" 2>&1 || true
-    if bash scripts/canary.sh check >> "$LOG" 2>&1; then
-      echo "--- live verification passed $(date -u '+%F %T') UTC ---"
-    else
-      # Loud and repeated, because the code on disk is what the cohorts run: a red live run means the
-      # module does not play, and no number of further slices fixes that on its own.
-      echo "=== LIVE VERIFICATION FAILED $(date -u '+%F %T') UTC — the accounts did not play; block above ==="
-      sleep 120
-      continue
-    fi
+    # every pass made the verification the bottleneck, which is why it is incremental now. The check
+    # itself runs at the end of the pass, after the cohort read (see below).
 
     # The cohorts are grand and pve — the dev stack is not a cohort at all, and measuring there
     # says nothing about a live universe (learned 28 Sep 2026).
+    #
+    # This runs BEFORE the canary, because the canary's failure parks the pass: while a canary reads
+    # red the cohort verdict used to stop being taken at all, and the quality report the operator
+    # reads went stale for as long as the canary stayed unhappy (found 30 Sep 2026: 45 minutes of
+    # stale verdicts, and 100 QUALITY FAILED lines that no longer matched the last cohort read).
+    # Reading the cohorts is free and read-only, so it is never the thing to skip.
     for universe in grand pve; do
       echo "--- live cohort verification: $universe $(date -u '+%F %T') UTC ---"
       HARNESS_WORKER=pass python3 -u scripts/strategy-pipeline.py publish "reading the $universe cohort" || true
@@ -189,6 +181,23 @@ PY
         "" | *"unavailable"*) echo "$universe unavailable (stack down?)" ;;
       esac
     done
+
+    # Only now the canary: it is the expensive, stateful one, and its failure parks the pass. A red
+    # live run means the code on disk does not play, so no further slice should be written on top of
+    # it — but the cohort verdict above has already been taken by then, which is what the operator
+    # reads and what raises the missing-invariant task rows.
+    echo "--- live canary verification $(date -u '+%F %T') UTC ---"
+    HARNESS_WORKER=pass python3 -u scripts/strategy-pipeline.py publish live-verification || true
+    bash scripts/canary.sh restart >> "$LOG" 2>&1 || true
+    if bash scripts/canary.sh check >> "$LOG" 2>&1; then
+      echo "--- live verification passed $(date -u '+%F %T') UTC ---"
+    else
+      # Loud and repeated, because the code on disk is what the cohorts run: a red live run means the
+      # module does not play, and no number of further slices fixes that on its own.
+      echo "=== LIVE VERIFICATION FAILED $(date -u '+%F %T') UTC — the accounts did not play; block above ==="
+      sleep 120
+      continue
+    fi
 
     proposals_after=$(ls plan/research/ogame/proposals | wc -l)
     markers_after=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)

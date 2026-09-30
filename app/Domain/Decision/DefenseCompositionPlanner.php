@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Models\AiProfile;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\Resources;
+use OGame\Models\UnitQueue;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -66,14 +67,22 @@ class DefenseCompositionPlanner
         }
 
         $anchor = $this->resolveUnit($doctrine['anchor']['unit'], $defenceObjects);
+
+        // The wall is what the planet holds plus what it has already paid for and is waiting on.
+        // The yard builds far slower than a fast universe pays, so a target measured on built units
+        // alone is re-bought every session and the queue grows without bound: measured live
+        // 29 Sep 2026, 21.8M paid rocket launchers pending on grand while 2.9M were built in a day.
         $current = $planet->getDefenseUnits();
+        $pending = $this->pendingDefence($planet);
+        $held = fn (string $machineName): int => $current->getAmountByMachineName($machineName)
+            + ($pending[$machineName] ?? 0);
 
         // The wall's size in doctrine layers. A wall whose anchor is still below the doctrine's
         // stated count is built to that stated wall; a larger anchor scales every ratio with it, so
         // a bigger wall is the same doctrine rather than a different one. A need extends that
         // further: what the account stands to lose, priced against what one layer of this doctrine
         // costs, is how far out the wall is built.
-        $scale = max($current->getAmountByMachineName($anchor->machine_name), $anchorCount);
+        $scale = max($held($anchor->machine_name), $anchorCount);
 
         if ($need !== null) {
             $scale = max($scale, (int) ceil($need->defenceValue / $this->layerValue($anchor, $doctrine, $defenceObjects)));
@@ -85,7 +94,7 @@ class DefenseCompositionPlanner
         foreach ($doctrine['ratio'] as $name => $ratio) {
             $unit = $this->resolveUnit($name, $defenceObjects);
             $target = (int) ceil($ratio * $scale / $anchorCount);
-            $have = $current->getAmountByMachineName($unit->machine_name);
+            $have = $held($unit->machine_name);
 
             if ($have >= $target) {
                 continue;
@@ -122,6 +131,35 @@ class DefenseCompositionPlanner
         $profile = AiProfile::query()->where('player_id', $player->getId())->first();
 
         return $profile?->defense_doctrine?->doctrineKey() ?? self::DEFAULT_DOCTRINE;
+    }
+
+    /**
+     * Defence this planet has already paid for and is waiting on, by machine name.
+     *
+     * The host takes the whole price when the order is placed, so an order in the yard is a wall the
+     * account already owns; without it the doctrine buys the same shortfall again every session.
+     * One read per planet per plan, resolved through the host's object registry so a mod-added
+     * defence piece needs no name here.
+     *
+     * @return array<string, int>
+     */
+    private function pendingDefence(PlanetService $planet): array
+    {
+        $pending = [];
+
+        $rows = UnitQueue::query()
+            ->where('planet_id', $planet->getPlanetId())
+            ->where('processed', 0)
+            ->selectRaw('object_id, SUM(object_amount) AS amount')
+            ->groupBy('object_id')
+            ->pluck('amount', 'object_id');
+
+        foreach ($rows as $objectId => $amount) {
+            $machineName = ObjectService::getObjectById((int) $objectId)->machine_name;
+            $pending[$machineName] = (int) $amount;
+        }
+
+        return $pending;
     }
 
     /**

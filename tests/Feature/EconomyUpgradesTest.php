@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Modules\AI\Actions\RecordAiExperienceOutcomeAction;
 use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Domain\Decision\BuildCandidate;
@@ -131,6 +132,35 @@ test('a warehouse that cannot finish before it overflows is not offered', functi
 
     expect(array_map(static fn (BuildCandidate $candidate): int => $candidate->buildingId, $candidates))
         ->not->toContain($ids['metal']);
+});
+
+/**
+ * A warehouse is grown one level at a time. The trigger measures the *built* level, so a level
+ * already in the queue reads as still-needed every session and the planet chains warehouses until
+ * the whole queue holds multi-hour builds and nothing else can be queued at all (measured on the
+ * canary, 29 Sep 2026). The level already ordered is not offered again.
+ */
+test('a warehouse already building is not offered again', function (): void {
+    $this->planetSetObjectLevel('solar_plant', 25);
+    $this->planetSetObjectLevel('metal_mine', 20);
+    $this->planetSetObjectLevel('crystal_mine', 20);
+    economyRefresh($this->planetService);
+
+    $ids = economyStorageIds($this->planetService);
+    $profile = economyProfile($this->currentUserId);
+
+    // Offered before anything is queued, so the test fails if the trigger itself changes.
+    expect(array_map(
+        static fn (BuildCandidate $candidate): int => $candidate->buildingId,
+        app(EconomyUpgrades::class)->storage($this->planetService, $profile)
+    ))->toContain($ids['metal']);
+
+    economyQueueBuilding($this->planetService, $ids['metal'], 'metal_store', 1);
+
+    expect(array_map(
+        static fn (BuildCandidate $candidate): int => $candidate->buildingId,
+        app(EconomyUpgrades::class)->storage($this->planetService, $profile)
+    ))->not->toContain($ids['metal']);
 });
 
 /**
@@ -286,6 +316,24 @@ function economyDeepPlanet(PlanetService $planet): void
     }
 
     economyRefresh($planet);
+}
+
+/**
+ * A building order in the queue, placed through the host's own service the way the module places it.
+ */
+function economyQueueBuilding(PlanetService $planet, int $objectId, string $machineName, int $level): void
+{
+    DB::table('building_queues')->insert([
+        'planet_id' => $planet->getPlanetId(),
+        'object_id' => $objectId,
+        'object_level_target' => $level,
+        'building' => false,
+        'processed' => false,
+        'canceled' => false,
+        'time_duration' => 60,
+        'time_start' => now()->getTimestamp(),
+        'time_end' => now()->addMinute()->getTimestamp(),
+    ]);
 }
 
 /**

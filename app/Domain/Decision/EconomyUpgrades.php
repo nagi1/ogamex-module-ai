@@ -14,6 +14,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\Resource;
 use OGame\Models\Resources;
+use OGame\Services\BuildingQueueService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 
@@ -88,8 +89,10 @@ class EconomyUpgrades
 
     private const EXPERIENCE_MAXIMUM_SHARE = 0.2;
 
-    public function __construct(private readonly ExperienceEngine $experience)
-    {
+    public function __construct(
+        private readonly ExperienceEngine $experience,
+        private readonly BuildingQueueService $buildingQueue,
+    ) {
     }
 
     /**
@@ -261,6 +264,15 @@ class EconomyUpgrades
             $hours = $this->timeToFill($planet, $object->machine_name);
 
             if ($hours === null || $hours <= 0.0 || $hours >= $absence) {
+                continue;
+            }
+
+            // One level of a warehouse at a time. The fill time above is measured on the built
+            // level, so a level already in the queue reads as still-needed on every session and the
+            // account chains levels until the whole queue holds multi-hour builds and nothing else
+            // can be queued at all (measured on the canary, 29 Sep 2026). The queue is the host's,
+            // so a storage object a mod adds is covered by the same check.
+            if ($this->buildingQueue->activeBuildingQueueItemCount($planet, $object->id) > 0) {
                 continue;
             }
 
