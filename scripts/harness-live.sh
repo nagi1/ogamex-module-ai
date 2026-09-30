@@ -107,13 +107,24 @@ PY
     python3 -u scripts/strategy-pipeline.py promote
 
     python3 - <<'PY' > /tmp/harness-queue.txt
+import glob
+import os
 import sqlite3
 
-print('\n'.join(
-    row[0] for row in sqlite3.connect('plan/tasks/tasks.db').execute(
-        "select code from tasks where status = 'todo' order by id"
-    )
-))
+# Ordered the way the task DB's own usage doc says to work it: priority, then the order the tasks
+# were written. Ordering by id alone buried every gameplay defect behind the wiki backlog (found
+# 30 Sep 2026: 157 todo, 120 of them P3 slices, so a P1 was never reached while the shards ground
+# through P3). The `ready_tasks` view also keeps a shard off work whose dependencies are unmet.
+#
+# A row the pipeline planned carries a proposal; a row written by hand (a cohort defect, an owner
+# directive) carries the file it must edit in `file_ref` and its evidence in `notes`. Both are
+# attemptable work. Gating on "a proposal exists" meant the attack, social, alliance and fleet rows
+# raised from the cohort read were never picked up at all.
+proposals = {os.path.basename(path)[:-3] for path in glob.glob('plan/research/ogame/proposals/*.md')}
+rows = sqlite3.connect('plan/tasks/tasks.db').execute(
+    "select code, coalesce(file_ref, '') from ready_tasks order by priority, id"
+)
+print('\n'.join(code for code, file_ref in rows if code in proposals or file_ref))
 PY
 
     # Known ceiling: two workers can in principle be handed two plans that name the same file, and the
@@ -124,8 +135,8 @@ PY
       (
         rc=0
         while read -r code; do
-          # Only tasks the pipeline itself planned: it must never invent code for someone else's ticket.
-          [ -f "plan/research/ogame/proposals/$code.md" ] || continue
+          # The queue above already holds only attemptable codes: a planned row or a hand-written
+          # one with a file to edit. The old "must have a proposal" gate lives there now.
           HARNESS_WORKER="impl-$shard" python3 -u scripts/strategy-pipeline.py implement "$code"
           # Exit 3 is the peak park. Sleeping out the window is what makes an unattended run come back
           # by itself; exiting would silently end the night's work at the first peak minute.

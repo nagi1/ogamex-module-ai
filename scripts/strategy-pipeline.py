@@ -540,6 +540,11 @@ def path_refusal(clean):
     if clean.startswith("resources/behavior/") and not clean.endswith((".yaml", ".yml", ".json")):
         # A data file a modder edits has to be data. PHP there is code wearing a data file's name.
         return "data must be YAML or JSON so a modder can edit it without code"
+    if clean.startswith("app/Ai/") and not clean.startswith("app/Ai/Agents/"):
+        # A parallel tree grew here: 16 unreferenced classes, a second DefenseCompositionPlanner, each
+        # with a test as its only caller (deleted 30 Sep 2026). The two agent classes the language
+        # gateways use are all that belongs here.
+        return "app/Ai/ holds only the LLM agent classes — wire the rule into the class that owns it"
 
     return None
 
@@ -1428,6 +1433,13 @@ Rules:
   acts on it -- the planner, engine or action an account actually runs -- and that file belongs in
   FILES. A Feature test must then drive that path (the engine or action), not construct your class
   directly: a test that only news up the class proves the class exists, not that the account uses it.
+- The module already owns most decisions. A new rule goes into the class that owns the decision it
+  belongs to -- edit that file, and its data file, rather than writing a class beside it. A second
+  class for a decision the module already has is a second authority, it drifts, and the writer
+  refuses it by name.
+- `app/Ai/` holds only the LLM agent classes the language gateways use. Nothing new is written there
+  and nothing under it is edited: a rule that lands under `app/Ai/` is a parallel module, not a
+  slice, and the writer refuses that path.
 - Ship a scenario under `resources/scenarios/` (named for the situation, never for the source) that
   puts a player in a concrete situation and says what must happen:
   `"expect": {"action": "Build", "reason_contains": "defense"}`. The scenario is replayed through
