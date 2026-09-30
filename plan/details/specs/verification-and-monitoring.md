@@ -52,6 +52,19 @@ watch 24 h → assert a real sleep window with daily drift
 It runs against a **capacity universe** (2/5/10 accounts), never the holy `grand` DB, and writes a
 machine-parsable report the review loop reads.
 
+`scripts/cohort-scenario.php` drives the first two lines of that list on demand, and it is the half
+that needed no waiting: it plants the situation (a hostile attack in flight, a debris field beside a
+planet, a profitable undefended neighbour), makes the host queues and the module's own due work expire
+*now* instead of waiting for them, drives `ai:run-due-work` on a synchronous queue so the sessions run
+in the same process, then asserts the recorded fact — a fleet save, a recycle, a raid — and exits
+non-zero when it is missing. Seconds per scenario and no provider call, which is why this is the work
+to run inside a peak window, when the loop has nothing else it is allowed to do. It plants a real
+`fleet_missions` row rather than provoking through the host, so what it proves is the account's answer
+to a situation, not the host's ability to fly one.
+
+Still missing from this section: the reaction-latency and 24-hour sleep measurements, and a planted
+exchange or alliance application (the enum values of `ai_social_exchanges` have to be pinned first).
+
 ## 3. PvE cooperation and the generative lanes
 
 The pve cohort is the cooperation testbed. Verify, not just enable:
