@@ -2482,12 +2482,13 @@ def scenario_problems(paths):
 
 
 # The provider counts reasoning tokens inside max_tokens. Measured 1 Oct 2026 over 41 finished writer
-# calls: the answer itself is a median 2.5k tokens (max 8.7k) but total output a median 45k, 95% of it
-# reasoning, and "reasoning_effort": "low" still spent 83% on reasoning. A 6.7k cap with thinking on
-# returned finish=length and no answer twice. The validators, the red-first proof and the retry
-# feedback do the checking, so thinking is off and the cap is answer-sized (max 8.7k, with headroom).
-WRITER_MAX_TOKENS = 12000
-WRITER_THINKING = {"type": "disabled"}
+# calls: the answer is a median 2.5k tokens (max 8.7k), but total output was a median 45k, 95% of it
+# reasoning at the default effort; a 6.7k cap returned finish=length and no answer. With thinking off
+# the answers were fast but careless (an EDIT of a file that does not exist, code without its test).
+# So thinking stays on at low effort, and the cap covers reasoning plus the largest answer.
+WRITER_MAX_TOKENS = 32000
+WRITER_THINKING = {"type": "enabled"}
+WRITER_REASONING_EFFORT = "low"
 
 
 def writer_answer(code, context, answer_file=None):
@@ -2500,7 +2501,7 @@ def writer_answer(code, context, answer_file=None):
     if answer_file:
         return read(answer_file), {}
 
-    payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
+    payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING, "reasoning_effort": WRITER_REASONING_EFFORT,
                "messages": [
                    {"role": "system", "content": IMPLEMENT_PROMPT},
                    {"role": "user", "content": context},
