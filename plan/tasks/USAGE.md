@@ -128,7 +128,14 @@ VALUES ((SELECT id FROM tasks WHERE code='IMPL-017'), (SELECT id FROM tasks WHER
    release the locks; `reap` frees claims idle 6h (agents) or 1h (a killed harness worker).
 3. **Done means proven.** `done CODE` runs the row's proof (`bash scripts/ogamex prove CODE`) and
    refuses on a failure. A row whose proof names no aspect, situation or invariant cannot be claimed,
-   added or closed.
+   added or closed. Test steps run first and stop at the first red one; a row whose tests pass but
+   whose live steps do not is *delivered* (in progress, held by `harness:delivered`) and closes on the
+   `done` that follows a passing evidence run. A step written `invariant:NAME?` is *suspect*: it is
+   reported, never fails the row.
+   `prove CODE --json` ends stdout with one verdict line; `proofs/CODE.log` is rewritten per run.
+   A row the harness fails twice with the same signature is `blocked` as `stuck` (`STUCK:` in
+   `strategy-pipeline.py status`); `task.py unstick CODE` reopens it once something changed.
+   `task.py defer CODE REASON` freezes a row.
 4. **The docs win.** `doc_refs` names the file that defines the work; if the doc and the row disagree,
    fix the row (and the seed).
 5. **Never re-seed over statuses you don't own.** After any edit run `python3 plan/tasks/dump_seed.py`
