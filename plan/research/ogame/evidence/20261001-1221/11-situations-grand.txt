@@ -1,0 +1,78 @@
+cohort: 2 enabled account(s), no provider call made (safe in a peak window)
+SCENARIO: PASS idle-planet (19s)
+    tick 1: 3 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 3: 1 order(s) finished, 0 item(s) made due, 1 work item(s) done so far
+    cleaned up: 0 planted row(s) reverted
+    read-back: 1 queue order(s) created with nothing to react to
+SCENARIO: FAIL every-planet-builds (190s)
+    tick 1: 0 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 3: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 4: 1 order(s) finished, 3 item(s) made due, 6 work item(s) done so far
+    tick 5: 1 order(s) finished, 0 item(s) made due, 7 work item(s) done so far
+    tick 6: 0 order(s) finished, 0 item(s) made due, 7 work item(s) done so far
+    tick 7: 0 order(s) finished, 0 item(s) made due, 7 work item(s) done so far
+    tick 8: 0 order(s) finished, 0 item(s) made due, 8 work item(s) done so far
+    tick 9: 1 order(s) finished, 0 item(s) made due, 9 work item(s) done so far
+    tick 10: 0 order(s) finished, 0 item(s) made due, 9 work item(s) done so far
+    tick 11: 0 order(s) finished, 0 item(s) made due, 10 work item(s) done so far
+    tick 12: 0 order(s) finished, 0 item(s) made due, 10 work item(s) done so far
+    tick 13: 0 order(s) finished, 0 item(s) made due, 10 work item(s) done so far
+    tick 14: 0 order(s) finished, 0 item(s) made due, 11 work item(s) done so far
+    tick 15: 0 order(s) finished, 0 item(s) made due, 11 work item(s) done so far
+    tick 16: 0 order(s) finished, 0 item(s) made due, 11 work item(s) done so far
+    tick 17: 0 order(s) finished, 0 item(s) made due, 12 work item(s) done so far
+    tick 18: 0 order(s) finished, 2 item(s) made due, 15 work item(s) done so far
+    cleaned up: 0 planted row(s) reverted
+    read-back: 0 of 12 planet(s) of account 12 building or ordered — last decisions: p13 12/eligible_transfer | p12 14/published_capability:throttle_mine | p13 12/eligible_transfer | p12 12/eligible_transfer | p13 12/eligible_transfer | p13 12/eligible_transfer
+SCENARIO: FAIL inbound-message (183s)
+    planted: message from account 13 to account 12
+    tick 1: 0 order(s) finished, 4 item(s) made due, 1 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 1 work item(s) done so far
+    tick 3: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 4: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 5: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 6: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 7: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 8: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 9: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 10: 0 order(s) finished, 0 item(s) made due, 3 work item(s) done so far
+    tick 11: 0 order(s) finished, 0 item(s) made due, 4 work item(s) done so far
+    tick 12: 0 order(s) finished, 0 item(s) made due, 4 work item(s) done so far
+    tick 13: 0 order(s) finished, 0 item(s) made due, 5 work item(s) done so far
+    tick 14: 0 order(s) finished, 0 item(s) made due, 6 work item(s) done so far
+    tick 15: 0 order(s) finished, 0 item(s) made due, 6 work item(s) done so far
+    tick 16: 0 order(s) finished, 0 item(s) made due, 7 work item(s) done so far
+    tick 17: 0 order(s) finished, 0 item(s) made due, 8 work item(s) done so far
+    cleaned up: 1 planted row(s) reverted
+    read-back: 0 exchange(s), 0 reply message(s) from account 12 — last decisions: p13 12/eligible_transfer | p12 14/published_capability:throttle_mine | p13 12/eligible_transfer | p12 14/published_capability:throttle_mine | p12 5/published_capability:queue_units
+SCENARIO: PASS inbound-attack (86s)
+    planted: hostile attack on planet 19 from account 13
+    tick 1: 0 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 3: 0 order(s) finished, 1 item(s) made due, 1 work item(s) done so far
+    tick 4: 0 order(s) finished, 1 item(s) made due, 3 work item(s) done so far
+    tick 5: 0 order(s) finished, 0 item(s) made due, 4 work item(s) done so far
+    tick 6: 0 order(s) finished, 0 item(s) made due, 4 work item(s) done so far
+    tick 7: 0 order(s) finished, 0 item(s) made due, 6 work item(s) done so far
+    cleaned up: 1 planted row(s) reverted
+    read-back: 1 fleet-save work item(s) (6)
+
+In Connection.php line 857:
+                                                                               
+  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-8-  
+  10' for key 'debris_fields.debris_fields_galaxy_system_planet_unique' (Conn  
+  ection: mysql, Host: mysql, Port: 3306, Database: ogamex-grand, SQL: insert  
+   into `debris_fields` (`galaxy`, `system`, `planet`, `metal`, `crystal`, `d  
+  euterium`, `created_at`, `updated_at`) values (1, 8, 10, 400000, 200000, 0,  
+   2026-10-01 12:34:22, 2026-10-01 12:34:22))                                  
+                                                                               
+
+In MySqlConnection.php line 53:
+                                                                               
+  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-8-  
+  10' for key 'debris_fields.debris_fields_galaxy_system_planet_unique'        
+                                                                               
+
+END grand situation all 2026-10-01 12:34:22 UTC

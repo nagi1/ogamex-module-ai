@@ -1,0 +1,9 @@
+=== ogamex artisan --version ===
+Laravel Framework 13.32.0
+
+=== php -v inside app container (grand) ===
+PHP 8.5.10 (cli) (built: Aug 31 2026 19:13:18) (NTS)
+Copyright (c) The PHP Group
+Built by https://github.com/docker-library/php
+Zend Engine v4.5.10, Copyright (c) Zend Technologies
+    with Zend OPcache v8.5.10, Copyright (c), by Zend Technologies

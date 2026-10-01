@@ -1,0 +1,2 @@
+No stale test sessions to reap.
+{"tool":"pest","result":"failed","tests":79,"passed":78,"assertions":235,"duration_ms":3655,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Ai\\TurtleDefenceStaleThresholdsTest::__pest_evaluable_it_leaves_the_superseded_defence_tallies_out_of_the_module_source","file":"/var/www/Modules/AI/tests/Feature/Ai/TurtleDefenceStaleThresholdsTest.php","line":26,"message":"Expecting [] not to be empty ."}]}

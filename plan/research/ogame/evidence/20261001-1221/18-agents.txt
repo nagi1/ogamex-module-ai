@@ -1,0 +1,26 @@
+How the DeepSeek agents run (read-only, from scripts/harness-live.sh and scripts/strategy-pipeline.py @ 9ce5a9c)
+
+Start command (see step 9): nohup bash scripts/harness-live.sh >/dev/null 2>&1 &
+
+Model: deepseek-flash (step 5 model-check: "model": "deepseek-flash", thinking:true, finish:stop).
+
+Worker counts (harness-live.sh, env-tunable):
+  PLAN_WORKERS=4   (default) — python3 -u scripts/strategy-pipeline.py run --max PLAN_BUDGET(20) --shard k/4
+  IMPL_WORKERS=3   (default) — python3 -u scripts/strategy-pipeline.py implement CODE (disjoint slice of ready queue)
+  MODEL_CONCURRENCY=4 (default) — spend control, enforced across processes via shared slot files
+                       in plan/research/ogame/model-slots/ (one slot per call in flight).
+
+Claiming / locks (strategy-pipeline.py):
+  - Row claim: claim_row(code, worker) does a direct SQLite UPDATE on plan/tasks/tasks.db
+    (status='in_progress', assignee=worker where status='todo' or assignee=worker) — equivalent to
+    `task.py claim` but implemented inline; it does NOT shell out to `python3 plan/tasks/task.py claim`.
+  - File exclusivity: per-path claim files in plan/research/ogame/claims/ (CLAIMS dir), taken before the
+    paid call; a killed worker's claim ages out (stale) instead of blocking forever.
+  - Harness calls `python3 plan/tasks/task.py reap` once per pass to reclaim claims a vanished agent left.
+  - VERIFY_LANE: a single shared lane serialises verification/test runs across workers.
+
+Promotion: `python3 scripts/strategy-pipeline.py promote` shells out to `task.py add` (not claim) to create rows.
+
+Peak gate: every worker checks the peak window itself (peak-gate / assert_window_matches_config) and exits 3
+to park; the harness sleeps out the window and resumes. During a peak park the harness drives
+`situation all` on both universes (HARNESS-004).

@@ -1,0 +1,72 @@
+=== pve cohort SQL 2026-10-01 12:41:34 UTC ===
+AiWorkKind: 1=BuildFirstBuilding 2=RunSession 3=QueueResearch 4=QueueUnits 5=Colonize 6=FleetSave 7=Spy 8=Raid 9=Recall 10=Expedition 11=Transfer 12=Recycle 13=SetMinePercent 14=Phalanx
+AiWorkState: 1=Pending 2=Leased 3=Retry 4=Completed 5=Failed
+
++---------------------+-------+
+| metric              | value |
++---------------------+-------+
+| enabled ai_profiles |    19 |
++---------------------+-------+
++--------------------------------------+-------+-------+-------+
+| metric                               | min_p | avg_p | max_p |
++--------------------------------------+-------+-------+-------+
+| planets per AI account (min/avg/max) |     1 |  9.16 |    14 |
++--------------------------------------+-------+-------+-------+
++--------------------------------------+
+| metric                               |
++--------------------------------------+
+| ai_work_items last 24h by kind,state |
++--------------------------------------+
++------+-------+-------+
+| kind | state | n     |
++------+-------+-------+
+|    1 |     1 |    17 |
+|    1 |     3 |     8 |
+|    1 |     4 |  3849 |
+|    2 |     1 |    10 |
+|    2 |     2 |     9 |
+|    2 |     3 |     2 |
+|    2 |     4 | 41846 |
+|    3 |     1 |     7 |
+|    3 |     4 |  1827 |
+|    4 |     1 |    11 |
+|    4 |     2 |     1 |
+|    4 |     3 |    19 |
+|    4 |     4 | 30185 |
+|    5 |     4 |    18 |
+|    6 |     3 |     1 |
+|   10 |     3 |     1 |
+|   10 |     4 |  2166 |
+|   11 |     4 |   372 |
+|   12 |     4 |    24 |
+|   13 |     4 |   264 |
++------+-------+-------+
++------------------------------+
+| metric                       |
++------------------------------+
+| ai_decision_traces newest 20 |
++------------------------------+
++-----------+-----------------+----------------------------------+---------------------+
+| player_id | selected_action | selected_reason                  | created_at          |
++-----------+-----------------+----------------------------------+---------------------+
+|        12 |              11 | eligible_expedition              | 2026-10-01 12:41:37 |
+|         9 |               5 | published_capability:queue_units | 2026-10-01 12:41:37 |
+|        17 |               5 | published_capability:queue_units | 2026-10-01 12:41:35 |
+|         4 |               5 | published_capability:queue_units | 2026-10-01 12:41:33 |
+|        20 |               5 | published_capability:queue_units | 2026-10-01 12:41:32 |
+|        18 |               5 | published_capability:queue_units | 2026-10-01 12:41:31 |
+|         8 |               3 | published_capability:build       | 2026-10-01 12:41:29 |
+|        15 |               3 | published_capability:build       | 2026-10-01 12:41:29 |
+|         2 |               5 | published_capability:queue_units | 2026-10-01 12:41:28 |
+|        16 |               1 | always_available                 | 2026-10-01 12:41:28 |
+|         6 |               5 | published_capability:queue_units | 2026-10-01 12:41:28 |
+|        18 |               5 | published_capability:queue_units | 2026-10-01 12:41:27 |
+|        14 |               5 | published_capability:queue_units | 2026-10-01 12:41:26 |
+|        19 |               5 | published_capability:queue_units | 2026-10-01 12:41:22 |
+|        10 |               5 | published_capability:queue_units | 2026-10-01 12:41:21 |
+|         9 |               5 | published_capability:queue_units | 2026-10-01 12:41:13 |
+|         4 |               5 | published_capability:queue_units | 2026-10-01 12:41:10 |
+|         3 |               3 | published_capability:build       | 2026-10-01 12:41:08 |
+|        13 |               3 | published_capability:build       | 2026-10-01 12:41:07 |
+|        11 |               5 | published_capability:queue_units | 2026-10-01 12:41:07 |
++-----------+-----------------+----------------------------------+---------------------+

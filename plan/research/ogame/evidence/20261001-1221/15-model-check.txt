@@ -1,0 +1,17 @@
+{
+  "peak_now": false,
+  "concurrency_cap": 4,
+  "last_call": {
+    "at": "2026-10-01T12:39:45Z",
+    "worker": "",
+    "purpose": "model-check",
+    "model": "deepseek-flash",
+    "seconds": 1.1,
+    "prompt": 37,
+    "cache_hit": 0,
+    "output": 32,
+    "reasoning": 30,
+    "thinking": true,
+    "finish": "stop"
+  }
+}

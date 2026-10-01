@@ -1,0 +1,20 @@
+cohort scenarios — a situation, driven in seconds, read back as a recorded fact
+
+  idle-planet          safe   proves: an account with nothing to react to still advances its economy
+  every-planet-builds  safe   proves: a login fills the build queue on every planet, not one per session (ECON-001)
+  inbound-message      writes proves: a message from a neighbour produces a social exchange (SOC-001: none in days)
+  inbound-attack       writes proves: a visible hostile fleet produces a fleet save (FLEET-001: one in the cohort lifetime)
+  debris-field         writes proves: a debris field at a planet produces a recycle (FLEET-002: no account owns a recycler)
+  lootable-neighbour   writes proves: a profitable neighbour produces a raid, or the refusal that stops it (ATK-001)
+
+  run <name|all>   drive it (writing scenarios need --confirm)
+  --accounts=N     how many enabled accounts to work with (default 2)
+  --wait=S         seconds to wait for the expected work before failing (default 180)
+  --inline         run the work in this process (only when the universe's workers are stopped)
+  --arrival=SEC    when the planted hostile fleet arrives (default 600)
+  --cleanup        remove the rows this run planted
+  --json           also print the results as JSON
+
+No provider call is made: this is the work to run inside a peak window.
+Deferred on purpose: social and alliance situations (a planted exchange or application) need
+the enum values of ai_social_exchanges verified first — add one scenario per situation there.

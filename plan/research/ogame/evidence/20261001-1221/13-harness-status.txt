@@ -1,0 +1,13 @@
+=== task.py next ===
+NEXT: ATK-001 [P0] Raids never fly: the target-class ladder cannot open in a universe with no inactive players
+  file: app/Domain/Decision/RaidPlanner.php
+  read it: python3 plan/tasks/task.py show ATK-001
+
+=== strategy-pipeline.py status ===
+P0-P2 code rows: 0 proven, 141 closed before proofs existed, 4 delivered but NOT proven, 19 ready now, 2 cooling off
+delivered, not proven: ECON-001, HARNESS-002, HARNESS-004, QUAL-6
+open rows with no proof stated (cannot close): PIPE-001
+model today: 12 call(s), prompt 110304 (cached 44672), output 544005 of which reasoning 528474, 5 not finished cleanly
+READY: 19
+UNPROVEN: ECON-001 HARNESS-002 HARNESS-004 QUAL-6
+next one free in 584 min

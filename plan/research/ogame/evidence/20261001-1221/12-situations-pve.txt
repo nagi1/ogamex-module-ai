@@ -1,0 +1,55 @@
+cohort: 2 enabled account(s), no provider call made (safe in a peak window)
+SCENARIO: PASS idle-planet (24s)
+    tick 1: 73 order(s) finished, 1 item(s) made due, 0 work item(s) done so far
+    tick 2: 1 order(s) finished, 0 item(s) made due, 1 work item(s) done so far
+    cleaned up: 0 planted row(s) reverted
+    read-back: 1 queue order(s) created with nothing to react to
+SCENARIO: FAIL every-planet-builds (192s)
+    tick 1: 1 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 2: 1 order(s) finished, 4 item(s) made due, 6 work item(s) done so far
+    tick 3: 0 order(s) finished, 3 item(s) made due, 8 work item(s) done so far
+    tick 4: 1 order(s) finished, 7 item(s) made due, 16 work item(s) done so far
+    tick 5: 1 order(s) finished, 7 item(s) made due, 18 work item(s) done so far
+    tick 6: 1 order(s) finished, 3 item(s) made due, 25 work item(s) done so far
+    tick 7: 1 order(s) finished, 0 item(s) made due, 27 work item(s) done so far
+    tick 8: 0 order(s) finished, 1 item(s) made due, 27 work item(s) done so far
+    tick 9: 0 order(s) finished, 5 item(s) made due, 28 work item(s) done so far
+    tick 10: 0 order(s) finished, 1 item(s) made due, 30 work item(s) done so far
+    tick 11: 0 order(s) finished, 7 item(s) made due, 34 work item(s) done so far
+    tick 12: 0 order(s) finished, 1 item(s) made due, 40 work item(s) done so far
+    tick 13: 0 order(s) finished, 1 item(s) made due, 40 work item(s) done so far
+    tick 14: 0 order(s) finished, 2 item(s) made due, 43 work item(s) done so far
+    cleaned up: 0 planted row(s) reverted
+    read-back: 2 of 12 planet(s) of account 2 building or ordered — last decisions: p3 3/published_capability:build | p2 3/published_capability:build | p3 3/published_capability:build | p2 3/published_capability:build | p3 4/published_capability:research | p3 3/published_capability:build
+SCENARIO: PASS inbound-message (2s)
+    planted: message from account 3 to account 2
+    tick 1: 0 order(s) finished, 0 item(s) made due, 1 work item(s) done so far
+    cleaned up: 1 planted row(s) reverted
+    read-back: 1 exchange(s), 1 reply message(s) from account 2
+SCENARIO: PASS inbound-attack (48s)
+    planted: hostile attack on planet 2 from account 3
+    tick 1: 0 order(s) finished, 1 item(s) made due, 1 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    tick 3: 0 order(s) finished, 3 item(s) made due, 5 work item(s) done so far
+    tick 4: 1 order(s) finished, 3 item(s) made due, 8 work item(s) done so far
+    tick 5: 0 order(s) finished, 3 item(s) made due, 10 work item(s) done so far
+    cleaned up: 1 planted row(s) reverted
+    read-back: 1 fleet-save work item(s) (6)
+
+In Connection.php line 857:
+                                                                               
+  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-16  
+  -8' for key 'debris_fields.debris_fields_galaxy_system_planet_unique' (Conn  
+  ection: mysql, Host: mysql, Port: 3306, Database: ogamex-pve, SQL: insert i  
+  nto `debris_fields` (`galaxy`, `system`, `planet`, `metal`, `crystal`, `deu  
+  terium`, `created_at`, `updated_at`) values (1, 16, 8, 400000, 200000, 0, 2  
+  026-10-01 12:39:08, 2026-10-01 12:39:08))                                    
+                                                                               
+
+In MySqlConnection.php line 53:
+                                                                               
+  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-16  
+  -8' for key 'debris_fields.debris_fields_galaxy_system_planet_unique'        
+                                                                               
+
+END pve situation all 2026-10-01 12:39:08 UTC

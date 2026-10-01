@@ -1,0 +1,386 @@
+=== tail -n 300 /tmp/harness-live.log ===
+  ! [WALL_CEILING] planet 52 holds 155,696 defence units
+  ! [WALL_CEILING] planet 73 holds 169,916 defence units
+  ! [WALL_CEILING] planet 86 holds 170,185 defence units
+  ! [WALL_CEILING] planet 139 holds 169,946 defence units
+  ! [WALL_CEILING] planet 140 holds 155,081 defence units
+  ! [WALL_CEILING] planet 154 holds 156,766 defence units
+  ! [WALL_CEILING] planet 159 holds 155,620 defence units
+  ! [WALL_CEILING] planet 166 holds 155,225 defence units
+  ! [WALL_CEILING] planet 53 holds 67,035 defence units
+  ! [WALL_CEILING] planet 133 holds 98,325 defence units
+  ! [WALL_CEILING] planet 134 holds 154,297 defence units
+  ! [WALL_CEILING] planet 135 holds 101,675 defence units
+  ! [WALL_CEILING] planet 136 holds 151,829 defence units
+  ! [WALL_CEILING] planet 137 holds 151,426 defence units
+  ! [WALL_CEILING] planet 138 holds 101,675 defence units
+  ! [WALL_CEILING] planet 163 holds 101,675 defence units
+  ! [WALL_CEILING] planet 170 holds 144,090 defence units
+  ! [WALL_CEILING] planet 57 holds 154,930 defence units
+  ! [WALL_CEILING] planet 74 holds 101,675 defence units
+  ! [WALL_CEILING] planet 128 holds 101,675 defence units
+  ! [WALL_CEILING] planet 129 holds 101,675 defence units
+  ! [WALL_CEILING] planet 130 holds 86,109 defence units
+  ! [WALL_CEILING] planet 155 holds 146,640 defence units
+  ! [WALL_CEILING] planet 171 holds 145,462 defence units
+  ! [ALLIANCE_SHARE] alliance 1 holds 15 of 20 AI accounts (75%)
+  ! [IDLE_QUEUES] player 12 played this hour with 12 of 12 build queues empty
+  ! [IDLE_QUEUES] player 13 played this hour with 10 of 10 build queues empty
+  ! [IDLE_QUEUES] player 14 played this hour with 9 of 9 build queues empty
+  ! [IDLE_QUEUES] player 15 played this hour with 10 of 11 build queues empty
+  ! [IDLE_QUEUES] player 16 played this hour with 10 of 10 build queues empty
+  ! [IDLE_QUEUES] player 17 played this hour with 11 of 12 build queues empty
+  ! [IDLE_QUEUES] player 18 played this hour with 6 of 6 build queues empty
+  ! [IDLE_QUEUES] player 19 played this hour with 8 of 8 build queues empty
+  ! [IDLE_QUEUES] player 20 played this hour with 7 of 9 build queues empty
+  ! [IDLE_QUEUES] player 21 played this hour with 10 of 11 build queues empty
+  ! [IDLE_QUEUES] player 22 played this hour with 9 of 10 build queues empty
+  ! [IDLE_QUEUES] player 23 played this hour with 4 of 4 build queues empty
+  ! [IDLE_QUEUES] player 24 played this hour with 10 of 11 build queues empty
+  ! [IDLE_QUEUES] player 25 played this hour with 11 of 13 build queues empty
+  ! [IDLE_QUEUES] player 26 played this hour with 11 of 11 build queues empty
+  ! [IDLE_QUEUES] player 27 played this hour with 9 of 13 build queues empty
+  ! [IDLE_QUEUES] player 28 played this hour with 4 of 4 build queues empty
+  ! [IDLE_QUEUES] player 29 played this hour with 9 of 9 build queues empty
+  ! [IDLE_QUEUES] player 31 played this hour with 10 of 11 build queues empty
+QUALITY: FAIL NAKED_BESIDE_WALLED WALL_CEILING ALLIANCE_SHARE IDLE_QUEUES
+PLAY SCORECARD ogamex-grand: 20 account(s), 199 planet(s), last 6h
+  PASS economy              1501         floor 60     fills the build queue on every planet each login
+  PASS research              129         floor 10     keeps the research lab busy
+  PASS shipyard             4212         floor 5      builds ships and defence from what the economy leaves
+  FAIL espionage               0         floor 5      probes neighbours before deciding whom to hit
+       owner: app/Domain/Decision/QueueableSpyPlanner.php
+  FAIL raids                   1         floor 5      raids a profitable target
+       owner: app/Domain/Decision/RaidPlanner.php
+  PASS transport              46         floor 3      moves resources to where they are spent
+  FAIL recycle                 0         floor 1      harvests debris it or others left
+       owner: app/Domain/Decision/QueueableRecyclePlanner.php
+  PASS expeditions           162         floor 3      sends expeditions when the fleet has nothing better to do
+  PASS colonisation            6         floor 1      settles new planets while slots remain
+  FAIL fleet_save              2         floor 3      saves the fleet before going offline or under attack
+       owner: app/Domain/Decision/QueueableFleetSavePlanner.php
+  FAIL social                  1         floor 3      answers and starts exchanges with other players
+       owner: app/Actions/EvaluateAiSocialExchangeAction.php
+  FAIL chat                    2         floor 3      writes to other players
+       owner: app/Actions/EvaluateAiSocialExchangeAction.php
+  FAIL alliance                0         floor 1      applies to, recruits for or leaves an alliance
+       owner: app/Actions/ReviewAiAllianceApplicationsAction.php
+  PASS work_failures          20         floor 0      rarely has an order refused (failed work items stay under 20% of finished ones)
+  PASS fleet_breadth          75         floor 80     uses the fleet for more than one thing (expeditions are at most 80% of missions)
+PLAY: 8 of 15 aspects pass
+PLAY: FAIL espionage raids recycle fleet_save social chat alliance
+=== QUALITY FAILED on grand — the accounts play, but badly; violations above 2026-10-01 12:06:56 UTC ===
+quality work: nothing new; already tracked: NAKED_BESIDE_WALLED (QUAL-003), WALL_CEILING (DEF-001), ALLIANCE_SHARE (DEF-002), IDLE_QUEUES (ECON-001), PLAY_espionage (DEF-35), PLAY_raids (ATK-001), PLAY_recycle (FLEET-002), PLAY_fleet_save (FLEET-003), PLAY_social (SOC-001), PLAY_chat (SOC-001), PLAY_alliance (ALLY-001)
+--- live cohort verification: pve 2026-10-01 12:06:56 UTC ---
+
+=== cohort verification — 2026-10-01 12:06:57 ===
+profiles: 19   planets: 172   defence units: 42,375,590
+orders last 10 min: building 50, research 12, units 220   (in flight: 6547/81881/38029)
+receipts: 477,624   decisions: 567,706   work items by state: {"1":41,"3":20,"4":1045325,"5":308}
+defence held: {"rocket_launcher":40648243,"light_laser":141080,"heavy_laser":550971,"gauss_cannon":345782,"ion_cannon":603999,"plasma_turret":85294,"small_shield_dome":55,"large_shield_dome":9,"interplanetary_missile":157}
+astrophysics: 299 level(s) across the cohort, 0 of 19 accounts still at 0
+research (newest 300 rows): 177 cancelled, 122 completed, 1 waiting
+research (last 20 min): 21 rows, 0 cancelled
+  newest cancelled: planet 3, object 115, target level 19, cost 0, created 2026-10-01 11:24:05
+due now: 61   leased: 0   pending: 41
+
+QUALITY: 146 violation(s) across 3 invariant(s)
+  ! [NAKED_BESIDE_WALLED] player 2: 4 planet(s) at zero defence while one holds 7,080,737 units
+  ! [NAKED_BESIDE_WALLED] player 3: 5 planet(s) at zero defence while one holds 8,326,685 units
+  ! [NAKED_BESIDE_WALLED] player 4: 3 planet(s) at zero defence while one holds 122,648 units
+  ! [NAKED_BESIDE_WALLED] player 5: 5 planet(s) at zero defence while one holds 168,359 units
+  ! [NAKED_BESIDE_WALLED] player 6: 3 planet(s) at zero defence while one holds 150,004 units
+  ! [NAKED_BESIDE_WALLED] player 7: 3 planet(s) at zero defence while one holds 118,667 units
+  ! [NAKED_BESIDE_WALLED] player 8: 1 planet(s) at zero defence while one holds 201,910 units
+  ! [NAKED_BESIDE_WALLED] player 9: 2 planet(s) at zero defence while one holds 175,762 units
+  ! [NAKED_BESIDE_WALLED] player 10: 1 planet(s) at zero defence while one holds 171,960 units
+  ! [NAKED_BESIDE_WALLED] player 11: 4 planet(s) at zero defence while one holds 171,020 units
+  ! [NAKED_BESIDE_WALLED] player 12: 4 planet(s) at zero defence while one holds 135,493 units
+  ! [NAKED_BESIDE_WALLED] player 13: 1 planet(s) at zero defence while one holds 239,549 units
+  ! [NAKED_BESIDE_WALLED] player 14: 3 planet(s) at zero defence while one holds 163,034 units
+  ! [NAKED_BESIDE_WALLED] player 15: 3 planet(s) at zero defence while one holds 171,933 units
+  ! [NAKED_BESIDE_WALLED] player 17: 5 planet(s) at zero defence while one holds 124,761 units
+  ! [NAKED_BESIDE_WALLED] player 19: 1 planet(s) at zero defence while one holds 151,320 units
+  ! [NAKED_BESIDE_WALLED] player 20: 1 planet(s) at zero defence while one holds 170,636 units
+  ! [WALL_CEILING] planet 2 holds 95,488 defence units
+  ! [WALL_CEILING] planet 32 holds 106,655 defence units
+  ! [WALL_CEILING] planet 120 holds 7,080,737 defence units
+  ! [WALL_CEILING] planet 123 holds 1,152,243 defence units
+  ! [WALL_CEILING] planet 143 holds 6,892,027 defence units
+  ! [WALL_CEILING] planet 154 holds 1,171,619 defence units
+  ! [WALL_CEILING] planet 158 holds 2,105,060 defence units
+  ! [WALL_CEILING] planet 162 holds 260,099 defence units
+  ! [WALL_CEILING] planet 3 holds 8,326,685 defence units
+  ! [WALL_CEILING] planet 30 holds 2,881,767 defence units
+  ! [WALL_CEILING] planet 4 holds 122,648 defence units
+  ! [WALL_CEILING] planet 29 holds 42,403 defence units
+  ! [WALL_CEILING] planet 97 holds 120,425 defence units
+  ! [WALL_CEILING] planet 107 holds 103,335 defence units
+  ! [WALL_CEILING] planet 5 holds 32,044 defence units
+  ! [WALL_CEILING] planet 33 holds 48,186 defence units
+  ! [WALL_CEILING] planet 87 holds 168,359 defence units
+  ! [WALL_CEILING] planet 89 holds 55,462 defence units
+  ! [WALL_CEILING] planet 103 holds 167,892 defence units
+  ! [WALL_CEILING] planet 106 holds 165,852 defence units
+  ! [WALL_CEILING] planet 108 holds 36,019 defence units
+  ! [WALL_CEILING] planet 111 holds 165,583 defence units
+  ! [WALL_CEILING] planet 119 holds 165,504 defence units
+  ! [WALL_CEILING] planet 6 holds 117,961 defence units
+  ! [WALL_CEILING] planet 28 holds 117,260 defence units
+  ! [WALL_CEILING] planet 72 holds 150,004 defence units
+  ! [WALL_CEILING] planet 73 holds 117,822 defence units
+  ! [WALL_CEILING] planet 74 holds 149,884 defence units
+  ! [WALL_CEILING] planet 75 holds 117,393 defence units
+  ! [WALL_CEILING] planet 79 holds 149,757 defence units
+  ! [WALL_CEILING] planet 80 holds 117,561 defence units
+  ! [WALL_CEILING] planet 95 holds 118,792 defence units
+  ! [WALL_CEILING] planet 124 holds 118,629 defence units
+  ! [WALL_CEILING] planet 27 holds 77,699 defence units
+  ! [WALL_CEILING] planet 91 holds 117,360 defence units
+  ! [WALL_CEILING] planet 93 holds 109,426 defence units
+  ! [WALL_CEILING] planet 94 holds 115,552 defence units
+  ! [WALL_CEILING] planet 96 holds 78,628 defence units
+  ! [WALL_CEILING] planet 112 holds 115,323 defence units
+  ! [WALL_CEILING] planet 137 holds 118,667 defence units
+  ! [WALL_CEILING] planet 148 holds 117,581 defence units
+  ! [WALL_CEILING] planet 8 holds 201,894 defence units
+  ! [WALL_CEILING] planet 24 holds 201,910 defence units
+  ! [WALL_CEILING] planet 9 holds 175,695 defence units
+  ! [WALL_CEILING] planet 21 holds 175,762 defence units
+  ! [WALL_CEILING] planet 52 holds 81,589 defence units
+  ! [WALL_CEILING] planet 99 holds 175,597 defence units
+  ! [WALL_CEILING] planet 34 holds 23,443 defence units
+  ! [WALL_CEILING] planet 45 holds 171,960 defence units
+  ! [WALL_CEILING] planet 46 holds 21,186 defence units
+  ! [WALL_CEILING] planet 49 holds 42,416 defence units
+  ! [WALL_CEILING] planet 51 holds 31,566 defence units
+  ! [WALL_CEILING] planet 62 holds 41,866 defence units
+  ! [WALL_CEILING] planet 116 holds 138,054 defence units
+  ! [WALL_CEILING] planet 11 holds 107,909 defence units
+  ! [WALL_CEILING] planet 25 holds 107,971 defence units
+  ! [WALL_CEILING] planet 56 holds 107,709 defence units
+  ! [WALL_CEILING] planet 58 holds 82,661 defence units
+  ! [WALL_CEILING] planet 59 holds 55,183 defence units
+  ! [WALL_CEILING] planet 61 holds 101,675 defence units
+  ! [WALL_CEILING] planet 98 holds 101,675 defence units
+  ! [WALL_CEILING] planet 110 holds 171,020 defence units
+  ! [WALL_CEILING] planet 12 holds 60,025 defence units
+  ! [WALL_CEILING] planet 31 holds 131,053 defence units
+  ! [WALL_CEILING] planet 35 holds 131,393 defence units
+  ! [WALL_CEILING] planet 77 holds 130,818 defence units
+  ! [WALL_CEILING] planet 113 holds 131,216 defence units
+  ! [WALL_CEILING] planet 118 holds 135,493 defence units
+  ! [WALL_CEILING] planet 140 holds 131,627 defence units
+  ! [WALL_CEILING] planet 155 holds 65,043 defence units
+  ! [WALL_CEILING] planet 166 holds 40,000 defence units
+  ! [WALL_CEILING] planet 13 holds 239,549 defence units
+  ! [WALL_CEILING] planet 14 holds 163,034 defence units
+  ! [WALL_CEILING] planet 65 holds 48,144 defence units
+  ! [WALL_CEILING] planet 71 holds 73,667 defence units
+  ! [WALL_CEILING] planet 78 holds 87,966 defence units
+  ! [WALL_CEILING] planet 104 holds 109,248 defence units
+  ! [WALL_CEILING] planet 22 holds 56,633 defence units
+  ! [WALL_CEILING] planet 38 holds 101,675 defence units
+  ! [WALL_CEILING] planet 39 holds 60,990 defence units
+  ! [WALL_CEILING] planet 82 holds 171,933 defence units
+  ! [WALL_CEILING] planet 84 holds 171,923 defence units
+  ! [WALL_CEILING] planet 86 holds 101,675 defence units
+  ! [WALL_CEILING] planet 117 holds 171,214 defence units
+  ! [WALL_CEILING] planet 136 holds 87,308 defence units
+  ! [WALL_CEILING] planet 17 holds 53,217 defence units
+  ! [WALL_CEILING] planet 42 holds 124,761 defence units
+  ! [WALL_CEILING] planet 43 holds 124,460 defence units
+  ! [WALL_CEILING] planet 44 holds 124,201 defence units
+  ! [WALL_CEILING] planet 48 holds 123,841 defence units
+  ! [WALL_CEILING] planet 83 holds 123,735 defence units
+  ! [WALL_CEILING] planet 85 holds 123,568 defence units
+  ! [WALL_CEILING] planet 141 holds 123,378 defence units
+  ! [WALL_CEILING] planet 18 holds 703,646 defence units
+  ! [WALL_CEILING] planet 90 holds 492,054 defence units
+  ! [WALL_CEILING] planet 19 holds 136,278 defence units
+  ! [WALL_CEILING] planet 41 holds 93,198 defence units
+  ! [WALL_CEILING] planet 53 holds 151,320 defence units
+  ! [WALL_CEILING] planet 54 holds 93,289 defence units
+  ! [WALL_CEILING] planet 69 holds 136,335 defence units
+  ! [WALL_CEILING] planet 20 holds 42,922 defence units
+  ! [WALL_CEILING] planet 60 holds 76,469 defence units
+  ! [WALL_CEILING] planet 63 holds 101,675 defence units
+  ! [WALL_CEILING] planet 64 holds 55,462 defence units
+  ! [WALL_CEILING] planet 81 holds 170,636 defence units
+  ! [WALL_CEILING] planet 88 holds 57,002 defence units
+  ! [WALL_CEILING] planet 92 holds 170,536 defence units
+  ! [WALL_CEILING] planet 105 holds 170,515 defence units
+  ! [WALL_CEILING] planet 114 holds 170,505 defence units
+  ! [WALL_CEILING] planet 153 holds 41,299 defence units
+  ! [IDLE_QUEUES] player 2 played this hour with 10 of 12 build queues empty
+  ! [IDLE_QUEUES] player 3 played this hour with 6 of 7 build queues empty
+  ! [IDLE_QUEUES] player 4 played this hour with 7 of 7 build queues empty
+  ! [IDLE_QUEUES] player 5 played this hour with 12 of 14 build queues empty
+  ! [IDLE_QUEUES] player 6 played this hour with 13 of 13 build queues empty
+  ! [IDLE_QUEUES] player 7 played this hour with 11 of 13 build queues empty
+  ! [IDLE_QUEUES] player 8 played this hour with 3 of 3 build queues empty
+  ! [IDLE_QUEUES] player 9 played this hour with 6 of 6 build queues empty
+  ! [IDLE_QUEUES] player 10 played this hour with 11 of 11 build queues empty
+  ! [IDLE_QUEUES] player 11 played this hour with 11 of 12 build queues empty
+  ! [IDLE_QUEUES] player 12 played this hour with 13 of 13 build queues empty
+  ! [IDLE_QUEUES] player 13 played this hour with 3 of 3 build queues empty
+  ! [IDLE_QUEUES] player 14 played this hour with 9 of 9 build queues empty
+  ! [IDLE_QUEUES] player 15 played this hour with 14 of 14 build queues empty
+  ! [IDLE_QUEUES] player 16 played this hour with 1 of 1 build queues empty
+  ! [IDLE_QUEUES] player 17 played this hour with 11 of 13 build queues empty
+  ! [IDLE_QUEUES] player 18 played this hour with 2 of 2 build queues empty
+  ! [IDLE_QUEUES] player 19 played this hour with 6 of 7 build queues empty
+  ! [IDLE_QUEUES] player 20 played this hour with 11 of 12 build queues empty
+QUALITY: FAIL NAKED_BESIDE_WALLED WALL_CEILING IDLE_QUEUES
+PLAY SCORECARD ogamex-pve: 19 account(s), 172 planet(s), last 6h
+  PASS economy               474         floor 57     fills the build queue on every planet each login
+  PASS research               95         floor 10     keeps the research lab busy
+  PASS shipyard             6643         floor 5      builds ships and defence from what the economy leaves
+  FAIL espionage               0         floor 5      probes neighbours before deciding whom to hit
+       owner: app/Domain/Decision/QueueableSpyPlanner.php
+  FAIL raids                   0         floor 5      raids a profitable target
+       owner: app/Domain/Decision/RaidPlanner.php
+  PASS transport              70         floor 3      moves resources to where they are spent
+  FAIL recycle                 0         floor 1      harvests debris it or others left
+       owner: app/Domain/Decision/QueueableRecyclePlanner.php
+  PASS expeditions           201         floor 3      sends expeditions when the fleet has nothing better to do
+  PASS colonisation            6         floor 1      settles new planets while slots remain
+  FAIL fleet_save              0         floor 3      saves the fleet before going offline or under attack
+       owner: app/Domain/Decision/QueueableFleetSavePlanner.php
+  FAIL social                  0         floor 3      answers and starts exchanges with other players
+       owner: app/Actions/EvaluateAiSocialExchangeAction.php
+  FAIL chat                    0         floor 3      writes to other players
+       owner: app/Actions/EvaluateAiSocialExchangeAction.php
+  FAIL alliance                0         floor 1      applies to, recruits for or leaves an alliance
+       owner: app/Actions/ReviewAiAllianceApplicationsAction.php
+  PASS work_failures          20         floor 0      rarely has an order refused (failed work items stay under 20% of finished ones)
+  PASS fleet_breadth          73         floor 80     uses the fleet for more than one thing (expeditions are at most 80% of missions)
+PLAY: 8 of 15 aspects pass
+PLAY: FAIL espionage raids recycle fleet_save social chat alliance
+=== QUALITY FAILED on pve — the accounts play, but badly; violations above 2026-10-01 12:08:04 UTC ===
+quality work: nothing new; already tracked: NAKED_BESIDE_WALLED (QUAL-003), WALL_CEILING (DEF-001), IDLE_QUEUES (ECON-001), PLAY_espionage (DEF-35), PLAY_raids (ATK-001), PLAY_recycle (FLEET-002), PLAY_fleet_save (FLEET-003), PLAY_social (SOC-001), PLAY_chat (SOC-001), PLAY_alliance (ALLY-001)
+--- live canary verification 2026-10-01 12:08:04 UTC ---
+[canary] reloaded onto the code on disk
+[canary] last 10 min: sessions 27, accepted 0, rejected 7, orders 0, failed 0
+[canary] FAIL the accounts were refused or broke: 7 rejected, 0 failed
+=== LIVE VERIFICATION FAILED 2026-10-01 12:08:10 UTC — the accounts did not play; block above ===
+reaped: nothing
+--- nothing to plan, going straight to implementation 2026-10-01 12:10:19 UTC ---
+HARNESS-003 [in_progress]: 0 file(s) to write, refused 1
+  ! resources/docker/entrypoint.sh (outside the module or not a module file type)
+  tokens: prompt 4396 (cached 4096) output 22783
+  attempt 2 failed; retrying with this output
+FLEET-003 [in_progress]: 4 file(s) to write, refused 0
+  tokens: prompt 10559 (cached 10368) output 45445
+  + resources/scenarios/inbound-hostile-forces-fleet-save.json
+  + resources/scenarios/no-inbound-hostile-leaves-small-fleet-alone.json
+  + tests/Feature/InboundHostileFleetSaveTest.php
+  + app/Domain/Decision/QueueableFleetSavePlanner.php
+  InboundHostileFleetSaveTest: FAIL [90mTests:[39m    [31;1m3 failed[39;22m[90m (4 assertions)[39m
+  unverified, restored 4 file(s)
+  attempt 1 failed; retrying with this output
+ATK-001 [in_progress]: 4 file(s) to write, refused 0
+  tokens: prompt 13616 (cached 12800) output 49975
+  + resources/scenarios/lootable-active-neighbour.json
+  + resources/scenarios/active-neighbour-with-nothing-worth-taking.json
+  + tests/Feature/ActiveNeighbourRaidTest.php
+  + app/Domain/Decision/RaidPlanner.php
+  ActiveNeighbourRaidTest: FAIL not collectable
+  unverified, restored 4 file(s)
+  attempt 2 failed; retrying with this output
+refusing a length answer; nothing written
+Exception ignored in atexit callback: <function implement.<locals>.<lambda> at 0x757d51a5f880>
+Traceback (most recent call last):
+  File "/home/nagi/code/ogamex-next/Modules/AI/scripts/strategy-pipeline.py", line 2532, in <lambda>
+    atexit.register(lambda: kept or release_row(code, worker))
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nagi/code/ogamex-next/Modules/AI/scripts/strategy-pipeline.py", line 2476, in release_row
+    connection.commit()
+  File "/home/nagi/code/ogamex-next/Modules/AI/scripts/strategy-pipeline.py", line 1858, in release_and_exit
+    raise SystemExit(128 + signum)
+SystemExit: 143
+
+=== [canary] lines (all, refusal reasons included) ===
+329571:[canary] VERDICT passed — the accounts played and the host accepted their orders
+329581:[canary] stopped (database kept)
+331050:[canary] reloaded onto the code on disk
+331051:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+331052:[canary] VERDICT passed — the accounts played and the host accepted their orders
+332251:[canary] reloaded onto the code on disk
+332252:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+332253:[canary] VERDICT passed — the accounts played and the host accepted their orders
+333452:[canary] reloaded onto the code on disk
+333453:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+333454:[canary] VERDICT passed — the accounts played and the host accepted their orders
+334653:[canary] reloaded onto the code on disk
+334654:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+334655:[canary] VERDICT passed — the accounts played and the host accepted their orders
+335854:[canary] reloaded onto the code on disk
+335855:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+335856:[canary] VERDICT passed — the accounts played and the host accepted their orders
+337055:[canary] reloaded onto the code on disk
+337056:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+337057:[canary] VERDICT passed — the accounts played and the host accepted their orders
+338256:[canary] reloaded onto the code on disk
+338257:[canary] last 10 min: sessions 3, accepted 2, rejected 0, orders 2, failed 0
+338258:[canary] VERDICT passed — the accounts played and the host accepted their orders
+339457:[canary] reloaded onto the code on disk
+339458:[canary] last 10 min: sessions 6, accepted 3, rejected 0, orders 3, failed 0
+339459:[canary] VERDICT passed — the accounts played and the host accepted their orders
+340658:[canary] reloaded onto the code on disk
+340659:[canary] last 10 min: sessions 8, accepted 3, rejected 0, orders 3, failed 0
+340660:[canary] VERDICT passed — the accounts played and the host accepted their orders
+341859:[canary] reloaded onto the code on disk
+341860:[canary] last 10 min: sessions 8, accepted 3, rejected 0, orders 3, failed 0
+341861:[canary] VERDICT passed — the accounts played and the host accepted their orders
+343060:[canary] reloaded onto the code on disk
+343061:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+343062:[canary] VERDICT passed — the accounts played and the host accepted their orders
+344261:[canary] reloaded onto the code on disk
+344262:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+344263:[canary] VERDICT passed — the accounts played and the host accepted their orders
+345462:[canary] reloaded onto the code on disk
+345463:[canary] last 10 min: sessions 9, accepted 3, rejected 0, orders 3, failed 0
+345464:[canary] VERDICT passed — the accounts played and the host accepted their orders
+346663:[canary] reloaded onto the code on disk
+346664:[canary] last 10 min: sessions 9, accepted 3, rejected 0, orders 3, failed 0
+346665:[canary] VERDICT passed — the accounts played and the host accepted their orders
+347864:[canary] reloaded onto the code on disk
+347865:[canary] last 10 min: sessions 9, accepted 3, rejected 0, orders 3, failed 0
+347866:[canary] VERDICT passed — the accounts played and the host accepted their orders
+349065:[canary] reloaded onto the code on disk
+349066:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+349067:[canary] VERDICT passed — the accounts played and the host accepted their orders
+350266:[canary] reloaded onto the code on disk
+350267:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+350268:[canary] VERDICT passed — the accounts played and the host accepted their orders
+351467:[canary] reloaded onto the code on disk
+351468:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+351469:[canary] VERDICT passed — the accounts played and the host accepted their orders
+352668:[canary] reloaded onto the code on disk
+352669:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+352670:[canary] VERDICT passed — the accounts played and the host accepted their orders
+353869:[canary] reloaded onto the code on disk
+353870:[canary] last 10 min: sessions 12, accepted 4, rejected 0, orders 4, failed 0
+353871:[canary] VERDICT passed — the accounts played and the host accepted their orders
+355070:[canary] reloaded onto the code on disk
+355071:[canary] last 10 min: sessions 10, accepted 3, rejected 0, orders 3, failed 0
+355072:[canary] VERDICT passed — the accounts played and the host accepted their orders
+356271:[canary] reloaded onto the code on disk
+356272:[canary] last 10 min: sessions 7, accepted 3, rejected 0, orders 3, failed 0
+356273:[canary] VERDICT passed — the accounts played and the host accepted their orders
+357472:[canary] reloaded onto the code on disk
+357473:[canary] last 10 min: sessions 5, accepted 2, rejected 1, orders 2, failed 0
+357474:[canary] FAIL the accounts were refused or broke: 1 rejected, 0 failed
+358668:[canary] reloaded onto the code on disk
+358669:[canary] last 10 min: sessions 8, accepted 1, rejected 3, orders 1, failed 0
+358670:[canary] FAIL the accounts were refused or broke: 3 rejected, 0 failed
+359864:[canary] reloaded onto the code on disk
+359865:[canary] last 10 min: sessions 5, accepted 0, rejected 3, orders 0, failed 0
+359866:[canary] FAIL the accounts were refused or broke: 3 rejected, 0 failed
+360344:[canary] reloaded onto the code on disk
+360345:[canary] last 10 min: sessions 27, accepted 0, rejected 7, orders 0, failed 0
+360346:[canary] FAIL the accounts were refused or broke: 7 rejected, 0 failed
+
+=== log file info ===
+-rw-r--r-- 1 nagi nagi 21372484 Oct  1 15:19 /tmp/harness-live.log
