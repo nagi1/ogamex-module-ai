@@ -139,7 +139,10 @@ proposals = {os.path.basename(path)[:-3] for path in glob.glob('plan/research/og
 rows = sqlite3.connect('plan/tasks/tasks.db').execute(
     # Only code rows: a doc or review row handed to the PHP writer can only be refused (DOC-8 spent
     # its attempts explaining it could not rewrite a truncated markdown register).
-    "select code, coalesce(file_ref, '') from ready_tasks where kind = 'impl' and priority in ('P0', 'P1', 'P2') order by priority, id"
+    "select code, coalesce(file_ref, '') from ready_tasks where kind = 'impl' and priority in ('P0', 'P1', 'P2') "
+    # North star: only rows judged by what an account does (or by the loop that judges it).
+    "and (proof like '%aspect:%' or proof like '%situation:%' or proof like '%invariant:%' or proof like '%harness:%') "
+    "order by priority, id"
 )
 print('\n'.join(code for code, file_ref in rows if code in proposals or file_ref))
 PY

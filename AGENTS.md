@@ -114,6 +114,9 @@ six aspects moving, the work is making the existing engine play, not adding to i
 - **The harness** implements only `impl` rows at P0–P2 that name a `file_ref`. Rows with an empty
   `file_ref` (`SIM-001`, `AUTH-001`) belong to the strong lane: the owner or a stronger model. Wiki
   ingestion runs only with `HARNESS_INGEST=1`.
+- **North-star gate.** An open code row's proof must name an `aspect:`, `situation:` or `invariant:`
+  (or `harness:` for the loop itself); the ledger, the harness and the writer refuse anything else.
+  Before touching a row, say which aspect it moves and what an observer would see change.
 - **Done means proven.** Every open code row states a proof (`task.py show CODE`); `task.py done`
   runs it and refuses to close on a failure. The tools: `bash scripts/ogamex scorecard` (every aspect
   of a player's day, PASS/FAIL), `situation NAME` (plant, drive, read back in seconds), `prove CODE`,

@@ -147,6 +147,8 @@ Rules:
 
 Answer with exactly these headings, nothing before them and nothing after:
 
+ASPECT: <the one aspect of play this change makes the account do more or better, from this list:
+  {aspects}; a change that moves none of them is not proposed — answer `ASPECT: none` and stop>
 VARIANT: <copied word for word from section 7, or `none (facts only)` when section 7 is empty>
 DECISION: <2-4 sentences on what to change and why>
 FILES: <one `- path` line per file touched; existing paths or a new path>
@@ -431,7 +433,7 @@ def plan(source_id, extra=""):
     payload = {
         "model": MODEL,
         "messages": [
-            {"role": "system", "content": PROMPT},
+            {"role": "system", "content": PROMPT.replace("{aspects}", ", ".join(scorecard_aspects()))},
             {"role": "user", "content": markdown if not extra else f"{markdown}\n\n{extra}"},
         ],
     }
@@ -569,6 +571,12 @@ def check_proposal(source_id):
     failures = []
 
     variants = doctrine_variants(front_matter(read(raw_path(source_id)))[1])
+    # The north star at planning time: a plan that moves no aspect of play is not a task.
+    aspect = proposal_aspect(blocks)
+    if aspect is None:
+        failures.append("ASPECT names none of the scorecard's aspects ("
+                        + ", ".join(scorecard_aspects()) + "): a change that moves no aspect of play is not proposed")
+
     chosen = " ".join(blocks.get("VARIANT", [])).strip()
     facts_only = chosen.lower().startswith("none")
     if not chosen:
@@ -1204,6 +1212,12 @@ def self_check():
     finally:
         os.remove(os.path.join(MODULE, factory_probe))
 
+    assert ledger.on_path("test:X aspect:raids") and ledger.on_path("harness:self-check"), "live and loop proofs are on the path"
+    assert not ledger.on_path("test:AI") and not ledger.on_path(""), "a test alone is not north-star work"
+    assert {"economy", "raids", "fleet_save", "social"} <= set(scorecard_aspects()), "plans name the scorecard's aspects"
+    assert proposal_aspect({"ASPECT": ["raids — the account raids a profitable neighbour"]}) == "raids"
+    assert proposal_aspect({"ASPECT": ["none"]}) is None, "a plan that moves no aspect is refused"
+
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
         handle.write("<?php\n")
@@ -1458,8 +1472,13 @@ def promote(dry=False):
         if dry:
             created.append(source_id)
             continue
+        aspect = proposal_aspect(blocks)
+        if aspect is None:
+            skipped.append(f"{source_id} (names no aspect of play)")
+            continue
         subprocess.run([sys.executable, cli, "add", source_id, title, "impl", "P3",
-                        "--file", files, "--notes", notes], check=True, capture_output=True)
+                        "--file", files, "--notes", notes, "--proof", f"aspect:{aspect}"],
+                       check=True, capture_output=True)
         created.append(source_id)
     print(f"promoted {len(created)}: {', '.join(created) if created else 'none'}")
     print(f"skipped {len(skipped)}: {', '.join(skipped[:8])}{' …' if len(skipped) > 8 else ''}")
@@ -2075,7 +2094,7 @@ def status():
     proven = [code for code, state, _, _, stamped in rows if state == "done" and stamped]
     closed_blind = [code for code, state, _, _, stamped in rows if state == "done" and not stamped]
     unproven = [code for code, state, *_ in rows if code in marked and state != "done"]
-    no_proof = [code for code, state, _, proof, _ in rows if state in ("todo", "in_progress", "blocked") and not proof]
+    no_proof = [code for code, state, _, proof, _ in rows if state in ("todo", "in_progress", "blocked") and not ledger.on_path(proof)]
 
     print(f"P0-P2 code rows: {len(proven)} proven, {len(closed_blind)} closed before proofs existed, "
           f"{len(unproven)} delivered but NOT proven, "
@@ -2083,7 +2102,8 @@ def status():
     if unproven:
         print("delivered, not proven: " + ", ".join(sorted(unproven)))
     if no_proof:
-        print("open rows with no proof stated (cannot close): " + ", ".join(sorted(no_proof)))
+        print("OFF THE NORTH STAR (no aspect, situation or invariant in the proof; cannot be taken or closed): "
+              + ", ".join(sorted(no_proof)))
     # Machine-readable for the harness: an empty queue may wait, a queue with attemptable work may not.
     print(f"model today: {usage_today()}")
     print(f"READY: {len(ready)}")
@@ -2239,6 +2259,20 @@ VERIFY_LANE = "verify:shared-test-database"
 FILE_BLOCK = re.compile(r"### FILE:\s*(\S+?)\s*\n+```[a-zA-Z]*\n(.*?)\n```[ \t]*(?:\n|$)", re.S)
 EDIT_BLOCK = re.compile(r"### EDIT:\s*(\S+?)\s*\n(.*?)(?=^### (?:FILE|EDIT):|\Z)", re.S | re.M)
 SEARCH_REPLACE = re.compile(r"<<<<<<< SEARCH\n(.*?)\n?=======\n(.*?)\n?>>>>>>> REPLACE", re.S)
+
+
+def proposal_aspect(blocks):
+    """The scorecard aspect a plan says it moves, or None when it names none that exists."""
+    named = " ".join(blocks.get("ASPECT", [])).strip().strip("`").split(" ")[0].lower() if blocks.get("ASPECT") else ""
+
+    return named if named in scorecard_aspects() else None
+
+
+def scorecard_aspects():
+    """The aspects of play the scorecard measures, read from it, so a plan names one that exists."""
+    source = read(os.path.join(MODULE, "scripts/play-scorecard.php"))
+
+    return re.findall(r"^\s{8}'(\w+)' => \['", source, re.M)
 
 
 def scenario_required_keys():
@@ -2566,6 +2600,11 @@ def implement(code, answer_file=None):
 
     # The row itself, in the ledger every agent claims from: a file lock alone let an interactive
     # agent and a harness worker take the same task and both write it.
+    if not ledger.on_path(task_row(code)["proof"]):
+        # Never pay for work that moves no aspect of play: the writer would be busy, not useful.
+        say(ledger.off_path_reason(code))
+        return 0
+
     worker = "harness:" + os.environ.get("HARNESS_WORKER", f"pid-{os.getpid()}")
     if not claim_row(code, worker):
         say(f"{code}: claimed by someone else — left alone")

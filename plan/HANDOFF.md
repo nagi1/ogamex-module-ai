@@ -20,6 +20,16 @@ harness / agents  ──write──▶  code + tests  ──prove──▶  task
    pushes `plan/research/ogame/evidence/<stamp>/`. Wait the full hour in its step 8.
 4. **Review** — the reviewer reads the evidence, fixes what it shows and re-plans this file.
 
+## The north-star gate (enforced, not advice)
+
+Code work is judged by what an account visibly does. A row's proof must contain an `aspect:`,
+`situation:` or `invariant:` step, or a `harness:` step for the loop that does the judging. Without
+one, `task.py add`, `claim`, `proof`, `next` and `done` refuse the row, the harness queue skips it and
+the writer will not pay for it; `strategy-pipeline.py status` lists it as OFF THE NORTH STAR. A wiki
+plan must name the scorecard aspect it moves (its ASPECT line) or it is never promoted, and a promoted
+row carries that aspect as its proof. Rows that could not name one were frozen on 1 Oct 2026
+(`PERS-001`, `DEF-39`, `CAMPAIGN-001`, the reason in each row).
+
 ## Tools (all from `Modules/AI`, `export OGAMEX_RUNNER=local-docker-dev`)
 
 | Command | What it answers |

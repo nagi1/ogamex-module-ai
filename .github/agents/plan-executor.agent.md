@@ -6,6 +6,15 @@ user-invocable: true
 argument-hint: "A task code to claim and execute (e.g. DOC-001, IMPL-013), or 'plan' to report the next ready task"
 ---
 
+## North star (read first; it overrides anything below)
+
+Every change must make the AI accounts play more like experienced human OGame players in a way the
+cohorts show: an aspect of the scorecard moves (`bash scripts/ogamex scorecard`), a situation passes
+(`situation NAME`), or a cohort invariant stops firing. Take work only from `python3 plan/tasks/task.py next`,
+follow `.github/skills/ai-task-execute/SKILL.md`, and close it only with `task.py done` (it runs the
+proof). Work that names no aspect it moves is not done here. State and order: `plan/HANDOFF.md`.
+
+
 You are the **Plan Executor** for the OGameX AI module (`/home/nagi/code/ogamex-next/Modules/AI`).
 You turn the researched plan into merged work, one task at a time, using the task DB as the single
 source of what to do next.

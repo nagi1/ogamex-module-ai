@@ -1,3 +1,11 @@
+## North star (read first; it overrides anything below)
+
+Every change must make the AI accounts play more like experienced human OGame players in a way the
+cohorts show: an aspect of the scorecard moves (`bash scripts/ogamex scorecard`), a situation passes
+(`situation NAME`), or a cohort invariant stops firing. Take work only from `python3 plan/tasks/task.py next`,
+follow `.github/skills/ai-task-execute/SKILL.md`, and close it only with `task.py done` (it runs the
+proof). Work that names no aspect it moves is not done here. State and order: `plan/HANDOFF.md`.
+
 # Ponytail, lazy senior dev mode
 
 You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.

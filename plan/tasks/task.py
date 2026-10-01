@@ -42,6 +42,23 @@ CLAIMS = os.path.join(MODULE, "plan/research/ogame/claims")
 AGENT_CLAIM_HOURS = 6
 
 
+# The north star in one rule: code work must be judged by something an account visibly does on the
+# cohorts (an aspect, a situation, an invariant) or keep the loop that judges it sound (harness).
+# A row that can only say "my test passes" cannot be taken, created or closed as code work.
+NORTH_STAR_STEPS = ("aspect", "situation", "invariant", "harness")
+
+
+def on_path(proof):
+    """Whether a proof judges the row by the account's behaviour or by the loop that measures it."""
+    return any(re.search(rf"(^|\s){kind}:", proof or "") for kind in NORTH_STAR_STEPS)
+
+
+def off_path_reason(code):
+    return (f"{code} names no aspect it moves. Give it a proof with an aspect:, situation: or invariant: "
+            f"step (`task.py proof {code} aspect:economy ...`; `bash scripts/ogamex scorecard` lists the "
+            f"aspects), or freeze it. Work that moves no aspect is not north-star work.")
+
+
 def file_paths(file_ref):
     """The files a row names. One parser for the ledger and the harness, so both lock the same key:
     `;` or `,` separated, with a trailing `(new)`, `(edit)` or `(method names)` note taken off."""
@@ -148,6 +165,9 @@ def cmd_blocked(con):
 def cmd_claim(con, code, assignee):
     """The row and every file it names, or nothing: two agents in one file is how one slice's code
     ends up inside another's, and the harness's rollback then erases the other agent's edit."""
+    row = con.execute("SELECT kind, coalesce(proof,'') FROM tasks WHERE code=?", (code,)).fetchone()
+    if row and row[0] == "impl" and not on_path(row[1]):
+        sys.exit("NOT claimed: " + off_path_reason(code))
     cur = con.execute(
         "UPDATE tasks SET status='in_progress', assignee=?, updated_at=datetime('now') "
         "WHERE code=? AND status='todo'", (assignee, code))
@@ -206,8 +226,8 @@ def cmd_done(con, code):
     if row is None:
         sys.exit(f"no task {code}")
     kind, proof = row
-    if kind == "impl" and not proof.strip():
-        sys.exit(f"NOT done: {code} states no proof. Set one first: task.py proof {code} test:X situation:Y aspect:Z")
+    if kind == "impl" and not on_path(proof):
+        sys.exit("NOT done: " + off_path_reason(code))
     if kind == "impl":
         module = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         result = subprocess.run(["bash", os.path.join(module, "scripts/ogamex"), "prove", code])
@@ -237,7 +257,8 @@ def cmd_next(con):
     """The single row an agent should take: worst observable badness first, code rows that name a file."""
     row = con.execute(
         "SELECT code, priority, title, file_ref FROM ready_tasks WHERE kind='impl' AND priority IN ('P0','P1','P2') "
-        "AND coalesce(file_ref,'') <> '' ORDER BY priority, id LIMIT 1").fetchone()
+        "AND coalesce(file_ref,'') <> '' AND (" + " OR ".join(f"proof LIKE '%{k}:%'" for k in NORTH_STAR_STEPS) + ") "
+        "ORDER BY priority, id LIMIT 1").fetchone()
     if row is None:
         print("NEXT: nothing ready")
         return
@@ -249,6 +270,9 @@ def cmd_proof(con, code, steps):
         bad = [step for step in steps if not re.match(r"^(test|situation|aspect|invariant|harness):[\w.-]+$", step)]
         if bad:
             sys.exit(f"not a proof step: {' '.join(bad)} (use test:TestName situation:name aspect:name invariant:NAME)")
+        kind = con.execute("SELECT kind FROM tasks WHERE code=?", (code,)).fetchone()
+        if kind and kind[0] == "impl" and not on_path(" ".join(steps)):
+            sys.exit("proof NOT set: " + off_path_reason(code))
         con.execute("UPDATE tasks SET proof=?, updated_at=datetime('now') WHERE code=?", (" ".join(steps), code))
         con.commit()
     row = con.execute("SELECT coalesce(proof,'') FROM tasks WHERE code=?", (code,)).fetchone()
@@ -301,6 +325,8 @@ def cmd_add(con, a):
         sys.exit(f"kind must be one of {sorted(kinds)}")
     # A deferred row is born deferred: ready_tasks selects status='todo', so inserting one as
     # todo would offer work the plan has deliberately not scheduled to the next agent.
+    if a.kind == "impl" and not on_path(a.proof):
+        sys.exit("NOT added: " + off_path_reason(a.code))
     status = "deferred" if a.kind == "deferred" else "todo"
     con.execute(
         "INSERT OR REPLACE INTO tasks (code,title,kind,status,priority,gap_ref,principle_refs,algorithm_ref,file_ref,notes,proof) "

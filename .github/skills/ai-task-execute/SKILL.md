@@ -24,6 +24,11 @@ Read the row's `notes` fully: they hold the measurement, the cause when it is kn
 already made. Do not re-decide a decided question. Read the files in `file_ref`. Read nothing else
 unless an error sends you there.
 
+Then write one sentence before anything else: **which aspect of play this row moves, and what an
+observer would see the account do differently afterwards** ("the account raids an inactive neighbour
+it scouted", "every planet's build queue is busy after a login"). If you cannot write it, the row is
+not north-star work: `task.py unclaim CODE` and say why.
+
 ## 2. See it fail first
 
 Run the proof before you change anything. It must fail, and you must be able to say which step fails
