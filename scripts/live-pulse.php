@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Enums\AiActionType;
+use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
@@ -54,6 +55,12 @@ foreach (DB::table('ai_action_receipts')->whereIn('player_id', $players)->where(
 }
 arsort($refusals);
 
+$chosen = [];
+foreach (DB::table('ai_decision_traces')->whereIn('player_id', $players)->where('created_at', '>=', $since)
+    ->selectRaw('selected_action, count(*) as n')->groupBy('selected_action')->orderByDesc('n')->get() as $row) {
+    $chosen[AiCandidateActionType::tryFrom((int) $row->selected_action)?->name ?? (string) $row->selected_action] = (int) $row->n;
+}
+
 $classes = GameMissionFactory::getMissionClasses();
 $missions = [];
 foreach (DB::table('fleet_missions')->whereIn('user_id', $players)->whereNull('parent_id')->where('time_departure', '>=', $since->timestamp)
@@ -78,6 +85,7 @@ $pulse = [
     'accounts' => count($players),
     'sessions' => (clone $sessions)->count(),
     'accounts_with_session' => (clone $sessions)->distinct()->count('player_id'),
+    'chosen' => $chosen,
     'work' => $work,
     'refusals' => array_slice($refusals, 0, 12, true),
     'missions' => $missions,
@@ -94,6 +102,8 @@ if ($json) {
 printf("PULSE last %d min, %d accounts: %d sessions on %d accounts\n", $minutes, $pulse['accounts'], $pulse['sessions'], $pulse['accounts_with_session']);
 printf("  backlog: %d work item(s) more than a minute late%s\n", $pulse['backlog']['late'],
     $pulse['backlog']['oldest_late_seconds'] > 300 ? ', oldest '.round($pulse['backlog']['oldest_late_seconds'] / 60).' min — live verdicts read worker lag' : '');
+$decisions = max(1, array_sum($chosen));
+echo '  sessions chose: '.implode(', ', array_map(fn ($k, $v) => $k.' '.round($v * 100 / $decisions).'%', array_keys($chosen), $chosen))."\n";
 echo '  host orders: '.implode(', ', array_map(fn ($k, $v) => "$k $v", array_keys($orders), $orders))."\n";
 echo '  missions launched: '.($missions === [] ? 'none' : implode(', ', array_map(fn ($k, $v) => "$k $v", array_keys($missions), $missions)))."\n";
 echo "  work (kind: state count):\n";
