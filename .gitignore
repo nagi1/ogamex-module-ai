@@ -18,3 +18,4 @@ __pycache__/
 # Harness output kept for the watch page (timestamped by scripts/harness-log.py)
 /plan/research/ogame/logs/
 /plan/research/ogame/stories.json
+/plan/research/ogame/provider-down

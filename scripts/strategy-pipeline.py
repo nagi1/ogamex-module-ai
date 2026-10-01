@@ -93,6 +93,11 @@ MODEL_TIMEOUT_SECONDS = 20 * 60
 # sends keep-alive blank lines while it waits, and then gives up itself at 900 s with an error body (twice
 # on 1 Oct 2026, 15 minutes of a writer each). 108 finished calls took at most 263 s (p50 122 s).
 MODEL_DEADLINE_SECONDS = 8 * 60
+# One stalled call marks the provider down for this long: writers skip the paid call (the free red-first
+# proof still runs) and the pass reaches its proof and live stages instead of waiting out five retries on
+# three writers (1 Oct 2026 20:04: the provider stopped answering even a 20-token request).
+PROVIDER_DOWN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "plan/research/ogame/provider-down")
+PROVIDER_PAUSE_SECONDS = 10 * 60
 # A slot outlives its call by a margin, or a slow call's slot is taken while it is still in flight.
 SLOT_STALE_SECONDS = MODEL_TIMEOUT_SECONDS + 5 * 60
 MODEL_USAGE = os.path.join(MODULE, "plan/research/ogame/model-usage.jsonl")
@@ -2484,6 +2489,11 @@ def status():
     return 0
 
 
+def provider_down():
+    """True while a stalled call marked the provider down less than PROVIDER_PAUSE_SECONDS ago."""
+    return os.path.exists(PROVIDER_DOWN) and time.time() - os.path.getmtime(PROVIDER_DOWN) < PROVIDER_PAUSE_SECONDS
+
+
 def read_within(response, deadline):
     """The JSON body, read line by line so a queued request that only sends keep-alive blank lines is
     abandoned at the deadline (as a TimeoutError, which the caller retries) instead of after 15 minutes."""
@@ -2526,6 +2536,8 @@ def model_call(payload, purpose="a model answer"):
                 with urllib.request.urlopen(request, timeout=MODEL_TIMEOUT_SECONDS) as response:
                     data = read_within(response, started + MODEL_DEADLINE_SECONDS)
                 record_usage(purpose, data, time.time() - started)
+                if data.get("choices") and os.path.exists(PROVIDER_DOWN):
+                    os.remove(PROVIDER_DOWN)
                 return data
             except urllib.error.HTTPError as error:
                 if error.code not in MODEL_RETRY_CODES or attempt == MODEL_ATTEMPTS:
@@ -2534,7 +2546,13 @@ def model_call(payload, purpose="a model answer"):
                 print(f"  {error.code} from the model on {purpose}; waiting {wait}s "
                       f"(attempt {attempt} of {MODEL_ATTEMPTS})")
                 time.sleep(wait + random.uniform(0, 2))
-            except (TimeoutError, urllib.error.URLError, ConnectionError) as error:
+            except TimeoutError as error:
+                # A call past the deadline is the provider queueing, not a dropped connection: retrying
+                # at once queues again. Mark it down and give the pass back to the free stages.
+                with open(PROVIDER_DOWN, "w", encoding="utf-8") as handle:
+                    handle.write(f"{datetime.datetime.now(datetime.timezone.utc):%H:%M} {purpose}\n")
+                raise SystemExit(f"model stalled on {purpose}: {error}; provider marked down for {PROVIDER_PAUSE_SECONDS // 60} min")
+            except (urllib.error.URLError, ConnectionError) as error:
                 # A dropped connection or the server's ten-minute close: retried like a 503, never a
                 # crash that loses the worker's whole pass.
                 if attempt == MODEL_ATTEMPTS:
@@ -3083,6 +3101,9 @@ def implement(code, answer_file=None):
                     + failure[:2000]
                     + "\nFix exactly that and change nothing else.")
 
+    if not answer_file and provider_down():
+        print(f"  the provider is marked down ({read(PROVIDER_DOWN).strip()}); no paid call this pass")
+        return 0
     answer, usage = writer_answer(code, context, answer_file)
     if answer is None and usage.get("finish_reason") == "provider_error":
         print(f"  the provider returned no answer, not counted as an attempt: {usage['error']}")
