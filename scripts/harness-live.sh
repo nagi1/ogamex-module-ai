@@ -253,7 +253,11 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       done
       for code in $(printf '%s\n' $unproven | head -n 5); do
         echo "--- proving $code $(date -u '+%F %T') UTC ---"
-        python3 plan/tasks/task.py done "$code" || echo "--- $code delivered, NOT proven yet $(date -u '+%F %T') UTC ---"
+        if ! python3 plan/tasks/task.py done "$code"; then
+          echo "--- $code delivered, NOT proven yet $(date -u '+%F %T') UTC ---"
+          # A failing live proof is the writer's next input, not a verdict to wait out.
+          python3 scripts/strategy-pipeline.py reopen "$code"
+        fi
       done
     fi
 

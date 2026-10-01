@@ -944,6 +944,39 @@ def record_failure(code, reason):
     return True
 
 
+def reopen(code):
+    """Send a delivered row back to the writer when its live proof failed, with that failure as feedback.
+
+    A delivered row used to wait for ever: its tests passed, so no attempt repeated it, and `task.py
+    done` only re-ran a proof that kept failing for the same reason (ECON-001, FLEET-002 and QUAL-008
+    sat `in_progress` for hours). A failing situation, invariant or test is the next attempt's input; a
+    step that only says `too early` waits for the cohort. The repeat-failure rule still stops a row whose
+    proof fails the same way twice.
+    """
+    log = os.path.join(MODULE, "plan/research/ogame/proofs", f"{code}.log")
+    text = re.sub(r"\x1b\[[0-9;]*m", "", read(log)) if os.path.exists(log) else ""
+    failing = [line for line in text.splitlines() if line.startswith("FAIL ") and "too early" not in line]
+    if not failing:
+        print(f"{code}: nothing to send back (no failing step, or only steps that wait for the cohort)")
+        return 0
+
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    connection.execute("update tasks set status='todo', assignee=null, updated_at=datetime('now') "
+                       "where code=? and assignee='harness:delivered'", (code,))
+    connection.commit()
+    connection.close()
+    # No longer delivered: the marker is what `status` and the watch page count as awaiting proof, and a
+    # fresh delivery writes it again.
+    marker = os.path.join(IMPLEMENTED, f"{code}.md")
+    if os.path.exists(marker):
+        os.remove(marker)
+    # After the reset, so a stuck verdict (blocked) wins over it.
+    record_failure(code, "the delivered change passed its tests but its live proof failed:\n" + "\n".join(text.splitlines()[:30]))
+    print(f"{code}: back to the writer with the failing proof step")
+
+    return 0
+
+
 def cooling_off(code):
     """How long this task should wait before its next attempt, or 0 when it may be attempted now."""
     if stuck(code):
@@ -3010,7 +3043,7 @@ def main(argv=None):
     parser.add_argument("command", nargs="?",
                         choices=["bundle", "plan", "validate", "run", "sweep", "promote",
                                  "coverage", "implement", "wait-until-offpeak", "publish", "peak-gate",
-                                 "quality", "status", "model-check"])
+                                 "quality", "status", "model-check", "reopen"])
     parser.add_argument("source", nargs="?")
     parser.add_argument("--max", type=int, default=4, help="run/sweep: work allowed this pass")
     parser.add_argument("--shard", help="run: slice k/N of the queue, so N workers cover it once")
@@ -3048,6 +3081,8 @@ def main(argv=None):
         return 0
     if args.command == "implement":
         return implement(args.source, args.answer)
+    if args.command == "reopen":
+        return reopen(args.source)
     if not args.command or not args.source:
         parser.error("give a command and a source id, or --self-check")
     if args.command == "bundle":
