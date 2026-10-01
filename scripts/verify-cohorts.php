@@ -255,6 +255,14 @@ $playedThisHour = DB::table('ai_work_items')->whereIn('player_id', $playerIds)
 $busyPlanets = BuildingQueue::query()->where('processed', 0)->where('time_end', '>', time())
     ->distinct()->pluck('planet_id')->map(fn ($id): int => (int) $id)->all();
 
+// A planet whose build order is already queued is being filled: the session that placed it is done, the
+// order runs a few minutes later, and at 1000x the planet reads idle in between.
+$ordered = [];
+foreach (DB::table('ai_work_items')->whereIn('player_id', $playerIds)->where('kind', AiWorkKind::BuildFirstBuilding->value)
+    ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value, AiWorkState::Leased->value])->pluck('payload') as $payload) {
+    $ordered[] = (int) (json_decode((string) $payload, true)['planet_id'] ?? 0);
+}
+
 $buildingPlanner = app(QueueableBuildingPlanner::class);
 
 foreach ($playedThisHour as $accountId) {
@@ -274,6 +282,7 @@ foreach ($playedThisHour as $accountId) {
         ->groupBy('planet_id')->selectRaw('planet_id, max(time_end) as ended')->pluck('ended', 'planet_id');
     $idle = array_filter($ownPlanets, static fn (int $id): bool => in_array($id, $planned, true)
         && !in_array($id, $busyPlanets, true)
+        && !in_array($id, $ordered, true)
         && $lastSession > (int) ($lastBuildEnd[$id] ?? 0));
 
     if (count($idle) / count($ownPlanets) > $IDLE_SHARE) {

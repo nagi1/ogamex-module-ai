@@ -241,6 +241,24 @@ class QueueableBuildingPlanner
     }
 
     /**
+     * What this planet is saving for: the price plus reserve of the first economy step the planet is
+     * short of, or null when it is not saving. A player mines while short, so anything else that spends
+     * the same resource waits (the shipyard leaves the balance alone until the step is paid).
+     */
+    public function savingFor(PlanetService $planet, AiProfile $profile): ?Resources
+    {
+        foreach ($this->passes($profile) as $pass) {
+            foreach ($pass($planet) as $candidate) {
+                if ($this->refusal($planet, $candidate) === 'price plus reserve') {
+                    return $this->withReserve($planet, ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet), ReserveFloor::ECONOMY_HOURS);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The same question for a technology, asked the way the host's research page asks it.
      *
      * Research is account-wide on the host's screen while its queue and its requirements are per

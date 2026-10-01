@@ -172,7 +172,7 @@ class QueueableUnitPlanner
             }
 
             $defense = $this->defenseComposition->plan($player, $planet, $need);
-            if ($defense !== null) {
+            if ($defense !== null && !$this->starvesSaving($planet, $profile, $defense)) {
                 $standing[] = [$planet, $defense];
             }
         }
@@ -480,6 +480,30 @@ class QueueableUnitPlanner
         // The host service silently returns when the amount is unaffordable, so a published
         // capability that cannot pay would schedule work that creates no queue row.
         return ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true) >= self::FIRST_CARGO_AMOUNT;
+    }
+
+    /**
+     * Whether this order would spend a resource the planet is saving for an economy step: a player
+     * mines while short, and defence comes from what the economy leaves.
+     */
+    private function starvesSaving(PlanetService $planet, AiProfile $profile, DefenseComposition $defense): bool
+    {
+        $saving = $this->buildingPlanner->savingFor($planet, $profile);
+        if ($saving === null) {
+            return false;
+        }
+
+        $price = ObjectService::getObjectPrice($defense->unit->machine_name, $planet);
+        $held = $planet->getResources();
+
+        foreach (['metal', 'crystal', 'deuterium'] as $resource) {
+            if ($price->{$resource}->get() > 0 && $saving->{$resource}->get() > 0
+                && $held->{$resource}->get() - $price->{$resource}->get() * $defense->amount < $saving->{$resource}->get()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function metalEquivalent(Resources $resources): float
