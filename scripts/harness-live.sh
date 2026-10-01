@@ -53,7 +53,7 @@ IDLE_INTERVAL=60
       bash scripts/canary.sh down >> "$LOG" 2>&1 || true
       # The park is free time for checks that make no provider call (HARNESS-004): drive every
       # situation on both cohorts once, so the next pass starts from a fresh read of what plays.
-      for universe in grand pve; do
+      for universe in ${HARNESS_UNIVERSES:-grand}; do
         echo "--- situations on $universe during the park $(date -u '+%F %T') UTC ---"
         PROVE_UNIVERSE=$universe bash scripts/ogamex situation all || true
       done
@@ -142,8 +142,15 @@ rows = sqlite3.connect('plan/tasks/tasks.db').execute(
     "select code, coalesce(file_ref, '') from ready_tasks where kind = 'impl' and priority in ('P0', 'P1', 'P2') "
     # North star: only rows judged by what an account does (or by the loop that judges it).
     "and (proof like '%aspect:%' or proof like '%situation:%' or proof like '%invariant:%' or proof like '%harness:%') "
-    "order by priority, id"
+    # Within a priority: a row with a fast proof (a `test:` step) first, because its verdict takes
+    # seconds and its slice can be delivered tonight; then the row that has failed least, so one hard
+    # row does not hold a worker while easier value waits.
+    "order by priority, proof like '%test:%' desc, id"
 )
+def attempts(code):
+    path = f'plan/research/ogame/attempts/{code}.count'
+    return int(open(path).read().strip() or 0) if os.path.exists(path) else 0
+rows = sorted(rows, key=lambda row: attempts(row[0]))  # stable: keeps the priority/fast-proof order within ties
 print('\n'.join(code for code, file_ref in rows if code in proposals or file_ref))
 PY
 
@@ -190,7 +197,7 @@ PY
     # reads went stale for as long as the canary stayed unhappy (found 30 Sep 2026: 45 minutes of
     # stale verdicts, and 100 QUALITY FAILED lines that no longer matched the last cohort read).
     # Reading the cohorts is free and read-only, so it is never the thing to skip.
-    for universe in grand pve; do
+    for universe in ${HARNESS_UNIVERSES:-grand}; do
       echo "--- live cohort verification: $universe $(date -u '+%F %T') UTC ---"
       HARNESS_WORKER=pass python3 -u scripts/strategy-pipeline.py publish "reading the $universe cohort" || true
       # Captured rather than piped straight through, so the quality verdict can be read as well as
@@ -239,7 +246,7 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
     # they are restarted onto the code on disk first, or the proof would read the old behaviour.
     unproven=$(python3 -u scripts/strategy-pipeline.py status | sed -n 's/^UNPROVEN: //p')
     if [ -n "$unproven" ]; then
-      for universe in grand pve; do
+      for universe in ${HARNESS_UNIVERSES:-grand}; do
         (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc "cd /var/www && php artisan queue:restart") || true
       done
       for code in $(printf '%s\n' $unproven | head -n 5); do

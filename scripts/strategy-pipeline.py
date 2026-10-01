@@ -1744,6 +1744,8 @@ WHERE THE CHANGE GOES
   never `new`; small methods; a comment only for a non-obvious why.
 
 THE TEST
+- When the task shows THE FAST PROOF, that test is the target: make it pass. It already counts as your
+  test. Otherwise:
 - One Pest Feature test in `tests/Feature/`, shaped like EXAMPLE TEST (`uses(...)`, no class, no
   `extends`). Never `tests/Unit`.
 - Build rows with `Model::create([...])` exactly as TEST THAT ALREADY USES THESE CLASSES does, every NOT
@@ -1853,6 +1855,8 @@ def reference_context():
                   "makes the player, the account and the planets):",
                   "```php", read(support)[:3000], "```", ""]
 
+    parts += ["TEST KIT (every helper a test can use; anything not listed does not exist):", test_kit(), ""]
+
     example_test = next(iter(sorted(glob.glob(os.path.join(MODULE, "tests/Feature/*Test.php")))), None)
     if example_test:
         parts += [f"EXAMPLE TEST {os.path.relpath(example_test, MODULE)} (the shape every test copies):",
@@ -1864,6 +1868,31 @@ def reference_context():
                   f"{', '.join(scenario_required_keys() + ['expect'])}):", "```json", read(example)[:2500], "```", ""]
 
     return "\n".join(parts), os.path.relpath(example_test, MODULE) if example_test else ""
+
+
+def proof_tests(code):
+    """The `test:` steps of the row's proof whose file exists: the fast proof the slice must pass."""
+    proof = task_row(code)["proof"] if os.path.exists(TASKS_DB) else ""
+    names = [step[len("test:"):].rstrip("?") for step in proof.split() if step.startswith("test:")]
+
+    return [name for name in names if glob.glob(os.path.join(MODULE, "tests/Feature/**", f"{name}.php"), recursive=True)]
+
+
+def test_kit():
+    """Every helper a Feature test can call, as one-line signatures: the base cases' methods and
+    properties, and the module's shared test functions. Invented helper names were a common failure."""
+    root = os.path.abspath(os.path.join(MODULE, "..", ".."))
+    lines = []
+    for path in sorted(glob.glob(os.path.join(root, "tests/*TestCase.php")) + glob.glob(os.path.join(root, "tests/Traits/*.php")) + glob.glob(os.path.join(MODULE, "tests/Support/*.php"))):
+        body = read(path)
+        members = re.findall(r"^\s*(?:public|protected)\s+(?:static\s+)?(?:function\s+\w+\([^)]*\)(?:\s*:\s*[\w|\\?]+)?|[\w|\\?]+\s+\$\w+)", body, re.M)
+        if members:
+            lines.append(f"{os.path.basename(path)[:-4]}: " + "; ".join(" ".join(m.split()) for m in members))
+    helpers = []
+    for path in sorted(glob.glob(os.path.join(MODULE, "tests/Feature/**/*.php"), recursive=True)):
+        for found in re.findall(r"^function\s+(\w+\([^)]*\)(?:\s*:\s*[\w|\\?]+)?)", read(path), re.M):
+            helpers.append(f"{' '.join(found.split())}  [{os.path.basename(path)[:-4]}]")
+    return "\n".join(lines) + "\nSHARED TEST FUNCTIONS (global in the suite; call them, do not redefine them):\n" + "\n".join(helpers)
 
 
 def implement_context(code):
@@ -1886,6 +1915,12 @@ def implement_context(code):
                   "aspect:X = accounts must visibly do X more; situation:Y = a planted situation must produce "
                   "the expected work; invariant:Z = the cohort must stop violating Z. A green test alone does "
                   "not close it.", ""]
+
+    for name in proof_tests(code):
+        path = glob.glob(os.path.join(MODULE, "tests/Feature/**", f"{name}.php"), recursive=True)[0]
+        parts += [f"THE FAST PROOF {os.path.relpath(path, MODULE)} (make this test pass through the real path; "
+                  "it already counts as your test, so write another only for a case it does not cover; edit it "
+                  "only to remove a `->todo()` your change satisfies):", "```php", read(path)[:5000], "```", ""]
 
     # The row's own evidence: what was measured, what is required, and any default already decided.
     if task["notes"].strip():
@@ -2666,6 +2701,9 @@ def verify_slice(code, written, tests, backups):
     if broken:
         return "generated code does not parse:\n" + "\n".join(broken)
 
+    # The row's own fast proof (a `test:` step, e.g. its situation test) verifies the slice as well as a
+    # test the writer wrote would, so a slice that makes it pass needs no second test of its own.
+    tests = tests + [name for name in proof_tests(code) if name not in tests]
     if not tests:
         return "the answer wrote files but no test, so nothing verified the behaviour"
 
@@ -2698,18 +2736,21 @@ def verify_slice(code, written, tests, backups):
     if problems:
         return "the scenario would be refused before it runs:\n" + "\n".join(problems)
 
-    # The slice's own tests first, then every test that names a class the slice touched: a shared
-    # action rewritten in place has to keep the pages and flows that already call it working.
-    for name in tests + [name for name in affected_tests(written) if name not in tests]:
-        code_rc, output = run_in_app(f"./vendor/bin/pest --testsuite=Modules --filter={name}")
-        summary = [line.strip() for line in output.splitlines() if "Tests:" in line]
-        # A summary line only means the suite RAN: six failed tests still print one.
-        if summary and code_rc == 0:
-            print(f"  {name}: PASS {summary[-1]}")
-            continue
-        print(f"  {name}: FAIL {' '.join(summary[-1:]) or 'not collectable'}")
-        detail = re.sub(r"\x1b\[[0-9;]*m", "", output).strip()[-2500:]
-        return f"{name}: {' '.join(summary[-1:]) or 'suite not collectable'}\n\n{detail}"
+    # The slice's own tests, its proof tests and every test that names a class it touched, in ONE
+    # parallel Pest run: one boot instead of one per file (a planner edit used to mean ~19 serial runs).
+    names = tests + [name for name in affected_tests(written) if name not in tests]
+    pattern = "|".join(re.escape(name) for name in names)
+    code_rc, output = run_in_app(f"timeout -k 5 300 ./vendor/bin/pest --testsuite=Modules --parallel "
+                                 f"--processes=4 --bail --filter='({pattern})'")
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    summary = [line.strip() for line in clean.splitlines() if "Tests:" in line]
+    # A summary line only means the suite RAN: six failed tests still print one.
+    if not (summary and code_rc == 0):
+        print(f"  {len(names)} test file(s): FAIL {' '.join(summary[-1:]) or 'not collectable'}")
+        failed = clean.find("FAILED")
+        detail = (clean[failed:failed + 2500] if failed >= 0 else clean.strip()[-2500:]).strip()
+        return f"tests ({', '.join(names)}): {' '.join(summary[-1:]) or 'suite not collectable'}\n\n{detail}"
+    print(f"  {len(names)} test file(s): PASS {summary[-1]}")
 
     # The tailored proof: a described situation plus the action the engine must choose under it.
     for scenario in [path for path in written if path.startswith("resources/scenarios/")]:
