@@ -106,5 +106,5 @@ test('the module schedules the reconciliation command', function (): void {
         ->filter(static fn (object $event): bool => str_contains((string) $event->command, 'ai:reconcile-language-requests'));
 
     expect($events)->toHaveCount(1)
-        ->and($events->first()->expression)->toBe('*/10 * * * *');
+        ->and($events->first()->expression)->toBe('* * * * *');
 });

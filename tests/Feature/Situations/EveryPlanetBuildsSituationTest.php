@@ -17,6 +17,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
+use OGame\Services\PlanetService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -26,7 +27,7 @@ uses(IsolatedAccountTestCase::class);
 // `every-planet-builds`).
 test('a login with free fields and stock on three planets queues a step on each', function (): void {
     $profile = everyPlanetProfile($this->currentUserId);
-    everyPlanetStock($this->currentUserId);
+    everyPlanetStock($this->currentUserId, $this->secondPlanetService);
 
     $steps = app(QueueableBuildingPlanner::class)->steps($this->currentUserId);
     $planetIds = array_map(static fn (QueueableBuilding|QueueableResearch $step): int => $step->planetId, $steps);
@@ -62,11 +63,11 @@ function everyPlanetProfile(int $playerId): AiProfile
 
 /** An ordinary mid-game stock, not billions: enough for the next mine plus the planner's reserve, on the
  * fixture's two planets and a third with free fields. */
-function everyPlanetStock(int $playerId): void
+function everyPlanetStock(int $playerId, PlanetService $second): void
 {
     $stock = new Resources(200_000, 100_000, 50_000);
     test()->planetAddResources($stock);
-    test()->secondPlanetService->addResources($stock);
+    $second->addResources($stock);
 
     Planet::factory()->create([
         'user_id' => $playerId,
