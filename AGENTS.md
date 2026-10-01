@@ -94,6 +94,8 @@ Check these two criteria before any material design choice. A choice that fails 
 
 ## Direction — 1 October 2026 (overrides any older phase or milestone instruction)
 
+State of play, work order and owner actions: `plan/HANDOFF.md`. Read it before taking a row.
+
 The accounts do not play yet: no raids, one fleet save in a lifetime, no recyclers, no applications,
 no social exchanges (`plan/details/specs/play-coverage.md`). Until a cohort read shows each of those
 six aspects moving, the work is making the existing engine play, not adding to it.
