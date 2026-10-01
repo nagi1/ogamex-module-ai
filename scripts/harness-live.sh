@@ -57,7 +57,11 @@ IDLE_INTERVAL=60
     proposals_before=$(ls plan/research/ogame/proposals | wc -l)
     markers_before=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)
 
-    python3 -u scripts/strategy-pipeline.py sweep --max 12
+    # Direction reset, 1 Oct 2026 (AGENTS.md): ingesting more wiki pages grew the backlog faster than
+    # the accounts learned to play -- 120 open WIK rows while raids, fleet saves and social were dead.
+    # Sweep, plan and promote run only when an operator asks for them.
+    ingest=${HARNESS_INGEST:-0}
+    [ "$ingest" = 1 ] && python3 -u scripts/strategy-pipeline.py sweep --max 12
 
     # Planning and implementation are network-bound: one source at a time waits on the model for tens
     # of seconds per call, so a sixty-source queue was an hour spent waiting. The queue is sharded
@@ -85,6 +89,7 @@ print(len(pipeline.pending_sources()))
 PY
 )
 
+    [ "$ingest" = 1 ] || plan_queue_before=0
     if [ "${plan_queue_before:-0}" -gt 0 ]; then
       [ "$plan_queue_before" -lt "$plan_workers" ] && plan_workers=$plan_queue_before
       echo "--- ${plan_queue_before} source(s) to plan across ${plan_workers} worker(s), ${impl_workers} implementing $(date -u '+%F %T') UTC ---"
@@ -104,7 +109,7 @@ PY
       rm -f /tmp/harness-plan-rc.* /tmp/harness-impl-rc.*
     fi
 
-    python3 -u scripts/strategy-pipeline.py promote
+    [ "$ingest" = 1 ] && python3 -u scripts/strategy-pipeline.py promote
 
     python3 - <<'PY' > /tmp/harness-queue.txt
 import glob
@@ -124,7 +129,7 @@ proposals = {os.path.basename(path)[:-3] for path in glob.glob('plan/research/og
 rows = sqlite3.connect('plan/tasks/tasks.db').execute(
     # Only code rows: a doc or review row handed to the PHP writer can only be refused (DOC-8 spent
     # its attempts explaining it could not rewrite a truncated markdown register).
-    "select code, coalesce(file_ref, '') from ready_tasks where kind = 'impl' order by priority, id"
+    "select code, coalesce(file_ref, '') from ready_tasks where kind = 'impl' and priority in ('P0', 'P1', 'P2') order by priority, id"
 )
 print('\n'.join(code for code, file_ref in rows if code in proposals or file_ref))
 PY
@@ -234,6 +239,7 @@ PY
       continue
     fi
 
+    [ "$ingest" = 1 ] || plan_queue=0
     if [ "${plan_queue:-0}" -gt 0 ]; then
       echo "--- ${plan_queue} source(s) still to plan, continuing immediately $(date -u '+%F %T') UTC ---"
       continue

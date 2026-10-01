@@ -143,12 +143,12 @@ todo ──▶ deferred (recorded follow-up, e.g. DEF-*)
 todo ──▶ open     (open discovery, e.g. DISC-*)
 ```
 
-## What blocks implementation today
+## What is frozen today
 
-`REV-001` (catalog review, status `blocked`) gates every `impl` task. Until it is `done`,
-the only ready work is the `DOC-*` tasks (write the algorithm blocks). Once reviewed:
-`IMPL-013` (SP7 reader) and `IMPL-018` (fleet composition, parallel-safe) are the first two
-`impl` tasks ready.
+Direction reset, 1 October 2026 (`AGENTS.md` → "Direction"): every P3 row, the `WIK-*` corpus,
+`JEV-*`, `PIPE-002..005` and the cognition refactors are `deferred` with `FROZEN` in their notes.
+The live queue is P0–P2 only, led by the dead lanes of play and the `SIM-001` situations that prove
+them.
 
 ## The executor agent
 

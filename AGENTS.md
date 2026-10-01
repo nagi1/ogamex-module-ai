@@ -92,6 +92,25 @@ Check these two criteria before any material design choice. A choice that fails 
 - Run the Gate 2 review (`bash scripts/ogamex gate`) and resolve every must-fix finding before handoff.
 - Run Pint, module PHPStan, Rector dry-run, full Pest, PCOV coverage, and TIA before handoff.
 
-## Phase 3 execution
+## Direction — 1 October 2026 (overrides any older phase or milestone instruction)
 
-Continue working autonomously through every deterministic Phase 3 slice and do not stop for progress-only updates. Finish all work before the optional LLM/provider phase: complete 3B through 3G, keep the plan updated after each verified slice, run the required checks, and commit each meaningful completed slice. Stop only when the pre-LLM Phase 3 baseline is genuinely complete or a real blocker requires user input.
+The accounts do not play yet: no raids, one fleet save in a lifetime, no recyclers, no applications,
+no social exchanges (`plan/details/specs/play-coverage.md`). Until a cohort read shows each of those
+six aspects moving, the work is making the existing engine play, not adding to it.
+
+- **Work order:** P0 → P1 → P2 from `python3 plan/tasks/task.py ready`. Every P3 row, the `WIK-*`
+  corpus, `JEV-*`, the strategy-pipeline PHP rows and new cognition work are **frozen** (`deferred`,
+  with the reason in the row). Do not unfreeze one without the owner.
+- **Behaviour before sources.** A slice starts from a step of the player's day (`LOOP-001`) and a
+  situation that proves it (`scripts/cohort-scenario.php`), never from a wiki page. New strategy is a
+  YAML edit under `resources/behavior/` that an existing planner reads; a new class needs a step no
+  planner owns.
+- **Shrink before grow.** A class or data file nothing calls is deleted or wired (`QUAL-5`,
+  `QUAL-6`) before anything is added beside it.
+- **Proof is live.** A row is done when the cohort read or a cohort situation shows the behaviour,
+  not when its own test passes. `AUTH-001` turns the authenticity research into that read.
+- **The harness** implements only `impl` rows at P0–P2 that name a `file_ref`. Rows with an empty
+  `file_ref` (`SIM-001`, `AUTH-001`) belong to the strong lane: the owner or a stronger model. Wiki
+  ingestion runs only with `HARNESS_INGEST=1`.
+- **Comments** state why, in one or two lines. Incident history ("found 30 Sep…") goes in the commit
+  message, not the code.

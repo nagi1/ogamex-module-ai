@@ -977,7 +977,8 @@ def unreachable_files(paths, backups):
             continue
 
         klass = os.path.basename(clean)[:-4]
-        hits = subprocess.run(["grep", "-rl", klass, "app/", "--include=*.php"],
+        # Whole words: as a substring, SolarSystemSlot counted SolarSystemSlots as its caller (QUAL-7).
+        hits = subprocess.run(["grep", "-rlw", klass, "app/", "--include=*.php"],
                               cwd=MODULE, capture_output=True, text=True).stdout.split()
         callers = [hit for hit in hits
                    if os.path.abspath(os.path.join(MODULE, hit)) != os.path.abspath(full)
@@ -1143,6 +1144,17 @@ def self_check():
     assert set(changes) == {"tests/Feature/ProbeShapeTest.php", target}, "FILE and EDIT blocks mix"
     assert scenario_required_keys() == ["name", "persona", "input", "decision_key"], \
         "the scenario keys are read from the replay action"
+
+    target_full = os.path.join(MODULE, target)
+    original = read(target_full)
+    with open(target_full, "w", encoding="utf-8") as handle:
+        handle.write(original.replace("public function handle(", "private function handle(", 1))
+    try:
+        assert any("handle()" in line for line in lost_contract({target_full: original})), \
+            "removing a public method something still calls is caught"
+    finally:
+        with open(target_full, "w", encoding="utf-8") as handle:
+            handle.write(original)
 
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
@@ -2172,6 +2184,33 @@ def write_changes(code, changes):
     return written, tests, backups
 
 
+def lost_contract(backups):
+    """Public methods and interfaces an edit removed while other code still uses them.
+
+    A slice rewrote BuildAiPilotReportAction without handle() and QueueAiBuildingAction without its
+    interface; their own tests passed and /admin/ai answered 500 (HARNESS-001). A grep finds it.
+    """
+    lost = []
+    for full, before in backups.items():
+        if not full.endswith(".php"):
+            continue
+        after = read(full)
+        clean = os.path.relpath(full, MODULE)
+        methods = r"public\s+(?:static\s+)?function\s+(\w+)"
+        for name in sorted(set(re.findall(methods, before)) - set(re.findall(methods, after))):
+            callers = [hit for hit in subprocess.run(
+                ["grep", "-rlE", rf"(->|::){name}\(", "app/", "tests/", "--include=*.php"],
+                cwd=MODULE, capture_output=True, text=True).stdout.split() if hit != clean]
+            if callers:
+                lost.append(f"{clean} no longer has public {name}(), which {callers[0]} calls")
+        interfaces = r"implements\s+([\w\\, ]+?)\s*\{"
+        had = {part.strip() for found in re.findall(interfaces, before) for part in found.split(",")}
+        has = {part.strip() for found in re.findall(interfaces, after) for part in found.split(",")}
+        lost += [f"{clean} no longer implements {name}" for name in sorted(had - has)]
+
+    return lost
+
+
 def verify_slice(code, written, tests, backups):
     """Why the written slice is not a delivery, or None. Cheapest checks first.
 
@@ -2190,6 +2229,11 @@ def verify_slice(code, written, tests, backups):
 
     if not tests:
         return "the answer wrote files but no test, so nothing verified the behaviour"
+
+    lost = lost_contract(backups)
+    if lost:
+        return ("your edit removed code other files still use:\n" + "\n".join(lost) +
+                "\nKeep every public method and interface; change only the lines the task needs.")
 
     unreachable = unreachable_files(written, backups)
     if unreachable:
