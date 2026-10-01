@@ -15,7 +15,7 @@ use OGame\Services\PlanetService;
 class ActivityIntelReader
 {
     /** The activity star vanishes exactly this many minutes after the body's last update (INT-010). */
-    private const ACTIVITY_WINDOW_MINUTES = 15;
+    public const ACTIVITY_WINDOW_MINUTES = 15;
 
     private const ACTIVITY_WINDOW_SECONDS = self::ACTIVITY_WINDOW_MINUTES * 60;
 

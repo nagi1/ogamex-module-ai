@@ -163,6 +163,9 @@ class QueueableSpyPlanner
         $candidates = Planet::query()
             ->where('user_id', '!=', $player->getId())
             ->where('destroyed', 0)
+            // A planet touched inside the activity window is a player at the keyboard; leaving it out of the
+            // query keeps the cap for neighbours a scout could actually use.
+            ->where('time_last_update', '<', now()->subMinutes(ActivityIntelReader::ACTIVITY_WINDOW_MINUTES)->getTimestamp())
             ->orderByRaw('ABS(CAST(`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planet` AS SIGNED) - ?), `id`', [$home->galaxy, $home->system, $home->position])
             ->cursor()
             ->reject(static fn (Planet $planet): bool => isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"]))
@@ -190,9 +193,6 @@ class QueueableSpyPlanner
                 continue;
             }
             if ($owner?->getUsername(false) === 'Legor') {
-                continue;
-            }
-            if ($this->activityIntelReader->activityAt($target)) {
                 continue;
             }
 
