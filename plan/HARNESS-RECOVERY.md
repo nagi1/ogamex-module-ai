@@ -5,6 +5,43 @@ Written 1 October 2026 after a full read of the evidence runs (`evidence/2026100
 reset (below). `AGENTS.md` still binds. This file is the work order until every exit criterion at the
 bottom is met; it overrides the work order in `plan/HANDOFF.md`.
 
+## Status: 1 Oct 2026, 17:05 UTC (read this first)
+
+W1, W2.1–W2.4 and the cohort reset are merged on `main` (PR #1 plus follow-ups), and the harness is
+running unattended on grand at 1000×. What changed after the PR, measured live:
+
+| Change | Why (measured) |
+| --- | --- |
+| Writer: thinking on, `reasoning_effort: low`, `max_tokens` 65,536 (the provider ceiling) | The provider counts reasoning inside `max_tokens`: a 6.7k cap returned `finish=length` with no answer, and thinking off wrote careless answers (EDIT of a missing file, no test). Low effort finishes in 9k–32k tokens. |
+| Cool-off 45 min, not 12 h | A 12 h cool-off ended a row's night after three attempts; repeats are stopped by the failure signature instead. |
+| One parallel Pest run per slice (own + proof + affected tests) | It used to be one serial boot per affected file (~19 for a planner edit); 6 files and 56 tests now take 8.5 s. |
+| The row's `test:` proof steps count as its test and are shown as THE FAST PROOF | The writer wrote its own test instead of making the situation test pass. |
+| TEST KIT in the cached prefix: base-case methods, host traits and every declared test function | Invented helper names. Other files' functions are listed as **not callable** (a filtered run does not load them) and as **taken names**. |
+| A test redeclaring another file's function is refused before Pest | One redeclared helper stopped the whole suite loading (QUAL-5). |
+| Attempts are judged only on `test:` and `situation:` steps | An aspect cannot flip within one attempt; FLEET-002 went stuck on `aspect:recycle`. Aspects and invariants are judged at `task.py done` on the delivered row. |
+| No scenario JSON when the row has a fast proof | FLEET-003 went stuck on a malformed scenario it did not need. |
+| Queue: priority, then rows with a fast proof, then fewest failed attempts; cohort reads only `HARNESS_UNIVERSES` (default `grand`) | Value that can be verified in seconds goes first; pve is stopped. |
+| `IDLE_QUEUES` needs a session after the planet's last build ended | At 1000× an instant read flagged every account waiting for its turn. |
+| Stale Copilot claims on the raid files (3.4 h, DEF-33 already merged) released | They kept the harness off ATK-001. |
+
+### Next harness work (in order)
+
+1. **Give every open P0/P1 row a fast proof.** Rows raised automatically from a cohort read
+   (`QUAL-009`, …) carry only an `aspect:` step, so their attempts cannot be judged quickly. The
+   quality step should attach the matching `tests/Feature/Situations/*` test when one exists, and the
+   reviewer adds a situation test for each aspect that has none (research, shipyard, transport,
+   colonisation, expeditions, fleet_breadth).
+2. **ECON-001 `IDLE_QUEUES`.** The invariant still flags one-planet accounts every pass after the
+   grace. Read `verify-cohorts.php` against a live account (`ogamex economy <id>`) and decide whether
+   it is a real miss (raise a row) or a measurement gap (fix the invariant). Until then its proof
+   costs about 40 s every pass.
+3. **Canary universe.** The capacity stack the canary runs on refuses fleet sends for lack of
+   resources (`Not enough resources on the planet to send the fleet`) while grand refuses none.
+   Reseed the canary like grand, or point the canary check at grand, so the live gate stops reading
+   red for an artefact.
+4. **Count delivered and proven per hour** in `strategy-pipeline.py status`, so a night's yield is
+   one number.
+
 ## The diagnosis
 
 Nothing has been proven since the north-star gate went in (`strategy-pipeline.py status`: 3 proven,
