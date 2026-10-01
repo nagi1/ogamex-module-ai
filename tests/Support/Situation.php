@@ -371,6 +371,25 @@ final class Situation
         return $this;
     }
 
+    /** The home planet has a building under construction. */
+    public function expectBuildingQueueBusy(): self
+    {
+        $busy = BuildingQueue::query()->where('planet_id', $this->host('currentPlanetId'))->where('processed', 0)->where('canceled', 0)->exists();
+        expect($busy)->toBeTrue('expected the build queue busy, but it is idle; ' . $this->account());
+
+        return $this;
+    }
+
+    /** A research is running: OGame's lab is a queue of its own, beside the build queue. */
+    public function expectResearchQueueBusy(): self
+    {
+        $planets = Planet::query()->where('user_id', $this->profile->player_id)->pluck('id');
+        $busy = ResearchQueue::query()->whereIn('planet_id', $planets)->where('processed', 0)->where('canceled', 0)->exists();
+        expect($busy)->toBeTrue('expected a research running, but the lab is idle; ' . $this->account());
+
+        return $this;
+    }
+
     /** The account flew this mission, by host mission name: "Attack", "Espionage", "Recycle", "Colonisation", ... */
     public function expectMission(string $mission): self
     {
