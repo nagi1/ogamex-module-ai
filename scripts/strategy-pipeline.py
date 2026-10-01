@@ -1267,6 +1267,15 @@ def moves_no_failing_aspect(proof):
     aspects, invariants = live_aspects(), violated_invariants()
     judged = []
 
+    # A story on the behaviour board is seconds old where a cohort read is hours old: a row whose
+    # story fails has work to do even while its live aspect passes (QUAL-006, 1 Oct 2026: research
+    # "passed" live while an account with a lab and 2M stock queued none).
+    board_path = os.path.join(MODULE, "plan/research/ogame/stories.json")
+    board = json.loads(read(board_path)) if os.path.exists(board_path) else {}
+    failing = {story["test"] for story in board.get("stories", []) if not story["pass"]}
+    if any(step.startswith("test:") and step[5:] in failing for step in proof.split()):
+        return None
+
     for step in proof.split():
         kind, name = step.rstrip("?").split(":", 1)
         if kind not in ("aspect", "invariant"):
