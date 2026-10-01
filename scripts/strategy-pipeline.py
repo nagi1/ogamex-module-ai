@@ -944,6 +944,24 @@ def record_failure(code, reason):
     return True
 
 
+def waits_upstream(code, failing):
+    """The open rows this one depends on, when every failing proof step is live; else [].
+
+    A live step can fail for a cause upstream: no raid is flown while no account spies (DEF-33 on
+    ATK-001), no debris is recycled while nobody fights (FLEET-002), 1 Oct 2026. The writer cannot fix
+    that from this row's files, so such a row neither goes back to the writer nor buys an attempt.
+    """
+    if any(line.startswith("FAIL test:") for line in failing):
+        return []
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    try:
+        return [row[0] for row in connection.execute(
+            "select d.code from dependencies x join tasks t on t.id=x.task_id join tasks d on d.id=x.depends_on "
+            "where t.code=? and d.status!='done'", (code,))]
+    finally:
+        connection.close()
+
+
 def reopen(code):
     """Send a delivered row back to the writer when its live proof failed, with that failure as feedback.
 
@@ -960,17 +978,11 @@ def reopen(code):
         print(f"{code}: nothing to send back (no failing step, or only steps that wait for the cohort)")
         return 0
 
-    connection = sqlite3.connect(TASKS_DB, timeout=30)
-    # A live step can fail for a cause upstream: no raid is flown while no account spies (DEF-33 on
-    # ATK-001, 1 Oct 2026). With every failing step live and a dependency still open, the writer cannot
-    # fix it from this row's files; the row stays delivered until the dependency lands.
-    upstream = [row[0] for row in connection.execute(
-        "select d.code from dependencies x join tasks t on t.id=x.task_id join tasks d on d.id=x.depends_on "
-        "where t.code=? and d.status!='done'", (code,))]
-    if upstream and not any(line.startswith("FAIL test:") for line in failing):
-        connection.close()
+    upstream = waits_upstream(code, failing)
+    if upstream:
         print(f"{code}: its live proof fails, but it waits on {', '.join(upstream)}; stays delivered")
         return 0
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
     connection.execute("update tasks set status='todo', assignee=null, updated_at=datetime('now') "
                        "where code=? and assignee='harness:delivered'", (code,))
     connection.commit()
@@ -1182,6 +1194,12 @@ def red_first(code):
         # Its tests pass; the live steps may not. `done` runs the whole proof, so only a pass settles it.
         if subprocess.run([sys.executable, os.path.join(MODULE, "plan/tasks/task.py"), "done", code]).returncode == 0:
             print(f"  the proof of {code} already passes; closed, nothing spent")
+            return True
+        log = os.path.join(MODULE, "plan/research/ogame/proofs", f"{code}.log")
+        failed = [line for line in (read(log).splitlines() if os.path.exists(log) else []) if line.startswith("FAIL ")]
+        upstream = waits_upstream(code, failed)
+        if upstream:
+            print(f"  the tests of {code} pass; its live proof waits on {', '.join(upstream)}; nothing spent")
             return True
         print(f"  the tests of {code} pass but its live proof does not; the attempt works from that failure")
         return False
