@@ -89,6 +89,10 @@ MODEL_RETRY_CODES = (429, 500, 502, 503)
 # server sends blank keep-alive lines while a request waits and closes it if inference has not started
 # within ten minutes, so twenty minutes covers a queued start plus a long answer.
 MODEL_TIMEOUT_SECONDS = 20 * 60
+# A wall-clock limit on one call. The socket timeout never fires on a queued request, because the provider
+# sends keep-alive blank lines while it waits, and then gives up itself at 900 s with an error body (twice
+# on 1 Oct 2026, 15 minutes of a writer each). 108 finished calls took at most 263 s (p50 122 s).
+MODEL_DEADLINE_SECONDS = 8 * 60
 # A slot outlives its call by a margin, or a slow call's slot is taken while it is still in flight.
 SLOT_STALE_SECONDS = MODEL_TIMEOUT_SECONDS + 5 * 60
 MODEL_USAGE = os.path.join(MODULE, "plan/research/ogame/model-usage.jsonl")
@@ -2480,6 +2484,17 @@ def status():
     return 0
 
 
+def read_within(response, deadline):
+    """The JSON body, read line by line so a queued request that only sends keep-alive blank lines is
+    abandoned at the deadline (as a TimeoutError, which the caller retries) instead of after 15 minutes."""
+    body = []
+    for line in response:
+        if time.time() > deadline:
+            raise TimeoutError("no answer within the call deadline")
+        body.append(line)
+    return json.loads(b"".join(body).strip() or b"{}")
+
+
 def model_call(payload, purpose="a model answer"):
     """One model call, paced by a shared slot and retried on the errors DeepSeek documents.
 
@@ -2509,8 +2524,7 @@ def model_call(payload, purpose="a model answer"):
             try:
                 started = time.time()
                 with urllib.request.urlopen(request, timeout=MODEL_TIMEOUT_SECONDS) as response:
-                    # json.load skips the blank keep-alive lines a queued request receives.
-                    data = json.load(response)
+                    data = read_within(response, started + MODEL_DEADLINE_SECONDS)
                 record_usage(purpose, data, time.time() - started)
                 return data
             except urllib.error.HTTPError as error:
