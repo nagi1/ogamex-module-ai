@@ -1,25 +1,56 @@
-your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
---- your previous answer began:
-### FILE: resources/behavior/harvest.php
-```php
-<?php
+HarvestHullOrderTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (6 assertions)[39m
 
-/*
- * Harvester policy for the AI pilot.
- *
- * A lost fleet leaves debris, but debris is only worth buying a recycler for
- * when it is heavy enough to pay for the hull. These are the knobs a modder
- * turns to change when the pilot buys harvesters and how many it buys at once;
- * keep them integers, the module reads them as ints.
- */
-return [
-    // Lighter fields are left in space: collecting them costs more than they return.
-    'worthwhile_mass' => 5000,
+─────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a recy…  TypeError   
+  OGame\Services\UnitQueueService::add(): Argument #1 ($planet) must be of type OGame\Services\PlanetService, string given, called in /var/www/Modules/AI/app/Actions/QueueAiRecycleAction.php on line 135
 
-    // Hulls the pilot keeps back from any single build.
-    'reserve_hulls' => 2,
+  at app/Services/UnitQueueService.php:158
+    154▕      *
+    155▕      * @return void
+    156▕      * @throws Exception
+    157▕      */
+  ➜ 158▕     public function add(PlanetService $planet, int $object_id, int $requested_build_amount): void
+    159▕     {
+    160▕         // @TODO: add checks that current logged in user is owner of planet
+    161▕         // and is able to add this object to the building queue.
+    162▕
 
-    // Ceiling on the hulls one build order may add.
-    'max_hulls_per_order' => 5,
-];
-```
+  1   app/Services/UnitQueueService.php:158
+  2   Modules/AI/app/Actions/QueueAiRecycleAction.php:135
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a fiel…  TypeError   
+  OGame\Services\UnitQueueService::add(): Argument #1 ($planet) must be of type OGame\Services\PlanetService, string given, called in /var/www/Modules/AI/app/Actions/QueueAiRecycleAction.php on line 135
+
+  at app/Services/UnitQueueService.php:158
+    154▕      *
+    155▕      * @return void
+    156▕      * @throws Exception
+    157▕      */
+  ➜ 158▕     public function add(PlanetService $planet, int $object_id, int $requested_build_amount): void
+    159▕     {
+    160▕         // @TODO: add checks that current logged in user is owner of planet
+    161▕         // and is able to add this object to the building queue.
+    162▕
+
+  1   app/Services/UnitQueueService.php:158
+  2   Modules/AI/app/Actions/QueueAiRecycleAction.php:135
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a body that owns…    
+  Failed asserting that 0 is identical to 1.
+
+  at Modules/AI/tests/Feature/HarvestHullOrderTest.php:81
+     77▕ 
+     78▕     app(QueueAiRecycle::class)->handle($this->currentUserId, $planetId, 1, 2, 5, PlanetType::DebrisField->value);
+     79▕ 
+     80▕     expect(UnitQueue::query()->count())->toBe(0)
+  ➜  81▕         ->and(FleetMission::query()->where('mission_type', RecycleMission::getTypeId())->count())->toBe(1);
+     82▕ });
+     83▕
+
+  1   Modules/AI/tests/Feature/HarvestHullOrderTest.php:81
+
+
+  Tests:    3 failed, 2 passed (6 assertions)
+  Duration: 1.23s

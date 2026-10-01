@@ -1,0 +1,28 @@
+cohort: 2 enabled account(s), no provider call made (safe in a peak window)
+SCENARIO: PASS idle-planet (37s)
+    tick 1: 1 order(s) finished, 0 item(s) made due, 0 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 1 work item(s) done so far
+    tick 3: 0 order(s) finished, 0 item(s) made due, 1 work item(s) done so far
+    tick 4: 1 order(s) finished, 0 item(s) made due, 2 work item(s) done so far
+    cleaned up: 0 planted row(s) reverted
+    read-back: 1 queue order(s) created with nothing to react to
+SCENARIO: FAIL every-planet-builds (217s)
+    tick 1: 0 order(s) finished, 3 item(s) made due, 1 work item(s) done so far
+    tick 2: 0 order(s) finished, 0 item(s) made due, 5 work item(s) done so far
+    tick 3: 0 order(s) finished, 0 item(s) made due, 6 work item(s) done so far
+    tick 4: 0 order(s) finished, 0 item(s) made due, 7 work item(s) done so far
+    tick 5: 1 order(s) finished, 0 item(s) made due, 10 work item(s) done so far
+    cleaned up: 0 planted row(s) reverted
+    read-back: 0 of 12 planet(s) of account 12 building or ordered
+      p19 IDLE — storage: no free field x2; surplus: no free field x3, technology (lab already taken or refused) x11; routine: no free field x4 | metal 29,525,546 crystal 2,907,358 deut 5,355,000
+      p40 IDLE — storage: no candidate; surplus: no free field x3, technology (lab already taken or refused) x15; routine: no free field x4 | metal 18,005,000 crystal 9,820,000 deut 2,920,000
+      p69 IDLE — storage: no candidate; surplus: no candidate; routine: price plus reserve x2 | metal 14,029,490,972 crystal 30,843,978 deut 0
+      p70 IDLE — storage: no candidate; surplus: no free field x3, technology (lab already taken or refused) x15; routine: technology (lab already taken or refused) x1, no free field x3 | metal 203,350,000 crystal 372,785,000 deut 33,005,000
+      p71 IDLE — storage: no candidate; surplus: no free field x3, technology (lab already taken or refused) x15; routine: technology (lab already taken or refused) x1, no free field x3 | metal 203,350,000 crystal 203,350,000 deut 110,925,000
+      p120 IDLE — storage: no candidate; surplus: no free field x3, technology (lab already taken or refused) x15; routine: technology (lab already taken or refused) x1, no free field x3 | metal 372,785,000 crystal 203,350,000 deut 60,510,000
+      p124 IDLE — storage: no free field x1; surplus: no candidate; routine: technology (lab already taken or refused) x1, no free field x3 | metal 23,667,466,251 crystal 16,189,197,953 deut 7,591,319,076
+      p158 IDLE — storage: no candidate; surplus: no free field x3, technology (lab already taken or refused) x15; routine: technology (lab already taken or refused) x1, no free field x3 | metal 4,210,120,000 crystal 1,252,790,000 deut 1,252,827,037
+      p168 IDLE — storage: no candidate; surplus: no free field x3, technology (lab already taken or refused) x15; routine: no free field x4 | metal 372,785,000 crystal 110,925,000 deut 9,820,000
+      p182 IDLE — storage: no candidate; surplus: no candidate; routine: price plus reserve x2, no free field x2 | metal 14,148,500,000 crystal 731,471,425 deut 0
+      p194 IDLE — storage: no candidate; surplus: technology (lab already taken or refused) x15; routine: price plus reserve x1 | metal 4,210,120,000 crystal 122,293,176 deut 20,000
+      p197 IDLE — storage: no candidate; surplus: no candidate; routine: price plus reserve x2, no free field x3 | metal 14,148,500,000 crystal 3,711,502,142 deut 0 — last decisions: p13 12/eligible_transfer | p12 5/published_capability:queue_units | p13 12/eligible_transfer | p13 12/eligible_transfer | p13 12/eligible_transfer | p12 5/published_capability:queue_units

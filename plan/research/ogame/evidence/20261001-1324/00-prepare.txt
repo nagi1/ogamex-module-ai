@@ -1,0 +1,19 @@
+=== step 0.1 git status --short ===
+ M plan/research/ogame/attempts/DEF-33.log
+ M plan/research/ogame/attempts/FLEET-002.log
+ M plan/research/ogame/attempts/SOC-001.answer.md
+ M plan/research/ogame/attempts/SOC-001.count
+ M plan/research/ogame/attempts/SOC-001.log
+ M plan/tasks/tasks.db
+?? plan/research/ogame/attempts/DEF-33.answer.md
+?? plan/research/ogame/attempts/DEF-33.count
+?? plan/research/ogame/attempts/FLEET-002.answer.md
+?? plan/research/ogame/attempts/FLEET-002.count
+?? plan/research/ogame/evidence/20261001-1324/
+?? plan/research/ogame/evidence/takeover-20261001-1304/
+?? plan/research/ogame/proofs/QUAL-5.log
+?? plan/research/ogame/scorecards.root-owned-backup-1308/
+
+=== git log -2 ===
+30a4ff9 DEF-33: one attack cap, stated once (bashing limit is the single source)
+965ef55 instructions: one contract for every agent, and a cheaper, clearer writer prompt
