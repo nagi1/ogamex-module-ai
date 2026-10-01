@@ -996,8 +996,9 @@ def run_in_app(command):
     contend on the same rows, and a test that fails for that reason reads exactly like a test that
     failed because the generated code is wrong -- which sends the retry off chasing a phantom.
     """
-    lane = await_claim("verify:shared-test-database")
-    if lane is None:
+    # A slice holds the lane from its first write to its verdict, and its own runs go through here.
+    lane = None if claim_path(VERIFY_LANE) in HELD_CLAIMS else await_claim(VERIFY_LANE)
+    if lane is None and claim_path(VERIFY_LANE) not in HELD_CLAIMS:
         return 1, "the verification lane stayed held; nothing ran"
 
     try:
@@ -1012,7 +1013,8 @@ def run_in_app(command):
         # recorded rather than silently swallowed.
         return 1, f"{command} did not finish within {APP_TIMEOUT_SECONDS}s and was killed"
     finally:
-        release_claims([lane])
+        if lane:
+            release_claims([lane])
 
 
 def module_test_passes(relative_path):
@@ -1124,6 +1126,23 @@ def self_check():
     assert seconds_until_offpeak(at(28, 6, 0)) == 4 * 3600, "06:00 sleeps to 10:00"
     assert seconds_until_offpeak(at(28, 5, 0)) == 0, "off-peak never waits"
     assert seconds_until_offpeak(at(27, 7, 0)) == 0, "a Sunday morning never waits"
+
+    # The writer's answer format: an edit lands only where its SEARCH is, once; anything else is a
+    # refusal with a reason the retry can act on, and a refused-only answer is not "no blocks".
+    target = "app/Actions/ReplayAiScenarioAction.php"
+    anchor = "throw new RuntimeException('Scenario file not found: ' . $path);"
+    edit = f"### EDIT: {target}\n<<<<<<< SEARCH\n{anchor}\n=======\n{anchor} // probe\n>>>>>>> REPLACE\n"
+    changes, refused = parse_answer(edit)
+    assert not refused and changes[target].count("// probe") == 1, "an exact SEARCH applies once"
+    _, refused = parse_answer(edit.replace(anchor, "nothing like this line", 1))
+    assert refused and "is not in the file" in refused[0], "a SEARCH that is not there is refused, by name"
+    changes, refused = parse_answer("### FILE: resources/behavior/x.php\n```php\n<?php\n```\n")
+    assert not changes and refused, "a refused-only answer has refusals, not an empty answer"
+    changes, _ = parse_answer("### FILE: tests/Feature/ProbeShapeTest.php\n```php\n<?php\n```\n"
+                              + edit)
+    assert set(changes) == {"tests/Feature/ProbeShapeTest.php", target}, "FILE and EDIT blocks mix"
+    assert scenario_required_keys() == ["name", "persona", "input", "decision_key"], \
+        "the scenario keys are read from the replay action"
 
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
@@ -1413,10 +1432,19 @@ def coverage():
 
 IMPLEMENT_PROMPT = """You implement ONE task in the OGameX `Modules/AI` module: PHP 8.5 on Laravel.
 
+Why the module exists: thousands of OGame accounts that another player cannot tell from humans,
+playing the way an experienced player does (opening economy, prerequisites first, fleet saves,
+raids that pay), on a small server. Gameplay is deterministic rules over host data -- no model call
+decides a move. So every change is a rule in the class that already owns that decision, with its
+numbers in a data file and a test that drives the real path.
+
 Rules:
-- Return COMPLETE file contents. Never a diff, never a fragment, never a placeholder comment
-  such as `// ... rest unchanged`.
-- Touch ONLY the files listed in the task. Do not add files the task did not name.
+- An EXISTING file is changed with EDIT blocks only. A NEW file is written whole with a FILE block:
+  never a fragment and never a placeholder comment such as `// ... rest unchanged`.
+- Each SEARCH must be copied character-for-character from the EXISTING FILE shown, appear in it exactly
+  once, and be just long enough to be unique (a few lines). An answer whose SEARCH is not found is
+  refused, so never retype from memory.
+- Touch ONLY the files listed in the task, plus the test and scenario the rules below ask for.
 - Follow the module's conventions: actions in `app/Actions` resolved through `app()`; no `new` for
   module collaborators; no `else`/`elseif` (early returns, `match`); enums for stable values;
   comments explain *why* only; Pest tests in `tests/Feature` using the module's base test case.
@@ -1481,13 +1509,23 @@ Rules:
 - Test the stated bound explicitly — at it, past it, and at zero. A test that only covers the easy
   middle of a range is how a wrong implementation passes.
 
-Answer with exactly this shape, one block per file, nothing before the first and nothing after the
-last code block:
+Answer with blocks only, nothing before the first and nothing after the last:
 
-### FILE: <path exactly as the task writes it>
+### EDIT: <path of an existing file>
+<<<<<<< SEARCH
+<exact lines from the existing file>
+=======
+<the lines that replace them>
+>>>>>>> REPLACE
+
+(several SEARCH/REPLACE pairs may follow one EDIT header; they apply in order)
+
+### FILE: <path of a new file>
 ```php
 <complete file contents>
 ```
+
+Data files under `resources/behavior/` are YAML (```yaml), never PHP.
 """
 
 COMPOSE_DIR = os.path.abspath(os.path.join(MODULE, "..", "..", "local-docker-dev"))
@@ -1590,10 +1628,23 @@ def implement_context(code):
 
     for path in paths[:6]:
         full = os.path.join(MODULE, path)
-        if os.path.exists(full):
-            parts += [f"EXISTING FILE {path}:", "```php", read(full)[:6000], "```", ""]
-        else:
-            parts += [f"{path} does not exist yet — create it.", ""]
+        if not os.path.exists(full):
+            parts += [f"{path} does not exist yet — create it with a FILE block.", ""]
+            continue
+        body = read(full)
+        # Shown whole up to a bound, because the writer edits it with SEARCH blocks copied from what it
+        # sees. The old 6000-character cut asked for COMPLETE contents of a file it was shown half of,
+        # and 51 module files are longer than that.
+        shown = body[:EDIT_SHOW_LIMIT]
+        cut = "" if len(body) <= EDIT_SHOW_LIMIT else " (TRUNCATED — edit only with EDIT blocks inside the shown part)"
+        parts += [f"EXISTING FILE {path}{cut}:", "```php", shown, "```", ""]
+
+    # The replay refuses a scenario missing a required key, and that cost a full test cycle per guess
+    # (four rows on 30 Sep 2026). One real scenario is the schema.
+    example = next(iter(sorted(glob.glob(os.path.join(MODULE, "resources/scenarios/*.json")))), None)
+    if example:
+        parts += [f"EXAMPLE SCENARIO {os.path.relpath(example, MODULE)} (required keys: "
+                  f"{', '.join(scenario_required_keys())}):", "```json", read(example)[:2500], "```", ""]
 
     # The real host classes, because the model never sees the repository and a service it needs has to
     # be named from somewhere. Without this list it invents names -- one answer used
@@ -1603,7 +1654,7 @@ def implement_context(code):
               "exist, so never call it):",
               "\n".join(f"- {name}" for name in host_class_names()), ""]
 
-    return task, paths, "\n".join(parts)
+    return task, paths, "\n".join(parts), proposal_path
 
 
 def notes_block(notes, limit=4000):
@@ -1974,7 +2025,216 @@ def take_model_slot():
     return None
 
 
-def implement(code):
+# How much of an existing file the writer is shown. Big enough for every planner the module has;
+# anything past it can only be reached with EDIT blocks, never rewritten whole.
+EDIT_SHOW_LIMIT = 40000
+VERIFY_LANE = "verify:shared-test-database"
+FILE_BLOCK = re.compile(r"### FILE:\s*(\S+?)\s*\n+```[a-zA-Z]*\n(.*?)\n```[ \t]*(?:\n|$)", re.S)
+EDIT_BLOCK = re.compile(r"### EDIT:\s*(\S+?)\s*\n(.*?)(?=^### (?:FILE|EDIT):|\Z)", re.S | re.M)
+SEARCH_REPLACE = re.compile(r"<<<<<<< SEARCH\n(.*?)\n?=======\n(.*?)\n?>>>>>>> REPLACE", re.S)
+
+
+def scenario_required_keys():
+    """The keys the replay refuses a scenario without, read from the replay itself so they never drift."""
+    source = read(os.path.join(MODULE, "app/Actions/ReplayAiScenarioAction.php"))
+    found = re.search(r"foreach \(\[([^\]]*)\] as \$key\)", source)
+
+    return re.findall(r"'(\w+)'", found.group(1)) if found else []
+
+
+def scenario_problems(paths):
+    """What the replay would refuse in these scenarios, found without starting the app."""
+    problems = []
+    for clean in paths:
+        if not clean.startswith("resources/scenarios/"):
+            continue
+        try:
+            body = json.loads(read(os.path.join(MODULE, clean)))
+        except ValueError as error:
+            problems.append(f"{clean} is not valid JSON: {error}")
+            continue
+        missing = [key for key in scenario_required_keys() + ["expect"] if key not in body]
+        if missing:
+            problems.append(f"{clean} is missing {', '.join(missing)} — copy the EXAMPLE SCENARIO's shape")
+
+    return problems
+
+
+def writer_answer(code, context, answer_file=None):
+    """The writer's answer and its token usage: a saved answer when one is given, else a paid call.
+
+    Every paid answer is kept beside the attempt log, so a refusal or a failing check can be re-run
+    against the same answer with `implement CODE --answer FILE` for nothing.
+    """
+    if answer_file:
+        return read(answer_file), {}
+
+    payload = {"model": MODEL, "messages": [
+        {"role": "system", "content": IMPLEMENT_PROMPT},
+        {"role": "user", "content": context},
+    ]}
+    data = model_call(payload, purpose=f"implementing {code}")
+    choice = data["choices"][0]
+    if choice.get("finish_reason") != "stop":
+        raise SystemExit(f"refusing a {choice.get('finish_reason')} answer; nothing written")
+
+    answer = choice["message"]["content"] or ""
+    os.makedirs(ATTEMPTS, exist_ok=True)
+    with open(os.path.join(ATTEMPTS, f"{code}.answer.md"), "w", encoding="utf-8") as handle:
+        handle.write(answer)
+
+    return answer, data.get("usage", {})
+
+
+def apply_edits(clean, body, current):
+    """The file after its SEARCH/REPLACE pairs, or (None, why) when a SEARCH is not there exactly once."""
+    pairs = SEARCH_REPLACE.findall(body)
+    if not pairs:
+        return None, f"{clean} (EDIT block without a SEARCH/REPLACE pair)"
+
+    for search, replace in pairs:
+        count = current.count(search)
+        if count != 1:
+            where = "is not in the file" if count == 0 else f"matches {count} places"
+            return None, (f"{clean} (SEARCH text {where}; copy it exactly from the EXISTING FILE, "
+                          f"starting: {search.strip().splitlines()[0][:80] if search.strip() else 'empty'})")
+        current = current.replace(search, replace, 1)
+
+    return current, None
+
+
+def parse_answer(answer):
+    """Each path's new contents and every refused block, before anything touches the disk."""
+    contents, refused = {}, []
+
+    for path, content in FILE_BLOCK.findall(answer):
+        clean = path.strip("`")
+        full = os.path.join(MODULE, clean)
+        if os.path.exists(full) and len(read(full)) > EDIT_SHOW_LIMIT:
+            # The writer was shown only part of this file, so a whole-file answer would delete the rest.
+            refused.append(f"{clean} (longer than you were shown — change it with an EDIT block)")
+            continue
+        contents[clean] = content
+
+    for path, body in EDIT_BLOCK.findall(answer):
+        clean = path.strip("`")
+        full = os.path.join(MODULE, clean)
+        current = contents.get(clean, read(full) if os.path.exists(full) else None)
+        if current is None:
+            refused.append(f"{clean} (EDIT of a file that does not exist — create it with a FILE block)")
+            continue
+        edited, why = apply_edits(clean, body, current)
+        if why:
+            refused.append(why)
+            continue
+        contents[clean] = edited
+
+    accepted = {}
+    for clean, content in contents.items():
+        why = path_refusal(clean) or duplicate_class(content, clean)
+        if why:
+            refused.append(f"{clean} ({why})")
+            continue
+        accepted[clean] = content
+
+    return accepted, refused
+
+
+def write_changes(code, changes):
+    """Write the accepted contents: (written, test names, backups), or (None, ...) on a claim conflict."""
+    written, tests, backups, late_claims = [], [], {}, []
+
+    for clean, content in changes.items():
+        full = os.path.join(MODULE, clean)
+        # The answer may name a file the plan never listed, and the claim was taken from the plan.
+        # Claimed before the write: rolling back after a collision only hides it.
+        if not os.path.exists(claim_path(full)):
+            if not take_claim(full):
+                release_claims(late_claims)
+                rollback(written, backups)
+                print(f"  left for the next pass: another worker is writing {clean}")
+                publish("working", f"{code} waiting on {clean}")
+                return None, [], {}
+            late_claims.append(claim_path(full))
+            HELD_CLAIMS.append(claim_path(full))
+        if os.path.exists(full):
+            backups[full] = read(full)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as handle:
+            handle.write(content.rstrip() + "\n")
+        written.append(clean)
+        if "/tests/" in f"/{clean}":
+            tests.append(os.path.basename(clean)[:-4])
+
+    if late_claims:
+        atexit.register(release_claims, late_claims)
+
+    return written, tests, backups
+
+
+def verify_slice(code, written, tests, backups):
+    """Why the written slice is not a delivery, or None. Cheapest checks first.
+
+    The static checks used to run after the Pest suites, so a slice nothing calls spent a full test
+    cycle before being told so. They cost a grep; the suites cost minutes in the shared lane.
+    """
+    broken = []
+    for clean in [path for path in written if path.endswith(".php")]:
+        lint = subprocess.run(["docker", "compose", "exec", "-T", "ogamex-app", "php", "-l",
+                               f"/var/www/Modules/AI/{clean}"],
+                              cwd=COMPOSE_DIR, capture_output=True, text=True)
+        if lint.returncode != 0:
+            broken.append(f"{clean}: {(lint.stdout + lint.stderr).strip().splitlines()[0]}")
+    if broken:
+        return "generated code does not parse:\n" + "\n".join(broken)
+
+    if not tests:
+        return "the answer wrote files but no test, so nothing verified the behaviour"
+
+    unreachable = unreachable_files(written, backups)
+    if unreachable:
+        return ("these files are not called by any runtime code, so no account can ever execute them: "
+                + ", ".join(unreachable) +
+                ".\nDo not write a new class. EDIT the planner, engine or action that already owns this "
+                "decision, and have the Feature test drive that path.")
+
+    inlined = inlined_policy(written, plan_numbers(code))
+    if inlined:
+        return ("these values decide behaviour but were written into PHP: " + ", ".join(inlined) +
+                ".\nPut them in a YAML file under resources/behavior/ (extend one that exists when it "
+                "covers the topic) and read them from there.")
+
+    problems = scenario_problems(written)
+    if problems:
+        return "the scenario would be refused before it runs:\n" + "\n".join(problems)
+
+    # The slice's own tests first, then every test that names a class the slice touched: a shared
+    # action rewritten in place has to keep the pages and flows that already call it working.
+    for name in tests + [name for name in affected_tests(written) if name not in tests]:
+        code_rc, output = run_in_app(f"./vendor/bin/pest --testsuite=Modules --filter={name}")
+        summary = [line.strip() for line in output.splitlines() if "Tests:" in line]
+        # A summary line only means the suite RAN: six failed tests still print one.
+        if summary and code_rc == 0:
+            print(f"  {name}: PASS {summary[-1]}")
+            continue
+        print(f"  {name}: FAIL {' '.join(summary[-1:]) or 'not collectable'}")
+        detail = re.sub(r"\x1b\[[0-9;]*m", "", output).strip()[-2500:]
+        return f"{name}: {' '.join(summary[-1:]) or 'suite not collectable'}\n\n{detail}"
+
+    # The tailored proof: a described situation plus the action the engine must choose under it.
+    for scenario in [path for path in written if path.startswith("resources/scenarios/")]:
+        name = os.path.basename(scenario)[:-5]
+        run_rc, run_output = run_in_app(f"php artisan ai:replay-scenario {name}")
+        if run_rc != 0:
+            detail = re.sub(r"\x1b\[[0-9;]*m", "", run_output).strip()[-1500:]
+            print(f"  scenario {name}: FAIL — the engine did not do what the rule says")
+            return f"the scenario {name} did not hold:\n{detail}"
+        print(f"  scenario {name}: holds under these conditions")
+
+    return None
+
+
+def implement(code, answer_file=None):
     """Have the harness write one task's code, then verify it locally.
 
     Fail-closed on purpose: it only creates files that do not exist yet (editing live code by hand
@@ -2009,7 +2269,7 @@ def implement(code):
         return 0
 
     publish("implementing", code)
-    task, paths, context = implement_context(code)
+    task, paths, context, proposal_path = implement_context(code)
 
     # Never pay to redo finished work. If every file the plan names already exists and its own test
     # passes, the slice is delivered -- and the previous "edit-only plan" label was hiding finished
@@ -2049,184 +2309,61 @@ def implement(code):
     failure = previous_failure(code)
     if failure:
         # The last attempt's own output, so the retry corrects the actual error instead of guessing.
-        context += ("\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED. The test run said:\n"
+        context += ("\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED. The check said:\n"
                     + failure[:2000]
                     + "\nFix exactly that and change nothing else.")
-    payload = {"model": MODEL, "messages": [
-        {"role": "system", "content": IMPLEMENT_PROMPT},
-        {"role": "user", "content": context},
-    ]}
-    data = model_call(payload, purpose=f"implementing {code}")
-    choice = data["choices"][0]
-    if choice.get("finish_reason") != "stop":
-        raise SystemExit(f"refusing a {choice.get('finish_reason')} answer; nothing written")
 
-    written, refused, tests, backups = [], [], [], {}
-    late_claims = []
-    for path, content in re.findall(
-        r"### FILE:\s*(\S+?)\s*\n+```[a-zA-Z]*\n(.*?)```", choice["message"]["content"], re.S
-    ):
-        clean = path.strip("`")
-        refusal = path_refusal(clean)
-        if refusal:
-            refused.append(f"{clean} ({refusal})")
-            continue
-        shadowed = duplicate_class(content, clean)
-        if shadowed:
-            refused.append(f"{clean} ({shadowed})")
-            continue
-        full = os.path.join(MODULE, clean)
-        # The answer may name a file the plan never listed, and the claim was taken from the plan. Claim
-        # it here, before the write, because an unclaimed write is how two workers get into one file:
-        # rolling back afterwards cannot undo the collision, it can only hide it.
-        if not os.path.exists(claim_path(full)):
-            if not take_claim(full):
-                release_claims(late_claims)
-                rollback(written, backups)
-                print(f"  left for the next pass: another worker is writing {clean}")
-                publish("working", f"{code} waiting on {clean}")
-                return 0
-            late_claims.append(claim_path(full))
-            HELD_CLAIMS.append(claim_path(full))
-        # An existing file is an edit, not a dead end. The previous contents are kept so a failed
-        # verification restores them: this runs unattended, so refusing to touch existing code would
-        # simply park every plan that touches it.
-        if os.path.exists(full):
-            backups[full] = read(full)
-        os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, "w", encoding="utf-8") as handle:
-            handle.write(content.rstrip() + "\n")
-        written.append(clean)
-        if "/tests/" in f"/{clean}":
-            tests.append(os.path.basename(clean)[:-4])
-
-    if late_claims:
-        atexit.register(release_claims, late_claims)
+    answer, usage = writer_answer(code, context, answer_file)
+    changes, refused = parse_answer(answer)
 
     # What was refused, in the words the retry needs. Without this the retry only saw the test
-    # failure it caused: a plan whose data file under `resources/behavior/` was refused (PHP is not
-    # data) leaves generated code that `require`s a file nobody wrote, so every test dies with "No
-    # such file or directory" and the model repeats the same shape until its attempts run out.
+    # failure it caused: a plan whose data file was refused leaves code that reads a file nobody
+    # wrote, and the model repeats the same shape until its attempts run out.
     refusal_note = ""
     if refused:
-        refusal_note = "\n\nThese files from your answer were refused and NOT written:\n- " + "\n- ".join(refused)
+        refusal_note = "\n\nThese blocks from your answer were refused and NOT written:\n- " + "\n- ".join(refused)
 
-    # Nothing written and nothing refused means the answer carried no FILE blocks at all.
-
-    # A new file that does not even parse is worse than no file: Pest fails to collect the whole
-    # suite, so one bad answer silently breaks every other test in the module.
-    broken = []
-    for clean in written:
-        if not clean.endswith(".php"):
-            continue
-        lint = subprocess.run(["docker", "compose", "exec", "-T", "ogamex-app", "php", "-l",
-                               f"/var/www/Modules/AI/{clean}"],
-                              cwd=COMPOSE_DIR, capture_output=True, text=True)
-        if lint.returncode != 0:
-            broken.append(f"{clean}: {(lint.stdout + lint.stderr).strip().splitlines()[0]}")
-
-    usage = data.get("usage", {})
-    print(f"{code} [{task['status']}]: wrote {len(written)}, refused {len(refused)}")
-    for path in written:
-        print(f"  + {path}")
+    print(f"{code} [{task['status']}]: {len(changes)} file(s) to write, refused {len(refused)}")
     for reason in refused:
         print(f"  ! {reason}")
-    print(f"  tokens: prompt {usage.get('prompt_tokens')} "
-          f"(cached {usage.get('prompt_cache_hit_tokens')}) output {usage.get('completion_tokens')}")
-    for reason in broken:
-        print(f"  X does not parse — {reason}")
+    if usage:
+        print(f"  tokens: prompt {usage.get('prompt_tokens')} "
+              f"(cached {usage.get('prompt_cache_hit_tokens')}) output {usage.get('completion_tokens')}")
 
-    if not written:
-        # No FILE blocks at all: the model either declined or answered in prose, and either way it has
-        # been paid for. The retry has to see what it actually said -- "could not be verified" tells it
-        # nothing about its own answer, so it just answers the same way again.
-        answer = (choice["message"]["content"] or "").strip()
-        print(f"  no files in the answer — {answer.splitlines()[0][:100] if answer else 'empty reply'}")
-        record_failure(code, "your answer contained no ### FILE blocks, so nothing could be written. "
-                             "Reply with the FILE blocks only, in the documented format.\n"
-                             "--- your previous answer began:\n" + answer[:1200])
+    if not changes:
+        # Two different mistakes that used to share one message: an answer in prose, and an answer
+        # whose every block was refused. Telling the second "you wrote no FILE blocks" made it resend
+        # the same refused blocks (ALLY-001 spent its attempts that way).
+        if refused:
+            record_failure(code, "every block in your answer was refused, so nothing was written." + refusal_note)
+            return 1
+        print(f"  no blocks in the answer — {answer.strip().splitlines()[0][:100] if answer.strip() else 'empty reply'}")
+        record_failure(code, "your answer contained no ### FILE or ### EDIT blocks, so nothing could be "
+                             "written. Reply with the blocks only, in the documented format.\n"
+                             "--- your previous answer began:\n" + answer.strip()[:1200])
         return 1
 
-    if broken:
-        print(f"  unverified, restored {rollback(written, backups)} file(s)")
-        record_failure(code, "generated code does not parse:\n" + "\n".join(broken))
-        return 1
+    # Writing and verifying happen inside the one verification lane. Files written outside it sat
+    # on disk, unverified, while another worker's Pest run collected the whole suite -- one worker's
+    # broken file failed the other's slice, and the retry chased an error it never made.
+    lane = await_claim(VERIFY_LANE)
+    if lane is None:
+        print("  left for the next pass: the verification lane stayed held")
+        return 0
+    try:
+        written, tests, backups = write_changes(code, changes)
+        if written is None:
+            return 0
+        for path in written:
+            print(f"  + {path}")
 
-    if not tests:
-        print(f"  unverified, restored {rollback(written, backups)} file(s)")
-        record_failure(code, "the answer wrote files but no test, so nothing verified the behaviour"
-                             + refusal_note)
-        return 1
-    # One lane for everything that touches the shared test database: the Pest runs below and the
-    # scenario replay at the end both go through `run_in_app`, which holds the lane for each one.
-    # The slice's own tests first, then every test that names a class the slice touched: a shared
-    # action rewritten in place has to keep the pages and flows that already call it working.
-    for name in tests + [name for name in affected_tests(written) if name not in tests]:
-        code_rc, output = run_in_app(f"./vendor/bin/pest --testsuite=Modules --filter={name}")
-        summary = [line.strip() for line in output.splitlines() if "Tests:" in line]
-        # A summary line only means the suite RAN: six failed tests still print one. The exit code is
-        # what says whether the code works, and a red test must leave nothing behind.
-        if summary and code_rc == 0:
-            print(f"  {name}: PASS {summary[-1]}")
-            continue
-        print(f"  {name}: FAIL {' '.join(summary[-1:]) or 'not collectable'}")
-        print(f"  unverified, restored {rollback(written, backups)} file(s)")
-        # Raw output with the colour codes stripped, not a keyword filter: Pest prints the exception
-        # message on its own indented lines, so filtering for "FAIL"/"Error" threw the reason away and
-        # left the retry with "7 failed (0 assertions)" and no idea why.
-        detail = re.sub(r"\x1b\[[0-9;]*m", "", output).strip()[-2500:]
-        record_failure(code, f"{name}: {' '.join(summary[-1:]) or 'suite not collectable'}\n\n{detail}"
-                             + refusal_note)
-        return 1
-
-    # Live validation starts here: if no runtime code calls this, no cohort can execute it, so the
-    # Feature test proves only that the class exists. Refused and rolled back, with the reason the
-    # retry needs: name the runtime file that uses the rule and edit it too.
-    unreachable = unreachable_files(written, backups)
-    if unreachable:
-        print(f"  nothing calls {', '.join(unreachable)} — not a delivery, restored")
-        record_failure(code, "these files are not called by any runtime code, so no account can ever "
-                             "execute them: " + ", ".join(unreachable) +
-                             ".\nWire the rule into the planner, engine or action that acts on it, add "
-                             "that file to FILES, and have the Feature test drive that path instead of "
-                             "constructing your class directly.")
-        rollback(written, backups)
-        return 1
-
-    # Policy belongs in data, not in PHP: a modder must be able to change how the account plays without
-    # reading code. The source's own numbers are the test -- other literals stay untouched so this
-    # speaks only about policy and never about a sort sentinel or an initial zero.
-    inlined = inlined_policy(written, plan_numbers(code))
-    if inlined:
-        print(f"  {len(inlined)} source value(s) written inline — policy belongs in a data file")
-        record_failure(code, "these values decide behaviour but were written into PHP: "
-                             + ", ".join(inlined) +
-                             ".\nPut them in a file under resources/behavior/ (extend one that exists "
-                             "when it covers the topic) and read them from there, so a modder can change "
-                             "the behaviour without editing code. Say which file in FILES.")
-        rollback(written, backups)
-        return 1
-
-    # The tailored proof: a described situation plus the action the engine must choose under it. A
-    # scenario without an `expect` block is skipped rather than counted, so nobody can point at a
-    # report as if it were a check.
-    for scenario in [path for path in written if path.startswith("resources/scenarios/")]:
-        name = os.path.basename(scenario)[:-5]
-        body = read(os.path.join(MODULE, scenario))
-        if '"expect"' not in body:
-            print(f"  scenario {name}: no expect block — not a check, ignored")
-            continue
-
-        run_rc, run_output = run_in_app(f"php artisan ai:replay-scenario {name}")
-        if run_rc == 0:
-            print(f"  scenario {name}: holds under these conditions")
-            continue
-
-        detail = re.sub(r"\x1b\[[0-9;]*m", "", run_output).strip()[-1500:]
-        print(f"  scenario {name}: FAIL — the engine did not do what the rule says")
-        record_failure(code, f"the scenario {name} did not hold:\n{detail}")
-        rollback(written, backups)
-        return 1
+        rejection = verify_slice(code, written, tests, backups)
+        if rejection:
+            print(f"  unverified, restored {rollback(written, backups)} file(s)")
+            record_failure(code, rejection + refusal_note)
+            return 1
+    finally:
+        release_claims([lane])
 
     os.makedirs(IMPLEMENTED, exist_ok=True)
     with open(marker, "w", encoding="utf-8") as handle:
@@ -2248,6 +2385,7 @@ def main(argv=None):
     parser.add_argument("--shard", help="run: slice k/N of the queue, so N workers cover it once")
     parser.add_argument("--dry", action="store_true", help="promote: report without writing rows")
     parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--answer", help="implement: verify this saved answer instead of paying for one")
     args = parser.parse_args(argv)
 
     if args.self_check:
@@ -2276,7 +2414,7 @@ def main(argv=None):
         publish(args.source or "working")
         return 0
     if args.command == "implement":
-        return implement(args.source)
+        return implement(args.source, args.answer)
     if not args.command or not args.source:
         parser.error("give a command and a source id, or --self-check")
     if args.command == "bundle":

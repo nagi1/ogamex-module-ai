@@ -122,7 +122,9 @@ import sqlite3
 # raised from the cohort read were never picked up at all.
 proposals = {os.path.basename(path)[:-3] for path in glob.glob('plan/research/ogame/proposals/*.md')}
 rows = sqlite3.connect('plan/tasks/tasks.db').execute(
-    "select code, coalesce(file_ref, '') from ready_tasks order by priority, id"
+    # Only code rows: a doc or review row handed to the PHP writer can only be refused (DOC-8 spent
+    # its attempts explaining it could not rewrite a truncated markdown register).
+    "select code, coalesce(file_ref, '') from ready_tasks where kind = 'impl' order by priority, id"
 )
 print('\n'.join(code for code, file_ref in rows if code in proposals or file_ref))
 PY
