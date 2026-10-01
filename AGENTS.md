@@ -116,5 +116,8 @@ six aspects moving, the work is making the existing engine play, not adding to i
   runs it and refuses to close on a failure. The tools: `bash scripts/ogamex scorecard` (every aspect
   of a player's day, PASS/FAIL), `situation NAME` (plant, drive, read back in seconds), `prove CODE`,
   `test-one Name`. The workflow is `.github/skills/ai-task-execute/SKILL.md`; follow it exactly.
+- **Agents never share a file.** `task.py claim` locks the row and its files for you, the harness
+  respects those locks, tests queue on one lane, and commits name their files (`git add <files>`,
+  never `-A`). The rules are in the skill's "Never get in another agent's way".
 - **Comments** state why, in one or two lines. Incident history ("found 30 Sep…") goes in the commit
   message, not the code.

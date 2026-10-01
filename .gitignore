@@ -6,3 +6,11 @@
 .DS_Store
 
 __pycache__/
+
+# Harness runtime state: locks, model slots and heartbeats belong to one machine and one moment.
+# Committed, a lock outlives its holder in every other checkout.
+/plan/research/ogame/claims/
+/plan/research/ogame/model-slots/
+/plan/research/ogame/workers/
+/plan/research/ogame/harness-status.json
+/plan/research/ogame/model-usage.jsonl

@@ -62,6 +62,8 @@ IDLE_INTERVAL=60
       echo "=== peak over, resuming $(date -u '+%F %T') UTC ==="
       continue
     fi
+    # Claims a vanished agent or a killed worker left behind, before the queue is read.
+    python3 plan/tasks/task.py reap
     proposals_before=$(ls plan/research/ogame/proposals | wc -l)
     markers_before=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)
 

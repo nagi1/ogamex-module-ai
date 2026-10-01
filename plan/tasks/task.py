@@ -6,7 +6,9 @@ The sqlite3 CLI also works if installed: `sudo apt-get install -y sqlite3`.
 
 Usage:
   python3 plan/tasks/task.py list|ready|blocked|graph
-  python3 plan/tasks/task.py claim CODE ASSIGNEE
+  python3 plan/tasks/task.py claim CODE ASSIGNEE   # the row AND its files, or nothing
+  python3 plan/tasks/task.py lock CODE PATH ...    # one more file the row's work touches
+  python3 plan/tasks/task.py reap                  # release claims nobody has touched in 6h
   python3 plan/tasks/task.py unclaim CODE
   python3 plan/tasks/task.py next                  # the one row to work now (P0-P2 impl, by priority)
   python3 plan/tasks/task.py show CODE             # everything the row says, proof included
@@ -22,6 +24,7 @@ Usage:
 """
 import argparse
 import datetime
+import hashlib
 import os
 import re
 import sqlite3
@@ -30,6 +33,73 @@ import sys
 
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.db")
 SEED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed.sql")
+
+
+MODULE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CLAIMS = os.path.join(MODULE, "plan/research/ogame/claims")
+# An interactive agent works a row for hours; the harness holds a file for one attempt. A lock older
+# than this with no activity belongs to an agent that went away.
+AGENT_CLAIM_HOURS = 6
+
+
+def file_paths(file_ref):
+    """The files a row names. One parser for the ledger and the harness, so both lock the same key:
+    `;` or `,` separated, with a trailing `(new)`, `(edit)` or `(method names)` note taken off."""
+    paths = []
+    for piece in re.split(r"[;,]", file_ref or ""):
+        clean = re.sub(r"\s*\([^)]*\)\s*$", "", piece.strip("- ").replace("`", "")).strip()
+        if clean:
+            paths.append(clean)
+
+    return paths
+
+
+def lock_path(key):
+    """Where the lock for a key lives. The harness's own file claims use this same name."""
+    return os.path.join(CLAIMS, hashlib.sha256(key.encode()).hexdigest()[:16] + ".lock")
+
+
+def lock_owner(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            # Line 2 names the holder: "agent NAME CODE" from here, "pid N at ..." from the harness.
+            return handle.read().splitlines()[1]
+    except (OSError, IndexError):
+        return ""
+
+
+def take_locks(code, assignee, paths):
+    """Every file at once or none, written O_EXCL. Returns (taken, the path someone else holds)."""
+    os.makedirs(CLAIMS, exist_ok=True)
+    taken = []
+    for path in sorted({os.path.join(MODULE, p) for p in paths}):
+        lock = lock_path(path)
+        try:
+            handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if lock_owner(lock) == f"agent {assignee} {code}":
+                continue
+            for mine in taken:
+                os.remove(mine)
+            return [], f"{os.path.relpath(path, MODULE)} ({lock_owner(lock) or 'held'})"
+        os.write(handle, f"{path}\nagent {assignee} {code}\n".encode())
+        os.close(handle)
+        taken.append(lock)
+
+    return taken, None
+
+
+def release_locks(code, assignee):
+    if not os.path.isdir(CLAIMS):
+        return 0
+    released = 0
+    for name in os.listdir(CLAIMS):
+        lock = os.path.join(CLAIMS, name)
+        if lock_owner(lock) == f"agent {assignee} {code}":
+            os.remove(lock)
+            released += 1
+
+    return released
 
 
 def connect():
@@ -76,17 +146,57 @@ def cmd_blocked(con):
 
 
 def cmd_claim(con, code, assignee):
+    """The row and every file it names, or nothing: two agents in one file is how one slice's code
+    ends up inside another's, and the harness's rollback then erases the other agent's edit."""
     cur = con.execute(
         "UPDATE tasks SET status='in_progress', assignee=?, updated_at=datetime('now') "
         "WHERE code=? AND status='todo'", (assignee, code))
+    if not cur.rowcount:
+        con.rollback()
+        sys.exit(f"NOT claimed {code} (already taken or not todo)")
+    file_ref = con.execute("SELECT coalesce(file_ref,'') FROM tasks WHERE code=?", (code,)).fetchone()[0]
+    _, held = take_locks(code, assignee, file_paths(file_ref))
+    if held:
+        con.rollback()
+        sys.exit(f"NOT claimed {code}: {held} is being edited by someone else. Take another row.")
     con.commit()
-    print("claimed" if cur.rowcount else "NOT claimed (already taken or not todo)", code)
+    print("claimed", code, "and locked:", ", ".join(file_paths(file_ref)) or "(no files)")
+
+
+def cmd_lock(con, code, paths):
+    row = con.execute("SELECT assignee FROM tasks WHERE code=? AND status='in_progress'", (code,)).fetchone()
+    if row is None or not row[0]:
+        sys.exit(f"claim {code} first")
+    _, held = take_locks(code, row[0], paths)
+    if held:
+        sys.exit(f"NOT locked: {held} is being edited by someone else")
+    print("locked", ", ".join(paths), "for", code)
 
 
 def cmd_unclaim(con, code):
+    row = con.execute("SELECT coalesce(assignee,'') FROM tasks WHERE code=?", (code,)).fetchone()
+    released = release_locks(code, row[0]) if row else 0
     con.execute("UPDATE tasks SET status='todo', assignee=NULL WHERE code=?", (code,))
     con.commit()
-    print("released", code)
+    print("released", code, f"and {released} file lock(s)")
+
+
+def cmd_reap(con):
+    """Claims a vanished agent left: a row in progress untouched for hours, and its file locks."""
+    # A harness attempt lasts minutes, so its row is stale after an hour (a killed worker); a row
+    # waiting on its proof (harness:delivered) is not stale at all.
+    stale = con.execute(
+        "SELECT code, coalesce(assignee,'') FROM tasks WHERE status='in_progress' AND ("
+        "(coalesce(assignee,'') NOT LIKE 'harness:%' AND updated_at < datetime('now', ?)) OR "
+        "(assignee LIKE 'harness:%' AND assignee <> 'harness:delivered' AND updated_at < datetime('now', '-1 hours')))",
+        (f"-{AGENT_CLAIM_HOURS} hours",)).fetchall()
+    for code, assignee in stale:
+        release_locks(code, assignee)
+        con.execute("UPDATE tasks SET status='todo', assignee=NULL, notes=coalesce(notes,'') || ? WHERE code=?",
+                    (f" | {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: claim by {assignee} "
+                     f"released after {AGENT_CLAIM_HOURS}h without activity.", code))
+    con.commit()
+    print("reaped:", ", ".join(code for code, _ in stale) or "nothing")
 
 
 def cmd_done(con, code):
@@ -103,6 +213,8 @@ def cmd_done(con, code):
         result = subprocess.run(["bash", os.path.join(module, "scripts/ogamex"), "prove", code])
         if result.returncode != 0:
             sys.exit(f"NOT done: the proof for {code} failed (see above). The row stays open.")
+    holder = con.execute("SELECT coalesce(assignee,'') FROM tasks WHERE code=?", (code,)).fetchone()[0]
+    release_locks(code, holder)
     con.execute("UPDATE tasks SET status='done', assignee=NULL, notes=coalesce(notes,'') || ?, "
                 "updated_at=datetime('now') WHERE code=?",
                 (f" | PROVEN {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: {proof}" if proof else "", code))
@@ -146,6 +258,9 @@ def cmd_proof(con, code, steps):
 
 
 def cmd_block(con, code, note):
+    holder = con.execute("SELECT coalesce(assignee,'') FROM tasks WHERE code=?", (code,)).fetchone()
+    if holder:
+        release_locks(code, holder[0])
     con.execute("UPDATE tasks SET status='blocked', notes=coalesce(notes,'') || ' | blocked: ' || ? WHERE code=?", (note, code))
     con.commit()
     print("blocked", code)
@@ -216,7 +331,7 @@ def cmd_rebuild(con):
 def main():
     p = argparse.ArgumentParser(description="OGameX task-DB CLI")
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("list", "ready", "blocked", "graph", "rebuild", "next"):
+    for name in ("list", "ready", "blocked", "graph", "rebuild", "next", "reap"):
         sub.add_parser(name)
     cp = sub.add_parser("claim"); cp.add_argument("code"); cp.add_argument("assignee")
     for name in ("unclaim", "done", "unblock", "show"):
@@ -234,6 +349,7 @@ def main():
     ap.add_argument("--notes", default=None)
     ap.add_argument("--proof", default=None)
     pp = sub.add_parser("proof"); pp.add_argument("code"); pp.add_argument("steps", nargs="*")
+    lp = sub.add_parser("lock"); lp.add_argument("code"); lp.add_argument("paths", nargs="+")
 
     a = p.parse_args()
     con = connect()
@@ -271,6 +387,10 @@ def main():
             cmd_next(con)
         elif cmd == "proof":
             cmd_proof(con, a.code, a.steps)
+        elif cmd == "lock":
+            cmd_lock(con, a.code, a.paths)
+        elif cmd == "reap":
+            cmd_reap(con)
     finally:
         con.close()
 

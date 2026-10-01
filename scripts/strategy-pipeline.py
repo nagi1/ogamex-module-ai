@@ -76,15 +76,25 @@ APP_TIMEOUT_SECONDS = 15 * 60
 # slot file, because the workers are separate processes.
 MODEL_SLOTS = os.path.join(MODULE, "plan/research/ogame/model-slots")
 MODEL_CONCURRENCY = int(os.environ.get("MODEL_CONCURRENCY", "4"))
-SLOT_STALE_SECONDS = 15 * 60
 MODEL_ATTEMPTS = 5
 MODEL_RETRY_CODES = (429, 500, 502, 503)
-MODEL_TIMEOUT_SECONDS = 300
+# deepseek-flash (V4.1) thinks by default at high effort, and a non-streaming answer sends no byte
+# while it generates: a 300s read timeout cut long edits off mid-answer and paid for them again. The
+# server sends blank keep-alive lines while a request waits and closes it if inference has not started
+# within ten minutes, so twenty minutes covers a queued start plus a long answer.
+MODEL_TIMEOUT_SECONDS = 20 * 60
+# A slot outlives its call by a margin, or a slow call's slot is taken while it is still in flight.
+SLOT_STALE_SECONDS = MODEL_TIMEOUT_SECONDS + 5 * 60
+MODEL_USAGE = os.path.join(MODULE, "plan/research/ogame/model-usage.jsonl")
 
 # Every claim this process holds. Kept so a signal can release them: Python does not run `atexit` on
 # SIGTERM, and the harness stops workers exactly that way (`trap 'kill 0' EXIT`, `pkill`) -- so every
 # restart used to leave claims behind that blocked their files for the full stale window.
 HELD_CLAIMS = []
+# The ledger owns rows, file_ref parsing and lock names; the harness and the agents share them, so a
+# file an agent is editing is a file the harness will not write, and the other way round.
+sys.path.insert(0, os.path.join(MODULE, "plan/tasks"))
+import task as ledger  # noqa: E402
 REGISTRY = os.path.join(MODULE, "plan/research/ogame/SOURCE-REGISTRY.yaml")
 STORE = os.path.join(MODULE, "plan/details/research/strategy/sources.yaml")
 PRINCIPLES = os.path.join(MODULE, "plan/details/research/strategy/principles")
@@ -1173,6 +1183,18 @@ def self_check():
     assert unreachable_files(["resources/behavior/__nobody_reads_this.yaml"], {}) == \
         ["resources/behavior/__nobody_reads_this.yaml"], "a data file nothing loads is unreachable"
 
+    # Agents and the harness share one lock namespace: an agent's lock is not taken for stale
+    # after the harness's thirty minutes, and the harness reads the ledger's own file parser.
+    agent_lock = claim_path(f"self-check-agent:{os.getpid()}")
+    os.makedirs(CLAIMS, exist_ok=True)
+    with open(agent_lock, "w", encoding="utf-8") as handle:
+        handle.write("self-check\nagent someone ROW-1\n")
+    os.utime(agent_lock, (time.time() - 3600, time.time() - 3600))
+    assert not claim_is_stale(agent_lock), "an agent's hour-old lock still holds its file"
+    os.remove(agent_lock)
+    assert plan_paths({}, "app/A.php (method); app/B.php, app/C.php") == ["app/A.php", "app/B.php", "app/C.php"], \
+        "the harness locks the same paths the ledger does"
+
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
         handle.write("<?php\n")
@@ -1587,7 +1609,10 @@ def plan_paths(blocks, fallback=""):
     the contents of any file it was asked to edit: measured 30 Sep 2026 on `PERS-001`, which rewrote
     `AiProfile` from a blank page and failed three attempts on that table's own required columns.
     """
-    lines = blocks.get("FILES", []) or ([fallback] if fallback else [])
+    if not blocks.get("FILES"):
+        return ledger.file_paths(fallback)
+
+    lines = blocks["FILES"]
     paths = []
 
     for line in lines:
@@ -1788,7 +1813,15 @@ def host_class_names():
 
 
 def claim_path(key):
-    return os.path.join(CLAIMS, hashlib.sha256(key.encode()).hexdigest()[:16] + ".lock")
+    return ledger.lock_path(key)
+
+
+def claim_is_stale(path):
+    """A harness claim dies with its attempt; an agent's lives as long as the agent works the row."""
+    owner = ledger.lock_owner(path)
+    limit = ledger.AGENT_CLAIM_HOURS * 3600 if owner.startswith("agent ") else CLAIM_STALE_SECONDS
+
+    return time.time() - os.path.getmtime(path) > limit
 
 
 def take_claim(key):
@@ -1802,7 +1835,7 @@ def take_claim(key):
             os.close(handle)
             return True
         except FileExistsError:
-            if attempt or time.time() - os.path.getmtime(path) <= CLAIM_STALE_SECONDS:
+            if attempt or not claim_is_stale(path):
                 return False
             # A worker that died mid-slice leaves its claim behind; an aged one is not a claim.
             os.remove(path)
@@ -2035,6 +2068,7 @@ def status():
     if no_proof:
         print("open rows with no proof stated (cannot close): " + ", ".join(sorted(no_proof)))
     # Machine-readable for the harness: an empty queue may wait, a queue with attemptable work may not.
+    print(f"model today: {usage_today()}")
     print(f"READY: {len(ready)}")
     print(f"UNPROVEN: {' '.join(sorted(unproven))}")
 
@@ -2071,8 +2105,12 @@ def model_call(payload, purpose="a model answer"):
         try:
             publish("waiting on the model", f"{purpose} ({os.path.basename(slot)})")
             try:
+                started = time.time()
                 with urllib.request.urlopen(request, timeout=MODEL_TIMEOUT_SECONDS) as response:
-                    return json.load(response)
+                    # json.load skips the blank keep-alive lines a queued request receives.
+                    data = json.load(response)
+                record_usage(purpose, data, time.time() - started)
+                return data
             except urllib.error.HTTPError as error:
                 if error.code not in MODEL_RETRY_CODES or attempt == MODEL_ATTEMPTS:
                     raise
@@ -2080,11 +2118,68 @@ def model_call(payload, purpose="a model answer"):
                 print(f"  {error.code} from the model on {purpose}; waiting {wait}s "
                       f"(attempt {attempt} of {MODEL_ATTEMPTS})")
                 time.sleep(wait + random.uniform(0, 2))
+            except (TimeoutError, urllib.error.URLError, ConnectionError) as error:
+                # A dropped connection or the server's ten-minute close: retried like a 503, never a
+                # crash that loses the worker's whole pass.
+                if attempt == MODEL_ATTEMPTS:
+                    raise SystemExit(f"model unreachable on {purpose}: {error}")
+                wait = min(60, 2 ** attempt)
+                print(f"  {type(error).__name__} from the model on {purpose}; waiting {wait}s "
+                      f"(attempt {attempt} of {MODEL_ATTEMPTS})")
+                time.sleep(wait + random.uniform(0, 2))
         finally:
             if os.path.exists(slot):
                 os.remove(slot)
 
     raise SystemExit("model call fell through every attempt")
+
+
+def record_usage(purpose, data, seconds):
+    """One line per paid call: what it cost in tokens and whether it thought. Peak and off-peak bill
+    differently and thinking tokens bill as output, so spend is only visible if it is written down."""
+    usage = data.get("usage", {})
+    message = (data.get("choices") or [{}])[0].get("message", {})
+    line = {
+        "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "worker": os.environ.get("HARNESS_WORKER", ""),
+        "purpose": purpose,
+        "model": data.get("model"),
+        "seconds": round(seconds, 1),
+        "prompt": usage.get("prompt_tokens"),
+        "cache_hit": usage.get("prompt_cache_hit_tokens"),
+        "output": usage.get("completion_tokens"),
+        "reasoning": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
+        "thinking": bool(message.get("reasoning_content")),
+        "finish": (data.get("choices") or [{}])[0].get("finish_reason"),
+    }
+    with open(MODEL_USAGE, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(line) + "\n")
+
+
+def model_check():
+    """One tiny paid call that says what the API is actually doing: the model it answered with,
+    whether it thought, the tokens, the latency, and whether now is peak. Read it before trusting
+    any assumption about defaults."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    data = model_call({"model": MODEL, "max_tokens": 64,
+                       "messages": [{"role": "user", "content": "Reply with the single word: ok"}]},
+                      purpose="model-check")
+    print(json.dumps({"peak_now": in_peak(now), "concurrency_cap": MODEL_CONCURRENCY,
+                      "last_call": json.loads(read(MODEL_USAGE).strip().splitlines()[-1])}, indent=2))
+    return 0
+
+
+def usage_today():
+    """Calls and tokens since midnight UTC, from the usage log."""
+    if not os.path.exists(MODEL_USAGE):
+        return "no model calls recorded yet"
+    day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    lines = [json.loads(line) for line in read(MODEL_USAGE).splitlines() if line.startswith(f'{{"at": "{day}')]
+    total = lambda key: sum(line.get(key) or 0 for line in lines)  # noqa: E731
+
+    return (f"{len(lines)} call(s), prompt {total('prompt')} (cached {total('cache_hit')}), "
+            f"output {total('output')} of which reasoning {total('reasoning')}, "
+            f"{sum(1 for line in lines if line.get('finish') != 'stop')} not finished cleanly")
 
 
 def retry_after(error):
@@ -2362,6 +2457,37 @@ def verify_slice(code, written, tests, backups):
     return None
 
 
+def claim_row(code, worker):
+    """Take the row for this attempt, or say someone else holds it. Guarded like `task.py claim`."""
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    taken = connection.execute(
+        "update tasks set status='in_progress', assignee=?, updated_at=datetime('now') "
+        "where code=? and (status='todo' or assignee=?)", (worker, code, worker)).rowcount
+    connection.commit()
+    connection.close()
+
+    return taken == 1
+
+
+def release_row(code, worker):
+    """Give a row back after a failed attempt, only if this worker still holds it."""
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    connection.execute("update tasks set status='todo', assignee=null where code=? and assignee=?", (code, worker))
+    connection.commit()
+    connection.close()
+
+
+def mark_delivered(code, worker, kept):
+    """A delivered row waits for its proof: still in progress, held by no worker, so no agent takes
+    it and no attempt repeats it. `task.py done` closes it when the proof passes."""
+    kept.append(True)
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    connection.execute("update tasks set assignee='harness:delivered', updated_at=datetime('now') "
+                       "where code=? and assignee=?", (code, worker))
+    connection.commit()
+    connection.close()
+
+
 def implement(code, answer_file=None):
     """Have the harness write one task's code, then verify it locally.
 
@@ -2396,6 +2522,15 @@ def implement(code, answer_file=None):
         publish("working", f"skipped {code} (cooling off, retries itself)")
         return 0
 
+    # The row itself, in the ledger every agent claims from: a file lock alone let an interactive
+    # agent and a harness worker take the same task and both write it.
+    worker = "harness:" + os.environ.get("HARNESS_WORKER", f"pid-{os.getpid()}")
+    if not claim_row(code, worker):
+        say(f"{code}: claimed by someone else — left alone")
+        return 0
+    kept = []
+    atexit.register(lambda: kept or release_row(code, worker))
+
     publish("implementing", code)
     task, paths, context, proposal_path = implement_context(code)
 
@@ -2417,6 +2552,7 @@ def implement(code, answer_file=None):
                 # reachability, inlined policy, the dashboard -- silently see nothing.
                 handle.write(f"# {code} was already delivered; {delivered} passes\n\n"
                              + "\n".join(f"- {path}" for path in paths) + "\n")
+            mark_delivered(code, worker, kept)
             print(f"  already delivered: {delivered} passes — nothing spent")
             publish("working", f"{code} already delivered")
             return 0
@@ -2497,6 +2633,7 @@ def implement(code, answer_file=None):
     with open(marker, "w", encoding="utf-8") as handle:
         handle.write(f"# {code} implemented {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC\n\n"
                      + "\n".join(f"- {path}" for path in written) + "\n")
+    mark_delivered(code, worker, kept)
     print(f"  verified and wired: {len(written)} file(s) kept, marker written")
     publish("implemented", f"{code} ({len(written)} file(s))")
     return 0
@@ -2507,7 +2644,7 @@ def main(argv=None):
     parser.add_argument("command", nargs="?",
                         choices=["bundle", "plan", "validate", "run", "sweep", "promote",
                                  "coverage", "implement", "wait-until-offpeak", "publish", "peak-gate",
-                                 "quality", "status"])
+                                 "quality", "status", "model-check"])
     parser.add_argument("source", nargs="?")
     parser.add_argument("--max", type=int, default=4, help="run/sweep: work allowed this pass")
     parser.add_argument("--shard", help="run: slice k/N of the queue, so N workers cover it once")
@@ -2530,6 +2667,8 @@ def main(argv=None):
         return quality(args.source or "/tmp/harness-quality.txt")
     if args.command == "status":
         return status()
+    if args.command == "model-check":
+        return model_check()
     if args.command == "coverage":
         return coverage()
     if args.command == "peak-gate":

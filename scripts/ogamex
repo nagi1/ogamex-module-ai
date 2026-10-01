@@ -148,6 +148,31 @@ Environment:
 TEXT
 }
 
+# One lane for every run on the shared test database. The harness takes the same lock file
+# (strategy-pipeline.py, key "verify:shared-test-database"), so an agent's test and a harness
+# verification never run together: two suites on one database fail each other, and each retry then
+# chases an error the other caused.
+with_test_lane() {
+    local claims="$MODULE_ROOT/plan/research/ogame/claims" lock rc=0 told=0
+    lock="$claims/$(printf '%s' 'verify:shared-test-database' | sha256sum | cut -c1-16).lock"
+    mkdir -p "$claims"
+    until (set -o noclobber; printf 'verify:shared-test-database\npid %s at %s UTC (ogamex)\n' "$$" "$(date -u '+%F %T')" > "$lock") 2>/dev/null; do
+        # A run killed mid-test leaves its lock; the harness ages its own out after 30 minutes too.
+        if [ $(( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || date +%s) )) -gt 1800 ]; then
+            rm -f "$lock"
+            continue
+        fi
+        [ "$told" = 1 ] || echo "waiting for the test lane, held by: $(sed -n 2p "$lock" 2>/dev/null)" >&2
+        told=1
+        sleep 2
+    done
+    trap 'rm -f "$lock"' INT TERM
+    "$@" || rc=$?
+    rm -f "$lock"
+    trap - INT TERM
+    return $rc
+}
+
 # The cohorts are their own stacks (grand, pve); the dev stack holds no AI population, so a
 # situation or a scorecard read there says nothing about how the accounts play.
 in_universe() {
@@ -180,7 +205,7 @@ prove_row() {
         name="${step#*:}"
         echo "--- $step"
         case "$kind" in
-            test) run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" || failed=1 ;;
+            test) with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" || failed=1 ;;
             situation) in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup || failed=1 ;;
             invariant)
                 # verify-cohorts names a violated invariant as "[NAME]"; its absence is the pass.
@@ -236,12 +261,12 @@ case "$command_name" in
     test)
         reap_stale_test_sessions
         # shellcheck disable=SC2046
-        run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags) "$@"
+        with_test_lane run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags) "$@"
         ;;
     test-all)
         reap_stale_test_sessions
         # shellcheck disable=SC2046
-        run_core $(pest_runner) $(pest_flags) "$@"
+        with_test_lane run_core $(pest_runner) $(pest_flags) "$@"
         ;;
     quality)
         # The over-engineering gate runs first: a slice that fails Gate 2 is fixed before
@@ -252,7 +277,7 @@ case "$command_name" in
         run_core composer run stan
         reap_stale_test_sessions
         # shellcheck disable=SC2046
-        run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags)
+        with_test_lane run_core $(pest_runner) --testsuite=Modules --filter=AI $(pest_flags)
         ;;
     gate)
         run_core php Modules/AI/scripts/gate-2-review.php
@@ -271,7 +296,7 @@ case "$command_name" in
         prove_row "${1:?usage: prove CODE}"
         ;;
     test-one)
-        run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"
+        with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"
         ;;
     reap)
         reap_stale_test_sessions

@@ -16,7 +16,7 @@ invent other ways to check your work.
 
 ```
 python3 plan/tasks/task.py next                 # the one task to take
-python3 plan/tasks/task.py claim CODE yourname  # "NOT claimed" = someone has it; run next again
+python3 plan/tasks/task.py claim CODE yourname  # locks the row AND its files; "NOT claimed" = take another
 python3 plan/tasks/task.py show CODE            # notes = evidence and decisions; proof = how it is judged
 ```
 
@@ -67,6 +67,22 @@ python3 plan/tasks/task.py done CODE           # runs the proof again; only clos
 
 If `aspect:` still fails after the cohort played, your change did not change what accounts do. Say so
 in the row (`task.py block CODE "<what the scorecard shows>"`), do not close it.
+
+## Never get in another agent's way
+
+Several agents and the harness work this checkout at once. These rules are what keeps them apart:
+
+- **Edit only files you hold.** `claim` locked the row's files. Need another file (a test, a YAML file)?
+  `python3 plan/tasks/task.py lock CODE path/to/file` first. "NOT locked" means another agent is in it:
+  stop and take a different row, never edit it anyway.
+- **Run tests only through `scripts/ogamex`** (`test-one`, `test`, `prove`). They wait for the shared
+  test-database lane; a raw `pest` call collides with the harness and both fail for no reason.
+- **Commit only your files:** `git add <the files you hold>` then `git commit`. Never `git add -A`,
+  `git add .`, `git commit -a`, `git stash`, `git checkout -- <file>`, `git reset` or `git clean`: each one
+  takes or destroys another agent's unfinished work.
+- **Give the row back when you stop:** `task.py done CODE`, `task.py block CODE "<why>"` or
+  `task.py unclaim CODE`. Each releases your file locks. A claim left for 6 hours is reaped.
+- **Never touch** `plan/research/ogame/claims/`, `model-slots/` or a row someone else holds.
 
 ## Proof steps
 
