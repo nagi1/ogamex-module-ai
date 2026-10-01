@@ -1141,24 +1141,23 @@ def red_first(code):
 
 
 def proof_change(before, after):
-    """Why an attempt moved nothing, or None when the proof passes or a step went FAIL to PASS and no
-    step went PASS to FAIL. A suspect step is judged like any other here: it is only exempt from
-    failing the row."""
-    if after["pass"]:
-        return None
-
-    was = {step["step"]: step["pass"] for step in before["steps"]}
-    now = {step["step"]: step["pass"] for step in after["steps"]}
-    failing = next(step for step in after["steps"] if not step["pass"])
+    """Why an attempt moved nothing, or None when its fast steps pass or one went FAIL to PASS and none
+    went PASS to FAIL. Only `test:` and `situation:` steps are judged here: an aspect or invariant is
+    measured over an hour of cohort play, cannot flip within one attempt, and is judged later by
+    `task.py done` on the delivered row (FLEET-002 went stuck on `aspect:recycle` for that reason)."""
+    fast = lambda report: [step for step in report["steps"] if step["step"].split(":")[0] in ("test", "situation")]
+    was = {step["step"]: step["pass"] for step in fast(before)}
+    now = {step["step"]: step["pass"] for step in fast(after)}
     broke = [name for name, ok in now.items() if not ok and was.get(name)]
-    fixed = [name for name, ok in now.items() if ok and was.get(name) is False]
-
     if broke:
         return f"proof regressed: {broke[0]} passed before this attempt and fails now"
-    if not fixed:
-        return f"proof unchanged: {failing['step']} {failing['line']}"
+    failing = next((step for step in fast(after) if not step["pass"]), None)
+    if failing is None:
+        return None
+    if any(ok and was.get(name) is False for name, ok in now.items()):
+        return None
 
-    return None
+    return f"proof unchanged: {failing['step']} {failing['line']}"
 
 
 def note_delivery(code, report):
@@ -1753,7 +1752,7 @@ THE TEST
 - Drive the real path (planner, engine or action) and assert the behaviour. Test at the bound, past it
   and at zero, not only the easy middle.
 
-THE SCENARIO
+THE SCENARIO (only when the task shows no FAST PROOF; with one, write no scenario)
 - Add `resources/scenarios/<situation>.json` shaped like EXAMPLE SCENARIO, with an `expect` block naming
   the action this rule must make the engine choose. Where the rule has a boundary, add the opposite
   situation too.
@@ -1870,6 +1869,19 @@ def reference_context():
     return "\n".join(parts), os.path.relpath(example_test, MODULE) if example_test else ""
 
 
+def helper_clashes(written):
+    """Top-level test functions this slice declares that another test file declares too."""
+    clashes = []
+    for path in [p for p in written if p.startswith("tests/") and p.endswith(".php")]:
+        for name in re.findall(r"^function\s+(\w+)\s*\(", read(os.path.join(MODULE, path)), re.M):
+            hits = subprocess.run(["grep", "-rlE", rf"^function\s+{name}\s*\(", "tests/", "--include=*.php"],
+                                  cwd=MODULE, capture_output=True, text=True).stdout.split()
+            others = [hit for hit in hits if os.path.normpath(hit) != os.path.normpath(path)]
+            if others:
+                clashes.append(f"{name}() (also in {others[0]})")
+    return clashes
+
+
 def proof_tests(code):
     """The `test:` steps of the row's proof whose file exists: the fast proof the slice must pass."""
     proof = task_row(code)["proof"] if os.path.exists(TASKS_DB) else ""
@@ -1892,7 +1904,7 @@ def test_kit():
     for path in sorted(glob.glob(os.path.join(MODULE, "tests/Feature/**/*.php"), recursive=True)):
         for found in re.findall(r"^function\s+(\w+\([^)]*\)(?:\s*:\s*[\w|\\?]+)?)", read(path), re.M):
             helpers.append(f"{' '.join(found.split())}  [{os.path.basename(path)[:-4]}]")
-    return "\n".join(lines) + "\nSHARED TEST FUNCTIONS (global in the suite; call them, do not redefine them):\n" + "\n".join(helpers)
+    return "\n".join(lines) + "\nTEST FUNCTIONS ALREADY DECLARED IN OTHER TEST FILES (NOT loaded with your test, so do not call them; every function name is global, so a function you declare must use a name NOT in this list):\n" + "\n".join(helpers)
 
 
 def implement_context(code):
@@ -2700,6 +2712,11 @@ def verify_slice(code, written, tests, backups):
             broken.append(f"{clean}: {output.splitlines()[0]}")
     if broken:
         return "generated code does not parse:\n" + "\n".join(broken)
+
+    clashes = helper_clashes(written)
+    if clashes:
+        return ("your test declares functions another test file already declares, which stops the whole "
+                "suite loading: " + ", ".join(clashes) + ". Rename them to names unique to your test.")
 
     # The row's own fast proof (a `test:` step, e.g. its situation test) verifies the slice as well as a
     # test the writer wrote would, so a slice that makes it pass needs no second test of its own.
