@@ -10,12 +10,14 @@ uses(IsolatedAccountTestCase::class);
 
 // ATK-001's fast proof. A neighbour who has not logged in for eight days and holds stock is what an
 // experienced player farms: they look (a probe), then raid. The session must start that, with probes and
-// cargo on hand. A neighbour who logged in yesterday is not farmed.
+// cargo on hand, in a universe with other players in it (crowd). A neighbour who logged in yesterday
+// is not farmed.
 test('an inactive neighbour with stock is looked at or raided by an account that has the ships', function (): void {
     $situation = Situation::of($this)
         ->resources(1_000_000, 1_000_000, 1_000_000)
         ->ships('espionage_probe', 5)
         ->ships('small_cargo', 20)
+        ->crowd(25)
         ->inactiveNeighbour(daysQuiet: 8)
         ->session();
 

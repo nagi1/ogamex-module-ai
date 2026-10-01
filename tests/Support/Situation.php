@@ -155,6 +155,20 @@ final class Situation
         return $this;
     }
 
+    /**
+     * $players active players around the account, created before anything planted after this call: a real
+     * universe. A test universe of two players hides every "first N by id" cap (QueueableSpyPlanner looked
+     * at the 20 oldest planets, so on grand the seeded inactives were never seen while the test passed).
+     */
+    public function crowd(int $players = 25): self
+    {
+        for ($player = 0; $player < $players; $player++) {
+            $this->host('createForeignPlanet');
+        }
+
+        return $this;
+    }
+
     /** A neighbour who stopped logging in $daysQuiet days ago, holding stock a raid would be worth. */
     public function inactiveNeighbour(int $daysQuiet = 8, int $metal = 400_000, int $crystal = 200_000): self
     {
@@ -455,7 +469,8 @@ final class Situation
         $kinds = AiWorkItem::query()->where('player_id', $this->profile->player_id)->where('kind', '!=', AiWorkKind::RunSession)->orderBy('id')->get()
             ->map(static fn (AiWorkItem $item): string => $item->kind->name . '(' . $item->state->name
                 . ($item->state === AiWorkState::Completed ? '' : ', due ' . now()->diffInSeconds($item->due_at, false) . 's') . ')')->all();
-        $trace = DB::table('ai_decision_traces')->where('player_id', $this->profile->player_id)->orderByDesc('id')->first(['candidates']);
+        $trace = DB::table('ai_decision_traces')->where('player_id', $this->profile->player_id)->orderByDesc('id')->first(['candidates', 'score_components']);
+        $rejected = json_decode((string) ($trace->score_components ?? '{}'), true)['rejections'] ?? [];
         $ranked = array_map(static function (array $candidate): string {
             $parts = [];
             foreach (array_filter($candidate['components'] ?? []) as $name => $value) {
@@ -466,7 +481,8 @@ final class Situation
         }, array_slice(json_decode((string) ($trace->candidates ?? '[]'), true) ?: [], 0, 6));
 
         return 'the account created work: [' . implode(', ', $kinds) . '], executors refused: [' . implode('; ', $this->refused()) . '], queued: ['
-            . implode(', ', $this->queued()) . '], flew: [' . implode(', ', $this->missions()) . '] and its last decision ranked: ' . ($ranked === [] ? 'no candidates' : implode('; ', $ranked));
+            . implode(', ', $this->queued()) . '], flew: [' . implode(', ', $this->missions()) . '], not offered: ['
+            . implode(', ', array_map(static fn ($key, $reason): string => $key . ' (' . $reason . ')', array_keys($rejected), $rejected)) . '] and its last decision ranked: ' . ($ranked === [] ? 'no candidates' : implode('; ', $ranked));
     }
 
     /** The neighbour planted by inactiveNeighbour(), for a test that asserts on what happened to it. */

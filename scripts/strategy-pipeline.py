@@ -962,6 +962,24 @@ def waits_upstream(code, failing):
         connection.close()
 
 
+def live_evidence(failing):
+    """What the live cohort shows behind a failed live step, for the writer: the last half hour of the
+    cohort (work, refusals, missions) and what the situation's subject account sees and decides. A bare
+    "raids 0 floor 1" told the retry nothing about why (1 Oct 2026)."""
+    if not any(line.startswith(("FAIL situation:", "FAIL aspect:", "FAIL invariant:")) for line in failing):
+        return ""
+    env = dict(os.environ, OGAMEX_RUNNER=os.environ.get("OGAMEX_RUNNER", "local-docker-dev"))
+    parts = []
+    for command in (["pulse", "30"], ["why", "subject"]):
+        try:
+            result = subprocess.run(["bash", os.path.join(MODULE, "scripts/ogamex"), *command],
+                                    capture_output=True, text=True, timeout=120, env=env)
+            parts.append(f"--- ogamex {' '.join(command)} (live, now):\n" + result.stdout.strip()[:2500])
+        except subprocess.TimeoutExpired:
+            continue
+    return "\n\nLIVE EVIDENCE\n" + "\n".join(parts) if parts else ""
+
+
 def reopen(code):
     """Send a delivered row back to the writer when its live proof failed, with that failure as feedback.
 
@@ -993,7 +1011,8 @@ def reopen(code):
     if os.path.exists(marker):
         os.remove(marker)
     # After the reset, so a stuck verdict (blocked) wins over it.
-    record_failure(code, "the delivered change passed its tests but its live proof failed:\n" + "\n".join(text.splitlines()[:30]))
+    record_failure(code, "the delivered change passed its tests but its live proof failed:\n" + "\n".join(text.splitlines()[:30])
+                   + live_evidence(failing))
     print(f"{code}: back to the writer with the failing proof step")
 
     return 0

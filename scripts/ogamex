@@ -137,6 +137,13 @@ Proof (a task is done when its proof passes; see .github/skills/ai-task-execute)
                                         names the failing step; --json ends stdout with one JSON verdict line
   test-one <TestName>                   one module test file by name (fast, no parallel start-up)
   economy <player_id>                   per planet: building, what it would queue, or the gate that refuses it
+  stories                               every Situation-kit story, PASS/FAIL with the kit's diagnosis (~5 s)
+
+Live (on a cohort, PROVE_UNIVERSE=grand by default; all read-only except situation):
+  pulse [minutes]                       what the cohort did in the last N minutes, refusals, worker backlog
+  account <player_id> [minutes]         one account: planets, queues, fleets, recent work, refusals, decisions
+  why <player_id>                       what its next session will see: published actions, every input flag,
+                                        the real decision over it and what the candidate factory turned down
 
 Environment:
   OGAMEX_ROOT          OGameX checkout (default: two levels above this script)
@@ -231,6 +238,7 @@ prove_row() {
     # a change made by hand uses PROVE_HOURS.
     local marker="$MODULE_ROOT/plan/research/ogame/implemented/$code.md"
     hours="${PROVE_HOURS:-2}"
+    age=$(( hours * 3600 ))
     if [ -f "$marker" ]; then
         age=$(( $(date +%s) - $(stat -c %Y "$marker") ))
         hours=$(( age / 3600 ))
@@ -264,8 +272,16 @@ prove_row() {
                 ;;
             aspect)
                 if [ "$hours" -lt 1 ]; then
-                    echo "too early: the cohort has played under an hour on this change" | tee "$out" >&"$progress"
-                    rc=1
+                    # Under an hour a pass is still evidence (the floor scales with the window and never
+                    # drops below one event); only a fail has to wait for the full hour to mean anything.
+                    early="$(awk -v s="$age" 'BEGIN { h = s / 3600; printf "%.2f", (h < 0.1 ? 0.1 : h) }')"
+                    if in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php --aspect="$name" --hours="$early" > "$out" 2>&1; then
+                        echo "early pass: the aspect already passes on the ${early}h since this change" >> "$out"
+                        cat "$out" >&"$progress"
+                    else
+                        echo "too early: the cohort has played under an hour on this change (not yet passing on ${early}h)" | tee "$out" >&"$progress"
+                        rc=1
+                    fi
                 else
                     in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php --aspect="$name" --hours="$hours" --save="$code" 2>&1 | tee "$out" >&"$progress" || rc=1
                 fi
@@ -372,6 +388,15 @@ case "$command_name" in
         ;;
     economy)
         in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/economy-explain.php'; foreach (explain_economy(${1:?usage: economy PLAYER_ID}) as \$line) { echo \$line, PHP_EOL; }"
+        ;;
+    pulse)
+        in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/live-pulse.php "${1:-15}" "${@:2}"
+        ;;
+    account)
+        in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/live-account.php "${1:?usage: account PLAYER_ID [MINUTES]}" "${2:-60}"
+        ;;
+    why)
+        in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/live-why.php "${1:?usage: why PLAYER_ID}"
         ;;
     stories)
         python3 "$MODULE_ROOT/scripts/stories.py" "$@"

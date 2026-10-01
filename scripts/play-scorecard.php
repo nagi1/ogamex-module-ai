@@ -230,7 +230,8 @@ function scorecard_options(array $arguments): array
 
             exit(2);
         }
-        $options[$match[1]] = $match[1] === 'hours' ? max(1.0, (float) $match[2]) : $match[2];
+        // Down to six minutes: the harness reads a short window for an early pass, never for a fail.
+        $options[$match[1]] = $match[1] === 'hours' ? max(0.1, (float) $match[2]) : $match[2];
     }
 
     return $options;

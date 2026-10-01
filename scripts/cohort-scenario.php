@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiProfile;
 use OGame\Models\ChatMessage;
 
@@ -64,7 +65,7 @@ if ($command === 'help' || $command === 'list') {
 }
 
 if ($command !== 'run') {
-    fwrite(STDERR, "usage: cohort-scenario.php <list|run> [scenario|all] [--confirm] [--accounts=2] [--wait=180] [--inline] [--arrival=600] [--cleanup] [--json]\n");
+    fwrite(STDERR, "usage: cohort-scenario.php <list|run> [scenario|all] [--confirm] [--accounts=2] [--wait=180] [--workers] [--arrival=600] [--cleanup] [--json]\n");
 
     exit(2);
 }
@@ -297,33 +298,47 @@ function scenarios(): array
         ],
         'inactive-neighbour' => [
             'writes' => true,
-            'proves' => 'a neighbour inactive for 8 days, with stock beside the account, is raided (ATK-001: no raid in days)',
+            'proves' => 'the nearest genuinely inactive neighbour, holding stock, is spied and then raided (ATK-001)',
             'plant' => static function (array $context): array {
-                // The host calls a player inactive once users.time is older than seven days.
-                $user = DB::table('users')->where('id', $context['neighbour'])->first(['time']);
-                $before = (array) DB::table('planets')->where('id', $context['neighbour_planet'])->first(['metal', 'crystal', 'deuterium']);
-
-                DB::table('users')->where('id', $context['neighbour'])->update(['time' => (string) CarbonImmutable::now()->subDays(8)->timestamp]);
-                DB::table('planets')->where('id', $context['neighbour_planet'])->update([
-                    'metal' => 300000,
-                    'crystal' => 200000,
-                    'deuterium' => 100000,
-                    'updated_at' => CarbonImmutable::now(),
-                ]);
-
-                return ['account '.$context['neighbour'].' last seen 8 days ago with 600k resources on planet '.$context['neighbour_planet'],
-                    [['restore', 'users', $context['neighbour'], ['time' => $user->time]],
-                        ['restore', 'planets', $context['neighbour_planet'], $before]]];
-            },
-            'expect' => static function (array $context): array {
-                $raids = work_item_rows($context['players'], $context['before'], AiWorkKind::Raid->value);
-                $refusals = refusal_reasons($context['players'], $context['before']);
-
-                if ($raids !== []) {
-                    return [true, count($raids).' raid work item(s) '.describe($raids, 'kind')];
+                // A real inactive, not a cohort account with its login backdated: a cohort account plays
+                // every few minutes, so its planet always shows the activity star and a correct executor
+                // refuses it. The seeded inactives (seed-inactive-neighbours.php) are what raids are for.
+                $home = DB::table('planets')->where('id', $context['planet'])->first(['galaxy', 'system']);
+                $target = DB::table('planets')->join('users', 'users.id', '=', 'planets.user_id')
+                    ->where('planets.planet_type', 1)->whereNotIn('planets.user_id', $context['players'])
+                    ->where('users.time', '<', CarbonImmutable::now()->subDays(7)->timestamp)
+                    ->orderByRaw('planets.galaxy != ?, abs(planets.system - ?)', [$home->galaxy, $home->system])
+                    ->first(['planets.id', 'planets.user_id', 'planets.galaxy', 'planets.system', 'planets.planet as position',
+                        'planets.metal', 'planets.crystal', 'planets.deuterium', 'planets.time_last_update']);
+                if ($target === null) {
+                    throw new RuntimeException('no inactive player here; seed some with local-docker-dev/seed-inactive-neighbours.php');
                 }
 
-                return [false, 'no raid decided; refusals: '.($refusals === [] ? 'none recorded' : implode(', ', $refusals))];
+                DB::table('planets')->where('id', $target->id)->update([
+                    'metal' => 300000, 'crystal' => 200000, 'deuterium' => 100000,
+                    'time_last_update' => CarbonImmutable::now()->subDays(8)->timestamp,
+                ]);
+                [$probes, $undoProbes] = lend_ships($context['planet'], 'espionage_probe', 3);
+                [$cargo, $undoCargo] = lend_ships($context['planet'], 'large_cargo', 10);
+
+                return [sprintf('inactive player %d at [%d:%d:%d] holds 600k; lent %s and %s', $target->user_id, $target->galaxy,
+                    $target->system, $target->position, $probes, $cargo),
+                    [['restore', 'planets', $target->id, ['metal' => $target->metal, 'crystal' => $target->crystal,
+                        'deuterium' => $target->deuterium, 'time_last_update' => $target->time_last_update]], $undoProbes, $undoCargo]];
+            },
+            'expect' => static function (array $context): array {
+                $spies = work_item_rows($context['players'], $context['before'], AiWorkKind::Spy->value);
+                $raids = work_item_rows($context['players'], $context['before'], AiWorkKind::Raid->value);
+                $reports = DB::table('messages')->whereIn('user_id', $context['players'])->whereNotNull('espionage_report_id')
+                    ->where('created_at', '>=', $context['before'])->count();
+                $refusals = refusal_reasons($context['players'], $context['before']);
+                $story = sprintf('%d spy, %d report(s), %d raid', count($spies), $reports, count($raids));
+
+                if ($raids !== []) {
+                    return [true, $story];
+                }
+
+                return [false, $story.'; refusals: '.($refusals === [] ? 'none recorded' : implode(', ', $refusals))];
             },
         ],
         'alliance-application' => [
@@ -402,12 +417,12 @@ function run_scenario(string $name, array $definition, array $context, array $op
     $since = CarbonImmutable::now();
     $tick = 0;
     do {
-        $lines[] = drive_once($context, $options['inline'], ++$tick, $since);
+        $lines[] = drive_once($context, $options['workers'], ++$tick, $since);
         [$ok, $detail] = $definition['expect']($context);
         if ($ok || microtime(true) - $started >= $options['wait']) {
             break;
         }
-        sleep(POLL_SECONDS);
+        sleep($options['workers'] ? POLL_SECONDS : 1);
     } while (true);
 
     if (!$ok) {
@@ -430,28 +445,69 @@ function run_scenario(string $name, array $definition, array $context, array $op
 }
 
 /**
- * One pass of time: host orders finish, the module's work falls due, and the host applies its
- * queues. The live queue workers then run the work, which is the cohort's real runtime; --inline
- * runs it in this process instead, for a universe whose workers are stopped. Inline on a live cohort
- * queued behind the workers' per-player locks and took five minutes a scenario.
+ * One pass of time for the situation's accounts only: host orders finish, their own fleets arrive and
+ * the host processes the arrivals (a probe's report, a raid's loot, a recycle), the module's work falls
+ * due, and that work runs right here, account by account, through the real ProcessAiWork. Waiting for
+ * the cohort's workers instead read their backlog, not the code: a situation took 183 s and still timed
+ * out while 20 accounts queued ahead of it (1 Oct 2026). --workers keeps that path, for a test of the
+ * runtime itself.
  *
  * @param  array<string, mixed>  $context
  */
-function drive_once(array $context, bool $inline, int $tick, CarbonImmutable $since): string
+function drive_once(array $context, bool $workers, int $tick, CarbonImmutable $since): string
 {
     $now = CarbonImmutable::now();
     $finished = finish_host_queues($context['planets'], $now);
+    $arrived = arrive_own_fleets($context['players'], $now);
     $due = make_module_work_due($context['players'], $now);
 
     Artisan::call('ogamex:scheduler:process-planet-queues');
+    Artisan::call('ogamex:scheduler:process-fleet-arrivals', ['--limit' => 200]);
 
-    if ($inline) {
-        config(['queue.default' => 'sync']);
+    if ($workers) {
+        Artisan::call('ai:run-due-work', ['--limit' => 40]);
     }
-    Artisan::call('ai:run-due-work', ['--limit' => 40]);
+    $ran = $workers ? 0 : run_own_work($context['players']);
 
-    return sprintf('tick %d: %d order(s) finished, %d item(s) made due, %d work item(s) done so far',
-        $tick, $finished, $due, engine_ran($context['players'], $since));
+    return sprintf('tick %d: %d order(s) finished, %d fleet(s) arrived, %d item(s) made due, %d run here, %d work item(s) done so far',
+        $tick, $finished, $arrived, $due, $ran, engine_ran($context['players'], $since));
+}
+
+/**
+ * The accounts' own fleets in flight arrive now. Only theirs: a hostile fleet planted against them
+ * keeps its arrival, because reacting before it lands is what a save situation proves.
+ *
+ * @param  array<int, int>  $playerIds
+ */
+function arrive_own_fleets(array $playerIds, CarbonImmutable $now): int
+{
+    return DB::table('fleet_missions')->whereIn('user_id', $playerIds)->where('processed', 0)->where('canceled', 0)
+        ->where('time_arrival', '>', $now->timestamp)->update(['time_arrival' => $now->timestamp]);
+}
+
+/**
+ * Every due item of these accounts, through the real job, in due order. An account a cohort worker
+ * holds right now is left for the next tick (the job retries its own lease on contention).
+ *
+ * @param  array<int, int>  $playerIds
+ */
+function run_own_work(array $playerIds): int
+{
+    $ran = 0;
+    $due = DB::table('ai_work_items')->whereIn('player_id', $playerIds)
+        ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value])
+        ->where('due_at', '<=', CarbonImmutable::now())->orderBy('due_at')->limit(60)->pluck('id');
+
+    foreach ($due as $id) {
+        try {
+            app()->makeWith(ProcessAiWork::class, ['workItemId' => (int) $id])->handle();
+            $ran++;
+        } catch (Throwable $exception) {
+            echo '    work item '.$id.' threw: '.$exception->getMessage()."\n";
+        }
+    }
+
+    return $ran;
 }
 
 /**
@@ -724,7 +780,7 @@ function cohort_context(int $accounts): array
  */
 function read_options(array $arguments): array
 {
-    $options = ['confirm' => false, 'cleanup' => false, 'json' => false, 'inline' => false, 'accounts' => 2, 'wait' => 180, 'arrival' => 120];
+    $options = ['confirm' => false, 'cleanup' => false, 'json' => false, 'workers' => false, 'accounts' => 2, 'wait' => 180, 'arrival' => 120];
 
     foreach ($arguments as $argument) {
         if ($argument === '--confirm') {
@@ -739,8 +795,8 @@ function read_options(array $arguments): array
         if (str_starts_with($argument, '--accounts=')) {
             $options['accounts'] = max(1, (int) substr($argument, 11));
         }
-        if ($argument === '--inline') {
-            $options['inline'] = true;
+        if ($argument === '--workers') {
+            $options['workers'] = true;
         }
         if (str_starts_with($argument, '--wait=')) {
             $options['wait'] = max(10, min(1800, (int) substr($argument, 7)));
@@ -769,7 +825,7 @@ function print_catalogue(): void
     echo "\n  run <name|all>   drive it (writing scenarios need --confirm)\n";
     echo "  --accounts=N     how many enabled accounts to work with (default 2)\n";
     echo "  --wait=S         seconds to wait for the expected work before failing (default 180)\n";
-    echo "  --inline         run the work in this process (only when the universe's workers are stopped)\n";
+    echo "  --workers        leave the accounts' work to the cohort's queue workers (default: run it here, in seconds)\n";
     echo "  --arrival=SEC    when the planted hostile fleet arrives (default 600)\n";
     echo "  --cleanup        remove the rows this run planted\n";
     echo "  --json           also print the results as JSON\n";
