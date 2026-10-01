@@ -1,23 +1,89 @@
 ---
 name: ai-task-execute
-description: Execute one task from the Modules/AI task database with bounded context and focused verification.
+description: Take the next Modules/AI task, change the code that owns the behaviour, and close it only when its proof passes on the cohorts. Use for every implementation task.
 ---
 
-Input: task code.
+# One task, proven
 
-Follow `Modules/AI/plan/tasks/USAGE.md`.
+A task is **done only when `task.py done` accepts it**, and that command runs the task's proof
+itself. A test passing is not done. A file existing is not done. If the proof fails, the task stays
+open and you say why.
 
-Resolve the task, dependencies and referenced docs using the existing task CLI.
-Read only the relevant implementation/research/specification surfaces.
+Run every command from the module root (`Modules/AI`). The commands are the whole workflow; do not
+invent other ways to check your work.
 
-If the task has separable research/code-archeology questions, use subagents.
+## 1. Pick and read (2 commands)
 
-Implement only the task scope.
-Use central behavior configuration for behavioural tuning.
-Keep host mechanics in host services.
+```
+python3 plan/tasks/task.py next                 # the one task to take
+python3 plan/tasks/task.py claim CODE yourname  # "NOT claimed" = someone has it; run next again
+python3 plan/tasks/task.py show CODE            # notes = evidence and decisions; proof = how it is judged
+```
 
-Add/update focused Pest tests and run them.
+Read the row's `notes` fully: they hold the measurement, the cause when it is known, and any decision
+already made. Do not re-decide a decided question. Read the files in `file_ref`. Read nothing else
+unless an error sends you there.
 
-Do not mark work complete if required evidence/specification is missing.
+## 2. See it fail first
 
-Return the standard compact implementation handoff.
+Run the proof before you change anything. It must fail, and you must be able to say which step fails
+and why in one sentence:
+
+```
+bash scripts/ogamex prove CODE
+```
+
+If it already passes, the task is stale: run `task.py done CODE` and stop.
+
+## 3. Change the owner, smallest change
+
+- Edit the class that already makes this decision (the `file_ref`). Never add a class beside it.
+- Numbers that decide behaviour go in a YAML file under `resources/behavior/` that the class loads by name.
+- Objects, prices and requirements come from the host (`ObjectService`, the planet and player services).
+  Never write a building, ship or tech name or id as a rule.
+- No `else`/`elseif`; early returns or `match`. Resolve module classes with `app()`, never `new`.
+- Add or change a Pest test in `tests/Feature` that drives the real action or planner. Add it to the proof:
+  `python3 plan/tasks/task.py proof CODE test:YourTest <the existing steps>`.
+
+## 4. Check fast, in this order
+
+```
+bash scripts/ogamex test-one YourTest          # seconds: your test
+bash scripts/ogamex test-one ExecuteIntentTest # any test that names a class you touched
+bash scripts/ogamex situation NAME             # the situation from the proof, on the cohort
+bash scripts/ogamex gate                       # over-engineering gate, must be clean
+```
+
+Fix what fails. Do not move on with a red step.
+
+## 5. Prove and close
+
+Aspect steps need the cohort to play on your change for at least an hour. Commit, let it play, then:
+
+```
+bash scripts/ogamex prove CODE
+python3 plan/tasks/task.py done CODE           # runs the proof again; only closes if it passes
+```
+
+If `aspect:` still fails after the cohort played, your change did not change what accounts do. Say so
+in the row (`task.py block CODE "<what the scorecard shows>"`), do not close it.
+
+## Proof steps
+
+| Step | What it runs | Passes when |
+| --- | --- | --- |
+| `test:Name` | `./vendor/bin/pest --filter=Name` in the dev stack | the test file is green |
+| `situation:name` | `scripts/cohort-scenario.php run name` on the cohort | the planted situation got the expected work |
+| `aspect:name` | `scripts/play-scorecard.php --aspect=name` on the cohort | the aspect meets its floor since the change |
+| `invariant:NAME` | `scripts/verify-cohorts.php` on the cohort | the invariant is not violated |
+| `harness:self-check` | `scripts/strategy-pipeline.py --self-check` | the harness checks pass |
+
+`bash scripts/ogamex situation list` names every situation; `bash scripts/ogamex scorecard` shows every
+aspect with its floor and the file that owns it.
+
+## Handoff (exactly this)
+
+- Row code, and the last `PROOF:` line verbatim.
+- Files changed.
+- The failing step before, the passing step after.
+- Anything left open, and why.

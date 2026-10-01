@@ -952,6 +952,19 @@ def inlined_policy(paths, numbers):
     return found
 
 
+def data_reader(clean):
+    """The first line of code (not a comment) that names this behaviour file, or None.
+
+    Data nothing reads looks like policy and changes nothing: seven doctrine files delivered on
+    30 Sep 2026 were named by no runtime file (QUAL-6). A docblock mentioning the file is not a reader.
+    """
+    hits = subprocess.run(["grep", "-rnF", os.path.basename(clean), "app/", "--include=*.php"],
+                          cwd=MODULE, capture_output=True, text=True).stdout.splitlines()
+    code = [hit for hit in hits if not re.match(r"^[^:]+:\d+:\s*(\*|//|/\*)", hit)]
+
+    return code[0] if code else None
+
+
 def unreachable_files(paths, backups):
     """Module code files that no runtime code calls.
 
@@ -967,7 +980,7 @@ def unreachable_files(paths, backups):
     created = {os.path.abspath(os.path.join(MODULE, clean)) for clean in paths
                if os.path.join(MODULE, clean) not in backups}
 
-    unreachable = []
+    unreachable = [clean for clean in paths if clean.startswith("resources/behavior/") and not data_reader(clean)]
 
     for clean in paths:
         if not clean.startswith("app/") or not clean.endswith(".php"):
@@ -1155,6 +1168,10 @@ def self_check():
     finally:
         with open(target_full, "w", encoding="utf-8") as handle:
             handle.write(original)
+
+    assert data_reader("resources/behavior/collector.yaml"), "a data file a class loads has a reader"
+    assert unreachable_files(["resources/behavior/__nobody_reads_this.yaml"], {}) == \
+        ["resources/behavior/__nobody_reads_this.yaml"], "a data file nothing loads is unreachable"
 
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
@@ -1548,13 +1565,13 @@ def task_row(code):
         raise SystemExit("no task database")
     connection = sqlite3.connect(TASKS_DB)
     row = connection.execute(
-        "select code, title, status, notes, file_ref from tasks where code = ?", (code,)
+        "select code, title, status, notes, file_ref, proof from tasks where code = ?", (code,)
     ).fetchone()
     connection.close()
     if row is None:
         raise SystemExit(f"no task {code} in the database")
     return {"code": row[0], "title": row[1], "status": row[2],
-            "notes": row[3] or "", "file_ref": row[4] or ""}
+            "notes": row[3] or "", "file_ref": row[4] or "", "proof": row[5] or ""}
 
 
 def plan_paths(blocks, fallback=""):
@@ -1603,6 +1620,13 @@ def implement_context(code):
     if task["notes"].strip():
         parts += ["THE ROW'S OWN NOTES (authoritative: measurements, constraints, already-decided defaults):",
                   notes_block(task["notes"]), ""]
+
+    # What will judge the slice, so the writer aims at the account's behaviour and not at its own test.
+    if task["proof"]:
+        parts += ["THE PROOF THAT CLOSES THIS ROW (run on the live cohorts after your change; a green "
+                  "test alone does not close it): " + task["proof"],
+                  "aspect:X = the account must visibly do X more on the cohort; situation:Y = a planted "
+                  "situation must produce the expected work; invariant:Z = the cohort must stop violating Z.", ""]
 
     parts += ["THE PLAN:",
              read(proposal_path) if proposal_path else "(the task has no proposal attached)", ""]
@@ -1878,94 +1902,141 @@ QUALITY_TASKS = {
 
 
 def quality(path):
-    """Turn a cohort's failed invariants into tracked tasks, once each.
+    """Turn a cohort read's failures into tracked tasks, once each, and reopen what regressed.
 
-    The verdict used to be a log line: the harness printed "QUALITY: FAIL" every pass and nothing
-    consumed it, so a failing cohort and a fixed one looked the same from the task database -- the
-    circle the owner called out. Here each invariant that fires either finds the task that already
-    answers for it or creates one, and the caller is told which of the two happened.
+    Two verdicts are read: `QUALITY: FAIL` from verify-cohorts (invariants) and `PLAY: FAIL` from
+    play-scorecard (aspects of a player's day, named PLAY_<aspect>). Each failing name finds the row
+    that answers for it; a done row that fails again is reopened, because a closed row over a failing
+    cohort is the report lying. A new row gets the owning file and a proof, so the implement lane can
+    take it and `task.py done` can check it.
     """
     text = read(path) if os.path.exists(path) else ""
-    verdict = re.search(r"^QUALITY: FAIL ([A-Z_ ]+)$", text, re.M)
-    if verdict is None:
-        print("QUALITY: no failed invariant in that read — nothing to raise")
+    fired = []
+    for verdict, prefix in ((r"^QUALITY: FAIL ([A-Z_ ]+)$", ""), (r"^PLAY: FAIL ([a-z_ ]+)$", "PLAY_")):
+        found = re.search(verdict, text, re.M)
+        fired += [prefix + name for name in found.group(1).split()] if found else []
+    if not fired:
+        print("QUALITY: no failed invariant or aspect in that read — nothing to raise")
         return 0
 
-    fired = verdict.group(1).split()
+    owners = dict(re.findall(r"FAIL (\w+) .*\n\s+owner: (\S+)", text))
     cli = os.path.join(MODULE, "plan/tasks/task.py")
-    known = quality_task_codes()
-    raised, tracked = [], []
+    known = quality_task_codes(fired)
+    raised, tracked, reopened = [], [], []
+    connection = sqlite3.connect(TASKS_DB)
 
     for name in fired:
-        if name in known:
-            tracked.append(f"{name} ({known[name]})")
+        if name in known and known[name][1] != "done":
+            tracked.append(f"{name} ({known[name][0]})")
             continue
-        title, why, owner = QUALITY_TASKS.get(name, (f"Cohort invariant {name} fires", "See verify-cohorts.php.", ""))
-        code = f"QUAL-{len(known) + 1:03d}"
-        samples = [line.strip() for line in text.splitlines() if f"[{name}]" in line][:5]
-        subprocess.run([sys.executable, cli, "add", code, title, "impl", "P1",
-                        "--gap", name, "--file", owner,
+        if name in known:
+            connection.execute("update tasks set status='todo', assignee=null, updated_at=datetime('now'), "
+                               "notes=coalesce(notes,'') || ? where code=?",
+                               (f" | REOPENED {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: "
+                                f"{name} fails again on the cohort read.", known[name][0]))
+            connection.commit()
+            reopened.append(f"{name} ({known[name][0]})")
+            continue
+
+        aspect = name[len("PLAY_"):] if name.startswith("PLAY_") else ""
+        title, why, owner = QUALITY_TASKS.get(name, (
+            f"The cohort does not play {aspect}" if aspect else f"Cohort invariant {name} fires",
+            "See play-scorecard.php." if aspect else "See verify-cohorts.php.",
+            owners.get(aspect, ""),
+        ))
+        code = next_quality_code(connection)
+        samples = [line.strip() for line in text.splitlines() if f"[{name}]" in line or (aspect and f" {aspect} " in line)][:5]
+        subprocess.run([sys.executable, cli, "add", code, title, "impl", "P1", "--gap", name, "--file", owner,
+                        "--proof", f"aspect:{aspect}" if aspect else f"invariant:{name}",
                         "--notes", f"{why} Raised from the cohort read's own verdict. "
-                                   f"Invariant name {name} is the dedupe key: do not raise a second "
-                                   f"task while this one is open.\nEvidence:\n" + "\n".join(samples)],
+                                   f"{name} is the dedupe key: do not raise a second task while this one is open.\n"
+                                   "Evidence:\n" + "\n".join(samples)],
                        check=True, capture_output=True)
-        known[name] = code
         raised.append(f"{name} ({code})")
         print(f"raised {code} for {name}: {title}")
 
+    connection.close()
     print("quality work: " + ("; ".join(raised) if raised else "nothing new") +
+          ("; REGRESSED, reopened: " + ", ".join(reopened) if reopened else "") +
           ("; already tracked: " + ", ".join(tracked) if tracked else ""))
     return 0
 
 
-def quality_task_codes():
-    """Which invariant each existing task already answers for, keyed by the invariant name.
+def next_quality_code(connection):
+    """The next unused QUAL number. `task.py add` replaces a row with the same code, so a guessed
+    number could overwrite an unrelated task."""
+    numbers = [int(code.split("-")[1]) for (code,) in connection.execute("select code from tasks where code like 'QUAL-%'")
+               if code.split("-")[1].isdigit()]
 
-    Read from `gap_ref` and the notes, because that is where the task says what it is about: a task
-    exists per invariant, not per violation, so a second pass must find it rather than raise a twin.
+    return f"QUAL-{max(numbers, default=0) + 1:03d}"
+
+
+def quality_task_codes(names):
+    """The row that answers for each name: name -> (code, status), open rows before done ones.
+
+    A whole-word match on gap_ref, title and notes, because that is where a row says what it is
+    about. Any name is looked up, not only the ones with a hand-written title: an unlisted name used
+    to find nothing, so every pass raised a twin of the row it raised last time.
     """
     if not os.path.exists(TASKS_DB):
         return {}
 
     connection = sqlite3.connect(TASKS_DB)
     rows = connection.execute(
-        "select code, coalesce(gap_ref, '') || ' ' || coalesce(title, '') || ' ' || coalesce(notes, '') from tasks"
+        "select code, status, coalesce(gap_ref, '') || ' ' || coalesce(title, '') || ' ' || coalesce(notes, '') "
+        "from tasks order by status = 'done', id"
     ).fetchall()
     connection.close()
 
     found = {}
-    for code, haystack in rows:
-        for name in QUALITY_TASKS:
-            if name in haystack and name not in found:
-                found[name] = code
+    for name in names:
+        for code, state, haystack in rows:
+            if re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", haystack):
+                found[name] = (code, state)
+                break
 
     return found
 
 
 def status():
-    """What the harness is waiting for, so an idle pass explains itself.
+    """What the harness can still do, and what it delivered without proof.
 
-    "nothing left to do" every sixty seconds reads as a stall, and it hides the real state: a queue of
-    tasks that cannot be attempted yet because their own attempts are cooling off. Saying which is
-    which is the difference between a loop and a queue.
+    The queue is the implement lane's own (impl rows at P0-P2 naming a file or a proposal); counting
+    only wiki-planned rows read READY: 0 while the P0 rows waited. "Delivered" is a writer marker;
+    "proven" is a row `task.py done` closed because its proof passed. Only the second is progress.
     """
-    todo = []
+    rows = []
     if os.path.exists(TASKS_DB):
         connection = sqlite3.connect(TASKS_DB)
-        todo = [row[0] for row in connection.execute("select code from tasks where status = 'todo'")]
+        rows = connection.execute(
+            "select code, status, coalesce(file_ref, ''), coalesce(proof, ''), coalesce(notes, '') like '% PROVEN %' from tasks "
+            "where kind = 'impl' and priority in ('P0', 'P1', 'P2')").fetchall()
+        ready_codes = {code for (code,) in connection.execute("select code from ready_tasks")}
         connection.close()
+    else:
+        ready_codes = set()
 
-    planned = [code for code in todo if os.path.exists(os.path.join(PROPOSALS, f"{code}.md"))]
-    done = [code for code in planned if os.path.exists(os.path.join(IMPLEMENTED, f"{code}.md"))]
-    cooling = {code: cooling_off(code) for code in planned if code not in done}
-    waiting = {code: seconds for code, seconds in cooling.items() if seconds > 0}
-    ready = [code for code in cooling if cooling[code] == 0]
+    marked = {code for code, *_ in rows if os.path.exists(os.path.join(IMPLEMENTED, f"{code}.md"))}
+    attemptable = [code for code, _, file_ref, _, _ in rows
+                   if code in ready_codes and code not in marked
+                   and (file_ref or os.path.exists(os.path.join(PROPOSALS, f"{code}.md")))]
+    waiting = {code: cooling_off(code) for code in attemptable if cooling_off(code) > 0}
+    ready = [code for code in attemptable if code not in waiting]
+    proven = [code for code, state, _, _, stamped in rows if state == "done" and stamped]
+    closed_blind = [code for code, state, _, _, stamped in rows if state == "done" and not stamped]
+    unproven = [code for code, state, *_ in rows if code in marked and state != "done"]
+    no_proof = [code for code, state, _, proof, _ in rows if state in ("todo", "in_progress", "blocked") and not proof]
 
-    print(f"planning: {len(pending_sources())} source(s) pending")
-    print(f"tasks: {len(todo)} todo, {len(planned)} planned, {len(done)} already proved, "
+    print(f"P0-P2 code rows: {len(proven)} proven, {len(closed_blind)} closed before proofs existed, "
+          f"{len(unproven)} delivered but NOT proven, "
           f"{len(ready)} ready now, {len(waiting)} cooling off")
+    if unproven:
+        print("delivered, not proven: " + ", ".join(sorted(unproven)))
+    if no_proof:
+        print("open rows with no proof stated (cannot close): " + ", ".join(sorted(no_proof)))
     # Machine-readable for the harness: an empty queue may wait, a queue with attemptable work may not.
     print(f"READY: {len(ready)}")
+    print(f"UNPROVEN: {' '.join(sorted(unproven))}")
 
     if waiting:
         print(f"next one free in {min(waiting.values()) // 60} min")
@@ -2252,7 +2323,8 @@ def verify_slice(code, written, tests, backups):
         return ("these files are not called by any runtime code, so no account can ever execute them: "
                 + ", ".join(unreachable) +
                 ".\nDo not write a new class. EDIT the planner, engine or action that already owns this "
-                "decision, and have the Feature test drive that path.")
+                "decision, and have the Feature test drive that path. A data file under resources/behavior "
+                "must be loaded by name in that class.")
 
     inlined = inlined_policy(written, plan_numbers(code))
     if inlined:

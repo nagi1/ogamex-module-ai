@@ -26,6 +26,8 @@ trap 'kill 0' EXIT
 
 cd "$(dirname "$0")/.." || exit 1
 LOG=/tmp/harness-live.log
+# Tests in the dev stack, situations and scorecards in the cohorts: `scripts/ogamex prove` needs both.
+export OGAMEX_RUNNER="${OGAMEX_RUNNER:-local-docker-dev}"
 COMPOSE_DIR=../../local-docker-dev
 # Only used when a whole pass produced nothing: there is no point hammering an empty queue, but
 # there is also no point sleeping while there is work left.
@@ -49,6 +51,12 @@ IDLE_INTERVAL=60
       # Nothing of ours runs during peak: the canary is stopped too, so the machine is quiet and the
       # dashboard cannot be mistaken for work in progress.
       bash scripts/canary.sh down >> "$LOG" 2>&1 || true
+      # The park is free time for checks that make no provider call (HARNESS-004): drive every
+      # situation on both cohorts once, so the next pass starts from a fresh read of what plays.
+      for universe in grand pve; do
+        echo "--- situations on $universe during the park $(date -u '+%F %T') UTC ---"
+        PROVE_UNIVERSE=$universe bash scripts/ogamex situation all || true
+      done
       python3 -u scripts/strategy-pipeline.py wait-until-offpeak
       bash scripts/canary.sh up >> "$LOG" 2>&1 || true
       echo "=== peak over, resuming $(date -u '+%F %T') UTC ==="
@@ -185,10 +193,14 @@ PY
       # 125 naked, so the verdict gets its own line in the log.
       cohort_output=$( (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc \
         "cd /var/www && php artisan tinker --execute=\"require '/var/www/Modules/AI/scripts/verify-cohorts.php';\"") 2>&1 )
+      # The scorecard is the other half of the read: invariants say what is shaped wrong, aspects say
+      # what a player does that these accounts never do. Both verdicts go to the same quality file.
+      cohort_output="$cohort_output
+$(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       printf '%s\n' "$cohort_output"
       printf '%s\n' "$cohort_output" > "/tmp/harness-quality-$universe.txt"
       case "$cohort_output" in
-        *"QUALITY: FAIL"*)
+        *"QUALITY: FAIL"* | *"PLAY: FAIL"*)
           echo "=== QUALITY FAILED on $universe — the accounts play, but badly; violations above $(date -u '+%F %T') UTC ==="
           # Not a dead end: a failing invariant becomes a task row, once per invariant, so the next
           # pass reports it as already tracked instead of the verdict circling in the log forever.
@@ -215,6 +227,20 @@ PY
       echo "=== LIVE VERIFICATION FAILED $(date -u '+%F %T') UTC — the accounts did not play; block above ==="
       sleep 120
       continue
+    fi
+
+    # Proof stage: a row the writer delivered closes only when its proof passes on the cohorts
+    # (`task.py done` runs `scripts/ogamex prove`). The cohort workers keep classes in memory, so
+    # they are restarted onto the code on disk first, or the proof would read the old behaviour.
+    unproven=$(python3 -u scripts/strategy-pipeline.py status | sed -n 's/^UNPROVEN: //p')
+    if [ -n "$unproven" ]; then
+      for universe in grand pve; do
+        (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc "cd /var/www && php artisan queue:restart") || true
+      done
+      for code in $(printf '%s\n' $unproven | head -n 5); do
+        echo "--- proving $code $(date -u '+%F %T') UTC ---"
+        python3 plan/tasks/task.py done "$code" || echo "--- $code delivered, NOT proven yet $(date -u '+%F %T') UTC ---"
+      done
     fi
 
     proposals_after=$(ls plan/research/ogame/proposals | wc -l)

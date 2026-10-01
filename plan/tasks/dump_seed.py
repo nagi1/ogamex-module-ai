@@ -37,13 +37,13 @@ deps = con.execute("SELECT task_id, depends_on, reason FROM dependencies ORDER B
 out = "".join(header)
 out += "-- \u2500\u2500 tasks \u2500\u2500" + "\u2500" * 90 + "\n"
 out += ("INSERT OR REPLACE INTO tasks\n"
-        " (id, code, title, kind, status, priority, gap_ref, principle_refs, algorithm_ref, doc_refs, file_ref, notes, updated_at) VALUES\n")
+        " (id, code, title, kind, status, priority, assignee, gap_ref, principle_refs, algorithm_ref, doc_refs, file_ref, notes, proof, updated_at) VALUES\n")
 rows = []
 for t in tasks:
     rows.append(" (" + ",".join([
         str(t["id"]), q(t["code"]), q(t["title"]), q(t["kind"]), q(t["status"]),
-        q(t["priority"]), q(t["gap_ref"]), q(t["principle_refs"]), q(t["algorithm_ref"]),
-        q(t["doc_refs"]), q(t["file_ref"]), q(t["notes"]), q(t["updated_at"]),
+        q(t["priority"]), q(t["assignee"]), q(t["gap_ref"]), q(t["principle_refs"]), q(t["algorithm_ref"]),
+        q(t["doc_refs"]), q(t["file_ref"]), q(t["notes"]), q(t["proof"]), q(t["updated_at"]),
     ]) + ")")
 out += ",\n".join(rows) + ";\n"
 

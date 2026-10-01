@@ -129,6 +129,13 @@ Checks:
   coverage                              the one serial run: PCOV coverage of Modules/AI/app
   reap                                  release locks left by a killed test run
 
+Proof (a task is done when its proof passes; see .github/skills/ai-task-execute):
+  scorecard [--hours=N] [--aspect=X] [--save=CODE] [--compare=FILE]
+                                        every aspect of a real player's day, PASS/FAIL, on a cohort
+  situation <name|all|list>             plant a situation on a cohort, drive it, read the answer back
+  prove <CODE>                          run the row's proof steps; PROOF: PASS or PROOF: FAIL
+  test-one <TestName>                   one module test file by name (fast, no parallel start-up)
+
 Environment:
   OGAMEX_ROOT          OGameX checkout (default: two levels above this script)
   OGAMEX_RUNNER        host (default) or local-docker-dev
@@ -136,7 +143,67 @@ Environment:
   TEST_TIMEOUT         seconds before a test run is killed in-container (default: 120)
   COVERAGE_TIMEOUT     seconds before the serial coverage run is killed (default: 600)
   AI_COVERAGE_DATABASE database the serial coverage gate owns (default: ogamex-test-ai-coverage)
+  PROVE_UNIVERSE       cohort the proof reads: grand (default) or pve
+  PROVE_HOURS          scorecard window an aspect step is judged on (default: 2)
 TEXT
+}
+
+# The cohorts are their own stacks (grand, pve); the dev stack holds no AI population, so a
+# situation or a scorecard read there says nothing about how the accounts play.
+in_universe() {
+    local universe="$1"
+    shift
+    (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose -f "docker-compose.${universe}.yml" exec -T ogamex-app \
+        sh -lc "cd /var/www && $(printf '%q ' "$@")")
+}
+
+# Every step runs even after a failure, so one run shows everything that is still wrong.
+prove_row() {
+    local code="$1" steps failed=0 step kind name
+    steps="$(python3 "$MODULE_ROOT/plan/tasks/task.py" proof "$code")"
+    if [ -z "$steps" ]; then
+        echo "PROOF: FAIL $code states no proof (task.py proof $code test:X situation:Y aspect:Z invariant:NAME)"
+        return 1
+    fi
+    mkdir -p "$MODULE_ROOT/plan/research/ogame/proofs"
+    # An aspect is judged only on play since the change landed: a window that reaches back before it
+    # measures the old code and can pass for the wrong reason. The writer's marker dates the change;
+    # a change made by hand uses PROVE_HOURS.
+    local marker="$MODULE_ROOT/plan/research/ogame/implemented/$code.md" hours="${PROVE_HOURS:-2}" age
+    if [ -f "$marker" ]; then
+        age=$(( $(date +%s) - $(stat -c %Y "$marker") ))
+        hours=$(( age / 3600 ))
+        [ "$hours" -gt 24 ] && hours=24
+    fi
+    for step in $steps; do
+        kind="${step%%:*}"
+        name="${step#*:}"
+        echo "--- $step"
+        case "$kind" in
+            test) run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" || failed=1 ;;
+            situation) in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup || failed=1 ;;
+            invariant)
+                # verify-cohorts names a violated invariant as "[NAME]"; its absence is the pass.
+                if in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/verify-cohorts.php';" | tee /dev/stderr | grep -q "\[$name\]"; then
+                    failed=1
+                fi
+                ;;
+            aspect)
+                if [ "$hours" -lt 1 ]; then
+                    echo "too early: the cohort has played under an hour on this change"
+                    failed=1
+                    continue
+                fi
+                in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php --aspect="$name" --hours="$hours" --save="$code" || failed=1
+                ;;
+            harness) python3 "$MODULE_ROOT/scripts/strategy-pipeline.py" --self-check || failed=1 ;;
+            *) echo "unknown proof step $step"; failed=1 ;;
+        esac
+    done
+    local verdict="PASS"
+    [ "$failed" = 0 ] || verdict="FAIL"
+    echo "PROOF: $verdict $code ($steps)" | tee -a "$MODULE_ROOT/plan/research/ogame/proofs/$code.log"
+    [ "$failed" = 0 ]
 }
 
 command_name="${1:-help}"
@@ -189,6 +256,22 @@ case "$command_name" in
         ;;
     gate)
         run_core php Modules/AI/scripts/gate-2-review.php
+        ;;
+    scorecard)
+        in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php "$@"
+        ;;
+    situation)
+        if [ "${1:-list}" = "list" ]; then
+            in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php list
+        else
+            in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$1" --confirm --cleanup "${@:2}"
+        fi
+        ;;
+    prove)
+        prove_row "${1:?usage: prove CODE}"
+        ;;
+    test-one)
+        run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"
         ;;
     reap)
         reap_stale_test_sessions

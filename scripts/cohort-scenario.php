@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use OGame\Models\ChatMessage;
 
 /**
  * Drive a named situation on the cohort this container points at, in seconds.
@@ -118,6 +119,41 @@ function scenarios(): array
                 $orders = orders_since($context['planets'], $context['before']);
 
                 return [$orders > 0, $orders.' queue order(s) created with nothing to react to'];
+            },
+        ],
+        'every-planet-builds' => [
+            'writes' => false,
+            'proves' => 'a login fills the build queue on every planet, not one per session (ECON-001)',
+            'plant' => null,
+            'expect' => static function (array $context): array {
+                $subjectPlanets = DB::table('planets')->where('user_id', $context['subject'])->where('planet_type', 1)->pluck('id')->all();
+                $building = DB::table('building_queues')->whereIn('planet_id', $subjectPlanets)
+                    ->where('created_at', '>=', $context['before'])->distinct()->count('planet_id');
+
+                return [count($subjectPlanets) > 0 && $building * 2 >= count($subjectPlanets),
+                    $building.' of '.count($subjectPlanets).' planet(s) of account '.$context['subject'].' got a building order'];
+            },
+        ],
+        'inbound-message' => [
+            'writes' => true,
+            'proves' => 'a message from a neighbour produces a social exchange (SOC-001: none in days)',
+            'plant' => static function (array $context): array {
+                // Eloquent, not a raw insert: the module observes the host model's created event,
+                // which is exactly what a real player's message fires.
+                $message = ChatMessage::create([
+                    'sender_id' => $context['neighbour'],
+                    'recipient_id' => $context['subject'],
+                    'message' => 'hey neighbour, we share a system. no attacks between us? we can both grow',
+                ]);
+
+                return ['message from account '.$context['neighbour'].' to account '.$context['subject'],
+                    [static fn (): int => (int) ChatMessage::query()->whereKey($message->id)->delete()]];
+            },
+            'expect' => static function (array $context): array {
+                $exchanges = DB::table('ai_social_exchanges')->where('player_id', $context['subject'])
+                    ->where('created_at', '>=', $context['before'])->count();
+
+                return [$exchanges > 0, $exchanges.' social exchange(s) recorded for account '.$context['subject']];
             },
         ],
         'inbound-attack' => [

@@ -8,7 +8,10 @@ Usage:
   python3 plan/tasks/task.py list|ready|blocked|graph
   python3 plan/tasks/task.py claim CODE ASSIGNEE
   python3 plan/tasks/task.py unclaim CODE
-  python3 plan/tasks/task.py done CODE
+  python3 plan/tasks/task.py next                  # the one row to work now (P0-P2 impl, by priority)
+  python3 plan/tasks/task.py show CODE             # everything the row says, proof included
+  python3 plan/tasks/task.py proof CODE [STEP ...] # read or set the proof: test:X situation:Y aspect:Z invariant:NAME
+  python3 plan/tasks/task.py done CODE             # runs the proof; refuses unless it passes
   python3 plan/tasks/task.py block CODE NOTE      # todo -> blocked
   python3 plan/tasks/task.py unblock CODE          # blocked -> todo
   python3 plan/tasks/task.py deps CODE             # direct + transitive dependencies
@@ -18,8 +21,11 @@ Usage:
   python3 plan/tasks/task.py rebuild               # re-run seed.sql (resets all statuses)
 """
 import argparse
+import datetime
 import os
+import re
 import sqlite3
+import subprocess
 import sys
 
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.db")
@@ -84,9 +90,59 @@ def cmd_unclaim(con, code):
 
 
 def cmd_done(con, code):
-    con.execute("UPDATE tasks SET status='done', assignee=NULL, updated_at=datetime('now') WHERE code=?", (code,))
+    """Done means proven. A code row closes only when its proof runs green: a passing unit of code
+    that changes nothing an account does is how 34 of 75 'delivered' slices turned out dead."""
+    row = con.execute("SELECT kind, coalesce(proof,'') FROM tasks WHERE code=?", (code,)).fetchone()
+    if row is None:
+        sys.exit(f"no task {code}")
+    kind, proof = row
+    if kind == "impl" and not proof.strip():
+        sys.exit(f"NOT done: {code} states no proof. Set one first: task.py proof {code} test:X situation:Y aspect:Z")
+    if kind == "impl":
+        module = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        result = subprocess.run(["bash", os.path.join(module, "scripts/ogamex"), "prove", code])
+        if result.returncode != 0:
+            sys.exit(f"NOT done: the proof for {code} failed (see above). The row stays open.")
+    con.execute("UPDATE tasks SET status='done', assignee=NULL, notes=coalesce(notes,'') || ?, "
+                "updated_at=datetime('now') WHERE code=?",
+                (f" | PROVEN {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: {proof}" if proof else "", code))
     con.commit()
     print("done", code)
+
+
+def cmd_show(con, code):
+    row = con.execute("SELECT * FROM tasks WHERE code=?", (code,)).fetchone()
+    if row is None:
+        sys.exit(f"no task {code}")
+    names = [d[0] for d in con.execute("SELECT * FROM tasks LIMIT 0").description]
+    for name, value in zip(names, row):
+        print(f"{name}: {value if value is not None else ''}")
+    deps = [d[0] for d in rows(con, "SELECT dep.code || ' [' || dep.status || ']' FROM dependencies d JOIN tasks dep ON dep.id=d.depends_on JOIN tasks t ON t.id=d.task_id WHERE t.code=?", (code,))]
+    print("depends on: " + (", ".join(deps) or "(none)"))
+
+
+def cmd_next(con):
+    """The single row an agent should take: worst observable badness first, code rows that name a file."""
+    row = con.execute(
+        "SELECT code, priority, title, file_ref FROM ready_tasks WHERE kind='impl' AND priority IN ('P0','P1','P2') "
+        "AND coalesce(file_ref,'') <> '' ORDER BY priority, id LIMIT 1").fetchone()
+    if row is None:
+        print("NEXT: nothing ready")
+        return
+    print(f"NEXT: {row[0]} [{row[1]}] {row[2]}\n  file: {row[3]}\n  read it: python3 plan/tasks/task.py show {row[0]}")
+
+
+def cmd_proof(con, code, steps):
+    if steps:
+        bad = [step for step in steps if not re.match(r"^(test|situation|aspect|invariant|harness):[\w.-]+$", step)]
+        if bad:
+            sys.exit(f"not a proof step: {' '.join(bad)} (use test:TestName situation:name aspect:name invariant:NAME)")
+        con.execute("UPDATE tasks SET proof=?, updated_at=datetime('now') WHERE code=?", (" ".join(steps), code))
+        con.commit()
+    row = con.execute("SELECT coalesce(proof,'') FROM tasks WHERE code=?", (code,)).fetchone()
+    if row is None:
+        sys.exit(f"no task {code}")
+    print(row[0])
 
 
 def cmd_block(con, code, note):
@@ -132,9 +188,9 @@ def cmd_add(con, a):
     # todo would offer work the plan has deliberately not scheduled to the next agent.
     status = "deferred" if a.kind == "deferred" else "todo"
     con.execute(
-        "INSERT OR REPLACE INTO tasks (code,title,kind,status,priority,gap_ref,principle_refs,algorithm_ref,file_ref,notes) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (a.code, a.title, a.kind, status, a.priority, a.gap, a.principles, a.alg, a.file, a.notes))
+        "INSERT OR REPLACE INTO tasks (code,title,kind,status,priority,gap_ref,principle_refs,algorithm_ref,file_ref,notes,proof) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (a.code, a.title, a.kind, status, a.priority, a.gap, a.principles, a.alg, a.file, a.notes, a.proof))
     for dep in (a.depends or "").split(","):
         dep = dep.strip()
         if dep:
@@ -160,10 +216,10 @@ def cmd_rebuild(con):
 def main():
     p = argparse.ArgumentParser(description="OGameX task-DB CLI")
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("list", "ready", "blocked", "graph", "rebuild"):
+    for name in ("list", "ready", "blocked", "graph", "rebuild", "next"):
         sub.add_parser(name)
     cp = sub.add_parser("claim"); cp.add_argument("code"); cp.add_argument("assignee")
-    for name in ("unclaim", "done", "unblock"):
+    for name in ("unclaim", "done", "unblock", "show"):
         sub.add_parser(name).add_argument("code")
     bp = sub.add_parser("block"); bp.add_argument("code"); bp.add_argument("note")
     sub.add_parser("deps").add_argument("code")
@@ -176,6 +232,8 @@ def main():
     ap.add_argument("--alg", default=None)
     ap.add_argument("--file", default=None)
     ap.add_argument("--notes", default=None)
+    ap.add_argument("--proof", default=None)
+    pp = sub.add_parser("proof"); pp.add_argument("code"); pp.add_argument("steps", nargs="*")
 
     a = p.parse_args()
     con = connect()
@@ -207,6 +265,12 @@ def main():
             cmd_dependson(con, a.code)
         elif cmd == "add":
             cmd_add(con, a)
+        elif cmd == "show":
+            cmd_show(con, a.code)
+        elif cmd == "next":
+            cmd_next(con)
+        elif cmd == "proof":
+            cmd_proof(con, a.code, a.steps)
     finally:
         con.close()
 
