@@ -1,33 +1,25 @@
-your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
---- your previous answer began:
-### FILE: resources/behavior/alliance_lane.php
-```php
-<?php
+AllianceLaneRecruitmentTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (4 assertions)[39m
 
-/*
- * The alliance lane: the values that decide how an AI-led alliance recruits.
- *
- * The leader's review pass reads every threshold from here, so retuning the lane — how long an
- * application waits, how many the leader takes in one pass, and how selective the alliance is
- * by rank and by points-per-member — is a data edit, not a code edit.
- */
+FAIL  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest
+  ✓ a leader takes a qualified applicant while its alliance is below th… 0.45s  
+  ⨯ a leader at the cohort share limit does not take even the strongest… 0.39s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest > a leader a…   
+  Failed asserting that 1 is identical to 0.
 
-$review = [
-    // An application sits this long before the leader looks at it, so membership grows like a
-    // leader deciding, not a script draining a queue.
-    'minimum_application_age_minutes' => 15,
+  at Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:118
+    114▕     laneAgeApplication($application, 30);
+    115▕ 
+    116▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
+    117▕ 
+  ➜ 118▕     expect($decided)->toBe(0)
+    119▕         ->and(AllianceMember::query()
+    120▕             ->where('alliance_id', $alliance->id)
+    121▕             ->where('user_id', $applicant->id)
+    122▕             ->exists())->toBeFalse()
 
-    // The leader takes at most this many per pass; the rest wait for the next one.
-    'maximum_accepts_per_pass' => 1,
+  1   Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:118
 
-    // The top share of the population a leader takes without another thought.
-    'strong_rank_ratio' => 0.15,
 
-    // The bottom share that only a mass or still-recruiting alliance will take.
-    'newbie_rank_ratio' => 0.5,
-
-    // Points per member at or above which the alliance reads as an elite core, and takes only
-    // the strongest applicants.
-    'elite_points_per_member' => 1_000_000,
-
-    // Points per member at or below which the alliance re
+  Tests:    1 failed, 1 passed (4 assertions)
+  Duration: 1.32s

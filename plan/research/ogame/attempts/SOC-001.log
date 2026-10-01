@@ -1,48 +1,62 @@
-AiSocialCognitionTest: [90mTests:[39m    [31;1m7 failed[39;22m[90m (0 assertions)[39m
+AiSocialCognitionTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (0 assertions)[39m
 
-44
+─────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiSocialCognitionTest > a co…  ValueError   
+  "nothing owed" is not a valid backing value for enum Modules\AI\Enums\AiSocialResponseReason
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AiSocialCognitionTest >…   QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'source_observation_id' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_social_exchanges` (`player_id`, `counterparty_player_id`, `type`, `terms`, `state`, `response`, `due_at`, `responded_at`, `revision`, `created_at`, `updated_at`) values (1, 2, 9, {"metal":500}, 2, 1, 2024-01-11 05:00:00, 2024-01-10 05:00:00, 2, 2024-01-10 03:00:00, 2024-01-10 05:00:00))
+  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php:1323
+    1319▕      */
+    1320▕     protected function getEnumCaseFromValue($enumClass, $value)
+    1321▕     {
+    1322▕         return is_subclass_of($enumClass, BackedEnum::class)
+  ➜ 1323▕             ? $enumClass::from($value)
+    1324▕             : constant($enumClass.'::'.$value);
+    1325▕     }
+    1326▕ 
+    1327▕     /**
 
-  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
-     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
-     50▕ 
-     51▕             $this->recordsHaveBeenModified();
-     52▕ 
-  ➜  53▕             $result = $statement->execute();
-     54▕ 
-     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
-     56▕ 
-     57▕             return $result;
-
-      +13 vendor frames 
-  14  Modules/AI/tests/Feature/AiSocialCognitionTest.php:70
-  15  Modules/AI/tests/Feature/AiSocialCognitionTest.php:151
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/AiSocialCognitionTest.php:28
+  12  Modules/AI/tests/Feature/AiSocialCognitionTest.php:91
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AiSocialCognitionTest >…   QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'source_observation_id' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_social_exchanges` (`player_id`, `counterparty_player_id`, `type`, `terms`, `state`, `response`, `due_at`, `responded_at`, `revision`, `created_at`, `updated_at`) values (1, 2, 9, {"metal":500}, 2, 1, 2024-01-11 05:00:00, 2024-01-10 05:00:00, 2, 2024-01-10 03:00:00, 2024-01-10 05:00:00))
+   FAILED  Modules\AI\tests\Feature\AiSocialCognitionTest > an e…  ValueError   
+  "nothing owed" is not a valid backing value for enum Modules\AI\Enums\AiSocialResponseReason
 
-  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
-     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
-     50▕ 
-     51▕             $this->recordsHaveBeenModified();
-     52▕ 
-  ➜  53▕             $result = $statement->execute();
-     54▕ 
-     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
-     56▕ 
-     57▕             return $result;
+  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php:1323
+    1319▕      */
+    1320▕     protected function getEnumCaseFromValue($enumClass, $value)
+    1321▕     {
+    1322▕         return is_subclass_of($enumClass, BackedEnum::class)
+  ➜ 1323▕             ? $enumClass::from($value)
+    1324▕             : constant($enumClass.'::'.$value);
+    1325▕     }
+    1326▕ 
+    1327▕     /**
 
-      +13 vendor frames 
-  14  Modules/AI/tests/Feature/AiSocialCognitionTest.php:70
-  15  Modules/AI/tests/Feature/AiSocialCognitionTest.php:165
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/AiSocialCognitionTest.php:28
+  12  Modules/AI/tests/Feature/AiSocialCognitionTest.php:103
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AiSocialCognitionTest > dorm…  ValueError   
+  "nothing owed" is not a valid backing value for enum Modules\AI\Enums\AiSocialResponseReason
+
+  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php:1323
+    1319▕      */
+    1320▕     protected function getEnumCaseFromValue($enumClass, $value)
+    1321▕     {
+    1322▕         return is_subclass_of($enumClass, BackedEnum::class)
+  ➜ 1323▕             ? $enumClass::from($value)
+    1324▕             : constant($enumClass.'::'.$value);
+    1325▕     }
+    1326▕ 
+    1327▕     /**
+
+      +10 vendor frames 
+  11  Modules/AI/tests/Feature/AiSocialCognitionTest.php:28
+  12  Modules/AI/tests/Feature/AiSocialCognitionTest.php:120
 
 
-  Tests:    7 failed (0 assertions)
-  Duration: 1.27s
-
-These files from your answer were refused and NOT written:
-- resources/behavior/social-cadence.php (data must be YAML or JSON so a modder can edit it without code)
+  Tests:    6 failed (0 assertions)
+  Duration: 1.28s
