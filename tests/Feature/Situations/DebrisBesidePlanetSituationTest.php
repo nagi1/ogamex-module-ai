@@ -46,7 +46,31 @@ test('a debris field beside the planet and a recycler on hand is a harvest the a
 
 // FLEET-002's cause: no account ever owned a recycler, because no unit role asks for one. A player
 // with debris beside the planet builds the hull that collects it.
-test('an account with a field beside its planet and no recycler builds one (FLEET-002)')->todo();
+test('an account with a field beside its planet and no recycler builds one (FLEET-002)', function (): void {
+    debrisSituationProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetSetObjectLevel('shipyard', 4);
+    $home = $this->planetService->getPlanetCoordinates();
+    DebrisField::create(['galaxy' => $home->galaxy, 'system' => $home->system, 'planet' => $home->position, 'metal' => 40_000, 'crystal' => 20_000, 'deuterium' => 0]);
+
+    $result = app(QueueAiRecycle::class)->handle($this->currentUserId, $this->currentPlanetId, $home->galaxy, $home->system, $home->position, PlanetType::DebrisField->value);
+
+    expect($result->successful)->toBeTrue($result->reason)
+        ->and(FleetMission::query()->where('mission_type', RecycleMission::getTypeId())->count())->toBe(0);
+});
+
+// Nothing is built when the field the intent was decided for is already gone: the ordered hull
+// would have nothing to collect.
+test('a recycle intent with no field left orders no hull (FLEET-002)', function (): void {
+    debrisSituationProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetSetObjectLevel('shipyard', 4);
+    $home = $this->planetService->getPlanetCoordinates();
+
+    $result = app(QueueAiRecycle::class)->handle($this->currentUserId, $this->currentPlanetId, $home->galaxy, $home->system, $home->position, PlanetType::DebrisField->value);
+
+    expect($result->successful)->toBeFalse();
+});
 
 function debrisSituationProfile(int $playerId): AiProfile
 {

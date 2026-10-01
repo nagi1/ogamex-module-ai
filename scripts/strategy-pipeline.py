@@ -1134,8 +1134,13 @@ def run_in_app(command):
 
 
 def proof_report(code):
-    """The row's proof as `prove CODE --json` reports it, or None when the proof could not run."""
-    env = dict(os.environ, OGAMEX_RUNNER=os.environ.get("OGAMEX_RUNNER", "local-docker-dev"))
+    """The row's test steps as `prove CODE --json` reports them, or None when they could not run.
+
+    Fast on purpose: an attempt is judged on its tests, which take seconds. The live steps (a situation
+    on the cohort took up to 183 s, an aspect needs an hour of play) judge a delivered row afterwards, and
+    a failure there goes back to the writer through `reopen`.
+    """
+    env = dict(os.environ, OGAMEX_RUNNER=os.environ.get("OGAMEX_RUNNER", "local-docker-dev"), PROVE_FAST="1")
     try:
         result = subprocess.run(["bash", os.path.join(MODULE, "scripts/ogamex"), "prove", code, "--json"],
                                 capture_output=True, text=True, timeout=30 * 60, env=env)
@@ -1162,9 +1167,12 @@ def red_first(code):
     failing = [step for step in report["steps"] if not step["pass"]]
 
     if not failing:
-        print(f"  the proof of {code} already passes; closing it, nothing spent")
-        subprocess.run([sys.executable, os.path.join(MODULE, "plan/tasks/task.py"), "done", code])
-        return True
+        # Its tests pass; the live steps may not. `done` runs the whole proof, so only a pass settles it.
+        if subprocess.run([sys.executable, os.path.join(MODULE, "plan/tasks/task.py"), "done", code]).returncode == 0:
+            print(f"  the proof of {code} already passes; closed, nothing spent")
+            return True
+        print(f"  the tests of {code} pass but its live proof does not; the attempt works from that failure")
+        return False
     if all(step.get("suspect") for step in failing):
         print(f"  every failing step of {code} is suspect; nothing spent")
         block_row(code, "proof suspect: only " + ", ".join(step["step"] for step in failing) + " fails; the reviewer judges the proof")
@@ -1175,10 +1183,10 @@ def red_first(code):
 
 def proof_change(before, after):
     """Why an attempt moved nothing, or None when its fast steps pass or one went FAIL to PASS and none
-    went PASS to FAIL. Only `test:` and `situation:` steps are judged here: an aspect or invariant is
+    went PASS to FAIL. Only `test:` steps are judged here: a live situation, an aspect or an invariant is
     measured over an hour of cohort play, cannot flip within one attempt, and is judged later by
     `task.py done` on the delivered row (FLEET-002 went stuck on `aspect:recycle` for that reason)."""
-    fast = lambda report: [step for step in report["steps"] if step["step"].split(":")[0] in ("test", "situation")]
+    fast = lambda report: [step for step in report["steps"] if step["step"].split(":")[0] == "test"]
     was = {step["step"]: step["pass"] for step in fast(before)}
     now = {step["step"]: step["pass"] for step in fast(after)}
     broke = [name for name, ok in now.items() if not ok and was.get(name)]
@@ -1776,6 +1784,11 @@ WHERE THE CHANGE GOES
   never `new`; small methods; a comment only for a non-obvious why.
 
 THE TEST
+- Prove behaviour with the SITUATION KIT: `Situation::of($this)->resources(..)->ships(..)->debris(..)
+  ->session()->expectWork(AiWorkKind::X)` plants a situation, runs the account's real session and says
+  what it chose when the expectation fails. One short story per test; never plant rows by hand when the
+  kit has a method for it. If the kit lacks what you need to plant, add ONE method to it (it is a test
+  file) in the same answer.
 - When the task shows THE FAST PROOF, that test is the target: make it pass. It already counts as your
   test. Otherwise:
 - One Pest Feature test in `tests/Feature/`, shaped like EXAMPLE TEST (`uses(...)`, no class, no
@@ -1886,6 +1899,14 @@ def reference_context():
         parts += [f"TEST BASE CASE {os.path.relpath(support, MODULE)} (a Feature test `uses()` it; it already "
                   "makes the player, the account and the planets):",
                   "```php", read(support)[:3000], "```", ""]
+
+    kit = os.path.join(MODULE, "tests/Support/Situation.php")
+    if os.path.exists(kit):
+        parts += ["SITUATION KIT tests/Support/Situation.php (plant state, run the account's real session, read what it "
+                  "did: a verdict in about a second, with the reason when it fails. Prove behaviour with this):",
+                  "```php", read(kit), "```", "",
+                  "EXAMPLE SITUATION TESTS tests/Feature/Situations/SituationKitTest.php (copy this shape, including the "
+                  "`require_once` line):", "```php", read(os.path.join(MODULE, "tests/Feature/Situations/SituationKitTest.php")), "```", ""]
 
     parts += ["TEST KIT (every helper a test can use; anything not listed does not exist):", test_kit(), ""]
 

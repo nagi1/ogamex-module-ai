@@ -231,8 +231,10 @@ prove_row() {
         hours=$(( age / 3600 ))
         [ "$hours" -gt 24 ] && hours=24
     fi
+    # PROVE_FAST=1 runs only the test steps: a verdict in seconds, for the writer's own attempts. The live
+    # steps (a situation on the cohort, an invariant, an aspect) judge a delivered row later.
     ordered="$(for step in $steps; do case "$step" in test:*) echo "$step" ;; esac; done
-               for step in $steps; do case "$step" in test:*) ;; *) echo "$step" ;; esac; done)"
+               [ "${PROVE_FAST:-0}" = 1 ] || for step in $steps; do case "$step" in test:*) ;; *) echo "$step" ;; esac; done)"
     for step in $ordered; do
         # A trailing ? marks a step suspect: it is reported but never fails the row.
         suspect=0
