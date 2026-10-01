@@ -289,6 +289,73 @@ function scenarios(): array
                 return [false, 'no raid decided; refusals: '.($refusals === [] ? 'none recorded' : implode(', ', $refusals))];
             },
         ],
+        'inactive-neighbour' => [
+            'writes' => true,
+            'proves' => 'a neighbour inactive for 8 days, with stock beside the account, is raided (ATK-001: no raid in days)',
+            'plant' => static function (array $context): array {
+                // The host calls a player inactive once users.time is older than seven days.
+                $user = DB::table('users')->where('id', $context['neighbour'])->first(['time']);
+                $before = (array) DB::table('planets')->where('id', $context['neighbour_planet'])->first(['metal', 'crystal', 'deuterium']);
+
+                DB::table('users')->where('id', $context['neighbour'])->update(['time' => (string) CarbonImmutable::now()->subDays(8)->timestamp]);
+                DB::table('planets')->where('id', $context['neighbour_planet'])->update([
+                    'metal' => 300000,
+                    'crystal' => 200000,
+                    'deuterium' => 100000,
+                    'updated_at' => CarbonImmutable::now(),
+                ]);
+
+                return ['account '.$context['neighbour'].' last seen 8 days ago with 600k resources on planet '.$context['neighbour_planet'],
+                    [['restore', 'users', $context['neighbour'], ['time' => $user->time]],
+                        ['restore', 'planets', $context['neighbour_planet'], $before]]];
+            },
+            'expect' => static function (array $context): array {
+                $raids = work_item_rows($context['players'], $context['before'], AiWorkKind::Raid->value);
+                $refusals = refusal_reasons($context['players'], $context['before']);
+
+                if ($raids !== []) {
+                    return [true, count($raids).' raid work item(s) '.describe($raids, 'kind')];
+                }
+
+                return [false, 'no raid decided; refusals: '.($refusals === [] ? 'none recorded' : implode(', ', $refusals))];
+            },
+        ],
+        'alliance-application' => [
+            'writes' => true,
+            'proves' => 'a pending application to an AI-led alliance is decided (SIM-001: no applications in the cohort lifetime)',
+            'plant' => static function (array $context): array {
+                $alliance = DB::table('alliances')->whereIn('founder_user_id', $context['players'])->orderBy('id')->first(['id']);
+                if ($alliance === null) {
+                    throw new RuntimeException('no AI account leads an alliance here; nothing to apply to');
+                }
+
+                // A rankless applicant is rejected, so the run leaves no new member behind.
+                $applicant = DB::table('users')->whereNotIn('id', $context['players'])->whereNull('alliance_id')
+                    ->whereNotIn('id', DB::table('highscores')->where('general_rank', '>', 0)->select('player_id'))->orderBy('id')->first(['id']);
+                if ($applicant === null) {
+                    throw new RuntimeException('no unranked player outside the cohort to apply with');
+                }
+
+                $stamp = CarbonImmutable::now()->subMinutes(30);
+                $row = DB::table('alliance_applications')->insertGetId([
+                    'alliance_id' => $alliance->id,
+                    'user_id' => $applicant->id,
+                    'application_message' => 'cohort-scenario: looking for a home',
+                    'status' => 0,
+                    'created_at' => $stamp,
+                    'updated_at' => $stamp,
+                ]);
+
+                return ['application from account '.$applicant->id.' to alliance '.$alliance->id,
+                    [['delete', 'alliance_applications', $row]]];
+            },
+            'expect' => static function (array $context): array {
+                $decided = DB::table('alliance_applications')->where('application_message', 'like', 'cohort-scenario:%')
+                    ->where('status', '!=', 0)->count();
+
+                return [$decided > 0, $decided.' planted application(s) decided'];
+            },
+        ],
     ];
 }
 
@@ -664,6 +731,5 @@ function print_catalogue(): void
     echo "  --cleanup        remove the rows this run planted\n";
     echo "  --json           also print the results as JSON\n";
     echo "\nNo provider call is made: this is the work to run inside a peak window.\n";
-    echo "Deferred on purpose: social and alliance situations (a planted exchange or application) need\n";
-    echo "the enum values of ai_social_exchanges verified first — add one scenario per situation there.\n";
+    echo "Not yet a situation: a planted social exchange (ai_social_exchanges enum values unverified).\n";
 }
