@@ -51,7 +51,12 @@ Record the time (UTC) you did it — the reviewer dates every "after" from it.
 - `bash scripts/ogamex gate` → `08-gate.txt`
 - `bash scripts/ogamex artisan --version` and `php -v` inside the app container → `09-versions.txt`
 
-## 4. Situations (seconds each, they clean up after themselves)
+## 4. Situations (each ends within its `--wait`, 180s by default, and cleans up after itself)
+
+The live queue workers run the work; a scenario passes as soon as the expected work appears. If one
+still runs past 4 minutes, record that, interrupt it with Ctrl-C (it reverts what it planted) and go on.
+Rows a killed run planted are reverted automatically at the start of the next run: record the
+`reverted N row(s)` line if it appears.
 
 - `PROVE_UNIVERSE=grand bash scripts/ogamex situation list` → `10-situations-list.txt`
 - `PROVE_UNIVERSE=grand bash scripts/ogamex situation all` → `11-situations-grand.txt`

@@ -2,7 +2,6 @@
 
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Application;
-use InvalidArgumentException;
 use Modules\AI\Actions\OpenAiCampaignAction;
 use Modules\AI\Enums\AiCampaignState;
 use Modules\AI\Models\AiCampaign;

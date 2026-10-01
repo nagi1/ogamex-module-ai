@@ -1,9 +1,5 @@
 <?php
 
-use FilesystemIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-
 /**
  * The module implements no headhunt doctrine: the source states no variants and no numbers, so
  * nothing may be encoded into code or into the behaviour data. These tests fail if a later

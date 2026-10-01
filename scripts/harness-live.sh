@@ -227,8 +227,8 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       # Loud and repeated, because the code on disk is what the cohorts run: a red live run means the
       # module does not play, and no number of further slices fixes that on its own.
       echo "=== LIVE VERIFICATION FAILED $(date -u '+%F %T') UTC — the accounts did not play; block above ==="
-      sleep 120
-      continue
+      # Not a `continue`: implementation happens at the top of the next pass either way, so skipping
+      # here only skipped the proof stage, and nothing could be proven while the canary stayed red.
     fi
 
     # Proof stage: a row the writer delivered closes only when its proof passes on the cohorts

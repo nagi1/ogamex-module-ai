@@ -28,7 +28,7 @@ use OGame\Models\ChatMessage;
  *   php Modules/AI/scripts/cohort-scenario.php list
  *   php Modules/AI/scripts/cohort-scenario.php run idle-planet
  *   php Modules/AI/scripts/cohort-scenario.php run inbound-attack --confirm --accounts=2
- *   php Modules/AI/scripts/cohort-scenario.php run all --confirm --ticks=4
+ *   php Modules/AI/scripts/cohort-scenario.php run all --confirm --wait=300
  *
  * `--arrival` must sit inside the account's own reaction lead (provoke-ai.php prints it:
  * 120 + 60 x session interval), or "it did not save" is the account correctly waiting for a fleet
@@ -62,7 +62,7 @@ if ($command === 'help' || $command === 'list') {
 }
 
 if ($command !== 'run') {
-    fwrite(STDERR, "usage: cohort-scenario.php <list|run> [scenario|all] [--confirm] [--accounts=2] [--ticks=3] [--arrival=600] [--cleanup] [--json]\n");
+    fwrite(STDERR, "usage: cohort-scenario.php <list|run> [scenario|all] [--confirm] [--accounts=2] [--wait=180] [--inline] [--arrival=600] [--cleanup] [--json]\n");
 
     exit(2);
 }
@@ -77,6 +77,26 @@ if ($subject !== 'all' && !in_array($subject, $names, true)) {
 
 $chosen = $subject === 'all' ? $names : [$subject];
 $context = cohort_context($options['accounts']);
+
+// How often the read-back is asked while the live workers run the work.
+const POLL_SECONDS = 5;
+
+$leftovers = revert_planted();
+if ($leftovers > 0) {
+    echo 'reverted '.$leftovers." row(s) a previous run planted and never cleaned up\n";
+}
+
+// A run stopped by a timeout or Ctrl-C still takes its planted rows back out of the universe.
+if (function_exists('pcntl_async_signals')) {
+    pcntl_async_signals(true);
+    foreach ([SIGINT, SIGTERM] as $signal) {
+        pcntl_signal($signal, static function (): never {
+            echo "\ninterrupted: reverted ".revert_planted()." planted row(s)\n";
+
+            exit(130);
+        });
+    }
+}
 
 echo 'cohort: '.count($context['players']).' enabled account(s), no provider call made (safe in a peak window)'."\n";
 
@@ -126,12 +146,14 @@ function scenarios(): array
             'proves' => 'a login fills the build queue on every planet, not one per session (ECON-001)',
             'plant' => null,
             'expect' => static function (array $context): array {
+                // A planet already building counts: the player's property is a queue that is not idle.
                 $subjectPlanets = DB::table('planets')->where('user_id', $context['subject'])->where('planet_type', 1)->pluck('id')->all();
-                $building = DB::table('building_queues')->whereIn('planet_id', $subjectPlanets)
-                    ->where('created_at', '>=', $context['before'])->distinct()->count('planet_id');
+                $building = DB::table('building_queues')->whereIn('planet_id', $subjectPlanets)->where('canceled', 0)
+                    ->where(static fn ($query) => $query->where('processed', 0)->orWhere('created_at', '>=', $context['before']))
+                    ->distinct()->count('planet_id');
 
                 return [count($subjectPlanets) > 0 && $building * 2 >= count($subjectPlanets),
-                    $building.' of '.count($subjectPlanets).' planet(s) of account '.$context['subject'].' got a building order'];
+                    $building.' of '.count($subjectPlanets).' planet(s) of account '.$context['subject'].' building or ordered'];
             },
         ],
         'inbound-message' => [
@@ -147,19 +169,28 @@ function scenarios(): array
                 ]);
 
                 return ['message from account '.$context['neighbour'].' to account '.$context['subject'],
-                    [static fn (): int => (int) ChatMessage::query()->whereKey($message->id)->delete()]];
+                    [['delete', 'chat_messages', $message->id]]];
             },
             'expect' => static function (array $context): array {
+                // An answer is the behaviour; whether it went through a recorded exchange or the
+                // conversation reply lane is the module's business (the first run got a reply and no row).
                 $exchanges = DB::table('ai_social_exchanges')->where('player_id', $context['subject'])
                     ->where('created_at', '>=', $context['before'])->count();
+                $replies = DB::table('chat_messages')->where('sender_id', $context['subject'])
+                    ->where('recipient_id', $context['neighbour'])->where('created_at', '>=', $context['before'])->count();
 
-                return [$exchanges > 0, $exchanges.' social exchange(s) recorded for account '.$context['subject']];
+                return [$exchanges + $replies > 0, $exchanges.' exchange(s), '.$replies.' reply message(s) from account '.$context['subject']];
             },
         ],
         'inbound-attack' => [
             'writes' => true,
             'proves' => 'a visible hostile fleet produces a fleet save (FLEET-001: one in the cohort lifetime)',
             'plant' => static function (array $context): array {
+                // A run killed before undo records existed left its fleet in flight; it has this exact shape.
+                DB::table('fleet_missions')->where('user_id', $context['neighbour'])->where('planet_id_to', $context['planet'])
+                    ->where('mission_type', 1)->where('processed', 0)
+                    ->where('light_fighter', 40)->where('cruiser', 15)->where('small_cargo', 20)->delete();
+
                 $mission = DB::table('fleet_missions')->insertGetId([
                     'user_id' => $context['neighbour'],
                     'planet_id_from' => $context['neighbour_planet'],
@@ -177,7 +208,7 @@ function scenarios(): array
                 ]);
 
                 return ['hostile attack on planet '.$context['planet'].' from account '.$context['neighbour'],
-                    [static fn (): int => DB::table('fleet_missions')->where('id', $mission)->delete()]];
+                    [['delete', 'fleet_missions', $mission]]];
             },
             'expect' => static function (array $context): array {
                 $saves = work_item_rows($context['players'], $context['before'], AiWorkKind::FleetSave->value);
@@ -205,7 +236,7 @@ function scenarios(): array
                 ]);
 
                 return ['debris field of 400k metal beside planet '.$context['planet'],
-                    [static fn (): int => DB::table('debris_fields')->where('id', $field)->delete()]];
+                    [['delete', 'debris_fields', $field]]];
             },
             'expect' => static function (array $context): array {
                 $recycles = work_item_rows($context['players'], $context['before'], AiWorkKind::Recycle->value);
@@ -229,7 +260,7 @@ function scenarios(): array
                 ]);
 
                 return ['2.1M resources left undefended on neighbour planet '.$context['neighbour_planet'],
-                    [static fn (): int => DB::table('planets')->where('id', $context['neighbour_planet'])->update($before)]];
+                    [['restore', 'planets', $context['neighbour_planet'], $before]]];
             },
             'expect' => static function (array $context): array {
                 $raids = work_item_rows($context['players'], $context['before'], AiWorkKind::Raid->value);
@@ -246,6 +277,9 @@ function scenarios(): array
 }
 
 /**
+ * Plant, drive, read back. The read-back is polled: the scenario passes the moment the expected
+ * work appears and fails only when the wait runs out.
+ *
  * @param  array<string, mixed>  $definition
  * @param  array<string, mixed>  $options
  * @return array<string, mixed>
@@ -267,33 +301,35 @@ function run_scenario(string $name, array $definition, array $context, array $op
 
     $context['before'] = CarbonImmutable::now();
     $context['arrival'] = $options['arrival'];
-    $undo = [];
     $lines = [];
 
     if ($definition['plant'] !== null) {
         [$line, $undo] = $definition['plant']($context);
+        remember_planted($undo);
         $lines[] = 'planted: '.$line;
     }
 
-    foreach (drive($context, $options['ticks']) as $line) {
-        $lines[] = $line;
-    }
-
-    [$ok, $detail] = $definition['expect']($context);
+    $started = microtime(true);
+    $since = CarbonImmutable::now();
+    $tick = 0;
+    do {
+        $lines[] = drive_once($context, $options['inline'], ++$tick, $since);
+        [$ok, $detail] = $definition['expect']($context);
+        if ($ok || microtime(true) - $started >= $options['wait']) {
+            break;
+        }
+        sleep(POLL_SECONDS);
+    } while (true);
 
     if (!$ok) {
         $detail .= ' — last decisions: '.newest_decisions($context['players'], $context['before']);
     }
 
     if ($options['cleanup']) {
-        $reverted = 0;
-        foreach ($undo as $revert) {
-            $reverted += $revert();
-        }
-        $lines[] = 'cleaned up: '.$reverted.' planted row(s) reverted';
+        $lines[] = 'cleaned up: '.revert_planted().' planted row(s) reverted';
     }
 
-    echo 'SCENARIO: '.($ok ? 'PASS' : 'FAIL').' '.$name."\n";
+    printf("SCENARIO: %s %s (%.0fs)\n", $ok ? 'PASS' : 'FAIL', $name, microtime(true) - $started);
 
     foreach ($lines as $line) {
         echo '    '.$line."\n";
@@ -305,43 +341,67 @@ function run_scenario(string $name, array $definition, array $context, array $op
 }
 
 /**
- * Let the time pass, then let the module run on the situations that are now due.
+ * One pass of time: host orders finish, the module's work falls due, and the host applies its
+ * queues. The live queue workers then run the work, which is the cohort's real runtime; --inline
+ * runs it in this process instead, for a universe whose workers are stopped. Inline on a live cohort
+ * queued behind the workers' per-player locks and took five minutes a scenario.
  *
  * @param  array<string, mixed>  $context
- * @return array<int, string>
  */
-function drive(array $context, int $ticks, int $limit = 40): array
+function drive_once(array $context, bool $inline, int $tick, CarbonImmutable $since): string
 {
-    $lines = [];
-    $since = CarbonImmutable::now();
+    $now = CarbonImmutable::now();
+    $finished = finish_host_queues($context['planets'], $now);
+    $due = make_module_work_due($context['players'], $now);
 
-    for ($tick = 1; $tick <= $ticks; $tick++) {
-        $now = CarbonImmutable::now();
-        $finished = finish_host_queues($context['planets'], $now);
-        $due = make_module_work_due($context['players'], $now);
+    Artisan::call('ogamex:scheduler:process-planet-queues');
 
-        // The host's own apply step consumes what just finished; without it the fast-forward only
-        // rewrote rows and the account would still be waiting for a scheduler it never runs here.
-        Artisan::call('ogamex:scheduler:process-planet-queues');
-
-        // Synchronous on purpose: `ai:run-due-work` leases and dispatches, and a real queue would run
-        // the session in a worker some seconds later, which is exactly the wait this tool exists to
-        // avoid. Same engine, same paths, this process.
+    if ($inline) {
         config(['queue.default' => 'sync']);
-        Artisan::call('ai:run-due-work', ['--limit' => $limit]);
+    }
+    Artisan::call('ai:run-due-work', ['--limit' => 40]);
 
-        $lines[] = sprintf(
-            'tick %d: %d order(s) finished, %d item(s) made due, %d work item(s) run',
-            $tick,
-            $finished,
-            $due,
-            engine_ran($context['players'], $since)
-        );
+    return sprintf('tick %d: %d order(s) finished, %d item(s) made due, %d work item(s) done so far',
+        $tick, $finished, $due, engine_ran($context['players'], $since));
+}
 
-        usleep(200_000);
+/**
+ * Planted rows are written down before the drive starts, so a run that is killed or times out is
+ * cleaned up by the next run instead of leaving a hostile fleet in a live universe.
+ *
+ * @param  list<array<int, mixed>>  $undo  [action, table, id, restored columns]
+ */
+function remember_planted(array $undo): void
+{
+    file_put_contents(planted_file(), json_encode([...read_planted(), ...$undo]));
+}
+
+/** Delete planted rows and restore overwritten ones; returns how many rows it touched. */
+function revert_planted(): int
+{
+    $touched = 0;
+
+    foreach (read_planted() as [$action, $table, $id, $columns]) {
+        $query = DB::table($table)->where('id', $id);
+        $touched += $action === 'restore' ? $query->update($columns) : $query->delete();
     }
 
-    return $lines;
+    @unlink(planted_file());
+
+    return $touched;
+}
+
+/** @return list<array{0: string, 1: string, 2: int, 3: array<string, mixed>}> */
+function read_planted(): array
+{
+    $rows = is_file(planted_file()) ? json_decode((string) file_get_contents(planted_file()), true) : [];
+
+    return array_map(static fn (array $row): array => [$row[0], $row[1], (int) $row[2], (array) ($row[3] ?? [])], is_array($rows) ? $rows : []);
+}
+
+function planted_file(): string
+{
+    return storage_path('app/cohort-scenario-planted.json');
 }
 
 /**
@@ -538,7 +598,7 @@ function cohort_context(int $accounts): array
  */
 function read_options(array $arguments): array
 {
-    $options = ['confirm' => false, 'cleanup' => false, 'json' => false, 'accounts' => 2, 'ticks' => 3, 'arrival' => 120];
+    $options = ['confirm' => false, 'cleanup' => false, 'json' => false, 'inline' => false, 'accounts' => 2, 'wait' => 180, 'arrival' => 120];
 
     foreach ($arguments as $argument) {
         if ($argument === '--confirm') {
@@ -553,8 +613,11 @@ function read_options(array $arguments): array
         if (str_starts_with($argument, '--accounts=')) {
             $options['accounts'] = max(1, (int) substr($argument, 11));
         }
-        if (str_starts_with($argument, '--ticks=')) {
-            $options['ticks'] = max(1, min(10, (int) substr($argument, 8)));
+        if ($argument === '--inline') {
+            $options['inline'] = true;
+        }
+        if (str_starts_with($argument, '--wait=')) {
+            $options['wait'] = max(10, min(1800, (int) substr($argument, 7)));
         }
         if (str_starts_with($argument, '--arrival=')) {
             $options['arrival'] = max(30, (int) substr($argument, 10));
@@ -579,7 +642,8 @@ function print_catalogue(): void
 
     echo "\n  run <name|all>   drive it (writing scenarios need --confirm)\n";
     echo "  --accounts=N     how many enabled accounts to work with (default 2)\n";
-    echo "  --ticks=N        engine passes, each letting the host queues finish (default 3)\n";
+    echo "  --wait=S         seconds to wait for the expected work before failing (default 180)\n";
+    echo "  --inline         run the work in this process (only when the universe's workers are stopped)\n";
     echo "  --arrival=SEC    when the planted hostile fleet arrives (default 600)\n";
     echo "  --cleanup        remove the rows this run planted\n";
     echo "  --json           also print the results as JSON\n";

@@ -1,9 +1,5 @@
 <?php
 
-use FilesystemIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-
 /**
  * The account's diplomacy stance is declared data, not code, so the module must keep
  * exposing no diplomacy contract, and the data it does ship must say it is unconfirmed.

@@ -1195,6 +1195,15 @@ def self_check():
     assert plan_paths({}, "app/A.php (method); app/B.php, app/C.php") == ["app/A.php", "app/B.php", "app/C.php"], \
         "the harness locks the same paths the ledger does"
 
+    factory_probe = "tests/Feature/__FactoryProbeTest.php"
+    with open(os.path.join(MODULE, factory_probe), "w", encoding="utf-8") as handle:
+        handle.write("<?php\nAiProfile::factory()->create();\n")
+    try:
+        assert invented_factories([factory_probe]) == [f"AiProfile::factory() in {factory_probe}"], \
+            "a factory the module model does not have is refused"
+    finally:
+        os.remove(os.path.join(MODULE, factory_probe))
+
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
         handle.write("<?php\n")
@@ -1699,6 +1708,14 @@ def implement_context(code):
         shown = body[:EDIT_SHOW_LIMIT]
         cut = "" if len(body) <= EDIT_SHOW_LIMIT else " (TRUNCATED — edit only with EDIT blocks inside the shown part)"
         parts += [f"EXISTING FILE {path}{cut}:", "```php", shown, "```", ""]
+
+    # The enums the shown files use, whole: SOC-001 stored an invented reason ("nothing owed") into an
+    # enum column and every test died on the cast. A value not listed here does not exist.
+    shown = "\n".join(read(os.path.join(MODULE, path)) for path in paths[:6] if os.path.exists(os.path.join(MODULE, path)))
+    for enum in sorted(set(re.findall(r"use Modules\\AI\\Enums\\(\w+);", shown)))[:12]:
+        enum_file = os.path.join(MODULE, "app/Enums", f"{enum}.php")
+        if os.path.exists(enum_file):
+            parts += [f"ENUM {enum} (its cases are the only valid values):", "```php", read(enum_file)[:2500], "```", ""]
 
     # The replay refuses a scenario missing a required key, and that cost a full test cycle per guess
     # (four rows on 30 Sep 2026). One real scenario is the schema.
@@ -2362,6 +2379,19 @@ def write_changes(code, changes):
     return written, tests, backups
 
 
+def invented_factories(paths):
+    """`Model::factory()` calls on module models that have no factory. ATK-001 spent its attempt on
+    `AiProfile::factory()`; the module's models are built with create() in every test."""
+    invented = []
+    for clean in [path for path in paths if path.endswith(".php")]:
+        for name in sorted(set(re.findall(r"\b(\w+)::factory\(", read(os.path.join(MODULE, clean))))):
+            model = os.path.join(MODULE, "app/Models", f"{name}.php")
+            if os.path.exists(model) and "HasFactory" not in read(model):
+                invented.append(f"{name}::factory() in {clean}")
+
+    return invented
+
+
 def lost_contract(backups):
     """Public methods and interfaces an edit removed while other code still uses them.
 
@@ -2400,13 +2430,23 @@ def verify_slice(code, written, tests, backups):
         lint = subprocess.run(["docker", "compose", "exec", "-T", "ogamex-app", "php", "-l",
                                f"/var/www/Modules/AI/{clean}"],
                               cwd=COMPOSE_DIR, capture_output=True, text=True)
-        if lint.returncode != 0:
-            broken.append(f"{clean}: {(lint.stdout + lint.stderr).strip().splitlines()[0]}")
+        # php -l exits 0 on a compile warning such as a bare `use FilesystemIterator;` in a file
+        # with no namespace, yet Pest turns that warning into an exception that stops the whole
+        # suite from being collected. A warning is a refusal.
+        output = (lint.stdout + lint.stderr).strip()
+        if lint.returncode != 0 or "Warning:" in output:
+            broken.append(f"{clean}: {output.splitlines()[0]}")
     if broken:
         return "generated code does not parse:\n" + "\n".join(broken)
 
     if not tests:
         return "the answer wrote files but no test, so nothing verified the behaviour"
+
+    invented = invented_factories(written)
+    if invented:
+        return ("these model factories do not exist: " + ", ".join(invented) +
+                ".\nBuild the row with Model::create([...]) the way the TEST THAT ALREADY USES THESE "
+                "CLASSES does, with every NOT NULL column from the migration.")
 
     lost = lost_contract(backups)
     if lost:

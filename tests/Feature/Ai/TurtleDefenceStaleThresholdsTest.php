@@ -1,9 +1,5 @@
 <?php
 
-use FilesystemIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-
 /*
  * The AI module must not treat the older defence/IPM tallies as current doctrine. The source
  * documents a turtle-defence figure of 37 and an anti-ballistic total of 100 or more as

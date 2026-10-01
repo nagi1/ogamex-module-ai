@@ -96,6 +96,13 @@ class ScheduleAiIntentAction
 
     private const PAYLOAD_PERCENTAGE = 'percentage';
 
+    /**
+     * The gap between one planet's order and the next in a login, the way a player clicks through
+     * planets. It also keeps a session's intents from reaching the workers in the same instant, where
+     * all but one lose the per-player lock and wait out a retry.
+     */
+    private const SECONDS_BETWEEN_PLANETS = 20;
+
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
         private QueueableUnitPlanner $queueableUnitPlanner,
@@ -139,9 +146,18 @@ class ScheduleAiIntentAction
     {
         // Every case is listed: adding a capability means deciding here where it is executed, and
         // a capability with no executor must not be published to begin with.
-        match ($trace->selected->candidate->type) {
+        $type = $trace->selected->candidate->type;
+        // A player refills the build queues and the lab every login before turning to the shipyard or
+        // the fleet; choosing a raid or a ship must not leave nine planets idle until the next session.
+        $economySteps = $this->fillsEconomy($type) && $this->economyOffered($trace)
+            ? $this->fillQueues($profile, $sessionWorkItem, ':economy')
+            : 0;
+
+        match ($type) {
             AiCandidateActionType::Build, AiCandidateActionType::Research => $this->fillQueues($profile, $sessionWorkItem, ''),
-            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem),
+            // The shipyard gets what the buildings leave, so its order waits until they are placed:
+            // the host cancels a building it cannot pay for, and a ship order placed first would cause it.
+            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
             AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem),
@@ -154,22 +170,17 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Phalanx => $this->schedulePhalanx($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
-
-        // A player refills the build queues and the lab every login before turning to the fleet;
-        // choosing a raid must not leave nine planets idle until the next session.
-        if ($this->leavesStockAlone($trace->selected->candidate->type) && $this->economyOffered($trace)) {
-            $this->fillQueues($profile, $sessionWorkItem, ':economy');
-        }
     }
 
     /**
-     * Whether the selected action leaves the planets' stock for the economy. Units, transfers and
-     * saves spend or move it, and two intents priced against one balance get one of them cancelled
-     * by the host; an idle session is a player who did not log in to play.
+     * Whether the economy is filled before the selected action. Transfers and saves move the stock
+     * away, so a building priced against it would be cancelled; Build and Research fill it themselves;
+     * an idle session is a player who did not log in to play.
      */
-    private function leavesStockAlone(AiCandidateActionType $type): bool
+    private function fillsEconomy(AiCandidateActionType $type): bool
     {
         return match ($type) {
+            AiCandidateActionType::QueueUnits,
             AiCandidateActionType::Spy,
             AiCandidateActionType::Raid,
             AiCandidateActionType::Expedition,
@@ -200,9 +211,10 @@ class ScheduleAiIntentAction
      * planner verified travels with the intent, so the schedule and the executor name one objective.
      * The first step keeps the session's own key, so a retried session converges on the same work.
      */
-    private function fillQueues(AiProfile $profile, AiWorkItem $sessionWorkItem, string $keyPrefix): void
+    private function fillQueues(AiProfile $profile, AiWorkItem $sessionWorkItem, string $keyPrefix): int
     {
-        foreach ($this->queueableBuildingPlanner->steps($profile->player_id) as $index => $step) {
+        $steps = $this->queueableBuildingPlanner->steps($profile->player_id);
+        foreach ($steps as $index => $step) {
             [$kind, $payload] = $step instanceof QueueableResearch
                 ? [AiWorkKind::QueueResearch, [self::PAYLOAD_RESEARCH_ID => $step->researchId]]
                 : [AiWorkKind::BuildFirstBuilding, [self::PAYLOAD_BUILDING_ID => $step->buildingId]];
@@ -211,8 +223,10 @@ class ScheduleAiIntentAction
                 self::PAYLOAD_PLANET_ID => $step->planetId,
                 ...$payload,
                 self::PAYLOAD_REASON => $step->reason,
-            ], null, $keyPrefix . ($index === 0 ? '' : ':' . $index));
+            ], $this->clock->now()->addSeconds($index * self::SECONDS_BETWEEN_PLANETS), $keyPrefix . ($index === 0 ? '' : ':' . $index));
         }
+
+        return count($steps);
     }
 
     /**
@@ -236,7 +250,7 @@ class ScheduleAiIntentAction
      * unit name three different objectives, which is how an account ends up building combat ships
      * while it claims to be assembling cargo.
      */
-    private function scheduleUnits(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    private function scheduleUnits(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt): void
     {
         $plan = $this->queueableUnitPlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableUnit) {
@@ -248,7 +262,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_UNIT_ID => $plan->unitId,
             self::PAYLOAD_AMOUNT => $plan->amount,
             self::PAYLOAD_REASON => $plan->reason,
-        ]);
+        ], $dueAt);
     }
 
     /**

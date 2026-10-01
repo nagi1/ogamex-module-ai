@@ -180,6 +180,29 @@ test('a session that chose something else still refills the queues only when the
     'a transfer moves the stock' => [AiCandidateActionType::Transfer, false],
 ]);
 
+// The buildings are placed before the shipyard spends: the host cancels a building it cannot pay
+// for, so a ship order that ran first would turn the login's economy into cancelled rows.
+test('a shipyard session places the economy first and the ships after it', function (): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+    $this->secondPlanetService->addResources(intentPlenty());
+    $this->planetSetObjectLevel('shipyard', 2);
+    $this->playerSetResearchLevel('combustion_drive', 2);
+
+    $session = intentSession($profile, 'shipyard-after-economy');
+    app(ScheduleAiIntentAction::class)->handle($profile, $session, intentTrace($this->currentUserId, $this->currentPlanetId, AiCandidateActionType::QueueUnits, [], [AiCandidateActionType::Build]));
+
+    $work = intentSessionWork($session);
+    $economy = $work->where('kind', AiWorkKind::BuildFirstBuilding);
+    $ships = $work->firstWhere('kind', AiWorkKind::QueueUnits);
+
+    expect($economy)->toHaveCount(2)
+        ->and($ships)->not->toBeNull()
+        ->and($ships->due_at->greaterThan($economy->max('due_at')))->toBeTrue()
+        // One planet after another, never all at the same instant.
+        ->and($economy->pluck('due_at')->map->getTimestamp()->unique())->toHaveCount(2);
+});
+
 test('a session whose economy was not offered refills nothing', function (): void {
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());

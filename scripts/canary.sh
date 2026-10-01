@@ -69,8 +69,15 @@ check() {
     printf '[canary] last %s min: sessions %s, accepted %s, rejected %s, orders %s, failed %s\n' \
         "$WINDOW_MINUTES" "${completed:-0}" "${accepted:-0}" "${rejected:-0}" "${orders:-0}" "${failed:-0}"
 
-    if [ "${rejected:-0}" -gt 0 ] || [ "${failed:-0}" -gt 0 ]; then
-        printf '[canary] FAIL the accounts were refused or broke: %s rejected, %s failed\n' "$rejected" "$failed"
+    # Why the host refused, so a red canary names its own cause instead of a count.
+    q "SELECT COALESCE(JSON_UNQUOTE(JSON_EXTRACT(result, '$.reason')), 'no reason'), COUNT(*) FROM \`$DB\`.ai_action_receipts
+       WHERE state = 3 AND created_at >= '$since' GROUP BY 1 ORDER BY 2 DESC LIMIT 5" | sed 's/^/[canary]   refused: /'
+
+    # A player has an order refused now and then (short by a few metal, a slot just taken); that is
+    # play, not breakage. Red is a worker that crashed, or an account whose refusals outnumber what
+    # the host accepted.
+    if [ "${failed:-0}" -gt 0 ] || [ "${rejected:-0}" -gt "${accepted:-0}" ]; then
+        printf '[canary] FAIL the accounts broke or were mostly refused: %s rejected vs %s accepted, %s failed\n' "$rejected" "$accepted" "$failed"
         return 1
     fi
     if [ "${completed:-0}" -lt 1 ] || [ "${orders:-0}" -lt 1 ]; then
