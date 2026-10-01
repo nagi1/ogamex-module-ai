@@ -219,8 +219,10 @@ function scenarios(): array
                     'updated_at' => CarbonImmutable::now(),
                 ]);
 
-                return ['hostile attack on planet '.$context['planet'].' from account '.$context['neighbour'],
-                    [['delete', 'fleet_missions', $mission]]];
+                [$lent, $undo] = lend_ships($context['planet'], 'large_cargo', 5);
+
+                return ['hostile attack on planet '.$context['planet'].' from account '.$context['neighbour'].' ('.$lent.')',
+                    [['delete', 'fleet_missions', $mission], $undo]];
             },
             'expect' => static function (array $context): array {
                 $saves = work_item_rows($context['players'], $context['before'], AiWorkKind::FleetSave->value);
@@ -245,14 +247,18 @@ function scenarios(): array
                 if ($existing !== null) {
                     DB::table('debris_fields')->where('id', $existing->id)->update($amounts);
 
-                    return ['debris field topped up to 400k metal beside planet '.$context['planet'],
-                        [['restore', 'debris_fields', $existing->id, ['metal' => $existing->metal, 'crystal' => $existing->crystal, 'deuterium' => $existing->deuterium]]]];
+                    [$lent, $undo] = lend_ships($context['planet'], 'recycler', 2);
+
+                    return ['debris field topped up to 400k metal beside planet '.$context['planet'].' ('.$lent.')',
+                        [['restore', 'debris_fields', $existing->id, ['metal' => $existing->metal, 'crystal' => $existing->crystal, 'deuterium' => $existing->deuterium]], $undo]];
                 }
 
                 $field = DB::table('debris_fields')->insertGetId([...$position, ...$amounts, 'created_at' => CarbonImmutable::now()]);
 
-                return ['debris field of 400k metal beside planet '.$context['planet'],
-                    [['delete', 'debris_fields', $field]]];
+                [$lent, $undo] = lend_ships($context['planet'], 'recycler', 2);
+
+                return ['debris field of 400k metal beside planet '.$context['planet'].' ('.$lent.')',
+                    [['delete', 'debris_fields', $field], $undo]];
             },
             'expect' => static function (array $context): array {
                 $recycles = work_item_rows($context['players'], $context['before'], AiWorkKind::Recycle->value);
@@ -477,6 +483,22 @@ function revert_planted(): int
     @unlink(planted_file());
 
     return $touched;
+}
+
+/**
+ * Give the attacked or harvesting planet the ships the situation is about, and the undo that takes them
+ * back. A fresh cohort account owns no ships, so a situation that only planted the threat or the debris
+ * asked it to act with nothing: not saving a fleet it does not have is correct play, and the proof read
+ * as a failure for a reason that was not the rule's.
+ *
+ * @return array{0: string, 1: array{0: string, 1: string, 2: int, 3: array<string, int>}}
+ */
+function lend_ships(int $planetId, string $ship, int $amount): array
+{
+    $held = (int) DB::table('planets')->where('id', $planetId)->value($ship);
+    DB::table('planets')->where('id', $planetId)->update([$ship => $held + $amount]);
+
+    return ["{$amount} {$ship} on planet {$planetId}", ['restore', 'planets', $planetId, [$ship => $held]]];
 }
 
 /**
