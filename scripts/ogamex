@@ -368,6 +368,9 @@ case "$command_name" in
     economy)
         in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/economy-explain.php'; foreach (explain_economy(${1:?usage: economy PLAYER_ID}) as \$line) { echo \$line, PHP_EOL; }"
         ;;
+    stories)
+        python3 "$MODULE_ROOT/scripts/stories.py" "$@"
+        ;;
     test-one)
         with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"
         ;;

@@ -46,6 +46,18 @@
         .chip { padding: 3px 9px; border-radius: 6px; font-size: 12px; border: 1px solid var(--line); background: var(--panel-2); cursor: default; }
         .chip.fail { border-color: #5a2a2a; color: #ff9b94; background: #1c1214; }
         .chip.pass { color: var(--good); border-color: #1f4a2a; background: #0e1a13; }
+        .story { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+        .story:first-child { border-top: 0; }
+        .story .what { font-weight: 600; }
+        .story .what::before { content: "✗ "; color: var(--bad); }
+        .story .rows-of { color: var(--muted); font-size: 12px; white-space: nowrap; }
+        .story details { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+        .story details summary { cursor: pointer; }
+        .story details p { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+        .passing-stories { margin-top: 8px; color: var(--muted); font-size: 12px; }
+        .passing-stories li { margin: 2px 0; }
+        .passing-stories li::before { content: "✓ "; color: var(--good); }
+        .passing-stories ul { list-style: none; padding: 0; margin: 6px 0 0; }
         .chip b { font-weight: 600; }
         .chip em { font-style: normal; color: var(--muted); margin-left: 4px; }
 
@@ -139,6 +151,13 @@
             <div class="note" id="starAt" style="margin:0"></div>
         </div>
         <div class="chips" id="chips"></div>
+    </section>
+
+    <!-- 1b. The behaviour board: what an account does today, story by story, seconds old. -->
+    <section class="panel" id="storiesPanel" aria-label="Behaviour board" hidden>
+        <h2>Behaviour board <small id="storiesMeta"></small></h2>
+        <div id="storiesFailing"></div>
+        <details class="passing-stories" id="storiesPassing"><summary></summary><ul></ul></details>
     </section>
 
     <!-- 2. What the harness has produced. Zero values go dim; stuck only draws the eye when it is not zero. -->
@@ -267,6 +286,20 @@
             + '<b>' + esc(a.name.replace(/_/g, ' ')) + '</b>' + (a.pass ? '' : '<em>' + a.count + '/' + a.floor + '</em>') + '</span>').join('');
     }
 
+    function renderStories(board) {
+        $('storiesPanel').hidden = !board || board.total === 0;
+        if (!board || board.total === 0) return;
+        $('storiesMeta').textContent = board.passing + ' / ' + board.total + ' pass · run ' + board.at + ' UTC (' + board.age + ' min ago, ' + board.seconds + 's)';
+        const failing = board.stories.filter(s => !s.pass), passing = board.stories.filter(s => s.pass);
+        $('storiesFailing').innerHTML = failing.map(s =>
+            '<div class="story"><span class="what">' + esc(s.story) + '</span><span class="rows-of">' + esc(s.rows.join(', ') || 'no row') + '</span>'
+            + '<details><summary>' + esc(s.test) + ' — why</summary><p>' + esc(s.why) + '</p></details></div>').join('');
+        const more = $('storiesPassing');
+        more.hidden = passing.length === 0;
+        more.querySelector('summary').textContent = passing.length + ' stories pass';
+        more.querySelector('ul').innerHTML = passing.map(s => '<li>' + esc(s.story) + '</li>').join('');
+    }
+
     function renderQueue(queue) {
         counter('cProven', queue.proven, 'good');
         counter('cDelivered', queue.delivered, 'warn');
@@ -341,7 +374,7 @@
     }
 
     function render(data) {
-        renderState(data); renderStar(data.northStar); renderQueue(data.queue); renderRows(data.rows);
+        renderState(data); renderStar(data.northStar); renderStories(data.stories); renderQueue(data.queue); renderRows(data.rows);
         renderWriter(data.model); renderCohort(data.cohort); renderNow(data);
     }
 

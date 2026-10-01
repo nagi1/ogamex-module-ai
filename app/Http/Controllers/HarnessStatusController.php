@@ -185,7 +185,7 @@ class HarnessStatusController
 
         // What the page now draws from: the stamped log, the model ledger, the attempt counters, the
         // newest scorecard and the cohort verdict.
-        foreach ([...$this->persistentLogs(), $this->path('plan/research/ogame/model-usage.jsonl'), '/tmp/harness-quality-grand.txt'] as $file) {
+        foreach ([...$this->persistentLogs(), $this->path('plan/research/ogame/model-usage.jsonl'), '/tmp/harness-quality-grand.txt', $this->path('plan/research/ogame/stories.json')] as $file) {
             $parts[] = $file.':'.(@filemtime($file) ?: 0).':'.(@filesize($file) ?: 0);
         }
         $attempts = glob($this->path('plan/research/ogame/attempts/*.{count,stuck}'), GLOB_BRACE) ?: [];
@@ -214,6 +214,7 @@ class HarnessStatusController
             'feed' => $this->feed(),
             'queue' => $this->queue(),
             'northStar' => $this->northStar(),
+            'stories' => $this->stories(),
             'model' => $this->model(),
             'rows' => $this->rows(),
             'cohort' => $this->cohort(),
@@ -337,6 +338,29 @@ class HarnessStatusController
             'aspects' => $aspects,
             'passing' => count(array_filter($aspects, static fn (array $a): bool => $a['pass'])),
             'total' => count($aspects),
+        ];
+    }
+
+    /**
+     * The behaviour board (scripts/stories.py): each Situation-kit story, what the account did, and for a
+     * failing one the kit's own diagnosis. Seconds old, where the scorecard is hours old.
+     *
+     * @return array<string, mixed>
+     */
+    private function stories(): array
+    {
+        $board = json_decode((string) @file_get_contents($this->path('plan/research/ogame/stories.json')), true);
+        if (!is_array($board) || !isset($board['stories'])) {
+            return ['at' => null, 'stories' => [], 'passing' => 0, 'total' => 0];
+        }
+
+        return [
+            'at' => date('H:i', (int) $board['at']),
+            'age' => (int) floor((time() - (int) $board['at']) / 60),
+            'seconds' => (float) ($board['seconds'] ?? 0),
+            'stories' => $board['stories'],
+            'passing' => count(array_filter($board['stories'], static fn (array $story): bool => (bool) $story['pass'])),
+            'total' => count($board['stories']),
         ];
     }
 

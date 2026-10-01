@@ -1788,7 +1788,13 @@ THE TEST
   ->session()->expectWork(AiWorkKind::X)` plants a situation, runs the account's real session and says
   what it chose when the expectation fails. One short story per test; never plant rows by hand when the
   kit has a method for it. If the kit lacks what you need to plant, add ONE method to it (it is a test
-  file) in the same answer.
+  file) in the same answer. It plants colonies, stock on every planet, an inactive neighbour, a spy
+  report on it, an alliance application, a direct message; it asserts queued objects, flown missions,
+  ranked candidates, decided applications and replies.
+- A kit failure is a diagnosis, read it before editing: "executors refused: [X: reason]" means the
+  decision was right and an executor gate said no (fix the gate or the plant); a wanted action missing
+  from "ranked" means no planner offered it (fix the planner); ranked but outscored means the choice
+  (fix the comparison, not the test). Never weaken the story's expectation to make it pass.
 - When the task shows THE FAST PROOF, that test is the target: make it pass. It already counts as your
   test. Otherwise:
 - One Pest Feature test in `tests/Feature/`, shaped like EXAMPLE TEST (`uses(...)`, no class, no

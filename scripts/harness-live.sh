@@ -185,6 +185,11 @@ PY
       continue
     fi
 
+    # The behaviour board: every Situation-kit story against the code as it stands, in seconds. Its
+    # summary line is the cheapest "is the account playing better than last pass" signal there is.
+    echo "--- behaviour board $(date -u '+%F %T') UTC ---"
+    python3 scripts/stories.py 2>&1 | grep -E "stories pass|^FAIL" || echo "behaviour board did not run"
+
     # The half that scenarios cannot prove: that a real account actually plays. A persistent canary
     # universe (never grand or pve) has been working while this pass wrote code; it is reloaded onto
     # that code, then asked what it did since the last check. Booting and sleeping out a window inside
