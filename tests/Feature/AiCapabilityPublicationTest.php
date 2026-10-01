@@ -296,10 +296,14 @@ test('it converges on one intent when a session runs twice', function (): void {
     $this->planetAddResources(capabilityPlenty());
 
     $session = capabilitySession($profile, 'retry');
+    $builds = static fn (): int => AiWorkItem::query()->where('player_id', $profile->player_id)->where('kind', AiWorkKind::BuildFirstBuilding)->count();
     app(RunAiSessionAction::class)->handle($profile, $session);
+    $afterFirstRun = $builds();
     app(RunAiSessionAction::class)->handle($profile, $session);
 
-    expect(AiWorkItem::query()->where('player_id', $profile->player_id)->where('kind', AiWorkKind::BuildFirstBuilding)->count())->toBe(1);
+    // One intent per free queue, and a retry adds none: the account owns more than one planet.
+    expect($afterFirstRun)->toBeGreaterThanOrEqual(1)
+        ->and($builds())->toBe($afterFirstRun);
 });
 
 // Reading the account's own economy must not change it: the refresh behind the capability answer
@@ -327,7 +331,9 @@ test('it schedules work only for selections the module can execute', function ()
 
         $intent = AiWorkItem::query()->where('idempotency_key', 'intent:session:' . $session->id)->first();
 
-        expect($intent !== null)->toBe($type === AiCandidateActionType::Build, $type->name);
+        // Build and Research both fill whatever economy queue is free; the lab and the build queue
+        // are one decision for a player at login.
+        expect($intent !== null)->toBe(in_array($type, [AiCandidateActionType::Build, AiCandidateActionType::Research], true), $type->name);
     }
 });
 

@@ -1846,21 +1846,33 @@ def await_claim(key):
 
 
 QUALITY_TASKS = {
-    # invariant -> (title, what the cohort is telling us)
+    # invariant -> (title, what the cohort is telling us, the file that owns the decision). The file
+    # is what makes the row attemptable: a raised row without one was skipped by the implement lane
+    # forever, so the cohort kept failing the same invariant and nothing worked on it.
     "NAKED_BESIDE_WALLED": (
         "Defence never reaches every planet: naked planets beside a walled one",
         "The cohort read found accounts with a planet at zero defence while a sibling holds a real "
         "wall, so the wall is being built in one place instead of everywhere it is wanted.",
+        "app/Domain/Decision/QueueableUnitPlanner.php",
     ),
     "WALL_CEILING": (
         "Standing wall size is unbounded",
         "The cohort read found single planets holding more defence units than any planet needs. Size "
         "is scaled from exposure with no ceiling, so it grows with production rather than with threat.",
+        "app/Domain/Decision/DefenseNeedEvaluator.php",
     ),
     "ALLIANCE_SHARE": (
         "One alliance absorbs the cohort",
         "The cohort read found one alliance holding most of the AI accounts. Nothing in the social "
         "routine spreads founders, so the first club takes everyone who is engaged.",
+        "app/Domain/Social/AllianceChoice.php",
+    ),
+    "IDLE_QUEUES": (
+        "Accounts log in and leave most build queues empty",
+        "The cohort read found accounts that played this hour with most planets' build queues empty. "
+        "A player fills every planet's queue at login; the session's economy fill is "
+        "QueueableBuildingPlanner::steps(), so find which planets it returns nothing for, and why.",
+        "app/Domain/Decision/QueueableBuildingPlanner.php",
     ),
 }
 
@@ -1888,11 +1900,11 @@ def quality(path):
         if name in known:
             tracked.append(f"{name} ({known[name]})")
             continue
-        title, why = QUALITY_TASKS.get(name, (f"Cohort invariant {name} fires", "See verify-cohorts.php."))
+        title, why, owner = QUALITY_TASKS.get(name, (f"Cohort invariant {name} fires", "See verify-cohorts.php.", ""))
         code = f"QUAL-{len(known) + 1:03d}"
         samples = [line.strip() for line in text.splitlines() if f"[{name}]" in line][:5]
         subprocess.run([sys.executable, cli, "add", code, title, "impl", "P1",
-                        "--gap", name,
+                        "--gap", name, "--file", owner,
                         "--notes", f"{why} Raised from the cohort read's own verdict. "
                                    f"Invariant name {name} is the dedupe key: do not raise a second "
                                    f"task while this one is open.\nEvidence:\n" + "\n".join(samples)],

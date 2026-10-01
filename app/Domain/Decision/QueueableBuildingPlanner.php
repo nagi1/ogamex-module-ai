@@ -51,17 +51,30 @@ class QueueableBuildingPlanner
 
     public function plan(int $playerId, ?PlayerService $player = null): QueueableBuilding|QueueableResearch|null
     {
+        return $this->steps($playerId, $player, 1)[0] ?? null;
+    }
+
+    /**
+     * Every queue a player would fill in one login: at most one step per planet, because each planet
+     * pays from its own stock and has its own build queue, and at most one technology, because the
+     * lab is one queue for the account. The order is plan()'s, so the first step is the one plan()
+     * returns.
+     *
+     * @return list<QueueableBuilding|QueueableResearch>
+     */
+    public function steps(int $playerId, ?PlayerService $player = null, int $limit = PHP_INT_MAX): array
+    {
         // An account the module does not manage has no policy to apply, so it gets no capability.
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
         if ($profile === null) {
-            return null;
+            return [];
         }
 
         // The module owns profile rows; the host owns accounts. A profile can outlive its account or
         // be written by a fixture, and loading an account the host does not have throws -- so the
         // precondition is asked here rather than discovered in the host service.
         if (!User::query()->whereKey($playerId)->exists()) {
-            return null;
+            return [];
         }
 
         // Refresh every planet's live balance once: the candidate pass reads stored amounts and
@@ -74,38 +87,64 @@ class QueueableBuildingPlanner
             $planet->updateResourceStorageStats(false);
         }
 
-        // A warehouse about to overflow stops that planet producing wherever it sits, so it outranks
-        // every routine step on every other planet. Without this pass the first planet always won:
-        // it always has a queueable step, and the newest colonies filled to the cap while the
-        // homeworld kept buying.
-        $step = $this->firstQueueableAcross($planets, $profile, fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile));
-        if ($step !== null) {
-            return $step;
-        }
-
-        // E7: a full warehouse is a spend signal, and the surplus is a permanent loss while a
-        // deferred routine step is not — so it outranks the chain and the routine mine. The
-        // pass is empty for a planet whose warehouse still has room.
-        $step = $this->firstQueueableAcross($planets, $profile, fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile));
-        if ($step !== null) {
-            return $step;
-        }
-
-        // The routine economy, planet by planet in the account's own order: the energy a planet
-        // needs before it throttles, the chain's facilities, then the fastest-paying mine.
-        foreach ($planets as $planet) {
-            $step = $this->firstQueueable($planet, $profile, [
+        // A warehouse about to overflow stops that planet producing, so its pass runs across every
+        // planet before any routine step; a full warehouse (E7) is a spend signal and comes next;
+        // then the routine economy: energy before it throttles, the chain's facilities, the
+        // fastest-paying mine.
+        $passes = [
+            fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
+            fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
+            fn (PlanetService $planet): array => [
                 ...$this->energyCapacity->pending($planet),
                 ...$this->facilityChain->pending($planet),
                 ...$this->economyUpgrades->storageForPrice($planet, $profile),
                 ...$this->economyUpgrades->production($planet, $profile),
-            ]);
-            if ($step !== null) {
-                return $step;
+            ],
+        ];
+
+        $steps = [];
+        foreach ($passes as $candidates) {
+            foreach ($planets as $planet) {
+                if (count($steps) >= $limit) {
+                    return array_values($steps);
+                }
+
+                $steps = $this->withStep($steps, $planet, $profile, $candidates);
             }
         }
 
-        return null;
+        return array_values($steps);
+    }
+
+    /**
+     * @param array<int, QueueableBuilding|QueueableResearch> $steps
+     * @param callable(PlanetService): list<BuildCandidate> $pass
+     * @return array<int, QueueableBuilding|QueueableResearch>
+     */
+    private function withStep(array $steps, PlanetService $planet, AiProfile $profile, callable $pass): array
+    {
+        if (isset($steps[$planet->getPlanetId()])) {
+            return $steps;
+        }
+
+        $candidates = $pass($planet);
+
+        // The lab is one queue for the account: once a technology is taken, the other planets build.
+        if (array_filter($steps, static fn (object $taken): bool => $taken instanceof QueueableResearch) !== []) {
+            $candidates = array_values(array_filter(
+                $candidates,
+                static fn (BuildCandidate $candidate): bool => ObjectService::getObjectById($candidate->buildingId)->type !== GameObjectType::Research,
+            ));
+        }
+
+        $step = $this->firstQueueable($planet, $profile, $candidates);
+        if ($step === null) {
+            return $steps;
+        }
+
+        $steps[$planet->getPlanetId()] = $step;
+
+        return $steps;
     }
 
     /**
@@ -113,26 +152,6 @@ class QueueableBuildingPlanner
      *
      * @param list<BuildCandidate> $candidates
      */
-    /**
-     * The first candidate any planet can queue from one list — the cross-planet sweep behind the
-     * blocking passes. The list is built per planet, but the planet that wins is whichever the
-     * list returns first in account order.
-     *
-     * @param list<PlanetService> $planets
-     * @param callable(PlanetService): list<BuildCandidate> $list
-     */
-    private function firstQueueableAcross(array $planets, AiProfile $profile, callable $list): QueueableBuilding|QueueableResearch|null
-    {
-        foreach ($planets as $planet) {
-            $step = $this->firstQueueable($planet, $profile, $list($planet));
-            if ($step !== null) {
-                return $step;
-            }
-        }
-
-        return null;
-    }
-
     private function firstQueueable(PlanetService $planet, AiProfile $profile, array $candidates): QueueableBuilding|QueueableResearch|null
     {
         foreach ($candidates as $candidate) {

@@ -149,6 +149,47 @@ test('a spy selection schedules and executes an espionage mission', function ():
     expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
 });
 
+test('a login fills the build queue on every planet the account owns', function (): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+    $this->secondPlanetService->addResources(intentPlenty());
+
+    $session = intentSession($profile, 'every-planet');
+    app(ScheduleAiIntentAction::class)->handle($profile, $session, intentTrace($this->currentUserId, $this->currentPlanetId, AiCandidateActionType::Build));
+
+    $planets = intentSessionWork($session)->pluck('payload')->map(static fn (array $payload): int => (int) $payload['planet_id']);
+
+    expect($planets->sort()->values()->all())->toBe(collect([$this->currentPlanetId, $this->secondPlanetService->getPlanetId()])->sort()->values()->all());
+});
+
+// The two dataset sides are the boundary of the rule: a fleet errand leaves the stock to the
+// economy, a decision that spends or moves the stock keeps it.
+test('a session that chose something else still refills the queues only when the stock is free', function (AiCandidateActionType $selected, bool $refills): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+
+    $session = intentSession($profile, 'chore-' . $selected->value);
+    app(ScheduleAiIntentAction::class)->handle($profile, $session, intentTrace($this->currentUserId, $this->currentPlanetId, $selected, [], [AiCandidateActionType::Build]));
+
+    $economy = AiWorkItem::query()->where('idempotency_key', 'intent:session:' . $session->id . ':economy')->first();
+
+    expect($economy !== null)->toBe($refills)
+        ->and($economy?->kind)->toBe($refills ? AiWorkKind::BuildFirstBuilding : null);
+})->with([
+    'a spy errand leaves the stock free' => [AiCandidateActionType::Spy, true],
+    'a transfer moves the stock' => [AiCandidateActionType::Transfer, false],
+]);
+
+test('a session whose economy was not offered refills nothing', function (): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+
+    $session = intentSession($profile, 'no-economy');
+    app(ScheduleAiIntentAction::class)->handle($profile, $session, intentTrace($this->currentUserId, $this->currentPlanetId, AiCandidateActionType::Spy));
+
+    expect(AiWorkItem::query()->where('idempotency_key', 'intent:session:' . $session->id . ':economy')->exists())->toBeFalse();
+});
+
 test('a raid selection schedules and executes an attack', function (): void {
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());
@@ -263,6 +304,12 @@ function intentWorkItem(AiProfile $profile, AiWorkKind $kind, array $payload): A
     ]);
 }
 
+/** @return Illuminate\Support\Collection<int, AiWorkItem> every intent one session created */
+function intentSessionWork(AiWorkItem $session): Illuminate\Support\Collection
+{
+    return AiWorkItem::query()->where('idempotency_key', 'like', 'intent:session:' . $session->id . '%')->get();
+}
+
 /** Schedule the selected action and return the intent work item it created. */
 function intentSchedule(AiProfile $profile, AiCandidateActionType $type, int $planetId, array $parameters = []): ?AiWorkItem
 {
@@ -278,16 +325,21 @@ function intentExecute(AiWorkItem $intent, int $planetId): array
     return app(ExecuteAiIntentAction::class)->execute($intent, (int) ($intent->payload['planet_id'] ?? $planetId));
 }
 
-function intentTrace(int $playerId, int $planetId, AiCandidateActionType $type, array $parameters = []): DecisionTrace
+/** @param list<AiCandidateActionType> $offered other actions the engine offered beside the selected one */
+function intentTrace(int $playerId, int $planetId, AiCandidateActionType $type, array $parameters = [], array $offered = []): DecisionTrace
 {
-    $candidate = app()->makeWith(CandidateAction::class, [
-        'type' => $type,
-        'reason' => 'intent-fixture',
-        'parameters' => $parameters,
-        'features' => ['resource_need' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0],
-        'sourceTimestamps' => [],
+    $scored = static fn (AiCandidateActionType $candidateType, array $candidateParameters): ScoredCandidate => app()->makeWith(ScoredCandidate::class, [
+        'candidate' => app()->makeWith(CandidateAction::class, [
+            'type' => $candidateType,
+            'reason' => 'intent-fixture',
+            'parameters' => $candidateParameters,
+            'features' => ['resource_need' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0],
+            'sourceTimestamps' => [],
+        ]),
+        'score' => 1.0,
+        'components' => [],
     ]);
-    $selected = app()->makeWith(ScoredCandidate::class, ['candidate' => $candidate, 'score' => 1.0, 'components' => []]);
+    $selected = $scored($type, $parameters);
 
     return app()->makeWith(DecisionTrace::class, [
         'perception' => app()->makeWith(PerceptionSnapshot::class, [
@@ -301,7 +353,7 @@ function intentTrace(int $playerId, int $planetId, AiCandidateActionType $type, 
             'sourceTimestamps' => [],
             'inboundFleets' => [],
         ]),
-        'candidates' => [$selected],
+        'candidates' => [$selected, ...array_map(static fn (AiCandidateActionType $other): ScoredCandidate => $scored($other, []), $offered)],
         'selected' => $selected,
         'rejections' => [],
         'inputHash' => 'intent-fixture',

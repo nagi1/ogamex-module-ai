@@ -24,9 +24,11 @@ use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\ReserveFloor;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Domain\Perception\PlayerObservationService;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\Models\BuildingQueue;
 use OGame\Services\ObjectService;
 
 echo "\n=== cohort verification — ".now()->toDateTimeString()." ===\n";
@@ -185,6 +187,7 @@ printf(
 //   NAKED_BESIDE_WALLED  an account with a planet at zero defence while a sibling holds a real wall
 //   WALL_CEILING         one planet holding more defence units than any single planet needs
 //   ALLIANCE_SHARE       one alliance holding more than this share of the AI accounts
+//   IDLE_QUEUES          an account that played in the last hour with most planets' build queues empty
 $nakedBesideWalled = [];
 $overCeiling = [];
 $WALL_CEILING = 20_000;
@@ -236,6 +239,24 @@ if (Schema::hasColumn('users', 'alliance_id')) {
     }
 }
 
+// A player who logs in fills every planet's build queue; an account that played this hour and left
+// most of them empty grows at a fraction of its production, which the public highscore shows.
+$IDLE_SHARE = 0.5;
+$idleQueues = [];
+$playedThisHour = DB::table('ai_work_items')->whereIn('player_id', $playerIds)
+    ->where('kind', AiWorkKind::RunSession->value)->where('updated_at', '>=', now()->subHour())
+    ->distinct()->pluck('player_id')->map(fn ($id): int => (int) $id)->all();
+$busyPlanets = BuildingQueue::query()->where('processed', 0)->where('time_end', '>', time())
+    ->distinct()->pluck('planet_id')->map(fn ($id): int => (int) $id)->all();
+
+foreach ($playedThisHour as $accountId) {
+    $ownPlanets = array_column($byAccount[$accountId] ?? [], 'id');
+    $idle = array_diff($ownPlanets, $busyPlanets);
+    if ($ownPlanets !== [] && count($idle) / count($ownPlanets) > $IDLE_SHARE) {
+        $idleQueues[] = sprintf('player %d played this hour with %d of %d build queues empty', $accountId, count($idle), count($ownPlanets));
+    }
+}
+
 // Named invariants, one line per violation, and a machine-readable verdict at the end. The harness
 // reads that line to raise a task for anything the cohorts fail, so a repeated "QUALITY: FAIL" is not
 // a dead end someone has to notice by eye.
@@ -243,13 +264,14 @@ $invariants = [
     'NAKED_BESIDE_WALLED' => $nakedBesideWalled,
     'WALL_CEILING' => $overCeiling,
     'ALLIANCE_SHARE' => $allianceShare,
+    'IDLE_QUEUES' => $idleQueues,
 ];
 
 $fired = array_keys(array_filter($invariants, static fn (array $rows): bool => $rows !== []));
 $total = array_sum(array_map('count', $invariants));
 
 echo "\nQUALITY: ".($total === 0
-    ? '3 of 3 invariants honoured'
+    ? count($invariants).' of '.count($invariants).' invariants honoured'
     : $total.' violation(s) across '.count($fired).' invariant(s)')."\n";
 
 foreach ($invariants as $name => $rows) {

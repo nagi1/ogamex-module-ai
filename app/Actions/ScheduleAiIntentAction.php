@@ -4,7 +4,6 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Decision\DecisionTrace;
-use Modules\AI\Domain\Decision\QueueableBuilding;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableColony;
 use Modules\AI\Domain\Decision\QueueableColonyPlanner;
@@ -121,10 +120,10 @@ class ScheduleAiIntentAction
      *
      * @param array<string, mixed> $payload
      */
-    private function enqueue(AiProfile $profile, AiWorkItem $sessionWorkItem, AiWorkKind $kind, array $payload, ?CarbonImmutable $dueAt = null): void
+    private function enqueue(AiProfile $profile, AiWorkItem $sessionWorkItem, AiWorkKind $kind, array $payload, ?CarbonImmutable $dueAt = null, string $keySuffix = ''): void
     {
         AiWorkItem::query()->firstOrCreate(
-            ['idempotency_key' => 'intent:session:' . $sessionWorkItem->id],
+            ['idempotency_key' => 'intent:session:' . $sessionWorkItem->id . $keySuffix],
             [
                 'player_id' => $profile->player_id,
                 'kind' => $kind,
@@ -141,8 +140,7 @@ class ScheduleAiIntentAction
         // Every case is listed: adding a capability means deciding here where it is executed, and
         // a capability with no executor must not be published to begin with.
         match ($trace->selected->candidate->type) {
-            AiCandidateActionType::Build => $this->scheduleBuild($profile, $sessionWorkItem),
-            AiCandidateActionType::Research => $this->scheduleResearch($profile, $sessionWorkItem),
+            AiCandidateActionType::Build, AiCandidateActionType::Research => $this->fillQueues($profile, $sessionWorkItem, ''),
             AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
@@ -156,6 +154,65 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Phalanx => $this->schedulePhalanx($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
+
+        // A player refills the build queues and the lab every login before turning to the fleet;
+        // choosing a raid must not leave nine planets idle until the next session.
+        if ($this->leavesStockAlone($trace->selected->candidate->type) && $this->economyOffered($trace)) {
+            $this->fillQueues($profile, $sessionWorkItem, ':economy');
+        }
+    }
+
+    /**
+     * Whether the selected action leaves the planets' stock for the economy. Units, transfers and
+     * saves spend or move it, and two intents priced against one balance get one of them cancelled
+     * by the host; an idle session is a player who did not log in to play.
+     */
+    private function leavesStockAlone(AiCandidateActionType $type): bool
+    {
+        return match ($type) {
+            AiCandidateActionType::Spy,
+            AiCandidateActionType::Raid,
+            AiCandidateActionType::Expedition,
+            AiCandidateActionType::Recycle,
+            AiCandidateActionType::Recall,
+            AiCandidateActionType::Phalanx,
+            AiCandidateActionType::ThrottleMine,
+            AiCandidateActionType::Colonize => true,
+            default => false,
+        };
+    }
+
+    /** Only what the engine offered this session, so legality and persona policy stay its own. */
+    private function economyOffered(DecisionTrace $trace): bool
+    {
+        foreach ($trace->candidates as $scored) {
+            if (in_array($scored->candidate->type, [AiCandidateActionType::Build, AiCandidateActionType::Research], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * One intent per queue the planner found free and payable: a building per planet and one
+     * technology. Legality is re-asked here rather than trusted from the decision, and the step the
+     * planner verified travels with the intent, so the schedule and the executor name one objective.
+     * The first step keeps the session's own key, so a retried session converges on the same work.
+     */
+    private function fillQueues(AiProfile $profile, AiWorkItem $sessionWorkItem, string $keyPrefix): void
+    {
+        foreach ($this->queueableBuildingPlanner->steps($profile->player_id) as $index => $step) {
+            [$kind, $payload] = $step instanceof QueueableResearch
+                ? [AiWorkKind::QueueResearch, [self::PAYLOAD_RESEARCH_ID => $step->researchId]]
+                : [AiWorkKind::BuildFirstBuilding, [self::PAYLOAD_BUILDING_ID => $step->buildingId]];
+
+            $this->enqueue($profile, $sessionWorkItem, $kind, [
+                self::PAYLOAD_PLANET_ID => $step->planetId,
+                ...$payload,
+                self::PAYLOAD_REASON => $step->reason,
+            ], null, $keyPrefix . ($index === 0 ? '' : ':' . $index));
+        }
     }
 
     /**
@@ -172,54 +229,8 @@ class ScheduleAiIntentAction
         ]);
     }
 
-    private function scheduleBuild(AiProfile $profile, AiWorkItem $sessionWorkItem): void
-    {
-        // Legality is re-asked here rather than trusted from the decision: the host is the
-        // authority, and a session that decided while the queue was free must not queue into a
-        // full one.
-        $plan = $this->queueableBuildingPlanner->plan($profile->player_id);
-        if (!$plan instanceof QueueableBuilding) {
-            return;
-        }
-
-        // The building the plan verified travels with the intent. Re-deciding at execution time
-        // would let a published capability, the schedule and the queued building name three
-        // different objectives, which is exactly how an account ends up mining while it claims to
-        // be reaching for a shipyard.
-        //
-        // The session's own id is the idempotency key: a retried session converges on one action,
-        // while a later session decides again. The generation is inherited when the session knows
-        // it and falls back to the column default when it does not.
-        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::BuildFirstBuilding, [
-            self::PAYLOAD_PLANET_ID => $plan->planetId,
-            self::PAYLOAD_BUILDING_ID => $plan->buildingId,
-            self::PAYLOAD_REASON => $plan->reason,
-        ]);
-    }
-
     /**
-     * The same for a technology the plan approved, with the same guarantees.
-     *
-     * The step that reached the decision is re-asked, and the technology it approved travels with
-     * the intent, so a research capability that was published, the schedule that carries it and the
-     * queued technology cannot name three different objectives.
-     */
-    private function scheduleResearch(AiProfile $profile, AiWorkItem $sessionWorkItem): void
-    {
-        $plan = $this->queueableBuildingPlanner->plan($profile->player_id);
-        if (!$plan instanceof QueueableResearch) {
-            return;
-        }
-
-        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::QueueResearch, [
-            self::PAYLOAD_PLANET_ID => $plan->planetId,
-            self::PAYLOAD_RESEARCH_ID => $plan->researchId,
-            self::PAYLOAD_REASON => $plan->reason,
-        ]);
-    }
-
-    /**
-     * The same for a unit the plan approved: the hull and the amount travel with the intent.
+     * A unit the plan approved travels with the intent, hull and amount.
      *
      * Re-deciding at execution time would let a published capability, the schedule and the queued
      * unit name three different objectives, which is how an account ends up building combat ships
