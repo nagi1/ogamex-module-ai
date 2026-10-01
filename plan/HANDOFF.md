@@ -44,7 +44,18 @@ row carries that aspect as its proof. Rows that could not name one were frozen o
 
 `PROVE_UNIVERSE=pve` points the cohort tools at pve instead of grand.
 
-## State (evidence run 2, 1 Oct 2026 12:21 UTC)
+## Reset (1 Oct 2026 15:39 UTC): read this before the State table below
+
+Both cohorts ran at **90,000×** (not the 1000× grand-test protocol), which saturated them: 14
+billion metal per planet, full planets, 54 million defence units. Every number in the State table
+below was measured on that world and is void. Grand was backed up
+(`~/cohort-backups/ogamex-grand-90000x-20261001.sql.gz`) and reseeded fresh at 1000×: one human
+account, 20 AI accounts at 1:1–1:9, and 12 inactive neighbours at 1:9–1:14
+(`local-docker-dev/seed-inactive-neighbours.php`) so raids have something worth flying for. **pve is
+stopped**; it is not an evidence cohort until the harness recovery lands. The harness is stopped
+until `plan/HARNESS-RECOVERY.md` W1–W2 are merged. The work order is in that file.
+
+## State (evidence run 2, 1 Oct 2026 12:21 UTC; VOID, measured on the 90,000× world)
 
 | Aspect | grand | pve | Row |
 | --- | --- | --- | --- |

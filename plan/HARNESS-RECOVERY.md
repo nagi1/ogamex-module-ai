@@ -1,250 +1,287 @@
 # Harness recovery: stop the loop circling, get to a verdict fast
 
 Written 1 October 2026 after a full read of the evidence runs (`evidence/20261001-1042`, `-1221`,
-`-1324`), the proof and attempt logs, the scorecards and the harness code. `AGENTS.md` and
-`plan/HANDOFF.md` still bind; this file is the work order for fixing the loop itself. Work it top to
-bottom: each workstream unblocks the one after it.
+`-1324`), the proof and attempt logs, the scorecards and the harness code, and after the cohort was
+reset (below). `AGENTS.md` still binds. This file is the work order until every exit criterion at the
+bottom is met; it overrides the work order in `plan/HANDOFF.md`.
 
-## The diagnosis in one paragraph
+## The diagnosis
 
 Nothing has been proven since the north-star gate went in (`strategy-pipeline.py status`: 3 proven,
-141 closed before proofs existed). The cause is not that the planners cannot play. Three things
-stack up. **(a) The judge is wrong.** ECON-001's proof fails on `IDLE_QUEUES`, but the per-planet
-read-out shows every "idle" planet refused for a legal reason (`no free field`, `lab already taken`).
-The planets are full and hold billions of resources. **(b) The world is degenerate.** The grand
-cohort holds 54 million defence units (51M rocket launchers, 11M on one planet) and 14 billion metal
-on single planets. The yard wins about 70% of sessions, and the expansion sinks (colonisation,
-raids, recycle) are at zero, so no economy read means anything. **(c) The harness burns budget in
-circles.** It retries the same failure three times and comes back after the cool-off. 96% of its
-output tokens are reasoning, 22 of 62 calls did not finish cleanly, and the rows it can take are low
-value, while the P0 rows sit in the strong lane.
+141 closed before proofs existed). The planners are not the main reason. Four things stack up:
+
+1. **The world was broken.** Both cohorts ran at **90,000×** speed instead of the 1000× grand-test
+   protocol (`local-docker-dev/capacity-run.sh`). A day of real time was centuries of game. Planets
+   filled their fields and banked 14 billion metal, the yard piled up 54 million defence units, and
+   every human-timescale measure (reaction latency, uptime shape, a raid's flight) stopped meaning
+   anything. **Fixed on the cohort machine, see "Already done".**
+2. **The world had no prey.** The only inactive players were nine abandoned test accounts with no
+   mines, galaxies away from the AI accounts. Nothing was worth raiding, so `raids` read zero for a
+   reason that was not the AI's. **Fixed on the cohort machine.**
+3. **The judge is wrong.** ECON-001's proof fails on `IDLE_QUEUES`. The per-planet read-out shows
+   every "idle" planet refused for a legal reason (`no free field`, `lab already taken`).
+   `IDLE_QUEUES` counts "no open building row" and never asks whether anything was buildable, so it
+   cannot pass on a saturated planet. The harness re-ran the same `PROOF: FAIL` nine times.
+4. **The harness burns budget in circles.** It gets three attempts, then a 12h cool-off that
+   *deletes the counter* and starts over ("there is no terminal state"). It has no memory of what
+   the failure was, and it does not check whether the proof can pass before paying for code. The
+   implement call has no `max_tokens`; 96% of output tokens were reasoning, and 22 of 62 calls did
+   not finish cleanly. The rows it could take (DEF-35..38, IMPL-67..71) move no failing aspect.
+
+## Already done on the cohort machine (1 Oct 2026, by the reviewer)
+
+- Harness stopped. It stays stopped until W1 and W2 are merged and pulled.
+- **pve stopped** (containers stopped, database kept). One honest cohort beats two broken ones.
+- **grand backed up** to `~/cohort-backups/ogamex-grand-90000x-20261001.sql.gz` (cohort machine), then
+  dropped and reseeded with the grand-test protocol: speeds 1000×, one human first account,
+  `ai:seed-grand-test --players=20` (AI accounts at 1:1–1:9), and 12 inactive neighbours at 1:9–1:14
+  from the new `local-docker-dev/seed-inactive-neighbours.php`. These are accounts registered through
+  the host path, with ordinary mine levels (metal 12–17), small storage, a token defence on every
+  other one, and `users.time` 10 days old.
+- Grand's Redis keys flushed; the scheduler and Horizon workers restarted on the fresh database.
+- Every scorecard, proof log and State-table number from before 1 Oct 15:39 UTC is void. Do not
+  compare against them.
 
 ## Evidence (so a fresh agent does not have to re-derive it)
 
 | Finding | Where |
 | --- | --- |
+| Speeds were `90000` in `settings` for grand and pve | the cohort databases (now reset) |
 | ECON-001 proof: the same `PROOF: FAIL` line nine times, no step named | `plan/research/ogame/proofs/ECON-001.log` |
-| every-planet-builds 0/12: each planet refused by `no free field` / `lab already taken`; three planets also hit `price plus reserve` with 0 deuterium beside 14B metal | `evidence/20261001-1324/11-situations-grand.txt` |
-| `IDLE_QUEUES` counts "no unprocessed building row" and never asks whether anything was buildable | `scripts/verify-cohorts.php:240-258` |
-| 54,187,390 defence units held, `WALL_CEILING` and `NAKED_BESIDE_WALLED` on 19 of 20 accounts | `evidence/20261001-1324/03-verify-grand.txt` |
-| Hourly scorecards: espionage, raids, recycle, colonisation, social, chat and alliance all 0 | `plan/research/ogame/scorecards/ECON-001-ogamex-grand-*.json` |
+| every-planet-builds 0/12, each planet refused by `no free field` / `lab already taken` / `price plus reserve` with 0 deuterium | `plan/research/ogame/evidence/20261001-1324/11-situations-grand.txt` |
+| `IDLE_QUEUES` = "no unprocessed building row", never "something was buildable" | `scripts/verify-cohorts.php:240-258` |
+| `WALL_CEILING` / `NAKED_BESIDE_WALLED` on 19 of 20 accounts | `evidence/20261001-1324/03-verify-grand.txt` |
 | ALLY-001, FLEET-002, DEF-35: failing tests ×3. FLEET-003: unwired YAML ×3. IMPL-67: no test ×3 | `plan/research/ogame/attempts/*.log` |
-| Retry policy: `MAX_ATTEMPTS = 3`, then a 12h cool-off that **resets the counter** and tries again; "there is no terminal state" | `scripts/strategy-pipeline.py:54-55, 879-913` |
-| Implement call sends no `max_tokens` and no reasoning limit | `scripts/strategy-pipeline.py:2271` |
-| `prove_row` runs every step even after one fails, and the log keeps only the summary line | `scripts/ogamex:187-230` |
+| `MAX_ATTEMPTS = 3`, `COOLOFF_SECONDS = 12h`, and `cooling_off()` deletes the counter when the cool-off ends | `scripts/strategy-pipeline.py:54-55, 879-913` |
+| Implement payload has no `max_tokens` | `scripts/strategy-pipeline.py:2271` |
+| `prove_row` runs every step after a failure, and the log keeps only the summary line | `scripts/ogamex:187-230` |
 | Module suite red: `AiActivityMarkerTest` "2 records were found" (113/114) | `evidence/20261001-1324/07-test-module.txt` |
-| `tasks.db` (binary) committed by both sides; root-owned scorecard files blocked a merge; `init-watcher` (root, PID 3) auto-commits and cannot be stopped from the dev user | `evidence/takeover-20261001-1304/LOG.md` |
+| `tasks.db` (binary) committed from two machines; root-owned scorecards blocked a merge; a root `init-watcher` auto-commits | `evidence/takeover-20261001-1304/LOG.md` |
 
 ## Rules for whoever works this file
 
-- Every change to `scripts/` or `plan/tasks/` is dev tooling. Register each workstream item as a row
-  (`task.py add`, codes `HARNESS-005` onward) with a `harness:` proof step, so the north-star gate
-  accepts it. Module code changes (W3, W4) need an `aspect:`, `situation:` or `invariant:` step as
-  usual.
-- Gate 2 applies to tooling too: one function per mechanism, no framework and no config for values
-  that never vary. Extend `strategy-pipeline.py`, `scripts/ogamex` and `task.py`; do not add a
-  fourth orchestrator.
-- Stop the harness (`pkill -f harness-live.sh`) before editing `strategy-pipeline.py`. Restart it only
-  after W1 lands.
-- Commit named files only (`git add <files>`).
+- **Lanes.** The cloud agent works from code only and has no cohort, no Docker and no live database.
+  It does W1, W2 and the code parts of W3/W4, and pushes a branch. The cohort machine pulls, runs
+  the tool chain and the proofs, and restarts the harness. Anything that needs a live cohort to
+  verify is marked **[verify on pull]**.
+- **Ledger.** Register each item as a row before working it (`python3 plan/tasks/task.py add`, codes
+  `HARNESS-005` onward for tooling). Tooling rows carry a `harness:` proof step; module code rows
+  carry `aspect:`, `situation:` or `invariant:` as usual. If `tasks.db` is not usable where you are,
+  list the rows you would add at the end of your PR description instead; the cohort machine adds
+  them.
+- **Gate 2 applies to tooling too.** One function per mechanism. Extend `strategy-pipeline.py`,
+  `scripts/ogamex`, `task.py` and `verify-cohorts.php`; never add a fourth orchestrator, a config
+  file for a constant, or a class with one caller.
+- **Module code** follows `AGENTS.md` → Code and Tests in full: `app()`/`makeWith()`, no `else`, Pest
+  Feature tests on real models, no Mockery, and the three gates.
+- Commit named files only. Never commit `plan/tasks/tasks.db`, `plan/research/ogame/attempts/*`,
+  `proofs/*` or `scorecards/*`: they are runtime state of the cohort machine.
 
 ---
 
-## W1: Stop the loop circling (do first, about half a day)
+## W1: Stop the loop circling (tooling, cloud agent)
 
 ### W1.1 Failure signature and a terminal `stuck` state
-`scripts/strategy-pipeline.py` (`record_failure`, `cooling_off`)
+`scripts/strategy-pipeline.py` (`record_failure`, `cooling_off`, `status`), `plan/tasks/task.py`
 
-- Normalise each failure reason: strip numbers, timestamps, durations, paths under `/var/www` and
-  hex ids. Hash the result. Store the last signatures beside the count:
-  `attempts/<CODE>.sig`, one hash per line.
-- When the same signature appears **twice in a row**, stop: write `attempts/<CODE>.stuck` holding the
-  reason, and set the row to `blocked` via `task.py` with the note
-  `stuck: same failure twice — <first line>`. Do not count down to a cool-off, and do not let the
-  cool-off delete the counter of a stuck row.
-- `cooling_off` returns "never" for a stuck row. Only a human or the reviewer clears it with
-  `task.py unstick CODE` (a new subcommand), which deletes `.stuck`, `.sig` and `.count`.
-- Replace the docstring's "there is no terminal state": a repeat failure *is* the terminal state.
+- Normalise each failure reason: strip digits, durations, timestamps, absolute paths and hex or uuid
+  ids, and collapse whitespace. Hash the result (sha1, first 12 characters). Append the hash to
+  `attempts/<CODE>.sig`.
+- When a row's last two signatures are equal, stop. Write `attempts/<CODE>.stuck` holding the
+  normalised reason and the first 40 lines of the raw one. Set the row to `blocked` with note
+  `stuck: same failure twice: <first line>`.
+- `cooling_off` treats a stuck row as never attemptable, and the cool-off no longer deletes the
+  counter of a stuck row. Rewrite the docstring "there is no terminal state": a repeat failure is
+  the terminal state.
+- `task.py unstick CODE`: a new subcommand that deletes `.stuck`, `.sig` and `.count` and sets the
+  row back to `todo`.
+- `strategy-pipeline.py status` prints a `STUCK:` line listing them.
 
-Done when: a row that fails twice with the same pest error is `blocked` and never re-sent to the
-model; `strategy-pipeline.py status` lists it under `STUCK`.
+Verify offline: `implement CODE --answer <file>` already replays a saved answer without a model
+call. Replay `attempts/DEF-35.answer.md` twice against a scratch copy of `tasks.db`; the second
+replay must leave the row `blocked` and print it under `STUCK`. Where Pest cannot run, fake the test
+runner's failure with a stub answer that fails a pre-test validator (for example a file with no
+test, which fails with the fixed "no test" reason).
 
 ### W1.2 Red-first baseline before any paid attempt
-`scripts/strategy-pipeline.py` (`implement`), `scripts/ogamex` (`prove_row`)
+`scripts/strategy-pipeline.py` (`implement`)
 
-- Before the first model call for a row, run `ogamex prove CODE` once and save the per-step results to
-  `attempts/<CODE>.baseline` (see W2.1 for the per-step format).
-- If the baseline **passes**, do not implement: close the row through `task.py done`.
-- If the baseline fails only on a step marked `suspect` (W2.3), do not implement: block the row as
-  `proof suspect`.
-- After an attempt, accept it only if the proof passes, or at least one step moved from FAIL to PASS
-  and none moved from PASS to FAIL. An attempt whose proof read-out has the same signature as the
-  baseline is a failure, even when its own tests pass.
-
-Done when: running the harness on ECON-001 as it stands makes **zero** model calls and blocks the row
-with the baseline attached.
+- Before the first model call for a row (no `.count` yet), run `bash scripts/ogamex prove CODE --json`
+  (W2.1) and save it as `attempts/<CODE>.baseline.json`.
+- If the baseline passes, make no model call. Run `task.py done CODE` instead.
+- If every failing step in the baseline is tagged `suspect` (W2.3), make no model call. Block the
+  row with `proof suspect`.
+- After an attempt's own tests pass, run the proof again. Accept the attempt only if the proof
+  passes, or at least one step went from FAIL to PASS and none went from PASS to FAIL. Otherwise the
+  attempt failed with reason `proof unchanged: <step> <first line>`, which feeds W1.1, so a second
+  identical miss makes the row stuck.
 
 ### W1.3 Proof-suspect detector
 `scripts/strategy-pipeline.py`
 
-- If a row's proof has failed with the same signature after code changes on **three** separate
-  attempts or deliveries, mark it `proof suspect` and assign it to the strong lane. The proof, not
-  the code, is the likely defect (ECON-001 is the worked example).
+- When a row's proof fails with the same step signature on three deliveries (code changed each time,
+  per the `implemented/<CODE>.md` marker), tag that step `suspect` (W2.3) and block the row as
+  `proof suspect`, for the reviewer. ECON-001 is the worked example: the planner was changed three
+  times and `IDLE_QUEUES` read the same.
 
 ### W1.4 Cap the writer's cost
-`scripts/strategy-pipeline.py:2271` and `model_call`
+`scripts/strategy-pipeline.py` (implement payload, `model_call`)
 
-- Send `max_tokens` on the implement payload. Size it from the longest accepted answer in
-  `attempts/*.answer.md` plus 50%; measure it, do not guess.
-- If the provider exposes a reasoning or thinking budget for `deepseek-flash`, set it, and confirm the
-  field name against the provider's API documentation. If it does not, record that in the row.
-- A `finish_reason` other than `stop` already refuses the answer. Also count it as a failure with
-  signature `unfinished`, so W1.1 stops a row that keeps truncating.
+- Add `max_tokens` to the implement payload. Set it to the largest answer in
+  `attempts/*.answer.md` (measure the bytes, convert at ~3.5 bytes per token) plus 50%. Write the
+  measurement in a one-line comment.
+- Look up whether the provider's chat-completions API for `deepseek-flash` accepts a reasoning or
+  thinking budget parameter. If it does, set it and cite the documentation in the PR. If it does
+  not, say so in the PR. Do not invent a field.
+- Count a `finish_reason` other than `stop` as a failure with the fixed reason
+  `unfinished: <finish_reason>`, so W1.1 stops a row that keeps truncating, instead of a
+  `SystemExit` that is not recorded.
 
-Done when: `strategy-pipeline.py status` over a day shows reasoning below 70% of output and fewer
-than 5% of calls unfinished. Re-measure, then tune.
+### W1.5 Spend only on rows that can move a failing aspect
+`scripts/strategy-pipeline.py` (the attemptable queue in `status`)
 
-### W1.5 Only spend on rows that can move a failing aspect
-`scripts/strategy-pipeline.py` (`status` / the attemptable queue)
-
-- A row is attemptable only if its proof names an aspect or invariant that is **currently failing**
-  in the latest scorecard or verify run. Rows whose aspect already passes wait.
-- Park the current P2 tail that moves no failing aspect (DEF-35..38, IMPL-67..71) as `deferred` with
-  that reason. IMPL-67's scenario has `"status": "unverified"`, so it cannot prove anything anyway.
-
----
-
-## W2: Make the verdict fast and readable (about one day)
-
-### W2.1 `prove` names the failing step and bails
-`scripts/ogamex:187-230`
-
-- Run `test:` steps first and stop on the first failure; there is no point planting a situation for
-  code whose own test is red. Run the live steps (`situation`, `invariant`, `aspect`) only after
-  every test step passes.
-- Write one line per step to `proofs/<CODE>.log`, as `STEP <step> PASS|FAIL <seconds>s <first
-  failing line>`, then the summary line. Overwrite the per-run block instead of appending identical
-  summaries.
-- Add `--json` that prints the same data as one JSON object. W1.2 and W1.1 consume this, never
-  scraped text.
-
-### W2.2 Isolated situation proofs: seconds, not hours
-New Pest Feature tests per situation, under `tests/Feature/Situations/`
-
-The live `cohort-scenario.php` run takes about 217s, depends on live workers and on a saturated
-cohort, and its aspect steps need an hour of play. Give each situation a Feature test that plants the
-same situation on a fresh `IsolatedAccountTestCase` account with an ordinary economy (not billions)
-and asserts on the planner's or action's output. Use real models and services, Pest native, no
-Mockery, following `AGENTS.md` → Tests.
-
-- Start with the situations behind failing aspects: `every-planet-builds`, `inbound-attack` (fleet
-  save), `debris-beside-planet` (recycle), `inactive-neighbour` (raid; the situation does not exist
-  yet and is listed under ATK-001), and `alliance-application`.
-- Name the test file after the situation (`EveryPlanetBuildsSituationTest`), so a proof step
-  `test:EveryPlanetBuildsSituationTest` is the fast gate and `situation:every-planet-builds` stays as
-  the live confirmation.
-- Proof order becomes: own test → situation test (seconds) → live situation → invariant/aspect. The
-  harness verdict is the first two. The live steps run on the evidence cadence, not on every attempt.
-- Change `task.py done` to close on the fast steps and mark the row `delivered` until the live steps
-  pass on the next evidence run. Today the live steps hold `done` hostage to the cohort clock.
-
-Done when: `bash scripts/ogamex prove ECON-001` reaches a verdict on its test steps in under 60s, and
-each failing aspect above has a situation test.
-
-### W2.3 Invariants that measure the defect, not the symptom
-`scripts/verify-cohorts.php`
-
-- **`IDLE_QUEUES`**: a planet counts as idle only when `QueueableBuildingPlanner::steps()` returns a
-  step for it **and** it has no building in progress. A planet whose every candidate is refused (by
-  `refusal()`) is not idle; print it separately as `SATURATED` (planet full, lab busy), because that
-  is a different, real gap: the account should expand (W4). Reuse the planner and `refusal()`; do not
-  restate any gate in the script.
-- Allow a proof step to be tagged `suspect` in `task.py` (`task.py proof CODE invariant:IDLE_QUEUES?`
-  or a column). W1.2 then knows not to spend on it.
-
-Done when: on the current cohort, `IDLE_QUEUES` reports only planets the planner could have built on,
-and the ECON-001 proof either passes or names a real planner miss.
-
-### W2.4 Fix the red module suite
-- `tests/Feature/AiActivityMarkerTest.php:85` expects one row and finds two. Find out whether the code
-  writes a duplicate marker (a bug) or the test is order-dependent, and fix the cause. No merge to
-  `main` until `bash scripts/ogamex test` is green.
+- A row is attemptable only when one of its proof's `aspect:` or `invariant:` steps currently fails.
+  For an aspect, read the newest `plan/research/ogame/scorecards/*.json` that is not older than the
+  cohort reset (1 Oct 2026 15:39 UTC). For an invariant, read the newest `verify` output saved by the
+  evidence run. With no scorecard newer than the reset, nothing waits on this rule. A row whose
+  steps all pass waits, and `status` says why.
+- Set DEF-35, DEF-36, DEF-37, DEF-38 and IMPL-67..IMPL-71 to `deferred`, reason "moves no failing
+  aspect (harness recovery 1 Oct 2026)". IMPL-67's scenario is `"status": "unverified"` and proves
+  nothing.
 
 ---
 
-## W3: A world worth measuring (strong lane, about one day)
+## W2: Make the verdict fast and readable
 
-### W3.1 Reset the cohort's state
-The grand cohort's numbers (54M defence, 14B metal, full planets) come from fast-forwarded speed
-changes plus a yard with no sink. Measuring the economy on it measures nothing.
+### W2.1 `prove` names the failing step, bails, and speaks JSON (tooling, cloud agent)
+`scripts/ogamex` (`prove_row`)
 
-- Owner decision: re-seed grand from a fresh universe, or start a second small cohort (3–5 accounts)
-  for evidence and leave grand as a soak test. The second is cheaper and keeps history.
-- Record the choice and the seed date in `HANDOFF.md`, so scorecards before and after are never
-  compared.
+- Run `test:` steps first and stop at the first failure. Run the live steps (`situation`,
+  `invariant`, `aspect`) only when every test step passed.
+- Per step, record `PASS|FAIL`, seconds, and the first failing line (pest's first `FAILED` line, the
+  situation's `read-back`, the invariant's first `[NAME]` row, the aspect's count against its floor).
+- `proofs/<CODE>.log` is overwritten per run with one line per step and the summary line. No more
+  appended duplicates.
+- `prove CODE --json` prints `{"code":…,"pass":bool,"steps":[{"step":…,"pass":bool,"seconds":…,"line":…}]}`
+  on stdout as the last line. W1 consumes only this.
+- Keep `bash` + `python3` only; no new dependency. **[verify on pull]** for the live steps.
 
-### W3.2 The yard must have a stopping rule (ARB-001 + QUAL-003)
-- The shipyard wins about 70% of sessions from the fixed score table in
-  `CandidateActionFactory::features`. Feed in what the planners already compute (loot per hour of
-  flight, debris value, expedition yield), as ARB-001 says.
-- Defence on a planet stops growing at a level an experienced player would name (Gate 3), for
-  example "the wall makes a raid on this planet unprofitable". Derive it from host prices and the
-  planet's own production (Gate 1); never name a unit. Prove it with `invariant:WALL_CEILING` and
-  `invariant:NAKED_BESIDE_WALLED` on the fresh cohort.
+### W2.2 Situation tests: a verdict in seconds, not hours (module code, cloud agent)
+New Pest Feature tests under `tests/Feature/Situations/`
 
-### W3.3 Verify the Terraformer field rule
+Each situation that guards a failing aspect gets a Feature test that plants the same situation on an
+`IsolatedAccountTestCase` account with an ordinary economy (not billions) and asserts what the
+account's planner or action chooses. Use real host models and services, no Mockery, and read the
+live situation in `scripts/cohort-scenario.php` plus a neighbouring Feature test first, and follow
+their shape.
+
+- `EveryPlanetBuildsSituationTest`: three planets with free fields and stock for their next mine.
+  `QueueableBuildingPlanner::steps()` returns one step per planet, and the session queues all three.
+- `InboundAttackSituationTest`: a hostile fleet due inside the reaction lead. The account saves.
+- `DebrisBesidePlanetSituationTest`: a debris field in reach and a recycler on hand. The account
+  sends it.
+- `InactiveNeighbourSituationTest`: a neighbour whose `users.time` is 8 days old and whose stock
+  beats the trip's cost. The raid planner picks it (ATK-001's situation; also add the live
+  `inactive-neighbour` situation to `cohort-scenario.php`).
+- `AllianceApplicationSituationTest`: an `alliance_applications` row (alliance_id, user_id,
+  application_message, status 0) for an AI-led alliance. It is decided (SIM-001's situation; also add
+  the live one).
+
+A test that fails today because the behaviour is missing is still the deliverable. Mark it
+`->todo()` with the row code, so the suite stays green and the row has its fast proof waiting. Then
+give each matching row the proof order: own test → situation test → live `situation:` →
+`invariant:`/`aspect:`. Change `task.py done` so that a row whose test steps pass becomes `delivered`
+and only becomes `done` when its live steps pass on an evidence run. Today the live steps hold
+everything hostage to the cohort clock. **[verify on pull]** (Pest needs the host and MySQL).
+
+### W2.3 Invariants that measure the defect, not the symptom (cloud agent)
+`scripts/verify-cohorts.php`, `plan/tasks/task.py`
+
+- **`IDLE_QUEUES`**: a planet is idle only when `QueueableBuildingPlanner::steps()` returns a step for
+  it **and** it has no building in progress. A planet whose candidates are all refused by
+  `refusal()` is not idle. Print those as `SATURATED player P: N planet(s) with every candidate
+  refused (no free field: a, lab busy: b, price plus reserve: c)`. This is information, not a
+  violation: it is the signal for W4's expansion sinks. Resolve the planner with `app()` and reuse
+  `refusal()`; restate no gate.
+- **`UNIVERSE_SPEED`**: a new violation when `economy_speed` or any fleet speed in `settings` is above
+  1000. That is the guard against the cause of this whole recovery. 1000 is the grand-test protocol
+  in `capacity-run.sh`; state it once.
+- `task.py`: a proof step may carry a trailing `?` (`invariant:IDLE_QUEUES?`), meaning **suspect**.
+  `prove` runs and reports it but never fails the row on it, and W1.2 never pays for a row whose only
+  failures are suspect. `task.py proof CODE` accepts and prints the marker.
+- Take `?` off ECON-001's `invariant:IDLE_QUEUES` once the rewrite lands. **[verify on pull]**
+
+### W2.4 Fix the red module suite (cloud agent, best effort)
+- `tests/Feature/AiActivityMarkerTest.php:85` expects one row and finds two. Read the code under test
+  and decide whether production writes a duplicate marker (fix the code) or the test depends on
+  order or leftover rows (fix the test). Say which in the PR. **[verify on pull]**
+
+---
+
+## W3: The world
+
+### W3.1 Cohort protocol (done; keep it true)
+- Grand is the only evidence cohort. pve stays stopped until W1–W2 are merged and one clean evidence
+  run on grand has been read.
+- Speeds stay at 1000× (W2.3 `UNIVERSE_SPEED` enforces it). Never raise a cohort's speed to make it
+  grow faster. Reseed instead. Reseed recipe (cohort machine only):
+  back up the database → drop and create it → `up -d ogamex-app` and wait for the full migration
+  count → `capacity-prepare.php 20` → `ai:seed-grand-test --players=20 --confirm` →
+  `seed-inactive-neighbours.php 12` → flush `*ogamex_grand*` Redis keys → `--profile queue up -d`.
+- Reseed when `SATURATED` covers most planets of most accounts. That is the end of a run, not a
+  defect to tune away.
+
+### W3.2 The yard must have a stopping rule (ARB-001 + QUAL-003, cloud agent after W1–W2)
+- The yard wins ~70% of sessions from the fixed score table in `CandidateActionFactory::features`.
+  Feed in what the planners already compute (loot per hour of flight, debris value, expedition
+  yield), as ARB-001 says.
+- Defence on a planet stops growing at a level an experienced player names (Gate 3): "the wall makes a
+  raid on this planet unprofitable for an attacker of my size", priced from host data and the
+  planet's own production (Gate 1), with no unit named. Prove it with `invariant:WALL_CEILING`,
+  `invariant:NAKED_BESIDE_WALLED` and a situation test. **[verify on pull]**
+
+### W3.3 Verify the Terraformer field rule (cloud agent, research only)
 `QueueableBuildingPlanner::refusal()` says a terraformer consumes a field, so a full planet can never
-build one. Check this against original OGame before relying on it (`AGENTS.md`: game accuracy). If
-it is wrong, the host's `consumesPlanetField` for the terraformer is the fix, not the module.
+build one. Check against original OGame (wiki, the game's own text) and report the answer with
+sources in the PR. If it is wrong, the fix is the host object's `consumesPlanetField`, in a separate
+host PR, not in the module.
 
 ---
 
-## W4: Expansion sinks: the aspects that are actually dead (strong lane)
+## W4: The aspects that are actually dead (after W1–W2)
 
-A saturated account with full planets and banked resources does what a human does: it colonises,
-raids, recycles and expands its fleet. These are the north-star rows; take them after W1–W3, in
-this order:
-
-1. **ATK-001**: the `inactive-neighbour` situation (host rule: `users.time` older than 7 days), then
-   the decided raid-ladder change. Proof: `aspect:raids`, `situation:inactive-neighbour`.
-2. **Colonisation**: hourly scorecards show 0. Find out why with the `SATURATED` read-out from
-   W2.3. An account with astrophysics headroom and full planets should colonise.
-3. **FLEET-002 recycle** and **FLEET-003 proactive save**. FLEET-003 failed three times on an unwired
-   `resources/behavior/fleet-save-reaction.yaml`: wire it into the planner that owns the save, or
-   drop it.
-4. **SIM-001 / ALLY-001**: the `alliance-application` situation, then the ceiling. ALLY-001's tests
-   failed three times; read `attempts/ALLY-001.log` before trying again.
-
-Each gets a situation test (W2.2) before any code, so the harness can work it once it is unblocked.
+Order: **ATK-001** (raid ladder; the fresh cohort now has inactive neighbours) → **colonisation**
+(why does an account with astrophysics headroom not colonise; read the `SATURATED` output) →
+**FLEET-003** proactive save (wire `resources/behavior/fleet-save-reaction.yaml` into the planner
+that owns the save, or delete it) → **FLEET-002** recycle → **SIM-001 / ALLY-001**. Read each row's
+`attempts/<CODE>.log` before starting it. Each starts from its W2.2 situation test.
 
 ---
 
-## W5: Loop plumbing (owner actions, can run in parallel)
+## W5: Owner actions on the cohort machine (not for the cloud agent)
 
-- **`tasks.db` out of git.** Keep `seed.sql` as the shared record (`python3
-  plan/tasks/dump_seed.py`), add `tasks.db` to `.gitignore`, `git rm --cached` it.
-- **`init-watcher`.** Root-owned, it cannot be stopped from the dev user. Owner: stop it, or limit it
-  to `plan/research/ogame/evidence/`. Until then, unverified harness writes can be committed.
-- **Root-owned outputs.** The scorecard writer runs as root in the container and leaves files the dev
-  user cannot unlink. Run it with the host UID (`docker compose exec -u $(id -u):$(id -g)`), or
-  `chown` in the script after writing.
-- **`HARNESS-003`**: `schedule:work` in the host entrypoint (already in the handoff).
-- **Proof logs.** After W2.1, delete the duplicate summary lines in old `proofs/*.log`, or leave them
-  but stop appending duplicates.
+- `tasks.db` out of git: keep `seed.sql` as the shared record (`python3 plan/tasks/dump_seed.py`),
+  `.gitignore` the binary, `git rm --cached` it.
+- `init-watcher` (root, PID 3): stop it, or limit it to `plan/research/ogame/evidence/`.
+- Root-owned scorecard files: run the writer with the host UID, or `chown` after writing.
+- `HARNESS-003`: `schedule:work` in the host entrypoint.
 
----
+## After the pull (cohort machine)
 
-## Order and exit criteria
+1. `git pull`; run the tool chain (`bash scripts/ogamex gate`, `test-one` per touched test, then
+   `bash scripts/ogamex test`), and fix what is red before anything else.
+2. Add the ledger rows listed in the PR, remove the `->todo()` marks the code now satisfies, and run
+   `prove` on ECON-001 and the W2.2 rows.
+3. Restart the harness (`bash scripts/harness-live.sh`). Watch one pass: no row attempted twice on one
+   signature, and `STUCK` and `deferred` doing their job.
+4. After one hour of fresh-cohort play, run the evidence prompt and rewrite the State table in
+   `HANDOFF.md`.
 
-| Step | Owner | Exit |
-| --- | --- | --- |
-| W1.1–W1.5 | any agent | ECON-001 blocked with zero spend; no row attempted twice on one signature; reasoning share measured |
-| W2.1, W2.3, W2.4 | any agent | `prove` names the failing step; `IDLE_QUEUES` reads only real misses; suite green |
-| W2.2 | any agent, one situation per row | each failing aspect has a test-speed situation proof |
-| W3 | owner + strong lane | a cohort worth measuring; yard sessions under half; Terraformer rule verified |
-| W4 | strong lane, then harness | raids, recycle, colonisation, fleet save and alliance each non-zero on the hourly scorecard |
-| W5 | owner | no binary conflicts, no unverified auto-commits |
+## Exit criteria
 
-The whole plan is done when the harness, left unattended for a day, (1) makes no repeat-signature
-attempt, (2) closes at least one row through a fast proof, and (3) the next evidence run shows an
-aspect that was at 0 above its floor. Update the State table in `plan/HANDOFF.md` after that run.
+The recovery is done when, over one unattended day on the fresh grand:
+1. no row is attempted twice on one failure signature;
+2. at least one row closes through a fast proof (test + situation test);
+3. `UNIVERSE_SPEED` is clean and `IDLE_QUEUES` reports only real misses;
+4. the hourly scorecard shows `raids` above its floor, and at least one more of the dead aspects
+   (recycle, colonisation, fleet save, alliance) is above zero.
