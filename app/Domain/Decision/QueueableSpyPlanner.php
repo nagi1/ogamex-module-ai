@@ -38,7 +38,7 @@ use OGame\Services\PlayerService;
  */
 class QueueableSpyPlanner
 {
-    /** Bounded: only this many candidate targets are inspected per decision. */
+    /** Bounded: only this many unscouted, nearest candidate targets are inspected per decision. */
     private const MAX_CANDIDATES = 20;
 
     /** A report stays fresh this long; scouting and raiding agree on the window. */
@@ -157,12 +157,17 @@ class QueueableSpyPlanner
             return null;
         }
 
+        // A scout looks at the nearest neighbours it has not already read, not at the oldest planets in the
+        // universe: once those are probed or watched the first rows never change and the account stops spying.
+        $home = $idleOrigins[0]->getPlanetCoordinates();
         $candidates = Planet::query()
             ->where('user_id', '!=', $player->getId())
             ->where('destroyed', 0)
-            ->orderBy('id')
-            ->limit(self::MAX_CANDIDATES)
-            ->get();
+            ->orderByRaw('ABS(CAST(`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planet` AS SIGNED) - ?), `id`', [$home->galaxy, $home->system, $home->position])
+            ->cursor()
+            ->reject(static fn (Planet $planet): bool => isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"]))
+            ->take(self::MAX_CANDIDATES)
+            ->values();
 
         $knownYield = $this->knownYieldByCoordinate($candidates);
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
