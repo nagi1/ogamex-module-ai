@@ -1,25 +1,44 @@
-AllianceLaneRecruitmentTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (4 assertions)[39m
+AllianceLaneRecruitmentTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (5 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest
-  ✓ a leader takes a qualified applicant while its alliance is below th… 0.45s  
-  ⨯ a leader at the cohort share limit does not take even the strongest… 0.39s  
+  ✓ a leader below the cohort ceiling takes a qualified applicant        0.47s  
+  ⨯ a leader at the cohort ceiling leaves a qualified applicant pending  0.13s  
+  ⨯ a leader past the cohort ceiling leaves the strongest applicant pen… 0.10s  
+  ✓ a leader with nothing waiting decides nothing                        0.06s  
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest > a leader a…   
   Failed asserting that 1 is identical to 0.
 
-  at Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:118
-    114▕     laneAgeApplication($application, 30);
-    115▕ 
-    116▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
-    117▕ 
-  ➜ 118▕     expect($decided)->toBe(0)
-    119▕         ->and(AllianceMember::query()
-    120▕             ->where('alliance_id', $alliance->id)
-    121▕             ->where('user_id', $applicant->id)
-    122▕             ->exists())->toBeFalse()
+  at Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:109
+    105▕     laneAgeApplication($application->id, 30);
+    106▕ 
+    107▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
+    108▕ 
+  ➜ 109▕     expect($decided)->toBe(0)
+    110▕         ->and(AllianceMember::query()
+    111▕             ->where('alliance_id', $alliance->id)
+    112▕             ->where('user_id', $applicant->id)
+    113▕             ->exists())->toBeFalse()
 
-  1   Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:118
+  1   Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:109
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest > a leader p…   
+  Failed asserting that 1 is identical to 0.
+
+  at Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:130
+    126▕     laneAgeApplication($application->id, 30);
+    127▕ 
+    128▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
+    129▕ 
+  ➜ 130▕     expect($decided)->toBe(0)
+    131▕         ->and(AllianceMember::query()
+    132▕             ->where('alliance_id', $alliance->id)
+    133▕             ->where('user_id', $applicant->id)
+    134▕             ->exists())->toBeFalse();
+
+  1   Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:130
 
 
-  Tests:    1 failed, 1 passed (4 assertions)
-  Duration: 1.32s
+  Tests:    2 failed, 2 passed (5 assertions)
+  Duration: 1.26s

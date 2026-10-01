@@ -1,5 +1,61 @@
-these files are not called by any runtime code, so no account can ever execute them: resources/behavior/social_contact.yaml.
-Do not write a new class. EDIT the planner, engine or action that already owns this decision, and have the Feature test drive that path. A data file under resources/behavior must be loaded by name in that class.
+SocialContactInitiationTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m (11 assertions)[39m
 
-These blocks from your answer were refused and NOT written:
-- app/Actions/EvaluateAiSocialExchangeAction.php (SEARCH text is not in the file; copy it exactly from the EXISTING FILE, starting: $exchange->update([)
+change answered past its freshness window is history, not an opening', function (): void {
+     70▕     $now = CarbonImmutable::parse(SOCIAL_CONTACT_NOW);
+
+  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:66
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SocialContactInitiationTest > an exchang…   
+  Failed asserting that 5 is identical to 0.
+
+  at Modules/AI/tests/Feature/SocialContactInitiationTest.php:76
+     72▕ 
+     73▕     $answered = app(EvaluateAiSocialExchangeAction::class)->handle($cue->id, 0.0, $now);
+     74▕ 
+     75▕     expect($answered->state)->toBe(AiSocialExchangeState::Responded)
+  ➜  76▕         ->and(socialContactOpenings($cue->id))->toBe(0);
+     77▕ });
+     78▕ 
+     79▕ test('an answer still owed between the two stops a reach-out, at the cap and past it', function (int $pending): void {
+     80▕     $now = CarbonImmutable::parse(SOCIAL_CONTACT_NOW);
+
+  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:76
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SocialContactInitiationTest > an answer…    
+  Failed asserting that 5 is identical to 0.
+
+  at Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
+     87▕ 
+     88▕     $answered = app(EvaluateAiSocialExchangeAction::class)->handle($cue->id, 0.0, $now);
+     89▕ 
+     90▕     expect($answered->state)->toBe(AiSocialExchangeState::Responded)
+  ➜  91▕         ->and(socialContactOpenings($cue->id))->toBe(0);
+     92▕ })->with([
+     93▕     'at the cap' => 1,
+     94▕     'past the cap' => 2,
+     95▕ ]);
+
+  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\SocialContactInitiationTest > an answer…    
+  Failed asserting that 5 is identical to 0.
+
+  at Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
+     87▕ 
+     88▕     $answered = app(EvaluateAiSocialExchangeAction::class)->handle($cue->id, 0.0, $now);
+     89▕ 
+     90▕     expect($answered->state)->toBe(AiSocialExchangeState::Responded)
+  ➜  91▕         ->and(socialContactOpenings($cue->id))->toBe(0);
+     92▕ })->with([
+     93▕     'at the cap' => 1,
+     94▕     'past the cap' => 2,
+     95▕ ]);
+
+  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
+
+
+  Tests:    5 failed (11 assertions)
+  Duration: 1.46s
