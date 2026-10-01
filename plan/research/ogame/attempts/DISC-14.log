@@ -1,0 +1,59 @@
+ViolentSpecialityTest: [90mTests:[39m    [31;1m8 failed[39;22m[90m (0 assertions)[39m
+
+─  
+   FAILED  Modules\AI\tests\Feature\ViolentSpecialityTest > it calls…   Error   
+  Call to undefined method OGame\Services\InitialUserDataService::createInitialUserData()
+
+  at Modules/AI/tests/Feature/ViolentSpecialityTest.php:72
+     68▕  */
+     69▕ function violentAccount(int $silo = 0, int $graviton = 0, int $deathstars = 0, bool $alliance = false): array
+     70▕ {
+     71▕     $user = User::factory()->create();
+  ➜  72▕     app(InitialUserDataService::class)->createInitialUserData($user);
+     73▕ 
+     74▕     $player = app(PlayerServiceFactory::class)->createFromUserId($user->id);
+     75▕ 
+     76▕     if ($alliance) {
+
+  1   Modules/AI/tests/Feature/ViolentSpecialityTest.php:72
+  2   Modules/AI/tests/Feature/ViolentSpecialityTest.php:128
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ViolentSpecialityTest > it leaves…  Error   
+  Call to undefined method OGame\Services\InitialUserDataService::createInitialUserData()
+
+  at Modules/AI/tests/Feature/ViolentSpecialityTest.php:72
+     68▕  */
+     69▕ function violentAccount(int $silo = 0, int $graviton = 0, int $deathstars = 0, bool $alliance = false): array
+     70▕ {
+     71▕     $user = User::factory()->create();
+  ➜  72▕     app(InitialUserDataService::class)->createInitialUserData($user);
+     73▕ 
+     74▕     $player = app(PlayerServiceFactory::class)->createFromUserId($user->id);
+     75▕ 
+     76▕     if ($alliance) {
+
+  1   Modules/AI/tests/Feature/ViolentSpecialityTest.php:72
+  2   Modules/AI/tests/Feature/ViolentSpecialityTest.php:132
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ViolentSpecialityTest > it flies…   Error   
+  Call to undefined method OGame\Services\InitialUserDataService::createInitialUserData()
+
+  at Modules/AI/tests/Feature/ViolentSpecialityTest.php:72
+     68▕  */
+     69▕ function violentAccount(int $silo = 0, int $graviton = 0, int $deathstars = 0, bool $alliance = false): array
+     70▕ {
+     71▕     $user = User::factory()->create();
+  ➜  72▕     app(InitialUserDataService::class)->createInitialUserData($user);
+     73▕ 
+     74▕     $player = app(PlayerServiceFactory::class)->createFromUserId($user->id);
+     75▕ 
+     76▕     if ($alliance) {
+
+  1   Modules/AI/tests/Feature/ViolentSpecialityTest.php:72
+  2   Modules/AI/tests/Feature/ViolentSpecialityTest.php:136
+
+
+  Tests:    8 failed (0 assertions)
+  Duration: 1.19s

@@ -1,44 +1,44 @@
 WeaponPowerInputTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\Combat\WeaponPowerInputTest
-  ⨯ it weapon power follows the weapon technology of the fleet owner     0.44s  
-  ⨯ it an unchanged weapon technology resolves to an unchanged weapon p… 0.06s  
+  ⨯ it resolves a higher weapon power when the attacker weapon technolo… 0.35s  
+  ⨯ it resolves a weapon power above zero when the attacker weapon tech… 0.05s  
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\Combat\WeaponPowerInputTest > it…   Error   
-  Call to a member function getParameters() on null
+  Call to undefined method OGame\Services\ObjectService::getShipProperties()
 
-  at Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:128
-    124▕     $reflection = new ReflectionClass($fleetClass);
-    125▕ 
-    126▕     $arguments = [];
-    127▕ 
-  ➜ 128▕     foreach ($reflection->getConstructor()->getParameters() as $parameter) {
-    129▕         $arguments[] = combatFleetArgument($parameter, $player);
-    130▕     }
-    131▕ 
-    132▕     return $reflection->newInstanceArgs($arguments);
+  at Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:35
+     31▕ });
+     32▕ 
+     33▕ function resolvedWeaponPower(int $weaponTechnology): int
+     34▕ {
+  ➜  35▕     $properties = app(ObjectService::class)->getShipProperties(
+     36▕         COMBAT_SHIP,
+     37▕         COMBAT_SHIP_AMOUNT,
+     38▕         $weaponTechnology,
+     39▕         SHIELDING_TECHNOLOGY_NONE,
 
-  1   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:128
-  2   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:71
+  1   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:35
+  2   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:25
 
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\Combat\WeaponPowerInputTest > it…   Error   
-  Call to a member function getParameters() on null
+  Call to undefined method OGame\Services\ObjectService::getShipProperties()
 
-  at Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:128
-    124▕     $reflection = new ReflectionClass($fleetClass);
-    125▕ 
-    126▕     $arguments = [];
-    127▕ 
-  ➜ 128▕     foreach ($reflection->getConstructor()->getParameters() as $parameter) {
-    129▕         $arguments[] = combatFleetArgument($parameter, $player);
-    130▕     }
-    131▕ 
-    132▕     return $reflection->newInstanceArgs($arguments);
+  at Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:35
+     31▕ });
+     32▕ 
+     33▕ function resolvedWeaponPower(int $weaponTechnology): int
+     34▕ {
+  ➜  35▕     $properties = app(ObjectService::class)->getShipProperties(
+     36▕         COMBAT_SHIP,
+     37▕         COMBAT_SHIP_AMOUNT,
+     38▕         $weaponTechnology,
+     39▕         SHIELDING_TECHNOLOGY_NONE,
 
-  1   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:128
-  2   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:71
+  1   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:35
+  2   Modules/AI/tests/Feature/Combat/WeaponPowerInputTest.php:30
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.98s
+  Duration: 0.91s

@@ -1,11 +1,6 @@
 DeploymentRecallTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
-FAIL  Modules\AI\tests\Feature\DeploymentRecallTest
-  ⨯ it recalls a deployment parked on one of the account own planets     0.37s  
-  ⨯ it refuses a deployment bound for a foreign coordinate               0.05s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DeploymentRecallTest > i…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'lang' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`username`, `email`, `password`, `updated_at`, `created_at`) values (ai-recall-own, ai-recall-own@example.com, password, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+base`, `sensor_phalanx`, `jump_gate`, `terraformer`, `user_id`, `name`, `galaxy`, `system`, `planet`, `planet_type`, `created_at`, `updated_at`) values (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16355, Recall 3:295:1, 3, 295, 1, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
   at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
      49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
@@ -18,13 +13,13 @@ FAIL  Modules\AI\tests\Feature\DeploymentRecallTest
      56▕ 
      57▕             return $result;
 
-      +10 vendor frames 
-  11  Modules/AI/tests/Feature/DeploymentRecallTest.php:26
-  12  Modules/AI/tests/Feature/DeploymentRecallTest.php:80
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/DeploymentRecallTest.php:70
+  8   Modules/AI/tests/Feature/DeploymentRecallTest.php:106
 
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\DeploymentRecallTest > i…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'lang' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `users` (`username`, `email`, `password`, `updated_at`, `created_at`) values (ai-recall-visitor, ai-recall-visitor@example.com, password, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+  SQLSTATE[HY000]: General error: 1364 Field 'diameter' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `planets` (`metal`, `crystal`, `deuterium`, `energy_max`, `energy_used`, `field_current`, `field_max`, `destroyed`, `metal_mine`, `crystal_mine`, `deuterium_synthesizer`, `solar_plant`, `fusion_plant`, `shipyard`, `research_lab`, `metal_store`, `crystal_store`, `deuterium_store`, `alliance_depot`, `missile_silo`, `space_dock`, `lunar_base`, `sensor_phalanx`, `jump_gate`, `terraformer`, `user_id`, `name`, `galaxy`, `system`, `planet`, `planet_type`, `created_at`, `updated_at`) values (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16357, Recall 5:393:1, 5, 393, 1, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
   at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
      49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
@@ -37,10 +32,10 @@ FAIL  Modules\AI\tests\Feature\DeploymentRecallTest
      56▕ 
      57▕             return $result;
 
-      +10 vendor frames 
-  11  Modules/AI/tests/Feature/DeploymentRecallTest.php:26
-  12  Modules/AI/tests/Feature/DeploymentRecallTest.php:91
+      +6 vendor frames 
+  7   Modules/AI/tests/Feature/DeploymentRecallTest.php:70
+  8   Modules/AI/tests/Feature/DeploymentRecallTest.php:106
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.88s
+  Duration: 1.01s

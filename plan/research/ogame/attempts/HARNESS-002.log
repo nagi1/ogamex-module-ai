@@ -1,0 +1,23 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+### FILE: scripts/canary.sh
+```php
+#!/usr/bin/env bash
+#
+# A persistent canary universe: the cheapest honest answer to "do the accounts actually play?".
+#
+# Booting a universe and waiting out a window inside every pass made the verification the bottleneck —
+# minutes of sleep for a check that only needs the last few minutes of work. So the universe stays up:
+# it plays continuously on its own scheduler and worker, the harness only restarts it onto new code and
+# then asks what it did *since the last check*. That is a second or two, not four minutes.
+#
+# DEV TOOLING. Its own `ogamex-cap-*` database: never grand, never pve, never the dev stack.
+#
+#   canary.sh up        boot it if it is not already up (idempotent), then leave it playing
+#   canary.sh restart   reload it onto the code on disk (the workers hold classes in memory)
+#   canary.sh check     assert what it did since the last check; exit code is the verdict
+#   canary.sh status    print the numbers without judging them
+#   canary.sh down      stop the stack (the database is kept)
+#   canary.sh full      up, play for a window, check, then stop — for an ad-hoc run
+#
+# WHY THE VERDICT IS NOT "ANY REFUSED ORDER". A running accou

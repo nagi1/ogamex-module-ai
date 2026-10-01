@@ -1,0 +1,61 @@
+PublicApiSurfaceGuardTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m (7 assertions)[39m
+
+dules/AI/tests/Feature/PublicApiSurfaceGuardTest.php:190
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PublicApiSurfa…  CommandNotFoundException   
+  The command "ai:verify-public-api" does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Console/Application.php:162
+    158▕     {
+    159▕         [$command, $input] = $this->parseCommand($command, $parameters);
+    160▕ 
+    161▕         if (! $this->has($command)) {
+  ➜ 162▕             throw new CommandNotFoundException(sprintf('The command "%s" does not exist.', $command));
+    163▕         }
+    164▕ 
+    165▕         return $this->run(
+    166▕             $input, $this->lastOutput = $outputBuffer ?: new BufferedOutput
+
+      +2 vendor frames 
+  3   Modules/AI/tests/Feature/PublicApiSurfaceGuardTest.php:219
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PublicApiSurfa…  CommandNotFoundException   
+  The command "ai:verify-public-api" does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Console/Application.php:162
+    158▕     {
+    159▕         [$command, $input] = $this->parseCommand($command, $parameters);
+    160▕ 
+    161▕         if (! $this->has($command)) {
+  ➜ 162▕             throw new CommandNotFoundException(sprintf('The command "%s" does not exist.', $command));
+    163▕         }
+    164▕ 
+    165▕         return $this->run(
+    166▕             $input, $this->lastOutput = $outputBuffer ?: new BufferedOutput
+
+      +2 vendor frames 
+  3   Modules/AI/tests/Feature/PublicApiSurfaceGuardTest.php:262
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\PublicApiSurfa…  CommandNotFoundException   
+  The command "ai:verify-public-api" does not exist.
+
+  at vendor/laravel/framework/src/Illuminate/Console/Application.php:162
+    158▕     {
+    159▕         [$command, $input] = $this->parseCommand($command, $parameters);
+    160▕ 
+    161▕         if (! $this->has($command)) {
+  ➜ 162▕             throw new CommandNotFoundException(sprintf('The command "%s" does not exist.', $command));
+    163▕         }
+    164▕ 
+    165▕         return $this->run(
+    166▕             $input, $this->lastOutput = $outputBuffer ?: new BufferedOutput
+
+      +2 vendor frames 
+  3   Modules/AI/tests/Feature/PublicApiSurfaceGuardTest.php:293
+
+
+  Tests:    6 failed (7 assertions)
+  Duration: 1.45s

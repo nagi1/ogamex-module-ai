@@ -1,0 +1,57 @@
+ResearchQueueDuplicationTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (2 assertions)[39m
+
+ FAILED  Modules\AI\tests\Feature\ResearchQueueDuplicationTest > it enqueu…   
+  Failed asserting that 0 is identical to 1.
+
+  at Modules/AI/tests/Feature/ResearchQueueDuplicationTest.php:116
+    112▕     $this->fundPlanet($planetId);
+    113▕ 
+    114▕     $result = app(QueueAiResearch::class)->handle($userId, $planetId, $this->energyTechnologyId());
+    115▕ 
+  ➜ 116▕     expect($this->queuedResearchRows($planetId, $this->energyTechnologyId()))->toBe(1);
+    117▕ });
+    118▕ 
+    119▕ it('refuses a second request for a technology the account is already researching', function () {
+    120▕     [$userId, $planetId] = $this->accountIds();
+
+  1   Modules/AI/tests/Feature/ResearchQueueDuplicationTest.php:116
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ResearchQueueDuplicationTest > it refuse…   
+  Failed asserting that 0 is identical to 1.
+
+  at Modules/AI/tests/Feature/ResearchQueueDuplicationTest.php:127
+    123▕     $action = app(QueueAiResearch::class);
+    124▕     $action->handle($userId, $planetId, $this->energyTechnologyId());
+    125▕     $action->handle($userId, $planetId, $this->energyTechnologyId());
+    126▕ 
+  ➜ 127▕     expect($this->queuedResearchRows($planetId, $this->energyTechnologyId()))->toBe(1);
+    128▕ });
+    129▕ 
+    130▕ it('still enqueues a different technology while one is in research', function () {
+    131▕     [$userId, $planetId] = $this->accountIds();
+
+  1   Modules/AI/tests/Feature/ResearchQueueDuplicationTest.php:127
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\ResearchQueueDuplicationTest > it…  Error   
+  Object of class OGame\GameObjects\Models\Fields\GameObjectRequirement could not be converted to string
+
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:753
+    749▕      */
+    750▕     public function bindValues($statement, $bindings)
+    751▕     {
+    752▕         foreach ($bindings as $key => $value) {
+  ➜ 753▕             $statement->bindValue(
+    754▕                 is_string($key) ? $key : $key + 1,
+    755▕                 $value,
+    756▕                 match (true) {
+    757▕                     is_int($value) => PDO::PARAM_INT,
+
+      +8 vendor frames 
+  9   Modules/AI/tests/Feature/ResearchQueueDuplicationTest.php:103
+  10  Modules/AI/tests/Feature/ResearchQueueDuplicationTest.php:133
+
+
+  Tests:    3 failed (2 assertions)
+  Duration: 0.99s

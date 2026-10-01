@@ -1,62 +1,65 @@
-AllianceWarExceptionTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+AllianceLifeTest: [90mTests:[39m    [31;1m6 failed[39;22m[90m,[39m[39m [39m[32;1m7 passed[39;22m[90m (29 assertions)[39m
 
-─────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceWarExceptionTest…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/alliance_war_exception.php): Failed to open stream: No such file or directory
+>currentUserId)->update(['alliance_id' => $alliance->id]);
+     86▕ 
+     87▕     expect(app(AdvanceAiAllianceLifeAction::class)->handle())->toBe(0)
+  ➜  88▕         ->and(AllianceApplication::query()->count())->toBe(0);
+     89▕ });
+     90▕ 
+     91▕ test('a pending application is never duplicated', function (): void {
+     92▕     enableProfile($this->currentUserId);
 
-  at Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
-    245▕      * where a modder edits it without reading this action.
-    246▕      */
-    247▕     private function warWindowHours(): int
-    248▕     {
-  ➜ 249▕         $exception = require dirname(__DIR__, 2) . self::WAR_EXCEPTION_FILE;
-    250▕ 
-    251▕         return (int) $exception['window_hours'];
-    252▕     }
-    253▕
-
-  1   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
-  2   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:195
+  1   Modules/AI/tests/Feature/AllianceLifeTest.php:88
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceWarExceptionTest…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/alliance_war_exception.php): Failed to open stream: No such file or directory
+   FAILED  Modules\AI\tests\Feature\AllianceLifeTest > a newbie account choo…   
+  Failed asserting that 308 is identical to 307.
 
-  at Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
-    245▕      * where a modder edits it without reading this action.
-    246▕      */
-    247▕     private function warWindowHours(): int
-    248▕     {
-  ➜ 249▕         $exception = require dirname(__DIR__, 2) . self::WAR_EXCEPTION_FILE;
-    250▕ 
-    251▕         return (int) $exception['window_hours'];
-    252▕     }
-    253▕
+  at Modules/AI/tests/Feature/AllianceLifeTest.php:146
+    142▕     rank($this->currentUserId, 10, 2);
+    143▕     rank($founder->id, 5, 1);
+    144▕     rank($eliteFounder->id, 1_000_000, 3);
+    145▕ 
+  ➜ 146▕     expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($mass->id);
+    147▕ });
+    148▕ 
+    149▕ test('a strong account chooses the high points-per-member core over the mass', function (): void {
+    150▕     $massFounder = User::factory()->create();
 
-  1   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
-  2   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:195
+  1   Modules/AI/tests/Feature/AllianceLifeTest.php:146
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceWarExceptionTest…  ErrorException   
-  require(/var/www/Modules/AI/resources/behavior/alliance_war_exception.php): Failed to open stream: No such file or directory
+   FAILED  Modules\AI\tests\Feature\AllianceLifeTest > a wary account skips…    
+  Failed asserting that 77 is identical to 316.
 
-  at Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
-    245▕      * where a modder edits it without reading this action.
-    246▕      */
-    247▕     private function warWindowHours(): int
-    248▕     {
-  ➜ 249▕         $exception = require dirname(__DIR__, 2) . self::WAR_EXCEPTION_FILE;
-    250▕ 
-    251▕         return (int) $exception['window_hours'];
-    252▕     }
-    253▕
+  at Modules/AI/tests/Feature/AllianceLifeTest.php:300
+    296▕         'threat' => '0.7500',
+    297▕         'revision' => 0,
+    298▕     ]));
+    299▕ 
+  ➜ 300▕     expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($safe->id);
+    301▕ });
+    302▕ 
+    303▕ test('a cooperate read keeps the alliance in the running', function (): void {
+    304▕     config(['ai.cognition.mode' => 'external']);
 
-  1   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:249
-  2   Modules/AI/app/Actions/AdvanceAiAllianceLifeAction.php:195
+  1   Modules/AI/tests/Feature/AllianceLifeTest.php:300
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceLifeTest > a cooperate read keep…   
+  Failed asserting that 77 is identical to 317.
+
+  at Modules/AI/tests/Feature/AllianceLifeTest.php:326
+    322▕         'threat' => '0.7500',
+    323▕         'revision' => 0,
+    324▕     ]));
+    325▕ 
+  ➜ 326▕     expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($alliance->id);
+    327▕ });
+    328▕
+
+  1   Modules/AI/tests/Feature/AllianceLifeTest.php:326
 
 
-  Tests:    3 failed (0 assertions)
-  Duration: 1.26s
-
-These files from your answer were refused and NOT written:
-- resources/behavior/alliance_war_exception.php (data must be YAML or JSON so a modder can edit it without code)
+  Tests:    6 failed, 7 passed (29 assertions)
+  Duration: 2.07s

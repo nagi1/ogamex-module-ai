@@ -1,56 +1,63 @@
 AllianceAcademyTierTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
 
-───────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTierTest > it e…  Error   
-  Call to undefined method Modules\AI\Actions\ReplayAiScenarioAction::execute()
+\AllianceAcademyTierTest
+  ⨯ it excludes an academy-tier member from main-alliance intel sharing  0.44s  
+  ⨯ it includes a main-alliance member in intel sharing                  0.06s  
+  ⨯ it refuses the espionage task to a branch that is not oriented to e… 0.07s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTier…  RuntimeException   
+  Scenario file not found: alliance_academy_tier
 
-  at Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:45
-     41▕ 
-     42▕ uses(AllianceAcademyTierModuleTestCase::class);
-     43▕ 
-     44▕ it('excludes an academy-tier member from main-alliance intel sharing', function () {
-  ➜  45▕     $outcome = app(ReplayAiScenarioAction::class)->execute('alliance_academy_tier');
-     46▕ 
-     47▕     $members = collect($outcome->members)->keyBy('handle');
-     48▕ 
-     49▕     expect($members->get('Recruit')->sharesIntel)->toBeFalse()
+  at Modules/AI/app/Actions/ReplayAiScenarioAction.php:135
+    131▕      */
+    132▕     private function load(string $path): array
+    133▕     {
+    134▕         if (!is_file($path)) {
+  ➜ 135▕             throw new RuntimeException('Scenario file not found: ' . $path);
+    136▕         }
+    137▕ 
+    138▕         $decoded = json_decode((string) file_get_contents($path), true);
+    139▕
 
-  1   Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:45
+  1   Modules/AI/app/Actions/ReplayAiScenarioAction.php:135
+  2   Modules/AI/app/Actions/ReplayAiScenarioAction.php:67
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTierTest > it a…  Error   
-  Call to undefined method Modules\AI\Actions\ReplayAiScenarioAction::execute()
+   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTier…  RuntimeException   
+  Scenario file not found: alliance_academy_tier
 
-  at Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:54
-     50▕         ->and($members->get('Veteran')->sharesIntel)->toBeTrue();
-     51▕ });
-     52▕ 
-     53▕ it('assigns the espionage role only to the branch marked with that orientation', function () {
-  ➜  54▕     $outcome = app(ReplayAiScenarioAction::class)->execute('alliance_academy_tier');
-     55▕ 
-     56▕     $members = collect($outcome->members)->keyBy('handle');
-     57▕ 
-     58▕     expect($members->get('Watcher')->role)->toBe('espionage')
+  at Modules/AI/app/Actions/ReplayAiScenarioAction.php:135
+    131▕      */
+    132▕     private function load(string $path): array
+    133▕     {
+    134▕         if (!is_file($path)) {
+  ➜ 135▕             throw new RuntimeException('Scenario file not found: ' . $path);
+    136▕         }
+    137▕ 
+    138▕         $decoded = json_decode((string) file_get_contents($path), true);
+    139▕
 
-  1   Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:54
+  1   Modules/AI/app/Actions/ReplayAiScenarioAction.php:135
+  2   Modules/AI/app/Actions/ReplayAiScenarioAction.php:67
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTierTest > it r…  Error   
-  Call to undefined method Modules\AI\Actions\ReplayAiScenarioAction::execute()
+   FAILED  Modules\AI\tests\Feature\Ai\AllianceAcademyTier…  RuntimeException   
+  Scenario file not found: alliance_academy_tier
 
-  at Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:68
-     64▕         (string) file_get_contents(dirname(__DIR__, 3) . '/resources/scenarios/alliance_academy_tier.json'),
-     65▕         true
-     66▕     );
-     67▕ 
-  ➜  68▕     $outcome = app(ReplayAiScenarioAction::class)->execute($scenario['name']);
-     69▕ 
-     70▕     expect($outcome->action)->toBe($scenario['expect']['action'])
-     71▕         ->and($outcome->reason)->toContain($scenario['expect']['reason_contains']);
-     72▕ });
+  at Modules/AI/app/Actions/ReplayAiScenarioAction.php:135
+    131▕      */
+    132▕     private function load(string $path): array
+    133▕     {
+    134▕         if (!is_file($path)) {
+  ➜ 135▕             throw new RuntimeException('Scenario file not found: ' . $path);
+    136▕         }
+    137▕ 
+    138▕         $decoded = json_decode((string) file_get_contents($path), true);
+    139▕
 
-  1   Modules/AI/tests/Feature/Ai/AllianceAcademyTierTest.php:68
+  1   Modules/AI/app/Actions/ReplayAiScenarioAction.php:135
+  2   Modules/AI/app/Actions/ReplayAiScenarioAction.php:67
 
 
   Tests:    3 failed (0 assertions)
-  Duration: 1.07s
+  Duration: 1.10s

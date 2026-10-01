@@ -1,0 +1,7 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+I am not shipping a file for QUAL-6, and this is the "cannot satisfy it as written" case the rules tell me to report instead of reinterpreting.
+
+**1. The task names no file.** QUAL-6 has no FILES list and "no proposal attached", so there is nothing I am permitted to touch. The one candidate is `scripts/strategy-pipeline.py` (relative to the module root), which is the only place the "gate" referenced by QUAL-4 can live — the `validate`/`implement` path that inspects a proposal and refuses it.
+
+**2. I do not have that file's contents.** The prompt gives roughly the first 130 lines of `scripts/strategy-pipeline.py` and stops mid-string inside `PROMPT`. The module rules require me to return the **complete** file and forbid diffs, fragments and "rest unchanged" placeholders. Emitting a "complete file" from a 130-line excerpt of what is plainly a multi-hundred-line harness would silently delete the `bundle`, `plan`, `run`, `sweep`, `promote`, `implement`, `--self-check` and `validate` commands, the DeepSeek client, the peak-hour gate, the claim/slot machinery and the SOURCE-REGISTRY/STORE readers. That is not a slice; it is a data loss event with a passing test bolted on. I will not fabr

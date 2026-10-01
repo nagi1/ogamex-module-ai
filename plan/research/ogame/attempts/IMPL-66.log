@@ -1,56 +1,19 @@
-GrowthCeilingTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m (0 assertions)[39m
+GrowthCeilingTest: suite not collectable
 
-   $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
+Pest\Exceptions\FatalException 
 
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/GrowthCeilingTest.php:56
-  9   Modules/AI/tests/Feature/GrowthCeilingTest.php:107
+  Access level to GrowthCeilingModuleTestCase::$planetService must be protected (as in class Tests\IsolatedAccountTestCase) or weaker
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\GrowthCeilingTe…  MassAssignmentException   
-  Add [user_id] to fillable property to allow mass assignment on [OGame\Models\Planet].
-
-  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
-    686▕             // the model, and all others will just get ignored for security reasons.
-    687▕             if ($this->isFillable($key)) {
-    688▕                 $this->setAttribute($key, $value);
-    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
-  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
-
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/GrowthCeilingTest.php:56
-  9   Modules/AI/tests/Feature/GrowthCeilingTest.php:115
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\GrowthCeilingTe…  MassAssignmentException   
-  Add [user_id] to fillable property to allow mass assignment on [OGame\Models\Planet].
-
-  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
-    686▕             // the model, and all others will just get ignored for security reasons.
-    687▕             if ($this->isFillable($key)) {
-    688▕                 $this->setAttribute($key, $value);
-    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
-  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
-
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/GrowthCeilingTest.php:56
-  9   Modules/AI/tests/Feature/GrowthCeilingTest.php:122
-
-
-  Tests:    5 failed (0 assertions)
-  Duration: 1.04s
+  at Modules/AI/tests/Feature/GrowthCeilingTest.php:16
+     12▕ use OGame\Services\ModuleSlotService;
+     13▕ use OGame\Services\PlanetService;
+     14▕ use Tests\IsolatedAccountTestCase;
+     15▕ 
+  ➜  16▕ class GrowthCeilingModuleTestCase extends IsolatedAccountTestCase
+     17▕ {
+     18▕     /** The host object that raises the fleet slot ceiling; the module publishes it, the test names it. */
+     19▕     protected const FLEET_SLOT_OBJECT = 'computer_technology';
+     20▕
 
 These files from your answer were refused and NOT written:
 - resources/behavior/growth_ceilings.php (data must be YAML or JSON so a modder can edit it without code)

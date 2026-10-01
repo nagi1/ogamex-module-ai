@@ -1,64 +1,55 @@
-RecordObservedShipyardQueueTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+ConversationCycleTest: [90mTests:[39m    [31;1m9 failed[39;22m[90m,[39m[39m [39m[32;1m25 passed[39;22m[90m (77 assertions)[39m
 
-ILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+col sto…   
+  Failed asserting that 15 is identical to 2.
 
-  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
-     84▕ }
-     85▕ 
-     86▕ beforeEach(function () {
-     87▕     $this->profile = AiProfile::query()->create([
-  ➜  88▕         'user_id' => $this->user->id,
-     89▕     ]);
-     90▕ 
-     91▕     $this->payload = shipyardObservationPayload(
-     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+  at Modules/AI/tests/Feature/ConversationCycleTest.php:279
+    275▕ 
+    276▕     inboundMessage($this->currentUserId, $human->id, 'still here');
+    277▕ 
+    278▕     expect(runConversationCycle($this->currentUserId))->toBe(0)
+  ➜ 279▕         ->and(AiSocialExchange::query()->count())->toBe(2)
+    280▕         ->and(deliveredReplies($this->currentUserId))->toBe(2);
+    281▕ });
+    282▕ 
+    283▕ test('two automated neighbours stop greeting each other instead of looping', function (): void {
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
-
-  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
-     84▕ }
-     85▕ 
-     86▕ beforeEach(function () {
-     87▕     $this->profile = AiProfile::query()->create([
-  ➜  88▕         'user_id' => $this->user->id,
-     89▕     ]);
-     90▕ 
-     91▕     $this->payload = shipyardObservationPayload(
-     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+  1   Modules/AI/tests/Feature/ConversationCycleTest.php:279
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+   FAILED  Modules\AI\tests\Feature\ConversationCycleTest > a session…  Error   
+  Call to undefined method Modules\AI\Actions\RunAiSessionAction::handle()
 
-  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
-     84▕ }
-     85▕ 
-     86▕ beforeEach(function () {
-     87▕     $this->profile = AiProfile::query()->create([
-  ➜  88▕         'user_id' => $this->user->id,
-     89▕     ]);
-     90▕ 
-     91▕     $this->payload = shipyardObservationPayload(
-     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+  at Modules/AI/tests/Feature/ConversationCycleTest.php:318
+    314▕     ]);
+    315▕ 
+    316▕     // The session entry point is what composes the cycle, so running it is the proof that a
+    317▕     // real player answers a real message rather than only a test calling the cycle directly.
+  ➜ 318▕     app(RunAiSession::class)->handle($profile, $work);
+    319▕ 
+    320▕     expect(deliveredReplies($this->currentUserId))->toBe(1)
+    321▕         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->recipient_id)->toBe($human->id)
+    322▕         // The successor is addressed by its deterministic key rather than by row order: a session
+
+  1   Modules/AI/tests/Feature/ConversationCycleTest.php:318
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\RecordObservedShipyardQu…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\RecordObservedShipyardQueueTest::$user
+   FAILED  Modules\AI\tests\Feature\ConversationCycleTest > disabling…  Error   
+  Call to undefined method Modules\AI\Actions\RunAiSessionAction::handle()
 
-  at Modules/AI/tests/Feature/RecordObservedShipyardQueueTest.php:88
-     84▕ }
-     85▕ 
-     86▕ beforeEach(function () {
-     87▕     $this->profile = AiProfile::query()->create([
-  ➜  88▕         'user_id' => $this->user->id,
-     89▕     ]);
-     90▕ 
-     91▕     $this->payload = shipyardObservationPayload(
-     92▕         ShipyardObservationModuleTestCase::SHIP_TYPE_ID,
+  at Modules/AI/tests/Feature/ConversationCycleTest.php:341
+    337▕         'idempotency_key' => 'disabled-conversation-' . $this->currentUserId,
+    338▕         'state' => AiWorkState::Pending,
+    339▕     ]);
+    340▕ 
+  ➜ 341▕     app(RunAiSession::class)->handle($profile, $work);
+    342▕ 
+    343▕     expect(AiSocialExchange::query()->count())->toBe(0)
+    344▕         ->and(AiConversationReply::query()->count())->toBe(0)
+    345▕         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->count())->toBe(0);
+
+  1   Modules/AI/tests/Feature/ConversationCycleTest.php:341
 
 
-  Tests:    4 failed (0 assertions)
-  Duration: 0.92s
+  Tests:    9 failed, 25 passed (77 assertions)
+  Duration: 3.88s

@@ -1,2 +1,67 @@
-these values decide behaviour but were written into PHP: app/Domain/Decision/MovableFleet.php: 100, app/Domain/Decision/MovableFleet.php: 35000, app/Domain/Decision/MovableFleet.php: 5.
-Put them in a file under resources/behavior/ (extend one that exists when it covers the topic) and read them from there, so a modder can change the behaviour without editing code. Say which file in FILES.
+MovableFleetFuelCostTest: [90mTests:[39m    [31;1m7 failed[39;22m[90m (0 assertions)[39m
+
+ '/resources/behavior/fleet_fuel.php';
+     64▕     }
+     65▕ }
+     66▕
+
+  1   Modules/AI/app/Domain/Decision/MovableFleet.php:63
+  2   Modules/AI/app/Domain/Decision/MovableFleet.php:42
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MovableFleetFuelCostTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/fleet_fuel.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Decision/MovableFleet.php:63
+     59▕      * @return array{launch_cost: int, distance_divisor: int, speed_scale: int}
+     60▕      */
+     61▕     private static function formula(): array
+     62▕     {
+  ➜  63▕         return require dirname(__DIR__, 3) . '/resources/behavior/fleet_fuel.php';
+     64▕     }
+     65▕ }
+     66▕
+
+  1   Modules/AI/app/Domain/Decision/MovableFleet.php:63
+  2   Modules/AI/app/Domain/Decision/MovableFleet.php:42
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MovableFleetFuelCostTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/fleet_fuel.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Decision/MovableFleet.php:63
+     59▕      * @return array{launch_cost: int, distance_divisor: int, speed_scale: int}
+     60▕      */
+     61▕     private static function formula(): array
+     62▕     {
+  ➜  63▕         return require dirname(__DIR__, 3) . '/resources/behavior/fleet_fuel.php';
+     64▕     }
+     65▕ }
+     66▕
+
+  1   Modules/AI/app/Domain/Decision/MovableFleet.php:63
+  2   Modules/AI/app/Domain/Decision/MovableFleet.php:42
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\MovableFleetFuelCostTest…  ErrorException   
+  require(/var/www/Modules/AI/resources/behavior/fleet_fuel.php): Failed to open stream: No such file or directory
+
+  at Modules/AI/app/Domain/Decision/MovableFleet.php:63
+     59▕      * @return array{launch_cost: int, distance_divisor: int, speed_scale: int}
+     60▕      */
+     61▕     private static function formula(): array
+     62▕     {
+  ➜  63▕         return require dirname(__DIR__, 3) . '/resources/behavior/fleet_fuel.php';
+     64▕     }
+     65▕ }
+     66▕
+
+  1   Modules/AI/app/Domain/Decision/MovableFleet.php:63
+  2   Modules/AI/app/Domain/Decision/MovableFleet.php:42
+
+
+  Tests:    7 failed (0 assertions)
+  Duration: 1.29s
+
+These files from your answer were refused and NOT written:
+- resources/behavior/fleet_fuel.php (data must be YAML or JSON so a modder can edit it without code)

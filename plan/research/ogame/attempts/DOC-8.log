@@ -1,0 +1,9 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+I cannot deliver DOC-8 as a code slice, and I will not fabricate the file. Three things stop it, and each is a rule in this brief rather than a preference:
+
+**1. There is no acceptance line to read as the specification.** The plan is explicitly *not attached*. The brief says the plan's ACCEPTANCE line is the specification and that a test encoding my own reading of the rule will pass while the behaviour is wrong. With no proposal and no acceptance, "the drift the coverage audit found" is not stated anywhere in this task — the audit's findings are the deliverable's entire input, and they are missing. Anything I write would be my reading of the drift, which is the exact failure mode the brief names.
+
+**2. The only file the task names is shown truncated.** `plan/details/GAP-REGISTER.md` ends mid-word in the brief ("A cargo-o"). I am required to return *complete* file contents, never a fragment. There is no way to return the complete contents of that file from here, and reconstructing its tail — or its `Aggregate statistics` and `Operational failure` axes, which the header promises and which are cut off entirely — would be invention, not a fix.
+
+**3. A register has no runtime path, so t

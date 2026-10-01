@@ -1,0 +1,35 @@
+your answer contained no ### FILE blocks, so nothing could be written. Reply with the FILE blocks only, in the documented format.
+--- your previous answer began:
+### FILE: docker/entrypoint.sh
+```php
+#!/usr/bin/env bash
+#
+# Container entrypoint for the OGameX application.
+#
+# Laravel decides which passes are due by matching each schedule's cron
+# expression against the wall-clock minute. A loop that sleeps a fixed 60
+# seconds drifts later by however long the previous `schedule:run` took; once
+# the drift crosses a minute boundary the loop is looking at the clock partway
+# through every minute, so the everyMinute, everyTenMinutes and hourly passes
+# are never due at the moment it looks and silently stop firing. Sleeping to the
+# top of the next minute keeps every iteration locked to the boundaries the cron
+# expressions are evaluated against.
+#
+# Usage:
+#   entrypoint.sh                  # run the scheduler loop in the foreground
+#   entrypoint.sh php-fpm --foo    # exec the given command instead
+
+set -euo pipefail
+
+APP_DIR="${APP_DIR:-/var/www/html}"
+PHP_BIN="${PHP_BIN:-php}"
+
+log() {
+    printf '[entrypoint] %s\n' "$*"
+}
+
+# Seconds remaining in the current minute: 1..60, so the loop never spins and
+# every wake-up lands on the :00 second the cron expressions match against.
+seconds_until_next_minute() {
+    local second
+    second="$(date 

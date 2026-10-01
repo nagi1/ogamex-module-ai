@@ -1,4 +1,4 @@
-PlanetTemperatureTest: suite not collectable
+RecommendAntiBallisticMissilesTest: suite not collectable
 
 Error 
 
@@ -14,6 +14,3 @@ Error
      44▕ it('caps a solar satellite at the documented ceiling and rises up to it', function () use ($behavior) {
      45▕     $ceiling = $behavior['solar_satellite_max_energy'];
      46▕
-
-These files from your answer were refused and NOT written:
-- resources/behavior/planet_temperature.php (data must be YAML or JSON so a modder can edit it without code)

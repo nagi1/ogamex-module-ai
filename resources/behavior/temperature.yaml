@@ -1,0 +1,24 @@
+# Temperature policy for the AI pilot.
+#
+# A planet's maximum temperature pulls two buildings in opposite directions: a
+# Solar Satellite's energy rises with the slot's temperature while a Deuterium
+# Synthesizer's hourly output falls with it. The policy is therefore a ranking
+# over that one planet attribute, plus the ceiling the satellite's production
+# is clamped to so a freakishly hot slot cannot pay out more than the cap.
+#
+# Everything the decision needs lives here: edit a value, not the code.
+
+solar_satellite:
+  # The end of the slot list this building wants: the hottest planet owned.
+  prefers: hottest
+  # Energy per satellite follows the published production curve
+  # floor((max_temperature + base_temperature) / degrees_per_energy).
+  base_temperature: 140
+  degrees_per_energy: 10
+  # Ceiling per satellite. The cap wins over the curve, however hot the slot.
+  max_energy: 65
+
+deuterium_synthesizer:
+  # The other end of the list: the synthesizer wants the coldest planet, where
+  # its hourly deuterium output is highest.
+  prefers: coldest
