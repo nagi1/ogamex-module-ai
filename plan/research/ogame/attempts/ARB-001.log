@@ -1,53 +1,25 @@
-the delivered change passed its tests but its live proof failed:
-PASS test:ExpeditionSituationTest 2s
-PASS test:DebrisRecycleSituationTest 1s
-PASS test:ColonisationSituationTest 2s
-PASS test:ShipyardSituationTest 1s
-PASS test:RaidFromReportSituationTest 2s
-PASS test:ShipyardRestraintSituationTest 2s
-PASS aspect:fleet_breadth 0s
-FAIL aspect:raids 1s —  FAIL raids 0 floor 1 raids a profitable target
-PASS aspect:economy 0s
-PROOF: FAIL ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy) at aspect:raids:  FAIL raids 0 floor 1 raids a profitable target
+tests (RaidWithShipyardSituationTest, ExpeditionSituationTest, DebrisRecycleSituationTest, ColonisationSituationTest, ShipyardSituationTest, RaidFromReportSituationTest, ShipyardRestraintSituationTest, DecisionEngineTest, IdleOverrideAndAntiBotCadenceTest, PersonaPolicyMechanicsTest): Tests:    1 failed, 18 passed (31 assertions)
 
-LIVE EVIDENCE
---- ogamex pulse 30 (live, now):
-PULSE last 30 min, 20 accounts: 393 sessions on 20 accounts
-  backlog: 56 work item(s) more than a minute late
-  sessions chose: QueueUnits 74%, DoNothing 18%, ThrottleMine 4%, Build 3%, Expedition 2%
-  host orders: buildings 258, research 39, units 276
-  missions launched: Expedition 6
-  work (kind: state count):
-    BuildFirstBuilding: Completed 312, Pending 36, Retry 2
-    QueueUnits: Completed 291, Pending 25, Retry 1
-    RunSession: Completed 393, Retry 3, Pending 17
-    QueueResearch: Completed 57, Pending 4
-    SetMinePercent: Completed 17
-    Expedition: Completed 6
-  refused: 
-    9 × QueueUnits: queue_not_created
-    3 × QueueResearch: already_researching
---- ogamex why subject (live, now):
-WHY 3 (Miner): what the next session will see
+FAILED  Modules\AI\tests\Feature\Situations\RaidWithShipyardSituationTest…   
+  expected Raid work, but the account created work: [BuildFirstBuilding(Completed), BuildFirstBuilding(Completed), QueueUnits(Completed)], executors refused: [], queued: [metal_mine, solar_plant, rocket_launcher], flew: [], not offered: [] and its last decision ranked: Build 66.0 (safety=10, resource_need=30, seeded_variation=1, archetype_preference=25); QueueUnits 40.7 (safety=10, resource_need=30, seeded_variation=0.7); DoNothing 3.3 (safety=5, seeded_variation=-1.7)
+Failed asserting that false is true.
 
-  published: queue_units
-  NOT published: build, research, colonize, spy, throttle_mine
+  at Modules/AI/tests/Support/Situation.php:450
+    446▕     }
+    447▕ 
+    448▕     public function expectWork(AiWorkKind $kind): self
+    449▕     {
+  ➜ 450▕         expect(in_array($kind, $this->work(), true))->toBeTrue('expected ' . $kind->name . ' work, but ' . $this->account());
+    451▕ 
+    452▕         return $this;
+    453▕     }
+    454▕
 
-  player_id                    3
-  observed_at                  1790885062
-  account_state                "active"
-  recovery_factor              0
-  fleet_slots_free             1
-  colonize_eligible            true
-  target_reports               0 item(s)
-  fleetsave_eligible           false
-  fleetsave_skip_reason        null
-  inbound_fleets               0 item(s)
-  reaction_wake_at             null
-  recall_eligible              false
-  planets                      2 planet(s)
+  1   Modules/AI/tests/Support/Situation.php:450
+  2   Modules/AI/tests/Feature/Situations/RaidWithShipyardSituationTest.php:26
 
-  decision: QueueUnits
-    QueueUnits    39.8  resource_need=30, safety=10, seeded_variation=-0.2
-    DoNothing      1.5  safety=5, seeded_variation=-3.5
-  turned down by the candidate factory: nothing
+
+  Tests:    1 failed, 18 passed (31 assertions)
+  Duration: 3.84s
+
+[1A  Parallel: 4 processes

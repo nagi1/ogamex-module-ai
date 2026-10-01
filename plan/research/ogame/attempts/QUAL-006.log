@@ -1,23 +1,23 @@
-tests (ResearchSituationTest, EnergyCapacityTest, EveryPlanetBuildsSituationTest, ReserveFloorTest, AiCapabilityPublicationTest, BuildingChainReachabilityTest, ProcessAiWorkTest, ThrowingQueueableBuildingPlanner): Tests:    1 failed, 21 passed, 9 pending (131 assertions)
+tests (BothQueuesSituationTest, ResearchSituationTest, EnergyCapacityTest, EveryPlanetBuildsSituationTest, ReserveFloorTest, AiCapabilityPublicationTest, BuildingChainReachabilityTest, ProcessAiWorkTest, ThrowingQueueableBuildingPlanner): Tests:    1 failed, 59 passed (274 assertions)
 
-FAILED  Modules\AI\tests\Feature\BuildingChainReachabilityTest > a funded…   
-  Failed asserting that 0 is equal to 2 or is greater than 2.
+FAILED  Modules\AI\tests\Feature\ReserveFloorTest > the reserve floor is…    
+  Failed asserting that 0.0 is identical to 534540.0.
 
-  at Modules/AI/tests/Feature/BuildingChainReachabilityTest.php:71
-     67▕ 
-     68▕     $planet = chainPlanet($this->currentUserId, $this->currentPlanetId);
-     69▕ 
-     70▕     expect($planet->getObjectLevel('research_lab'))->toBeGreaterThanOrEqual(1)
-  ➜  71▕         ->and($planet->getObjectLevel('robot_factory'))->toBeGreaterThanOrEqual(2)
-     72▕         ->and($planet->getObjectLevel('shipyard'))->toBeGreaterThanOrEqual(1);
-     73▕ 
-     74▕     // A technology the host's graph asks for cannot stand on a planet, so the only proof it was
-     75▕     // reached is the level the host reports for it -- which is what makes research a capability the
+  at Modules/AI/tests/Feature/ReserveFloorTest.php:35
+     31▕     $planet = reservePlanet($this->currentUserId);
+     32▕     $floor = app(ReserveFloor::class)->floor($planet, ReserveFloor::ECONOMY_HOURS);
+     33▕ 
+     34▕     expect($floor->metal->get())
+  ➜  35▕         ->toBe(max(0.0, $planet->metalStorage()->get() * ReserveFloor::BUFFER - $planet->getMetalProductionPerHour() * ReserveFloor::ECONOMY_HOURS))
+     36▕         ->and($floor->crystal->get())
+     37▕         ->toBe(max(0.0, $planet->crystalStorage()->get() * ReserveFloor::BUFFER - $planet->getCrystalProductionPerHour() * ReserveFloor::ECONOMY_HOURS))
+     38▕         ->and($floor->deuterium->get())
+     39▕         ->toBe(max(0.0, $planet->deuteriumStorage()->get() * ReserveFloor::BUFFER - $planet->getDeuteriumProductionPerHour() * ReserveFloor::ECONOMY_HOURS));
 
-  1   Modules/AI/tests/Feature/BuildingChainReachabilityTest.php:71
+  1   Modules/AI/tests/Feature/ReserveFloorTest.php:35
 
 
-  Tests:    1 failed, 21 passed, 9 pending (131 assertions)
-  Duration: 3.24s
+  Tests:    1 failed, 59 passed (274 assertions)
+  Duration: 4.33s
 
 [1A  Parallel: 4 processes

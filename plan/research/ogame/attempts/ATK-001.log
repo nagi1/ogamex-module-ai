@@ -1,25 +1,50 @@
-tests (InactiveNeighbourSituationTest, InactiveNeighbourSessionSituationTest, RaidFromReportSituationTest, DecisionEngineTest, RecycleDepthTest, SpyDepthTest, TransferDepthTest, ColonySpyExecutorTest, RecallDepthTest, RaidDepthTest, EnergyUnconstrainedCandidateActionsTest, ScarcityResourceNeedTest, ProactiveSaveTest, ExpeditionDepthTest, CoverageCompletionTest, Situation): Tests:    1 failed, 105 passed (242 assertions)
+the writer used its 40 turns before a check passed.
+the delivered change passed its tests but its live proof failed:
+PASS test:InactiveNeighbourSituationTest 1s
+PASS test:InactiveNeighbourSessionSituationTest 2s
+PASS test:RaidFromReportSituationTest 2s
+FAIL situation:inactive-neighbour 180s —  read-back: 0 spy, 0 report(s), 0 raid; refusals: none recorded — last decisions: p3 5/published_capability:queue_units | p4 5/published_capability:queue_units | p3 5/published_capability:queue_units | p4 5/published_capability:queue_units | p3 1/always_available | p4 5/published_capability:queue_
+FAIL aspect:raids 1s — too early: the cohort has played under an hour on this change (not yet passing on 0.10h)
+FAIL aspect:espionage 0s — too early: the cohort has played under an hour on this change (not yet passing on 0.10h)
+PROOF: FAIL ATK-001 (test:InactiveNeighbourSituationTest test:InactiveNeighbourSessionSituationTest test:RaidFromReportSituationTest situation:inactive-neighbour aspect:raids aspect:espionage) at situation:inactive-neighbour:  read-back: 0 spy, 0 report(s), 0 raid; refusals: none recorded — last decisions: p3 5/published_capability:queue_units | p4 5/published_capability:queue_units | p3 5/published_capability:queue_units | p4 5/published_capability:queue_units | p3 1/always_available | p4 5/published_capability:queue_
 
-FAILED  Modules\AI\tests\Feature\Situations\BothQueuesSituationTest > a l…   
-  expected a research running, but the lab is idle; the account created work: [BuildFirstBuilding(Completed), BuildFirstBuilding(Completed)], executors refused: [], queued: [metal_mine, solar_plant], flew: [], not offered: [] and its last decision ranked: Build 63.5 (safety=10, resource_need=30, seeded_variation=-1.5, archetype_preference=25); DoNothing 4.0 (safety=5, seeded_variation=-1)
-Failed asserting that false is true.
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 20 accounts: 351 sessions on 20 accounts
+  backlog: 62 work item(s) more than a minute late
+  sessions chose: QueueUnits 89%, DoNothing 8%, ThrottleMine 1%, Expedition 1%, Build 1%, Research 1%
+  host orders: buildings 244, research 40, units 296
+  missions launched: Expedition 3
+  work (kind: state count):
+    BuildFirstBuilding: Completed 312, Retry 5, Pending 35
+    RunSession: Completed 351, Pending 18, Retry 1, Leased 1
+    QueueUnits: Completed 310, Retry 5, Pending 24
+    QueueResearch: Completed 47, Retry 1, Pending 13
+    SetMinePercent: Completed 4
+    Expedition: Completed 3
+  refused: 
+    10 × QueueUnits: queue_not_created
+--- ogamex why subject (live, now):
+WHY 3 (Miner): what the next session will see
 
-  at Modules/AI/tests/Support/Situation.php:402
-    398▕     public function expectResearchQueueBusy(): self
-    399▕     {
-    400▕         $planets = Planet::query()->where('user_id', $this->profile->player_id)->pluck('id');
-    401▕         $busy = ResearchQueue::query()->whereIn('planet_id', $planets)->where('processed', 0)->where('canceled', 0)->exists();
-  ➜ 402▕         expect($busy)->toBeTrue('expected a research running, but the lab is idle; ' . $this->account());
-    403▕ 
-    404▕         return $this;
-    405▕     }
-    406▕
+  published: queue_units
+  NOT published: build, research, colonize, spy, throttle_mine
 
-  1   Modules/AI/tests/Support/Situation.php:402
-  2   Modules/AI/tests/Feature/Situations/BothQueuesSituationTest.php:20
+  player_id                    3
+  observed_at                  1790891530
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             1
+  colonize_eligible            true
+  target_reports               0 item(s)
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      2 planet(s)
 
-
-  Tests:    1 failed, 105 passed (242 assertions)
-  Duration: 5.35s
-
-[1A  Parallel: 4 processes
+  decision: QueueUnits
+    QueueUnits    41.9  resource_need=30, safety=10, seeded_variation=1.9
+    DoNothing      7.0  safety=5, seeded_variation=2
+  turned down by the candidate factory: nothing

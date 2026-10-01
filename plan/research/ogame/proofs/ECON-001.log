@@ -1,8 +1,9 @@
 PASS test:ExecuteIntentTest 2s
 PASS test:AiCapabilityPublicationTest 3s
 PASS test:EveryPlanetBuildsSituationTest 1s
-PASS test:EveryPlanetBuildsSessionSituationTest 1s
-FAIL situation:every-planet-builds 184s —  read-back: 0 of 1 planet(s) of account 3 building or ordered
-FAIL invariant:IDLE_QUEUES 2s —  ! [IDLE_QUEUES] player 3 played this hour with 1 of 1 planets buildable and idle
+PASS test:EveryPlanetBuildsSessionSituationTest 2s
+PASS test:BothQueuesSituationTest 1s
+PASS situation:every-planet-builds 2s
+PASS invariant:IDLE_QUEUES 6s
 PASS aspect:economy 0s
-PROOF: FAIL ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest test:EveryPlanetBuildsSituationTest test:EveryPlanetBuildsSessionSituationTest situation:every-planet-builds invariant:IDLE_QUEUES aspect:economy) at situation:every-planet-builds:  read-back: 0 of 1 planet(s) of account 3 building or ordered
+PROOF: PASS ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest test:EveryPlanetBuildsSituationTest test:EveryPlanetBuildsSessionSituationTest test:BothQueuesSituationTest situation:every-planet-builds invariant:IDLE_QUEUES aspect:economy)

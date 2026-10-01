@@ -1,82 +1,87 @@
-### FILE: tests/Feature/ColonisationScanSpreadTest.php
+### EDIT: app/Domain/Decision/QueueableColonyPlanner.php
+<<<<<<< SEARCH
+        $origin = $this->colonyShipPlanet($player->planets->all());
+        if ($origin === null) {
+            return null;
+        }
+=======
+        $origin = $this->originPlanet($player->planets->all());
+        if ($origin === null) {
+            return null;
+        }
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH
+    /**
+     * The planet carrying an idle colony ship.
+     *
+     * @param array<int, PlanetService> $planets
+     */
+    private function colonyShipPlanet(array $planets): ?PlanetService
+    {
+        foreach ($planets as $planet) {
+            if ($planet->getShipUnits()->getAmountByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]) > 0) {
+                return $planet;
+            }
+        }
+
+        return null;
+    }
+=======
+    /**
+     * The planet a colony leaves from: the one holding a colony ship, else the account's first.
+     *
+     * Waiting for the ship before committing to a free slot is what left the cohort never
+     * colonising: the slot is claimed by deciding to settle it, and the ship a shipyard builds
+     * for that decision belongs to the same decision rather than to its precondition. The host
+     * still owns the ship's machine name and the reach of the walk.
+     *
+     * @param array<int, PlanetService> $planets
+     */
+    private function originPlanet(array $planets): ?PlanetService
+    {
+        $ship = ColonisationMission::getRequiredShipMachineNames()[0];
+
+        foreach ($planets as $planet) {
+            if ($planet->getShipUnits()->getAmountByMachineName($ship) > 0) {
+                return $planet;
+            }
+        }
+
+        $first = array_key_first($planets);
+
+        return $first === null ? null : $planets[$first];
+    }
+>>>>>>> REPLACE
+
+### FILE: tests/Feature/Situations/ColonisationWithoutShipTest.php
 ```php
 <?php
 
-use Modules\AI\Domain\Decision\QueueableColony;
-use Modules\AI\Domain\Decision\QueueableColonyPlanner;
-use Modules\AI\Enums\AiArchetype;
-use Modules\AI\Enums\AiSkillBand;
-use Modules\AI\Models\AiProfile;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Tests\Support\Situation;
 use Tests\IsolatedAccountTestCase;
+
+require_once __DIR__ . '/../../Support/Situation.php';
 
 uses(IsolatedAccountTestCase::class);
 
-/**
- * A deterministic per-account walk is the only thing that keeps a cohort from
- * converging on one first slot, so the seed has to reach the chosen coordinate.
- */
-function colonisationScanProfile(int $playerId, int $seed = 42): AiProfile
-{
-    return AiProfile::create([
-        'player_id' => $playerId,
-        'enabled' => true,
-        'archetype' => AiArchetype::Miner->value,
-        'skill_band' => AiSkillBand::Standard->value,
-        'random_seed' => $seed,
-    ]);
-}
+// The fast proof settles a planet with a colony ship already on hand. These are the two edges
+// around it: the account whose ship is still to be built, and the account with no slot left.
 
-function colonisationScanSlot(?QueueableColony $plan): string
-{
-    if ($plan === null) {
-        return 'none';
-    }
-
-    return $plan->galaxy . ':' . $plan->system . ':' . $plan->position;
-}
-
-test('an account holding a colony ship plans a colony on a colonisable slot', function (): void {
-    colonisationScanProfile($this->currentUserId);
-    $this->playerSetResearchLevel('astrophysics', 4);
-    $this->planetAddUnit('colony_ship', 1);
-
-    $plan = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
-
-    expect($plan)->toBeInstanceOf(QueueableColony::class)
-        ->and($plan->planetId)->toBe($this->currentPlanetId)
-        ->and($plan->galaxy)->toBeGreaterThanOrEqual(1)
-        ->and($plan->system)->toBeGreaterThanOrEqual(1)
-        ->and($plan->position)->toBeBetween(1, 15);
+test('a free colony slot is claimed even before the colony ship is built', function (): void {
+    Situation::of($this)
+        ->research('astrophysics', 4)
+        ->research('impulse_drive', 3)
+        ->resources(1_000_000, 1_000_000, 1_000_000)
+        ->session()
+        ->expectWork(AiWorkKind::Colonize);
 });
 
-test('the scan offsets with the account seed so two accounts do not claim one slot', function (): void {
-    $profile = colonisationScanProfile($this->currentUserId);
-    $this->playerSetResearchLevel('astrophysics', 4);
-    $this->planetAddUnit('colony_ship', 1);
-
-    $first = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
-
-    $profile->update(['random_seed' => 7]);
-    $second = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
-
-    expect(colonisationScanSlot($first))->not->toBe('none')
-        ->and(colonisationScanSlot($second))->not->toBe('none')
-        ->and(colonisationScanSlot($first))->not->toBe(colonisationScanSlot($second));
-});
-
-test('the scan plans nothing without a colony ship, an enabled profile or an account', function (): void {
-    $profile = colonisationScanProfile($this->currentUserId);
-
-    expect(app(QueueableColonyPlanner::class)->plan($this->currentUserId))->toBeNull();
-
-    $profile->update(['enabled' => false]);
-    $this->planetAddUnit('colony_ship', 1);
-
-    expect(app(QueueableColonyPlanner::class)->plan($this->currentUserId))->toBeNull();
-
-    $orphaned = $this->currentUserId + 1_000_000;
-    colonisationScanProfile($orphaned);
-
-    expect(app(QueueableColonyPlanner::class)->plan($orphaned))->toBeNull();
+test('an account whose colony slots are exhausted plans no colony', function (): void {
+    Situation::of($this)
+        ->resources(1_000_000, 1_000_000, 1_000_000)
+        ->session()
+        ->expectNoWork(AiWorkKind::Colonize);
 });
 ```

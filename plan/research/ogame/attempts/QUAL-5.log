@@ -1,2 +1,2 @@
-these files are not called by any runtime code, so no account can ever execute them: app/Domain/Decision/WaveFarmPlanner.php.
+these files are not called by any runtime code, so no account can ever execute them: app/Domain/Decision/PillageCap.php.
 Do not write a new class. EDIT the planner, engine or action that already owns this decision, and have the Feature test drive that path. A data file under resources/behavior must be loaded by name in that class.

@@ -24,6 +24,7 @@ import argparse
 import datetime
 import atexit
 import difflib
+import fnmatch
 import glob
 import hashlib
 import json
@@ -54,9 +55,22 @@ ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 # not the stop: a row that fails the same way twice is stuck (record_failure) and waits for a person.
 MAX_ATTEMPTS = 3
 
-# Turns the writer gets inside one attempt: a failed check goes back to it as a follow-up in the same
-# conversation (the prompt prefix is cached) instead of throwing the edit away and starting cold.
-WRITER_TURNS = 3
+# The writer works like an engineer at a terminal: it reads, searches and edits a working copy and runs
+# the slice's checks itself, so a misquoted SEARCH or a guessed column costs one tool call, not an
+# attempt. The working copy outlives a failed check and a failed attempt (ATTEMPTS/CODE.work.json); the
+# bounds below stop a writer that circles. One attempt: at most this many model turns, checks, seconds.
+AGENT_STEPS = 40
+AGENT_CHECKS = 6
+AGENT_SECONDS = 40 * 60
+# Past this prompt size the conversation restarts from the task plus the working copy's diff and the last
+# check, instead of growing until the provider truncates it. The work is kept; only the chatter goes.
+AGENT_CONTEXT_TOKENS = 100_000
+# The same call with nothing changed in between, or the same check failure, this many times ends the attempt.
+AGENT_REPEATS = 3
+# Consecutive read-only calls before reading is refused and the writer must edit or give up.
+AGENT_READ_STREAK = 15
+TOOL_RESULT_CHARS = 12_000
+READ_LINES = 400
 COOLOFF_SECONDS = 45 * 60
 # A stuck row's wait, in seconds: no clock ends it, `task.py unstick` does.
 NEVER = 10 ** 9
@@ -1611,6 +1625,33 @@ def self_check():
     assert proof_change(two, red).startswith("proof regressed"), "a step that went PASS to FAIL is refused"
     assert WRITER_MAX_TOKENS >= 1.5 * 15540 / 3.5 - 100, "the cap follows the largest saved answer"
 
+    # The writer's tools: an edit lands once in the working copy and never on disk; a miss shows the real
+    # lines; credentials are unreadable; a saved copy whose base moved is dropped, not replayed.
+    working, held = {}, set()
+    probe_code = f"__self-check-work-{os.getpid()}__"
+    try:
+        result = tool_edit({"path": target, "old_string": anchor, "new_string": anchor + " // probe"}, working, held)
+        assert result.startswith("edited") and working[target].count("// probe") == 1 and "// probe" not in read(target_full), \
+            "an edit changes the working copy only"
+        assert "// probe" in tool_read({"path": target}, working), "reads see the working copy"
+        assert "// probe" in tool_search({"pattern": "// probe", "path": "app/Actions"}, working), "search sees the working copy"
+        missed = tool_edit({"path": target, "old_string": "throw new RuntimeException('Scenario file not found: ' . $file);", "new_string": "x"}, working, held)
+        assert missed.startswith("refused") and "Scenario file not found" in missed, "a miss shows the closest real lines"
+        assert tool_write({"path": target, "content": "<?php\n"}, working, held).startswith("refused"), "an existing file is never rewritten"
+        assert tool_read({"path": ".env", "host": True}, working).startswith("refused"), "credentials are not readable"
+        assert tool_read({"path": "../../../etc/passwd"}, working).startswith("refused"), "nothing outside the repository"
+        save_work(probe_code, working, "boom")
+        assert load_work(probe_code)[0] == working and load_work(probe_code)[1] == "boom", "the copy survives the attempt"
+        with open(work_path(probe_code), encoding="utf-8") as handle:
+            saved = json.load(handle)
+        saved["bases"][target] = "moved"
+        with open(work_path(probe_code), "w", encoding="utf-8") as handle:
+            json.dump(saved, handle)
+        assert load_work(probe_code)[2] == [target], "a file changed under the copy is dropped"
+    finally:
+        drop_work(probe_code)
+        release_claims([claim_path(key) for key in held])
+
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
         handle.write("<?php\n")
@@ -1954,32 +1995,80 @@ HONESTY
   add no floor, tie-break or rule the source does not state.
 - Name every file for what it does (`RaidProfit`), never after a source id (`WIK-078`).
 
-REFUSED AUTOMATICALLY, BEFORE ANY TEST RUNS (each costs you the attempt)
-a path outside the module or starting `Modules/`; `tests/Unit/`; a PHP file under `resources/behavior/`;
-anything under `app/Ai/`; a file named after a source id; a second class with an existing class's name;
-a FILE block for an existing file you were shown only in part; a SEARCH not found exactly once; PHP that
-does not lint cleanly (warnings included); no test; a class or data file no runtime code uses; the
-plan's numbers inlined in PHP; `Model::factory()` on a module model; a public method or interface that
-other code uses removed; a scenario missing a required key.
+REFUSED AUTOMATICALLY
+When you edit: a path outside the module or starting `Modules/`; `tests/Unit/`; a PHP file under
+`resources/behavior/`; anything under `app/Ai/`; a file named after a source id; a second class with an
+existing class's name; old_string not found exactly once.
+When you check, before any test runs: PHP that does not lint cleanly (warnings included); no test; a class
+or data file no runtime code uses; the plan's numbers inlined in PHP; `Model::factory()` on a module
+model; a public method or interface that other code uses removed; a scenario missing a required key.
 
-ANSWER FORMAT -- blocks only, nothing before the first or after the last:
-
-### EDIT: <path of an existing file>
-<<<<<<< SEARCH
-<exact lines copied from the EXISTING FILE, unique, a few lines>
-=======
-<the lines that replace them>
->>>>>>> REPLACE
-
-(several SEARCH/REPLACE pairs may follow one EDIT header; they apply in order)
-
-### FILE: <path of a new file>
-```php
-<complete file contents>
-```
-
-Paths are module-relative: `app/...`, `tests/Feature/...`, `resources/...`. Data files are YAML.
+HOW YOU WORK -- with tools, like an engineer at a terminal
+- The task context below already holds the task, the files it names and the reference. Read more only
+  when the change needs it: `read_file`, `search` and `list_files` read the module (`app/...`,
+  `tests/...`, `resources/...`) or, with host=true, the OGameX host (`app/Services/...`, `app/Models/...`,
+  `tests/...`, `vendor/...`). Read a method before you call it; search before you assume a method, column,
+  enum case or helper exists.
+- `edit_file` replaces one exact, unique piece of text; `write_file` creates a new file. Both change your
+  WORKING COPY only: nothing reaches the shared tree until `check` passes, and the copy is kept across a
+  failed check and across attempts. Edit existing files; never rewrite them.
+- `check` puts the working copy in the tree, runs every automatic refusal, the tests and the proof, and
+  restores the tree. A pass delivers the task and ends your work. A fail returns the exact output: read it,
+  find the cause in the code (not in the test's expectation), fix it, check again.
+- `give_up` with one line when the specification cannot hold as written. Never weaken it instead.
+- Work order: read the failing proof and the code path it drives, name the cause, make the smallest edit
+  that removes it, check. Never repeat a call whose answer you already have, and never check again before
+  you changed something that addresses the last failure.
+- Paths are module-relative: `app/...`, `tests/Feature/...`, `resources/...`. Data files are YAML.
 """
+
+WRITER_TOOLS = [
+    {"type": "function", "function": {
+        "name": "read_file",
+        "description": "Read a file with line numbers (your working copy when you changed it). Long files come in pages: pass offset to read on.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Module-relative path, or host-relative with host=true"},
+            "offset": {"type": "integer", "description": "First line to show, 1-based (default 1)"},
+            "limit": {"type": "integer", "description": f"Lines to show (default and max {READ_LINES})"},
+            "host": {"type": "boolean", "description": "Read the OGameX host instead of the module"},
+        }, "required": ["path"]}}},
+    {"type": "function", "function": {
+        "name": "search",
+        "description": "Search file contents with an extended regular expression (grep -E). Returns path:line: text.",
+        "parameters": {"type": "object", "properties": {
+            "pattern": {"type": "string"},
+            "path": {"type": "string", "description": "Directory or file to search (default: the whole module, or the host's app/ with host=true)"},
+            "glob": {"type": "string", "description": "Only files whose name matches, e.g. *.php"},
+            "host": {"type": "boolean"},
+        }, "required": ["pattern"]}}},
+    {"type": "function", "function": {
+        "name": "list_files",
+        "description": "List the files under a directory, recursively, up to 200 entries.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"}, "host": {"type": "boolean"},
+        }, "required": ["path"]}}},
+    {"type": "function", "function": {
+        "name": "edit_file",
+        "description": "Replace old_string with new_string in a module file of your working copy. old_string must match exactly once (whitespace included) unless replace_all is true; include enough surrounding lines to make it unique.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"},
+            "replace_all": {"type": "boolean"},
+        }, "required": ["path", "old_string", "new_string"]}}},
+    {"type": "function", "function": {
+        "name": "write_file",
+        "description": "Create a new module file in your working copy. An existing file is changed with edit_file, never rewritten.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"}, "content": {"type": "string"},
+        }, "required": ["path", "content"]}}},
+    {"type": "function", "function": {
+        "name": "check",
+        "description": f"Verify the working copy in the real tree: lint, automatic refusals, the tests that name what you touched, then the proof. A pass delivers the task. A fail restores the tree, keeps your copy and returns the output. {AGENT_CHECKS} per attempt.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "give_up",
+        "description": "Stop: the specification cannot hold as written. Say why in one line.",
+        "parameters": {"type": "object", "properties": {"reason": {"type": "string"}}, "required": ["reason"]}}},
+]
 
 COMPOSE_DIR = os.path.abspath(os.path.join(MODULE, "..", "..", "local-docker-dev"))
 
@@ -2162,8 +2251,8 @@ def implement_context(code):
             parts += [f"{path} does not exist yet — create it with a FILE block.", ""]
             continue
         body = read(full)
-        # Shown whole up to a bound: the writer edits with SEARCH text copied from what it sees.
-        cut = "" if len(body) <= EDIT_SHOW_LIMIT else " (TRUNCATED — edit only inside the shown part)"
+        # Shown whole up to a bound, so the common edit needs no read call; past it the writer pages on.
+        cut = "" if len(body) <= EDIT_SHOW_LIMIT else " (TRUNCATED — read_file it with an offset for the rest)"
         parts += [f"EXISTING FILE {path}{cut}:", "```php", body[:EDIT_SHOW_LIMIT], "```", ""]
 
     # The enums the shown files use: a value not listed in one does not exist (SOC-001 invented one).
@@ -2838,36 +2927,426 @@ WRITER_THINKING = {"type": "enabled"}
 WRITER_REASONING_EFFORT = "low"
 
 
-def writer_answer(code, context, answer_file=None, conversation=None):
-    """The writer's answer and its token usage: a saved answer when one is given, else a paid call.
+def work_path(code):
+    return os.path.join(ATTEMPTS, f"{code}.work.json")
 
-    Every paid answer is kept beside the attempt log, so a refusal or a failing check can be re-run
-    against the same answer with `implement CODE --answer FILE` for nothing. An answer the model did
-    not finish is (None, {"finish_reason": ...}): nothing to write, and a failure the caller records.
-    """
-    if answer_file:
-        return read(answer_file), {}
 
-    payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING, "reasoning_effort": WRITER_REASONING_EFFORT,
-               "messages": conversation or [
-                   {"role": "system", "content": IMPLEMENT_PROMPT},
-                   {"role": "user", "content": context},
-               ]}
-    data = model_call(payload, purpose=f"implementing {code}")
-    if not data.get("choices"):
-        # An error body (rate limit, overload, a rejected request) has no choices; it crashed the shard
-        # before (1 Oct 2026) and hid what the provider said.
-        return None, {"finish_reason": "provider_error", "error": json.dumps(data)[:400]}
-    choice = data["choices"][0]
-    if choice.get("finish_reason") != "stop":
-        return None, {"finish_reason": choice.get("finish_reason")}
+def disk_text(clean):
+    full = os.path.join(MODULE, clean)
 
-    answer = choice["message"]["content"] or ""
+    return read(full) if os.path.exists(full) else None
+
+
+def digest(text):
+    return hashlib.sha1((text if text is not None else "\0absent").encode()).hexdigest()
+
+
+def save_work(code, working, failure=""):
+    """Keep the writer's copy beside the attempt, with the disk each file was based on, so the next
+    attempt resumes from it instead of rewriting the slice from a blank page."""
     os.makedirs(ATTEMPTS, exist_ok=True)
-    with open(os.path.join(ATTEMPTS, f"{code}.answer.md"), "w", encoding="utf-8") as handle:
-        handle.write(answer)
+    with open(work_path(code), "w", encoding="utf-8") as handle:
+        json.dump({"files": working, "bases": {clean: digest(disk_text(clean)) for clean in working},
+                   "failure": failure}, handle)
 
-    return answer, data.get("usage", {})
+
+def load_work(code):
+    """(working copy, its last failure, the files dropped because the tree moved under them)."""
+    if not os.path.exists(work_path(code)):
+        return {}, "", []
+    try:
+        saved = json.loads(read(work_path(code)))
+    except ValueError:
+        return {}, "", []
+    # A file somebody changed since the copy was taken is dropped: replaying the copy would undo their work.
+    kept = {clean: content for clean, content in saved["files"].items()
+            if saved["bases"].get(clean) == digest(disk_text(clean))}
+
+    return kept, saved.get("failure", ""), sorted(set(saved["files"]) - set(kept))
+
+
+def drop_work(code):
+    if os.path.exists(work_path(code)):
+        os.remove(work_path(code))
+
+
+def working_diff(working, limit=14000):
+    """The writer's copy against the tree, as a unified diff: what a resumed writer needs to see."""
+    lines = []
+    for clean, content in sorted(working.items()):
+        before = disk_text(clean)
+        lines += difflib.unified_diff((before or "").splitlines(), content.splitlines(),
+                                      f"a/{clean}" if before is not None else "/dev/null", f"b/{clean}", lineterm="", n=2)
+    text = "\n".join(lines)
+
+    return text if len(text) <= limit else text[:limit] + "\n… (diff truncated; read_file shows your working copy)"
+
+
+def resume_note(working, failure, dropped=()):
+    """What a writer resuming the slice is told: its own diff and what the last check said."""
+    parts = []
+    if working:
+        parts += ["\n\nYOUR WORK SO FAR (your working copy; it reaches the tree only when check passes):",
+                  "```diff", working_diff(working), "```"]
+    if dropped:
+        parts += ["These files of your earlier copy were dropped because the tree changed under them: "
+                  + ", ".join(dropped) + ". Read them again before editing."]
+    if failure:
+        parts += ["\n\nTHE LAST CHECK OF THIS TASK SAID:", failure[:3000],
+                  "Fix its cause and call check. Change nothing the failure does not need."]
+
+    return "\n".join(parts)
+
+
+def tool_target(path, host=False):
+    """(absolute path, module-relative path or None, refusal or None) for a path a tool names."""
+    base = ROOT if host else MODULE
+    full = os.path.realpath(os.path.join(base, str(path or ".").strip().strip("`").lstrip("/")))
+    if full != os.path.realpath(ROOT) and not full.startswith(os.path.realpath(ROOT) + os.sep):
+        return None, None, "outside the repository"
+    if os.path.basename(full).startswith(".env") or f"{os.sep}.git" in full[len(os.path.realpath(ROOT)):]:
+        return None, None, "credentials and git internals are not readable"
+    inside = full.startswith(os.path.realpath(MODULE) + os.sep)
+
+    return full, os.path.relpath(full, os.path.realpath(MODULE)) if inside else None, None
+
+
+def tool_read(args, working):
+    full, clean, why = tool_target(args.get("path"), args.get("host"))
+    if why:
+        return f"refused: {why}"
+    text = working.get(clean) if clean else None
+    if text is None and not os.path.isfile(full):
+        return f"{args.get('path')} does not exist" + (" (use list_files on its directory)" if not os.path.isdir(full) else " — it is a directory; use list_files")
+    text = text if text is not None else read(full)
+    lines = text.splitlines()
+    start = max(1, int(args.get("offset") or 1))
+    count = max(1, min(READ_LINES, int(args.get("limit") or READ_LINES)))
+    shown = lines[start - 1:start - 1 + count]
+    body = "\n".join(f"{number:>5}\t{line}" for number, line in enumerate(shown, start))
+    tail = (f"\n(lines {start}-{start + len(shown) - 1} of {len(lines)}; read on with offset {start + len(shown)})"
+            if start - 1 + len(shown) < len(lines) else "")
+
+    return (body or "(empty)") + tail
+
+
+def tool_search(args, working):
+    host = bool(args.get("host"))
+    full, _, why = tool_target(args.get("path") or ("app" if host else "."), host)
+    if why:
+        return f"refused: {why}"
+    pattern = str(args.get("pattern") or "")
+    try:
+        compiled = re.compile(pattern)
+    except re.error as error:
+        return f"refused: the pattern is not a valid regular expression ({error})"
+    command = ["grep", "-rnIE", "--exclude-dir=node_modules", "--exclude-dir=.git", "--exclude-dir=storage",
+               "--exclude=.env*", "--exclude-dir=vendor", "-e", pattern, full]
+    if f"{os.sep}vendor" in full:
+        command.remove("--exclude-dir=vendor")
+    if args.get("glob"):
+        command.insert(2, f"--include={args['glob']}")
+    found = subprocess.run(command, capture_output=True, text=True, timeout=60).stdout.splitlines()
+    module = os.path.realpath(MODULE) + os.sep
+    # The writer's copy wins over the disk for the files it changed.
+    hits = [hit for hit in found if not (hit.startswith(module) and hit[len(module):].split(":", 1)[0] in working)]
+    for clean, content in sorted(working.items()):
+        path = module + clean
+        if (path == full or path.startswith(full.rstrip(os.sep) + os.sep)) and \
+                (not args.get("glob") or fnmatch.fnmatch(os.path.basename(clean), args["glob"])):
+            hits += [f"{path}:{number}:{line}" for number, line in enumerate(content.splitlines(), 1) if compiled.search(line)]
+    base = (os.path.realpath(ROOT) if host else os.path.realpath(MODULE)) + os.sep
+    hits = [(hit[len(base):] if hit.startswith(base) else hit)[:240] for hit in hits]
+    if not hits:
+        return "no matches"
+
+    return "\n".join(hits[:80]) + (f"\n… {len(hits) - 80} more; narrow the path or pattern" if len(hits) > 80 else "")
+
+
+def tool_list(args, working):
+    full, clean, why = tool_target(args.get("path"), args.get("host"))
+    if why:
+        return f"refused: {why}"
+    if not os.path.isdir(full) and not any(path.startswith(f"{clean}/") for path in working if clean):
+        return f"{args.get('path')} is not a directory"
+    names = []
+    for folder, directories, files in os.walk(full):
+        directories[:] = sorted(name for name in directories if name not in ("vendor", "node_modules", ".git", "storage"))
+        names += [os.path.relpath(os.path.join(folder, name), full) for name in sorted(files) if not name.startswith(".env")]
+    names += [os.path.relpath(path, clean) + "  (new, in your working copy)" for path in working
+              if clean and path.startswith(f"{clean}/") and disk_text(path) is None]
+
+    return "\n".join(names[:200]) + (f"\n… {len(names) - 200} more" if len(names) > 200 else "") if names else "(empty)"
+
+
+def nearest_text(text, wanted):
+    """The lines of `text` closest to an old_string that is not there, so the writer copies the real ones
+    instead of guessing again."""
+    lines, size = text.splitlines(), max(1, len(wanted.splitlines()))
+    best, at = 0.0, 0
+    for start in range(0, max(1, len(lines) - size + 1)):
+        ratio = difflib.SequenceMatcher(None, "\n".join(lines[start:start + size]), wanted, autojunk=False).ratio()
+        if ratio > best:
+            best, at = ratio, start
+    shown = lines[max(0, at - 2):at + size + 2]
+
+    return "\n".join(f"{number:>5}\t{line}" for number, line in enumerate(shown, max(0, at - 2) + 1))
+
+
+def writable(clean, held):
+    """Why the writer may not change this module path, or None. Takes the file's claim on first touch,
+    so a file another worker holds is refused at the edit, not after a whole check."""
+    why = path_refusal(clean)
+    if why:
+        return why
+    key = os.path.join(MODULE, clean)
+    if claim_path(key) in HELD_CLAIMS or key in held:
+        return None
+    if not take_claim(key):
+        return "another worker is writing this file; leave it to them"
+    HELD_CLAIMS.append(claim_path(key))
+    held.add(key)
+
+    return None
+
+
+def keep(working, clean, content):
+    """Store a file in the working copy; a file edited back to the tree's text is no change at all."""
+    if content == disk_text(clean):
+        working.pop(clean, None)
+        return
+    working[clean] = content
+
+
+def tool_edit(args, working, held):
+    _, clean, why = tool_target(args.get("path"))
+    if why or clean is None:
+        return f"refused: {why or 'only module files can be edited'}"
+    why = writable(clean, held)
+    if why:
+        return f"refused: {clean}: {why}"
+    current = working.get(clean, disk_text(clean))
+    if current is None:
+        return f"refused: {clean} does not exist — create it with write_file"
+    old, new = str(args.get("old_string", "")), str(args.get("new_string", ""))
+    if not old or old == new:
+        return "refused: old_string must be non-empty and differ from new_string"
+    count = current.count(old)
+    if count == 0:
+        return f"refused: old_string is not in {clean}. The closest lines are:\n{nearest_text(current, old)}\nCopy the text exactly (without the line numbers)."
+    if count > 1 and not args.get("replace_all"):
+        return f"refused: old_string matches {count} places in {clean}; include more surrounding lines, or set replace_all"
+    keep(working, clean, current.replace(old, new) if args.get("replace_all") else current.replace(old, new, 1))
+    diff = list(difflib.unified_diff(current.splitlines(), working.get(clean, current).splitlines(), lineterm="", n=1))[2:]
+
+    return f"edited {clean}:\n" + "\n".join(diff[:40]) + ("\n…" if len(diff) > 40 else "")
+
+
+def tool_write(args, working, held):
+    _, clean, why = tool_target(args.get("path"))
+    if why or clean is None:
+        return f"refused: {why or 'only module files can be written'}"
+    if disk_text(clean) is not None:
+        return f"refused: {clean} exists — change it with edit_file"
+    why = writable(clean, held) or duplicate_class(str(args.get("content", "")), clean)
+    if why:
+        return f"refused: {clean}: {why}"
+    keep(working, clean, str(args.get("content", "")).rstrip() + "\n")
+
+    return f"wrote {clean} ({len(working[clean].splitlines())} lines) to your working copy"
+
+
+def check_in_lane(code, working, answer_file=None):
+    """verify_and_judge inside the one verification lane, or None when the lane or a file stayed held.
+
+    Written and verified inside the lane: files written outside it sat in the tree while another worker's
+    Pest run collected the whole suite, and the retry chased an error it never made. The lane is held to
+    the verdict, the proof check included (ECON-001's baseline once read QUAL-006's rejected planner)."""
+    lane = await_claim(VERIFY_LANE)
+    if lane is None:
+        print("  left for the next pass: the verification lane stayed held")
+        return None
+    try:
+        return verify_and_judge(code, working, "", answer_file)
+    finally:
+        release_claims([lane])
+
+
+def refresh_claims():
+    """Touch every claim this attempt holds: an attempt can outlive the stale window of its own claims,
+    and a claim that reads as stale is taken by the next worker in the middle of this one's work."""
+    for path in HELD_CLAIMS:
+        if os.path.exists(path):
+            os.utime(path)
+
+
+def writer_conversation(context, working, failure, dropped=()):
+    return [{"role": "system", "content": IMPLEMENT_PROMPT},
+            {"role": "user", "content": context + resume_note(working, failure, dropped)}]
+
+
+def save_transcript(code, conversation):
+    """The attempt as the writer lived it, without the shared prompt: what to read when a row goes stuck."""
+    os.makedirs(ATTEMPTS, exist_ok=True)
+    with open(os.path.join(ATTEMPTS, f"{code}.transcript.json"), "w", encoding="utf-8") as handle:
+        json.dump(conversation[2:], handle, indent=1)
+
+
+def call_line(name, args):
+    shown = {key: (value if len(str(value)) <= 60 else str(value)[:57] + "...") for key, value in args.items()
+             if key not in ("content", "new_string")}
+
+    return f"{name}({', '.join(f'{key}={value!r}' for key, value in shown.items())})"
+
+
+def write_slice(code, context, working, failure, dropped):
+    """Run the writer until the slice is delivered or the attempt ends.
+
+    Returns ("delivered", (written, proof after)), ("later", None) when nothing is counted (a held lane, a
+    provider error, an unrunnable proof) or ("failed", reason). The working copy is saved after every change.
+    """
+    conversation = writer_conversation(context, working, failure, dropped)
+    started, checks, version = time.time(), 0, 0
+    seen, repeats, reads, last_signature, same_failures, silent = {}, 0, 0, None, 0, 0
+    last_failure = failure
+
+    for step in range(1, AGENT_STEPS + 1):
+        if time.time() - started > AGENT_SECONDS:
+            return "failed", f"the writer ran out of time ({AGENT_SECONDS // 60} min) before a check passed.\n{last_failure}"
+        if in_peak(datetime.datetime.now(datetime.timezone.utc)):
+            # An attempt now runs for minutes; one started before a window must not bill inside it.
+            print("  a peak window opened; the attempt parks with its working copy kept")
+            save_work(code, working, last_failure)
+            return "later", None
+        refresh_claims()
+        publish("implementing", f"{code} step {step}")
+        payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
+                   "reasoning_effort": WRITER_REASONING_EFFORT, "messages": conversation,
+                   "tools": WRITER_TOOLS, "tool_choice": "auto"}
+        try:
+            data = model_call(payload, purpose=f"implementing {code} step {step}")
+        except urllib.error.HTTPError as error:
+            print(f"  the provider refused the request ({error.code}): {error.read().decode(errors='replace')[:400]}")
+            return "later", None
+        if not data.get("choices"):
+            print(f"  the provider returned no answer, not counted as an attempt: {json.dumps(data)[:400]}")
+            return "later", None
+        choice = data["choices"][0]
+        message = choice.get("message") or {}
+        calls = message.get("tool_calls") or []
+        if choice.get("finish_reason") == "length":
+            return "failed", "unfinished: the writer's turn hit the output cap; take smaller steps, one edit per call."
+
+        # In thinking mode the provider requires the reasoning of a tool-calling turn to be sent back with it.
+        conversation.append({"role": "assistant", "content": message.get("content") or "",
+                             **({"reasoning_content": message["reasoning_content"]} if message.get("reasoning_content") else {}),
+                             **({"tool_calls": calls} if calls else {})})
+
+        if not calls:
+            silent += 1
+            if silent >= 2 and working and checks < AGENT_CHECKS:
+                calls = [{"id": "", "function": {"name": "check", "arguments": "{}"}}]
+            if not calls:
+                if silent >= 2:
+                    return "failed", "the writer stopped calling tools without a change to check:\n" + (message.get("content") or "")[:1200]
+                conversation.append({"role": "user", "content": "Use the tools: edit_file/write_file to change the "
+                                     "code, check when it is done, give_up if the specification cannot hold."})
+                continue
+        silent = 0
+
+        for call in calls:
+            name = call["function"]["name"]
+            try:
+                args = json.loads(call["function"].get("arguments") or "{}")
+            except ValueError as error:
+                args, result = {}, f"refused: the arguments were not valid JSON ({error}); send one smaller call"
+            else:
+                result = None
+            print(f"  {step:>2}. {call_line(name, args)}")
+
+            key = (name, json.dumps(args, sort_keys=True), version)
+            if result is None and key in seen and name != "give_up":
+                repeats += 1
+                result = ("You already made this exact call and nothing has changed since, so the answer is the same:\n"
+                          + seen[key][:1500] + "\nDo something different.")
+                if repeats >= AGENT_REPEATS:
+                    return "failed", f"the writer kept repeating calls whose answer it had.\n{last_failure}"
+
+            if result is None and name == "give_up":
+                return "failed", f"the writer gave up: {args.get('reason', '')}\n{last_failure}"
+
+            if result is None and name == "check":
+                if not working:
+                    result = "Your working copy is empty: there is nothing to check. Edit the code first."
+                elif checks >= AGENT_CHECKS:
+                    return "failed", f"the writer used its {AGENT_CHECKS} checks.\n{last_failure}"
+                else:
+                    checks += 1
+                    verdict = check_in_lane(code, working)
+                    if verdict is None or verdict == 0:
+                        save_work(code, working, last_failure)
+                        return "later", None
+                    if not isinstance(verdict, Rejected):
+                        return "delivered", verdict
+                    last_failure = verdict.reason
+                    save_work(code, working, last_failure)
+                    signature = failure_signature(verdict.reason)
+                    same_failures = same_failures + 1 if signature == last_signature else 1
+                    last_signature = signature
+                    if same_failures >= AGENT_REPEATS:
+                        return "failed", verdict.reason
+                    result = (f"CHECK {checks}/{AGENT_CHECKS} FAILED; the tree is restored and your working copy is kept.\n"
+                              + verdict.reason[:6000])
+                    if same_failures > 1:
+                        result += ("\n\nThis is the SAME failure as your previous check: your edits since did not reach its "
+                                   "cause. Read the failing line and the code it runs before you edit again.")
+                    seen[key] = result
+
+            if result is None and reads >= AGENT_READ_STREAK and name in ("read_file", "search", "list_files"):
+                # A nudge is ignored (ATK-001 read for 28 turns without one edit): reading stops being offered.
+                result = (f"refused: {reads} read-only calls without a change. Reading is closed until you edit_file or "
+                          "write_file; if you cannot name the edit, give_up with what is missing.")
+                reads += 1
+
+            if result is None:
+                tools = {"read_file": lambda: tool_read(args, working), "search": lambda: tool_search(args, working),
+                         "list_files": lambda: tool_list(args, working), "edit_file": lambda: tool_edit(args, working, HELD),
+                         "write_file": lambda: tool_write(args, working, HELD)}
+                before = json.dumps(working, sort_keys=True)
+                try:
+                    result = tools[name]() if name in tools else f"refused: there is no tool named {name}"
+                except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+                    result = f"the tool failed: {error}"
+                if json.dumps(working, sort_keys=True) != before:
+                    version, reads = version + 1, 0
+                    save_work(code, working, last_failure)
+                else:
+                    reads += 1
+                seen[key] = result
+                if not result.startswith(("edited", "wrote")):
+                    print(f"      {result.splitlines()[0][:110] if result.strip() else '(empty)'}")
+
+            if reads == AGENT_READ_STREAK:
+                result += (f"\n\n[{reads} calls without a change: reading closes after this one. Make the edit, or give_up "
+                           "with the reason.]")
+            if AGENT_STEPS - step == 5:
+                result += "\n\n[5 turns left in this attempt: finish the change and call check.]"
+            if len(result) > TOOL_RESULT_CHARS:
+                result = result[:TOOL_RESULT_CHARS] + "\n… (cut; narrow the call)"
+            # A check the harness ran for a writer that stopped calling tools answers as the user.
+            conversation.append({"role": "tool", "tool_call_id": call["id"], "content": result} if call["id"]
+                                else {"role": "user", "content": result})
+
+        save_transcript(code, conversation)
+        if (data.get("usage") or {}).get("prompt_tokens", 0) > AGENT_CONTEXT_TOKENS:
+            print("  the conversation grew past its bound; the writer restarts from its working copy and the last check")
+            conversation = writer_conversation(context, working, last_failure)
+
+    return "failed", f"the writer used its {AGENT_STEPS} turns before a check passed.\n{last_failure}"
+
+
+# The files this process claimed while the writer edited, beyond the plan's own.
+HELD = set()
 
 
 def apply_edits(clean, body, current):
@@ -3128,9 +3607,8 @@ def mark_delivered(code, worker, kept):
 def implement(code, answer_file=None):
     """Have the harness write one task's code, then verify it locally.
 
-    Fail-closed on purpose: it only creates files that do not exist yet (editing live code by hand
-    stays a human act), refuses anything outside the module, and runs the new test itself. A task is
-    never marked done here — that still needs the full gate.
+    The writer edits a working copy with tools and runs the checks itself; only a passing check leaves
+    files in the tree. A task is never marked done here — that still needs its proof (`task.py done`).
     """
     assert_window_matches_config()
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -3225,99 +3703,38 @@ def implement(code, answer_file=None):
         publish("working", f"{code} waiting on {os.path.basename(other)}")
         return 0
     atexit.register(release_claims, claims)
+    atexit.register(lambda: release_claims([claim_path(key) for key in HELD]))
 
-    failure = previous_failure(code)
-    if failure:
-        # The last attempt's own output, so the retry corrects the actual error instead of guessing.
-        context += ("\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED. The check said:\n"
-                    + failure[:2000]
-                    + "\nFix exactly that and change nothing else.")
-
-    if not answer_file and provider_down():
-        print(f"  every DeepSeek key is cooling ({keys_state()}); no paid call this pass")
-        return 0
-    conversation = [{"role": "system", "content": IMPLEMENT_PROMPT}, {"role": "user", "content": context}]
-    working, last_signature, verdict = {}, None, None
-    for turn in range(1, WRITER_TURNS + 1):
-        answer, usage = writer_answer(code, context, answer_file, conversation)
-        if answer is None and usage.get("finish_reason") == "provider_error":
-            print(f"  the provider returned no answer, not counted as an attempt: {usage['error']}")
-            return 0
-        if answer is None:
-            record_failure(code, f"unfinished: {usage['finish_reason']}")
-            return 1
-        changes, refused = parse_answer(answer, working)
-
-        # What was refused, in the words the retry needs. Without this the retry only saw the test
-        # failure it caused: a plan whose data file was refused leaves code that reads a file nobody
-        # wrote, and the model repeats the same shape until its attempts run out.
-        refusal_note = ""
-        if refused:
-            refusal_note = "\n\nThese blocks from your answer were refused and NOT written:\n- " + "\n- ".join(refused)
-
-        print(f"{code} [{task['status']}] turn {turn}: {len(changes)} file(s) to write, refused {len(refused)}")
+    if answer_file:
+        # A saved block answer, verified for nothing and counted as nothing: a replay is for reading.
+        changes, refused = parse_answer(read(answer_file))
         for reason in refused:
             print(f"  ! {reason}")
-        if usage:
-            print(f"  tokens: prompt {usage.get('prompt_tokens')} "
-                  f"(cached {usage.get('prompt_cache_hit_tokens')}) output {usage.get('completion_tokens')}")
-
-        if not changes:
-            # Two different mistakes that used to share one message: an answer in prose, and an answer
-            # whose every block was refused. Telling the second "you wrote no FILE blocks" made it resend
-            # the same refused blocks (ALLY-001 spent its attempts that way).
-            if refused:
-                record_failure(code, "every block in your answer was refused, so nothing was written." + refusal_note)
-                return 1
-            print(f"  no blocks in the answer — {answer.strip().splitlines()[0][:100] if answer.strip() else 'empty reply'}")
-            record_failure(code, "your answer contained no ### FILE or ### EDIT blocks, so nothing could be "
-                                 "written. Reply with the blocks only, in the documented format.\n"
-                                 "--- your previous answer began:\n" + answer.strip()[:1200])
-            return 1
-
-        # What the writer has now is its working copy: every turn's edits stack on the last one.
-        working = {**working, **changes}
-
-        # Writing and verifying happen inside the one verification lane. Files written outside it sat
-        # on disk, unverified, while another worker's Pest run collected the whole suite -- one worker's
-        # broken file failed the other's slice, and the retry chased an error it never made. The lane is
-        # released between turns, so the tree is clean while the model thinks.
-        lane = await_claim(VERIFY_LANE)
-        if lane is None:
-            print("  left for the next pass: the verification lane stayed held")
+        verdict = check_in_lane(code, changes, answer_file) if changes else Rejected("the saved answer has nothing to write")
+        if verdict is None or verdict == 0:
             return 0
-        # The lane is held to the verdict, the proof check included: released after the slice's own tests,
-        # the files sat in the tree while that check ran, and another row's proof read code that was then
-        # rolled back (ECON-001's baseline failed on QUAL-006's rejected planner, 1 Oct 2026).
-        try:
-            verdict = verify_and_judge(code, working, refusal_note, answer_file)
-        finally:
-            release_claims([lane])
-        if not isinstance(verdict, Rejected):
-            break
-
-        # The same failure after a fix is not progress: stop and count the attempt instead of paying again.
-        signature = failure_signature(verdict.reason)
-        if signature == last_signature:
-            record_failure(code, verdict.reason)
+        if isinstance(verdict, Rejected):
+            print(verdict.reason[:3000])
             return 1
-        last_signature = signature
-        print(f"  turn {turn} rejected; the failure goes back to the writer with its work kept")
-        conversation += [
-            {"role": "assistant", "content": answer},
-            {"role": "user", "content": "Your changes were applied to a working copy and checked. The check said:\n"
-                                        + verdict.reason[:2500]
-                                        + "\nFix exactly that with EDIT blocks against your changed files as you left them; "
-                                          "change nothing else and do not resend whole files."},
-        ]
-    if verdict is None:
-        return 0
-    if isinstance(verdict, int):
-        return verdict
-    if isinstance(verdict, Rejected):
-        record_failure(code, verdict.reason)
-        return 1
-    written, after = verdict
+        written, after = verdict
+    if not answer_file:
+        if provider_down():
+            print(f"  every DeepSeek key is cooling ({keys_state()}); no paid call this pass")
+            return 0
+        # The writer resumes its own copy when an earlier attempt left one, and starts from the last failure
+        # either way: a retry that starts cold rewrites the slice and repeats the mistake.
+        working, failure, dropped = load_work(code)
+        if working:
+            print(f"  resuming the saved working copy: {', '.join(sorted(working))}")
+        outcome, result = write_slice(code, context, working, failure or previous_failure(code), dropped)
+        if outcome == "later":
+            return 0
+        if outcome == "failed":
+            print(f"  attempt ended: {result.splitlines()[0][:160]}; the working copy is kept for the next one")
+            record_failure(code, result)
+            return 1
+        written, after = result
+    drop_work(code)
 
     os.makedirs(IMPLEMENTED, exist_ok=True)
     with open(marker, "w", encoding="utf-8") as handle:
@@ -3332,7 +3749,7 @@ def implement(code, answer_file=None):
 
 
 class Rejected:
-    """A slice the checks refused. The disk is already restored; the writer's copy lives on in memory."""
+    """A slice the checks refused. The disk is already restored; the writer's copy lives on (CODE.work.json)."""
 
     def __init__(self, reason):
         self.reason = reason

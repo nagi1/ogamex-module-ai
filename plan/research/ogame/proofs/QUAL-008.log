@@ -1,2 +1,3 @@
-FAIL aspect:colonisation 1s —  FAIL colonisation 0 floor 1 settles new planets while slots remain
-PROOF: FAIL QUAL-008 (aspect:colonisation) at aspect:colonisation:  FAIL colonisation 0 floor 1 settles new planets while slots remain
+PASS test:ColonisationSituationTest 2s
+FAIL aspect:colonisation 0s — too early: the cohort has played under an hour on this change (not yet passing on 0.10h)
+PROOF: WAIT QUAL-008 (test:ColonisationSituationTest aspect:colonisation) at aspect:colonisation: too early: the cohort has played under an hour on this change (not yet passing on 0.10h)

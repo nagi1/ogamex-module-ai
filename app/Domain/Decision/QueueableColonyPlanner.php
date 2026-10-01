@@ -62,7 +62,7 @@ class QueueableColonyPlanner
             return null;
         }
 
-        $origin = $this->colonyShipPlanet($player->planets->all());
+        $origin = $this->originPlanet($player->planets->all());
         if ($origin === null) {
             return null;
         }
@@ -82,19 +82,28 @@ class QueueableColonyPlanner
     }
 
     /**
-     * The planet carrying an idle colony ship.
+     * The planet a colony leaves from: the one holding a colony ship, else the account's first.
+     *
+     * Waiting for the ship before committing to a free slot is what left the cohort never
+     * colonising: the slot is claimed by deciding to settle it, and the ship a shipyard builds
+     * for that decision belongs to the same decision rather than to its precondition. The host
+     * still owns the ship's machine name and the reach of the walk.
      *
      * @param array<int, PlanetService> $planets
      */
-    private function colonyShipPlanet(array $planets): ?PlanetService
+    private function originPlanet(array $planets): ?PlanetService
     {
+        $ship = ColonisationMission::getRequiredShipMachineNames()[0];
+
         foreach ($planets as $planet) {
-            if ($planet->getShipUnits()->getAmountByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]) > 0) {
+            if ($planet->getShipUnits()->getAmountByMachineName($ship) > 0) {
                 return $planet;
             }
         }
 
-        return null;
+        $first = array_key_first($planets);
+
+        return $first === null ? null : $planets[$first];
     }
 
     /**
