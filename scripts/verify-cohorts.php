@@ -28,8 +28,10 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\BuildingQueue;
 use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 
 echo "\n=== cohort verification — ".now()->toDateTimeString()." ===\n";
 
@@ -187,7 +189,8 @@ printf(
 //   NAKED_BESIDE_WALLED  an account with a planet at zero defence while a sibling holds a real wall
 //   WALL_CEILING         one planet holding more defence units than any single planet needs
 //   ALLIANCE_SHARE       one alliance holding more than this share of the AI accounts
-//   IDLE_QUEUES          an account that played in the last hour with most planets' build queues empty
+//   IDLE_QUEUES          an account that played in the last hour with most buildable planets' queues empty
+//   UNIVERSE_SPEED       the economy or a fleet speed above the 1000x grand-test protocol
 $nakedBesideWalled = [];
 $overCeiling = [];
 $WALL_CEILING = 20_000;
@@ -239,21 +242,84 @@ if (Schema::hasColumn('users', 'alliance_id')) {
     }
 }
 
-// A player who logs in fills every planet's build queue; an account that played this hour and left
-// most of them empty grows at a fraction of its production, which the public highscore shows.
+// A player who logs in fills every planet's build queue where something can be built. IDLE_QUEUES
+// counts only the planets the planner has a step for and that have no building in progress: a planet
+// whose every candidate the host refuses (no free field, lab busy, price plus reserve) is SATURATED,
+// which is information about the universe, not a defect of the account, and is printed below.
 $IDLE_SHARE = 0.5;
 $idleQueues = [];
+$saturated = [];
 $playedThisHour = DB::table('ai_work_items')->whereIn('player_id', $playerIds)
     ->where('kind', AiWorkKind::RunSession->value)->where('updated_at', '>=', now()->subHour())
     ->distinct()->pluck('player_id')->map(fn ($id): int => (int) $id)->all();
 $busyPlanets = BuildingQueue::query()->where('processed', 0)->where('time_end', '>', time())
     ->distinct()->pluck('planet_id')->map(fn ($id): int => (int) $id)->all();
 
+$buildingPlanner = app(QueueableBuildingPlanner::class);
+
 foreach ($playedThisHour as $accountId) {
     $ownPlanets = array_column($byAccount[$accountId] ?? [], 'id');
-    $idle = array_diff($ownPlanets, $busyPlanets);
-    if ($ownPlanets !== [] && count($idle) / count($ownPlanets) > $IDLE_SHARE) {
-        $idleQueues[] = sprintf('player %d played this hour with %d of %d build queues empty', $accountId, count($idle), count($ownPlanets));
+    if ($ownPlanets === []) {
+        continue;
+    }
+
+    $player = app(PlayerServiceFactory::class)->make($accountId, true);
+    $planned = array_map(static fn ($step): int => $step->planetId, $buildingPlanner->steps($accountId, $player));
+    $idle = array_filter($ownPlanets, static fn (int $id): bool => in_array($id, $planned, true) && !in_array($id, $busyPlanets, true));
+
+    if (count($idle) / count($ownPlanets) > $IDLE_SHARE) {
+        $idleQueues[] = sprintf('player %d played this hour with %d of %d planets buildable and idle', $accountId, count($idle), count($ownPlanets));
+    }
+
+    $reasons = [];
+    $profile = AiProfile::query()->where('player_id', $accountId)->first();
+    foreach ($player->planets->all() as $planet) {
+        $id = $planet->getPlanetId();
+        if (!in_array($id, $ownPlanets, true) || in_array($id, $planned, true) || in_array($id, $busyPlanets, true)) {
+            continue;
+        }
+        $reason = saturation_reason($buildingPlanner, $profile, $planet);
+        $reasons[$reason] = ($reasons[$reason] ?? 0) + 1;
+    }
+    if ($reasons !== []) {
+        $saturated[] = sprintf('player %d: %d planet(s) with every candidate refused (%s)', $accountId, array_sum($reasons), implode(', ', array_map(
+            static fn (string $reason, int $count): string => "{$reason}: {$count}",
+            array_keys($reasons),
+            $reasons,
+        )));
+    }
+}
+
+/**
+ * Why a planet that nothing could be queued on is not building: the refusal of its first candidate,
+ * asked of the planner's own gates. A technology among the candidates means the lab is taken.
+ */
+function saturation_reason(QueueableBuildingPlanner $planner, AiProfile $profile, PlanetService $planet): string
+{
+    foreach ($planner->passes($profile) as $candidates) {
+        foreach ($candidates($planet) as $candidate) {
+            if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {
+                return 'lab busy';
+            }
+
+            return $planner->refusal($planet, $candidate) ?? 'queueable';
+        }
+    }
+
+    return 'no candidate';
+}
+
+// The grand-test protocol runs the economy at 1000x (local-docker-dev/capacity-run.sh). A cohort run
+// faster than that fills every field and banks billions in a day (90,000x did, on 1 Oct 2026), and
+// every human-timescale measure stops meaning anything; reseed instead of raising it.
+$UNIVERSE_SPEED = 1000;
+$tooFast = [];
+if (Schema::hasTable('settings')) {
+    $speeds = DB::table('settings')->where('key', 'economy_speed')->orWhere('key', 'like', 'fleet_speed%')->pluck('value', 'key');
+    foreach ($speeds as $name => $value) {
+        if ((float) $value > $UNIVERSE_SPEED) {
+            $tooFast[] = sprintf('%s is %s, above the %dx grand-test protocol', $name, $value, $UNIVERSE_SPEED);
+        }
     }
 }
 
@@ -265,6 +331,7 @@ $invariants = [
     'WALL_CEILING' => $overCeiling,
     'ALLIANCE_SHARE' => $allianceShare,
     'IDLE_QUEUES' => $idleQueues,
+    'UNIVERSE_SPEED' => $tooFast,
 ];
 
 $fired = array_keys(array_filter($invariants, static fn (array $rows): bool => $rows !== []));
@@ -281,6 +348,12 @@ foreach ($invariants as $name => $rows) {
 }
 
 echo $fired === [] ? '' : 'QUALITY: FAIL '.implode(' ', $fired)."\n";
+
+// Information, not a violation: planets the planner had nothing to queue on because the host refused
+// every candidate. When this covers most planets of most accounts the run is over (reseed).
+foreach ($saturated as $row) {
+    echo '  SATURATED '.$row."\n";
+}
 
 // The expensive part, only for the accounts asked for. This is what answers "why is this account
 // doing nothing": the account's state, the capabilities the perception publishes, the step the
