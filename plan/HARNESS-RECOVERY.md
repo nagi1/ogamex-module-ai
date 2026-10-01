@@ -40,6 +40,26 @@ Output is persistent: `scripts/harness-log.py` (started by `harness-live.sh`) fo
 `plan/research/ogame/logs/` (git-ignored). The page shows events (stages, attempts, passes, failures)
 by default and every line on request; windows of 15 min, 1 h and 3 h.
 
+### What the Situation kit found (1 Oct 2026)
+
+`tests/Support/Situation.php` plants state and runs a real session in about a second; a failed
+expectation prints the ranked candidates with their score components. First verdicts:
+
+- **Raids and espionage never happen (ATK-001, DEF-35).** The account ranks no Spy or Raid
+  candidate at all. `QueueableSpyPlanner::target()` takes the first 20 planets in the universe by
+  `id`, always the oldest (other AI accounts, already probed), so a neighbour created later is never
+  considered, however close or inactive. The 12 seeded inactive neighbours have ids 23-34. Candidates
+  must be chosen by relevance in SQL before the cap. Row notes carry the fix direction.
+- **Recycling loses to building (FLEET-002).** Recycle is offered but scores 27.3 (safety 15,
+  resource_need 12) against Build 65.5 (archetype_preference 25, resource_need 30, safety 10): the
+  fixed score table in `CandidateActionFactory::features` (ARB-001).
+- **Reactive fleet save works (FLEET-003).** With ships on hand the session makes the save. The live
+  situation had failed because a fresh account owns no ships; live situations now lend them.
+
+Rule that came out of it: when a fast proof fails, read the ranked candidates first. If the expected
+action is not among them, the defect is candidate generation (a planner or its target selection), not
+scoring, and the row's file list must name that planner.
+
 ### Next harness work (in order)
 
 1. **Give every open P0/P1 row a fast proof.** Rows raised automatically from a cohort read
