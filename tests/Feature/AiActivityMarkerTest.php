@@ -79,9 +79,12 @@ test('the next AI session applies a finished host queue before deciding', functi
     $firstSession = aiMarkerSession($profile, 'queue-building');
     app()->makeWith(ProcessAiWork::class, ['workItemId' => $firstSession->id])->handle();
 
+    // A login now queues a step on every planet that can take one (ECON-001), and the fixture has two,
+    // so the intent this test follows is the one for the planet it asserts on.
     $intent = AiWorkItem::query()
         ->where('player_id', $profile->player_id)
         ->where('kind', AiWorkKind::BuildFirstBuilding)
+        ->where('payload->planet_id', $this->currentPlanetId)
         ->sole();
     app()->makeWith(ProcessAiWork::class, ['workItemId' => $intent->id])->handle();
 
