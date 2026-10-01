@@ -1,0 +1,13 @@
+=== step 0.1 git status --short ===
+ M plan/research/ogame/evidence/takeover-20261001-1304/LOG.md
+ M plan/tasks/tasks.db
+?? plan/research/ogame/evidence/20261001-1338/
+
+=== git log -3 ===
+3b237ed Update fleet and social exchange attempts
+56327d3 Add new scorecards and proof logs for Ogame AI evaluations
+30a4ff9 DEF-33: one attack cap, stated once (bashing limit is the single source)
+
+=== step 0.2 harness (owner: LEAVE RUNNING) ===
+3263574 bash scripts/harness-live.sh
+3268935 bash scripts/harness-live.sh

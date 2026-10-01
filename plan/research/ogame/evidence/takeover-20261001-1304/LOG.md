@@ -554,3 +554,14 @@ on main @ 30a4ff9 (claude already merged)
 harness stopped: none
 30a4ff9 DEF-33: one attack cap, stated once (bashing limit is the single source)
 965ef55 instructions: one contract for every agent, and a cheaper, clearer writer prompt
+
+## Part B — SKIPPED (owner direction)
+
+Owner: the harness does the implementation; Copilot's role is watcher/enforcer + evidence.
+DEF-38 was claimed, read, then unclaimed without editing anything. Part B is not Copilot's lane.
+Proceeding to Part C (evidence run, full hour wait).
+
+## Part C — SKIPPED (owner direction)
+
+Owner: skip the evidence run; finalize and stop. The harness stays running and does the work.
+Copilot's takeover is complete at Part A (merge) + this LOG.
