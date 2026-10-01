@@ -31,12 +31,15 @@ test('the reserve floor is the published buffer reduced by the production that r
     $planet = reservePlanet($this->currentUserId);
     $floor = app(ReserveFloor::class)->floor($planet, ReserveFloor::ECONOMY_HOURS);
 
+    // The buffer is a fraction of the balance, never of the storage capacity (see ReserveFloor).
+    $held = $planet->getResources();
+
     expect($floor->metal->get())
-        ->toBe(max(0.0, $planet->metalStorage()->get() * ReserveFloor::BUFFER - $planet->getMetalProductionPerHour() * ReserveFloor::ECONOMY_HOURS))
+        ->toBe(max(0.0, $held->metal->get() * ReserveFloor::BUFFER - $planet->getMetalProductionPerHour() * ReserveFloor::ECONOMY_HOURS))
         ->and($floor->crystal->get())
-        ->toBe(max(0.0, $planet->crystalStorage()->get() * ReserveFloor::BUFFER - $planet->getCrystalProductionPerHour() * ReserveFloor::ECONOMY_HOURS))
+        ->toBe(max(0.0, $held->crystal->get() * ReserveFloor::BUFFER - $planet->getCrystalProductionPerHour() * ReserveFloor::ECONOMY_HOURS))
         ->and($floor->deuterium->get())
-        ->toBe(max(0.0, $planet->deuteriumStorage()->get() * ReserveFloor::BUFFER - $planet->getDeuteriumProductionPerHour() * ReserveFloor::ECONOMY_HOURS));
+        ->toBe(max(0.0, $held->deuterium->get() * ReserveFloor::BUFFER - $planet->getDeuteriumProductionPerHour() * ReserveFloor::ECONOMY_HOURS));
 });
 
 test('a floor never goes negative, whatever the production', function (): void {
@@ -55,25 +58,18 @@ test('a floor never goes negative, whatever the production', function (): void {
 });
 
 /**
- * The planner is what the reserve guards: a planet that can pay the price but not the price plus the
- * floor must fall through to nothing, and one that can pay both must build. The scenario keeps every
- * other pass quiet -- deep mines never repay so the economy has nothing, and no solar plant means the
- * cheapest capacity is the only answer -- so the boundary is read off the first candidate alone.
+ * The planner is what the reserve guards: the buffer is a fraction of the balance, so a planet holding
+ * only the price keeps almost nothing back, and the production that arrives while saving refills even
+ * that. The scenario keeps every other pass quiet -- deep mines never repay so the economy has nothing,
+ * and no solar plant means the cheapest capacity is the only answer -- so the first candidate is read alone.
  */
-test('the planner refuses a build the price alone covers and accepts it once the floor is met', function (): void {
+test('the planner builds what the balance covers once the production refills the floor', function (): void {
     reserveProfile($this->currentUserId);
     reserveDeepPlanet();
 
     $planet = reservePlanet($this->currentUserId);
-    $price = ObjectService::getObjectPrice('solar_plant', $planet);
-    $floor = app(ReserveFloor::class)->floor($planet, ReserveFloor::ECONOMY_HOURS);
+    $this->planetAddResources(priceOnly(ObjectService::getObjectPrice('solar_plant', $planet)));
 
-    // The price alone: the host would accept it, but the reserve will not.
-    $this->planetAddResources(priceOnly($price));
-    expect(app(QueueableBuildingPlanner::class)->plan($this->currentUserId))->toBeNull();
-
-    // The price plus the floor: the same account now builds.
-    $this->planetAddResources($floor);
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
     expect($plan)->not->toBeNull()
@@ -98,7 +94,7 @@ test('a refused building names the host gate that refuses it', function (string 
 })->with([
     'a mine the planet can pay for' => ['metal_mine', 0, true, null],
     'a mine forty levels up' => ['metal_mine', 40, false, 'price plus reserve'],
-    'a factory whose prerequisites are missing' => ['nanite_factory', 0, true, 'requirements'],
+    'a factory whose prerequisites are missing' => ['nano_factory', 0, true, 'requirements'],
 ]);
 
 function reserveProfile(int $playerId): AiProfile
