@@ -2490,8 +2490,21 @@ def status():
 
 
 def provider_down():
-    """True while a stalled call marked the provider down less than PROVIDER_PAUSE_SECONDS ago."""
-    return os.path.exists(PROVIDER_DOWN) and time.time() - os.path.getmtime(PROVIDER_DOWN) < PROVIDER_PAUSE_SECONDS
+    """True while the provider is marked down: a stall less than PROVIDER_PAUSE_SECONDS ago, or after the
+    pause while another writer's probe is still out. Exactly one writer probes when the pause ends: three
+    shards starting together all probed and all stalled (1 Oct 2026 21:2x)."""
+    if not os.path.exists(PROVIDER_DOWN):
+        return False
+    if time.time() - os.path.getmtime(PROVIDER_DOWN) < PROVIDER_PAUSE_SECONDS:
+        return True
+    probe = PROVIDER_DOWN + ".probe"
+    if os.path.exists(probe) and time.time() - os.path.getmtime(probe) < MODEL_DEADLINE_SECONDS + 60:
+        return True
+    try:
+        os.close(os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        os.utime(probe)  # a stale probe from a killed writer: take it over
+    return False
 
 
 def read_within(response, deadline):
@@ -2536,8 +2549,10 @@ def model_call(payload, purpose="a model answer"):
                 with urllib.request.urlopen(request, timeout=MODEL_TIMEOUT_SECONDS) as response:
                     data = read_within(response, started + MODEL_DEADLINE_SECONDS)
                 record_usage(purpose, data, time.time() - started)
-                if data.get("choices") and os.path.exists(PROVIDER_DOWN):
-                    os.remove(PROVIDER_DOWN)
+                if data.get("choices"):
+                    for marker in (PROVIDER_DOWN, PROVIDER_DOWN + ".probe"):
+                        if os.path.exists(marker):
+                            os.remove(marker)
                 return data
             except urllib.error.HTTPError as error:
                 if error.code not in MODEL_RETRY_CODES or attempt == MODEL_ATTEMPTS:
@@ -2551,6 +2566,8 @@ def model_call(payload, purpose="a model answer"):
                 # at once queues again. Mark it down and give the pass back to the free stages.
                 with open(PROVIDER_DOWN, "w", encoding="utf-8") as handle:
                     handle.write(f"{datetime.datetime.now(datetime.timezone.utc):%H:%M} {purpose}\n")
+                if os.path.exists(PROVIDER_DOWN + ".probe"):
+                    os.remove(PROVIDER_DOWN + ".probe")
                 raise SystemExit(f"model stalled on {purpose}: {error}; provider marked down for {PROVIDER_PAUSE_SECONDS // 60} min")
             except (urllib.error.URLError, ConnectionError) as error:
                 # A dropped connection or the server's ten-minute close: retried like a 503, never a
