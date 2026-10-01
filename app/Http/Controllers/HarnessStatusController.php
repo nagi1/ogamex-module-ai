@@ -5,6 +5,7 @@ namespace Modules\AI\Http\Controllers;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use PDO;
 use Throwable;
@@ -41,6 +42,12 @@ class HarnessStatusController
 
     private const FEED = 10;
 
+    /** Most lines the log pane is sent: an hour of a busy harness is a few thousand. */
+    private const LOG_LINES = 4000;
+
+    /** A row that used its attempts waits this long before it is tried again (`COOLOFF_SECONDS`). */
+    private const COOLOFF_SECONDS = 2700;
+
     public function index(): View
     {
         $this->localOnly();
@@ -65,6 +72,55 @@ class HarnessStatusController
         }
 
         return response()->json($this->snapshot($this->fingerprint()));
+    }
+
+    /**
+     * The harness output of the last N minutes, from the persistent timestamped log.
+     *
+     * The harness's own log lives in /tmp and carries no times, so `scripts/harness-log.py` keeps a
+     * stamped copy under plan/research/ogame/logs. Reading that is what lets the page answer "what
+     * happened in the last hour" after a reload or a reboot.
+     */
+    public function log(Request $request): JsonResponse
+    {
+        $this->localOnly();
+
+        $minutes = max(5, min(180, (int) $request->query('minutes', 60)));
+        $cutoff = now('UTC')->subMinutes($minutes);
+        $lines = [];
+
+        foreach ($this->persistentLogs() as $file) {
+            $day = substr(basename($file, '.log'), strlen('harness-'));
+            if ($day < $cutoff->format('Y-m-d')) {
+                continue;
+            }
+
+            foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $raw) {
+                [$time, $text] = array_pad(explode("\t", $raw, 2), 2, '');
+                if ($day.' '.$time < $cutoff->format('Y-m-d H:i:s')) {
+                    continue;
+                }
+
+                $lines[] = ['t' => $time, 'text' => $text, 'kind' => $this->lineKind($text)];
+            }
+        }
+
+        $counts = array_count_values(array_column($lines, 'kind'));
+        // The default view is the events; plain lines (test and scorecard output) are sent only when asked
+        // for, so a full hour of events fits under the cap instead of being cut off by noise.
+        if (!$request->boolean('all')) {
+            $lines = array_values(array_filter($lines, static fn (array $line): bool => $line['kind'] !== 'plain'));
+        }
+        $total = count($lines);
+
+        return response()->json([
+            'minutes' => $minutes,
+            'total' => $total,
+            'counts' => $counts,
+            'truncated' => $total > self::LOG_LINES,
+            'since' => $cutoff->format('H:i:s'),
+            'lines' => array_slice($lines, -self::LOG_LINES),
+        ]);
     }
 
     /**
@@ -127,6 +183,16 @@ class HarnessStatusController
             $parts[] = 'status:'.(@filemtime($status) ?: 0);
         }
 
+        // What the page now draws from: the stamped log, the model ledger, the attempt counters, the
+        // newest scorecard and the cohort verdict.
+        foreach ([...$this->persistentLogs(), $this->path('plan/research/ogame/model-usage.jsonl'), '/tmp/harness-quality-grand.txt'] as $file) {
+            $parts[] = $file.':'.(@filemtime($file) ?: 0).':'.(@filesize($file) ?: 0);
+        }
+        $attempts = glob($this->path('plan/research/ogame/attempts/*.{count,stuck}'), GLOB_BRACE) ?: [];
+        $parts[] = 'attempts:'.count($attempts).':'.max([0, ...array_map('filemtime', $attempts)]);
+        $scorecards = glob($this->path('plan/research/ogame/scorecards/*.json')) ?: [];
+        $parts[] = 'scorecards:'.count($scorecards).':'.max([0, ...array_map('filemtime', $scorecards)]);
+
         return md5(implode('|', $parts));
     }
 
@@ -146,7 +212,318 @@ class HarnessStatusController
             'modelSlots' => count($this->modelSlotFiles()),
             'activity' => $this->activity(),
             'feed' => $this->feed(),
+            'queue' => $this->queue(),
+            'northStar' => $this->northStar(),
+            'model' => $this->model(),
+            'rows' => $this->rows(),
+            'cohort' => $this->cohort(),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function persistentLogs(): array
+    {
+        $files = glob($this->path('plan/research/ogame/logs/harness-*.log')) ?: [];
+        sort($files);
+
+        return $files;
+    }
+
+    /**
+     * Which kind of event a log line is. `plain` is everything that is not news: the scorecard and test
+     * output printed on every pass, and the banners that restate a state the header already shows.
+     * Order matters: the first rule that matches wins.
+     */
+    private function lineKind(string $text): string
+    {
+        $line = trim($text);
+
+        return match (true) {
+            (bool) preg_match('/^(PASS|FAIL)\s+\w+\s+\d+\s+floor/', $line) => 'plain',
+            (bool) preg_match('/^=== (QUALITY FAILED|LIVE VERIFICATION FAILED|cohort verification)|^(UNPROVEN|READY|WAITING|STUCK):|^delivered, not proven|^P0-P2 code rows|^model today|^next one free/', $line) => 'plain',
+            (bool) preg_match('/^=== |^--- (proving|parked)/', $line) => 'stage',
+            (bool) preg_match('/PROOF: PASS|DELIVERED|^done |test file\(s\): PASS|proven\b/i', $line) && !str_contains($line, 'NOT proven') => 'pass',
+            (bool) preg_match('/PROOF: FAIL|attempt \d+ failed|is stuck|STUCK:|did not hold|unfinished|test file\(s\): FAIL|SQLSTATE|Exception|proof (unchanged|regressed|suspect)/i', $line) => 'fail',
+            (bool) preg_match('/\[in_progress\]|file\(s\) to write|^raised |left for the next pass|skipped /i', $line) => 'work',
+            default => 'plain',
+        };
+    }
+
+    /**
+     * What the pipeline itself says about the queue, read once through its own `status` command.
+     *
+     * The rules for "proven", "delivered" and "cooling off" live in strategy-pipeline.py, so this asks it
+     * instead of restating them. Cached for a few seconds because a page with several tabs open would
+     * otherwise start a Python process per poll.
+     *
+     * @return array<string, mixed>
+     */
+    private function queue(): array
+    {
+        $output = Cache::remember('ai-harness-queue-status', 15, function (): string {
+            $command = 'cd '.escapeshellarg($this->path('')).' && timeout 20 python3 scripts/strategy-pipeline.py status 2>&1';
+
+            return (string) @shell_exec($command);
+        });
+
+        $queue = ['proven' => 0, 'closedBlind' => 0, 'delivered' => 0, 'ready' => 0, 'cooling' => 0,
+            'deliveredCodes' => [], 'stuck' => [], 'waiting' => [], 'nextInMinutes' => null, 'available' => $output !== ''];
+
+        if (preg_match('/(\d+) proven, (\d+) closed before proofs existed, (\d+) delivered but NOT proven, (\d+) ready now, (\d+) cooling off/', $output, $m)) {
+            [, $queue['proven'], $queue['closedBlind'], $queue['delivered'], $queue['ready'], $queue['cooling']] = array_map('intval', $m);
+        }
+        if (preg_match('/^delivered, not proven: (.+)$/m', $output, $m)) {
+            $queue['deliveredCodes'] = array_map('trim', explode(',', $m[1]));
+        }
+        if (preg_match('/^STUCK: ([^ ]+(?:, [^ ]+)*)/m', $output, $m)) {
+            $queue['stuck'] = array_map('trim', explode(',', $m[1]));
+        }
+        if (preg_match_all('/^WAITING: (\S+) — (.+)$/m', $output, $m, PREG_SET_ORDER)) {
+            $queue['waiting'] = array_map(static fn (array $row): array => ['code' => $row[1], 'why' => $row[2]], $m);
+        }
+        if (preg_match('/next one free in (\d+) min/', $output, $m)) {
+            $queue['nextInMinutes'] = (int) $m[1];
+        }
+
+        return $queue;
+    }
+
+    /**
+     * The player's day as the newest scorecard read it: one entry per aspect, passing or not.
+     *
+     * This is the north star the whole harness is judged by, so it leads the page. The newest read is
+     * the one whose `at` is latest, not whose file name sorts last: baselines and per-row proofs share
+     * the folder.
+     *
+     * @return array<string, mixed>
+     */
+    private function northStar(): array
+    {
+        $newest = null;
+
+        foreach (glob($this->path('plan/research/ogame/scorecards/*.json')) ?: [] as $file) {
+            $card = json_decode((string) file_get_contents($file), true);
+            if (!is_array($card) || !isset($card['aspects'], $card['at']) || !str_contains($file, 'grand')) {
+                continue;
+            }
+            if ($newest === null || (string) $card['at'] > (string) $newest['at']) {
+                $newest = $card;
+            }
+        }
+
+        if ($newest === null) {
+            return ['at' => null, 'aspects' => [], 'passing' => 0, 'total' => 0];
+        }
+
+        $aspects = [];
+        foreach ($newest['aspects'] as $name => $aspect) {
+            $aspects[] = [
+                'name' => (string) $name,
+                'pass' => (bool) ($aspect['pass'] ?? false),
+                'count' => (int) ($aspect['count'] ?? 0),
+                'floor' => (int) ($aspect['floor'] ?? 0),
+                'player' => (string) ($aspect['player'] ?? ''),
+            ];
+        }
+
+        // Failing aspects first: they are what the next row has to move.
+        usort($aspects, static fn (array $a, array $b): int => [$a['pass'], $a['name']] <=> [$b['pass'], $b['name']]);
+
+        return [
+            'at' => (string) $newest['at'],
+            'hours' => (int) ($newest['hours'] ?? 0),
+            'aspects' => $aspects,
+            'passing' => count(array_filter($aspects, static fn (array $a): bool => $a['pass'])),
+            'total' => count($aspects),
+        ];
+    }
+
+    /**
+     * Writer spend: today's totals and the last few calls, from the pipeline's own usage ledger.
+     *
+     * @return array<string, mixed>
+     */
+    private function model(): array
+    {
+        $file = $this->path('plan/research/ogame/model-usage.jsonl');
+        $model = ['calls' => 0, 'unfinished' => 0, 'answers' => 0, 'tokens' => 0, 'reasoning' => 0, 'recent' => []];
+        if (!is_file($file)) {
+            return $model;
+        }
+
+        $hourAgo = gmdate('Y-m-d\\TH:i:s\\Z', time() - 3600);
+        $writer = [];
+
+        foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $call = json_decode($line, true);
+            if (!is_array($call) || (string) ($call['at'] ?? '') < $hourAgo || !str_starts_with((string) ($call['purpose'] ?? ''), 'implementing')) {
+                continue;
+            }
+
+            $finished = ($call['finish'] ?? 'stop') === 'stop';
+            $model['calls']++;
+            $model['unfinished'] += $finished ? 0 : 1;
+            $model['tokens'] += (int) ($call['output'] ?? 0);
+            $model['reasoning'] += (int) ($call['reasoning'] ?? 0);
+            $writer[] = $call;
+        }
+
+        $model['recent'] = array_map(static fn (array $call): array => [
+            'at' => substr((string) $call['at'], 11, 8),
+            'code' => trim(substr((string) $call['purpose'], strlen('implementing'))),
+            'finish' => (string) ($call['finish'] ?? ''),
+            'output' => (int) ($call['output'] ?? 0),
+            'seconds' => (float) ($call['seconds'] ?? 0),
+        ], array_reverse(array_slice($writer, -6)));
+        unset($model['answers']);
+
+        return $model;
+    }
+
+    /**
+     * Every row the harness has touched, with what happened to it last, most urgent first.
+     *
+     * The old feed read "implemented" markers that the harness no longer writes, so it showed the same
+     * rows forever. This reads what the loop acts on: the attempt counter, the stuck marker, the last
+     * failure and the delivered list. Rows in the ledger the harness never tried are not here.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function rows(): array
+    {
+        $ledger = $this->openLedger();
+        $delivered = $this->queue()['deliveredCodes'];
+        $writing = [];
+        foreach ($this->workers() as $worker) {
+            // A shard that skipped a row ("skipped X (cooling off)") is not writing it.
+            if (!str_starts_with($worker['detail'], 'skipped') && preg_match('/\b([A-Z]+-\d+)\b/', $worker['detail'], $m)) {
+                $writing[$m[1]] = true;
+            }
+        }
+
+        $now = time();
+        // Only rows still open in the ledger: a frozen or finished row keeps its old counter, and listing
+        // it would bury what is moving tonight.
+        $codes = array_values(array_filter(array_unique([
+            ...array_map(static fn (string $f): string => basename($f, '.count'), glob($this->path('plan/research/ogame/attempts/*.count')) ?: []),
+            ...$delivered,
+            ...array_keys($writing),
+        ]), static fn (string $code): bool => isset($ledger[$code])));
+
+        $rows = [];
+        foreach ($codes as $code) {
+            $counter = $this->path("plan/research/ogame/attempts/{$code}.count");
+            $log = $this->path("plan/research/ogame/attempts/{$code}.log");
+            $attempts = is_file($counter) ? (int) trim((string) file_get_contents($counter)) : 0;
+            $touched = (int) max(@filemtime($counter) ?: 0, @filemtime($log) ?: 0);
+            $stuck = is_file($this->path("plan/research/ogame/attempts/{$code}.stuck"));
+
+            $state = match (true) {
+                isset($writing[$code]) => 'writing',
+                in_array($code, $delivered, true) => 'delivered',
+                $stuck => 'stuck',
+                $attempts >= 3 && $now - $touched < self::COOLOFF_SECONDS => 'cooling',
+                default => 'retrying',
+            };
+
+            // A row nobody has touched for hours is not part of tonight's work.
+            if ($state === 'retrying' && ($touched === 0 || $now - $touched > 10800)) {
+                continue;
+            }
+
+            $failure = '';
+            if (is_file($log) && $state !== 'delivered') {
+                $text = preg_replace('/\x1b\[[0-9;]*m/', '', (string) file_get_contents($log)) ?? '';
+                foreach (preg_split('/\R/', $text) ?: [] as $line) {
+                    if (trim($line) !== '') {
+                        $failure = mb_substr(trim($line), 0, 160);
+                        break;
+                    }
+                }
+            }
+
+            $rows[] = [
+                'code' => $code,
+                'title' => $ledger[$code]['title'],
+                'priority' => $ledger[$code]['priority'],
+                'state' => $state,
+                'attempts' => $attempts,
+                'age' => $touched === 0 ? null : $now - $touched,
+                'failure' => $failure,
+                'coolsIn' => $state === 'cooling' ? max(0, self::COOLOFF_SECONDS - ($now - $touched)) : null,
+            ];
+        }
+
+        $order = ['writing' => 0, 'delivered' => 1, 'retrying' => 2, 'cooling' => 3, 'stuck' => 4];
+        usort($rows, static fn (array $a, array $b): int => [$order[$a['state']], $a['age'] ?? PHP_INT_MAX] <=> [$order[$b['state']], $b['age'] ?? PHP_INT_MAX]);
+
+        return array_slice($rows, 0, 40);
+    }
+
+    /**
+     * The rows still open in the ledger (todo, in progress, blocked), by code.
+     *
+     * @return array<string, array{title: string, priority: string}>
+     */
+    private function openLedger(): array
+    {
+        if (!is_file($this->taskDatabase())) {
+            return [];
+        }
+
+        try {
+            $connection = new PDO('sqlite:'.$this->taskDatabase(), null, null, [PDO::ATTR_TIMEOUT => 2]);
+            $rows = $this->queryRows($connection, "SELECT code, title, priority FROM tasks WHERE status IN ('todo', 'in_progress', 'blocked')");
+        } catch (Throwable) {
+            return [];
+        }
+
+        $ledger = [];
+        foreach ($rows as $row) {
+            $ledger[(string) $row['code']] = ['title' => (string) $row['title'], 'priority' => (string) $row['priority']];
+        }
+
+        return $ledger;
+    }
+
+    /**
+     * The newest cohort verdict the harness wrote: the invariants and aspects it flagged.
+     *
+     * @return array<string, mixed>
+     */
+    private function cohort(): array
+    {
+        $file = '/tmp/harness-quality-grand.txt';
+        $cohort = ['at' => null, 'violations' => [], 'saturated' => []];
+        if (!is_file($file)) {
+            return $cohort;
+        }
+
+        $cohort['at'] = date('H:i:s', (int) filemtime($file));
+        $text = preg_replace('/\x1b\[[0-9;]*m/', '', (string) file_get_contents($file)) ?? '';
+
+        foreach (preg_split('/\R/', $text) ?: [] as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, '! [')) {
+                $cohort['violations'][] = mb_substr($line, 2, 140);
+            }
+            if (str_starts_with($line, 'SATURATED')) {
+                $cohort['saturated'][] = mb_substr($line, 0, 140);
+            }
+        }
+
+        // The same invariant fires once per account; one line per invariant is what a person reads.
+        $counts = [];
+        foreach ($cohort['violations'] as $violation) {
+            $name = preg_match('/^\[(\w+)\]/', $violation, $m) ? $m[1] : 'other';
+            $counts[$name] = ($counts[$name] ?? 0) + 1;
+        }
+        $cohort['violations'] = array_map(static fn (string $name, int $n): array => ['name' => $name, 'count' => $n], array_keys($counts), $counts);
+        $cohort['saturated'] = array_slice($cohort['saturated'], 0, 3);
+
+        return $cohort;
     }
 
     /**

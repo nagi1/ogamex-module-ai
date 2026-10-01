@@ -26,6 +26,8 @@ trap 'kill 0' EXIT
 
 cd "$(dirname "$0")/.." || exit 1
 LOG=/tmp/harness-live.log
+# Keep the output: the watch page shows the last hour from this, and /tmp does not survive a reboot.
+pgrep -f 'scripts/harness-log.py' >/dev/null || nohup python3 -u scripts/harness-log.py "$LOG" >/dev/null 2>&1 &
 # Tests in the dev stack, situations and scorecards in the cohorts: `scripts/ogamex prove` needs both.
 export OGAMEX_RUNNER="${OGAMEX_RUNNER:-local-docker-dev}"
 COMPOSE_DIR=../../local-docker-dev

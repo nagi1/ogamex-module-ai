@@ -24,6 +24,22 @@ running unattended on grand at 1000×. What changed after the PR, measured live:
 | `IDLE_QUEUES` needs a session after the planet's last build ended | At 1000× an instant read flagged every account waiting for its turn. |
 | Stale Copilot claims on the raid files (3.4 h, DEF-33 already merged) released | They kept the harness off ATK-001. |
 
+### The watch page (`/ai-harness`), rebuilt 1 Oct 2026
+
+It described the wiki-ingest pipeline that is frozen. It now answers, top to bottom: is it running
+(header, with when the next row is free), **how many of the 15 aspects of a player's day pass**
+(failing aspects first, with count/floor), what the harness produced (proven, delivered awaiting live
+proof, ready, cooling; stuck only appears when above zero), every row in play with its state and last
+failure, the writer's last hour (calls, finished cleanly, tokens per call, share spent thinking), the
+cohort's violated invariants, and the **last hour of output**. Sources, plans, promoted counts, empty
+claim and shard tables are gone; running-now and file-claims appear only when something is running or
+a claim is older than two minutes. The ledger is collapsed and shows open rows only.
+
+Output is persistent: `scripts/harness-log.py` (started by `harness-live.sh`) follows
+`/tmp/harness-live.log`, stamps each line in UTC and keeps three days in
+`plan/research/ogame/logs/` (git-ignored). The page shows events (stages, attempts, passes, failures)
+by default and every line on request; windows of 15 min, 1 h and 3 h.
+
 ### Next harness work (in order)
 
 1. **Give every open P0/P1 row a fast proof.** Rows raised automatically from a cohort read

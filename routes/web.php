@@ -10,6 +10,8 @@ use Modules\AI\Http\Controllers\HarnessStatusController;
 Route::prefix('ai-harness')->name('ai.harness.')->group(function (): void {
     Route::get('/', [HarnessStatusController::class, 'index'])->name('index');
     Route::get('/poll', [HarnessStatusController::class, 'poll'])->name('poll');
+    // The last hour of harness output, from the persistent timestamped log.
+    Route::get('/log', [HarnessStatusController::class, 'log'])->name('log');
     // The whole ledger, read-only: the overview counts rows, this lets a person read them.
     Route::get('/tasks', [HarnessStatusController::class, 'tasks'])->name('tasks');
 });

@@ -199,9 +199,9 @@ function scenarios(): array
             'proves' => 'a visible hostile fleet produces a fleet save (FLEET-001: one in the cohort lifetime)',
             'plant' => static function (array $context): array {
                 // A run killed before undo records existed left its fleet in flight; it has this exact shape.
-                DB::table('fleet_missions')->where('user_id', $context['neighbour'])->where('planet_id_to', $context['planet'])
+                delete_mission_tree(DB::table('fleet_missions')->where('user_id', $context['neighbour'])->where('planet_id_to', $context['planet'])
                     ->where('mission_type', 1)->where('processed', 0)
-                    ->where('light_fighter', 40)->where('cruiser', 15)->where('small_cargo', 20)->delete();
+                    ->where('light_fighter', 40)->where('cruiser', 15)->where('small_cargo', 20)->pluck('id')->map(fn ($id): int => (int) $id)->all());
 
                 $mission = DB::table('fleet_missions')->insertGetId([
                     'user_id' => $context['neighbour'],
@@ -465,6 +465,11 @@ function revert_planted(): int
     $touched = 0;
 
     foreach (read_planted() as [$action, $table, $id, $columns]) {
+        if ($table === 'fleet_missions' && $action !== 'restore') {
+            $touched += delete_mission_tree([$id]);
+            continue;
+        }
+
         $query = DB::table($table)->where('id', $id);
         $touched += $action === 'restore' ? $query->update($columns) : $query->delete();
     }
@@ -472,6 +477,22 @@ function revert_planted(): int
     @unlink(planted_file());
 
     return $touched;
+}
+
+/**
+ * Delete fleet missions and every mission that hangs off them. The engine adds a return mission with
+ * `parent_id` set once it processes a planted fleet, and the foreign key refuses to delete the parent
+ * first: that error aborted every revert and left the planted rows in the cohort (88 error lines in
+ * one evening of runs).
+ *
+ * @param list<int> $ids
+ */
+function delete_mission_tree(array $ids): int
+{
+    $children = DB::table('fleet_missions')->whereIn('parent_id', $ids)->pluck('id')->map(fn ($id): int => (int) $id)->all();
+    $deleted = $children === [] ? 0 : delete_mission_tree($children);
+
+    return $deleted + DB::table('fleet_missions')->whereIn('id', $ids)->delete();
 }
 
 /** @return list<array{0: string, 1: string, 2: int, 3: array<string, mixed>}> */

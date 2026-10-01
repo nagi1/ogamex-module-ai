@@ -14,3 +14,6 @@ __pycache__/
 /plan/research/ogame/workers/
 /plan/research/ogame/harness-status.json
 /plan/research/ogame/model-usage.jsonl
+
+# Harness output kept for the watch page (timestamped by scripts/harness-log.py)
+/plan/research/ogame/logs/
