@@ -190,13 +190,25 @@ final class Situation
         return $this;
     }
 
-    /** What the account did and what it chose, so a failing expectation says why instead of "false". */
+    /**
+     * What the account did and why: the work it created, and the candidates its last decision ranked with
+     * the score components that made them win or lose. A failing expectation then says "Recycle scored 12.0
+     * (resource_need=0.4, safety=0.3) against Build 40.7" instead of "false".
+     */
     public function account(): string
     {
         $kinds = array_map(static fn (AiWorkKind $kind): string => $kind->name, $this->work());
-        $chosen = DB::table('ai_decision_traces')->where('player_id', $this->profile->player_id)->orderByDesc('id')->limit(3)->pluck('selected_reason')->all();
+        $trace = DB::table('ai_decision_traces')->where('player_id', $this->profile->player_id)->orderByDesc('id')->first(['candidates']);
+        $ranked = array_map(static function (array $candidate): string {
+            $parts = [];
+            foreach (array_filter($candidate['components'] ?? []) as $name => $value) {
+                $parts[] = $name . '=' . round((float) $value, 1);
+            }
 
-        return 'the account created work: [' . implode(', ', $kinds) . '] and chose: [' . implode(' | ', $chosen) . ']';
+            return sprintf('%s %.1f (%s)', $candidate['action'], (float) $candidate['score'], implode(', ', $parts));
+        }, array_slice(json_decode((string) ($trace->candidates ?? '[]'), true) ?: [], 0, 6));
+
+        return 'the account created work: [' . implode(', ', $kinds) . '] and its last decision ranked: ' . ($ranked === [] ? 'no candidates' : implode('; ', $ranked));
     }
 
     /** The neighbour planted by inactiveNeighbour(), for a test that asserts on what happened to it. */
