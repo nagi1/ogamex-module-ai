@@ -265,7 +265,16 @@ foreach ($playedThisHour as $accountId) {
 
     $player = app(PlayerServiceFactory::class)->make($accountId, true);
     $planned = array_map(static fn ($step): int => $step->planetId, $buildingPlanner->steps($accountId, $player));
-    $idle = array_filter($ownPlanets, static fn (int $id): bool => in_array($id, $planned, true) && !in_array($id, $busyPlanets, true));
+    // At 1000x a build ends in minutes, so a planet read between its last build ending and the
+    // account's next turn is waiting, not neglected. Idle means the account finished a session
+    // after the planet's last build ended and the planet still has a legal step and no build.
+    $lastSession = (int) strtotime((string) DB::table('ai_work_items')->where('player_id', $accountId)
+        ->where('kind', AiWorkKind::RunSession->value)->where('state', AiWorkState::Completed->value)->max('updated_at'));
+    $lastBuildEnd = BuildingQueue::query()->whereIn('planet_id', $ownPlanets)->where('time_end', '<=', time())
+        ->groupBy('planet_id')->selectRaw('planet_id, max(time_end) as ended')->pluck('ended', 'planet_id');
+    $idle = array_filter($ownPlanets, static fn (int $id): bool => in_array($id, $planned, true)
+        && !in_array($id, $busyPlanets, true)
+        && $lastSession > (int) ($lastBuildEnd[$id] ?? 0));
 
     if (count($idle) / count($ownPlanets) > $IDLE_SHARE) {
         $idleQueues[] = sprintf('player %d played this hour with %d of %d planets buildable and idle', $accountId, count($idle), count($ownPlanets));
