@@ -15,7 +15,7 @@ use OGame\Services\PlanetService;
 class ActivityIntelReader
 {
     /** The activity star vanishes exactly this many minutes after the body's last update (INT-010). */
-    public const ACTIVITY_WINDOW_MINUTES = 15;
+    private const ACTIVITY_WINDOW_MINUTES = 15;
 
     private const ACTIVITY_WINDOW_SECONDS = self::ACTIVITY_WINDOW_MINUTES * 60;
 
@@ -24,7 +24,17 @@ class ActivityIntelReader
 
     public function activityAt(PlanetService $body): bool
     {
-        return $body->getMinutesSinceLastUpdate() < self::ACTIVITY_WINDOW_MINUTES;
+        // The planet's stamp is also refreshed by the host's own queue scheduler, so it lights up on every
+        // planet in a running universe. An owner with a recorded login older than a week (the host's own
+        // inactive rule) is not at the keyboard whatever that stamp says.
+        return $body->getMinutesSinceLastUpdate() < self::ACTIVITY_WINDOW_MINUTES && !$this->ownerAway($body);
+    }
+
+    private function ownerAway(PlanetService $body): bool
+    {
+        $lastLogin = (int) $body->getPlayer()?->getUser()->time;
+
+        return $lastLogin > 0 && $body->getPlayer()?->isInactive() === true;
     }
 
     /**

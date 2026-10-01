@@ -41,6 +41,9 @@ class QueueableSpyPlanner
     /** Bounded: only this many unscouted, nearest candidate targets are inspected per decision. */
     private const MAX_CANDIDATES = 20;
 
+    /** How many nearest planets are looked through to find them; a universe of active neighbours ends the search here. */
+    private const MAX_SCANNED = 400;
+
     /** A report stays fresh this long; scouting and raiding agree on the window. */
     private const INTEL_TTL_HOURS = 24;
 
@@ -163,12 +166,11 @@ class QueueableSpyPlanner
         $candidates = Planet::query()
             ->where('user_id', '!=', $player->getId())
             ->where('destroyed', 0)
-            // A planet touched inside the activity window is a player at the keyboard; leaving it out of the
-            // query keeps the cap for neighbours a scout could actually use.
-            ->where('time_last_update', '<', now()->subMinutes(ActivityIntelReader::ACTIVITY_WINDOW_MINUTES)->getTimestamp())
             ->orderByRaw('ABS(CAST(`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planet` AS SIGNED) - ?), `id`', [$home->galaxy, $home->system, $home->position])
+            ->limit(self::MAX_SCANNED)
             ->cursor()
             ->reject(static fn (Planet $planet): bool => isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"]))
+            ->reject(fn (Planet $planet): bool => $this->activityIntelReader->activityAt($this->planetServiceFactory->makeFromModel($planet)))
             ->take(self::MAX_CANDIDATES)
             ->values();
 
