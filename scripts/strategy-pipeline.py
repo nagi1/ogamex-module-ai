@@ -2481,11 +2481,13 @@ def scenario_problems(paths):
     return problems
 
 
-# Largest saved answer (attempts/*.answer.md): 15,540 bytes, about 4,440 tokens at 3.5 bytes a token;
-# plus 50% is 6,660. Reasoning effort per https://api-docs.deepseek.com/guides/thinking_mode/
-# ("reasoning_effort": low/high/max); 96% of the writer's output tokens were reasoning at the default.
-WRITER_MAX_TOKENS = 6700
-WRITER_REASONING_EFFORT = "low"
+# The provider counts reasoning tokens inside max_tokens. Measured 1 Oct 2026 over 41 finished writer
+# calls: the answer itself is a median 2.5k tokens (max 8.7k) but total output a median 45k, 95% of it
+# reasoning, and "reasoning_effort": "low" still spent 83% on reasoning. A 6.7k cap with thinking on
+# returned finish=length and no answer twice. The validators, the red-first proof and the retry
+# feedback do the checking, so thinking is off and the cap is answer-sized (max 8.7k, with headroom).
+WRITER_MAX_TOKENS = 12000
+WRITER_THINKING = {"type": "disabled"}
 
 
 def writer_answer(code, context, answer_file=None):
@@ -2498,7 +2500,7 @@ def writer_answer(code, context, answer_file=None):
     if answer_file:
         return read(answer_file), {}
 
-    payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "reasoning_effort": WRITER_REASONING_EFFORT,
+    payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
                "messages": [
                    {"role": "system", "content": IMPLEMENT_PROMPT},
                    {"role": "user", "content": context},
