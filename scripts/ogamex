@@ -133,7 +133,8 @@ Proof (a task is done when its proof passes; see .github/skills/ai-task-execute)
   scorecard [--hours=N] [--aspect=X] [--save=CODE] [--compare=FILE]
                                         every aspect of a real player's day, PASS/FAIL, on a cohort
   situation <name|all|list>             plant a situation on a cohort, drive it, read the answer back
-  prove <CODE>                          run the row's proof steps; PROOF: PASS or PROOF: FAIL
+  prove <CODE> [--json]                 test steps first (stops at a red one), then live steps; PROOF: PASS|FAIL
+                                        names the failing step; --json ends stdout with one JSON verdict line
   test-one <TestName>                   one module test file by name (fast, no parallel start-up)
   economy <player_id>                   per planet: building, what it would queue, or the gate that refuses it
 
@@ -183,53 +184,119 @@ in_universe() {
         sh -lc "cd /var/www && $(printf '%q ' "$@")")
 }
 
-# Every step runs even after a failure, so one run shows everything that is still wrong.
+# What a step printed, without the colour codes pest and artisan add.
+strip_ansi() {
+    sed 's/\x1b\[[0-9;]*[A-Za-z]//g' "$1"
+}
+
+# The one line that says why a step failed: pest's first FAILED line and the message under it, the
+# situation's read-back, the invariant's first [NAME] row, the aspect's count against its floor. A step
+# that printed none of those is described by the last thing it said.
+step_line() {
+    local kind="$1" name="$2" file="$3" line=""
+    case "$kind" in
+        test) line="$(strip_ansi "$file" | grep -m1 -A1 'FAILED' | tr '\n' ' ' || true)" ;;
+        situation) line="$(strip_ansi "$file" | grep -m1 'read-back' || true)" ;;
+        invariant) line="$(strip_ansi "$file" | grep -m1 "\[$name\]" || true)" ;;
+        aspect) line="$(strip_ansi "$file" | grep -m1 -E "^ +(FAIL|PASS) +$name " || true)" ;;
+    esac
+    [ -n "$line" ] || line="$(strip_ansi "$file" | grep -v '^[[:space:]]*$' | tail -n1 || true)"
+    printf '%s' "${line:-no output}" | tr -s ' \t' ' ' | cut -c1-300
+}
+
+# Test steps first, stopping at the first one that fails: a red test makes the live steps meaningless
+# and they cost minutes on a cohort. The live steps run, all of them, only when every test passed, so
+# one run still shows everything that is wrong on the cohort. `--json` keeps stdout for the verdict
+# alone (progress goes to stderr) and ends it with one JSON line; proofs/CODE.log is rewritten per run.
 prove_row() {
-    local code="$1" steps failed=0 step kind name
+    local code="$1" as_json=0 steps ordered step kind name suspect started rc out results hours age
+    local progress=1 tests_failed=0
+    [ "${2:-}" = "--json" ] && { as_json=1; progress=2; }
     steps="$(python3 "$MODULE_ROOT/plan/tasks/task.py" proof "$code")"
     if [ -z "$steps" ]; then
-        echo "PROOF: FAIL $code states no proof (task.py proof $code test:X situation:Y aspect:Z invariant:NAME)"
+        echo "PROOF: FAIL $code states no proof (task.py proof $code test:X situation:Y aspect:Z invariant:NAME)" >&"$progress"
+        [ "$as_json" = 0 ] || printf '{"code":"%s","pass":false,"steps":[]}\n' "$code"
         return 1
     fi
     mkdir -p "$MODULE_ROOT/plan/research/ogame/proofs"
+    out="$(mktemp)"
+    results="$(mktemp)"
     # An aspect is judged only on play since the change landed: a window that reaches back before it
     # measures the old code and can pass for the wrong reason. The writer's marker dates the change;
     # a change made by hand uses PROVE_HOURS.
-    local marker="$MODULE_ROOT/plan/research/ogame/implemented/$code.md" hours="${PROVE_HOURS:-2}" age
+    local marker="$MODULE_ROOT/plan/research/ogame/implemented/$code.md"
+    hours="${PROVE_HOURS:-2}"
     if [ -f "$marker" ]; then
         age=$(( $(date +%s) - $(stat -c %Y "$marker") ))
         hours=$(( age / 3600 ))
         [ "$hours" -gt 24 ] && hours=24
     fi
-    for step in $steps; do
+    ordered="$(for step in $steps; do case "$step" in test:*) echo "$step" ;; esac; done
+               for step in $steps; do case "$step" in test:*) ;; *) echo "$step" ;; esac; done)"
+    for step in $ordered; do
+        # A trailing ? marks a step suspect: it is reported but never fails the row.
+        suspect=0
+        case "$step" in *\?) suspect=1; step="${step%?}" ;; esac
         kind="${step%%:*}"
         name="${step#*:}"
-        echo "--- $step"
+        [ "$kind" = test ] || [ "$tests_failed" = 0 ] || break
+        echo "--- $step" >&"$progress"
+        started=$(date +%s)
+        rc=0
+        : > "$out"
         case "$kind" in
-            test) with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" || failed=1 ;;
-            situation) in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup || failed=1 ;;
+            test) with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
+            situation) in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
             invariant)
-                # verify-cohorts names a violated invariant as "[NAME]"; its absence is the pass.
-                if in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/verify-cohorts.php';" | tee /dev/stderr | grep -q "\[$name\]"; then
-                    failed=1
+                # verify-cohorts names a violated invariant as "[NAME]"; its absence is the pass, but
+                # only when the read itself ran (it ends with a QUALITY line).
+                in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/verify-cohorts.php';" 2>&1 | tee "$out" >&"$progress" || true
+                if grep -q "\[$name\]" "$out" || ! grep -q 'QUALITY:' "$out"; then
+                    rc=1
                 fi
                 ;;
             aspect)
                 if [ "$hours" -lt 1 ]; then
-                    echo "too early: the cohort has played under an hour on this change"
-                    failed=1
-                    continue
+                    echo "too early: the cohort has played under an hour on this change" | tee "$out" >&"$progress"
+                    rc=1
+                else
+                    in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php --aspect="$name" --hours="$hours" --save="$code" 2>&1 | tee "$out" >&"$progress" || rc=1
                 fi
-                in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php --aspect="$name" --hours="$hours" --save="$code" || failed=1
                 ;;
-            harness) python3 "$MODULE_ROOT/scripts/strategy-pipeline.py" --self-check || failed=1 ;;
-            *) echo "unknown proof step $step"; failed=1 ;;
+            harness) python3 "$MODULE_ROOT/scripts/strategy-pipeline.py" --self-check 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
+            *) echo "unknown proof step $step" > "$out"; rc=1 ;;
         esac
+        [ "$rc" = 0 ] || [ "$kind" != test ] || tests_failed=1
+        printf '%s\t%s\t%s\t%s\t%s\n' "$step" "$rc" "$(( $(date +%s) - started ))" "$suspect" "$(step_line "$kind" "$name" "$out")" >> "$results"
     done
-    local verdict="PASS"
-    [ "$failed" = 0 ] || verdict="FAIL"
-    echo "PROOF: $verdict $code ($steps)" | tee -a "$MODULE_ROOT/plan/research/ogame/proofs/$code.log"
-    [ "$failed" = 0 ]
+    local verdict_rc=0
+    python3 - "$code" "$results" "$as_json" "$MODULE_ROOT/plan/research/ogame/proofs/$code.log" "$steps" <<'PY' || verdict_rc=$?
+import json, sys
+
+code, results, as_json, log, steps = sys.argv[1:6]
+rows = []
+for raw in open(results).read().splitlines():
+    step, rc, seconds, suspect, line = (raw.split("\t") + [""] * 5)[:5]
+    rows.append({"step": step, "pass": rc == "0", "seconds": int(seconds), "suspect": suspect == "1", "line": line})
+
+# A suspect step is reported but never fails the row.
+failing = [row for row in rows if not row["pass"] and not row["suspect"]]
+verdict = f"PROOF: {'FAIL' if failing else 'PASS'} {code} ({steps})"
+if failing:
+    verdict += f" at {failing[0]['step']}: {failing[0]['line']}"
+
+lines = [f"{'PASS' if row['pass'] else 'FAIL'}{'?' if row['suspect'] else ''} {row['step']} {row['seconds']}s"
+         + ("" if row["pass"] else f" — {row['line']}") for row in rows]
+with open(log, "w", encoding="utf-8") as handle:
+    handle.write("\n".join(lines + [verdict]) + "\n")
+
+print("\n".join(lines + [verdict]), file=sys.stderr if as_json == "1" else sys.stdout)
+if as_json == "1":
+    print(json.dumps({"code": code, "pass": not failing, "steps": rows}))
+sys.exit(1 if failing else 0)
+PY
+    rm -f "$out" "$results"
+    return $verdict_rc
 }
 
 command_name="${1:-help}"
@@ -294,7 +361,7 @@ case "$command_name" in
         fi
         ;;
     prove)
-        prove_row "${1:?usage: prove CODE}"
+        prove_row "${1:?usage: prove CODE [--json]}" "${2:-}"
         ;;
     economy)
         in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/economy-explain.php'; foreach (explain_economy(${1:?usage: economy PLAYER_ID}) as \$line) { echo \$line, PHP_EOL; }"

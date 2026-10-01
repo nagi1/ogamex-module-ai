@@ -49,10 +49,16 @@ PROPOSALS = os.path.join(MODULE, "plan/research/ogame/proposals")
 IMPLEMENTED = os.path.join(MODULE, "plan/research/ogame/implemented")
 ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 
-# How many tries one task may spend in a window, and how long before its budget resets. Bounded so a
-# hopeless task cannot drain a night, but never terminal: the task returns on its own afterwards.
+# How many tries one task may spend in a window, and how long before its budget resets. The window is
+# not the stop: a row that fails the same way twice is stuck (record_failure) and waits for a person.
 MAX_ATTEMPTS = 3
 COOLOFF_SECONDS = 12 * 3600
+# A stuck row's wait, in seconds: no clock ends it, `task.py unstick` does.
+NEVER = 10 ** 9
+# Reads older than the grand reseed (1 Oct 2026 15:39 UTC) measured a universe at 90,000x speed.
+COHORT_RESET = datetime.datetime(2026, 10, 1, 15, 39, tzinfo=datetime.timezone.utc)
+SCORECARDS = os.path.join(MODULE, "plan/research/ogame/scorecards")
+EVIDENCE = os.path.join(MODULE, "plan/research/ogame/evidence")
 STATUS = os.path.join(MODULE, "plan/research/ogame/harness-status.json")
 # One heartbeat file per worker. The shared STATUS alone cannot describe parallel shards: every worker
 # wrote the same file, so a six-worker pass showed up as a single agent doing a single thing.
@@ -876,12 +882,38 @@ def wait_until_offpeak():
         time.sleep(min(60, remaining))
 
 
-def record_failure(code, reason):
-    """Count a failed attempt and keep its output for the next one.
+def failure_signature(reason):
+    """The reason with what varies per run taken out: colour codes, absolute paths, uuids and hex ids,
+    durations, every digit (ids, line numbers, timestamps). Two attempts that failed the same way
+    read the same."""
+    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", reason)
+    text = re.sub(r"(?<![\w.])/[\w.\-/]+", " ", text)
+    text = re.sub(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", " ", text)
+    text = re.sub(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b", " ", text)
+    text = re.sub(r"\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds|m|min|h)\b", " ", text)
 
-    There is no terminal state: this runs unattended, so a failure means try again carrying the reason,
-    not stop and wait for someone. The counter bounds what one bad task can cost in a window, and then
-    the budget ages out so the task comes back on its own instead of being abandoned.
+    return " ".join(re.sub(r"\d+", "", text).split())
+
+
+def stuck(code):
+    return os.path.exists(os.path.join(ATTEMPTS, f"{code}.stuck"))
+
+
+def block_row(code, note):
+    """Take a row out of the queue with the reason in its notes: the ledger's own `block`."""
+    if not os.path.exists(TASKS_DB):
+        return
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    ledger.cmd_block(connection, code, note)
+    connection.close()
+
+
+def record_failure(code, reason):
+    """Count a failed attempt, keep its output for the next one, and stop on a repeat.
+
+    A failure whose signature equals the previous one's is the terminal state: the row is stuck,
+    blocked, and no clock brings it back, because a third attempt with the same input fails the same
+    way and costs the same. A different failure is progress and gets another try carrying its reason.
     """
     os.makedirs(ATTEMPTS, exist_ok=True)
     path = os.path.join(ATTEMPTS, f"{code}.count")
@@ -892,11 +924,30 @@ def record_failure(code, reason):
     with open(os.path.join(ATTEMPTS, f"{code}.log"), "w", encoding="utf-8") as handle:
         handle.write(reason)
 
-    print(f"  attempt {attempts} failed; retrying with this output")
+    normalised = failure_signature(reason)
+    signature = hashlib.sha1(normalised.encode()).hexdigest()[:12]
+    sig_path = os.path.join(ATTEMPTS, f"{code}.sig")
+    with open(sig_path, "a", encoding="utf-8") as handle:
+        handle.write(signature + "\n")
+    signatures = read(sig_path).split()
+
+    if len(signatures) < 2 or signatures[-1] != signatures[-2]:
+        print(f"  attempt {attempts} failed; retrying with this output")
+        return False
+
+    first = next((line.strip() for line in reason.splitlines() if line.strip()), "")
+    with open(os.path.join(ATTEMPTS, f"{code}.stuck"), "w", encoding="utf-8") as handle:
+        handle.write(normalised + "\n---\n" + "\n".join(reason.splitlines()[:40]) + "\n")
+    block_row(code, f"stuck: same failure twice: {first[:200]}")
+    print(f"  attempt {attempts} failed the same way twice; {code} is stuck and blocked")
+
+    return True
 
 
 def cooling_off(code):
     """How long this task should wait before its next attempt, or 0 when it may be attempted now."""
+    if stuck(code):
+        return NEVER
 
     path = os.path.join(ATTEMPTS, f"{code}.count")
     if not os.path.exists(path):
@@ -904,7 +955,7 @@ def cooling_off(code):
 
     age = int(time.time() - os.path.getmtime(path))
     if age > COOLOFF_SECONDS:
-        # The budget ages out on its own, so a hard task is retried rather than left behind.
+        # A budget that ran out on different failures resets; a stuck row never reaches here.
         os.remove(path)
         return 0
 
@@ -1047,6 +1098,147 @@ def run_in_app(command):
     finally:
         if lane:
             release_claims([lane])
+
+
+def proof_report(code):
+    """The row's proof as `prove CODE --json` reports it, or None when the proof could not run."""
+    env = dict(os.environ, OGAMEX_RUNNER=os.environ.get("OGAMEX_RUNNER", "local-docker-dev"))
+    try:
+        result = subprocess.run(["bash", os.path.join(MODULE, "scripts/ogamex"), "prove", code, "--json"],
+                                capture_output=True, text=True, timeout=30 * 60, env=env)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def red_first(code):
+    """Run the proof before the first paid attempt. True when that settled the row without a model call.
+
+    A proof that already passes means the row is stale; one whose every failing step is suspect cannot
+    be moved by code (ECON-001 was changed three times and IDLE_QUEUES read the same). Either way a
+    model call would buy nothing. Otherwise the report is the baseline the attempt is judged against.
+    """
+    report = proof_report(code)
+    if report is None:
+        print(f"  the proof of {code} could not be run; nothing spent")
+        return True
+
+    os.makedirs(ATTEMPTS, exist_ok=True)
+    with open(os.path.join(ATTEMPTS, f"{code}.baseline.json"), "w", encoding="utf-8") as handle:
+        json.dump(report, handle)
+    failing = [step for step in report["steps"] if not step["pass"]]
+
+    if not failing:
+        print(f"  the proof of {code} already passes; closing it, nothing spent")
+        subprocess.run([sys.executable, os.path.join(MODULE, "plan/tasks/task.py"), "done", code])
+        return True
+    if all(step.get("suspect") for step in failing):
+        print(f"  every failing step of {code} is suspect; nothing spent")
+        block_row(code, "proof suspect: only " + ", ".join(step["step"] for step in failing) + " fails; the reviewer judges the proof")
+        return True
+
+    return False
+
+
+def proof_change(before, after):
+    """Why an attempt moved nothing, or None when the proof passes or a step went FAIL to PASS and no
+    step went PASS to FAIL. A suspect step is judged like any other here: it is only exempt from
+    failing the row."""
+    if after["pass"]:
+        return None
+
+    was = {step["step"]: step["pass"] for step in before["steps"]}
+    now = {step["step"]: step["pass"] for step in after["steps"]}
+    failing = next(step for step in after["steps"] if not step["pass"])
+    broke = [name for name, ok in now.items() if not ok and was.get(name)]
+    fixed = [name for name, ok in now.items() if ok and was.get(name) is False]
+
+    if broke:
+        return f"proof regressed: {broke[0]} passed before this attempt and fails now"
+    if not fixed:
+        return f"proof unchanged: {failing['step']} {failing['line']}"
+
+    return None
+
+
+def note_delivery(code, report):
+    """Block a row as `proof suspect` when its proof fails on the same step three deliveries running.
+
+    Code changed each time (each delivery is a verified attempt), so the step is not measuring the
+    change. The step gets the `?` marker and the reviewer reads the proof. A step that fails only
+    because the cohort has not played long enough says nothing about the proof."""
+    failing = next((step for step in report["steps"]
+                    if not step["pass"] and not step.get("suspect") and not step["line"].startswith("too early")), None)
+    if failing is None:
+        return False
+
+    signature = hashlib.sha1(f"{failing['step']} {failure_signature(failing['line'])}".encode()).hexdigest()[:12]
+    path = os.path.join(ATTEMPTS, f"{code}.deliveries")
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(signature + "\n")
+    last = read(path).split()[-3:]
+    if len(last) < 3 or len(set(last)) != 1:
+        return False
+
+    steps = [step + "?" if step == failing["step"] else step for step in task_row(code)["proof"].split()]
+    connection = sqlite3.connect(TASKS_DB, timeout=30)
+    ledger.cmd_proof(connection, code, steps)
+    connection.close()
+    block_row(code, f"proof suspect: {failing['step']} read the same on three deliveries: {failing['line'][:160]}")
+
+    return True
+
+
+def live_aspects():
+    """Aspect -> whether it passes, from the newest grand scorecard written after the cohort reset;
+    None when there is none."""
+    newest = None
+    for path in glob.glob(os.path.join(SCORECARDS, "*-ogamex-grand-*.json")):
+        try:
+            data = json.loads(read(path))
+            at = datetime.datetime.fromisoformat(data["at"])
+        except (ValueError, KeyError):
+            continue
+        if at >= COHORT_RESET and (newest is None or at > newest[0]):
+            newest = (at, {name: bool(aspect["pass"]) for name, aspect in data["aspects"].items()})
+
+    return newest[1] if newest else None
+
+
+def violated_invariants():
+    """The invariants the newest saved grand verify read (the evidence run's) names, from after the
+    cohort reset; None when there is none."""
+    newest = None
+    for path in glob.glob(os.path.join(EVIDENCE, "*", "*verify-grand*.txt")):
+        text = read(path)
+        header = re.search(r"cohort verification . (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)", text)
+        if header is None:
+            continue
+        at = datetime.datetime.strptime(header.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+        if at >= COHORT_RESET and (newest is None or at > newest[0]):
+            newest = (at, set(re.findall(r"^\s+! \[(\w+)\]", text, re.M)))
+
+    return newest[1] if newest else None
+
+
+def moves_no_failing_aspect(proof):
+    """Why no step of this proof currently fails, or None when one does or nothing says. Only an
+    aspect: or invariant: step with a read newer than the cohort reset can hold a row back."""
+    aspects, invariants = live_aspects(), violated_invariants()
+    judged = []
+
+    for step in proof.split():
+        kind, name = step.rstrip("?").split(":", 1)
+        if kind not in ("aspect", "invariant"):
+            continue
+        reads = aspects if kind == "aspect" else invariants
+        if reads is None:
+            return None
+        if (not reads.get(name, False)) if kind == "aspect" else name in reads:
+            return None
+        judged.append(step)
+
+    return f"{' '.join(judged)} pass on the newest read since the cohort reset" if judged else None
 
 
 def module_test_passes(relative_path):
@@ -1217,6 +1409,28 @@ def self_check():
     assert {"economy", "raids", "fleet_save", "social"} <= set(scorecard_aspects()), "plans name the scorecard's aspects"
     assert proposal_aspect({"ASPECT": ["raids — the account raids a profitable neighbour"]}) == "raids"
     assert proposal_aspect({"ASPECT": ["none"]}) is None, "a plan that moves no aspect is refused"
+
+    # A repeat failure is the terminal state: digits, paths, ids and durations do not make two failures
+    # differ, and the second identical one stops the row for good.
+    assert failure_signature("Tests: 2 failed 1.04s at /var/www/a.php:32 row 18915 c0ffee12ab") == \
+        failure_signature("Tests: 7 failed 2.5s at /tmp/b.php:41 row 99 deadbe3f12"), "volatile parts are not the failure"
+    assert failure_signature("no test") != failure_signature("no tests found"), "different words are different failures"
+    probe_code = f"__self-check-{os.getpid()}__"
+    try:
+        assert record_failure(probe_code, "boom 1") is False, "the first failure only counts"
+        assert record_failure(probe_code, "boom 2") is True and stuck(probe_code), "the same failure twice is stuck"
+        assert cooling_off(probe_code) == NEVER, "no clock ends a stuck row"
+    finally:
+        for suffix in ("count", "log", "sig", "stuck"):
+            if os.path.exists(os.path.join(ATTEMPTS, f"{probe_code}.{suffix}")):
+                os.remove(os.path.join(ATTEMPTS, f"{probe_code}.{suffix}"))
+    red, green = {"pass": False, "steps": [{"step": "test:X", "pass": False, "line": "boom"}]}, {"pass": True, "steps": []}
+    assert proof_change(red, green) is None, "a proof that passes is accepted"
+    assert proof_change(red, red).startswith("proof unchanged: test:X boom"), "an attempt that moved nothing is refused"
+    two = {"pass": False, "steps": [{"step": "test:X", "pass": True, "line": ""}, {"step": "aspect:a", "pass": False, "line": "n"}]}
+    assert proof_change(red, two) is None, "a step that went FAIL to PASS is progress"
+    assert proof_change(two, red).startswith("proof regressed"), "a step that went PASS to FAIL is refused"
+    assert WRITER_MAX_TOKENS >= 1.5 * 15540 / 3.5 - 100, "the cap follows the largest saved answer"
 
     probe = "app/Support/__rollback_probe.php"
     with open(os.path.join(MODULE, probe), "w", encoding="utf-8") as handle:
@@ -2047,8 +2261,11 @@ def status():
     attemptable = [code for code, _, file_ref, _, _ in rows
                    if code in ready_codes and code not in marked
                    and (file_ref or os.path.exists(os.path.join(PROPOSALS, f"{code}.md")))]
-    waiting = {code: cooling_off(code) for code in attemptable if cooling_off(code) > 0}
-    ready = [code for code in attemptable if code not in waiting]
+    waiting = {code: cooling_off(code) for code in attemptable if 0 < cooling_off(code) < NEVER}
+    proofs = {code: proof for code, _, _, proof, _ in rows}
+    held = {code: moves_no_failing_aspect(proofs[code]) for code in attemptable if code not in waiting}
+    held = {code: why for code, why in held.items() if why}
+    ready = [code for code in attemptable if code not in waiting and code not in held and not stuck(code)]
     proven = [code for code, state, _, _, stamped in rows if state == "done" and stamped]
     closed_blind = [code for code, state, _, _, stamped in rows if state == "done" and not stamped]
     unproven = [code for code, state, *_ in rows if code in marked and state != "done"]
@@ -2059,6 +2276,11 @@ def status():
           f"{len(ready)} ready now, {len(waiting)} cooling off")
     if unproven:
         print("delivered, not proven: " + ", ".join(sorted(unproven)))
+    for code, why in sorted(held.items()):
+        print(f"WAITING: {code} — {why}")
+    stuck_rows = sorted(os.path.basename(path)[:-len(".stuck")] for path in glob.glob(os.path.join(ATTEMPTS, "*.stuck")))
+    if stuck_rows:
+        print("STUCK: " + ", ".join(stuck_rows) + "  (same failure twice; `task.py unstick CODE` after a change)")
     if no_proof:
         print("OFF THE NORTH STAR (no aspect, situation or invariant in the proof; cannot be taken or closed): "
               + ", ".join(sorted(no_proof)))
@@ -2259,23 +2481,32 @@ def scenario_problems(paths):
     return problems
 
 
+# Largest saved answer (attempts/*.answer.md): 15,540 bytes, about 4,440 tokens at 3.5 bytes a token;
+# plus 50% is 6,660. Reasoning effort per https://api-docs.deepseek.com/guides/thinking_mode/
+# ("reasoning_effort": low/high/max); 96% of the writer's output tokens were reasoning at the default.
+WRITER_MAX_TOKENS = 6700
+WRITER_REASONING_EFFORT = "low"
+
+
 def writer_answer(code, context, answer_file=None):
     """The writer's answer and its token usage: a saved answer when one is given, else a paid call.
 
     Every paid answer is kept beside the attempt log, so a refusal or a failing check can be re-run
-    against the same answer with `implement CODE --answer FILE` for nothing.
+    against the same answer with `implement CODE --answer FILE` for nothing. An answer the model did
+    not finish is (None, {"finish_reason": ...}): nothing to write, and a failure the caller records.
     """
     if answer_file:
         return read(answer_file), {}
 
-    payload = {"model": MODEL, "messages": [
-        {"role": "system", "content": IMPLEMENT_PROMPT},
-        {"role": "user", "content": context},
-    ]}
+    payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "reasoning_effort": WRITER_REASONING_EFFORT,
+               "messages": [
+                   {"role": "system", "content": IMPLEMENT_PROMPT},
+                   {"role": "user", "content": context},
+               ]}
     data = model_call(payload, purpose=f"implementing {code}")
     choice = data["choices"][0]
     if choice.get("finish_reason") != "stop":
-        raise SystemExit(f"refusing a {choice.get('finish_reason')} answer; nothing written")
+        return None, {"finish_reason": choice.get("finish_reason")}
 
     answer = choice["message"]["content"] or ""
     os.makedirs(ATTEMPTS, exist_ok=True)
@@ -2550,6 +2781,9 @@ def implement(code, answer_file=None):
         return 0
 
     cooldown = cooling_off(code)
+    if cooldown >= NEVER:
+        say(f"{code}: stuck on a repeated failure — waits for `task.py unstick {code}`")
+        return 0
     if cooldown > 0:
         # Not parked: the budget ages out and the task is picked up again on its own.
         say(f"{code}: cooling off for another {cooldown // 3600}h {cooldown % 3600 // 60}m")
@@ -2563,12 +2797,23 @@ def implement(code, answer_file=None):
         say(ledger.off_path_reason(code))
         return 0
 
+    held = moves_no_failing_aspect(task_row(code)["proof"])
+    if held:
+        say(f"{code}: nothing to move — {held}")
+        return 0
+
     worker = "harness:" + os.environ.get("HARNESS_WORKER", f"pid-{os.getpid()}")
     if not claim_row(code, worker):
         say(f"{code}: claimed by someone else — left alone")
         return 0
     kept = []
     atexit.register(lambda: kept or release_row(code, worker))
+
+    # Red first: a saved answer costs nothing, but a paid first attempt is only bought for a proof that
+    # fails and can be moved by code.
+    first_attempt = not os.path.exists(os.path.join(ATTEMPTS, f"{code}.count"))
+    if first_attempt and not answer_file and red_first(code):
+        return 0
 
     publish("implementing", code)
     task, paths, context, proposal_path = implement_context(code)
@@ -2617,6 +2862,9 @@ def implement(code, answer_file=None):
                     + "\nFix exactly that and change nothing else.")
 
     answer, usage = writer_answer(code, context, answer_file)
+    if answer is None:
+        record_failure(code, f"unfinished: {usage['finish_reason']}")
+        return 1
     changes, refused = parse_answer(answer)
 
     # What was refused, in the words the retry needs. Without this the retry only saw the test
@@ -2668,11 +2916,28 @@ def implement(code, answer_file=None):
     finally:
         release_claims([lane])
 
+    # The slice's own tests pass; now ask whether it moved the row's proof. The proof takes the same
+    # lane, so it runs after the release, with the written files still in place.
+    baseline_path = os.path.join(ATTEMPTS, f"{code}.baseline.json")
+    after = None
+    if os.path.exists(baseline_path) and not answer_file:
+        after = proof_report(code)
+        if after is None:
+            print(f"  the proof of {code} could not be run after the attempt; restored {rollback(written, backups)} file(s), nothing counted")
+            return 0
+        why = proof_change(json.loads(read(baseline_path)), after)
+        if why:
+            print(f"  {why.splitlines()[0]}; restored {rollback(written, backups)} file(s)")
+            record_failure(code, why)
+            return 1
+
     os.makedirs(IMPLEMENTED, exist_ok=True)
     with open(marker, "w", encoding="utf-8") as handle:
         handle.write(f"# {code} implemented {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC\n\n"
                      + "\n".join(f"- {path}" for path in written) + "\n")
     mark_delivered(code, worker, kept)
+    if after is not None and note_delivery(code, after):
+        print(f"  {code}: the same proof step failed on three deliveries; blocked as proof suspect")
     print(f"  verified and wired: {len(written)} file(s) kept, marker written")
     publish("implemented", f"{code} ({len(written)} file(s))")
     return 0

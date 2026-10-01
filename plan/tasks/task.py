@@ -13,7 +13,11 @@ Usage:
   python3 plan/tasks/task.py next                  # the one row to work now (P0-P2 impl, by priority)
   python3 plan/tasks/task.py show CODE             # everything the row says, proof included
   python3 plan/tasks/task.py proof CODE [STEP ...] # read or set the proof: test:X situation:Y aspect:Z invariant:NAME
-  python3 plan/tasks/task.py done CODE             # runs the proof; refuses unless it passes
+                                                   # a trailing ? (invariant:NAME?) marks the step suspect: reported, never fails
+  python3 plan/tasks/task.py done CODE             # runs the proof; closes only when every step passes, else
+                                                   # a row whose tests pass is "delivered" and waits for its live steps
+  python3 plan/tasks/task.py defer CODE REASON     # freeze a row (status deferred, reason in the notes)
+  python3 plan/tasks/task.py unstick CODE          # a harness-stuck row back to todo, its attempt memory cleared
   python3 plan/tasks/task.py block CODE NOTE      # todo -> blocked
   python3 plan/tasks/task.py unblock CODE          # blocked -> todo
   python3 plan/tasks/task.py deps CODE             # direct + transitive dependencies
@@ -25,6 +29,7 @@ Usage:
 import argparse
 import datetime
 import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -37,6 +42,7 @@ SEED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed.sql")
 
 MODULE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CLAIMS = os.path.join(MODULE, "plan/research/ogame/claims")
+ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 # An interactive agent works a row for hours; the harness holds a file for one attempt. A lock older
 # than this with no activity belongs to an agent that went away.
 AGENT_CLAIM_HOURS = 6
@@ -219,9 +225,23 @@ def cmd_reap(con):
     print("reaped:", ", ".join(code for code, _ in stale) or "nothing")
 
 
+def run_proof(code):
+    """The proof's verdict as `prove --json` reports it, with its progress still on this terminal."""
+    result = subprocess.run(["bash", os.path.join(MODULE, "scripts/ogamex"), "prove", code, "--json"],
+                            stdout=subprocess.PIPE, text=True)
+    try:
+        return json.loads(result.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        return {"pass": False, "steps": []}
+
+
 def cmd_done(con, code):
     """Done means proven. A code row closes only when its proof runs green: a passing unit of code
-    that changes nothing an account does is how 34 of 75 'delivered' slices turned out dead."""
+    that changes nothing an account does is how 34 of 75 'delivered' slices turned out dead.
+
+    A row whose test steps pass but whose live steps do not (yet) is delivered, not done: it keeps its
+    place, held by no agent, and closes on the evidence run that passes them. The cohort's clock no
+    longer holds a finished slice hostage as 'in progress'."""
     row = con.execute("SELECT kind, coalesce(proof,'') FROM tasks WHERE code=?", (code,)).fetchone()
     if row is None:
         sys.exit(f"no task {code}")
@@ -229,9 +249,17 @@ def cmd_done(con, code):
     if kind == "impl" and not on_path(proof):
         sys.exit("NOT done: " + off_path_reason(code))
     if kind == "impl":
-        module = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        result = subprocess.run(["bash", os.path.join(module, "scripts/ogamex"), "prove", code])
-        if result.returncode != 0:
+        verdict = run_proof(code)
+        tests = [step for step in verdict["steps"] if step["step"].startswith("test:")]
+        if not verdict["pass"] and tests and all(step["pass"] for step in tests):
+            holder = con.execute("SELECT coalesce(assignee,'') FROM tasks WHERE code=?", (code,)).fetchone()[0]
+            release_locks(code, holder)
+            con.execute("UPDATE tasks SET status='in_progress', assignee='harness:delivered', "
+                        "updated_at=datetime('now') WHERE code=?", (code,))
+            con.commit()
+            sys.exit(f"DELIVERED {code}: its tests pass, its live steps do not yet (see above). "
+                     f"Run `task.py done {code}` after an evidence run.")
+        if not verdict["pass"]:
             sys.exit(f"NOT done: the proof for {code} failed (see above). The row stays open.")
     holder = con.execute("SELECT coalesce(assignee,'') FROM tasks WHERE code=?", (code,)).fetchone()[0]
     release_locks(code, holder)
@@ -240,6 +268,29 @@ def cmd_done(con, code):
                 (f" | PROVEN {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: {proof}" if proof else "", code))
     con.commit()
     print("done", code)
+
+
+def cmd_defer(con, code, reason):
+    """Freeze a row: nothing takes it until someone with the owner's say-so reopens it."""
+    cur = con.execute("UPDATE tasks SET status='deferred', assignee=NULL, "
+                      "notes=coalesce(notes,'') || ' | deferred: ' || ?, updated_at=datetime('now') WHERE code=?",
+                      (reason, code))
+    if not cur.rowcount:
+        sys.exit(f"no task {code}")
+    con.commit()
+    print("deferred", code)
+
+
+def cmd_unstick(con, code):
+    """The harness stops a row that fails the same way twice (strategy-pipeline.py record_failure) and
+    remembers it in three files. Unsticking is the reviewer's decision that something changed."""
+    for suffix in ("stuck", "sig", "count"):
+        path = os.path.join(ATTEMPTS, f"{code}.{suffix}")
+        if os.path.exists(path):
+            os.remove(path)
+    con.execute("UPDATE tasks SET status='todo', assignee=NULL, updated_at=datetime('now') WHERE code=?", (code,))
+    con.commit()
+    print("unstuck", code)
 
 
 def cmd_show(con, code):
@@ -267,9 +318,9 @@ def cmd_next(con):
 
 def cmd_proof(con, code, steps):
     if steps:
-        bad = [step for step in steps if not re.match(r"^(test|situation|aspect|invariant|harness):[\w.-]+$", step)]
+        bad = [step for step in steps if not re.match(r"^(test|situation|aspect|invariant|harness):[\w.-]+\??$", step)]
         if bad:
-            sys.exit(f"not a proof step: {' '.join(bad)} (use test:TestName situation:name aspect:name invariant:NAME)")
+            sys.exit(f"not a proof step: {' '.join(bad)} (use test:TestName situation:name aspect:name invariant:NAME, a trailing ? for a suspect step)")
         kind = con.execute("SELECT kind FROM tasks WHERE code=?", (code,)).fetchone()
         if kind and kind[0] == "impl" and not on_path(" ".join(steps)):
             sys.exit("proof NOT set: " + off_path_reason(code))
@@ -360,9 +411,10 @@ def main():
     for name in ("list", "ready", "blocked", "graph", "rebuild", "next", "reap"):
         sub.add_parser(name)
     cp = sub.add_parser("claim"); cp.add_argument("code"); cp.add_argument("assignee")
-    for name in ("unclaim", "done", "unblock", "show"):
+    for name in ("unclaim", "done", "unblock", "show", "unstick"):
         sub.add_parser(name).add_argument("code")
     bp = sub.add_parser("block"); bp.add_argument("code"); bp.add_argument("note")
+    dp = sub.add_parser("defer"); dp.add_argument("code"); dp.add_argument("reason")
     sub.add_parser("deps").add_argument("code")
     sub.add_parser("depends-on").add_argument("code")
     ap = sub.add_parser("add")
@@ -399,6 +451,10 @@ def main():
             cmd_done(con, a.code)
         elif cmd == "block":
             cmd_block(con, a.code, a.note)
+        elif cmd == "defer":
+            cmd_defer(con, a.code, a.reason)
+        elif cmd == "unstick":
+            cmd_unstick(con, a.code)
         elif cmd == "unblock":
             cmd_unblock(con, a.code)
         elif cmd == "deps":
