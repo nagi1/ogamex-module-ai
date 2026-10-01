@@ -304,7 +304,10 @@ for raw in open(results).read().splitlines():
 
 # A suspect step is reported but never fails the row.
 failing = [row for row in rows if not row["pass"] and not row["suspect"]]
-verdict = f"PROOF: {'FAIL' if failing else 'PASS'} {code} ({steps})"
+# Every failing step only waiting out the hour a live aspect needs is not a failure: it must not read as one
+# (156 PROOF: FAIL lines in a night, 96 of them "too early", made the progress look like wreckage).
+waiting = bool(failing) and all("too early" in row["line"] for row in failing)
+verdict = f"PROOF: {'WAIT' if waiting else 'FAIL' if failing else 'PASS'} {code} ({steps})"
 if failing:
     verdict += f" at {failing[0]['step']}: {failing[0]['line']}"
 

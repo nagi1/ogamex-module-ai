@@ -255,11 +255,21 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
     # (`task.py done` runs `scripts/ogamex prove`). The cohort workers keep classes in memory, so
     # they are restarted onto the code on disk first, or the proof would read the old behaviour.
     unproven=$(python3 -u scripts/strategy-pipeline.py status | sed -n 's/^UNPROVEN: //p')
-    if [ -n "$unproven" ]; then
+    # A delivered row is proved when its code changed since the last proof, or every 20 minutes (a live
+    # aspect needs time to move). Proving all of them every pass printed the same verdict dozens of times
+    # and restarted the cohort's workers each time, which added the backlog the verdict then read.
+    due=""
+    for code in $unproven; do
+      log="plan/research/ogame/proofs/$code.log"; marker="plan/research/ogame/implemented/$code.md"
+      if [ ! -f "$log" ] || [ "$marker" -nt "$log" ] || [ $(( $(date +%s) - $(stat -c %Y "$log") )) -gt 1200 ]; then
+        due="$due $code"
+      fi
+    done
+    if [ -n "$due" ]; then
       for universe in ${HARNESS_UNIVERSES:-grand}; do
         (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc "cd /var/www && php artisan queue:restart") || true
       done
-      for code in $(printf '%s\n' $unproven | head -n 5); do
+      for code in $(printf '%s\n' $due | head -n 5); do
         echo "--- proving $code $(date -u '+%F %T') UTC ---"
         if ! python3 plan/tasks/task.py done "$code"; then
           echo "--- $code delivered, NOT proven yet $(date -u '+%F %T') UTC ---"
