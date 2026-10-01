@@ -52,7 +52,7 @@ ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 # How many tries one task may spend in a window, and how long before its budget resets. The window is
 # not the stop: a row that fails the same way twice is stuck (record_failure) and waits for a person.
 MAX_ATTEMPTS = 3
-COOLOFF_SECONDS = 12 * 3600
+COOLOFF_SECONDS = 45 * 60
 # A stuck row's wait, in seconds: no clock ends it, `task.py unstick` does.
 NEVER = 10 ** 9
 # Reads older than the grand reseed (1 Oct 2026 15:39 UTC) measured a universe at 90,000x speed.
