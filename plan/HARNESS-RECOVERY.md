@@ -60,13 +60,41 @@ Rule that came out of it: when a fast proof fails, read the ranked candidates fi
 action is not among them, the defect is candidate generation (a planner or its target selection), not
 scoring, and the row's file list must name that planner.
 
+### The full kit and the behaviour board (1 Oct 2026, 18:50 UTC)
+
+`bash scripts/ogamex stories` (or `python3 scripts/stories.py`) runs every story in
+`tests/Feature/Situations/` in parallel, in about 5 s, and prints PASS/FAIL per story with the rows
+that name it and, for a failure, the kit's diagnosis. The harness runs it every pass; the watch page
+shows it under the north star (`plan/research/ogame/stories.json`, ignored by git).
+
+What the kit can plant: resources, stock on every planet, building and research levels, ships, a
+colony, debris at home, a hostile fleet, an inactive neighbour (login *and* planet activity aged), a
+spy report on it built field by field like `EspionageMission`, units on the neighbour, an alliance
+application, a direct message; it runs one session, several sessions, or the minute schedule. What it
+asserts: work kinds, queued objects, flown missions (host mission names), ranked candidates, a decided
+application, a reply. A failure prints work with state and due time, refused intents with their
+reason, queues, missions and the last ranked candidates.
+
+How to read a failure (also in the writer prompt): *refused* means an executor gate said no; *missing
+from ranked* means no planner offered it; *ranked but outscored* means the comparison.
+
+First board, before ARB-001: 17/23. All six red stories had the same shape: Build won every login at
+about 65 on the Miner's `archetype_preference=25`, while Recycle (27), Spy (38), Colonize (40),
+QueueUnits (41) and Expedition ranked and lost. `ScheduleAiIntentAction::handle` already refills the
+economy in every session whatever wins, so Build winning spent the login's one errand on work that
+happens anyway. ARB-001 was moved to the harness lane with that spec and five stories as its proof; its
+first attempt took the board to 24/25. Still red: research (QUAL-006: the economy refill queues no
+research with lab 3 and 2M stock). Two kit bugs found on the way (intents due seconds later were left
+pending; planting stock made an inactive look active) are fixed in the kit, not the module.
+
+A green story is evidence too: `EveryPlanetBuildsSessionSituationTest` passes, so ECON-001's live
+`IDLE_QUEUES` failure is the cohort's state, not the session logic.
+
 ### Next harness work (in order)
 
-1. **Give every open P0/P1 row a fast proof.** Rows raised automatically from a cohort read
-   (`QUAL-009`, …) carry only an `aspect:` step, so their attempts cannot be judged quickly. The
-   quality step should attach the matching `tests/Feature/Situations/*` test when one exists, and the
-   reviewer adds a situation test for each aspect that has none (research, shipyard, transport,
-   colonisation, expeditions, fleet_breadth).
+1. **Fast proofs: done for 13 rows (1 Oct 18:50).** Still without a story: transport, the proactive
+   save before an absence, defence shape (`NAKED_BESIDE_WALLED`), and the quality step still raises
+   rows with only an `aspect:` step; it should attach the story whose name matches the aspect.
 2. **ECON-001 `IDLE_QUEUES`.** The invariant still flags one-planet accounts every pass after the
    grace. Read `verify-cohorts.php` against a live account (`ogamex economy <id>`) and decide whether
    it is a real miss (raise a row) or a measurement gap (fix the invariant). Until then its proof
