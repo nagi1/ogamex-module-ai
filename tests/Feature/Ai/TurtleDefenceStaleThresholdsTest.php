@@ -50,7 +50,8 @@ it('flags a threshold built on a superseded tally injected into the module sourc
 
 function aiModuleRoot(): string
 {
-    return dirname(__DIR__, 3) . '/Modules/AI';
+    // tests/Feature/Ai is three levels below the module root.
+    return dirname(__DIR__, 3);
 }
 
 /**

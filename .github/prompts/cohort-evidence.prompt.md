@@ -95,6 +95,18 @@ In each cohort database: number of enabled `ai_profiles`, planets per account (m
 `ai_work_items` grouped by `kind, state` for the last 24h, and the newest 20 rows of `ai_decision_traces`
 (`player_id, selected_action, selected_reason, created_at`) → `20-cohort-sql-grand.txt`, `21-cohort-sql-pve.txt`.
 
+## 7b. Why planets idle, and how far behind the workers are
+
+- For the first three enabled AI accounts in each cohort (lowest player ids):
+  `PROVE_UNIVERSE=<u> bash scripts/ogamex economy <player_id>` → `25-economy-<u>.txt`
+- Queue backlog per lane, in each cohort app container:
+  `php artisan horizon:status`, `php artisan queue:monitor redis:default,redis:ai-work,redis:ai-language` (record whatever
+  queue names Horizon lists if these differ), the count of `ai_work_items` with state 1 or 3 and `due_at` older than
+  5 minutes, and `SELECT COUNT(*) FROM failed_jobs WHERE failed_at > NOW() - INTERVAL 1 HOUR`
+  → `26-backlog-<u>.txt`
+- Is anything on this machine auto-committing? `ps aux | grep -i watcher | grep -v grep` and the last 10
+  `git log --format='%h %an %ad %s' --date=iso` lines → `27-watchers.txt`
+
 ## 8. After one hour (if you can wait)
 
 Wait 60 minutes after step 2, then repeat step 1's scorecards without `--save`:

@@ -1,5 +1,6 @@
 <?php
 
+use Modules\AI\Domain\Decision\BuildCandidate;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\ReserveFloor;
 use Modules\AI\Enums\AiArchetype;
@@ -78,6 +79,27 @@ test('the planner refuses a build the price alone covers and accepts it once the
     expect($plan)->not->toBeNull()
         ->and(ObjectService::getObjectById((int) $plan?->buildingId)->machine_name)->toBe('solar_plant');
 });
+
+// A planet that never builds has to say which of the host's gates stops it, or an idle build queue
+// reads the same whether the planet is poor, blocked by a prerequisite or simply full.
+test('a refused building names the host gate that refuses it', function (string $building, int $level, bool $rich, ?string $gate): void {
+    reserveProfile($this->currentUserId);
+    $this->planetSetObjectLevel($building, $level);
+    if ($rich) {
+        $this->planetAddResources(new Resources(5_000_000, 5_000_000, 5_000_000));
+    }
+
+    $candidate = app()->makeWith(BuildCandidate::class, ['buildingId' => ObjectService::getObjectByMachineName($building)->id, 'reason' => 'refusal-fixture']);
+    $planner = app(QueueableBuildingPlanner::class);
+    $planet = reservePlanet($this->currentUserId);
+
+    expect($planner->refusal($planet, $candidate))->toBe($gate)
+        ->and($planner->canQueue($planet, $candidate))->toBe($gate === null);
+})->with([
+    'a mine the planet can pay for' => ['metal_mine', 0, true, null],
+    'a mine forty levels up' => ['metal_mine', 40, false, 'price plus reserve'],
+    'a factory whose prerequisites are missing' => ['nanite_factory', 0, true, 'requirements'],
+]);
 
 function reserveProfile(int $playerId): AiProfile
 {

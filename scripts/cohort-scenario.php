@@ -43,6 +43,8 @@ use OGame\Models\ChatMessage;
  * the wrong universe in front of it. The database the container points at decides the cohort.
  */
 
+require_once __DIR__.'/economy-explain.php';
+
 $root = dirname(__DIR__, 3);
 
 require $root.'/vendor/autoload.php';
@@ -105,7 +107,14 @@ $started = microtime(true);
 
 foreach ($chosen as $name) {
     $definition = scenarios()[$name];
-    $results[] = run_scenario($name, $definition, $context, $options);
+    // One scenario throwing must not cost the rest of the run, and must not leave its plant behind.
+    try {
+        $results[] = run_scenario($name, $definition, $context, $options);
+    } catch (Throwable $error) {
+        $reverted = revert_planted();
+        echo 'SCENARIO: ERROR '.$name.' — '.strtok($error->getMessage(), "\n").' (reverted '.$reverted." planted row(s))\n";
+        $results[] = ['name' => $name, 'ok' => false, 'detail' => $error->getMessage()];
+    }
 }
 
 $seconds = microtime(true) - $started;
@@ -152,8 +161,11 @@ function scenarios(): array
                     ->where(static fn ($query) => $query->where('processed', 0)->orWhere('created_at', '>=', $context['before']))
                     ->distinct()->count('planet_id');
 
-                return [count($subjectPlanets) > 0 && $building * 2 >= count($subjectPlanets),
-                    $building.' of '.count($subjectPlanets).' planet(s) of account '.$context['subject'].' building or ordered'];
+                $ok = count($subjectPlanets) > 0 && $building * 2 >= count($subjectPlanets);
+                $detail = $building.' of '.count($subjectPlanets).' planet(s) of account '.$context['subject'].' building or ordered';
+
+                // A failure names, per planet, the gate that kept it idle (economy-explain.php).
+                return [$ok, $ok ? $detail : $detail."\n      ".implode("\n      ", explain_economy($context['subject']))];
             },
         ],
         'inbound-message' => [
@@ -224,16 +236,20 @@ function scenarios(): array
                 $home = DB::table('planets')->where('id', $context['planet'])
                     ->first(['galaxy', 'system', 'planet']);
 
-                $field = DB::table('debris_fields')->insertGetId([
-                    'galaxy' => $home->galaxy,
-                    'system' => $home->system,
-                    'planet' => $home->planet,
-                    'metal' => 400000,
-                    'crystal' => 200000,
-                    'deuterium' => 0,
-                    'created_at' => CarbonImmutable::now(),
-                    'updated_at' => CarbonImmutable::now(),
-                ]);
+                // One debris field per position (a unique key): a real battle may already have left
+                // one here, so it is topped up and restored afterwards instead of inserted beside.
+                $position = ['galaxy' => $home->galaxy, 'system' => $home->system, 'planet' => $home->planet];
+                $existing = DB::table('debris_fields')->where($position)->first(['id', 'metal', 'crystal', 'deuterium']);
+                $amounts = ['metal' => 400000, 'crystal' => 200000, 'deuterium' => 0, 'updated_at' => CarbonImmutable::now()];
+
+                if ($existing !== null) {
+                    DB::table('debris_fields')->where('id', $existing->id)->update($amounts);
+
+                    return ['debris field topped up to 400k metal beside planet '.$context['planet'],
+                        [['restore', 'debris_fields', $existing->id, ['metal' => $existing->metal, 'crystal' => $existing->crystal, 'deuterium' => $existing->deuterium]]]];
+                }
+
+                $field = DB::table('debris_fields')->insertGetId([...$position, ...$amounts, 'created_at' => CarbonImmutable::now()]);
 
                 return ['debris field of 400k metal beside planet '.$context['planet'],
                     [['delete', 'debris_fields', $field]]];

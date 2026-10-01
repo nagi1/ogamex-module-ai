@@ -87,20 +87,7 @@ class QueueableBuildingPlanner
             $planet->updateResourceStorageStats(false);
         }
 
-        // A warehouse about to overflow stops that planet producing, so its pass runs across every
-        // planet before any routine step; a full warehouse (E7) is a spend signal and comes next;
-        // then the routine economy: energy before it throttles, the chain's facilities, the
-        // fastest-paying mine.
-        $passes = [
-            fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
-            fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
-            fn (PlanetService $planet): array => [
-                ...$this->energyCapacity->pending($planet),
-                ...$this->facilityChain->pending($planet),
-                ...$this->economyUpgrades->storageForPrice($planet, $profile),
-                ...$this->economyUpgrades->production($planet, $profile),
-            ],
-        ];
+        $passes = $this->passes($profile);
 
         $steps = [];
         foreach ($passes as $candidates) {
@@ -114,6 +101,29 @@ class QueueableBuildingPlanner
         }
 
         return array_values($steps);
+    }
+
+    /**
+     * The candidate lists in the order the planner tries them. A warehouse about to overflow stops
+     * that planet producing, so its pass runs across every planet before any routine step; a full
+     * warehouse (E7) is a spend signal and comes next; then the routine economy: energy before it
+     * throttles, the chain's facilities, the fastest-paying mine. Public so a read-out explains a
+     * planet with the same lists the decision used.
+     *
+     * @return array<string, callable(PlanetService): list<BuildCandidate>>
+     */
+    public function passes(AiProfile $profile): array
+    {
+        return [
+            'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
+            'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
+            'routine' => fn (PlanetService $planet): array => [
+                ...$this->energyCapacity->pending($planet),
+                ...$this->facilityChain->pending($planet),
+                ...$this->economyUpgrades->storageForPrice($planet, $profile),
+                ...$this->economyUpgrades->production($planet, $profile),
+            ],
+        ];
     }
 
     /**
@@ -190,24 +200,39 @@ class QueueableBuildingPlanner
      */
     public function canQueue(PlanetService $planet, BuildCandidate $candidate): bool
     {
+        return $this->refusal($planet, $candidate) === null;
+    }
+
+    /**
+     * Which of the host's gates refuses this building here, or null when the planet can queue it.
+     * The gates are asked in the order the building page asks them: planet type, free queue space,
+     * met requirements, a balance it can pay and a field the building still fits in. Named, so a
+     * planet that never builds says why instead of reading as idle.
+     */
+    public function refusal(PlanetService $planet, BuildCandidate $candidate): ?string
+    {
         $object = ObjectService::getObjectById($candidate->buildingId);
         $machineName = $object->machine_name;
-        // The host's own gates for a legal queue request, asked in the order its building page asks
-        // them: planet type, free queue space, met requirements, a balance it can pay and a field the
-        // building still fits in. They read as one predicate because one planet either accepts the
-        // building or does not; the rejected reason is the host's to report when an intent is
-        // actually attempted.
-        $queueable = ObjectService::objectValidPlanetType($machineName, $planet)
-            && !$this->buildingQueueService->retrieveQueue($planet)->isQueueFull()
-            && ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)
-            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS))
-            // `BuildingQueueService::start()` refuses a field-consuming building once the planet's
-            // fields are used up, so a planet with no field left is not a place to build: the
-            // question is the host's two numbers, and terraformer cannot rescue it because a
-            // terraformer consumes a field too.
-            && (!$object->consumesPlanetField || $planet->getBuildingCount() < $planet->getPlanetFieldMax());
 
-        return $queueable;
+        if (!ObjectService::objectValidPlanetType($machineName, $planet)) {
+            return 'planet type';
+        }
+        if ($this->buildingQueueService->retrieveQueue($planet)->isQueueFull()) {
+            return 'queue full';
+        }
+        if (!ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)) {
+            return 'requirements';
+        }
+        if (!$planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS))) {
+            return 'price plus reserve';
+        }
+        // `BuildingQueueService::start()` refuses a field-consuming building once the planet's fields
+        // are used up, and a terraformer cannot rescue it because a terraformer consumes a field too.
+        if ($object->consumesPlanetField && $planet->getBuildingCount() >= $planet->getPlanetFieldMax()) {
+            return 'no free field';
+        }
+
+        return null;
     }
 
     /**

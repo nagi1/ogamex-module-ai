@@ -135,6 +135,7 @@ Proof (a task is done when its proof passes; see .github/skills/ai-task-execute)
   situation <name|all|list>             plant a situation on a cohort, drive it, read the answer back
   prove <CODE>                          run the row's proof steps; PROOF: PASS or PROOF: FAIL
   test-one <TestName>                   one module test file by name (fast, no parallel start-up)
+  economy <player_id>                   per planet: building, what it would queue, or the gate that refuses it
 
 Environment:
   OGAMEX_ROOT          OGameX checkout (default: two levels above this script)
@@ -294,6 +295,9 @@ case "$command_name" in
         ;;
     prove)
         prove_row "${1:?usage: prove CODE}"
+        ;;
+    economy)
+        in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/economy-explain.php'; foreach (explain_economy(${1:?usage: economy PLAYER_ID}) as \$line) { echo \$line, PHP_EOL; }"
         ;;
     test-one)
         with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"

@@ -285,8 +285,13 @@ echo $fired === [] ? '' : 'QUALITY: FAIL '.implode(' ', $fired)."\n";
 // The expensive part, only for the accounts asked for. This is what answers "why is this account
 // doing nothing": the account's state, the capabilities the perception publishes, the step the
 // chain wants next, and the wall the doctrine would build.
+require_once __DIR__.'/economy-explain.php';
+
 foreach (($argv ?? []) as $playerId) {
     $playerId = (int) $playerId;
+    foreach (explain_economy($playerId) as $line) {
+        echo '  economy '.$line."\n";
+    }
     $player = app(PlayerServiceFactory::class)->make($playerId, true);
     $observation = app(PlayerObservationService::class)->ownedState($playerId);
     $published = array_keys(array_filter($observation['available_actions']));
