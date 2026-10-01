@@ -1,119 +1,15 @@
-### FILE: app/Actions/QueueAiRecycleAction.php
-```php
-<?php
-
-namespace Modules\AI\Actions;
-
-use Exception;
-use Modules\AI\Contracts\QueueAiRecycle;
-use Modules\AI\Enums\AiQueueActionReason;
-use Modules\AI\Support\AiActionResult;
-use OGame\Factories\PlanetServiceFactory;
-use OGame\GameMissions\RecycleMission;
-use OGame\GameObjects\Models\Units\UnitCollection;
-use OGame\Models\DebrisField;
-use OGame\Models\Enums\PlanetType;
-use OGame\Models\Planet;
-use OGame\Models\Planet\Coordinate;
-use OGame\Models\Resources;
-use OGame\Services\FleetMissionService;
-use OGame\Services\ObjectService;
-use OGame\Services\PlanetService;
+### EDIT: app/Actions/QueueAiRecycleAction.php
+<<<<<<< SEARCH
+use OGame\Services\PlayerGameStateService;
+use OGame\Services\PlayerService;
+=======
 use OGame\Services\PlayerGameStateService;
 use OGame\Services\PlayerService;
 use OGame\Services\UnitQueueService;
 use Symfony\Component\Yaml\Yaml;
+>>>>>>> REPLACE
 
-/**
- * Module-owned adapter over the host's harvest (recycle) fleet path.
- *
- * The decision, the field, the harvest-hull count and the hull order are the
- * module's; the mission, its legality and the harvest itself are the host's. The
- * hull is the one the host's own RecycleMission requires for the target slot.
- */
-class QueueAiRecycleAction implements QueueAiRecycle
-{
-    /** The cheapest speed the host accepts (10%), a slow harvest run. */
-    private const RECYCLE_SPEED = 10.0;
-
-    public function __construct(
-        private PlayerGameStateService $playerGameStateService,
-        private PlanetServiceFactory $planetServiceFactory,
-    ) {
-    }
-
-    public function handle(int $playerId, int $planetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType): AiActionResult
-    {
-        if (!Planet::query()->whereKey($planetId)->where('user_id', $playerId)->exists()) {
-            return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
-        }
-
-        try {
-            $player = $this->playerGameStateService->advance($playerId, $planetId);
-
-            if ($player->isBanned()) {
-                return AiActionResult::rejected(AiQueueActionReason::PlayerBanned);
-            }
-            if ($player->isInVacationMode()) {
-                return AiActionResult::rejected(AiQueueActionReason::VacationMode);
-            }
-
-            $origin = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
-            $harvester = RecycleMission::getHarvesterMachineNameForPosition($targetPosition);
-
-            if ($origin->getShipUnits()->getAmountByMachineName($harvester) <= 0) {
-                return $this->orderHarvestHulls($player, $origin, $harvester, $targetGalaxy, $targetSystem, $targetPosition);
-            }
-
-            $fleet = $this->harvestFleet($player, $origin, $targetGalaxy, $targetSystem, $targetPosition);
-            if ($fleet === null) {
-                return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
-            }
-
-            $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
-            $mission = $fleetMissions->createNewFromPlanet(
-                $origin,
-                new Coordinate($targetGalaxy, $targetSystem, $targetPosition),
-                PlanetType::from($targetType),
-                RecycleMission::getTypeId(),
-                $fleet,
-                new Resources(),
-                self::RECYCLE_SPEED,
-            );
-
-            return AiActionResult::queued($mission->id);
-        } catch (Exception $exception) {
-            return AiActionResult::rejected($exception->getMessage());
-        }
-    }
-
-    /**
-     * A field is in reach and nothing the account owns can carry it, so the hull
-     * the host's own RecycleMission asks for is ordered into the planet's yard.
-     * The trip itself stays refused: no fleet exists to fly it yet.
-     */
-    private function orderHarvestHulls(PlayerService $player, PlanetService $origin, string $harvester, int $galaxy, int $system, int $position): AiActionResult
-    {
-        $ship = ObjectService::getShipObjectByMachineName($harvester);
-        $capacity = $ship->properties->capacity->calculate($player)->totalValue;
-        $needed = (int) ceil($this->fieldMass($galaxy, $system, $position) / max(1, $capacity));
-        $count = min($needed, $this->harvestHullOrderCap());
-
-        if ($count > 0) {
-            app(UnitQueueService::class)->add($origin, (int) $ship->id, $count);
-        }
-
-        return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
-    }
-
-    /** The cap on one field's hull order, from the module's behaviour file. */
-    private function harvestHullOrderCap(): int
-    {
-        $rules = Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/harvest-hull.yaml');
-
-        return (int) ($rules['harvest_hull_order_cap'] ?? 0);
-    }
-
+<<<<<<< SEARCH
     /**
      * Enough harvest hulls to carry the field, capped by what the body holds.
      *
@@ -139,30 +35,72 @@ class QueueAiRecycleAction implements QueueAiRecycle
 
         return $fleet;
     }
-
-    /** The field's total mass at dispatch time, re-derived, never trusted from the decision. */
-    private function fieldMass(int $galaxy, int $system, int $position): float
+=======
+    /**
+     * Enough harvest hulls to carry the field, capped by what the body holds.
+     *
+     * The hull is the one the host's RecycleMission requires for the slot and its
+     * capacity is the host's own figure, so a mod that changes either changes the
+     * count with no module edit. At least one hull flies for a field still worth
+     * a trip. A body that holds none orders the hull the trip needs instead, so a
+     * field a human would harvest does not sit in space forever.
+     */
+    private function harvestFleet(PlayerService $player, PlanetService $origin, int $galaxy, int $system, int $position): ?UnitCollection
     {
-        $field = DebrisField::query()
-            ->where('galaxy', $galaxy)
-            ->where('system', $system)
-            ->where('planet', $position)
-            ->first();
+        $ship = ObjectService::getShipObjectByMachineName(RecycleMission::getHarvesterMachineNameForPosition($position));
+        $available = $origin->getShipUnits()->getAmountByMachineName($ship->machine_name);
+        if ($available <= 0) {
+            $this->orderHarvestHulls($player, $origin, $galaxy, $system, $position);
 
-        return $field === null ? 0.0 : (float) $field->metal + (float) $field->crystal + (float) $field->deuterium;
+            return null;
+        }
+
+        $capacity = $ship->properties->capacity->calculate($player)->totalValue;
+        $needed = (int) ceil($this->fieldMass($galaxy, $system, $position) / max(1, $capacity));
+        $count = max(1, min($available, $needed));
+
+        $fleet = new UnitCollection();
+        $fleet->addUnit($ship, $count);
+
+        return $fleet;
     }
-}
-```
 
-### FILE: resources/behavior/harvest-hull.yaml
+    /**
+     * The hulls this trip needs, ordered through the yard the account already builds in.
+     *
+     * Mass-free coordinates order nothing: yard time spent on dust is never paid
+     * back. The cap bounds what one field may claim, so a single field cannot eat
+     * a whole shipyard order.
+     */
+    private function orderHarvestHulls(PlayerService $player, PlanetService $origin, int $galaxy, int $system, int $position): void
+    {
+        $ship = ObjectService::getShipObjectByMachineName(RecycleMission::getHarvesterMachineNameForPosition($position));
+        $capacity = max(1, $ship->properties->capacity->calculate($player)->totalValue);
+        $needed = (int) ceil($this->fieldMass($galaxy, $system, $position) / $capacity);
+        $count = min($needed, $this->harvestHullOrderCap());
+        if ($count <= 0) {
+            return;
+        }
+
+        $unitQueue = app()->makeWith(UnitQueueService::class, ['player' => $player]);
+        $unitQueue->add($origin, $ship, $count);
+    }
+
+    /** The order cap, read by name from the module's behaviour file. */
+    private function harvestHullOrderCap(): int
+    {
+        $behaviour = Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/harvest-order.yaml');
+
+        return (int) $behaviour['max_hulls_per_order'];
+    }
+>>>>>>> REPLACE
+
+### FILE: resources/behavior/harvest-order.yaml
 ```yaml
-# Harvest-hull rules for the module's recycle adapter.
-#
-# The hulls one recycle intent orders are the field's own mass divided by the
-# host's capacity for that hull, so a big field is still harvested by
-# fleet-sized trips instead of one giant run. The cap keeps a single field from
-# eating the whole yard.
-harvest_hull_order_cap: 20
+# Bounds on the harvest hulls one debris field may order from the yard when the
+# account owns none: the trip is sized to the field, but a single field must not
+# claim a whole shipyard order.
+max_hulls_per_order: 20
 ```
 
 ### FILE: tests/Feature/HarvestHullOrderTest.php
@@ -182,57 +120,62 @@ use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
 
-beforeEach(function (): void {
-    app()->bind(QueueAiRecycle::class, QueueAiRecycleAction::class);
-    // The harvest surface is shared state, so clear it each test rather than
-    // depend on transaction rollback in a parallel worker.
-    DebrisField::query()->delete();
-    UnitQueue::query()->delete();
-    FleetMission::query()->where('mission_type', RecycleMission::getTypeId())->delete();
-});
-
-function harvestOriginPlanetId(int $userId): int
+/** The account's own body, the one the fixtures put hulls on. */
+function harvestHullOrderPlanet(int $playerId): int
 {
-    return (int) Planet::query()->where('user_id', $userId)->value('id');
+    return (int) Planet::query()->where('user_id', $playerId)->orderBy('id')->value('id');
 }
 
-function harvestDebrisField(int $position, int $metal): void
+/** A field of the given total mass at the given slot. */
+function harvestDebrisField(int $position, int $mass): void
 {
     DebrisField::create([
         'galaxy' => 1,
-        'system' => 2,
+        'system' => 1,
         'planet' => $position,
-        'metal' => $metal,
+        'metal' => $mass,
         'crystal' => 0,
         'deuterium' => 0,
     ]);
 }
 
-function harvestTrip(int $userId, int $planetId, int $position): AiActionResult
+/** The real harvest path: the module's recycle adapter, the host's mission. */
+function harvestTrip(int $playerId, int $planetId, int $position): AiActionResult
 {
-    return app(QueueAiRecycle::class)->handle($userId, $planetId, 1, 2, $position, PlanetType::DebrisField->value);
+    return app(QueueAiRecycle::class)->handle(
+        $playerId,
+        $planetId,
+        1,
+        1,
+        $position,
+        PlanetType::DebrisField->value,
+    );
 }
 
-// Nothing the account owns can carry the field, so the hull the trip needs is
-// ordered instead: a recycle intent that is never followed by a hull is the
-// reason the debris stays in space for ever.
-test('a field the account cannot carry orders the hull the trip needs', function (): void {
-    $planetId = harvestOriginPlanetId($this->currentUserId);
-    harvestDebrisField(5, 20_000);
+beforeEach(function (): void {
+    app()->bind(QueueAiRecycle::class, QueueAiRecycleAction::class);
+    DebrisField::query()->delete();
+    UnitQueue::query()->delete();
+    FleetMission::query()->where('mission_type', RecycleMission::getTypeId())->delete();
+});
 
-    $result = harvestTrip($this->currentUserId, $planetId, 5);
+// A field a human would harvest with no hull anywhere is work the account never
+// gets to: the hull the trip needs is ordered, not the field abandoned.
+test('a field the account cannot carry orders the hull the trip needs', function (): void {
+    harvestDebrisField(5, 10_000);
+
+    $result = harvestTrip($this->currentUserId, harvestHullOrderPlanet($this->currentUserId), 5);
 
     expect($result)->toBeInstanceOf(AiActionResult::class)
         ->and(UnitQueue::query()->count())->toBe(1)
         ->and((int) UnitQueue::query()->value('object_amount'))->toBe(1);
 });
 
-// Past the cap the module builds the cap: one field must not eat the whole yard.
+// Past the cap the module orders the cap: one field must not eat the whole yard.
 test('a field past the cap orders only the cap', function (): void {
-    $planetId = harvestOriginPlanetId($this->currentUserId);
     harvestDebrisField(6, 1_000_000_000);
 
-    harvestTrip($this->currentUserId, $planetId, 6);
+    harvestTrip($this->currentUserId, harvestHullOrderPlanet($this->currentUserId), 6);
 
     expect(UnitQueue::query()->count())->toBe(1)
         ->and((int) UnitQueue::query()->value('object_amount'))->toBe(20);
@@ -240,67 +183,111 @@ test('a field past the cap orders only the cap', function (): void {
 
 // No mass at the coordinates is no work: dust does not cost yard time.
 test('an empty field orders no hull', function (): void {
-    $planetId = harvestOriginPlanetId($this->currentUserId);
+    harvestDebrisField(7, 0);
 
-    harvestTrip($this->currentUserId, $planetId, 7);
+    $result = harvestTrip($this->currentUserId, harvestHullOrderPlanet($this->currentUserId), 7);
 
-    expect(UnitQueue::query()->count())->toBe(0);
+    expect($result)->toBeInstanceOf(AiActionResult::class)
+        ->and(UnitQueue::query()->count())->toBe(0);
 });
 
-// The hull is already owned, so the yard is untouched and the trip is the host's.
+// An account that already owns a harvest hull flies the trip; the yard is not
+// asked for a second fleet.
 test('an account that owns a hull orders nothing', function (): void {
-    $planetId = harvestOriginPlanetId($this->currentUserId);
     $this->planetAddUnit('recycler', 1);
-    harvestDebrisField(8, 20_000);
+    harvestDebrisField(8, 1_000_000);
 
-    harvestTrip($this->currentUserId, $planetId, 8);
+    harvestTrip($this->currentUserId, harvestHullOrderPlanet($this->currentUserId), 8);
 
     expect(UnitQueue::query()->count())->toBe(0);
 });
 ```
 
-### FILE: resources/scenarios/recycle-without-hull.json
+### FILE: resources/scenarios/recycle-without-harvest-hull.json
 ```json
 {
-    "name": "recycle-without-hull",
-    "situation": "A debris field worth a trip sits in reach and the account owns no harvest hull, so every recycle intent is refused for want of a fleet.",
-    "status": "unverified",
-    "persona": "balanced",
+    "name": "recycle-without-harvest-hull",
+    "situation": "A debris field worth harvesting sits near the account and the account owns no harvest hull, so every recycle intent it decides can never fly and the debris stays in space.",
+    "persona": "raider",
     "input": {
-        "own_units": {"recycler": 0},
-        "debris_fields": [
-            {"galaxy": 1, "system": 2, "planet": 5, "metal": 20000, "crystal": 0, "deuterium": 0}
-        ]
+        "owned_harvest_hulls": 0,
+        "debris_field": {
+            "galaxy": 1,
+            "system": 1,
+            "position": 5,
+            "metal": 10000,
+            "crystal": 0,
+            "deuterium": 0
+        }
     },
     "decision_key": "recycle",
     "expect": {
         "action": "recycle",
-        "mission_type": "recycle",
-        "unit_ordered": "recycler",
-        "outcome": "harvest_hull_ordered"
-    }
+        "harvest_hull_order": {
+            "object": "recycler",
+            "amount": 1
+        }
+    },
+    "status": "unverified",
+    "checklist": [
+        {
+            "topic": "hull-source",
+            "question": "Is the harvest hull ordered through the host's yard queue, at the host's price, or granted for free?",
+            "status": "unverified"
+        },
+        {
+            "topic": "order-size",
+            "question": "How many hulls does one field order when the account owns none: what the field carries, or a fixed count?",
+            "status": "unverified"
+        },
+        {
+            "topic": "order-cap",
+            "question": "What bounds one field's order so it cannot claim the whole shipyard?",
+            "status": "unverified"
+        },
+        {
+            "topic": "repeat-intent",
+            "question": "What stops a second recycle intent, before the ordered hulls exist, from ordering the same hulls again?",
+            "status": "unverified"
+        }
+    ]
 }
 ```
 
-### FILE: resources/scenarios/recycle-with-hull.json
+### FILE: resources/scenarios/recycle-with-harvest-hull.json
 ```json
 {
-    "name": "recycle-with-hull",
-    "situation": "The account owns the harvest hull the field needs, so the recycle intent flies the mission instead of ordering another hull.",
-    "status": "unverified",
-    "persona": "balanced",
+    "name": "recycle-with-harvest-hull",
+    "situation": "The same field, but the account already owns a harvest hull: the trip flies and the yard is left alone.",
+    "persona": "raider",
     "input": {
-        "own_units": {"recycler": 5},
-        "debris_fields": [
-            {"galaxy": 1, "system": 2, "planet": 5, "metal": 20000, "crystal": 0, "deuterium": 0}
-        ]
+        "owned_harvest_hulls": 1,
+        "debris_field": {
+            "galaxy": 1,
+            "system": 1,
+            "position": 5,
+            "metal": 10000,
+            "crystal": 0,
+            "deuterium": 0
+        }
     },
     "decision_key": "recycle",
     "expect": {
         "action": "recycle",
-        "mission_type": "recycle",
-        "unit_ordered": null,
-        "outcome": "recycle_mission_queued"
-    }
+        "harvest_hull_order": null
+    },
+    "status": "unverified",
+    "checklist": [
+        {
+            "topic": "hull-count",
+            "question": "Does an owned hull stop the order entirely, or is the order sized to the shortfall?",
+            "status": "unverified"
+        },
+        {
+            "topic": "trip-size",
+            "question": "How many owned hulls of the required type fly for a field of a given mass?",
+            "status": "unverified"
+        }
+    ]
 }
 ```

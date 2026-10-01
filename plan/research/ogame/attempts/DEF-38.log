@@ -1,58 +1,54 @@
-DefenseDeterrentFloorTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (0 assertions)[39m
+DefenseDeterrentFloorTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (1 assertions)[39m
 
-loor       0.07s  
-  ⨯ it wants nothing further when the wall already outweighs the floor   0.05s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\DefenseDeterrentFloorTest::$playerService
+or', function () {
+     58▕     $floor = statedMinimumDeterrent();
+     59▕ 
+  ➜  60▕     expect($floor)->toBeGreaterThan(0.0);
+     61▕ 
+     62▕     $need = defenseNeedForPlanet(0.0, AiActivityBand::Casual);
+     63▕ 
+     64▕     expect($need)->not->toBeNull()
 
-  at Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:52
-     48▕     /** The account the evaluator reasons about: without a profile a planet is nobody's business. */
-     49▕     protected function aiAccount(): void
-     50▕     {
-     51▕         AiProfile::query()->create([
-  ➜  52▕             'player_id' => $this->playerService->getId(),
-     53▕             'activity_band' => AiActivityBand::Regular,
-     54▕         ]);
-     55▕     }
-     56▕
-
-  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:119
+  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:60
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\DefenseDeterrentFloorTest::$playerService
+   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'archetype' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `activity_band`, `updated_at`, `created_at`) values (19048, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
-  at Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:52
-     48▕     /** The account the evaluator reasons about: without a profile a planet is nobody's business. */
-     49▕     protected function aiAccount(): void
-     50▕     {
-     51▕         AiProfile::query()->create([
-  ➜  52▕             'player_id' => $this->playerService->getId(),
-     53▕             'activity_band' => AiActivityBand::Regular,
-     54▕         ]);
-     55▕     }
-     56▕
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
 
-  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:128
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:33
+  18  Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:72
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  ErrorException   
-  Undefined property: P\Modules\AI\tests\Feature\DefenseDeterrentFloorTest::$playerService
+   FAILED  Modules\AI\tests\Feature\DefenseDeterrentFloorTes…  QueryException   
+  SQLSTATE[HY000]: General error: 1364 Field 'archetype' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `activity_band`, `updated_at`, `created_at`) values (19050, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
-  at Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:52
-     48▕     /** The account the evaluator reasons about: without a profile a planet is nobody's business. */
-     49▕     protected function aiAccount(): void
-     50▕     {
-     51▕         AiProfile::query()->create([
-  ➜  52▕             'player_id' => $this->playerService->getId(),
-     53▕             'activity_band' => AiActivityBand::Regular,
-     54▕         ]);
-     55▕     }
-     56▕
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
 
-  1   Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:139
+      +16 vendor frames 
+  17  Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:33
+  18  Modules/AI/tests/Feature/DefenseDeterrentFloorTest.php:81
 
 
-  Tests:    3 failed (0 assertions)
-  Duration: 1.05s
+  Tests:    3 failed (1 assertions)
+  Duration: 1.07s

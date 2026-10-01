@@ -1,44 +1,46 @@
-HarvestHullOrderTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (5 assertions)[39m
+HarvestHullOrderTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (3 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\HarvestHullOrderTest
-  ⨯ a field the account cannot carry orders the hull the trip needs      0.39s  
+  ⨯ a field the account cannot carry orders the hull the trip needs      0.36s  
   ⨯ a field past the cap orders only the cap                             0.06s  
-  ✓ an empty field orders no hull                                        0.06s  
-  ✓ an account that owns a hull orders nothing                           0.07s  
+  ✓ an empty field orders no hull                                        0.07s  
+  ✓ an account that owns a hull orders nothing                           0.06s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a field the accou…   
-  Failed asserting that 0 is identical to 1.
+   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a fiel…  TypeError   
+  OGame\Services\UnitQueueService::add(): Argument #2 ($object_id) must be of type int, OGame\GameObjects\Models\ShipObject given, called in /var/www/Modules/AI/app/Actions/QueueAiRecycleAction.php on line 129
 
-  at Modules/AI/tests/Feature/HarvestHullOrderTest.php:57
-     53▕ 
-     54▕     $result = harvestTrip($this->currentUserId, $planetId, 5);
-     55▕ 
-     56▕     expect($result)->toBeInstanceOf(AiActionResult::class)
-  ➜  57▕         ->and(UnitQueue::query()->count())->toBe(1)
-     58▕         ->and((int) UnitQueue::query()->value('object_amount'))->toBe(1);
-     59▕ });
-     60▕ 
-     61▕ // Past the cap the module builds the cap: one field must not eat the whole yard.
+  at app/Services/UnitQueueService.php:158
+    154▕      *
+    155▕      * @return void
+    156▕      * @throws Exception
+    157▕      */
+  ➜ 158▕     public function add(PlanetService $planet, int $object_id, int $requested_build_amount): void
+    159▕     {
+    160▕         // @TODO: add checks that current logged in user is owner of planet
+    161▕         // and is able to add this object to the building queue.
+    162▕
 
-  1   Modules/AI/tests/Feature/HarvestHullOrderTest.php:57
+  1   app/Services/UnitQueueService.php:158
+  2   Modules/AI/app/Actions/QueueAiRecycleAction.php:129
 
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a field past the…    
-  Failed asserting that 0 is identical to 1.
+   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a fiel…  TypeError   
+  OGame\Services\UnitQueueService::add(): Argument #2 ($object_id) must be of type int, OGame\GameObjects\Models\ShipObject given, called in /var/www/Modules/AI/app/Actions/QueueAiRecycleAction.php on line 129
 
-  at Modules/AI/tests/Feature/HarvestHullOrderTest.php:68
-     64▕     harvestDebrisField(6, 1_000_000_000);
-     65▕ 
-     66▕     harvestTrip($this->currentUserId, $planetId, 6);
-     67▕ 
-  ➜  68▕     expect(UnitQueue::query()->count())->toBe(1)
-     69▕         ->and((int) UnitQueue::query()->value('object_amount'))->toBe(20);
-     70▕ });
-     71▕ 
-     72▕ // No mass at the coordinates is no work: dust does not cost yard time.
+  at app/Services/UnitQueueService.php:158
+    154▕      *
+    155▕      * @return void
+    156▕      * @throws Exception
+    157▕      */
+  ➜ 158▕     public function add(PlanetService $planet, int $object_id, int $requested_build_amount): void
+    159▕     {
+    160▕         // @TODO: add checks that current logged in user is owner of planet
+    161▕         // and is able to add this object to the building queue.
+    162▕
 
-  1   Modules/AI/tests/Feature/HarvestHullOrderTest.php:68
+  1   app/Services/UnitQueueService.php:158
+  2   Modules/AI/app/Actions/QueueAiRecycleAction.php:129
 
 
-  Tests:    2 failed, 2 passed (5 assertions)
-  Duration: 1.08s
+  Tests:    2 failed, 2 passed (3 assertions)
+  Duration: 1.02s

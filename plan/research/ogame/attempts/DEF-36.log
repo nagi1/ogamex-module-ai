@@ -1,27 +1,2 @@
-DefenseCompositionDomeNameTest: [90mTests:[39m    [31;1m1 failed[39;22m[90m,[39m[39m [39m[32;1m1 passed[39;22m[90m (1 assertions)[39m
-
-FAIL  Modules\AI\tests\Feature\DefenseCompositionDomeNameTest
-  ⨯ it builds the one host shield dome however the doctrine spells it    0.36s  
-  ✓ it refuses a doctrine that spells a unit the host does not have      0.06s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseCompositionDomeNa…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'galaxy' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `planets` (`name`, `metal_mine`, `metal_mine_percent`, `solar_plant`, `solar_plant_percent`, `deuterium_synthesizer`, `deuterium_synthesizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 173, 53, 93, 1000000, 1000000, 1000000, 0, 0, 0, 15835, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
-
-  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
-     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
-     50▕ 
-     51▕             $this->recordsHaveBeenModified();
-     52▕ 
-  ➜  53▕             $result = $statement->execute();
-     54▕ 
-     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
-     56▕ 
-     57▕             return $result;
-
-      +15 vendor frames 
-  16  Modules/AI/tests/Feature/DefenseCompositionDomeNameTest.php:94
-  17  Modules/AI/tests/Feature/DefenseCompositionDomeNameTest.php:111
-
-
-  Tests:    1 failed, 1 passed (1 assertions)
-  Duration: 0.87s
+the scenario defense-dome-spelling did not hold:
+Scenario field "player_id" must be a scalar value.

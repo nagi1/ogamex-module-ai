@@ -1,11 +1,11 @@
 SpyTargetAuthorityTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
 
 FAIL  Modules\AI\tests\Feature\SpyTargetAuthorityTest
-  ⨯ it probes a neighbour called admin when the host does not protect t… 0.41s  
-  ⨯ it plans nothing when the account has no probe on hand               0.05s  
+  ⨯ the spy planner probes a neighbour called Legor when the host does…  0.45s  
+  ⨯ the spy planner plans nothing when the account has no probe on hand  0.07s  
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\SpyTargetAuthorityTest >…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'archetype' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `enabled`, `updated_at`, `created_at`) values (15786, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+  SQLSTATE[HY000]: General error: 1364 Field 'random_seed' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `archetype`, `skill_band`, `enabled`, `updated_at`, `created_at`) values (18915, 1, 1, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
   at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
      49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
@@ -18,13 +18,13 @@ FAIL  Modules\AI\tests\Feature\SpyTargetAuthorityTest
      56▕ 
      57▕             return $result;
 
-      +21 vendor frames 
-  22  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:63
-  23  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:92
+      +18 vendor frames 
+  19  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:41
+  20  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:18
 
   ────────────────────────────────────────────────────────────────────────────  
    FAILED  Modules\AI\tests\Feature\SpyTargetAuthorityTest >…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'archetype' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `enabled`, `updated_at`, `created_at`) values (15788, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+  SQLSTATE[HY000]: General error: 1364 Field 'random_seed' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `ai_profiles` (`player_id`, `archetype`, `skill_band`, `enabled`, `updated_at`, `created_at`) values (18916, 1, 1, 1, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
 
   at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
      49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
@@ -37,10 +37,10 @@ FAIL  Modules\AI\tests\Feature\SpyTargetAuthorityTest
      56▕ 
      57▕             return $result;
 
-      +21 vendor frames 
-  22  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:63
-  23  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:107
+      +18 vendor frames 
+  19  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:41
+  20  Modules/AI/tests/Feature/SpyTargetAuthorityTest.php:32
 
 
   Tests:    2 failed (0 assertions)
-  Duration: 0.94s
+  Duration: 1.04s

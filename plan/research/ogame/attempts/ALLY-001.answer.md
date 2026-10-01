@@ -1,27 +1,5 @@
 ### EDIT: app/Actions/ReviewAiAllianceApplicationsAction.php
 <<<<<<< SEARCH
-use OGame\Models\Highscore;
-use OGame\Services\AllianceService;
-=======
-use OGame\Models\Highscore;
-use OGame\Services\AllianceService;
-use Symfony\Component\Yaml\Yaml;
->>>>>>> REPLACE
-
-<<<<<<< SEARCH
- * deciding, not a script.
- */
-class ReviewAiAllianceApplicationsAction
-=======
- * deciding, not a script.
- *
- * A leader also watches how much of the AI population its tag already holds: at the cohort
- * ceiling it leaves qualified applicants pending rather than concentrating the cohort further.
- */
-class ReviewAiAllianceApplicationsAction
->>>>>>> REPLACE
-
-<<<<<<< SEARCH
             if ($this->readsAsExploitative($alliance, (int) $application->user_id)) {
                 $decided += $this->reject($alliance, $application);
 
@@ -36,65 +14,114 @@ class ReviewAiAllianceApplicationsAction
                 continue;
             }
 
-            // A tag already at the cohort ceiling defers rather than absorbing another account;
-            // the application stays pending so a later pass can still take it.
-            if ($this->wouldReachCohortCeiling($alliance)) {
+            if ($this->atCohortCeiling($alliance)) {
+                // The alliance already holds its share of the cohort: a leader takes nobody
+                // else on, leaving a qualified applicant waiting rather than turning it down.
                 continue;
             }
 
             if ($this->accept($alliance, $application)) {
 >>>>>>> REPLACE
-
 <<<<<<< SEARCH
-    private function pointsPerMember(Alliance $alliance): float
+    private function readsAsExploitative(Alliance $alliance, int $applicantId): bool
     {
-        $members = max(1, (int) AllianceMember::query()->where('alliance_id', $alliance->id)->count());
-        $points = (int) (AllianceHighscore::query()->where('alliance_id', $alliance->id)->value('general') ?? 0);
-
-        return $points / $members;
+        return app(PsychSimTheoryOfMind::class)->stanceToward((int) $alliance->founder_user_id, $applicantId) === AiToMStance::Defect;
     }
+}
 =======
-    private function pointsPerMember(Alliance $alliance): float
+    private function readsAsExploitative(Alliance $alliance, int $applicantId): bool
     {
-        $members = max(1, (int) AllianceMember::query()->where('alliance_id', $alliance->id)->count());
-        $points = (int) (AllianceHighscore::query()->where('alliance_id', $alliance->id)->value('general') ?? 0);
-
-        return $points / $members;
+        return app(PsychSimTheoryOfMind::class)->stanceToward((int) $alliance->founder_user_id, $applicantId) === AiToMStance::Defect;
     }
 
-    /** Would admitting one more account put this tag at or past the cohort ceiling? */
-    private function wouldReachCohortCeiling(Alliance $alliance): bool
+    /**
+     * The share of the module's accounts one alliance may recruit before its leader closes the
+     * doors: a cohort concentrated in one alliance starves every other lane of the game.
+     */
+    private function atCohortCeiling(Alliance $alliance): bool
     {
-        $population = AiProfile::query()->where('enabled', true)->count();
+        return $this->cohortShare($alliance) >= $this->cohortShareCeiling();
+    }
 
-        if ($population <= 0) {
-            return false;
+    /**
+     * The share of the enabled cohort the leader has recruited. It counts the accounts the
+     * leader took in, not the seat it sits in.
+     */
+    private function cohortShare(Alliance $alliance): float
+    {
+        $cohort = (int) AiProfile::query()->where('enabled', true)->count();
+
+        if ($cohort === 0) {
+            return 0.0;
         }
 
-        $members = (int) AllianceMember::query()->where('alliance_id', $alliance->id)->count();
+        return $this->recruitedAccounts($alliance) / $cohort;
+    }
 
-        return (($members + 1) / $population) >= $this->cohortShareCeiling();
+    private function recruitedAccounts(Alliance $alliance): int
+    {
+        $members = AllianceMember::query()->where('alliance_id', $alliance->id)->select('user_id');
+
+        return (int) AiProfile::query()
+            ->where('enabled', true)
+            ->where('player_id', '!=', (int) $alliance->founder_user_id)
+            ->whereIn('player_id', $members)
+            ->count();
     }
 
     private function cohortShareCeiling(): float
     {
-        $rules = Yaml::parseFile(module_path('AI', 'resources/behavior/alliance-lane.yaml'));
-
-        return (float) ($rules['cohort_share_ceiling'] ?? 0.0);
+        // A host that ships no ceiling keeps the lane open: a share can never exceed one.
+        return $this->rules()['cohort_share_ceiling'] ?? 1.0;
     }
+
+    /**
+     * The recruiting tunables, loaded by name so a host can retune the lane without a deploy.
+     *
+     * @return array<string, float>
+     */
+    private function rules(): array
+    {
+        $path = dirname(__DIR__, 2) . '/resources/behavior/alliance-recruitment.yaml';
+
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $contents = (string) file_get_contents($path);
+        $rules = [];
+
+        foreach (preg_split('/\R/', $contents) ?: [] as $line) {
+            $line = trim($line);
+
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            [$key, $value] = array_pad(explode(':', $line, 2), 2, '');
+
+            if (is_numeric(trim($value))) {
+                $rules[trim($key)] = (float) trim($value);
+            }
+        }
+
+        return $rules;
+    }
+}
 >>>>>>> REPLACE
 
-### FILE: resources/behavior/alliance-lane.yaml
+### FILE: resources/behavior/alliance-recruitment.yaml
 ```yaml
-# The alliance lane: how the AI cohort is spread over alliances.
-#
-# cohort_share_ceiling: the share of the enabled AI accounts one alliance may hold. A leader
-# whose tag would reach this share with one more member leaves the application pending instead
-# of admitting it, so no single tag absorbs the cohort (invariant ALLIANCE_SHARE).
-cohort_share_ceiling: 0.75
+# Recruiting tunables an AI-led alliance reads by name when its leader decides applications.
+# Keys are flat: one name, one number.
+
+# The share of the module's accounts one alliance may recruit before its leader stops taking
+# members on. Once an alliance holds this much of the cohort it grows no further, so no single
+# alliance can absorb the accounts every other lane of the game needs.
+cohort_share_ceiling: 0.6
 ```
 
-### FILE: tests/Feature/AllianceLaneRecruitmentTest.php
+### FILE: tests/Feature/AllianceRecruitmentCeilingTest.php
 ```php
 <?php
 
@@ -129,25 +156,46 @@ function laneProfile(int $playerId): void
     ]);
 }
 
-/** Adds AI accounts to the cohort beyond the account under test. */
-function laneCohort(int $extraAccounts): void
-{
-    for ($i = 0; $i < $extraAccounts; $i++) {
-        laneProfile(User::factory()->create()->id);
-    }
-}
-
-function laneRank(int $playerId, int $rank): void
+function laneRank(int $playerId): void
 {
     Highscore::unguarded(fn () => Highscore::updateOrCreate(
         ['player_id' => $playerId],
-        ['general' => 1000, 'general_rank' => $rank, 'economy' => 1000, 'research' => 1000],
+        ['general' => 1000, 'general_rank' => 1, 'economy' => 1000, 'research' => 1000],
     ));
 }
 
-function laneAlliance(int $founderId, string $tag = 'LANE'): Alliance
+/**
+ * The module's cohort: $size playing accounts, the first of which leads the alliance under test.
+ *
+ * @return array<int, int>
+ */
+function laneCohort(int $founderId, int $size): array
 {
-    return app(AllianceService::class)->createAlliance($founderId, $tag, 'Alliance ' . $tag);
+    laneProfile($founderId);
+    laneRank($founderId);
+
+    $recruits = [];
+
+    while (count($recruits) < $size - 1) {
+        $recruit = User::factory()->create();
+        laneProfile($recruit->id);
+        laneRank($recruit->id);
+        $recruits[] = $recruit->id;
+    }
+
+    return $recruits;
+}
+
+function laneAlliance(int $founderId): Alliance
+{
+    return app(AllianceService::class)->createAlliance($founderId, 'LANE', 'Alliance LANE');
+}
+
+/** Takes an account in through the host's own apply/accept path. */
+function laneJoin(Alliance $alliance, int $founderId, int $playerId): void
+{
+    $application = app(AllianceService::class)->applyToAlliance($playerId, $alliance->id, 'Looking for a home.');
+    app(AllianceService::class)->acceptApplication($application->id, $founderId);
 }
 
 function laneApplication(int $applicantId, int $allianceId): AllianceApplication
@@ -162,20 +210,24 @@ function laneAgeApplication(int $applicationId, int $minutes): void
     ]));
 }
 
-function laneTakeMember(int $allianceId, int $founderId, int $playerId): void
+/** A player ranked at the very top of the population, so only the ceiling can hold it back. */
+function laneApplicant(): User
 {
-    $application = laneApplication($playerId, $allianceId);
-    app(AllianceService::class)->acceptApplication($application->id, $founderId);
+    $applicant = User::factory()->create();
+    laneRank($applicant->id);
+
+    return $applicant;
 }
 
 test('a leader below the cohort ceiling takes a qualified applicant', function (): void {
-    laneProfile($this->currentUserId);
-    laneCohort(3);
-
+    $cohort = laneCohort($this->currentUserId, 20);
     $alliance = laneAlliance($this->currentUserId);
-    $applicant = User::factory()->create();
-    laneRank($applicant->id, 1);
 
+    foreach (array_slice($cohort, 0, 11) as $recruitId) {
+        laneJoin($alliance, $this->currentUserId, $recruitId);
+    }
+
+    $applicant = laneApplicant();
     $application = laneApplication($applicant->id, $alliance->id);
     laneAgeApplication($application->id, 30);
 
@@ -189,16 +241,14 @@ test('a leader below the cohort ceiling takes a qualified applicant', function (
 });
 
 test('a leader at the cohort ceiling leaves a qualified applicant pending', function (): void {
-    laneProfile($this->currentUserId);
-    laneCohort(3);
-
+    $cohort = laneCohort($this->currentUserId, 20);
     $alliance = laneAlliance($this->currentUserId);
-    $member = User::factory()->create();
-    laneTakeMember($alliance->id, $this->currentUserId, $member->id);
 
-    $applicant = User::factory()->create();
-    laneRank($applicant->id, 1);
+    foreach (array_slice($cohort, 0, 12) as $recruitId) {
+        laneJoin($alliance, $this->currentUserId, $recruitId);
+    }
 
+    $applicant = laneApplicant();
     $application = laneApplication($applicant->id, $alliance->id);
     laneAgeApplication($application->id, 30);
 
@@ -209,17 +259,19 @@ test('a leader at the cohort ceiling leaves a qualified applicant pending', func
             ->where('alliance_id', $alliance->id)
             ->where('user_id', $applicant->id)
             ->exists())->toBeFalse()
-        ->and(app(AllianceService::class)->getPendingApplications($alliance->id)->count())->toBe(1);
+        ->and(app(AllianceService::class)->getPendingApplications($alliance->id)->pluck('id')->all())
+        ->toContain($application->id);
 });
 
 test('a leader past the cohort ceiling leaves the strongest applicant pending', function (): void {
-    laneProfile($this->currentUserId);
-    laneCohort(1);
-
+    $cohort = laneCohort($this->currentUserId, 20);
     $alliance = laneAlliance($this->currentUserId);
-    $applicant = User::factory()->create();
-    laneRank($applicant->id, 1);
 
+    foreach (array_slice($cohort, 0, 13) as $recruitId) {
+        laneJoin($alliance, $this->currentUserId, $recruitId);
+    }
+
+    $applicant = laneApplicant();
     $application = laneApplication($applicant->id, $alliance->id);
     laneAgeApplication($application->id, 30);
 
@@ -233,102 +285,59 @@ test('a leader past the cohort ceiling leaves the strongest applicant pending', 
 });
 
 test('a leader with nothing waiting decides nothing', function (): void {
-    laneProfile($this->currentUserId);
+    laneCohort($this->currentUserId, 20);
     laneAlliance($this->currentUserId);
 
     expect(app(ReviewAiAllianceApplicationsAction::class)->handle())->toBe(0);
 });
 ```
 
-### FILE: resources/scenarios/alliance-lane-below-ceiling.json
+### FILE: resources/scenarios/alliance-recruitment-at-ceiling.json
 ```json
 {
-    "name": "alliance-lane-below-ceiling",
-    "persona": "an AI veteran leading a tag that holds one of the four cohort accounts and is still recruiting",
-    "situation": "Four enabled AI accounts share the cohort, the tag holds one of them, and a rank-1 applicant has waited thirty minutes.",
+    "name": "alliance-recruitment-at-ceiling",
+    "persona": "an AI founder whose alliance already holds its allowed share of the module's accounts",
+    "situation": "A qualified applicant waits on an AI-led alliance. The leader has recruited up to the ceiling, so the alliance grows no further even though the applicant would be taken on a quiet day.",
     "status": "unverified",
     "input": {
-        "ai_cohort_accounts": 4,
-        "tag_members": 1,
-        "applicant_general_rank": 1,
+        "cohort_ai_accounts": 20,
+        "alliance_recruited_ai_accounts": 12,
+        "cohort_share_ceiling": 0.6,
+        "applicant_rank": 1,
+        "applicant_population": 21,
+        "application_age_minutes": 30
+    },
+    "decision_key": "alliance.application.review",
+    "expect": {
+        "action": "Modules\\AI\\Actions\\ReviewAiAllianceApplicationsAction",
+        "decision": "leave_pending",
+        "applications_decided": 0,
+        "members_added": 0
+    }
+}
+```
+
+### FILE: resources/scenarios/alliance-recruitment-below-ceiling.json
+```json
+{
+    "name": "alliance-recruitment-below-ceiling",
+    "persona": "an AI founder whose alliance holds less than its allowed share of the module's accounts",
+    "situation": "A qualified applicant waits on an AI-led alliance that has room left before the ceiling, so the leader takes the account in.",
+    "status": "unverified",
+    "input": {
+        "cohort_ai_accounts": 20,
+        "alliance_recruited_ai_accounts": 11,
+        "cohort_share_ceiling": 0.6,
+        "applicant_rank": 1,
+        "applicant_population": 21,
         "application_age_minutes": 30
     },
     "decision_key": "alliance.application.review",
     "expect": {
         "action": "Modules\\AI\\Actions\\ReviewAiAllianceApplicationsAction",
         "decision": "accept",
-        "decisions": 1
-    },
-    "checklist": [
-        {
-            "topic": "cohort-size",
-            "question": "How many enabled AI accounts the cohort holds when the leader decides.",
-            "status": "unverified"
-        },
-        {
-            "topic": "tag-share",
-            "question": "How much of the cohort the tag already holds and whether one more member stays under the ceiling.",
-            "status": "unverified"
-        },
-        {
-            "topic": "applicant-rank",
-            "question": "Where the applicant sits in the general highscore at decision time.",
-            "status": "unverified"
-        },
-        {
-            "topic": "application-age",
-            "question": "Whether the application has waited the leader's minimum age.",
-            "status": "unverified"
-        },
-        {
-            "topic": "welcome",
-            "question": "Whether an accepted applicant receives the leader's welcome message.",
-            "status": "unverified"
-        }
-    ]
-}
-```
-
-### FILE: resources/scenarios/alliance-lane-at-ceiling.json
-```json
-{
-    "name": "alliance-lane-at-ceiling",
-    "persona": "an AI veteran leading a tag that already holds half of the cohort and would reach the ceiling by admitting one more",
-    "situation": "Four enabled AI accounts share the cohort, the tag holds two of them, and a rank-1 applicant has waited thirty minutes.",
-    "status": "unverified",
-    "input": {
-        "ai_cohort_accounts": 4,
-        "tag_members": 2,
-        "applicant_general_rank": 1,
-        "application_age_minutes": 30
-    },
-    "decision_key": "alliance.application.review",
-    "expect": {
-        "action": "Modules\\AI\\Actions\\ReviewAiAllianceApplicationsAction",
-        "decision": "defer",
-        "decisions": 0
-    },
-    "checklist": [
-        {
-            "topic": "cohort-size",
-            "question": "How many enabled AI accounts the cohort holds when the leader decides.",
-            "status": "unverified"
-        },
-        {
-            "topic": "ceiling-value",
-            "question": "The cohort share ceiling the leader reads from resources/behavior/alliance-lane.yaml.",
-            "status": "unverified"
-        },
-        {
-            "topic": "pending-fate",
-            "question": "Whether a deferred application stays pending or is declined.",
-            "status": "unverified"
-        },
-        {
-            "topic": "share-recovery",
-            "question": "What lets the leader recruit again once the cohort grows or another tag takes members.",
-            "status": "unverified"
-        }
-    ]
+        "applications_decided": 1,
+        "members_added": 1
+    }
 }
 ```

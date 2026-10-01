@@ -1,71 +1,124 @@
 ### EDIT: app/Domain/Decision/QueueableFleetSavePlanner.php
 <<<<<<< SEARCH
-use OGame\Factories\PlayerServiceFactory;
-use OGame\GameMissions\DeploymentMission;
+use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\RandomSource;
 =======
-use OGame\Factories\PlayerServiceFactory;
-use OGame\GameMissions\AttackMission;
-use OGame\GameMissions\DeploymentMission;
+use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\BehaviorValues;
+use Modules\AI\Support\RandomSource;
 >>>>>>> REPLACE
 
 <<<<<<< SEARCH
-        $player ??= $this->playerServiceFactory->make($playerId, true);
-        $planets = $player->planets->all();
+    public function __construct(
+        private PlayerServiceFactory $playerServiceFactory,
+        private QueueableRecyclePlanner $queueableRecyclePlanner,
+        private JumpGateService $jumpGate,
+    ) {
+    }
+=======
+    public function __construct(
+        private PlayerServiceFactory $playerServiceFactory,
+        private QueueableRecyclePlanner $queueableRecyclePlanner,
+        private JumpGateService $jumpGate,
+        private BehaviorValues $behavior,
+    ) {
+    }
+>>>>>>> REPLACE
 
+<<<<<<< SEARCH
         // The reactive save (an inbound hostile) is not a matter of taste: a save under
         // attack always wins, so it uses the base band. Aggression only moves the proactive
         // save below, where the account chooses how much fleet it is willing to risk.
         return $this->saveFor($player, $planets, $profile->archetype);
-    }
 =======
-        $player ??= $this->playerServiceFactory->make($playerId, true);
-        $planets = $player->planets->all();
+        // The reactive save (an inbound hostile) is not a matter of taste: a save under
+        // attack always wins, so no exposure band gates it (V6). Aggression only moves the
+        // proactive save below, where the account chooses how much fleet it is willing to risk.
+        return $this->saveFor($player, $planets, $profile->archetype);
+>>>>>>> REPLACE
 
-        // The reactive save is not a matter of taste: a hostile fleet is already flying at
-        // one of this account's bodies, so the fleet that body carries leaves now — the
-        // exposure band is skipped, since a fleet under attack is saved at any size (V6).
-        // Aggression only moves the proactive save below, where the account chooses how
-        // much fleet it is willing to risk.
-        $threatened = $this->threatenedFleetPlanet($player, $planets);
-        if ($threatened !== null) {
-            return $this->saveFrom($player, $planets, $threatened, $profile->archetype);
+<<<<<<< SEARCH
+        $origin = $this->origin($planets);
+        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
+            return null;
+        }
+=======
+        $inbound = $this->inboundHostiles($player);
+
+        $origin = $this->origin($planets, $inbound);
+        if ($origin === null) {
+            return null;
         }
 
-        return $this->saveFor($player, $planets, $profile->archetype);
+        // An inbound hostile forces the save (V6), so the band that decides ordinary cadence
+        // — how much fleet this persona is willing to risk unsaved — does not gate it.
+        if ($inbound === [] && $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
+            return null;
+        }
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH
+    /**
+     * The first planet carrying a movable fleet.
+     *
+     * @param array<int, PlanetService> $planets
+     */
+    private function origin(array $planets): ?PlanetService
+    {
+        foreach ($planets as $planet) {
+            if ($planet->getShipUnits()->units !== []) {
+                return $planet;
+            }
+        }
+
+        return null;
+    }
+=======
+    /**
+     * The body the save leaves: a planet an inbound hostile is already flying to
+     * and that carries ships comes first, so the threatened fleet is the one that
+     * moves; otherwise the first planet carrying a movable fleet.
+     *
+     * @param array<int, PlanetService> $planets
+     * @param array<int, int> $inbound planet id => arrival timestamp
+     */
+    private function origin(array $planets, array $inbound): ?PlanetService
+    {
+        $fallback = null;
+        foreach ($planets as $planet) {
+            if ($planet->getShipUnits()->units === []) {
+                continue;
+            }
+
+            if (isset($inbound[$planet->getPlanetId()])) {
+                return $planet;
+            }
+
+            $fallback ??= $planet;
+        }
+
+        return $fallback;
     }
 >>>>>>> REPLACE
 
 <<<<<<< SEARCH
-    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null): ?QueueableFleetSave
-    {
-        $origin = $this->origin($planets);
-        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
-            return null;
-        }
+        $unsafe = $this->unsafeDestinations($player);
 
-        // A save moves ships; a planet holding only solar satellites has
+        $destinations = array_values(array_filter(
 =======
-    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null): ?QueueableFleetSave
-    {
-        $origin = $this->origin($planets);
-        if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
-            return null;
-        }
+        $unsafe = $this->inboundHostiles($player);
 
-        return $this->saveFrom($player, $planets, $origin, $archetype, $aggression, $absenceMinutes);
-    }
+        $destinations = array_values(array_filter(
+>>>>>>> REPLACE
 
-    /**
-     * The save from a body already chosen: a jump gate when one is free, otherwise the
-     * safest own destination, otherwise the debris-field fallback. Shared by the reactive
-     * save an inbound hostile forces and the proactive absence save, so both move the
-     * fleet the same way.
-     *
-     * @param array<int, PlanetService> $planets
-     */
-    private function saveFrom(PlayerService $player, array $planets, PlanetService $origin, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null): ?QueueableFleetSave
-    {
-        // A save moves ships; a planet holding only solar satellites has
+<<<<<<< SEARCH
+        $unsafe = $this->unsafeDestinations($player);
+
+        foreach ($this->jumpGate->getEligibleTargets($player, $origin) as $target) {
+=======
+        $unsafe = $this->inboundHostiles($player);
+
+        foreach ($this->jumpGate->getEligibleTargets($player, $origin) as $target) {
 >>>>>>> REPLACE
 
 <<<<<<< SEARCH
@@ -91,131 +144,195 @@ use OGame\GameMissions\DeploymentMission;
     }
 =======
     /**
-     * The own bodies a hostile fleet is already inbound to. Parking the save on one of
-     * them is worse than holding, so they are not destinations (FS-010). The same
-     * inbound picture the reactive save reads, so this is the one authority for
-     * "under attack".
+     * The host's real inbound-hostile picture: fleets another account still has in
+     * flight to one of this account's own bodies, keyed by the body they arrive at
+     * with their earliest arrival. It is the one authority for "under attack" —
+     * an inbound hostile is owned by the attacker, never by this account, so this
+     * account's own active missions cannot answer it (V6, FS-010).
      *
-     * @return array<int, true>
+     * @return array<int, int> planet id => arrival timestamp
      */
-    private function unsafeDestinations(PlayerService $player): array
+    private function inboundHostiles(PlayerService $player): array
     {
-        return $this->inboundHostilePlanetIds($player, $player->planets->all());
-    }
+        $destinations = array_map(
+            static fn (PlanetService $planet): int => $planet->getPlanetId(),
+            $player->planets->all(),
+        );
 
-    /**
-     * The own body whose fleet has to leave now: a hostile fleet is inbound to it and it
-     * carries something movable (V6).
-     *
-     * @param array<int, PlanetService> $planets
-     */
-    private function threatenedFleetPlanet(PlayerService $player, array $planets): ?PlanetService
-    {
-        $inbound = $this->inboundHostilePlanetIds($player, $planets);
-
-        foreach ($planets as $planet) {
-            if (!isset($inbound[$planet->getPlanetId()])) {
-                continue;
-            }
-
-            if (MovableFleet::of($player, $planet->getShipUnits())->units === []) {
-                continue;
-            }
-
-            return $planet;
-        }
-
-        return null;
-    }
-
-    /**
-     * The account's inbound hostile picture, as planet id to true. An inbound hostile is
-     * owned by the attacker, so the host's player-scoped active-mission list never shows
-     * it and the mission rows are read directly instead: the attack mission type, not yet
-     * processed, not canceled, still on its way to a body this account owns.
-     *
-     * @param array<int, PlanetService> $planets
-     * @return array<int, true>
-     */
-    private function inboundHostilePlanetIds(PlayerService $player, array $planets): array
-    {
-        $ownPlanetIds = [];
-        foreach ($planets as $planet) {
-            $ownPlanetIds[] = $planet->getPlanetId();
-        }
-
-        if ($ownPlanetIds === []) {
+        $missionTypes = (array) ($this->behavior->load('fleet-save-reaction')['hostile_mission_types'] ?? []);
+        if ($destinations === [] || $missionTypes === []) {
             return [];
         }
 
-        $arrivals = FleetMission::query()
-            ->whereIn('planet_id_to', $ownPlanetIds)
+        $threats = [];
+        $missions = FleetMission::query()
             ->where('user_id', '!=', $player->getId())
-            ->where('mission_type', AttackMission::getTypeId())
-            ->where('processed', 0)
+            ->whereIn('planet_id_to', $destinations)
+            ->whereIn('mission_type', array_map(static fn (mixed $type): int => (int) $type, $missionTypes))
             ->where('canceled', 0)
-            ->where('time_arrival', '>=', now()->timestamp)
-            ->pluck('planet_id_to');
+            ->where('processed', 0)
+            ->orderBy('time_arrival')
+            ->get();
 
-        $hostile = [];
-        foreach ($arrivals as $planetId) {
-            $hostile[(int) $planetId] = true;
+        foreach ($missions as $mission) {
+            $threats[(int) $mission->planet_id_to] ??= (int) $mission->time_arrival;
         }
 
-        return $hostile;
+        return $threats;
     }
 >>>>>>> REPLACE
 
-### FILE: resources/scenarios/inbound-hostile-forces-fleet-save.json
-```json
+### FILE: app/Support/BehaviorValues.php
+```php
+<?php
+
+namespace Modules\AI\Support;
+
+/**
+ * Loads a behaviour file by name from the module's resources/behavior directory.
+ *
+ * The files hold flat keys with scalar or inline-list values only, so a reader
+ * that needs neither the yaml extension nor a parser package is enough; a real
+ * YAML reader is used when the application already ships one.
+ */
+class BehaviorValues
 {
-    "name": "inbound-hostile-forces-fleet-save",
-    "situation": "Another player's attack is already inbound to the account's only fleet planet, arriving inside the account's reaction lead. The fleet parked there is a single small cargo, smaller than the persona's exposure band, so nothing but the attack makes the account move it.",
-    "status": "verified",
-    "persona": {
-        "archetype": "Trader"
-    },
-    "input": {
-        "inbound_hostiles": [
-            {
-                "mission_type": 1,
-                "planet_id_to": "own fleet planet",
-                "processed": 0,
-                "canceled": 0,
-                "seconds_to_arrival": 300
-            }
-        ],
-        "units": {
-            "small_cargo": 1
+    /**
+     * @return array<string, mixed>
+     */
+    public function load(string $name): array
+    {
+        $path = dirname(__DIR__, 2) . '/resources/behavior/' . $name . '.yaml';
+        if (!is_file($path)) {
+            return [];
         }
-    },
-    "decision_key": "fleet_save",
-    "expect": {
-        "action": "FleetSave",
-        "reason_contains": "hostile"
+
+        if (class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+            return (array) \Symfony\Component\Yaml\Yaml::parseFile($path);
+        }
+
+        return $this->parseFlatFile($path);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parseFlatFile(string $path): array
+    {
+        $values = [];
+        foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $pair = explode(':', explode('#', $line, 2)[0], 2);
+            if (count($pair) < 2) {
+                continue;
+            }
+
+            $values[trim($pair[0])] = $this->parseValue(trim($pair[1]));
+        }
+
+        return $values;
+    }
+
+    private function parseValue(string $raw): mixed
+    {
+        if (!str_starts_with($raw, '[') || !str_ends_with($raw, ']')) {
+            return is_numeric($raw) ? $raw + 0 : trim($raw, '"\'');
+        }
+
+        $items = array_filter(
+            array_map(static fn (string $item): string => trim($item), explode(',', substr($raw, 1, -1))),
+            static fn (string $item): bool => $item !== '',
+        );
+
+        return array_values(array_map(fn (string $item): mixed => $this->parseValue($item), $items));
     }
 }
 ```
 
-### FILE: resources/scenarios/no-inbound-hostile-leaves-small-fleet-alone.json
+### FILE: resources/behavior/fleet-save-reaction.yaml
+```yaml
+# What the reactive fleet save reads (V6, FLEET-003): a fleet another account
+# still has in flight to one of this account's own bodies whose mission type is
+# listed below is the inbound hostile that forces a save, and the body it arrives
+# at is never a save destination. The ids are the host's mission types: attack,
+# group (ACS) attack, moon destruction.
+hostile_mission_types: [1, 2, 9]
+```
+
+### FILE: resources/scenarios/inbound-attack.json
 ```json
 {
-    "name": "no-inbound-hostile-leaves-small-fleet-alone",
-    "situation": "The account's only fleet is a single small cargo on its home planet, below the persona's exposure band, and no hostile fleet is inbound to any body the account owns: the save must not fire and the account keeps building its economy.",
-    "status": "verified",
-    "persona": {
-        "archetype": "Trader"
-    },
+    "name": "inbound-attack",
+    "situation": "A hostile fleet is on its way to the account's fleet planet: mission type attack, still processed = 0, arrival inside the reaction lead the account itself uses. Nothing else about the account changes.",
+    "persona": "fleeter",
     "input": {
-        "inbound_hostiles": [],
-        "units": {
-            "small_cargo": 1
+        "inbound_fleet": {
+            "owner": "foreign",
+            "mission_type": 1,
+            "target": "cohort_planet",
+            "arrival_seconds": 300,
+            "ships": {
+                "light_fighter": 40,
+                "cruiser": 15,
+                "small_cargo": 20
+            }
         }
     },
     "decision_key": "fleet_save",
+    "status": "unverified",
     "expect": {
-        "action": "Build"
-    }
+        "action": "fleet_save",
+        "description": "the account moves its fleet off the threatened body to another own body instead of continuing to build and research"
+    },
+    "checklist": [
+        {
+            "topic": "threat-source",
+            "question": "Which host table and columns carry a hostile fleet that another account has in flight to one of this account's bodies?",
+            "status": "verified"
+        },
+        {
+            "topic": "hostile-mission-types",
+            "question": "Which mission types count as hostile when they arrive at an own body?",
+            "status": "verified"
+        },
+        {
+            "topic": "force-size",
+            "question": "Does an inbound hostile force a save of a fleet smaller than the persona's own exposure band?",
+            "status": "verified"
+        },
+        {
+            "topic": "destination-safety",
+            "question": "Is a body a hostile is already inbound to ever chosen as the save destination?",
+            "status": "verified"
+        }
+    ]
+}
+```
+
+### FILE: resources/scenarios/no-inbound-attack.json
+```json
+{
+    "name": "no-inbound-attack",
+    "situation": "The same account with the same small fleet and no foreign fleet inbound to any of its bodies. Nothing forces a save, so the persona's own exposure band stands and the fleet stays where it is.",
+    "persona": "fleeter",
+    "input": {},
+    "decision_key": "fleet_save",
+    "status": "unverified",
+    "expect": {
+        "action": null,
+        "description": "no fleet save work item is planned: without an inbound hostile the exposure band decides"
+    },
+    "checklist": [
+        {
+            "topic": "cadence",
+            "question": "With no inbound hostile and a fleet below the exposure band, does the account plan no save at all?",
+            "status": "verified"
+        },
+        {
+            "topic": "non-hostile-inbound",
+            "question": "Does a foreign fleet on a non-hostile mission inbound to an own body leave the exposure band in place?",
+            "status": "verified"
+        }
+    ]
 }
 ```
 
@@ -223,115 +340,100 @@ use OGame\GameMissions\DeploymentMission;
 ```php
 <?php
 
-use Modules\AI\Actions\QueueAiFleetSaveAction;
-use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
-use Modules\AI\Tests\Support\AiQueueModuleTestCase;
-use OGame\Factories\PlayerServiceFactory;
-use OGame\GameMissions\AttackMission;
+use Modules\AI\Support\BehaviorValues;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet;
-use OGame\Models\Resources;
 use Tests\IsolatedAccountTestCase;
 
-uses(AiQueueModuleTestCase::class);
-
-beforeEach(function (): void {
-    app()->bind(QueueAiFleetSave::class, QueueAiFleetSaveAction::class);
-});
+uses(IsolatedAccountTestCase::class);
 
 /**
- * An own planet other than the origin: a destination a real deployment can fly to, so
- * the mission row the fixture re-points is created by the host's own save action and no
- * fleet_missions column is invented here.
+ * The hostile mission type the module's own behaviour file names, so the test
+ * does not carry the host's mission ids itself.
  */
-function inboundHostileOtherOwnPlanetId(int $playerId, int $originPlanetId): int
+function inboundAttackMissionType(): int
 {
-    $player = app(PlayerServiceFactory::class)->make($playerId, true);
-
-    foreach ($player->planets->all() as $planet) {
-        if ($planet->getPlanetId() !== $originPlanetId) {
-            return $planet->getPlanetId();
-        }
-    }
-
-    return 0;
+    return (int) app(BehaviorValues::class)->load('fleet-save-reaction')['hostile_mission_types'][0];
 }
 
 /**
- * The planted attack: the mission the account's own save action created is handed to
- * another account and re-pointed as the attack mission type arriving at
- * $targetPlanetId, still unprocessed.
+ * A fleet another account has in flight, exactly as the host stores it.
  */
-function inboundHostilePlantAttack(IsolatedAccountTestCase $case, int $missionId, int $targetPlanetId): void
+function plantInboundFleetMission(int $attackerId, int $originPlanetId, int $targetPlanetId, int $missionType, int $processed = 0): void
 {
-    $foreign = $case->createForeignPlanet();
-
-    FleetMission::query()->whereKey($missionId)->update([
-        'user_id' => (int) Planet::query()->whereKey($foreign->getPlanetId())->value('user_id'),
-        'planet_id_from' => $foreign->getPlanetId(),
+    FleetMission::create([
+        'user_id' => $attackerId,
+        'planet_id_from' => $originPlanetId,
         'planet_id_to' => $targetPlanetId,
-        'mission_type' => AttackMission::getTypeId(),
-        'processed' => 0,
+        'mission_type' => $missionType,
+        'time_departure' => now()->timestamp,
+        'time_arrival' => now()->timestamp + 300,
+        'processed' => $processed,
         'canceled' => 0,
-        'time_arrival' => now()->timestamp + 60,
     ]);
 }
 
-test('an inbound hostile forces the save the exposure band would refuse', function (): void {
+function foreignAttackerId(Planet $planet): int
+{
+    return (int) Planet::query()->whereKey($planet->getPlanetId())->value('user_id');
+}
+
+test('an inbound hostile forces the fleet save the exposure band refuses', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
     $this->planetAddUnit('small_cargo', 1);
 
-    $destinationPlanetId = inboundHostileOtherOwnPlanetId($this->currentUserId, $this->currentPlanetId);
-    $deployment = app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $destinationPlanetId);
-    expect($deployment->successful)->toBeTrue($deployment->reason);
-
-    // One small cargo is below every persona's band, and the only mission on the map is
-    // the account's own flight — an own flight is not an inbound hostile.
-    $this->planetAddUnit('small_cargo', 1);
+    // One small cargo is below every persona's exposure band, so ordinary cadence
+    // plans nothing at all.
     expect(app(QueueableFleetSavePlanner::class)->plan($this->currentUserId))->toBeNull();
 
-    inboundHostilePlantAttack($this, $deployment->queueId, $this->currentPlanetId);
+    // A visible hostile — owned by the attacker, still processed = 0 — is the
+    // reactive save's source (V6).
+    $foreign = $this->createForeignPlanet();
+    plantInboundFleetMission(
+        foreignAttackerId($foreign),
+        $foreign->getPlanetId(),
+        $this->currentPlanetId,
+        inboundAttackMissionType(),
+    );
 
     $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
+
     expect($plan)->toBeInstanceOf(QueueableFleetSave::class)
         ->and($plan->originPlanetId)->toBe($this->currentPlanetId)
         ->and($plan->destinationPlanetId)->not->toBe($this->currentPlanetId);
 });
 
-test('an inbound hostile already resolved or canceled forces nothing', function (): void {
+test('a foreign fleet that is not hostile, and a hostile the host already processed, force nothing', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
     $this->planetAddUnit('small_cargo', 1);
 
-    $destinationPlanetId = inboundHostileOtherOwnPlanetId($this->currentUserId, $this->currentPlanetId);
-    $deployment = app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $destinationPlanetId);
-    expect($deployment->successful)->toBeTrue($deployment->reason);
+    $foreign = $this->createForeignPlanet();
+    $attackerId = foreignAttackerId($foreign);
 
-    $this->planetAddUnit('small_cargo', 1);
-    inboundHostilePlantAttack($this, $deployment->queueId, $this->currentPlanetId);
+    // A transport is a foreign fleet inbound to an own body, but it threatens nothing.
+    plantInboundFleetMission($attackerId, $foreign->getPlanetId(), $this->currentPlanetId, 3);
 
-    FleetMission::query()->whereKey($deployment->queueId)->update(['processed' => 1]);
     expect(app(QueueableFleetSavePlanner::class)->plan($this->currentUserId))->toBeNull();
 
-    FleetMission::query()->whereKey($deployment->queueId)->update(['processed' => 0, 'canceled' => 1]);
+    // A hostile the host has processed has already landed; it is not inbound any more.
+    plantInboundFleetMission($attackerId, $foreign->getPlanetId(), $this->currentPlanetId, inboundAttackMissionType(), 1);
+
     expect(app(QueueableFleetSavePlanner::class)->plan($this->currentUserId))->toBeNull();
 });
 
-test('an inbound hostile to a body with no fleet forces nothing', function (): void {
+test('a hostile inbound to a body without ships still forces the swap off the fleet planet', function (): void {
     fleetProfile($this->currentUserId);
-    $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
     $this->planetAddUnit('small_cargo', 1);
 
-    $destinationPlanetId = inboundHostileOtherOwnPlanetId($this->currentUserId, $this->currentPlanetId);
-    $deployment = app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->currentPlanetId, $destinationPlanetId);
-    expect($deployment->successful)->toBeTrue($deployment->reason);
+    $foreign = $this->createForeignPlanet();
+    $ownBodies = array_values(array_diff(fleetOwnPlanetIds($this->currentUserId), [$this->currentPlanetId]));
+    plantInboundFleetMission(foreignAttackerId($foreign), $foreign->getPlanetId(), $ownBodies[0], inboundAttackMissionType());
 
-    inboundHostilePlantAttack($this, $deployment->queueId, $this->currentPlanetId);
+    $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
 
-    // The attack arrives at a body whose fleet already left, so there is nothing to move.
-    expect(app(QueueableFleetSavePlanner::class)->plan($this->currentUserId))->toBeNull();
+    expect($plan)->toBeInstanceOf(QueueableFleetSave::class)
+        ->and($plan->destinationPlanetId)->not->toBe($ownBodies[0]);
 });
 ```

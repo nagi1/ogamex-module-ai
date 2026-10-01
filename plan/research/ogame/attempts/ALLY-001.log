@@ -1,44 +1,44 @@
-AllianceLaneRecruitmentTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (5 assertions)[39m
+AllianceRecruitmentCeilingTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (5 assertions)[39m
 
-FAIL  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest
-  ✓ a leader below the cohort ceiling takes a qualified applicant        0.47s  
-  ⨯ a leader at the cohort ceiling leaves a qualified applicant pending  0.13s  
-  ⨯ a leader past the cohort ceiling leaves the strongest applicant pen… 0.10s  
-  ✓ a leader with nothing waiting decides nothing                        0.06s  
+FAIL  Modules\AI\tests\Feature\AllianceRecruitmentCeilingTest
+  ✓ a leader below the cohort ceiling takes a qualified applicant        1.20s  
+  ⨯ a leader at the cohort ceiling leaves a qualified applicant pending  0.96s  
+  ⨯ a leader past the cohort ceiling leaves the strongest applicant pen… 1.07s  
+  ✓ a leader with nothing waiting decides nothing                        0.13s  
   ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest > a leader a…   
+   FAILED  Modules\AI\tests\Feature\AllianceRecruitmentCeilingTest > a leade…   
   Failed asserting that 1 is identical to 0.
 
-  at Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:109
-    105▕     laneAgeApplication($application->id, 30);
-    106▕ 
-    107▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
-    108▕ 
-  ➜ 109▕     expect($decided)->toBe(0)
-    110▕         ->and(AllianceMember::query()
-    111▕             ->where('alliance_id', $alliance->id)
-    112▕             ->where('user_id', $applicant->id)
-    113▕             ->exists())->toBeFalse()
-
-  1   Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:109
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceLaneRecruitmentTest > a leader p…   
-  Failed asserting that 1 is identical to 0.
-
-  at Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:130
-    126▕     laneAgeApplication($application->id, 30);
-    127▕ 
-    128▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
+  at Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:132
+    128▕     laneAgeApplication($application->id, 30);
     129▕ 
-  ➜ 130▕     expect($decided)->toBe(0)
-    131▕         ->and(AllianceMember::query()
-    132▕             ->where('alliance_id', $alliance->id)
-    133▕             ->where('user_id', $applicant->id)
-    134▕             ->exists())->toBeFalse();
+    130▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
+    131▕ 
+  ➜ 132▕     expect($decided)->toBe(0)
+    133▕         ->and(AllianceMember::query()
+    134▕             ->where('alliance_id', $alliance->id)
+    135▕             ->where('user_id', $applicant->id)
+    136▕             ->exists())->toBeFalse()
 
-  1   Modules/AI/tests/Feature/AllianceLaneRecruitmentTest.php:130
+  1   Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:132
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\AllianceRecruitmentCeilingTest > a leade…   
+  Failed asserting that 1 is identical to 0.
+
+  at Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:155
+    151▕     laneAgeApplication($application->id, 30);
+    152▕ 
+    153▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
+    154▕ 
+  ➜ 155▕     expect($decided)->toBe(0)
+    156▕         ->and(AllianceMember::query()
+    157▕             ->where('alliance_id', $alliance->id)
+    158▕             ->where('user_id', $applicant->id)
+    159▕             ->exists())->toBeFalse();
+
+  1   Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:155
 
 
   Tests:    2 failed, 2 passed (5 assertions)
-  Duration: 1.26s
+  Duration: 3.84s
