@@ -1,0 +1,1 @@
+{"code": "QUAL-009", "pass": false, "steps": [{"step": "aspect:shipyard", "pass": false, "seconds": 1, "suspect": false, "line": " FAIL shipyard 0 floor 2 builds ships and defence from what the economy leaves"}]}

@@ -20,11 +20,15 @@ class DecisionEngine
     {
         $generation = $this->candidateActionFactory->create($perception);
         $scored = $this->utilityScorer->score($profile, $generation, $decisionKey);
+        $selected = $this->situationalErrand(
+            $scored,
+            $this->utilityScorer->select($profile, $scored, $decisionKey),
+        );
         $selected = $this->idleOverride(
             $profile,
             $perception,
             $scored,
-            $this->utilityScorer->select($profile, $scored, $decisionKey),
+            $selected,
             $decisionKey,
         );
         $inputHash = hash('sha256', json_encode($perception->traceInput(), JSON_THROW_ON_ERROR));
@@ -36,6 +40,47 @@ class DecisionEngine
             'rejections' => $generation->rejections,
             'inputHash' => $inputHash,
         ]);
+    }
+
+    /**
+     * A login's one errand. ScheduleAiIntentAction refills the build queues and the lab in every
+     * session whatever wins the slot, so a chore that fills them anyway spends the errand on work
+     * that was going to happen — and the fleet errand the situation actually offers (a raid from a
+     * report, debris at home, a colony ship, an expedition) never gets picked. The best candidate
+     * that is neither a queue chore nor doing nothing takes the slot, unless doing nothing scores
+     * higher: a quiet login is still a legitimate choice.
+     *
+     * @param array<int, ScoredCandidate> $scored
+     */
+    private function situationalErrand(array $scored, ScoredCandidate $selected): ScoredCandidate
+    {
+        if (!in_array($scored[0]->candidate->type, [AiCandidateActionType::Build, AiCandidateActionType::Research], true)) {
+            return $selected;
+        }
+
+        $doNothing = null;
+        foreach ($scored as $candidate) {
+            if ($candidate->candidate->type === AiCandidateActionType::DoNothing) {
+                $doNothing = $candidate;
+                break;
+            }
+        }
+
+        if ($doNothing === null) {
+            return $selected;
+        }
+
+        // $scored is already ranked best first, so the first candidate past the chores is the best
+        // remaining one: if it cannot beat doing nothing, neither can anything ranked below it.
+        foreach ($scored as $candidate) {
+            if (in_array($candidate->candidate->type, [AiCandidateActionType::Build, AiCandidateActionType::Research, AiCandidateActionType::DoNothing], true)) {
+                continue;
+            }
+
+            return $candidate->score > $doNothing->score ? $candidate : $selected;
+        }
+
+        return $selected;
     }
 
     /**

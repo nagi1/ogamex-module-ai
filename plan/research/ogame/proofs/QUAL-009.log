@@ -1,0 +1,2 @@
+FAIL aspect:shipyard 1s —  FAIL shipyard 0 floor 2 builds ships and defence from what the economy leaves
+PROOF: FAIL QUAL-009 (aspect:shipyard) at aspect:shipyard:  FAIL shipyard 0 floor 2 builds ships and defence from what the economy leaves

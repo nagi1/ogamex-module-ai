@@ -1,46 +1,25 @@
-HarvestHullOrderTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (3 assertions)[39m
+tests (DebrisBesidePlanetSituationTest, DebrisRecycleSituationTest, DecisionEngineTest, RecycleDepthTest, TransferDepthTest, RecallDepthTest, RaidDepthTest, EnergyUnconstrainedCandidateActionsTest, ScarcityResourceNeedTest, ProactiveSaveTest, ExpeditionDepthTest): Tests:    1 failed, 71 passed (159 assertions)
 
-FAIL  Modules\AI\tests\Feature\HarvestHullOrderTest
-  ⨯ a field the account cannot carry orders the hull the trip needs      0.36s  
-  ⨯ a field past the cap orders only the cap                             0.06s  
-  ✓ an empty field orders no hull                                        0.07s  
-  ✓ an account that owns a hull orders nothing                           0.06s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a fiel…  TypeError   
-  OGame\Services\UnitQueueService::add(): Argument #2 ($object_id) must be of type int, OGame\GameObjects\Models\ShipObject given, called in /var/www/Modules/AI/app/Actions/QueueAiRecycleAction.php on line 129
+FAILED  Modules\AI\tests\Feature\Situations\DebrisRecycleSituationTest >…    
+  expected Recycle work, but the account created work: [BuildFirstBuilding, BuildFirstBuilding] and its last decision ranked: Build 63.5 (safety=10, resource_need=30, seeded_variation=-1.5, archetype_preference=25); Recycle 14.2 (safety=15, seeded_variation=-0.8); DoNothing 7.0 (safety=5, seeded_variation=2)
+Failed asserting that false is true.
 
-  at app/Services/UnitQueueService.php:158
-    154▕      *
-    155▕      * @return void
-    156▕      * @throws Exception
-    157▕      */
-  ➜ 158▕     public function add(PlanetService $planet, int $object_id, int $requested_build_amount): void
-    159▕     {
-    160▕         // @TODO: add checks that current logged in user is owner of planet
-    161▕         // and is able to add this object to the building queue.
-    162▕
+  at Modules/AI/tests/Support/Situation.php:181
+    177▕     }
+    178▕ 
+    179▕     public function expectWork(AiWorkKind $kind): self
+    180▕     {
+  ➜ 181▕         expect(in_array($kind, $this->work(), true))->toBeTrue('expected ' . $kind->name . ' work, but ' . $this->account());
+    182▕ 
+    183▕         return $this;
+    184▕     }
+    185▕
 
-  1   app/Services/UnitQueueService.php:158
-  2   Modules/AI/app/Actions/QueueAiRecycleAction.php:129
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\HarvestHullOrderTest > a fiel…  TypeError   
-  OGame\Services\UnitQueueService::add(): Argument #2 ($object_id) must be of type int, OGame\GameObjects\Models\ShipObject given, called in /var/www/Modules/AI/app/Actions/QueueAiRecycleAction.php on line 129
-
-  at app/Services/UnitQueueService.php:158
-    154▕      *
-    155▕      * @return void
-    156▕      * @throws Exception
-    157▕      */
-  ➜ 158▕     public function add(PlanetService $planet, int $object_id, int $requested_build_amount): void
-    159▕     {
-    160▕         // @TODO: add checks that current logged in user is owner of planet
-    161▕         // and is able to add this object to the building queue.
-    162▕
-
-  1   app/Services/UnitQueueService.php:158
-  2   Modules/AI/app/Actions/QueueAiRecycleAction.php:129
+  1   Modules/AI/tests/Support/Situation.php:181
+  2   Modules/AI/tests/Feature/Situations/DebrisRecycleSituationTest.php:25
 
 
-  Tests:    2 failed, 2 passed (3 assertions)
-  Duration: 1.02s
+  Tests:    1 failed, 71 passed (159 assertions)
+  Duration: 4.55s
+
+[1A  Parallel: 4 processes

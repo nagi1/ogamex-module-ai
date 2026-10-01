@@ -1,0 +1,10 @@
+PASS test:ExpeditionSituationTest 2s
+PASS test:DebrisRecycleSituationTest 1s
+PASS test:ColonisationSituationTest 2s
+PASS test:ShipyardSituationTest 1s
+PASS test:RaidFromReportSituationTest 2s
+PASS test:ShipyardRestraintSituationTest 2s
+PASS aspect:fleet_breadth 0s
+FAIL aspect:raids 1s —  FAIL raids 0 floor 1 raids a profitable target
+PASS aspect:economy 0s
+PROOF: FAIL ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy) at aspect:raids:  FAIL raids 0 floor 1 raids a profitable target

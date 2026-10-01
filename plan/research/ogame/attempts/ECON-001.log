@@ -1,0 +1,23 @@
+tests (ExecuteIntentTest, AiCapabilityPublicationTest, EveryPlanetBuildsSituationTest, EveryPlanetBuildsSessionSituationTest, BothQueuesSituationTest, TransferDepthTest, RecallDepthTest, ExpeditionDepthTest, CoverageCompletionTest): Tests:    1 failed, 43 passed, 6 pending (133 assertions)
+
+FAILED  Modules\AI\tests\Feature\ExecuteIntentTest > a session that chose…   
+  Failed asserting that true is identical to false.
+
+  at Modules/AI/tests/Feature/ExecuteIntentTest.php:176
+    172▕     app(ScheduleAiIntentAction::class)->handle($profile, $session, intentTrace($this->currentUserId, $this->currentPlanetId, $selected, [], [AiCandidateActionType::Build]));
+    173▕ 
+    174▕     $economy = AiWorkItem::query()->where('idempotency_key', 'intent:session:' . $session->id . ':economy')->first();
+    175▕ 
+  ➜ 176▕     expect($economy !== null)->toBe($refills)
+    177▕         ->and($economy?->kind)->toBe($refills ? AiWorkKind::BuildFirstBuilding : null);
+    178▕ })->with([
+    179▕     'a spy errand leaves the stock free' => [AiCandidateActionType::Spy, true],
+    180▕     'a transfer moves the stock' => [AiCandidateActionType::Transfer, false],
+
+  1   Modules/AI/tests/Feature/ExecuteIntentTest.php:176
+
+
+  Tests:    1 failed, 43 passed, 6 pending (133 assertions)
+  Duration: 3.04s
+
+[1A  Parallel: 4 processes

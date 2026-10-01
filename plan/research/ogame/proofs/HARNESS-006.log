@@ -1,0 +1,2 @@
+PASS harness:self-check 0s
+PROOF: PASS HARNESS-006 (harness:self-check)

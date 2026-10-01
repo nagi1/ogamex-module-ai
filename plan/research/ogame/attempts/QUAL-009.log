@@ -1,0 +1,4 @@
+every block in your answer was refused, so nothing was written.
+
+These blocks from your answer were refused and NOT written:
+- tests/Feature/ShipyardWithoutResearchTest.php (EDIT of a file that does not exist — create it with a FILE block)

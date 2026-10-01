@@ -1,44 +1,48 @@
-AllianceRecruitmentCeilingTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m,[39m[39m [39m[32;1m2 passed[39;22m[90m (5 assertions)[39m
+the delivered change passed its tests but its live proof failed:
+PASS test:AllianceApplicationSituationTest 1s
+PASS test:AllianceLeaderSituationTest 2s
+PASS situation:alliance-application 54s
+FAIL aspect:alliance 1s —  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
+PROOF: FAIL ALLY-001 (test:AllianceApplicationSituationTest test:AllianceLeaderSituationTest situation:alliance-application aspect:alliance) at aspect:alliance:  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
 
-FAIL  Modules\AI\tests\Feature\AllianceRecruitmentCeilingTest
-  ✓ a leader below the cohort ceiling takes a qualified applicant        1.20s  
-  ⨯ a leader at the cohort ceiling leaves a qualified applicant pending  0.96s  
-  ⨯ a leader past the cohort ceiling leaves the strongest applicant pen… 1.07s  
-  ✓ a leader with nothing waiting decides nothing                        0.13s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceRecruitmentCeilingTest > a leade…   
-  Failed asserting that 1 is identical to 0.
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 20 accounts: 431 sessions on 20 accounts
+  backlog: 74 work item(s) more than a minute late, oldest 9 min — live verdicts read worker lag
+  sessions chose: QueueUnits 77%, DoNothing 13%, ThrottleMine 6%, Build 2%, Expedition 1%, Research 0%
+  host orders: buildings 381, research 29, units 313
+  missions launched: Expedition 5
+  work (kind: state count):
+    BuildFirstBuilding: Completed 439, Retry 4, Pending 28
+    QueueUnits: Completed 329, Retry 5, Pending 22
+    RunSession: Completed 431, Pending 18, Retry 2
+    QueueResearch: Completed 50, Pending 2, Retry 1
+    SetMinePercent: Completed 24, Retry 1, Pending 2
+    Expedition: Completed 5, Retry 1
+  refused: 
+    8 × QueueUnits: queue_not_created
+    1 × QueueBuilding: shipyard_busy
+--- ogamex why subject (live, now):
+WHY 3 (Miner): what the next session will see
 
-  at Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:132
-    128▕     laneAgeApplication($application->id, 30);
-    129▕ 
-    130▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
-    131▕ 
-  ➜ 132▕     expect($decided)->toBe(0)
-    133▕         ->and(AllianceMember::query()
-    134▕             ->where('alliance_id', $alliance->id)
-    135▕             ->where('user_id', $applicant->id)
-    136▕             ->exists())->toBeFalse()
+  published: queue_units
+  NOT published: build, research, colonize, spy, throttle_mine
 
-  1   Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:132
+  player_id                    3
+  observed_at                  1790886730
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             1
+  colonize_eligible            true
+  target_reports               0 item(s)
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      2 planet(s)
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\AllianceRecruitmentCeilingTest > a leade…   
-  Failed asserting that 1 is identical to 0.
-
-  at Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:155
-    151▕     laneAgeApplication($application->id, 30);
-    152▕ 
-    153▕     $decided = app(ReviewAiAllianceApplicationsAction::class)->handle();
-    154▕ 
-  ➜ 155▕     expect($decided)->toBe(0)
-    156▕         ->and(AllianceMember::query()
-    157▕             ->where('alliance_id', $alliance->id)
-    158▕             ->where('user_id', $applicant->id)
-    159▕             ->exists())->toBeFalse();
-
-  1   Modules/AI/tests/Feature/AllianceRecruitmentCeilingTest.php:155
-
-
-  Tests:    2 failed, 2 passed (5 assertions)
-  Duration: 3.84s
+  decision: QueueUnits
+    QueueUnits    38.1  resource_need=30, safety=10, seeded_variation=-1.9
+    DoNothing      8.5  safety=5, seeded_variation=3.5
+  turned down by the candidate factory: nothing

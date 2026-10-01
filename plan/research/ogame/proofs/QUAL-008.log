@@ -1,0 +1,2 @@
+FAIL aspect:colonisation 1s —  FAIL colonisation 0 floor 1 settles new planets while slots remain
+PROOF: FAIL QUAL-008 (aspect:colonisation) at aspect:colonisation:  FAIL colonisation 0 floor 1 settles new planets while slots remain

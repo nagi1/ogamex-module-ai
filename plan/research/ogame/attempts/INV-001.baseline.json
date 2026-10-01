@@ -1,0 +1,1 @@
+{"code": "INV-001", "pass": false, "steps": [{"step": "invariant:UNIVERSE_SPEED", "pass": true, "seconds": 1, "suspect": false, "line": "QUALITY: FAIL ALLIANCE_SHARE IDLE_QUEUES"}, {"step": "invariant:IDLE_QUEUES", "pass": false, "seconds": 4, "suspect": false, "line": " ! [IDLE_QUEUES] player 3 played this hour with 1 of 1 planets buildable and idle"}]}

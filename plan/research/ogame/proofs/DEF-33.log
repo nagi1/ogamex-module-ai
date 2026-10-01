@@ -1,0 +1,4 @@
+PASS test:RaidDepthTest 4s
+PASS test:RaidFromReportSituationTest 2s
+FAIL aspect:raids 0s —  FAIL raids 0 floor 2 raids a profitable target
+PROOF: FAIL DEF-33 (test:RaidDepthTest test:RaidFromReportSituationTest aspect:raids) at aspect:raids:  FAIL raids 0 floor 2 raids a profitable target

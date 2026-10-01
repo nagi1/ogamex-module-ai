@@ -1,0 +1,4 @@
+PASS situation:inbound-message 14s
+PASS aspect:social 0s
+PASS aspect:chat 1s
+PROOF: PASS SOC-001 (situation:inbound-message aspect:social aspect:chat)

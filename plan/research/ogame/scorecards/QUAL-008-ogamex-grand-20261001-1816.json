@@ -1,0 +1,111 @@
+{
+    "at": "2026-10-01T18:16:24+00:00",
+    "hours": 1,
+    "aspects": {
+        "economy": {
+            "count": 645,
+            "floor": 10,
+            "pass": true,
+            "player": "fills the build queue on every planet each login",
+            "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
+        },
+        "research": {
+            "count": 367,
+            "floor": 2,
+            "pass": true,
+            "player": "keeps the research lab busy",
+            "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
+        },
+        "shipyard": {
+            "count": 146,
+            "floor": 1,
+            "pass": true,
+            "player": "builds ships and defence from what the economy leaves",
+            "owner": "app/Domain/Decision/QueueableUnitPlanner.php"
+        },
+        "espionage": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "probes neighbours before deciding whom to hit",
+            "owner": "app/Domain/Decision/QueueableSpyPlanner.php"
+        },
+        "raids": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "raids a profitable target",
+            "owner": "app/Domain/Decision/RaidPlanner.php"
+        },
+        "transport": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "moves resources to where they are spent",
+            "owner": "app/Domain/Decision/QueueableTransferPlanner.php"
+        },
+        "recycle": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "harvests debris it or others left",
+            "owner": "app/Domain/Decision/QueueableRecyclePlanner.php"
+        },
+        "expeditions": {
+            "count": 2,
+            "floor": 1,
+            "pass": true,
+            "player": "sends expeditions when the fleet has nothing better to do",
+            "owner": "app/Domain/Decision/QueueableExpeditionPlanner.php"
+        },
+        "colonisation": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "settles new planets while slots remain",
+            "owner": "app/Domain/Decision/QueueableColonyPlanner.php"
+        },
+        "fleet_save": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "saves the fleet before going offline or under attack",
+            "owner": "app/Domain/Decision/QueueableFleetSavePlanner.php"
+        },
+        "social": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "answers and starts exchanges with other players",
+            "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
+        },
+        "chat": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "writes to other players",
+            "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
+        },
+        "alliance": {
+            "count": 0,
+            "floor": 1,
+            "pass": false,
+            "player": "applies to, recruits for or leaves an alliance",
+            "owner": "app/Actions/ReviewAiAllianceApplicationsAction.php"
+        },
+        "work_failures": {
+            "count": 20,
+            "floor": 0,
+            "pass": true,
+            "player": "rarely has an order refused (failed work items stay under 20% of finished ones)",
+            "owner": "app/Actions/ExecuteAiIntentAction.php"
+        },
+        "fleet_breadth": {
+            "count": 100,
+            "floor": 80,
+            "pass": false,
+            "player": "uses the fleet for more than one thing (expeditions are at most 80% of missions)",
+            "owner": "app/Domain/Decision/CandidateActionFactory.php"
+        }
+    }
+}

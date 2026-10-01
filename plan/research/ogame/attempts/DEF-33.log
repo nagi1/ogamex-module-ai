@@ -1,53 +1,5 @@
-RaidBashingCapTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
-
-AssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
-
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/RaidBashingCapTest.php:102
-  9   Modules/AI/tests/Feature/RaidBashingCapTest.php:35
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\RaidBashingCapT…  MassAssignmentException   
-  Add [user_id] to fillable property to allow mass assignment on [OGame\Models\EspionageReport].
-
-  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
-    686▕             // the model, and all others will just get ignored for security reasons.
-    687▕             if ($this->isFillable($key)) {
-    688▕                 $this->setAttribute($key, $value);
-    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
-  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
-
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/RaidBashingCapTest.php:102
-  9   Modules/AI/tests/Feature/RaidBashingCapTest.php:45
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\RaidBashingCapT…  MassAssignmentException   
-  Add [user_id] to fillable property to allow mass assignment on [OGame\Models\EspionageReport].
-
-  at vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php:690
-    686▕             // the model, and all others will just get ignored for security reasons.
-    687▕             if ($this->isFillable($key)) {
-    688▕                 $this->setAttribute($key, $value);
-    689▕             } elseif ($totallyGuarded || static::preventsSilentlyDiscardingAttributes()) {
-  ➜ 690▕                 $exception = new MassAssignmentException(sprintf(
-    691▕                     'Add [%s] to fillable property to allow mass assignment on [%s].',
-    692▕                     $key, get_class($this)
-    693▕                 ));
-    694▕
-
-      +7 vendor frames 
-  8   Modules/AI/tests/Feature/RaidBashingCapTest.php:102
-  9   Modules/AI/tests/Feature/RaidBashingCapTest.php:55
-
-
-  Tests:    4 failed (0 assertions)
-  Duration: 1.03s
+the delivered change passed its tests but its live proof failed:
+PASS test:RaidDepthTest 4s
+PASS test:RaidFromReportSituationTest 2s
+FAIL aspect:raids 0s —  FAIL raids 0 floor 1 raids a profitable target
+PROOF: FAIL DEF-33 (test:RaidDepthTest test:RaidFromReportSituationTest aspect:raids) at aspect:raids:  FAIL raids 0 floor 1 raids a profitable target

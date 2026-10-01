@@ -1,0 +1,1 @@
+{"code": "DEF-33", "pass": false, "steps": [{"step": "test:RaidDepthTest", "pass": true, "seconds": 9, "suspect": false, "line": "{\"tool\":\"pest\",\"result\":\"passed\",\"tests\":32,\"passed\":32,\"assertions\":55,\"duration_ms\":3021}"}, {"step": "aspect:raids", "pass": false, "seconds": 0, "suspect": false, "line": " FAIL raids 0 floor 2 raids a profitable target"}]}

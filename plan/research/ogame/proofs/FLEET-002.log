@@ -1,0 +1,4 @@
+PASS test:DebrisBesidePlanetSituationTest 1s
+PASS test:DebrisRecycleSituationTest 2s
+FAIL aspect:recycle 0s —  FAIL recycle 0 floor 1 harvests debris it or others left
+PROOF: FAIL FLEET-002 (test:DebrisBesidePlanetSituationTest test:DebrisRecycleSituationTest aspect:recycle) at aspect:recycle:  FAIL recycle 0 floor 1 harvests debris it or others left

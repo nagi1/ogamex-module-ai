@@ -1,16 +1,2 @@
-RecommendAntiBallisticMissilesTest: suite not collectable
-
-Error 
-
-  Failed opening required '/var/www/Modules/AI/resources/behavior/planet_temperature.php' (include_path='.:/usr/local/lib/php')
-
-  at Modules/AI/tests/Feature/PlanetTemperatureTest.php:42
-     38▕ }
-     39▕ 
-     40▕ uses(AiTemperatureModuleTestCase::class);
-     41▕ 
-  ➜  42▕ $behavior = require dirname(__DIR__, 2) . '/resources/behavior/planet_temperature.php';
-     43▕ 
-     44▕ it('caps a solar satellite at the documented ceiling and rises up to it', function () use ($behavior) {
-     45▕     $ceiling = $behavior['solar_satellite_max_energy'];
-     46▕
+these files are not called by any runtime code, so no account can ever execute them: app/Domain/Decision/WaveFarmPlanner.php.
+Do not write a new class. EDIT the planner, engine or action that already owns this decision, and have the Feature test drive that path. A data file under resources/behavior must be loaded by name in that class.

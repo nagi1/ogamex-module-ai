@@ -149,7 +149,9 @@ class ScheduleAiIntentAction
         $type = $trace->selected->candidate->type;
         // A player refills the build queues and the lab every login before turning to the shipyard or
         // the fleet; choosing a raid or a ship must not leave nine planets idle until the next session.
-        $economySteps = $this->fillsEconomy($type) && $this->economyOffered($trace)
+        // A transfer or a save is priced against the very balance a queue would spend, and a session
+        // that placed no order has nothing to spend on: neither may refill the queues.
+        $economySteps = $this->fillsEconomy($type) && !in_array($type, [AiCandidateActionType::Transfer, AiCandidateActionType::FleetSave, AiCandidateActionType::DoNothing], true) && $this->economyOffered($trace)
             ? $this->fillQueues($profile, $sessionWorkItem, ':economy')
             : 0;
 

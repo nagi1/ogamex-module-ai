@@ -19,6 +19,7 @@ use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
 use OGame\Services\PlayerService;
+use OGame\Services\UnitQueueService;
 
 /**
  * Module-owned adapter over the host's harvest (recycle) fleet path.
@@ -57,7 +58,7 @@ class QueueAiRecycleAction implements QueueAiRecycle
             $origin = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
             $fleet = $this->harvestFleet($player, $origin, $targetGalaxy, $targetSystem, $targetPosition);
             if ($fleet === null) {
-                return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
+                return $this->queueHarvestHull($player, $origin, $targetGalaxy, $targetSystem, $targetPosition);
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
@@ -101,6 +102,28 @@ class QueueAiRecycleAction implements QueueAiRecycle
         $fleet->addUnit($ship, $count);
 
         return $fleet;
+    }
+
+    /**
+     * With no harvest hull on hand the intent builds the hull that collects the field
+     * instead of failing, so a decided recycle eventually flies. The hull is the one the
+     * host's RecycleMission requires for the slot, and the count is what the field needs:
+     * a build is only ordered for a field that is still there.
+     */
+    private function queueHarvestHull(PlayerService $player, PlanetService $origin, int $galaxy, int $system, int $position): AiActionResult
+    {
+        $mass = $this->fieldMass($galaxy, $system, $position);
+        if ($mass <= 0) {
+            return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
+        }
+
+        $ship = ObjectService::getShipObjectByMachineName(RecycleMission::getHarvesterMachineNameForPosition($position));
+        $capacity = $ship->properties->capacity->calculate($player)->totalValue;
+        $count = max(1, (int) ceil($mass / max(1, $capacity)));
+
+        app(UnitQueueService::class)->add($origin, $ship->id, $count);
+
+        return AiActionResult::queued($ship->id);
     }
 
     /** The field's total mass at dispatch time, re-derived, never trusted from the decision. */

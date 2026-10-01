@@ -1,2 +1,2 @@
-these files are not called by any runtime code, so no account can ever execute them: resources/behavior/fleet-save-reaction.yaml.
-Do not write a new class. EDIT the planner, engine or action that already owns this decision, and have the Feature test drive that path. A data file under resources/behavior must be loaded by name in that class.
+the scenario inbound-attack did not hold:
+Scenario field "player_id" must be a scalar value.

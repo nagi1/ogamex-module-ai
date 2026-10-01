@@ -47,6 +47,11 @@ class ReviewAiAllianceApplicationsAction
     /** Points per member at or below which an alliance reads as mass / still recruiting. */
     private const MASS_POINTS_PER_MEMBER = 10_000;
 
+    /** The behaviour file's recruitment ceiling, read once per run. */
+    private array|null $recruitmentCeiling = null;
+
+    private bool $recruitmentCeilingRead = false;
+
     public function __construct(private readonly AiClock $clock)
     {
     }
@@ -101,6 +106,12 @@ class ReviewAiAllianceApplicationsAction
             }
 
             if ($this->readsAsExploitative($alliance, (int) $application->user_id)) {
+                $decided += $this->reject($alliance, $application);
+
+                continue;
+            }
+
+            if ($this->atRecruitmentCeiling($alliance, (int) $application->user_id)) {
                 $decided += $this->reject($alliance, $application);
 
                 continue;
@@ -198,6 +209,73 @@ class ReviewAiAllianceApplicationsAction
         } catch (Exception) {
             return false;
         }
+    }
+
+    /**
+     * ALLY-001: no single alliance may hold the AI cohort. An ai-managed applicant that would
+     * take its alliance to the invariant share or past it is refused however well it ranks, so
+     * membership spreads instead of the whole cohort ending up in the one alliance seeded first.
+     * Only ai-managed accounts count: a human applicant is not part of the cohort's share.
+     */
+    private function atRecruitmentCeiling(Alliance $alliance, int $applicantId): bool
+    {
+        $policy = $this->recruitmentPolicy();
+
+        if ($policy === null || !$this->isAiManaged($applicantId)) {
+            return false;
+        }
+
+        $cohort = $this->aiCohort();
+
+        if ($cohort < $policy['minimum_cohort']) {
+            return false;
+        }
+
+        return ($this->aiMemberCount($alliance) + 1) / $cohort >= $policy['share_ceiling'];
+    }
+
+    /**
+     * Read by name from resources/behavior so the share the cohort invariant states is a number
+     * a tuning pass moves without touching this class. A missing or unreadable file leaves the
+     * alliance's own rules in force rather than a default the source does not state.
+     *
+     * @return array{share_ceiling: float, minimum_cohort: int}|null
+     */
+    private function recruitmentPolicy(): array|null
+    {
+        if ($this->recruitmentCeilingRead) {
+            return $this->recruitmentCeiling;
+        }
+
+        $this->recruitmentCeilingRead = true;
+        $path = dirname(__DIR__, 2) . '/resources/behavior/alliance-recruitment.yaml';
+        $raw = is_file($path) ? (string) file_get_contents($path) : '';
+
+        if (!preg_match('/^share_ceiling:\s*([0-9.]+)/m', $raw, $share) || !preg_match('/^minimum_cohort:\s*([0-9]+)/m', $raw, $cohort)) {
+            return $this->recruitmentCeiling = null;
+        }
+
+        return $this->recruitmentCeiling = [
+            'share_ceiling' => (float) $share[1],
+            'minimum_cohort' => (int) $cohort[1],
+        ];
+    }
+
+    private function isAiManaged(int $playerId): bool
+    {
+        return AiProfile::query()->where('player_id', $playerId)->exists();
+    }
+
+    private function aiCohort(): int
+    {
+        return AiProfile::query()->where('enabled', true)->count();
+    }
+
+    private function aiMemberCount(Alliance $alliance): int
+    {
+        $managers = AiProfile::query()->where('enabled', true)->pluck('player_id');
+
+        return AllianceMember::query()->where('alliance_id', $alliance->id)->whereIn('user_id', $managers)->count();
     }
 
     /**

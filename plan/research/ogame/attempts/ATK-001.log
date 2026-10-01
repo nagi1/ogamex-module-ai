@@ -1,5 +1,25 @@
-ActiveNeighbourRaidTest: suite not collectable
+tests (InactiveNeighbourSituationTest, InactiveNeighbourSessionSituationTest, RaidFromReportSituationTest, DecisionEngineTest, RecycleDepthTest, SpyDepthTest, TransferDepthTest, ColonySpyExecutorTest, RecallDepthTest, RaidDepthTest, EnergyUnconstrainedCandidateActionsTest, ScarcityResourceNeedTest, ProactiveSaveTest, ExpeditionDepthTest, CoverageCompletionTest, Situation): Tests:    1 failed, 105 passed (242 assertions)
 
-Pest\Exceptions\TestCaseClassOrTraitNotFound 
+FAILED  Modules\AI\tests\Feature\Situations\BothQueuesSituationTest > a l…   
+  expected a research running, but the lab is idle; the account created work: [BuildFirstBuilding(Completed), BuildFirstBuilding(Completed)], executors refused: [], queued: [metal_mine, solar_plant], flew: [], not offered: [] and its last decision ranked: Build 63.5 (safety=10, resource_need=30, seeded_variation=-1.5, archetype_preference=25); DoNothing 4.0 (safety=5, seeded_variation=-1)
+Failed asserting that false is true.
 
-  The class or trait [Modules\AI\Tests\Support\AiQueueModuleTestCase] could not be found. Please check the name, and make sure it is autoloadable.
+  at Modules/AI/tests/Support/Situation.php:402
+    398▕     public function expectResearchQueueBusy(): self
+    399▕     {
+    400▕         $planets = Planet::query()->where('user_id', $this->profile->player_id)->pluck('id');
+    401▕         $busy = ResearchQueue::query()->whereIn('planet_id', $planets)->where('processed', 0)->where('canceled', 0)->exists();
+  ➜ 402▕         expect($busy)->toBeTrue('expected a research running, but the lab is idle; ' . $this->account());
+    403▕ 
+    404▕         return $this;
+    405▕     }
+    406▕
+
+  1   Modules/AI/tests/Support/Situation.php:402
+  2   Modules/AI/tests/Feature/Situations/BothQueuesSituationTest.php:20
+
+
+  Tests:    1 failed, 105 passed (242 assertions)
+  Duration: 5.35s
+
+[1A  Parallel: 4 processes

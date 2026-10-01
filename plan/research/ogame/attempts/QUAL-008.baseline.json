@@ -1,0 +1,1 @@
+{"code": "QUAL-008", "pass": false, "steps": [{"step": "aspect:colonisation", "pass": false, "seconds": 0, "suspect": false, "line": " FAIL colonisation 0 floor 1 settles new planets while slots remain"}]}

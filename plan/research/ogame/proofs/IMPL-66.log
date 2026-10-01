@@ -1,0 +1,3 @@
+PASS test:EveryPlanetBuildsSessionSituationTest 2s
+PASS aspect:economy 0s
+PROOF: PASS IMPL-66 (test:EveryPlanetBuildsSessionSituationTest aspect:economy)
