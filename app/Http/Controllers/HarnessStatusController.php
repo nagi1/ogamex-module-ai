@@ -247,7 +247,7 @@ class HarnessStatusController
             (bool) preg_match('/^=== |^--- (proving|parked)/', $line) => 'stage',
             (bool) preg_match('/PROOF: PASS|DELIVERED|^done |test file\(s\): PASS|proven\b/i', $line) && !str_contains($line, 'NOT proven') => 'pass',
             (bool) preg_match('/PROOF: FAIL|attempt \d+ failed|is stuck|STUCK:|did not hold|unfinished|test file\(s\): FAIL|SQLSTATE|Exception|proof (unchanged|regressed|suspect)/i', $line) => 'fail',
-            (bool) preg_match('/\[in_progress\]|file\(s\) to write|^raised |left for the next pass|skipped /i', $line) => 'work',
+            (bool) preg_match('/\[in_progress\]|file\(s\) to write|^raised |left for the next pass|skipped |^\[impl-\d+\]|^\[plan-\d+\]/i', $line) => 'work',
             default => 'plain',
         };
     }

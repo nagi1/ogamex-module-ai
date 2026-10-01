@@ -34,6 +34,7 @@ import signal
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -93,11 +94,11 @@ MODEL_TIMEOUT_SECONDS = 20 * 60
 # sends keep-alive blank lines while it waits, and then gives up itself at 900 s with an error body (twice
 # on 1 Oct 2026, 15 minutes of a writer each). 108 finished calls took at most 263 s (p50 122 s).
 MODEL_DEADLINE_SECONDS = 8 * 60
-# One stalled call marks the provider down for this long: writers skip the paid call (the free red-first
-# proof still runs) and the pass reaches its proof and live stages instead of waiting out five retries on
-# three writers (1 Oct 2026 20:04: the provider stopped answering even a 20-token request).
-PROVIDER_DOWN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "plan/research/ogame/provider-down")
-PROVIDER_PAUSE_SECONDS = 10 * 60
+# A key that stalled or was refused is skipped for this long (a stall is the provider queueing the account's
+# requests: retrying at once queues again). Auth and balance failures cool for hours.
+KEY_STALL_SECONDS = 10 * 60
+KEY_RATE_LIMIT_SECONDS = 2 * 60
+KEY_REFUSED_SECONDS = 6 * 3600
 # A slot outlives its call by a margin, or a slow call's slot is taken while it is still in flight.
 SLOT_STALE_SECONDS = MODEL_TIMEOUT_SECONDS + 5 * 60
 MODEL_USAGE = os.path.join(MODULE, "plan/research/ogame/model-usage.jsonl")
@@ -116,6 +117,20 @@ PRINCIPLES = os.path.join(MODULE, "plan/details/research/strategy/principles")
 TASKS_DB = os.path.join(MODULE, "plan/tasks/tasks.db")
 ROUTING = os.path.join(MODULE, "config/routing.php")
 HOST_ENV = os.path.abspath(os.path.join(MODULE, "..", "..", ".env"))
+
+# Three writers share one log. A line a writer prints is tagged with its shard and flushed at once, or the
+# overview shows an unlabelled mix that arrives minutes late (the call to the model is silent for 2-10).
+_print = print
+
+
+def print(*args, **kwargs):  # noqa: A001
+    worker = os.environ.get("HARNESS_WORKER")
+    if worker and not kwargs.get("file"):
+        args = (f"[{worker}]",) + args
+        kwargs["flush"] = True
+    _print(*args, **kwargs)
+KEYS_ENV = os.path.join(MODULE, ".env")
+KEY_COOLDOWNS = os.path.join(MODULE, "plan/research/ogame/key-cooldown")
 
 API = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-flash"
@@ -430,12 +445,60 @@ def in_peak(now):
     return any(start <= clock < end for start, end in PEAK_WINDOWS)
 
 
-def api_key():
-    text = read(os.path.abspath(HOST_ENV))
-    match = re.search(r"^DEEPSEEK_API_KEY=(.+)$", text, re.M)
-    if not match or not match.group(1).strip():
-        raise SystemExit("DEEPSEEK_API_KEY is not set in the host .env")
-    return match.group(1).strip()
+def api_keys():
+    """Every DeepSeek key the harness may use, in order, without repeats: DEEPSEEK_API_KEY_1.. and
+    DEEPSEEK_API_KEY from the module's own .env (Modules/AI/.env, ignored by git), then the host's
+    DEEPSEEK_API_KEY. A blank value is skipped, so a half-filled file is fine."""
+    keys = []
+    for path in (KEYS_ENV, os.path.abspath(HOST_ENV)):
+        if not os.path.exists(path):
+            continue
+        found = re.findall(r"^DEEPSEEK_API_KEY(?:_\d+)?=(.*)$", read(path), re.M)
+        keys += [value.strip().strip("\"'") for value in found if value.strip().strip("\"'")]
+    unique = list(dict.fromkeys(keys))
+    if not unique:
+        raise SystemExit("no DeepSeek key: set DEEPSEEK_API_KEY_1.. in Modules/AI/.env (see .env.example)")
+    return unique
+
+
+def key_tag(key):
+    """What may be printed of a key: its last four characters, never the key."""
+    return "…" + key[-4:]
+
+
+def key_file(key):
+    return os.path.join(KEY_COOLDOWNS, hashlib.sha256(key.encode()).hexdigest()[:12])
+
+
+def cool_key(key, seconds, reason):
+    """Keep one key out of use for a while. Its file's mtime plus the seconds inside is when it is ready."""
+    os.makedirs(KEY_COOLDOWNS, exist_ok=True)
+    with open(key_file(key), "w", encoding="utf-8") as handle:
+        handle.write(f"{int(seconds)} {reason}\n")
+
+
+def key_cooling(key):
+    """Seconds this key still has to cool, 0 when it is ready."""
+    path = key_file(key)
+    if not os.path.exists(path):
+        return 0
+    seconds = int(read(path).split(" ", 1)[0] or 0)
+    left = os.path.getmtime(path) + seconds - time.time()
+    if left <= 0:
+        os.remove(path)
+    return max(0, int(left))
+
+
+def choose_key(slot_index):
+    """The key for this connection slot, or None when every key is cooling. Slots are exclusive, so each
+    slot prefers its own key (slot i -> key i mod n): four writers on four keys never share one, and a
+    cooling key is skipped by whichever slot would have used it."""
+    keys = api_keys()
+    for offset in range(len(keys)):
+        key = keys[(slot_index + offset) % len(keys)]
+        if key_cooling(key) == 0:
+            return key
+    return None
 
 
 def plan(source_id, extra=""):
@@ -2490,21 +2553,42 @@ def status():
 
 
 def provider_down():
-    """True while the provider is marked down: a stall less than PROVIDER_PAUSE_SECONDS ago, or after the
-    pause while another writer's probe is still out. Exactly one writer probes when the pause ends: three
-    shards starting together all probed and all stalled (1 Oct 2026 21:2x)."""
-    if not os.path.exists(PROVIDER_DOWN):
-        return False
-    if time.time() - os.path.getmtime(PROVIDER_DOWN) < PROVIDER_PAUSE_SECONDS:
-        return True
-    probe = PROVIDER_DOWN + ".probe"
-    if os.path.exists(probe) and time.time() - os.path.getmtime(probe) < MODEL_DEADLINE_SECONDS + 60:
-        return True
-    try:
-        os.close(os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-    except FileExistsError:
-        os.utime(probe)  # a stale probe from a killed writer: take it over
-    return False
+    """True while every key is cooling: nothing can be asked of the provider, so a writer skips its paid
+    call and the pass goes on to the free stages (proofs, live checks, the board)."""
+    return choose_key(0) is None
+
+
+def keys_state():
+    """One line per key for a log: its tag and ready, or how long it still rests."""
+    return ", ".join(f"{key_tag(key)} " + (f"rests {key_cooling(key) // 60 + 1} min" if key_cooling(key) else "ready") for key in api_keys())
+
+
+def check_keys():
+    """Ask every key one 8-token question at once and say which answer: the quick way to learn that a key
+    is wrong, empty or queued after a file edit. Paid, but a few tokens per key."""
+    import concurrent.futures
+
+    def ask(key):
+        request = urllib.request.Request(API, data=json.dumps({"model": MODEL, "max_tokens": 8, "messages": [
+            {"role": "user", "content": "Reply with the single word: ok"}]}).encode(),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+        started = time.time()
+        try:
+            with urllib.request.urlopen(request, timeout=75) as response:
+                data = read_within(response, started + 70)
+            return key, f"ok in {time.time() - started:.1f}s" if data.get("choices") else f"no answer: {json.dumps(data)[:120]}"
+        except urllib.error.HTTPError as error:
+            return key, f"refused {error.code}" + (" (bad key or no balance)" if error.code in (401, 402, 403) else "")
+        except (TimeoutError, urllib.error.URLError, ConnectionError) as error:
+            return key, f"no answer in {time.time() - started:.0f}s ({type(error).__name__})"
+
+    keys = api_keys()
+    print(f"{len(keys)} key(s):")
+    with concurrent.futures.ThreadPoolExecutor(len(keys)) as pool:
+        for key, verdict in pool.map(ask, keys):
+            cooling = key_cooling(key)
+            print(f"  {key_tag(key)}  {verdict}" + (f"  [harness has it resting {cooling // 60 + 1} min]" if cooling else ""))
+    return 0
 
 
 def read_within(response, deadline):
@@ -2516,6 +2600,14 @@ def read_within(response, deadline):
             raise TimeoutError("no answer within the call deadline")
         body.append(line)
     return json.loads(b"".join(body).strip() or b"{}")
+
+
+def heartbeat(finished, purpose):
+    """A line a minute while a call is out, so a long call reads as waiting and not as nothing."""
+    waited = 0
+    while not finished.wait(60):
+        waited += 1
+        print(f"still waiting on the model for {purpose}: {waited} min")
 
 
 def model_call(payload, purpose="a model answer"):
@@ -2531,30 +2623,47 @@ def model_call(payload, purpose="a model answer"):
     `Retry-After` when it sends one, and exponential backoff with jitter when it does not. Without this
     an uncaught HTTPError killed a worker mid-pass, and a slice's whole attempt was lost to a blip.
     """
-    request = urllib.request.Request(
-        API,
-        data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {api_key()}", "Content-Type": "application/json"},
-    )
+    body = json.dumps(payload).encode()
 
     for attempt in range(1, MODEL_ATTEMPTS + 1):
         slot = take_model_slot()
         if slot is None:
             raise SystemExit("no model slot came free; giving up on this pass")
 
+        key = choose_key(int(os.path.basename(slot).split("-")[1]))
+        if key is None:
+            os.remove(slot)
+            raise SystemExit("every DeepSeek key is cooling; nothing was asked of the provider")
+        request = urllib.request.Request(API, data=body, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+
         try:
-            publish("waiting on the model", f"{purpose} ({os.path.basename(slot)})")
+            publish("waiting on the model", f"{purpose} ({os.path.basename(slot)}, key {key_tag(key)})")
+            print(f"asking DeepSeek for {purpose} (key {key_tag(key)})")
+            finished = threading.Event()
+            threading.Thread(target=heartbeat, args=(finished, purpose), daemon=True).start()
             try:
                 started = time.time()
                 with urllib.request.urlopen(request, timeout=MODEL_TIMEOUT_SECONDS) as response:
                     data = read_within(response, started + MODEL_DEADLINE_SECONDS)
-                record_usage(purpose, data, time.time() - started)
-                if data.get("choices"):
-                    for marker in (PROVIDER_DOWN, PROVIDER_DOWN + ".probe"):
-                        if os.path.exists(marker):
-                            os.remove(marker)
+                finished.set()
+                record_usage(purpose, data, time.time() - started, key)
+                used = data.get("usage", {})
+                print(f"answer for {purpose} in {time.time() - started:.0f}s: {used.get('completion_tokens')} tokens, "
+                      f"finish {(data.get('choices') or [{}])[0].get('finish_reason')}")
+                if data.get("choices") and os.path.exists(key_file(key)):
+                    os.remove(key_file(key))
                 return data
             except urllib.error.HTTPError as error:
+                if error.code in (401, 402, 403):
+                    # A wrong key or an empty balance does not heal in minutes; say which one, loudly.
+                    cool_key(key, KEY_REFUSED_SECONDS, f"http {error.code}")
+                    print(f"  key {key_tag(key)} refused with {error.code} (bad key or no balance); out for {KEY_REFUSED_SECONDS // 3600} h")
+                    continue
+                if error.code == 429:
+                    wait = retry_after(error) or KEY_RATE_LIMIT_SECONDS
+                    cool_key(key, wait, "http 429")
+                    print(f"  key {key_tag(key)} rate-limited on {purpose}; trying the next key (this one rests {wait}s)")
+                    continue
                 if error.code not in MODEL_RETRY_CODES or attempt == MODEL_ATTEMPTS:
                     raise
                 wait = retry_after(error) or min(60, 2 ** attempt)
@@ -2562,13 +2671,10 @@ def model_call(payload, purpose="a model answer"):
                       f"(attempt {attempt} of {MODEL_ATTEMPTS})")
                 time.sleep(wait + random.uniform(0, 2))
             except TimeoutError as error:
-                # A call past the deadline is the provider queueing, not a dropped connection: retrying
-                # at once queues again. Mark it down and give the pass back to the free stages.
-                with open(PROVIDER_DOWN, "w", encoding="utf-8") as handle:
-                    handle.write(f"{datetime.datetime.now(datetime.timezone.utc):%H:%M} {purpose}\n")
-                if os.path.exists(PROVIDER_DOWN + ".probe"):
-                    os.remove(PROVIDER_DOWN + ".probe")
-                raise SystemExit(f"model stalled on {purpose}: {error}; provider marked down for {PROVIDER_PAUSE_SECONDS // 60} min")
+                # Past the deadline is the provider queueing this key's requests, not a dropped connection:
+                # the key rests and the next call picks another one.
+                cool_key(key, KEY_STALL_SECONDS, "stalled")
+                raise SystemExit(f"model stalled on {purpose} with key {key_tag(key)}: {error}; that key rests {KEY_STALL_SECONDS // 60} min")
             except (urllib.error.URLError, ConnectionError) as error:
                 # A dropped connection or the server's ten-minute close: retried like a 503, never a
                 # crash that loses the worker's whole pass.
@@ -2579,13 +2685,14 @@ def model_call(payload, purpose="a model answer"):
                       f"(attempt {attempt} of {MODEL_ATTEMPTS})")
                 time.sleep(wait + random.uniform(0, 2))
         finally:
+            finished.set()
             if os.path.exists(slot):
                 os.remove(slot)
 
     raise SystemExit("model call fell through every attempt")
 
 
-def record_usage(purpose, data, seconds):
+def record_usage(purpose, data, seconds, key=None):
     """One line per paid call: what it cost in tokens and whether it thought. Peak and off-peak bill
     differently and thinking tokens bill as output, so spend is only visible if it is written down."""
     usage = data.get("usage", {})
@@ -2593,6 +2700,7 @@ def record_usage(purpose, data, seconds):
     line = {
         "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "worker": os.environ.get("HARNESS_WORKER", ""),
+        "key": key_tag(key) if key else None,
         "purpose": purpose,
         "model": data.get("model"),
         "seconds": round(seconds, 1),
@@ -3119,7 +3227,7 @@ def implement(code, answer_file=None):
                     + "\nFix exactly that and change nothing else.")
 
     if not answer_file and provider_down():
-        print(f"  the provider is marked down ({read(PROVIDER_DOWN).strip()}); no paid call this pass")
+        print(f"  every DeepSeek key is cooling ({keys_state()}); no paid call this pass")
         return 0
     answer, usage = writer_answer(code, context, answer_file)
     if answer is None and usage.get("finish_reason") == "provider_error":
@@ -3226,7 +3334,7 @@ def main(argv=None):
     parser.add_argument("command", nargs="?",
                         choices=["bundle", "plan", "validate", "run", "sweep", "promote",
                                  "coverage", "implement", "wait-until-offpeak", "publish", "peak-gate",
-                                 "quality", "status", "model-check", "reopen"])
+                                 "quality", "status", "model-check", "reopen", "keys"])
     parser.add_argument("source", nargs="?")
     parser.add_argument("--max", type=int, default=4, help="run/sweep: work allowed this pass")
     parser.add_argument("--shard", help="run: slice k/N of the queue, so N workers cover it once")
@@ -3251,6 +3359,8 @@ def main(argv=None):
         return status()
     if args.command == "model-check":
         return model_check()
+    if args.command == "keys":
+        return check_keys()
     if args.command == "coverage":
         return coverage()
     if args.command == "peak-gate":
