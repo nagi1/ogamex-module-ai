@@ -40,13 +40,24 @@ bash scripts/ogamex prove CODE
 
 If it already passes, the task is stale: run `task.py done CODE` and stop.
 
-To see *why* it fails, ask the tools before reading more code:
+To see *why* it fails, ask the tools before reading more code. Each answers in seconds:
 
 ```
-bash scripts/ogamex scorecard                  # every aspect, its floor, and the file that owns it
-bash scripts/ogamex situation NAME             # the planted situation, its read-back and the last decisions
+bash scripts/ogamex stories                    # every Situation-kit story, PASS/FAIL, with the kit's diagnosis
+bash scripts/ogamex why subject|PLAYER_ID      # live: what the next session sees, what is (not) offered, the decision
+bash scripts/ogamex pulse 30                   # live: what the cohort chose, did and had refused in 30 minutes
+bash scripts/ogamex account PLAYER_ID          # live: one account's planets, queues, fleets, work, refusals
 bash scripts/ogamex economy PLAYER_ID          # per planet: building, would queue X, or the gate refusing it
+bash scripts/ogamex situation NAME             # plant it on the cohort and drive the account in-process
+bash scripts/ogamex scorecard                  # every aspect, its floor, and the file that owns it
 ```
+
+Read a failure the same way everywhere: *refused* (an executor gate said no), *not offered / not
+published* (no planner produced it: fix the planner), *ranked but outscored* (fix the comparison).
+
+When the kit test passes but live fails, the kit is missing something the live world has: plant it
+(`crowd(n)` for a universe of players, `stockEveryPlanet`, `colony`) until the kit fails like live,
+then fix the code.
 
 ## 3. Change the owner, smallest change
 
@@ -55,7 +66,9 @@ bash scripts/ogamex economy PLAYER_ID          # per planet: building, would que
 - Objects, prices and requirements come from the host (`ObjectService`, the planet and player services).
   Never write a building, ship or tech name or id as a rule.
 - No `else`/`elseif`; early returns or `match`. Resolve module classes with `app()`, never `new`.
-- Add or change a Pest test in `tests/Feature` that drives the real action or planner. Add it to the proof:
+- Prove behaviour with the Situation kit (`tests/Support/Situation.php`, examples in
+  `tests/Feature/Situations/`): plant, `session()`, expect. Add or change a Pest test in `tests/Feature`
+  that drives the real path. Add it to the proof:
   `python3 plan/tasks/task.py proof CODE test:YourTest <the existing steps>`.
 
 ## 4. Check fast, in this order

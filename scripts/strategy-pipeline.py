@@ -1310,6 +1310,13 @@ def violated_invariants():
     return newest[1] if newest else None
 
 
+def known_red_stories():
+    """Situation stories failing on the newest behaviour board (scripts/stories.py)."""
+    path = os.path.join(MODULE, "plan/research/ogame/stories.json")
+    board = json.loads(read(path)) if os.path.exists(path) else {}
+    return {story["test"] for story in board.get("stories", []) if not story["pass"]}
+
+
 def moves_no_failing_aspect(proof):
     """Why no step of this proof currently fails, or None when one does or nothing says. Only an
     aspect: or invariant: step with a read newer than the cohort reset can hold a row back."""
@@ -1319,9 +1326,7 @@ def moves_no_failing_aspect(proof):
     # A story on the behaviour board is seconds old where a cohort read is hours old: a row whose
     # story fails has work to do even while its live aspect passes (QUAL-006, 1 Oct 2026: research
     # "passed" live while an account with a lab and 2M stock queued none).
-    board_path = os.path.join(MODULE, "plan/research/ogame/stories.json")
-    board = json.loads(read(board_path)) if os.path.exists(board_path) else {}
-    failing = {story["test"] for story in board.get("stories", []) if not story["pass"]}
+    failing = known_red_stories()
     if any(step.startswith("test:") and step[5:] in failing for step in proof.split()):
         return None
 
@@ -2051,6 +2056,21 @@ def implement_context(code):
         parts += [f"THE FAST PROOF {os.path.relpath(path, MODULE)} (make this test pass through the real path; "
                   "it already counts as your test, so write another only for a case it does not cover; edit it "
                   "only to remove a `->todo()` your change satisfies):", "```php", read(path)[:5000], "```", ""]
+
+    # What the tools already say, so the first attempt starts from the diagnosis instead of re-deriving it:
+    # the board's verdict on this row's stories (the kit's own explanation of what the account did), and
+    # for a row judged live, what the live subject account sees and what the cohort chose lately.
+    board_path = os.path.join(MODULE, "plan/research/ogame/stories.json")
+    board = json.loads(read(board_path)) if os.path.exists(board_path) else {}
+    mine = [story for story in board.get("stories", []) if story["test"] in proof_tests(code)]
+    if mine:
+        parts += ["THE BEHAVIOUR BOARD ON YOUR STORIES (current code, before your change):"]
+        parts += [f"- {'PASS' if story['pass'] else 'FAIL'} {story['test']}: {story['story']}"
+                  + ("" if story["pass"] else f"\n  why: {story['why']}") for story in mine]
+        parts += [""]
+    live = live_evidence([f"FAIL {step}" for step in task["proof"].split() if step.split(":")[0] in ("situation", "aspect", "invariant")])
+    if live:
+        parts += [live.strip(), ""]
 
     # The row's own evidence: what was measured, what is required, and any default already decided.
     if task["notes"].strip():
@@ -2873,7 +2893,11 @@ def verify_slice(code, written, tests, backups):
 
     # The slice's own tests, its proof tests and every test that names a class it touched, in ONE
     # parallel Pest run: one boot instead of one per file (a planner edit used to mean ~19 serial runs).
-    names = tests + [name for name in affected_tests(written) if name not in tests]
+    # A story already red on the behaviour board is another row's open defect (BothQueues is QUAL-006's):
+    # it would fail every attempt that touches the session, whatever the attempt did. The row's own
+    # proof stories stay in, red or not; they are its target.
+    red = known_red_stories()
+    names = tests + [name for name in affected_tests(written) if name not in tests and name not in red]
     pattern = "|".join(re.escape(name) for name in names)
     code_rc, output = run_in_app(f"timeout -k 5 300 ./vendor/bin/pest --testsuite=Modules --parallel "
                                  f"--processes=4 --bail --filter='({pattern})'")
