@@ -53,6 +53,10 @@ ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 # How many tries one task may spend in a window, and how long before its budget resets. The window is
 # not the stop: a row that fails the same way twice is stuck (record_failure) and waits for a person.
 MAX_ATTEMPTS = 3
+
+# Turns the writer gets inside one attempt: a failed check goes back to it as a follow-up in the same
+# conversation (the prompt prefix is cached) instead of throwing the edit away and starting cold.
+WRITER_TURNS = 3
 COOLOFF_SECONDS = 45 * 60
 # A stuck row's wait, in seconds: no clock ends it, `task.py unstick` does.
 NEVER = 10 ** 9
@@ -2834,7 +2838,7 @@ WRITER_THINKING = {"type": "enabled"}
 WRITER_REASONING_EFFORT = "low"
 
 
-def writer_answer(code, context, answer_file=None):
+def writer_answer(code, context, answer_file=None, conversation=None):
     """The writer's answer and its token usage: a saved answer when one is given, else a paid call.
 
     Every paid answer is kept beside the attempt log, so a refusal or a failing check can be re-run
@@ -2845,7 +2849,7 @@ def writer_answer(code, context, answer_file=None):
         return read(answer_file), {}
 
     payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING, "reasoning_effort": WRITER_REASONING_EFFORT,
-               "messages": [
+               "messages": conversation or [
                    {"role": "system", "content": IMPLEMENT_PROMPT},
                    {"role": "user", "content": context},
                ]}
@@ -2883,9 +2887,12 @@ def apply_edits(clean, body, current):
     return current, None
 
 
-def parse_answer(answer):
-    """Each path's new contents and every refused block, before anything touches the disk."""
+def parse_answer(answer, base=None):
+    """Each path's new contents and every refused block, before anything touches the disk.
+
+    `base` is the writer's working copy from an earlier turn: an EDIT applies to it, not to the disk."""
     contents, refused = {}, []
+    base = base or {}
 
     for path, content in FILE_BLOCK.findall(answer):
         clean = path.strip("`")
@@ -2899,7 +2906,7 @@ def parse_answer(answer):
     for path, body in EDIT_BLOCK.findall(answer):
         clean = path.strip("`")
         full = os.path.join(MODULE, clean)
-        current = contents.get(clean, read(full) if os.path.exists(full) else None)
+        current = contents.get(clean, base.get(clean, read(full) if os.path.exists(full) else None))
         if current is None:
             refused.append(f"{clean} (EDIT of a file that does not exist — create it with a FILE block)")
             continue
@@ -3229,60 +3236,87 @@ def implement(code, answer_file=None):
     if not answer_file and provider_down():
         print(f"  every DeepSeek key is cooling ({keys_state()}); no paid call this pass")
         return 0
-    answer, usage = writer_answer(code, context, answer_file)
-    if answer is None and usage.get("finish_reason") == "provider_error":
-        print(f"  the provider returned no answer, not counted as an attempt: {usage['error']}")
-        return 0
-    if answer is None:
-        record_failure(code, f"unfinished: {usage['finish_reason']}")
-        return 1
-    changes, refused = parse_answer(answer)
-
-    # What was refused, in the words the retry needs. Without this the retry only saw the test
-    # failure it caused: a plan whose data file was refused leaves code that reads a file nobody
-    # wrote, and the model repeats the same shape until its attempts run out.
-    refusal_note = ""
-    if refused:
-        refusal_note = "\n\nThese blocks from your answer were refused and NOT written:\n- " + "\n- ".join(refused)
-
-    print(f"{code} [{task['status']}]: {len(changes)} file(s) to write, refused {len(refused)}")
-    for reason in refused:
-        print(f"  ! {reason}")
-    if usage:
-        print(f"  tokens: prompt {usage.get('prompt_tokens')} "
-              f"(cached {usage.get('prompt_cache_hit_tokens')}) output {usage.get('completion_tokens')}")
-
-    if not changes:
-        # Two different mistakes that used to share one message: an answer in prose, and an answer
-        # whose every block was refused. Telling the second "you wrote no FILE blocks" made it resend
-        # the same refused blocks (ALLY-001 spent its attempts that way).
-        if refused:
-            record_failure(code, "every block in your answer was refused, so nothing was written." + refusal_note)
+    conversation = [{"role": "system", "content": IMPLEMENT_PROMPT}, {"role": "user", "content": context}]
+    working, last_signature, verdict = {}, None, None
+    for turn in range(1, WRITER_TURNS + 1):
+        answer, usage = writer_answer(code, context, answer_file, conversation)
+        if answer is None and usage.get("finish_reason") == "provider_error":
+            print(f"  the provider returned no answer, not counted as an attempt: {usage['error']}")
+            return 0
+        if answer is None:
+            record_failure(code, f"unfinished: {usage['finish_reason']}")
             return 1
-        print(f"  no blocks in the answer — {answer.strip().splitlines()[0][:100] if answer.strip() else 'empty reply'}")
-        record_failure(code, "your answer contained no ### FILE or ### EDIT blocks, so nothing could be "
-                             "written. Reply with the blocks only, in the documented format.\n"
-                             "--- your previous answer began:\n" + answer.strip()[:1200])
-        return 1
+        changes, refused = parse_answer(answer, working)
 
-    # Writing and verifying happen inside the one verification lane. Files written outside it sat
-    # on disk, unverified, while another worker's Pest run collected the whole suite -- one worker's
-    # broken file failed the other's slice, and the retry chased an error it never made.
-    lane = await_claim(VERIFY_LANE)
-    if lane is None:
-        print("  left for the next pass: the verification lane stayed held")
-        return 0
-    # The lane is held to the verdict, the proof check included: released after the slice's own tests,
-    # the files sat in the tree while that check ran, and another row's proof read code that was then
-    # rolled back (ECON-001's baseline failed on QUAL-006's rejected planner, 1 Oct 2026).
-    try:
-        verdict = verify_and_judge(code, changes, refusal_note, answer_file)
-    finally:
-        release_claims([lane])
+        # What was refused, in the words the retry needs. Without this the retry only saw the test
+        # failure it caused: a plan whose data file was refused leaves code that reads a file nobody
+        # wrote, and the model repeats the same shape until its attempts run out.
+        refusal_note = ""
+        if refused:
+            refusal_note = "\n\nThese blocks from your answer were refused and NOT written:\n- " + "\n- ".join(refused)
+
+        print(f"{code} [{task['status']}] turn {turn}: {len(changes)} file(s) to write, refused {len(refused)}")
+        for reason in refused:
+            print(f"  ! {reason}")
+        if usage:
+            print(f"  tokens: prompt {usage.get('prompt_tokens')} "
+                  f"(cached {usage.get('prompt_cache_hit_tokens')}) output {usage.get('completion_tokens')}")
+
+        if not changes:
+            # Two different mistakes that used to share one message: an answer in prose, and an answer
+            # whose every block was refused. Telling the second "you wrote no FILE blocks" made it resend
+            # the same refused blocks (ALLY-001 spent its attempts that way).
+            if refused:
+                record_failure(code, "every block in your answer was refused, so nothing was written." + refusal_note)
+                return 1
+            print(f"  no blocks in the answer — {answer.strip().splitlines()[0][:100] if answer.strip() else 'empty reply'}")
+            record_failure(code, "your answer contained no ### FILE or ### EDIT blocks, so nothing could be "
+                                 "written. Reply with the blocks only, in the documented format.\n"
+                                 "--- your previous answer began:\n" + answer.strip()[:1200])
+            return 1
+
+        # What the writer has now is its working copy: every turn's edits stack on the last one.
+        working = {**working, **changes}
+
+        # Writing and verifying happen inside the one verification lane. Files written outside it sat
+        # on disk, unverified, while another worker's Pest run collected the whole suite -- one worker's
+        # broken file failed the other's slice, and the retry chased an error it never made. The lane is
+        # released between turns, so the tree is clean while the model thinks.
+        lane = await_claim(VERIFY_LANE)
+        if lane is None:
+            print("  left for the next pass: the verification lane stayed held")
+            return 0
+        # The lane is held to the verdict, the proof check included: released after the slice's own tests,
+        # the files sat in the tree while that check ran, and another row's proof read code that was then
+        # rolled back (ECON-001's baseline failed on QUAL-006's rejected planner, 1 Oct 2026).
+        try:
+            verdict = verify_and_judge(code, working, refusal_note, answer_file)
+        finally:
+            release_claims([lane])
+        if not isinstance(verdict, Rejected):
+            break
+
+        # The same failure after a fix is not progress: stop and count the attempt instead of paying again.
+        signature = failure_signature(verdict.reason)
+        if signature == last_signature:
+            record_failure(code, verdict.reason)
+            return 1
+        last_signature = signature
+        print(f"  turn {turn} rejected; the failure goes back to the writer with its work kept")
+        conversation += [
+            {"role": "assistant", "content": answer},
+            {"role": "user", "content": "Your changes were applied to a working copy and checked. The check said:\n"
+                                        + verdict.reason[:2500]
+                                        + "\nFix exactly that with EDIT blocks against your changed files as you left them; "
+                                          "change nothing else and do not resend whole files."},
+        ]
     if verdict is None:
         return 0
     if isinstance(verdict, int):
         return verdict
+    if isinstance(verdict, Rejected):
+        record_failure(code, verdict.reason)
+        return 1
     written, after = verdict
 
     os.makedirs(IMPLEMENTED, exist_ok=True)
@@ -3297,9 +3331,17 @@ def implement(code, answer_file=None):
     return 0
 
 
+class Rejected:
+    """A slice the checks refused. The disk is already restored; the writer's copy lives on in memory."""
+
+    def __init__(self, reason):
+        self.reason = reason
+
+
 def verify_and_judge(code, changes, refusal_note, answer_file):
     """Write, verify and judge one slice inside the held lane: (written, proof after) when it is kept,
-    None when nothing was written, or the exit code when it was rejected and rolled back."""
+    None when nothing was written, 0 when the proof could not be run, or Rejected(reason) when a check
+    refused it and the tree was restored. Counting the attempt is the caller's, once its turns are used."""
     written, tests, backups = write_changes(code, changes)
     if written is None:
         return None
@@ -3308,9 +3350,8 @@ def verify_and_judge(code, changes, refusal_note, answer_file):
 
     rejection = verify_slice(code, written, tests, backups)
     if rejection:
-        print(f"  unverified, restored {rollback(written, backups)} file(s)")
-        record_failure(code, rejection + refusal_note)
-        return 1
+        print(f"  unverified, tree restored ({rollback(written, backups)} file(s)); the writer keeps its copy")
+        return Rejected(rejection + refusal_note)
 
     # The slice's own tests pass; now ask whether it moved the row's proof.
     baseline_path = os.path.join(ATTEMPTS, f"{code}.baseline.json")
@@ -3322,9 +3363,8 @@ def verify_and_judge(code, changes, refusal_note, answer_file):
             return 0
         why = proof_change(json.loads(read(baseline_path)), after)
         if why:
-            print(f"  {why.splitlines()[0]}; restored {rollback(written, backups)} file(s)")
-            record_failure(code, why)
-            return 1
+            print(f"  {why.splitlines()[0]}; tree restored ({rollback(written, backups)} file(s))")
+            return Rejected(why)
 
     return written, after
 

@@ -409,3 +409,11 @@ The recovery is done when, over one unattended day on the fresh grand:
 3. `UNIVERSE_SPEED` is clean and `IDLE_QUEUES` reports only real misses;
 4. the hourly scorecard shows `raids` above its floor, and at least one more of the dead aspects
    (recycle, colonisation, fleet save, alliance) is above zero.
+
+## How the writer works (2 Oct 2026)
+
+One attempt is up to three turns in one conversation. The writer's edit is applied, the row's tests run
+in the held lane, and the tree is restored so other rows never see unverified code. A failed check goes
+back as a follow-up message (the prompt prefix is cached, so it costs only the new output) and the writer
+patches its own working copy with EDIT blocks. The same failure twice in a row ends the attempt and counts
+it. Nothing is thrown away between turns: only the disk is restored, the writer's copy stays in memory.
