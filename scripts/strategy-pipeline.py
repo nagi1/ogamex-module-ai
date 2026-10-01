@@ -2485,8 +2485,9 @@ def scenario_problems(paths):
 # calls: the answer is a median 2.5k tokens (max 8.7k), but total output was a median 45k, 95% of it
 # reasoning at the default effort; a 6.7k cap returned finish=length and no answer. With thinking off
 # the answers were fast but careless (an EDIT of a file that does not exist, code without its test).
-# So thinking stays on at low effort, and the cap covers reasoning plus the largest answer.
-WRITER_MAX_TOKENS = 32000
+# So thinking stays on at low effort. Low effort still reasons 9k-32k+ tokens, and a truncated call is
+# billed in full, so the cap is the provider's own ceiling (65,536, where 24 default-effort calls stopped).
+WRITER_MAX_TOKENS = 65536
 WRITER_THINKING = {"type": "enabled"}
 WRITER_REASONING_EFFORT = "low"
 
