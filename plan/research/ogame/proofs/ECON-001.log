@@ -1,1 +1,2 @@
 PROOF: FAIL ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest situation:every-planet-builds aspect:economy invariant:IDLE_QUEUES)
+PROOF: FAIL ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest situation:every-planet-builds aspect:economy invariant:IDLE_QUEUES)

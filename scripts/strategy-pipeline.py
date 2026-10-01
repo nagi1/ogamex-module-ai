@@ -2512,7 +2512,9 @@ def claim_row(code, worker):
 def release_row(code, worker):
     """Give a row back after a failed attempt, only if this worker still holds it."""
     connection = sqlite3.connect(TASKS_DB, timeout=30)
-    connection.execute("update tasks set status='todo', assignee=null where code=? and assignee=?", (code, worker))
+    # Only a row still in progress: one an operator froze or blocked meanwhile stays as they left it.
+    connection.execute("update tasks set status='todo', assignee=null where code=? and assignee=? and status='in_progress'",
+                       (code, worker))
     connection.commit()
     connection.close()
 
