@@ -41,8 +41,8 @@ use OGame\Services\PlayerService;
  */
 class RaidPlanner
 {
-    /** The host's hard bashing limit: at most six attacks on one target per day. */
-    private const BASHING_LIMIT = 6;
+    /** The host's hard bashing limit: at most six attacks on one target per day. Single source of truth for the raid cap. */
+    public const int BASHING_LIMIT = 6;
 
     private const BASHING_WINDOW_HOURS = 24;
 

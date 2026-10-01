@@ -6,6 +6,7 @@ use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Domain\Decision\CandidateActionFactory;
 use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\RaidPlanner;
+use Modules\AI\Domain\Decision\RaidWavePlan;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerObservationService;
 use Modules\AI\Enums\AiAffectEmotion;
@@ -45,6 +46,10 @@ uses(IsolatedAccountTestCase::class);
 
 beforeEach(function (): void {
     app()->bind(QueueAiRaid::class, QueueAiRaidAction::class);
+});
+
+test('one attack cap, stated once: the wave plan honours the planner bashing limit', function (): void {
+    expect(RaidWavePlan::forTarget(1_000_000)->count())->toBe(RaidPlanner::BASHING_LIMIT);
 });
 
 test('the raid planner refuses a distant farm that burns more fuel than the tier allows', function (): void {

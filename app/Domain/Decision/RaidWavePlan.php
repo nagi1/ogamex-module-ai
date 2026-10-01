@@ -13,9 +13,6 @@ namespace Modules\AI\Domain\Decision;
  */
 final readonly class RaidWavePlan
 {
-    /** Attacks on one planet or moon within 24 hours on a base-speed server. */
-    public const int WAVE_LIMIT = 6;
-
     /** One cargo unit is loaded for every 50k resources the target holds. */
     public const int RESOURCES_PER_CARGO_UNIT = 50_000;
 
@@ -34,7 +31,7 @@ final readonly class RaidWavePlan
         $waves = [];
         $size = self::firstWaveSize($resources);
 
-        for ($wave = 0; $wave < self::WAVE_LIMIT; $wave++) {
+        for ($wave = 0; $wave < RaidPlanner::BASHING_LIMIT; $wave++) {
             $waves[] = $size;
             $size = self::halfOf($size);
         }
