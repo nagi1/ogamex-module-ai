@@ -38,6 +38,9 @@ use OGame\Services\ResearchQueueService;
  */
 class QueueableBuildingPlanner
 {
+    /** The lab is one queue for the account, so its step has one slot beside the per-planet building steps. */
+    private const LAB_STEP = 'lab';
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private FacilityChain $facilityChain,
@@ -55,7 +58,7 @@ class QueueableBuildingPlanner
     }
 
     /**
-     * Every queue a player would fill in one login: at most one step per planet, because each planet
+     * Every queue a player would fill in one login: at most one building per planet, because each planet
      * pays from its own stock and has its own build queue, and at most one technology, because the
      * lab is one queue for the account. The order is plan()'s, so the first step is the one plan()
      * returns.
@@ -127,32 +130,34 @@ class QueueableBuildingPlanner
     }
 
     /**
-     * @param array<int, QueueableBuilding|QueueableResearch> $steps
+     * The build queue and the lab run side by side, so a planet's building and the account's one
+     * technology are separate steps: a planet whose best candidate is a technology still builds.
+     *
+     * @param array<int|string, QueueableBuilding|QueueableResearch> $steps
      * @param callable(PlanetService): list<BuildCandidate> $pass
-     * @return array<int, QueueableBuilding|QueueableResearch>
+     * @return array<int|string, QueueableBuilding|QueueableResearch>
      */
     private function withStep(array $steps, PlanetService $planet, AiProfile $profile, callable $pass): array
     {
-        if (isset($steps[$planet->getPlanetId()])) {
-            return $steps;
-        }
-
         $candidates = $pass($planet);
+        $isResearch = static fn (BuildCandidate $candidate): bool => ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research;
 
-        // The lab is one queue for the account: once a technology is taken, the other planets build.
-        if (array_filter($steps, static fn (object $taken): bool => $taken instanceof QueueableResearch) !== []) {
-            $candidates = array_values(array_filter(
-                $candidates,
-                static fn (BuildCandidate $candidate): bool => ObjectService::getObjectById($candidate->buildingId)->type !== GameObjectType::Research,
-            ));
+        // The candidate list is in priority order, so whichever queue its first entry belongs to is tried first.
+        $queues = [$planet->getPlanetId() => false, self::LAB_STEP => true];
+        if ($candidates !== [] && $isResearch($candidates[0])) {
+            $queues = array_reverse($queues, true);
         }
 
-        $step = $this->firstQueueable($planet, $profile, $candidates);
-        if ($step === null) {
-            return $steps;
-        }
+        foreach ($queues as $key => $research) {
+            if (isset($steps[$key])) {
+                continue;
+            }
 
-        $steps[$planet->getPlanetId()] = $step;
+            $step = $this->firstQueueable($planet, $profile, array_values(array_filter($candidates, static fn (BuildCandidate $candidate): bool => $isResearch($candidate) === $research)));
+            if ($step !== null) {
+                $steps[$key] = $step;
+            }
+        }
 
         return $steps;
     }

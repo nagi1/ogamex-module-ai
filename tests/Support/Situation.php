@@ -385,10 +385,10 @@ final class Situation
         return $this;
     }
 
-    /** The home planet has a building under construction. */
+    /** The home planet started a building this session. session() advances the clock to each intent, so a short build may already be complete. */
     public function expectBuildingQueueBusy(): self
     {
-        $busy = BuildingQueue::query()->where('planet_id', $this->host('currentPlanetId'))->where('processed', 0)->where('canceled', 0)->exists();
+        $busy = BuildingQueue::query()->where('planet_id', $this->host('currentPlanetId'))->where('canceled', 0)->exists();
         expect($busy)->toBeTrue('expected the build queue busy, but it is idle; ' . $this->account());
 
         return $this;
