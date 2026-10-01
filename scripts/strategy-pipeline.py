@@ -2693,6 +2693,10 @@ def writer_answer(code, context, answer_file=None):
                    {"role": "user", "content": context},
                ]}
     data = model_call(payload, purpose=f"implementing {code}")
+    if not data.get("choices"):
+        # An error body (rate limit, overload, a rejected request) has no choices; it crashed the shard
+        # before (1 Oct 2026) and hid what the provider said.
+        return None, {"finish_reason": "provider_error", "error": json.dumps(data)[:400]}
     choice = data["choices"][0]
     if choice.get("finish_reason") != "stop":
         return None, {"finish_reason": choice.get("finish_reason")}
@@ -3066,6 +3070,9 @@ def implement(code, answer_file=None):
                     + "\nFix exactly that and change nothing else.")
 
     answer, usage = writer_answer(code, context, answer_file)
+    if answer is None and usage.get("finish_reason") == "provider_error":
+        print(f"  the provider returned no answer, not counted as an attempt: {usage['error']}")
+        return 0
     if answer is None:
         record_failure(code, f"unfinished: {usage['finish_reason']}")
         return 1
