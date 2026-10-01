@@ -1,0 +1,94 @@
+=== step 0.1 git status --short ===
+M  plan/research/ogame/attempts/ATK-001.answer.md
+M  plan/research/ogame/attempts/ATK-001.count
+M  plan/research/ogame/attempts/ATK-001.log
+A  plan/research/ogame/attempts/FLEET-003.answer.md
+A  plan/research/ogame/attempts/FLEET-003.count
+A  plan/research/ogame/attempts/FLEET-003.log
+M  plan/research/ogame/attempts/HARNESS-003.answer.md
+M  plan/research/ogame/attempts/HARNESS-003.count
+M  plan/research/ogame/attempts/HARNESS-003.log
+MM plan/tasks/tasks.db
+?? plan/research/ogame/evidence/20261001-1221/
+
+=== git log --oneline -3 ===
+e2a0a7f Add scorecards and logs for ECON-001, baseline data for ogamex, and updates to alliance and social cognition logic
+90ae207 harness: ATK-001 and HARNESS-003 attempts, task ledger + seed
+0ef3f1c evidence: cohort run 2026-10-01
+
+=== git diff --stat (worktree) ===
+ plan/tasks/tasks.db | Bin 380928 -> 380928 bytes
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+=== git diff --cached --stat (index) ===
+ plan/research/ogame/attempts/ATK-001.answer.md     | 353 ++++++++++-----------
+ plan/research/ogame/attempts/ATK-001.count         |   2 +-
+ plan/research/ogame/attempts/ATK-001.log           |  47 +--
+ plan/research/ogame/attempts/FLEET-003.answer.md   | 337 ++++++++++++++++++++
+ plan/research/ogame/attempts/FLEET-003.count       |   1 +
+ plan/research/ogame/attempts/FLEET-003.log         |  52 +++
+ plan/research/ogame/attempts/HARNESS-003.answer.md |  95 +++---
+ plan/research/ogame/attempts/HARNESS-003.count     |   2 +-
+ plan/research/ogame/attempts/HARNESS-003.log       |   2 +-
+ plan/tasks/tasks.db                                | Bin 380928 -> 380928 bytes
+ 10 files changed, 610 insertions(+), 281 deletions(-)
+
+=== git diff --cached --stat tasks.db ===
+-	-	plan/tasks/tasks.db
+-	-	plan/tasks/tasks.db
+85817c8e9d69b36a8ee997a4112b20904904604857dfcdfb6fd2268e4292b8d7  /tmp/tasks.db.local-harness-20261001-122124.bak
+M  plan/research/ogame/attempts/ATK-001.answer.md
+M  plan/research/ogame/attempts/ATK-001.count
+M  plan/research/ogame/attempts/ATK-001.log
+A  plan/research/ogame/attempts/FLEET-003.answer.md
+A  plan/research/ogame/attempts/FLEET-003.count
+A  plan/research/ogame/attempts/FLEET-003.log
+M  plan/research/ogame/attempts/HARNESS-003.answer.md
+M  plan/research/ogame/attempts/HARNESS-003.count
+M  plan/research/ogame/attempts/HARNESS-003.log
+?? plan/research/ogame/evidence/20261001-1221/
+From github.com:nagi1/ogamex-module-ai
+ * branch            claude/friendly-hypatia-hve9xk -> FETCH_HEAD
+Updating e2a0a7f..9ce5a9c
+Fast-forward
+ .github/prompts/cohort-evidence.prompt.md          |   7 +-
+ app/Actions/ScheduleAiIntentAction.php             |  48 +++---
+ plan/research/ogame/implemented/ECON-001.md        |   3 +-
+ plan/research/ogame/implemented/HARNESS-002.md     |   4 +
+ plan/tasks/seed.sql                                |  16 +-
+ plan/tasks/tasks.db                                | Bin 380928 -> 385024 bytes
+ scripts/canary.sh                                  |  11 +-
+ scripts/cohort-scenario.php                        | 170 ++++++++++++++-------
+ scripts/harness-live.sh                            |   4 +-
+ scripts/strategy-pipeline.py                       |  44 +++++-
+ .../Ai/TurtleDefenceStaleThresholdsTest.php        |   4 -
+ tests/Feature/AiCampaignWindowTest.php             |   1 -
+ tests/Feature/DiplomacyConceptAbsenceTest.php      |   4 -
+ tests/Feature/ExecuteIntentTest.php                |  23 +++
+ tests/Feature/HeadhuntGapTest.php                  |   4 -
+ 15 files changed, 243 insertions(+), 100 deletions(-)
+ create mode 100644 plan/research/ogame/implemented/HARNESS-002.md
+
+=== step 0.2 harness (was running) ===
+pgrep -af harness-live.sh; pgrep -af strategy-pipeline.py
+  3182503 bash scripts/harness-live.sh
+  3190887 bash scripts/harness-live.sh
+  3192803 python3 -u scripts/strategy-pipeline.py implement SOC-001
+stopped with: pkill -f harness-live.sh; pkill -f strategy-pipeline.py  -> no processes remain.
+
+=== step 0.3 git pull (first attempt refused, then unblocked) ===
+First `git pull origin claude/friendly-hypatia-hve9xk` refused verbatim:
+  From github.com:nagi1/ogamex-module-ai
+   * branch            claude/friendly-hypatia-hve9xk -> FETCH_HEAD
+  Updating e2a0a7f..9ce5a9c
+  error: Your local changes to the following files would be overwritten by merge:
+          plan/tasks/tasks.db
+  Please commit your changes or stash them before you merge.
+  Aborting
+
+Resolution (nothing discarded): the local tasks.db (harness runtime churn, harness already stopped)
+was backed up to /tmp/tasks.db.local-harness-20261001-122124.bak (sha256 above), then the file was
+restored to HEAD so the pull could fast-forward. The staged attempt files (ATK-001, FLEET-003,
+HARNESS-003) were left in place and are unaffected by the pull.
+Second pull: Fast-forward e2a0a7f..9ce5a9c (15 files, +243/-100). HEAD is now 9ce5a9c
+"fix what the first cohort evidence run found".
