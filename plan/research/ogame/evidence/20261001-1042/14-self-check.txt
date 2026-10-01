@@ -1,0 +1,1 @@
+self-check ok (window matches config/routing.php; parks at 01:00/03:59/06:00/09:59, resumes 04:00/10:00, weekends free; rollback removes unverified output)

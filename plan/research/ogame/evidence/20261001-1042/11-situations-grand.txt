@@ -1,0 +1,20 @@
+cohort: 2 enabled account(s), no provider call made (safe in a peak window)
+SCENARIO: PASS idle-planet
+    tick 1: 5488 order(s) finished, 0 item(s) made due, 10 work item(s) run
+    tick 2: 3 order(s) finished, 0 item(s) made due, 14 work item(s) run
+    tick 3: 1 order(s) finished, 19 item(s) made due, 18 work item(s) run
+    cleaned up: 0 planted row(s) reverted
+    read-back: 3 queue order(s) created with nothing to react to
+SCENARIO: FAIL every-planet-builds
+    tick 1: 1 order(s) finished, 0 item(s) made due, 2 work item(s) run
+    tick 2: 1 order(s) finished, 0 item(s) made due, 11 work item(s) run
+    tick 3: 1 order(s) finished, 0 item(s) made due, 15 work item(s) run
+    cleaned up: 0 planted row(s) reverted
+    read-back: 1 of 12 planet(s) of account 12 got a building order — last decisions: p12 3/published_capability:build | p13 12/eligible_transfer | p13 1/always_available | p12 3/published_capability:build | p13 11/eligible_expedition | p12 3/published_capability:build
+SCENARIO: FAIL inbound-message
+    planted: message from account 13 to account 12
+    tick 1: 1 order(s) finished, 0 item(s) made due, 22 work item(s) run
+    tick 2: 2 order(s) finished, 0 item(s) made due, 26 work item(s) run
+    tick 3: 1 order(s) finished, 13 item(s) made due, 31 work item(s) run
+    cleaned up: 1 planted row(s) reverted
+    read-back: 0 social exchange(s) recorded for account 12 — last decisions: p13 12/eligible_transfer | p12 3/published_capability:build | p13 12/eligible_transfer | p12 5/published_capability:queue_units | p13 12/eligible_transfer | p13 12/eligible_transfer

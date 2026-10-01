@@ -1,0 +1,17 @@
+=== step 0.1 git status --short ===
+?? plan/research/ogame/evidence/
+
+=== step 0.1 git log --oneline -3 ===
+41e0d19 prompts: one-shot cohort evidence run for the machine that hosts the cohorts
+0120d76 agents: one lock authority, one test lane, and DeepSeek's current limits
+68df54c proof: a task closes only when the cohorts show its effect
+
+=== step 0.2 harness processes (pgrep) ===
+pgrep exit=1 (no output above means none running)
+
+=== step 0.3 checkout ===
+claude/friendly-hypatia-hve9xk
+41e0d19 prompts: one-shot cohort evidence run for the machine that hosts the cohorts
+
+=== step 0.4 EVID ===
+plan/research/ogame/evidence/20261001-1042

@@ -1,0 +1,215 @@
+--- test:ExecuteIntentTest
+{"tool":"pest","result":"passed","tests":15,"passed":15,"assertions":37,"duration_ms":2345,"warnings":10,"warning_details":[]}
+--- test:AiCapabilityPublicationTest
+{"tool":"pest","result":"passed","tests":17,"passed":17,"assertions":63,"duration_ms":3907,"warnings":10,"warning_details":[]}
+--- situation:every-planet-builds
+cohort: 2 enabled account(s), no provider call made (safe in a peak window)
+SCENARIO: FAIL every-planet-builds
+    tick 1: 4 order(s) finished, 0 item(s) made due, 2 work item(s) run
+    tick 2: 1 order(s) finished, 25 item(s) made due, 5 work item(s) run
+    tick 3: 1 order(s) finished, 3 item(s) made due, 11 work item(s) run
+    cleaned up: 0 planted row(s) reverted
+    read-back: 1 of 12 planet(s) of account 12 got a building order — last decisions: p13 11/eligible_expedition | p12 3/published_capability:build | p13 11/eligible_expedition | p13 12/eligible_transfer | p12 4/published_capability:research | p13 12/eligible_transfer
+
+SCENARIOS: 0 passed, 1 failed, 190.4s
+--- aspect:economy
+PLAY SCORECARD ogamex-grand: 20 account(s), 199 planet(s), last 1h
+  PASS economy               287         floor 10     fills the build queue on every planet each login
+  PASS research               28         floor 2      keeps the research lab busy
+  PASS shipyard              694         floor 1      builds ships and defence from what the economy leaves
+  FAIL espionage               0         floor 1      probes neighbours before deciding whom to hit
+       owner: app/Domain/Decision/QueueableSpyPlanner.php
+  PASS raids                   1         floor 1      raids a profitable target
+  PASS transport               6         floor 1      moves resources to where they are spent
+  FAIL recycle                 0         floor 1      harvests debris it or others left
+       owner: app/Domain/Decision/QueueableRecyclePlanner.php
+  PASS expeditions            29         floor 1      sends expeditions when the fleet has nothing better to do
+  FAIL colonisation            0         floor 1      settles new planets while slots remain
+       owner: app/Domain/Decision/QueueableColonyPlanner.php
+  PASS fleet_save              2         floor 1      saves the fleet before going offline or under attack
+  PASS social                  1         floor 1      answers and starts exchanges with other players
+  PASS chat                    2         floor 1      writes to other players
+  FAIL alliance                0         floor 1      applies to, recruits for or leaves an alliance
+       owner: app/Actions/ReviewAiAllianceApplicationsAction.php
+  PASS work_failures          20         floor 0      rarely has an order refused (failed work items stay under 20% of finished ones)
+  FAIL fleet_breadth          81         floor 80     uses the fleet for more than one thing (expeditions are at most 80% of missions)
+       owner: app/Domain/Decision/CandidateActionFactory.php
+snapshot: plan/research/ogame/scorecards/ECON-001-ogamex-grand-20261001-1150.json
+PLAY: 10 of 15 aspects pass
+PLAY: FAIL espionage recycle colonisation alliance fleet_breadth
+--- invariant:IDLE_QUEUES
+
+=== cohort verification — 2026-10-01 11:50:52 ===
+profiles: 20   planets: 199   defence units: 53,772,557
+orders last 10 min: building 23, research 3, units 115   (in flight: 10401/146422/9440)
+receipts: 480,645   decisions: 641,101   work items by state: {"1":51,"3":37,"4":1121670,"5":3424}
+defence held: {"rocket_launcher":50908042,"light_laser":313425,"heavy_laser":1270994,"gauss_cannon":236779,"ion_cannon":908622,"plasma_turret":132063,"small_shield_dome":2098,"large_shield_dome":173,"anti_ballistic_missile":140,"interplanetary_missile":221}
+astrophysics: 353 level(s) across the cohort, 0 of 20 accounts still at 0
+research (newest 300 rows): 202 cancelled, 98 completed, 0 waiting
+research (last 20 min): 5 rows, 1 cancelled
+  newest cancelled: planet 124, object 121, target level 26, cost 0, created 2026-10-01 11:50:50
+due now: 88   leased: 0   pending: 51
+
+QUALITY: 160 violation(s) across 4 invariant(s)
+  ! [NAKED_BESIDE_WALLED] player 12: 2 planet(s) at zero defence while one holds 11,191,720 units
+  ! [NAKED_BESIDE_WALLED] player 13: 6 planet(s) at zero defence while one holds 9,372,618 units
+  ! [NAKED_BESIDE_WALLED] player 15: 2 planet(s) at zero defence while one holds 154,034 units
+  ! [NAKED_BESIDE_WALLED] player 16: 1 planet(s) at zero defence while one holds 164,073 units
+  ! [NAKED_BESIDE_WALLED] player 17: 11 planet(s) at zero defence while one holds 39,173 units
+  ! [NAKED_BESIDE_WALLED] player 18: 4 planet(s) at zero defence while one holds 311,514 units
+  ! [NAKED_BESIDE_WALLED] player 19: 3 planet(s) at zero defence while one holds 140,022 units
+  ! [NAKED_BESIDE_WALLED] player 20: 5 planet(s) at zero defence while one holds 163,448 units
+  ! [NAKED_BESIDE_WALLED] player 21: 2 planet(s) at zero defence while one holds 169,461 units
+  ! [NAKED_BESIDE_WALLED] player 22: 2 planet(s) at zero defence while one holds 128,288 units
+  ! [NAKED_BESIDE_WALLED] player 23: 2 planet(s) at zero defence while one holds 270,084 units
+  ! [NAKED_BESIDE_WALLED] player 24: 3 planet(s) at zero defence while one holds 168,637 units
+  ! [NAKED_BESIDE_WALLED] player 25: 1 planet(s) at zero defence while one holds 510,739 units
+  ! [NAKED_BESIDE_WALLED] player 26: 2 planet(s) at zero defence while one holds 163,405 units
+  ! [NAKED_BESIDE_WALLED] player 27: 12 planet(s) at zero defence while one holds 101,097 units
+  ! [NAKED_BESIDE_WALLED] player 28: 3 planet(s) at zero defence while one holds 341,255 units
+  ! [NAKED_BESIDE_WALLED] player 29: 1 planet(s) at zero defence while one holds 169,265 units
+  ! [NAKED_BESIDE_WALLED] player 30: 3 planet(s) at zero defence while one holds 153,396 units
+  ! [NAKED_BESIDE_WALLED] player 31: 2 planet(s) at zero defence while one holds 154,052 units
+  ! [WALL_CEILING] planet 19 holds 21,081 defence units
+  ! [WALL_CEILING] planet 70 holds 101,675 defence units
+  ! [WALL_CEILING] planet 71 holds 194,125 defence units
+  ! [WALL_CEILING] planet 120 holds 302,713 defence units
+  ! [WALL_CEILING] planet 124 holds 11,191,720 defence units
+  ! [WALL_CEILING] planet 158 holds 2,221,666 defence units
+  ! [WALL_CEILING] planet 168 holds 186,392 defence units
+  ! [WALL_CEILING] planet 182 holds 7,303,225 defence units
+  ! [WALL_CEILING] planet 197 holds 2,251,000 defence units
+  ! [WALL_CEILING] planet 20 holds 3,975,115 defence units
+  ! [WALL_CEILING] planet 30 holds 9,372,618 defence units
+  ! [WALL_CEILING] planet 33 holds 2,060,801 defence units
+  ! [WALL_CEILING] planet 21 holds 165,549 defence units
+  ! [WALL_CEILING] planet 43 holds 166,478 defence units
+  ! [WALL_CEILING] planet 85 holds 166,055 defence units
+  ! [WALL_CEILING] planet 150 holds 168,390 defence units
+  ! [WALL_CEILING] planet 151 holds 165,701 defence units
+  ! [WALL_CEILING] planet 156 holds 165,232 defence units
+  ! [WALL_CEILING] planet 160 holds 167,561 defence units
+  ! [WALL_CEILING] planet 162 holds 165,793 defence units
+  ! [WALL_CEILING] planet 164 holds 165,425 defence units
+  ! [WALL_CEILING] planet 22 holds 58,282 defence units
+  ! [WALL_CEILING] planet 37 holds 149,570 defence units
+  ! [WALL_CEILING] planet 42 holds 43,716 defence units
+  ! [WALL_CEILING] planet 80 holds 55,462 defence units
+  ! [WALL_CEILING] planet 83 holds 43,615 defence units
+  ! [WALL_CEILING] planet 84 holds 36,405 defence units
+  ! [WALL_CEILING] planet 105 holds 84,076 defence units
+  ! [WALL_CEILING] planet 141 holds 101,675 defence units
+  ! [WALL_CEILING] planet 149 holds 154,034 defence units
+  ! [WALL_CEILING] planet 23 holds 47,882 defence units
+  ! [WALL_CEILING] planet 36 holds 48,139 defence units
+  ! [WALL_CEILING] planet 67 holds 164,073 defence units
+  ! [WALL_CEILING] planet 68 holds 163,001 defence units
+  ! [WALL_CEILING] planet 72 holds 162,541 defence units
+  ! [WALL_CEILING] planet 88 holds 154,741 defence units
+  ! [WALL_CEILING] planet 179 holds 103,100 defence units
+  ! [WALL_CEILING] planet 24 holds 39,173 defence units
+  ! [WALL_CEILING] planet 25 holds 311,514 defence units
+  ! [WALL_CEILING] planet 31 holds 198,963 defence units
+  ! [WALL_CEILING] planet 26 holds 90,442 defence units
+  ! [WALL_CEILING] planet 44 holds 137,801 defence units
+  ! [WALL_CEILING] planet 100 holds 139,704 defence units
+  ! [WALL_CEILING] planet 102 holds 76,294 defence units
+  ! [WALL_CEILING] planet 132 holds 140,022 defence units
+  ! [WALL_CEILING] planet 27 holds 135,404 defence units
+  ! [WALL_CEILING] planet 34 holds 155,263 defence units
+  ! [WALL_CEILING] planet 35 holds 163,448 defence units
+  ! [WALL_CEILING] planet 173 holds 44,054 defence units
+  ! [WALL_CEILING] planet 28 holds 50,473 defence units
+  ! [WALL_CEILING] planet 38 holds 42,162 defence units
+  ! [WALL_CEILING] planet 82 holds 169,461 defence units
+  ! [WALL_CEILING] planet 87 holds 167,692 defence units
+  ! [WALL_CEILING] planet 122 holds 49,531 defence units
+  ! [WALL_CEILING] planet 123 holds 55,488 defence units
+  ! [WALL_CEILING] planet 142 holds 101,675 defence units
+  ! [WALL_CEILING] planet 152 holds 160,011 defence units
+  ! [WALL_CEILING] planet 186 holds 100,917 defence units
+  ! [WALL_CEILING] planet 45 holds 111,932 defence units
+  ! [WALL_CEILING] planet 89 holds 121,616 defence units
+  ! [WALL_CEILING] planet 93 holds 128,288 defence units
+  ! [WALL_CEILING] planet 126 holds 118,991 defence units
+  ! [WALL_CEILING] planet 127 holds 127,425 defence units
+  ! [WALL_CEILING] planet 146 holds 125,974 defence units
+  ! [WALL_CEILING] planet 157 holds 125,113 defence units
+  ! [WALL_CEILING] planet 172 holds 124,979 defence units
+  ! [WALL_CEILING] planet 46 holds 270,084 defence units
+  ! [WALL_CEILING] planet 58 holds 183,092 defence units
+  ! [WALL_CEILING] planet 47 holds 165,223 defence units
+  ! [WALL_CEILING] planet 56 holds 168,637 defence units
+  ! [WALL_CEILING] planet 91 holds 168,282 defence units
+  ! [WALL_CEILING] planet 92 holds 117,354 defence units
+  ! [WALL_CEILING] planet 94 holds 52,903 defence units
+  ! [WALL_CEILING] planet 103 holds 138,012 defence units
+  ! [WALL_CEILING] planet 110 holds 137,082 defence units
+  ! [WALL_CEILING] planet 115 holds 166,747 defence units
+  ! [WALL_CEILING] planet 48 holds 117,152 defence units
+  ! [WALL_CEILING] planet 62 holds 510,739 defence units
+  ! [WALL_CEILING] planet 111 holds 55,462 defence units
+  ! [WALL_CEILING] planet 112 holds 55,486 defence units
+  ! [WALL_CEILING] planet 113 holds 101,692 defence units
+  ! [WALL_CEILING] planet 114 holds 164,128 defence units
+  ! [WALL_CEILING] planet 131 holds 163,415 defence units
+  ! [WALL_CEILING] planet 145 holds 101,680 defence units
+  ! [WALL_CEILING] planet 147 holds 101,675 defence units
+  ! [WALL_CEILING] planet 167 holds 159,448 defence units
+  ! [WALL_CEILING] planet 49 holds 52,740 defence units
+  ! [WALL_CEILING] planet 55 holds 135,935 defence units
+  ! [WALL_CEILING] planet 97 holds 163,405 defence units
+  ! [WALL_CEILING] planet 99 holds 30,255 defence units
+  ! [WALL_CEILING] planet 116 holds 162,368 defence units
+  ! [WALL_CEILING] planet 117 holds 161,115 defence units
+  ! [WALL_CEILING] planet 118 holds 160,604 defence units
+  ! [WALL_CEILING] planet 125 holds 158,738 defence units
+  ! [WALL_CEILING] planet 169 holds 158,046 defence units
+  ! [WALL_CEILING] planet 50 holds 101,097 defence units
+  ! [WALL_CEILING] planet 51 holds 341,255 defence units
+  ! [WALL_CEILING] planet 52 holds 154,776 defence units
+  ! [WALL_CEILING] planet 73 holds 168,996 defence units
+  ! [WALL_CEILING] planet 86 holds 169,265 defence units
+  ! [WALL_CEILING] planet 139 holds 169,026 defence units
+  ! [WALL_CEILING] planet 140 holds 154,175 defence units
+  ! [WALL_CEILING] planet 154 holds 155,846 defence units
+  ! [WALL_CEILING] planet 159 holds 154,699 defence units
+  ! [WALL_CEILING] planet 166 holds 154,304 defence units
+  ! [WALL_CEILING] planet 53 holds 67,035 defence units
+  ! [WALL_CEILING] planet 133 holds 98,325 defence units
+  ! [WALL_CEILING] planet 134 holds 153,396 defence units
+  ! [WALL_CEILING] planet 135 holds 101,675 defence units
+  ! [WALL_CEILING] planet 136 holds 150,875 defence units
+  ! [WALL_CEILING] planet 137 holds 150,525 defence units
+  ! [WALL_CEILING] planet 138 holds 101,675 defence units
+  ! [WALL_CEILING] planet 163 holds 101,675 defence units
+  ! [WALL_CEILING] planet 170 holds 143,188 defence units
+  ! [WALL_CEILING] planet 57 holds 154,052 defence units
+  ! [WALL_CEILING] planet 74 holds 101,675 defence units
+  ! [WALL_CEILING] planet 128 holds 101,675 defence units
+  ! [WALL_CEILING] planet 129 holds 101,675 defence units
+  ! [WALL_CEILING] planet 130 holds 86,109 defence units
+  ! [WALL_CEILING] planet 155 holds 145,701 defence units
+  ! [WALL_CEILING] planet 171 holds 144,523 defence units
+  ! [ALLIANCE_SHARE] alliance 1 holds 15 of 20 AI accounts (75%)
+  ! [IDLE_QUEUES] player 12 played this hour with 11 of 12 build queues empty
+  ! [IDLE_QUEUES] player 13 played this hour with 10 of 10 build queues empty
+  ! [IDLE_QUEUES] player 14 played this hour with 9 of 9 build queues empty
+  ! [IDLE_QUEUES] player 15 played this hour with 10 of 11 build queues empty
+  ! [IDLE_QUEUES] player 16 played this hour with 10 of 10 build queues empty
+  ! [IDLE_QUEUES] player 17 played this hour with 10 of 12 build queues empty
+  ! [IDLE_QUEUES] player 18 played this hour with 6 of 6 build queues empty
+  ! [IDLE_QUEUES] player 19 played this hour with 8 of 8 build queues empty
+  ! [IDLE_QUEUES] player 20 played this hour with 7 of 9 build queues empty
+  ! [IDLE_QUEUES] player 21 played this hour with 10 of 11 build queues empty
+  ! [IDLE_QUEUES] player 22 played this hour with 9 of 10 build queues empty
+  ! [IDLE_QUEUES] player 23 played this hour with 4 of 4 build queues empty
+  ! [IDLE_QUEUES] player 24 played this hour with 10 of 11 build queues empty
+  ! [IDLE_QUEUES] player 25 played this hour with 11 of 13 build queues empty
+  ! [IDLE_QUEUES] player 26 played this hour with 11 of 11 build queues empty
+  ! [IDLE_QUEUES] player 27 played this hour with 9 of 13 build queues empty
+  ! [IDLE_QUEUES] player 28 played this hour with 4 of 4 build queues empty
+  ! [IDLE_QUEUES] player 29 played this hour with 9 of 9 build queues empty
+  ! [IDLE_QUEUES] player 31 played this hour with 11 of 11 build queues empty
+QUALITY: FAIL NAKED_BESIDE_WALLED WALL_CEILING ALLIANCE_SHARE IDLE_QUEUES
+PROOF: FAIL ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest situation:every-planet-builds aspect:economy invariant:IDLE_QUEUES)

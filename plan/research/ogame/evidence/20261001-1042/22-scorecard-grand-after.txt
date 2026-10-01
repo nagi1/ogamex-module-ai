@@ -1,0 +1,23 @@
+PLAY SCORECARD ogamex-grand: 20 account(s), 199 planet(s), last 1h
+  PASS economy               300         floor 10     fills the build queue on every planet each login
+  PASS research               27         floor 2      keeps the research lab busy
+  PASS shipyard              697         floor 1      builds ships and defence from what the economy leaves
+  FAIL espionage               0         floor 1      probes neighbours before deciding whom to hit
+       owner: app/Domain/Decision/QueueableSpyPlanner.php
+  PASS raids                   1         floor 1      raids a profitable target
+  PASS transport               6         floor 1      moves resources to where they are spent
+  FAIL recycle                 0         floor 1      harvests debris it or others left
+       owner: app/Domain/Decision/QueueableRecyclePlanner.php
+  PASS expeditions            29         floor 1      sends expeditions when the fleet has nothing better to do
+  FAIL colonisation            0         floor 1      settles new planets while slots remain
+       owner: app/Domain/Decision/QueueableColonyPlanner.php
+  PASS fleet_save              2         floor 1      saves the fleet before going offline or under attack
+  PASS social                  1         floor 1      answers and starts exchanges with other players
+  PASS chat                    2         floor 1      writes to other players
+  FAIL alliance                0         floor 1      applies to, recruits for or leaves an alliance
+       owner: app/Actions/ReviewAiAllianceApplicationsAction.php
+  PASS work_failures          20         floor 0      rarely has an order refused (failed work items stay under 20% of finished ones)
+  FAIL fleet_breadth          81         floor 80     uses the fleet for more than one thing (expeditions are at most 80% of missions)
+       owner: app/Domain/Decision/CandidateActionFactory.php
+PLAY: 10 of 15 aspects pass
+PLAY: FAIL espionage recycle colonisation alliance fleet_breadth

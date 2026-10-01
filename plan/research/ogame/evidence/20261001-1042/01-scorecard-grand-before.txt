@@ -1,0 +1,27 @@
+PLAY SCORECARD ogamex-grand: 20 account(s), 199 planet(s), last 24h
+  PASS economy              2986         floor 240    fills the build queue on every planet each login
+  PASS research              669         floor 40     keeps the research lab busy
+  PASS shipyard            10844         floor 20     builds ships and defence from what the economy leaves
+  FAIL espionage               0         floor 20     probes neighbours before deciding whom to hit
+       owner: app/Domain/Decision/QueueableSpyPlanner.php
+  FAIL raids                   0         floor 20     raids a profitable target
+       owner: app/Domain/Decision/RaidPlanner.php
+  PASS transport              88         floor 10     moves resources to where they are spent
+  FAIL recycle                 0         floor 2      harvests debris it or others left
+       owner: app/Domain/Decision/QueueableRecyclePlanner.php
+  PASS expeditions           488         floor 10     sends expeditions when the fleet has nothing better to do
+  PASS colonisation           23         floor 1      settles new planets while slots remain
+  FAIL fleet_save              0         floor 10     saves the fleet before going offline or under attack
+       owner: app/Domain/Decision/QueueableFleetSavePlanner.php
+  FAIL social                  0         floor 10     answers and starts exchanges with other players
+       owner: app/Actions/EvaluateAiSocialExchangeAction.php
+  FAIL chat                    0         floor 10     writes to other players
+       owner: app/Actions/EvaluateAiSocialExchangeAction.php
+  FAIL alliance                0         floor 1      applies to, recruits for or leaves an alliance
+       owner: app/Actions/ReviewAiAllianceApplicationsAction.php
+  PASS work_failures          20         floor 0      rarely has an order refused (failed work items stay under 20% of finished ones)
+  FAIL fleet_breadth          81         floor 80     uses the fleet for more than one thing (expeditions are at most 80% of missions)
+       owner: app/Domain/Decision/CandidateActionFactory.php
+snapshot: plan/research/ogame/scorecards/baseline-ogamex-grand-20261001-1042.json
+PLAY: 7 of 15 aspects pass
+PLAY: FAIL espionage raids recycle fleet_save social chat alliance fleet_breadth

@@ -1,0 +1,2 @@
+No stale test sessions to reap.
+{"tool":"pest","raw":["ErrorException","The use statement with non-compound name 'FilesystemIterator' has no effect","at Modules/AI/tests/Feature/Ai/TurtleDefenceStaleThresholdsTest.php:3","1 <?php","2","3 use FilesystemIterator;","4 use RecursiveDirectoryIterator;","5 use RecursiveIteratorIterator;","6","7 /*","8 * The AI module must not treat the older defence/IPM tallies as current doctrine. The source","9 * documents a turtle-defence figure of 37 and an anti-ballistic total of 100 or more as"]}

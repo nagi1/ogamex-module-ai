@@ -1,0 +1,38 @@
+=== HANG DIAGNOSTIC 2026-10-01 11:04:17 UTC ===
+situation all (grand) produced no output after 'every-planet-builds' for ~14 min.
+
+--- host process (elapsed 13:13, %CPU 0.0, STAT S+) ---
+    PID     ELAPSED %CPU %MEM STAT CMD
+3156609       15:45  0.0  0.0 S+   bash scripts/ogamex situation all
+
+--- container php process ---
+/proc/7466/cmdline: php Modules/AI/scripts/cohort-scenario.php run all --confirm --cleanup
+wchan: poll_schedule_timeout.constprop.0   state: S (sleeping)
+
+--- open sockets (fd -> peer) ---
+fd7 -> 172.18.0.2:3306 (MySQL, idle in SHOW PROCESSLIST)
+fd8 -> 172.18.0.3:6379 (Redis, db=0, cmd=set)
+fd9 -> 172.18.0.3:6379 (Redis, db=1, cmd=get)
+
+--- redis client 168735 (db=1) ---
+tot-cmds=2892 over ~958s (~3 GET/s) = busy lock retry loop
+
+--- laravel log (storage/logs/laravel-2026-10-01.log) ---
+total lines: 20740
+warning count (since 00:00:00): 19518 of: Queue driver "redis" does not support fleet arrival job tracking...
+
+=== CORRECTED UNDERSTANDING (11:05 UTC) ===
+Not a permanent deadlock: the scenario loop DOES progress, but each scenario takes
+~5 minutes instead of seconds (the synchronous ai:run-due-work blocks on locks held
+by the live queue workers; observed ~3 Redis GET/s = Laravel Lock::block retry loop).
+Evidence of progress:
+  - inbound-message planted at 10:55:36 (chat_messages 387), completed with
+    "cleaned up: 1 planted row(s) reverted" (soft-delete at 11:01:50), read-back:
+    "0 social exchange(s) recorded for account 12" -> FAIL.
+  - inbound-attack planted at 11:01:50 (fleet_missions 30088, mission_type 1,
+    40 LF / 15 cruiser / 20 SC); killed before its cleanup -> leftover planted row.
+The situation tool therefore does NOT run "in seconds" while cohorts are live.
+
+=== LEFTOVER PLANTED ROW (not touched, per instructions) ===
+fleet_missions 30088 (user 13 -> planet 19, mission_type 1) planted by inbound-attack;
+its --cleanup never ran because the process was killed. left in place, reported only.

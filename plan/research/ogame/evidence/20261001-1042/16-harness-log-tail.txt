@@ -1,0 +1,303 @@
+=== tail -n 300 /tmp/harness-live.log ===
+NameError: name 'proposal_path' is not defined
+--- live cohort verification: grand 2026-10-01 10:23:11 UTC ---
+
+=== cohort verification — 2026-10-01 10:23:12 ===
+profiles: 20   planets: 199   defence units: 16,107,720
+orders last 10 min: building 17, research 0, units 27   (in flight: 10329/146409/14393)
+receipts: 478,685   decisions: 639,277   work items by state: {"1":61,"2":2,"3":29,"4":1117886,"5":3424}
+defence held: {"rocket_launcher":13422749,"light_laser":313428,"heavy_laser":1211312,"gauss_cannon":216372,"ion_cannon":816122,"plasma_turret":125290,"small_shield_dome":1966,"large_shield_dome":160,"anti_ballistic_missile":100,"interplanetary_missile":221}
+astrophysics: 353 level(s) across the cohort, 0 of 20 accounts still at 0
+research (newest 300 rows): 217 cancelled, 83 completed, 0 waiting
+research (last 20 min): 0 rows, 0 cancelled
+  newest cancelled: planet 20, object 118, target level 15, cost 0, created 2026-10-01 09:56:12
+due now: 90   leased: 2   pending: 61
+
+QUALITY: 133 violation(s) across 3 invariant(s)
+  ! [NAKED_BESIDE_WALLED] player 12: 2 planet(s) at zero defence while one holds 21,084 units
+  ! [NAKED_BESIDE_WALLED] player 13: 7 planet(s) at zero defence while one holds 1,346,195 units
+  ! [NAKED_BESIDE_WALLED] player 15: 2 planet(s) at zero defence while one holds 148,867 units
+  ! [NAKED_BESIDE_WALLED] player 16: 1 planet(s) at zero defence while one holds 158,867 units
+  ! [NAKED_BESIDE_WALLED] player 17: 11 planet(s) at zero defence while one holds 39,173 units
+  ! [NAKED_BESIDE_WALLED] player 18: 4 planet(s) at zero defence while one holds 306,304 units
+  ! [NAKED_BESIDE_WALLED] player 19: 3 planet(s) at zero defence while one holds 134,794 units
+  ! [NAKED_BESIDE_WALLED] player 20: 5 planet(s) at zero defence while one holds 158,241 units
+  ! [NAKED_BESIDE_WALLED] player 21: 2 planet(s) at zero defence while one holds 164,269 units
+  ! [NAKED_BESIDE_WALLED] player 22: 2 planet(s) at zero defence while one holds 123,141 units
+  ! [NAKED_BESIDE_WALLED] player 23: 2 planet(s) at zero defence while one holds 264,883 units
+  ! [NAKED_BESIDE_WALLED] player 24: 3 planet(s) at zero defence while one holds 163,427 units
+  ! [NAKED_BESIDE_WALLED] player 25: 1 planet(s) at zero defence while one holds 510,739 units
+  ! [NAKED_BESIDE_WALLED] player 26: 2 planet(s) at zero defence while one holds 158,256 units
+  ! [NAKED_BESIDE_WALLED] player 27: 12 planet(s) at zero defence while one holds 101,097 units
+  ! [NAKED_BESIDE_WALLED] player 28: 3 planet(s) at zero defence while one holds 336,057 units
+  ! [NAKED_BESIDE_WALLED] player 29: 1 planet(s) at zero defence while one holds 164,066 units
+  ! [NAKED_BESIDE_WALLED] player 30: 3 planet(s) at zero defence while one holds 148,194 units
+  ! [NAKED_BESIDE_WALLED] player 31: 2 planet(s) at zero defence while one holds 148,803 units
+  ! [WALL_CEILING] planet 19 holds 21,084 defence units
+  ! [WALL_CEILING] planet 20 holds 1,346,195 defence units
+  ! [WALL_CEILING] planet 30 holds 193,060 defence units
+  ! [WALL_CEILING] planet 33 holds 194,585 defence units
+  ! [WALL_CEILING] planet 21 holds 160,346 defence units
+  ! [WALL_CEILING] planet 43 holds 161,276 defence units
+  ! [WALL_CEILING] planet 85 holds 160,853 defence units
+  ! [WALL_CEILING] planet 150 holds 163,189 defence units
+  ! [WALL_CEILING] planet 151 holds 160,500 defence units
+  ! [WALL_CEILING] planet 156 holds 160,007 defence units
+  ! [WALL_CEILING] planet 160 holds 162,360 defence units
+  ! [WALL_CEILING] planet 162 holds 160,592 defence units
+  ! [WALL_CEILING] planet 164 holds 160,217 defence units
+  ! [WALL_CEILING] planet 22 holds 58,282 defence units
+  ! [WALL_CEILING] planet 37 holds 144,402 defence units
+  ! [WALL_CEILING] planet 42 holds 43,716 defence units
+  ! [WALL_CEILING] planet 80 holds 55,462 defence units
+  ! [WALL_CEILING] planet 83 holds 43,164 defence units
+  ! [WALL_CEILING] planet 84 holds 36,405 defence units
+  ! [WALL_CEILING] planet 105 holds 84,076 defence units
+  ! [WALL_CEILING] planet 141 holds 101,675 defence units
+  ! [WALL_CEILING] planet 149 holds 148,867 defence units
+  ! [WALL_CEILING] planet 23 holds 42,677 defence units
+  ! [WALL_CEILING] planet 36 holds 42,933 defence units
+  ! [WALL_CEILING] planet 67 holds 158,867 defence units
+  ! [WALL_CEILING] planet 68 holds 157,796 defence units
+  ! [WALL_CEILING] planet 72 holds 157,336 defence units
+  ! [WALL_CEILING] planet 88 holds 149,536 defence units
+  ! [WALL_CEILING] planet 179 holds 97,897 defence units
+  ! [WALL_CEILING] planet 24 holds 39,173 defence units
+  ! [WALL_CEILING] planet 25 holds 306,304 defence units
+  ! [WALL_CEILING] planet 31 holds 193,753 defence units
+  ! [WALL_CEILING] planet 26 holds 90,442 defence units
+  ! [WALL_CEILING] planet 44 holds 132,573 defence units
+  ! [WALL_CEILING] planet 100 holds 134,476 defence units
+  ! [WALL_CEILING] planet 102 holds 75,898 defence units
+  ! [WALL_CEILING] planet 132 holds 134,794 defence units
+  ! [WALL_CEILING] planet 27 holds 135,404 defence units
+  ! [WALL_CEILING] planet 34 holds 155,263 defence units
+  ! [WALL_CEILING] planet 35 holds 158,241 defence units
+  ! [WALL_CEILING] planet 173 holds 44,054 defence units
+  ! [WALL_CEILING] planet 28 holds 50,473 defence units
+  ! [WALL_CEILING] planet 38 holds 42,162 defence units
+  ! [WALL_CEILING] planet 82 holds 164,269 defence units
+  ! [WALL_CEILING] planet 87 holds 162,500 defence units
+  ! [WALL_CEILING] planet 122 holds 49,531 defence units
+  ! [WALL_CEILING] planet 123 holds 55,488 defence units
+  ! [WALL_CEILING] planet 142 holds 101,675 defence units
+  ! [WALL_CEILING] planet 152 holds 154,820 defence units
+  ! [WALL_CEILING] planet 186 holds 95,714 defence units
+  ! [WALL_CEILING] planet 45 holds 111,231 defence units
+  ! [WALL_CEILING] planet 89 holds 116,469 defence units
+  ! [WALL_CEILING] planet 93 holds 123,141 defence units
+  ! [WALL_CEILING] planet 126 holds 116,748 defence units
+  ! [WALL_CEILING] planet 127 holds 122,278 defence units
+  ! [WALL_CEILING] planet 146 holds 120,827 defence units
+  ! [WALL_CEILING] planet 157 holds 119,966 defence units
+  ! [WALL_CEILING] planet 172 holds 119,832 defence units
+  ! [WALL_CEILING] planet 46 holds 264,883 defence units
+  ! [WALL_CEILING] planet 58 holds 177,891 defence units
+  ! [WALL_CEILING] planet 47 holds 160,013 defence units
+  ! [WALL_CEILING] planet 56 holds 163,427 defence units
+  ! [WALL_CEILING] planet 91 holds 163,072 defence units
+  ! [WALL_CEILING] planet 92 holds 117,136 defence units
+  ! [WALL_CEILING] planet 94 holds 52,480 defence units
+  ! [WALL_CEILING] planet 103 holds 138,012 defence units
+  ! [WALL_CEILING] planet 110 holds 137,082 defence units
+  ! [WALL_CEILING] planet 115 holds 161,538 defence units
+  ! [WALL_CEILING] planet 48 holds 117,152 defence units
+  ! [WALL_CEILING] planet 62 holds 510,739 defence units
+  ! [WALL_CEILING] planet 111 holds 55,462 defence units
+  ! [WALL_CEILING] planet 112 holds 55,486 defence units
+  ! [WALL_CEILING] planet 113 holds 101,692 defence units
+  ! [WALL_CEILING] planet 114 holds 158,977 defence units
+  ! [WALL_CEILING] planet 131 holds 158,264 defence units
+  ! [WALL_CEILING] planet 145 holds 101,680 defence units
+  ! [WALL_CEILING] planet 147 holds 101,675 defence units
+  ! [WALL_CEILING] planet 167 holds 154,297 defence units
+  ! [WALL_CEILING] planet 49 holds 52,740 defence units
+  ! [WALL_CEILING] planet 55 holds 135,935 defence units
+  ! [WALL_CEILING] planet 97 holds 158,256 defence units
+  ! [WALL_CEILING] planet 99 holds 30,255 defence units
+  ! [WALL_CEILING] planet 116 holds 157,219 defence units
+  ! [WALL_CEILING] planet 117 holds 155,966 defence units
+  ! [WALL_CEILING] planet 118 holds 155,403 defence units
+  ! [WALL_CEILING] planet 125 holds 153,589 defence units
+  ! [WALL_CEILING] planet 169 holds 152,898 defence units
+  ! [WALL_CEILING] planet 50 holds 101,097 defence units
+  ! [WALL_CEILING] planet 51 holds 336,057 defence units
+  ! [WALL_CEILING] planet 52 holds 149,576 defence units
+  ! [WALL_CEILING] planet 73 holds 163,797 defence units
+  ! [WALL_CEILING] planet 86 holds 164,066 defence units
+  ! [WALL_CEILING] planet 139 holds 163,827 defence units
+  ! [WALL_CEILING] planet 140 holds 149,659 defence units
+  ! [WALL_CEILING] planet 154 holds 150,647 defence units
+  ! [WALL_CEILING] planet 159 holds 149,498 defence units
+  ! [WALL_CEILING] planet 166 holds 149,103 defence units
+  ! [WALL_CEILING] planet 53 holds 67,035 defence units
+  ! [WALL_CEILING] planet 133 holds 98,325 defence units
+  ! [WALL_CEILING] planet 134 holds 148,194 defence units
+  ! [WALL_CEILING] planet 135 holds 101,675 defence units
+  ! [WALL_CEILING] planet 136 holds 145,659 defence units
+  ! [WALL_CEILING] planet 137 holds 145,323 defence units
+  ! [WALL_CEILING] planet 138 holds 101,675 defence units
+  ! [WALL_CEILING] planet 163 holds 101,675 defence units
+  ! [WALL_CEILING] planet 170 holds 137,987 defence units
+  ! [WALL_CEILING] planet 57 holds 148,803 defence units
+  ! [WALL_CEILING] planet 74 holds 101,675 defence units
+  ! [WALL_CEILING] planet 128 holds 101,675 defence units
+  ! [WALL_CEILING] planet 129 holds 101,675 defence units
+  ! [WALL_CEILING] planet 130 holds 86,109 defence units
+  ! [WALL_CEILING] planet 155 holds 140,516 defence units
+  ! [WALL_CEILING] planet 171 holds 139,334 defence units
+  ! [ALLIANCE_SHARE] alliance 1 holds 15 of 20 AI accounts (75%)
+QUALITY: FAIL NAKED_BESIDE_WALLED WALL_CEILING ALLIANCE_SHARE
+=== QUALITY FAILED on grand — the accounts play, but badly; violations above 2026-10-01 10:23:26 UTC ===
+quality work: nothing new; already tracked: NAKED_BESIDE_WALLED (QUAL-003), WALL_CEILING (DEF-001), ALLIANCE_SHARE (DEF-002)
+--- live cohort verification: pve 2026-10-01 10:23:26 UTC ---
+
+=== cohort verification — 2026-10-01 10:23:27 ===
+profiles: 19   planets: 168   defence units: 12,992,597
+orders last 10 min: building 8, research 1, units 207   (in flight: 6506/81877/43179)
+receipts: 475,068   decisions: 565,187   work items by state: {"1":24,"2":10,"3":16,"4":1040223,"5":308}
+defence held: {"rocket_launcher":11332514,"light_laser":141080,"heavy_laser":529961,"gauss_cannon":332206,"ion_cannon":579376,"plasma_turret":77240,"small_shield_dome":55,"large_shield_dome":8,"interplanetary_missile":157}
+astrophysics: 293 level(s) across the cohort, 0 of 19 accounts still at 0
+research (newest 300 rows): 235 cancelled, 65 completed, 0 waiting
+research (last 20 min): 7 rows, 4 cancelled
+  newest cancelled: planet 83, object 120, target level 27, cost 0, created 2026-10-01 10:13:53
+due now: 35   leased: 10   pending: 24
+
+QUALITY: 127 violation(s) across 2 invariant(s)
+  ! [NAKED_BESIDE_WALLED] player 2: 4 planet(s) at zero defence while one holds 92,581 units
+  ! [NAKED_BESIDE_WALLED] player 3: 1 planet(s) at zero defence while one holds 325,807 units
+  ! [NAKED_BESIDE_WALLED] player 4: 3 planet(s) at zero defence while one holds 116,512 units
+  ! [NAKED_BESIDE_WALLED] player 5: 5 planet(s) at zero defence while one holds 162,201 units
+  ! [NAKED_BESIDE_WALLED] player 6: 3 planet(s) at zero defence while one holds 143,867 units
+  ! [NAKED_BESIDE_WALLED] player 7: 3 planet(s) at zero defence while one holds 112,509 units
+  ! [NAKED_BESIDE_WALLED] player 8: 1 planet(s) at zero defence while one holds 195,766 units
+  ! [NAKED_BESIDE_WALLED] player 9: 2 planet(s) at zero defence while one holds 169,621 units
+  ! [NAKED_BESIDE_WALLED] player 10: 1 planet(s) at zero defence while one holds 165,821 units
+  ! [NAKED_BESIDE_WALLED] player 11: 4 planet(s) at zero defence while one holds 164,895 units
+  ! [NAKED_BESIDE_WALLED] player 12: 4 planet(s) at zero defence while one holds 129,335 units
+  ! [NAKED_BESIDE_WALLED] player 13: 1 planet(s) at zero defence while one holds 233,404 units
+  ! [NAKED_BESIDE_WALLED] player 14: 3 planet(s) at zero defence while one holds 156,907 units
+  ! [NAKED_BESIDE_WALLED] player 15: 3 planet(s) at zero defence while one holds 165,821 units
+  ! [NAKED_BESIDE_WALLED] player 17: 5 planet(s) at zero defence while one holds 118,604 units
+  ! [NAKED_BESIDE_WALLED] player 19: 1 planet(s) at zero defence while one holds 145,177 units
+  ! [NAKED_BESIDE_WALLED] player 20: 1 planet(s) at zero defence while one holds 164,519 units
+  ! [WALL_CEILING] planet 2 holds 92,581 defence units
+  ! [WALL_CEILING] planet 32 holds 69,235 defence units
+  ! [WALL_CEILING] planet 120 holds 69,133 defence units
+  ! [WALL_CEILING] planet 123 holds 69,014 defence units
+  ! [WALL_CEILING] planet 143 holds 68,975 defence units
+  ! [WALL_CEILING] planet 154 holds 68,753 defence units
+  ! [WALL_CEILING] planet 158 holds 68,650 defence units
+  ! [WALL_CEILING] planet 162 holds 68,529 defence units
+  ! [WALL_CEILING] planet 3 holds 325,807 defence units
+  ! [WALL_CEILING] planet 30 holds 188,953 defence units
+  ! [WALL_CEILING] planet 4 holds 116,512 defence units
+  ! [WALL_CEILING] planet 29 holds 42,006 defence units
+  ! [WALL_CEILING] planet 97 holds 114,289 defence units
+  ! [WALL_CEILING] planet 107 holds 103,335 defence units
+  ! [WALL_CEILING] planet 5 holds 32,044 defence units
+  ! [WALL_CEILING] planet 33 holds 48,186 defence units
+  ! [WALL_CEILING] planet 87 holds 162,201 defence units
+  ! [WALL_CEILING] planet 89 holds 55,462 defence units
+  ! [WALL_CEILING] planet 103 holds 161,734 defence units
+  ! [WALL_CEILING] planet 106 holds 159,694 defence units
+  ! [WALL_CEILING] planet 108 holds 36,019 defence units
+  ! [WALL_CEILING] planet 111 holds 159,425 defence units
+  ! [WALL_CEILING] planet 119 holds 159,346 defence units
+  ! [WALL_CEILING] planet 6 holds 111,845 defence units
+  ! [WALL_CEILING] planet 28 holds 112,166 defence units
+  ! [WALL_CEILING] planet 72 holds 143,867 defence units
+  ! [WALL_CEILING] planet 73 holds 111,706 defence units
+  ! [WALL_CEILING] planet 74 holds 143,768 defence units
+  ! [WALL_CEILING] planet 75 holds 111,277 defence units
+  ! [WALL_CEILING] planet 79 holds 143,641 defence units
+  ! [WALL_CEILING] planet 80 holds 111,445 defence units
+  ! [WALL_CEILING] planet 95 holds 112,676 defence units
+  ! [WALL_CEILING] planet 124 holds 112,513 defence units
+  ! [WALL_CEILING] planet 27 holds 77,699 defence units
+  ! [WALL_CEILING] planet 91 holds 111,202 defence units
+  ! [WALL_CEILING] planet 93 holds 103,268 defence units
+  ! [WALL_CEILING] planet 94 holds 109,394 defence units
+  ! [WALL_CEILING] planet 96 holds 78,628 defence units
+  ! [WALL_CEILING] planet 112 holds 109,165 defence units
+  ! [WALL_CEILING] planet 137 holds 112,509 defence units
+  ! [WALL_CEILING] planet 148 holds 111,423 defence units
+  ! [WALL_CEILING] planet 8 holds 195,750 defence units
+  ! [WALL_CEILING] planet 24 holds 195,766 defence units
+  ! [WALL_CEILING] planet 9 holds 169,553 defence units
+  ! [WALL_CEILING] planet 21 holds 169,621 defence units
+  ! [WALL_CEILING] planet 52 holds 81,589 defence units
+  ! [WALL_CEILING] planet 99 holds 169,455 defence units
+  ! [WALL_CEILING] planet 34 holds 23,443 defence units
+  ! [WALL_CEILING] planet 45 holds 165,821 defence units
+  ! [WALL_CEILING] planet 46 holds 21,186 defence units
+  ! [WALL_CEILING] planet 49 holds 42,416 defence units
+  ! [WALL_CEILING] planet 51 holds 31,566 defence units
+  ! [WALL_CEILING] planet 62 holds 41,866 defence units
+  ! [WALL_CEILING] planet 116 holds 138,054 defence units
+  ! [WALL_CEILING] planet 11 holds 101,784 defence units
+  ! [WALL_CEILING] planet 25 holds 101,846 defence units
+  ! [WALL_CEILING] planet 56 holds 101,584 defence units
+  ! [WALL_CEILING] planet 58 holds 82,661 defence units
+  ! [WALL_CEILING] planet 59 holds 55,183 defence units
+  ! [WALL_CEILING] planet 61 holds 101,675 defence units
+  ! [WALL_CEILING] planet 98 holds 101,675 defence units
+  ! [WALL_CEILING] planet 110 holds 164,895 defence units
+  ! [WALL_CEILING] planet 12 holds 60,025 defence units
+  ! [WALL_CEILING] planet 31 holds 124,895 defence units
+  ! [WALL_CEILING] planet 35 holds 125,235 defence units
+  ! [WALL_CEILING] planet 77 holds 124,660 defence units
+  ! [WALL_CEILING] planet 113 holds 125,058 defence units
+  ! [WALL_CEILING] planet 118 holds 129,335 defence units
+  ! [WALL_CEILING] planet 140 holds 125,469 defence units
+  ! [WALL_CEILING] planet 155 holds 58,885 defence units
+  ! [WALL_CEILING] planet 166 holds 33,842 defence units
+  ! [WALL_CEILING] planet 13 holds 233,404 defence units
+  ! [WALL_CEILING] planet 14 holds 156,907 defence units
+  ! [WALL_CEILING] planet 65 holds 47,657 defence units
+  ! [WALL_CEILING] planet 71 holds 73,667 defence units
+  ! [WALL_CEILING] planet 78 holds 87,966 defence units
+  ! [WALL_CEILING] planet 104 holds 109,248 defence units
+  ! [WALL_CEILING] planet 22 holds 56,633 defence units
+  ! [WALL_CEILING] planet 38 holds 101,675 defence units
+  ! [WALL_CEILING] planet 39 holds 60,990 defence units
+  ! [WALL_CEILING] planet 82 holds 165,821 defence units
+  ! [WALL_CEILING] planet 84 holds 165,811 defence units
+  ! [WALL_CEILING] planet 86 holds 101,675 defence units
+  ! [WALL_CEILING] planet 117 holds 165,102 defence units
+  ! [WALL_CEILING] planet 136 holds 87,308 defence units
+  ! [WALL_CEILING] planet 17 holds 53,217 defence units
+  ! [WALL_CEILING] planet 42 holds 118,604 defence units
+  ! [WALL_CEILING] planet 43 holds 118,327 defence units
+  ! [WALL_CEILING] planet 44 holds 118,044 defence units
+  ! [WALL_CEILING] planet 48 holds 117,684 defence units
+  ! [WALL_CEILING] planet 83 holds 117,578 defence units
+  ! [WALL_CEILING] planet 85 holds 117,411 defence units
+  ! [WALL_CEILING] planet 141 holds 117,221 defence units
+  ! [WALL_CEILING] planet 18 holds 697,506 defence units
+  ! [WALL_CEILING] planet 90 holds 485,914 defence units
+  ! [WALL_CEILING] planet 19 holds 130,135 defence units
+  ! [WALL_CEILING] planet 41 holds 87,055 defence units
+  ! [WALL_CEILING] planet 53 holds 145,177 defence units
+  ! [WALL_CEILING] planet 54 holds 87,146 defence units
+  ! [WALL_CEILING] planet 69 holds 130,192 defence units
+  ! [WALL_CEILING] planet 20 holds 42,922 defence units
+  ! [WALL_CEILING] planet 60 holds 76,469 defence units
+  ! [WALL_CEILING] planet 63 holds 101,675 defence units
+  ! [WALL_CEILING] planet 64 holds 55,462 defence units
+  ! [WALL_CEILING] planet 81 holds 164,519 defence units
+  ! [WALL_CEILING] planet 88 holds 57,002 defence units
+  ! [WALL_CEILING] planet 92 holds 164,419 defence units
+  ! [WALL_CEILING] planet 105 holds 164,398 defence units
+  ! [WALL_CEILING] planet 114 holds 164,388 defence units
+  ! [WALL_CEILING] planet 153 holds 35,159 defence units
+QUALITY: FAIL NAKED_BESIDE_WALLED WALL_CEILING
+=== QUALITY FAILED on pve — the accounts play, but badly; violations above 2026-10-01 10:23:37 UTC ===
+quality work: nothing new; already tracked: NAKED_BESIDE_WALLED (QUAL-003), WALL_CEILING (DEF-001)
+--- live canary verification 2026-10-01 10:23:37 UTC ---
+[canary] reloaded onto the code on disk
+[canary] last 10 min: sessions 5, accepted 0, rejected 3, orders 0, failed 0
+[canary] FAIL the accounts were refused or broke: 3 rejected, 0 failed
+=== LIVE VERIFICATION FAILED 2026-10-01 10:23:41 UTC — the accounts did not play; block above ===
+=== log file info ===
+-rw-r--r-- 1 nagi nagi 21339452 Oct  1 13:23 /tmp/harness-live.log

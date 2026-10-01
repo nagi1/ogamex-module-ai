@@ -1,0 +1,8 @@
+cohort: 2 enabled account(s), no provider call made (safe in a peak window)
+SCENARIO: PASS idle-planet
+    tick 1: 6517 order(s) finished, 0 item(s) made due, 2 work item(s) run
+    tick 2: 3 order(s) finished, 1 item(s) made due, 13 work item(s) run
+    tick 3: 4 order(s) finished, 0 item(s) made due, 15 work item(s) run
+    cleaned up: 0 planted row(s) reverted
+    read-back: 8 queue order(s) created with nothing to react to
+exit=124

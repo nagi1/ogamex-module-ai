@@ -1,0 +1,16 @@
+[allowed] single-implementation contract — ArchetypePolicyResolver has one implementation (deliberate seam).
+[allowed] single-implementation contract — ContextBuilder has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiBuilding has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiColony has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiExpedition has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiFleetSave has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiMinePercent has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiPhalanx has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiRaid has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiRecall has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiRecycle has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiResearch has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiSpy has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiTransfer has one implementation (deliberate seam).
+[allowed] single-implementation contract — QueueAiUnits has one implementation (deliberate seam).
+[allowed] single-implementation contract — RunAiSession has one implementation (deliberate seam).
