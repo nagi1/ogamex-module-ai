@@ -961,6 +961,16 @@ def reopen(code):
         return 0
 
     connection = sqlite3.connect(TASKS_DB, timeout=30)
+    # A live step can fail for a cause upstream: no raid is flown while no account spies (DEF-33 on
+    # ATK-001, 1 Oct 2026). With every failing step live and a dependency still open, the writer cannot
+    # fix it from this row's files; the row stays delivered until the dependency lands.
+    upstream = [row[0] for row in connection.execute(
+        "select d.code from dependencies x join tasks t on t.id=x.task_id join tasks d on d.id=x.depends_on "
+        "where t.code=? and d.status!='done'", (code,))]
+    if upstream and not any(line.startswith("FAIL test:") for line in failing):
+        connection.close()
+        print(f"{code}: its live proof fails, but it waits on {', '.join(upstream)}; stays delivered")
+        return 0
     connection.execute("update tasks set status='todo', assignee=null, updated_at=datetime('now') "
                        "where code=? and assignee='harness:delivered'", (code,))
     connection.commit()
