@@ -155,6 +155,11 @@ TEXT
 # verification never run together: two suites on one database fail each other, and each retry then
 # chases an error the other caused.
 with_test_lane() {
+    # The harness passes this when the calling attempt already holds the lane for its whole verdict.
+    if [ "${OGAMEX_LANE_HELD:-}" = 1 ]; then
+        "$@"
+        return
+    fi
     local claims="$MODULE_ROOT/plan/research/ogame/claims" lock rc=0 told=0
     lock="$claims/$(printf '%s' 'verify:shared-test-database' | sha256sum | cut -c1-16).lock"
     mkdir -p "$claims"

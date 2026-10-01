@@ -1151,6 +1151,8 @@ def proof_report(code):
     a failure there goes back to the writer through `reopen`.
     """
     env = dict(os.environ, OGAMEX_RUNNER=os.environ.get("OGAMEX_RUNNER", "local-docker-dev"), PROVE_FAST="1")
+    if claim_path(VERIFY_LANE) in HELD_CLAIMS:
+        env["OGAMEX_LANE_HELD"] = "1"  # this attempt holds the lane already; waiting on it would deadlock
     try:
         result = subprocess.run(["bash", os.path.join(MODULE, "scripts/ogamex"), "prove", code, "--json"],
                                 capture_output=True, text=True, timeout=30 * 60, env=env)
@@ -3042,23 +3044,47 @@ def implement(code, answer_file=None):
     if lane is None:
         print("  left for the next pass: the verification lane stayed held")
         return 0
+    # The lane is held to the verdict, the proof check included: released after the slice's own tests,
+    # the files sat in the tree while that check ran, and another row's proof read code that was then
+    # rolled back (ECON-001's baseline failed on QUAL-006's rejected planner, 1 Oct 2026).
     try:
-        written, tests, backups = write_changes(code, changes)
-        if written is None:
-            return 0
-        for path in written:
-            print(f"  + {path}")
-
-        rejection = verify_slice(code, written, tests, backups)
-        if rejection:
-            print(f"  unverified, restored {rollback(written, backups)} file(s)")
-            record_failure(code, rejection + refusal_note)
-            return 1
+        verdict = verify_and_judge(code, changes, refusal_note, answer_file)
     finally:
         release_claims([lane])
+    if verdict is None:
+        return 0
+    if isinstance(verdict, int):
+        return verdict
+    written, after = verdict
 
-    # The slice's own tests pass; now ask whether it moved the row's proof. The proof takes the same
-    # lane, so it runs after the release, with the written files still in place.
+    os.makedirs(IMPLEMENTED, exist_ok=True)
+    with open(marker, "w", encoding="utf-8") as handle:
+        handle.write(f"# {code} implemented {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC\n\n"
+                     + "\n".join(f"- {path}" for path in written) + "\n")
+    mark_delivered(code, worker, kept)
+    if after is not None and note_delivery(code, after):
+        print(f"  {code}: the same proof step failed on three deliveries; blocked as proof suspect")
+    print(f"  verified and wired: {len(written)} file(s) kept, marker written")
+    publish("implemented", f"{code} ({len(written)} file(s))")
+    return 0
+
+
+def verify_and_judge(code, changes, refusal_note, answer_file):
+    """Write, verify and judge one slice inside the held lane: (written, proof after) when it is kept,
+    None when nothing was written, or the exit code when it was rejected and rolled back."""
+    written, tests, backups = write_changes(code, changes)
+    if written is None:
+        return None
+    for path in written:
+        print(f"  + {path}")
+
+    rejection = verify_slice(code, written, tests, backups)
+    if rejection:
+        print(f"  unverified, restored {rollback(written, backups)} file(s)")
+        record_failure(code, rejection + refusal_note)
+        return 1
+
+    # The slice's own tests pass; now ask whether it moved the row's proof.
     baseline_path = os.path.join(ATTEMPTS, f"{code}.baseline.json")
     after = None
     if os.path.exists(baseline_path) and not answer_file:
@@ -3072,16 +3098,7 @@ def implement(code, answer_file=None):
             record_failure(code, why)
             return 1
 
-    os.makedirs(IMPLEMENTED, exist_ok=True)
-    with open(marker, "w", encoding="utf-8") as handle:
-        handle.write(f"# {code} implemented {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC\n\n"
-                     + "\n".join(f"- {path}" for path in written) + "\n")
-    mark_delivered(code, worker, kept)
-    if after is not None and note_delivery(code, after):
-        print(f"  {code}: the same proof step failed on three deliveries; blocked as proof suspect")
-    print(f"  verified and wired: {len(written)} file(s) kept, marker written")
-    publish("implemented", f"{code} ({len(written)} file(s))")
-    return 0
+    return written, after
 
 
 def main(argv=None):
