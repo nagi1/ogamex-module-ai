@@ -41,6 +41,10 @@ row carries that aspect as its proof. Rows that could not name one were frozen o
 | `bash scripts/ogamex test-one Name` | one test file, through the shared test lane |
 | `python3 plan/tasks/task.py next \| show \| claim \| lock \| done \| reap` | the ledger; claim locks the row and its files |
 | `python3 scripts/strategy-pipeline.py status \| model-check` | harness queue, proven vs delivered, DeepSeek spend today |
+| `bash scripts/ogamex stories` | every Situation-kit story PASS/FAIL with the kit's diagnosis, in ~5 s |
+| `bash scripts/ogamex pulse [min]` | live: the cohort's last N minutes: actions chosen, work, refusals, missions, orders, backlog |
+| `bash scripts/ogamex account ID` | live: one account's planets, queues, fleets, recent work, refusals, decisions |
+| `bash scripts/ogamex why ID\|subject` | live: published capabilities, every input flag, the real decision, what was turned down |
 
 `PROVE_UNIVERSE=pve` points the cohort tools at pve instead of grand.
 

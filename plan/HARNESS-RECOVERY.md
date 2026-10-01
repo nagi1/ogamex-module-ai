@@ -90,6 +90,29 @@ pending; planting stock made an inactive look active) are fixed in the kit, not 
 A green story is evidence too: `EveryPlanetBuildsSessionSituationTest` passes, so ECON-001's live
 `IDLE_QUEUES` failure is the cohort's state, not the session logic.
 
+### The live toolkit (1 Oct 2026, 19:40 UTC)
+
+Live verification used to mean waiting: a situation waited on the cohort's queue workers (183 s, then
+a timeout) and every `aspect:` step refused to judge for an hour. Now, all read-only except situations:
+
+| Command | Time | Answers |
+| --- | --- | --- |
+| `ogamex pulse [min]` | 0.5 s | what sessions chose (by share), work by kind and state, refusals by reason, missions, host orders, worker backlog |
+| `ogamex account ID` | 0.5 s | planets, stock, the three queues, ships, defence, fleets in flight, recent work with refusals, last decisions (selected, ranked, turned down) |
+| `ogamex why ID\|subject` | 0.7 s | the observation the next session sees: published and unpublished capabilities, every input flag, the real decision over it |
+| `ogamex situation NAME` | seconds per tick | plants, then runs the planted accounts' own work in-process through `ProcessAiWork` and lands their own fleets (`--workers` for the old path) |
+
+`prove` passes an `aspect:` step early when it already passes on the window since the change; only a
+fail waits for the hour. `reopen` hands the writer the live pulse and `why subject` with a failed live
+step. The loop prints the pulse every pass.
+
+What it found in its first ten minutes: on grand `spy` is never published, because
+`QueueableSpyPlanner::target()` reads the 20 oldest planets by id and never sees a seeded inactive
+(ATK-001). The kit test had passed because a two-player test universe has no 21st planet; the kit's
+`crowd(n)` now plants a real universe first. Sessions choose QueueUnits 70% of the time (ARB-001
+notes). The `inactive-neighbour` situation used a cohort account with a backdated login as its target,
+which always shows the activity star; it now targets a genuinely inactive seeded player.
+
 ### Next harness work (in order)
 
 1. **Fast proofs: done for 13 rows (1 Oct 18:50).** Still without a story: transport, the proactive
