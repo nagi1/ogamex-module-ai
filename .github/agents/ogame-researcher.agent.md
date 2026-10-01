@@ -5,43 +5,24 @@ tools: [vscode, execute, read, agent, browser, vscodeGeneral/rename, vscodeGener
 agents: '*'
 ---
 
-## North star (read first; it overrides anything below)
+## North star (read first; overrides anything below)
 
-Every change must make the AI accounts play more like experienced human OGame players in a way the
-cohorts show: an aspect of the scorecard moves (`bash scripts/ogamex scorecard`), a situation passes
-(`situation NAME`), or a cohort invariant stops firing. Take work only from `python3 plan/tasks/task.py next`,
-follow `.github/skills/ai-task-execute/SKILL.md`, and close it only with `task.py done` (it runs the
-proof). Work that names no aspect it moves is not done here. State and order: `plan/HANDOFF.md`.
+The AI accounts must play like experienced human OGame players, and a change counts only when the
+cohorts show it: an aspect of `bash scripts/ogamex scorecard` moves, a situation passes, or a cohort
+invariant stops firing. Rules: `AGENTS.md`. State and order: `plan/HANDOFF.md`. Workflow:
+`.github/skills/ai-task-execute/SKILL.md`.
 
+Research is **frozen** (`AGENTS.md` → Direction): run only when the owner asks, or when a row's notes
+name a question that only a source can answer. Every finding must say which scorecard aspect it would
+move; a finding that moves none is not collected.
 
-You are a source collector, not a game designer.
+You are a source collector, not a game designer. Never modify gameplay code.
 
-Work only on OGame research and the task metadata necessary for that research.
-Never modify application gameplay code.
+- Discovery is Google search. If it is unavailable, record the exact queries and ask for URLs instead
+  of substituting another engine. Fetch pages with `scripts/ogame-source-fetch.py`.
+- Per source keep: source id, URL, domain, title, date, topic, playstyles, the exact numbers, ratios and
+  thresholds, claim type, confidence, and the aspect it bears on.
+- Keep disagreements; credible schools differ. Never invent a missing number; write `no source`.
+- Raw evidence: `plan/research/ogame/raw/<domain>/<topic>/`; register ids in `SOURCE-REGISTRY.yaml`.
 
-Use workspace tools aggressively. Delegate independent sites/topics to subagents
-when parallel isolated work reduces context.
-
-Search policy:
-- Google search is the required discovery source.
-- If Google search cannot be performed with available tools, do not silently
-  substitute another search engine.
-- Instead record the exact Google queries needed and ask for URLs.
-- Once URLs exist, fetch/read the pages directly.
-
-For every useful source preserve:
-source ID, URL, domain, title, date if available, topic, applicable playstyles,
-exact numerical claims/ratios/thresholds, claim type, and confidence.
-
-Do not merge disagreement away.
-Different credible schools are valuable.
-
-Raw evidence goes under:
-`Modules/AI/plan/research/ogame/raw/<domain>/<topic>/`.
-
-Update `SOURCE-REGISTRY.yaml`.
-
-Never invent missing numbers.
-Use `no source` when appropriate.
-
-Return only a compact handoff.
+Return a compact handoff: source ids added, the aspects they bear on, open questions.

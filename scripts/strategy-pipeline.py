@@ -1509,90 +1509,58 @@ def coverage():
     return 0
 
 
-IMPLEMENT_PROMPT = """You implement ONE task in the OGameX `Modules/AI` module: PHP 8.5 on Laravel.
+IMPLEMENT_PROMPT = """You implement ONE task in the OGameX `Modules/AI` module (PHP 8.5, Laravel).
 
-Why the module exists: thousands of OGame accounts that another player cannot tell from humans,
-playing the way an experienced player does (opening economy, prerequisites first, fleet saves,
-raids that pay), on a small server. Gameplay is deterministic rules over host data -- no model call
-decides a move. So every change is a rule in the class that already owns that decision, with its
-numbers in a data file and a test that drives the real path.
+The goal: OGame accounts that play like experienced human players, decided by deterministic rules over
+the host's game data. Your change is judged by THE PROOF in the task -- what accounts visibly do on the
+live cohorts -- not by your test alone. Make the smallest change that makes the account do that.
 
-Rules:
-- An EXISTING file is changed with EDIT blocks only. A NEW file is written whole with a FILE block:
-  never a fragment and never a placeholder comment such as `// ... rest unchanged`.
-- Each SEARCH must be copied character-for-character from the EXISTING FILE shown, appear in it exactly
-  once, and be just long enough to be unique (a few lines). An answer whose SEARCH is not found is
-  refused, so never retype from memory.
-- Touch ONLY the files listed in the task, plus the test and scenario the rules below ask for.
-- Follow the module's conventions: actions in `app/Actions` resolved through `app()`; no `new` for
-  module collaborators; no `else`/`elseif` (early returns, `match`); enums for stable values;
-  comments explain *why* only; Pest tests in `tests/Feature` using the module's base test case.
-- Paths are relative to the module root: `app/...`, `tests/Feature/...`, `resources/...`. Never write
-  `Modules/AI/...` -- a path like that lands outside the module, where no test can collect it and no
-  account can run it.
-- Numbers come from the plan. Never invent a number, and never add a config key, migration or table.
-- The test must fail if the behaviour breaks — assert the behaviour, not that a method exists.
-- Tests are Pest, not PHPUnit classes: no `extends`, never invent a base class. See the EXAMPLE TEST
-  below for the exact shape this module uses.
-- Build fixtures the way the suite already builds them: use the test base case and the tests below that
-  already exercise these classes. Never hand-write an insert into a host table (`users`, `players`, any
-  `ai_*` table) -- their required columns are not in this prompt, so an invented insert fails before a
-  single assertion runs. Measured 30 Sep 2026: 22 rows spent three attempts each on
-  `Field 'player_id' doesn't have a default value` and its siblings, every attempt refused and restored.
-- A model's required columns come from its migration, which is below when the slice names a model. If a
-  table you need is not shown, build it the way the tests below do rather than from memory.
-- Every test goes in `tests/Feature`. **Unit tests are not accepted.** A test over a bare value
-  object can pass while the behaviour it describes is wrong, and nothing would notice. A Feature test
-  drives the real path -- the action, the host services and the database -- so it fails when the
-  behaviour is wrong rather than when a helper changes shape. A test written under `tests/Unit` is
-  rejected before it is ever run.
-- Data-driven by default: a value that decides behaviour -- a ratio, a cap, a cost, a threshold --
-  belongs in a data file under `resources/behavior/` that the code reads, never inline in PHP. That is
-  what lets a modder change how the account plays without touching code. The validator looks for the
-  numbers this source states and refuses an answer that writes them into PHP instead.
-- No magic numbers and no magic strings: name the constant, or read the value from the data file. If a
-  value genuinely is structural (an array index, an initial zero, a sort sentinel), keep it small and
-  obvious rather than hiding policy behind it.
-- Not spaghetti: one idea per method, early returns, no nested conditionals, no boolean-flag arguments.
-  A reader must be able to find where the behaviour is decided without tracing three layers.
-- DX: a person extending this module should find the knob, not the code. Prefer extending an existing
-  data file over adding a class, and say in the plan which data file a modder would edit.
-- A slice that nothing calls is not a delivery. The rule must be wired into the runtime path that
-  acts on it -- the planner, engine or action an account actually runs -- and that file belongs in
-  FILES. A Feature test must then drive that path (the engine or action), not construct your class
-  directly: a test that only news up the class proves the class exists, not that the account uses it.
-- The module already owns most decisions. A new rule goes into the class that owns the decision it
-  belongs to -- edit that file, and its data file, rather than writing a class beside it. A second
-  class for a decision the module already has is a second authority, it drifts, and the writer
-  refuses it by name.
-- `app/Ai/` holds only the LLM agent classes the language gateways use. Nothing new is written there
-  and nothing under it is edited: a rule that lands under `app/Ai/` is a parallel module, not a
-  slice, and the writer refuses that path.
-- Ship a scenario under `resources/scenarios/` (named for the situation, never for the source) that
-  puts a player in a concrete situation and says what must happen:
-  `"expect": {"action": "Build", "reason_contains": "defense"}`. The scenario is replayed through
-  the real decision engine and the answer is thrown away when the engine chooses something else, so
-  the expectation must be the action this rule is supposed to produce -- not whatever the engine
-  currently does.
-- Cover the condition that matters, not only the easy one: where the rule has a boundary, add a second
-  scenario for the opposite situation (rich and short, threatened and ignored) and say what changes.
-- Name every file for what it does (`DefenceValuation`, `RaidProfit`, `AntiBallisticMissile`). Never
-  name a file, class or test after the source page it came from: `WIK-078`-style names contain no
-  information and are refused. The source id belongs in the plan, not in the codebase.
-- Read the plan's ACCEPTANCE line as the specification. If the code cannot satisfy it as written,
-  say so in the answer instead of reinterpreting it — a test that encodes your own reading of the
-  rule will happily pass while the behaviour is wrong.
-- A limit the source states is a limit. Where a ratio and a cap cannot both hold at the extreme, the
-  cap wins and you say so in one line. Never add a floor, a tie-break or a precedence rule that the
-  source does not state just to keep both halves of the rule true.
-- Test the stated bound explicitly — at it, past it, and at zero. A test that only covers the easy
-  middle of a range is how a wrong implementation passes.
+WHERE THE CHANGE GOES
+- Edit the class that already owns the decision (the task's existing files). Never write a second class
+  for a decision the module already makes, and write nothing under `app/Ai/`.
+- The rule must run on the path an account runs: the planner, engine or action. A class only your test
+  calls is not a delivery.
+- Values that decide behaviour (ratios, caps, thresholds, weights) go in a YAML file under
+  `resources/behavior/` -- extend one that covers the topic -- loaded by name in that class. Never write
+  the plan's numbers into PHP.
+- Buildings, ships, defence, research, prices and requirements come from the host (`ObjectService`, the
+  planet and player services). Never hardcode an object name or id as a rule.
+- Use only host classes from HOST CLASSES, enum cases from ENUM blocks, and columns from MIGRATION blocks.
+- Style: no `else`/`elseif` (early return or `match`); module classes via `app()`/`app()->makeWith()`,
+  never `new`; small methods; a comment only for a non-obvious why.
 
-Answer with blocks only, nothing before the first and nothing after the last:
+THE TEST
+- One Pest Feature test in `tests/Feature/`, shaped like EXAMPLE TEST (`uses(...)`, no class, no
+  `extends`). Never `tests/Unit`.
+- Build rows with `Model::create([...])` exactly as TEST THAT ALREADY USES THESE CLASSES does, every NOT
+  NULL column included. Module models have no factories. Never insert into a host table by hand.
+- Drive the real path (planner, engine or action) and assert the behaviour. Test at the bound, past it
+  and at zero, not only the easy middle.
+
+THE SCENARIO
+- Add `resources/scenarios/<situation>.json` shaped like EXAMPLE SCENARIO, with an `expect` block naming
+  the action this rule must make the engine choose. Where the rule has a boundary, add the opposite
+  situation too.
+
+HONESTY
+- The plan's ACCEPTANCE (or the task's notes) is the specification. If it cannot hold as written, say so
+  in one line instead of reinterpreting it. Where a ratio and a cap conflict at the extreme, the cap wins;
+  add no floor, tie-break or rule the source does not state.
+- Name every file for what it does (`RaidProfit`), never after a source id (`WIK-078`).
+
+REFUSED AUTOMATICALLY, BEFORE ANY TEST RUNS (each costs you the attempt)
+a path outside the module or starting `Modules/`; `tests/Unit/`; a PHP file under `resources/behavior/`;
+anything under `app/Ai/`; a file named after a source id; a second class with an existing class's name;
+a FILE block for an existing file you were shown only in part; a SEARCH not found exactly once; PHP that
+does not lint cleanly (warnings included); no test; a class or data file no runtime code uses; the
+plan's numbers inlined in PHP; `Model::factory()` on a module model; a public method or interface that
+other code uses removed; a scenario missing a required key.
+
+ANSWER FORMAT -- blocks only, nothing before the first or after the last:
 
 ### EDIT: <path of an existing file>
 <<<<<<< SEARCH
-<exact lines from the existing file>
+<exact lines copied from the EXISTING FILE, unique, a few lines>
 =======
 <the lines that replace them>
 >>>>>>> REPLACE
@@ -1604,7 +1572,7 @@ Answer with blocks only, nothing before the first and nothing after the last:
 <complete file contents>
 ```
 
-Data files under `resources/behavior/` are YAML (```yaml), never PHP.
+Paths are module-relative: `app/...`, `tests/Feature/...`, `resources/...`. Data files are YAML.
 """
 
 COMPOSE_DIR = os.path.abspath(os.path.join(MODULE, "..", "..", "local-docker-dev"))
@@ -1652,68 +1620,66 @@ def plan_paths(blocks, fallback=""):
     return paths
 
 
-def implement_context(code):
-    """The task, its plan, and the *current* contents of the files it names.
+def reference_context():
+    """What every task is shown, identical across tasks and always first.
 
-    Bounded on purpose: only the named files are sent, truncated, so the model never sees the
-    codebase and the prompt stays cacheable.
+    DeepSeek caches an identical request prefix and bills a cached token at about 2% of a miss, so the
+    shared reference goes before anything task-specific: the system prompt plus this block become one
+    cached prefix for every call of the day. Returns the text and the example test's path.
+    """
+    parts = ["REFERENCE — the same for every task", ""]
+
+    # The real host classes: the model never sees the repository, and without this list it invents
+    # names (`OGame\Services\BattleEngineService` cost three attempts on 29 Sep).
+    parts += ["HOST CLASSES THAT EXIST (use these exact names; anything not listed does not exist):",
+              "\n".join(f"- {name}" for name in host_class_names()), ""]
+
+    for support in test_support_files():
+        parts += [f"TEST BASE CASE {os.path.relpath(support, MODULE)} (a Feature test `uses()` it; it already "
+                  "makes the player, the account and the planets):",
+                  "```php", read(support)[:3000], "```", ""]
+
+    example_test = next(iter(sorted(glob.glob(os.path.join(MODULE, "tests/Feature/*Test.php")))), None)
+    if example_test:
+        parts += [f"EXAMPLE TEST {os.path.relpath(example_test, MODULE)} (the shape every test copies):",
+                  "```php", read(example_test)[:1800], "```", ""]
+
+    example = next(iter(sorted(glob.glob(os.path.join(MODULE, "resources/scenarios/*.json")))), None)
+    if example:
+        parts += [f"EXAMPLE SCENARIO {os.path.relpath(example, MODULE)} (required keys: "
+                  f"{', '.join(scenario_required_keys() + ['expect'])}):", "```json", read(example)[:2500], "```", ""]
+
+    return "\n".join(parts), os.path.relpath(example_test, MODULE) if example_test else ""
+
+
+def implement_context(code):
+    """The shared reference, then this task: its notes, proof, plan and the files it touches.
+
+    Bounded on purpose: only the named files are sent, so the model never sees the whole codebase.
     """
     task = task_row(code)
     match = re.search(r"plan/research/ogame/proposals/(\S+?)\.md", task["notes"])
     proposal_path = os.path.join(PROPOSALS, f"{match.group(1)}.md") if match else None
     blocks = sections(read(proposal_path)) if proposal_path else {}
     paths = plan_paths(blocks, task["file_ref"])
+    reference, example_test = reference_context()
 
-    parts = [f"TASK {task['code']} — {task['title']}", ""]
-
-    # The row's own evidence. Hand-written rows carry what was measured, what is required and -- where a
-    # decision was open -- the default that was decided, and the writer used to be sent none of it: for a
-    # row with no proposal it saw a bare title. Two slices then spent three attempts each inventing a
-    # schema the row's own notes already described.
-    if task["notes"].strip():
-        parts += ["THE ROW'S OWN NOTES (authoritative: measurements, constraints, already-decided defaults):",
-                  notes_block(task["notes"]), ""]
+    parts = [reference, "", f"TASK {task['code']} — {task['title']}", ""]
 
     # What will judge the slice, so the writer aims at the account's behaviour and not at its own test.
     if task["proof"]:
-        parts += ["THE PROOF THAT CLOSES THIS ROW (run on the live cohorts after your change; a green "
-                  "test alone does not close it): " + task["proof"],
-                  "aspect:X = the account must visibly do X more on the cohort; situation:Y = a planted "
-                  "situation must produce the expected work; invariant:Z = the cohort must stop violating Z.", ""]
+        parts += ["THE PROOF THAT CLOSES THIS TASK (run on the live cohorts after your change): " + task["proof"],
+                  "aspect:X = accounts must visibly do X more; situation:Y = a planted situation must produce "
+                  "the expected work; invariant:Z = the cohort must stop violating Z. A green test alone does "
+                  "not close it.", ""]
 
-    parts += ["THE PLAN:",
-             read(proposal_path) if proposal_path else "(the task has no proposal attached)", ""]
+    # The row's own evidence: what was measured, what is required, and any default already decided.
+    if task["notes"].strip():
+        parts += ["THE TASK'S NOTES (authoritative: measurements, constraints, decisions already made):",
+                  notes_block(task["notes"]), ""]
 
-    # One real test from the module, so the harness copies the house style instead of inventing a
-    # base class the module does not have. This is the difference between a test that runs and one
-    # that cannot even be collected.
-    for example in sorted(glob.glob(os.path.join(MODULE, "tests/Feature/*Test.php"))):
-        parts += [f"EXAMPLE TEST {os.path.relpath(example, MODULE)} (copy this shape):",
-                  "```php", read(example)[:1800], "```", ""]
-        example_test = os.path.relpath(example, MODULE)
-        break
-    else:
-        example_test = ""
-
-    # Tests that already build the very classes this slice touches: the house way to make a profile, an
-    # exchange, a work item, with the columns the real tables require. The alphabetical example above is
-    # the only shape the writer saw, and it had never built an `ai_profiles` row -- so the writer guessed.
-    for fixture in fixture_examples(paths, skip=example_test):
-        parts += [f"TEST THAT ALREADY USES THESE CLASSES {os.path.relpath(fixture, MODULE)} "
-                  "(build your fixtures the way this one does):",
-                  "```php", read(fixture)[:3000], "```", ""]
-
-    for support in test_support_files():
-        parts += [f"TEST BASE CASE {os.path.relpath(support, MODULE)} (this is the class a Feature test "
-                  "extends; it already makes the player and the account):",
-                  "```php", read(support)[:3000], "```", ""]
-
-    # The tables this row's own words name, from the migrations that define them. A required column is what
-    # every invented insert got wrong, and the migration is that column's source of record.
-    for migration in migrations_for(task, paths):
-        parts += [f"MIGRATION THAT DEFINES A TABLE THIS TASK TOUCHES "
-                  f"{os.path.relpath(migration, MODULE)} (required columns are NOT NULL here):",
-                  "```php", read(migration)[:3000], "```", ""]
+    if proposal_path:
+        parts += ["THE PLAN (its ACCEPTANCE line is the specification):", read(proposal_path), ""]
 
     for path in paths[:6]:
         full = os.path.join(MODULE, path)
@@ -1721,35 +1687,27 @@ def implement_context(code):
             parts += [f"{path} does not exist yet — create it with a FILE block.", ""]
             continue
         body = read(full)
-        # Shown whole up to a bound, because the writer edits it with SEARCH blocks copied from what it
-        # sees. The old 6000-character cut asked for COMPLETE contents of a file it was shown half of,
-        # and 51 module files are longer than that.
-        shown = body[:EDIT_SHOW_LIMIT]
-        cut = "" if len(body) <= EDIT_SHOW_LIMIT else " (TRUNCATED — edit only with EDIT blocks inside the shown part)"
-        parts += [f"EXISTING FILE {path}{cut}:", "```php", shown, "```", ""]
+        # Shown whole up to a bound: the writer edits with SEARCH text copied from what it sees.
+        cut = "" if len(body) <= EDIT_SHOW_LIMIT else " (TRUNCATED — edit only inside the shown part)"
+        parts += [f"EXISTING FILE {path}{cut}:", "```php", body[:EDIT_SHOW_LIMIT], "```", ""]
 
-    # The enums the shown files use, whole: SOC-001 stored an invented reason ("nothing owed") into an
-    # enum column and every test died on the cast. A value not listed here does not exist.
+    # The enums the shown files use: a value not listed in one does not exist (SOC-001 invented one).
     shown = "\n".join(read(os.path.join(MODULE, path)) for path in paths[:6] if os.path.exists(os.path.join(MODULE, path)))
     for enum in sorted(set(re.findall(r"use Modules\\AI\\Enums\\(\w+);", shown)))[:12]:
         enum_file = os.path.join(MODULE, "app/Enums", f"{enum}.php")
         if os.path.exists(enum_file):
             parts += [f"ENUM {enum} (its cases are the only valid values):", "```php", read(enum_file)[:2500], "```", ""]
 
-    # The replay refuses a scenario missing a required key, and that cost a full test cycle per guess
-    # (four rows on 30 Sep 2026). One real scenario is the schema.
-    example = next(iter(sorted(glob.glob(os.path.join(MODULE, "resources/scenarios/*.json")))), None)
-    if example:
-        parts += [f"EXAMPLE SCENARIO {os.path.relpath(example, MODULE)} (required keys: "
-                  f"{', '.join(scenario_required_keys())}):", "```json", read(example)[:2500], "```", ""]
+    # Tests that already build these classes: the house way to make the rows the real tables require.
+    for fixture in fixture_examples(paths, skip=example_test):
+        parts += [f"TEST THAT ALREADY USES THESE CLASSES {os.path.relpath(fixture, MODULE)} "
+                  "(build your fixtures exactly the way this one does):",
+                  "```php", read(fixture)[:3000], "```", ""]
 
-    # The real host classes, because the model never sees the repository and a service it needs has to
-    # be named from somewhere. Without this list it invents names -- one answer used
-    # `OGame\Services\BattleEngineService`, which does not exist, so all three tests died with
-    # BindingResolutionException and every attempt was spent on the guess (measured 29 Sep).
-    parts += ["HOST CLASSES THAT EXIST (use these exact names; anything not listed here does not "
-              "exist, so never call it):",
-              "\n".join(f"- {name}" for name in host_class_names()), ""]
+    # The tables this task touches, from their migrations: NOT NULL columns are what invented inserts miss.
+    for migration in migrations_for(task, paths):
+        parts += [f"MIGRATION {os.path.relpath(migration, MODULE)} (NOT NULL columns are required):",
+                  "```php", read(migration)[:3000], "```", ""]
 
     return task, paths, "\n".join(parts), proposal_path
 

@@ -3,6 +3,10 @@ name: ogame-source-ingest
 description: Ingest one or more OGame strategy URLs into the durable source corpus.
 ---
 
+Frozen work (`AGENTS.md` → Direction): run only when the owner asks or a row's notes need a source.
+Every rule or claim you record names the scorecard aspect it bears on (`bash scripts/ogamex scorecard`
+lists them); one that bears on none is not recorded.
+
 Given URLs or a research query:
 
 1. Read the existing source registry first and avoid duplicates.

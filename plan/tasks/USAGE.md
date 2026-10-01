@@ -120,18 +120,21 @@ VALUES ((SELECT id FROM tasks WHERE code='IMPL-017'), (SELECT id FROM tasks WHER
 
 ## Agent rules
 
-1. **One agent, one task.** Claim with the `status='in_progress'` guarded update above; check
-   `changes()` — if 0, the task is already taken.
-2. **Start only from `ready_tasks`.** If a task is in `blocked_tasks`, its dependencies are not done;
-   do not start it.
-3. **The docs win.** `doc_refs` names the file that defines the work; read it before writing code.
-   If the doc and this DB disagree, fix the DB (or the seed), not just the row.
-4. **Keep statuses honest.** `done` means merged and verified (module gate green). A half-done task
-   stays `in_progress` with a note.
-5. **Never re-seed to erase statuses you don't own.** Re-seeding resets everything; if you must
-   change the seed, preserve the status/assignee of tasks other agents hold.
-6. **New work = new row**, with `gap_ref`/`principle_refs` pointing at the plan, and a dependency on
-   whatever it needs. Don't duplicate an existing row.
+1. **Take work from `next`.** It returns the one row to work: `todo`, dependencies done, P0–P2, a
+   `file_ref`, and a proof on the north-star path. `ready` lists everything startable; `next` is the
+   one to take.
+2. **One agent, one row.** `task.py claim CODE NAME` takes the row and locks every file it names, all
+   or nothing; `lock CODE PATH` adds a file. Edit only files you hold. `unclaim`, `block` and `done`
+   release the locks; `reap` frees claims idle 6h (agents) or 1h (a killed harness worker).
+3. **Done means proven.** `done CODE` runs the row's proof (`bash scripts/ogamex prove CODE`) and
+   refuses on a failure. A row whose proof names no aspect, situation or invariant cannot be claimed,
+   added or closed.
+4. **The docs win.** `doc_refs` names the file that defines the work; if the doc and the row disagree,
+   fix the row (and the seed).
+5. **Never re-seed over statuses you don't own.** After any edit run `python3 plan/tasks/dump_seed.py`
+   so `seed.sql` reproduces the database.
+6. **New work = new row** with a proof, an owning file and its evidence, and a dependency on what it
+   needs. Don't duplicate an existing row.
 
 ## Status flow
 
@@ -152,7 +155,5 @@ them.
 
 ## The executor agent
 
-The `plan-executor` custom agent (`.github/agents/plan-executor.agent.md`) is the role that works
-this DB: it reads `ready`, claims one task, follows its `doc_refs`, verifies, and marks `done`,
-adding tasks and dependencies as the work expands. Invoke it (or run the CLI yourself) with a task
-code or `plan` to see the next ready task.
+`.github/agents/plan-executor.agent.md` works this ledger by the rules above; the step-by-step
+workflow for one row is `.github/skills/ai-task-execute/SKILL.md`.

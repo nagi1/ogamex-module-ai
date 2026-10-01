@@ -4,34 +4,22 @@ description: Architecture and workflow rules for Modules/AI work.
 applyTo: "Modules/AI/**"
 ---
 
+## North star (read first; overrides anything below)
+
+The AI accounts must play like experienced human OGame players, and a change counts only when the
+cohorts show it: an aspect of `bash scripts/ogamex scorecard` moves, a situation passes, or a cohort
+invariant stops firing. Rules: `AGENTS.md`. State and order: `plan/HANDOFF.md`. Workflow:
+`.github/skills/ai-task-execute/SKILL.md`.
+
 # Modules/AI
 
-The host game is authoritative for mechanics, legality, resources, combat,
-queues, character-class restrictions, and game state.
-
-The AI module perceives, decides, schedules and calls normal host domain actions.
-Do not duplicate host rules.
-
-Before significant AI behaviour changes:
-1. inspect relevant plan/spec/research files;
-2. inspect existing implementation and tests;
-3. identify the smallest compatible seam;
-4. preserve deterministic seeded behaviour where applicable.
-
-Human-behaviour constants belong in `Modules/AI/resources/behavior`.
-Game mechanics do not.
-
-Behavioural values must be traceable to:
-- a source ID from the OGame research registry,
-- measured simulation evidence, or
-- an explicit INFERENCE/tuning decision.
-
-Do not invent historical OGame doctrine.
-
-Use `plan/tasks/USAGE.md` and the existing task database workflow.
-Plan documents remain authoritative.
-
-Prefer focused subagents for independent research/code-map/review questions.
-Do not load unrelated project areas merely for completeness.
-
-Every completed change requires focused tests and a compact handoff.
+- The host is authoritative for mechanics, legality, resources, combat, queues, character-class
+  restrictions and game state. The module perceives, decides, schedules and calls ordinary host
+  actions; it never restates a host rule.
+- Objects, prices and requirements are read from the host at decision time (Gate 1).
+- Values that express human behaviour live in `resources/behavior/*.yaml` and are loaded by name in
+  the class that uses them. Each traces to a source id in the research registry, a measurement, or an
+  explicit tuning decision. Never invent doctrine.
+- Work comes from `python3 plan/tasks/task.py next`; a row closes only through `task.py done`, which
+  runs its proof. See `plan/tasks/USAGE.md` for the ledger.
+- Read only what the row needs: its notes, its `file_ref`, the tests that build those classes.

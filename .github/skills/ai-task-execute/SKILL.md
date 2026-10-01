@@ -9,10 +9,10 @@ A task is **done only when `task.py done` accepts it**, and that command runs th
 itself. A test passing is not done. A file existing is not done. If the proof fails, the task stays
 open and you say why.
 
-Run every command from the module root (`Modules/AI`). The commands are the whole workflow; do not
-invent other ways to check your work.
+Run every command from the module root (`Modules/AI`) after `export OGAMEX_RUNNER=local-docker-dev`.
+The commands are the whole workflow; do not invent other ways to check your work.
 
-## 1. Pick and read (2 commands)
+## 1. Pick and read
 
 ```
 python3 plan/tasks/task.py next                 # the one task to take
@@ -39,6 +39,14 @@ bash scripts/ogamex prove CODE
 ```
 
 If it already passes, the task is stale: run `task.py done CODE` and stop.
+
+To see *why* it fails, ask the tools before reading more code:
+
+```
+bash scripts/ogamex scorecard                  # every aspect, its floor, and the file that owns it
+bash scripts/ogamex situation NAME             # the planted situation, its read-back and the last decisions
+bash scripts/ogamex economy PLAYER_ID          # per planet: building, would queue X, or the gate refusing it
+```
 
 ## 3. Change the owner, smallest change
 
@@ -99,6 +107,8 @@ Several agents and the harness work this checkout at once. These rules are what 
 | `invariant:NAME` | `scripts/verify-cohorts.php` on the cohort | the invariant is not violated |
 | `harness:self-check` | `scripts/strategy-pipeline.py --self-check` | the harness checks pass |
 
+A code row's proof needs at least one `situation:`, `aspect:` or `invariant:` step (`harness:` only for
+rows that keep the measuring loop sound); `test:` steps are added on top, never alone.
 `bash scripts/ogamex situation list` names every situation; `bash scripts/ogamex scorecard` shows every
 aspect with its floor and the file that owns it.
 

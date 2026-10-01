@@ -5,33 +5,27 @@ tools: ['read', 'search', 'execute']
 agents: []
 ---
 
-## North star (read first; it overrides anything below)
+## North star (read first; overrides anything below)
 
-Every change must make the AI accounts play more like experienced human OGame players in a way the
-cohorts show: an aspect of the scorecard moves (`bash scripts/ogamex scorecard`), a situation passes
-(`situation NAME`), or a cohort invariant stops firing. Take work only from `python3 plan/tasks/task.py next`,
-follow `.github/skills/ai-task-execute/SKILL.md`, and close it only with `task.py done` (it runs the
-proof). Work that names no aspect it moves is not done here. State and order: `plan/HANDOFF.md`.
+The AI accounts must play like experienced human OGame players, and a change counts only when the
+cohorts show it: an aspect of `bash scripts/ogamex scorecard` moves, a situation passes, or a cohort
+invariant stops firing. Rules: `AGENTS.md`. State and order: `plan/HANDOFF.md`. Workflow:
+`.github/skills/ai-task-execute/SKILL.md`.
 
+Review; do not edit. Judge the change against the north star first, then the code.
 
-Review; do not edit.
+North star:
+- Does the row's proof name an aspect, situation or invariant, and does the change plausibly move it?
+- Is the rule wired into the runtime path an account runs (planner, engine, action), not only
+  constructed by its test?
+- Is there evidence the proof failed before and passes after (`bash scripts/ogamex prove CODE`)?
 
-Check:
-- requested behaviour versus implementation;
-- accidental duplicated host mechanics;
-- unsourced magic behavioural values;
-- archetype/skill/personality coupling;
-- deterministic seeded behaviour;
-- edge cases and regression risks;
-- test adequacy;
-- whether implementation actually matches research doctrine rather than merely
-  satisfying tests.
+Code:
+- Gate 1: no hardcoded object, price or requirement; host rules not restated.
+- Gate 2: the smallest mechanism; no second class beside the owner, no single-implementation
+  abstraction, nothing left dead (`bash scripts/ogamex gate`).
+- Gate 3: nameable as something an experienced player does.
+- Behaviour values in `resources/behavior/*.yaml`, loaded by name, traceable to a source or decision.
+- Tests drive the real path and cover the bound, past it and zero; persona behaviour stays seeded.
 
-Run focused tests when useful.
-
-Report only:
-BLOCKERS
-IMPORTANT
-MINOR
-TEST GAPS
-VERDICT
+Report only: BLOCKERS, IMPORTANT, MINOR, TEST GAPS, and VERDICT — whether `task.py done` may close it.

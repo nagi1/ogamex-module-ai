@@ -30,6 +30,12 @@ that is not self-similar, and the breadth of social contact
   only after its offline benchmark beats the rules (`plan/details/research/jev-opportunity-map.md`).
   It never picks a build, a target or a timing: calibration is measurement, not a model problem.
 
+## How the north star is enforced
+
+A code row's proof must name an `aspect:`, `situation:` or `invariant:` step (or `harness:` for the
+loop that measures). `task.py add`, `claim`, `proof`, `next` and `done`, the harness queue and the
+writer all refuse a row without one; a wiki plan must name the aspect it moves or it is never promoted.
+
 ## How a slice is accepted
 
 1. Name the player behaviour it adds as something an experienced player does (gate 3).

@@ -1,6 +1,37 @@
 # Nagi — AI module agent instructions
 
-Use this as the base operating contract for all work in `Modules/AI`.
+The base contract for all work in `Modules/AI`, for every agent: the harness writer, DeepSeek agents,
+Copilot and the reviewer. Where an older file says otherwise, this file wins; where this file and
+`plan/HANDOFF.md` disagree on state or order, the handoff is newer.
+
+## Direction — 1 October 2026 (overrides any older phase or milestone instruction)
+
+State of play, work order and owner actions: `plan/HANDOFF.md`. Read it before taking a row.
+
+The accounts did not play: no raids, one fleet save in a lifetime, no recyclers, no applications, no
+social exchanges (`plan/details/specs/play-coverage.md`). Until a cohort read shows every aspect of
+play moving, the work is making the existing engine play, not adding to it.
+
+- **Work order.** Take rows only from `python3 plan/tasks/task.py next` (P0 → P1 → P2, on the north-star
+  path). Every P3 row, the `WIK-*` corpus, `JEV-*`, the strategy-pipeline PHP rows and new cognition
+  work are **frozen** (`deferred`, reason in the row). Do not unfreeze one without the owner.
+- **North-star gate.** A code row's proof must name an `aspect:`, `situation:` or `invariant:` step
+  (or `harness:` for the loop itself); the ledger, the harness and the writer refuse anything else.
+  Before touching a row, say which aspect it moves and what an observer would see the account do.
+- **Behaviour before sources.** A slice starts from a step of the player's day and a situation that
+  proves it (`scripts/cohort-scenario.php`), never from a wiki page. New strategy is a YAML edit under
+  `resources/behavior/` that an existing planner reads; a new class needs a step no planner owns.
+- **Shrink before grow.** A class or data file nothing calls is deleted or wired before anything is
+  added beside it.
+- **Done means proven.** `task.py done CODE` runs the row's proof and refuses on a failure. A green
+  test alone is not done. Tools: `bash scripts/ogamex scorecard | situation NAME | economy PLAYER |
+  prove CODE | test-one Name`. The workflow is `.github/skills/ai-task-execute/SKILL.md`; follow it.
+- **Lanes.** The harness implements `impl` rows at P0–P2 that name a `file_ref`; rows with an empty
+  `file_ref` belong to the strong lane (the owner or the reviewer). Wiki ingestion runs only with
+  `HARNESS_INGEST=1`.
+- **Agents never share a file.** `task.py claim` locks the row and its files, the harness respects
+  those locks, tests queue on one lane through `scripts/ogamex`, and commits name their files
+  (`git add <files>`; never `-A`, `stash`, `reset`, `clean` or a force-push).
 
 ## The three gates — non-negotiable
 
@@ -27,102 +58,68 @@ preferences. The full statement, including what each gate forbids and how a revi
   nameable as something an experienced player does; if it cannot be named, it is not ready.
 
 When they conflict: gate 3 decides what the account does, gate 1 decides how it is derived, and gate 2
-decides how much machinery is allowed in between.
-
-## Outcome
-
-Write clean, maintainable, production-ready code. Keep changes module-first: reuse existing OGameX extension points and do not move AI policy, persistence, or orchestration into the host.
 
 ## Decision baseline
 
-Check these two criteria before any material design choice. A choice that fails either is not made.
+Check these before any material design choice. A choice that fails one is not made.
 
-- **The goal** is accounts a human player cannot distinguish from other humans in ordinary play. Authenticity is measured by what a player can observe — reaction latency to a probe or attack and whether a save ever fails, the shape of the uptime across the day, the public hourly growth curve, the self-similarity of the action sequence, and the breadth of social contact — never by message polish. Read `plan/details/research/account-authenticity.md` and `plan/details/research/player-personas.md` before designing anything behavioural.
-- **The reference deployment profile** is a small VPS: **2 vCPU, 2 GB RAM, no GPU**, already running the Laravel app, queue workers, the database and Redis. Owner direction 16 September 2026: build the strongest account first and optimise later — hybrid mode with the sidecar drivers is the default, the native engines stay the floor and fallback, and the profile is an optimisation target, not a gate. Read `plan/details/specs/budgets.md`.
-- **Memory is paid for with generative calls in every modern product.** Do not adopt one, and do not reimplement one: adopt the mechanisms (decay from last access, weighted retrieval, write-time importance from authored rules, citation pointers, validity windows, selective forgetting). Read `plan/details/research/agent-memory-tooling.md`.
+- **The goal** is accounts a human player cannot distinguish from other humans in ordinary play,
+  measured by what a player can observe — reaction latency to a probe or attack and whether a save ever
+  fails, the shape of the uptime across the day, the public hourly growth curve, the self-similarity of
+  the action sequence, and the breadth of social contact — never by message polish. Read
+  `plan/details/research/account-authenticity.md` and `plan/details/research/player-personas.md` before
+  designing anything behavioural.
+- **Deterministic play, scarce models.** Ordinary gameplay, event and memory processing, structured
+  case retrieval and AI-to-AI exchanges make zero generative calls; thousands of accounts must run on
+  rules. Authored dialogue comes before any optional language-model reply.
+- **The reference deployment** is a small VPS (2 vCPU, 2 GB RAM, no GPU) already running the app, the
+  queue workers, the database and Redis. Owner direction 16 Sep 2026: build the strongest account
+  first and optimise later; the profile is an optimisation target, not a gate (`plan/details/specs/budgets.md`).
+- **Memory** is adopted as mechanisms (decay from last access, weighted retrieval, write-time
+  importance from authored rules, citation pointers, validity windows, selective forgetting), never as
+  a product that pays for memory with generative calls (`plan/details/research/agent-memory-tooling.md`).
 
-## Nagi implementation baseline
+## Code
 
-- Apply SOLID, DRY, KISS, YAGNI, composition over inheritance, high cohesion, and low coupling.
-- Keep business logic in descriptive action classes. Do not add forwarding-only proxy methods.
-- Prefer small, single-purpose methods, practical immutability, shallow control flow, readable code, and measured optimization only.
-- Use early returns, strategies, lookup tables, or `match`; never write `else`, `else if`, or `elseif`.
-- Handle failures explicitly. Comments are short, meaningful explanations of *why*, never narration of syntax.
-- Before changing a feature, inspect comparable module and host code and verify the real schema. Follow existing patterns; do not add dependencies, speculative refactors, or abstractions without an evidenced module need and approval.
-- Consult official Filament v5 documentation before changing Filament components.
-
-## Design
-
-- Apply SOLID, DRY, KISS, YAGNI, composition over inheritance, high cohesion, and low coupling.
-- Never duplicate a capability a supported driver already provides. A seam exists for swap-ease, not for a PHP reimplementation: do not port a driver's algorithm, do not write a second implementation intended to match its output, and do not add a parallel "native equivalent" purely to compare against. A .NET or Python service does appraisal, social volition and case retrieval better than PHP will, and a duplicate leaves two authorities that can drift.
-- Around a driver the module owns only its own authority: scope, attribution, permission, current-validity, validation, budgets, persistence, failure mapping and translation to and from the driver's wire format. Where a driver returns a proposal or evidence, the ordinary module policy still decides how much weight it carries.
-- Existing native engines (`NativeAffectEngine`, `NativeExperienceEngine`, `NativeSocialCognition`) stay as the default and as the fallback an absent or failed driver degrades to. The rule forbids new duplication; it does not ask for shipped fallbacks to be removed.
-- Use action classes for business logic. Do not add proxy/wrapper methods that only forward a call.
-- Prefer small, single-purpose methods, descriptive names, and practical immutability.
-- Choose readable code before clever code, optimize only from measured evidence, and handle errors explicitly.
-- Resolve container-managed actions, jobs, services, policies, and collaborators through `app()` or `app()->makeWith()`. Bind defaults in `AIServiceProvider` so they remain replaceable.
-- Do not use `new` for module-managed actions, services, policies, drivers, or domain payloads; resolve them through `app()` / `app()->makeWith()`. Laravel-required anonymous migration classes are the only exception.
-- Use enums for stable domain values. A one-use dynamic value may remain a string when an enum would not improve the design.
-- Never use `else`, `else if`, or `elseif`; use early returns, strategies, lookup tables, or a `match` expression where appropriate.
-- Do not add dependencies, abstractions, or refactors without a demonstrated module need and user approval when the scope is material.
-
-## Phase 3 architectural memory
-
-- Read `plan/details/specs/phase-3-cognition.md` and the assigned milestone before implementation; `plan/details/research/phase-3-current-state.md` distinguishes shipped behavior from proposals.
-- Do not write PHP that duplicates a driver's capability. Adding a driver is an integration and swap exercise, never an excuse to reimplement its algorithm better in PHP.
-- Keep cognition drivers behind small module-owned contracts and Laravel bindings. OGame-specific state/feature mapping and action resolution stay in module adapters; no standalone framework, generic game planner or second player runtime yet.
-- Native structured truth, persona, obligations and outcome records belong to the module. FAtiMA/CiF, CBRKit, AgentOS and PsychSim are candidate implementations, never alternate authorities or mandatory sidecars.
-- Ordinary gameplay, native event/memory processing, structured CBR and AI-to-AI social exchanges make zero generative calls. Use authored dialogue before optional human-language escalation; one foreground request may include validated proposals, never a separate extraction chain.
-- Semantic retrieval, ML compression, Theory of Mind, strategic advice and deferred model batches need their documented activation/measurement gates. Mem0 is rejected. Preserve attribution/permissions and provider-off behavior across every driver swap.
-- Validate libraries, Linux deployment and performance through pinned real-adapter experiments; do not treat claims or hypothetical graphs in the imported conversation as implemented facts.
-
-## Reading and comments
-
-- Study comparable host/module code and database schema before changing a feature. Follow established Laravel patterns.
-- Consult official Filament v5 documentation before changing a Filament component; do not guess its API.
-- Add a brief comment only for a non-obvious invariant, architectural boundary, algorithmic tradeoff, or reason a simpler-looking implementation is unsafe.
-- Do not narrate syntax or put comments on every line. Prefer clear names over comments; comments explain *why*, never merely *what*.
+- Module-first: reuse OGameX extension points; never move AI policy, persistence or orchestration into
+  the host, and never restate a host rule the host already enforces.
+- Business logic lives in descriptive action classes. No forwarding-only methods or wrappers.
+- Resolve module actions, jobs, services, policies, drivers and domain payloads with `app()` or
+  `app()->makeWith()`, never `new`; bind defaults in `AIServiceProvider`. Laravel's anonymous migration
+  classes are the only exception.
+- Never write `else`, `else if` or `elseif`: early returns, lookup tables, strategies or `match`.
+- Small single-purpose methods, descriptive names, practical immutability, shallow control flow,
+  explicit failure handling. Enums for stable domain values.
+- No new dependency, abstraction or refactor without a demonstrated module need and, when material,
+  the owner's approval. Optimise only from a measurement.
+- Before changing a feature, read the comparable module and host code and the real schema; follow the
+  pattern there. Consult the official Filament v5 documentation before changing a Filament component.
+- Comments: one or two lines on *why* — a non-obvious invariant, a boundary, a trade-off, or why the
+  simpler-looking version is unsafe. Never narrate syntax; incident history goes in the commit message.
 
 ## Tests and verification
 
-- Tests use native Pest 5 syntax, named datasets for repeated scenarios, PAO, and PCOV. Never use Xdebug.
-- Use only `/home/nagi/code/ogamex-next/local-docker-dev` for container-backed development and verification. Do not start or use another OGameX Docker environment.
-- Prefer real OGameX models, services, database state, queues, locks, and validation paths. Mockery is prohibited. A narrow container override is allowed only to exercise an explicitly replaceable seam and must be named and justified.
-- Cover every affected behavior, edge case, and branch with meaningful tests; changed module code must maintain 100% PCOV coverage.
-- Run the Gate 2 review (`bash scripts/ogamex gate`) and resolve every must-fix finding before handoff.
-- Run Pint, module PHPStan, Rector dry-run, full Pest, PCOV coverage, and TIA before handoff.
+- Pest 5, native syntax, named datasets for repeated scenarios, Feature tests that drive the real
+  path (`tests/Unit` is not accepted). PAO and PCOV; never Xdebug. Mockery is prohibited; a narrow
+  container override is allowed only for an explicitly replaceable seam, named and justified.
+- Real OGameX models, services, database state, queues, locks and validation paths. Container work runs
+  only in `/home/nagi/code/ogamex-next/local-docker-dev`.
+- Every row: its own test and the tests naming the classes it touched (`bash scripts/ogamex test-one`),
+  `bash scripts/ogamex gate` clean, then its proof. Before a merge to `main`: the whole module suite
+  (`bash scripts/ogamex test`); Pint, module PHPStan, Rector dry-run and the 100% PCOV coverage pass
+  (`quality`, `coverage`) run when the owner asks for them.
 
-## Direction — 1 October 2026 (overrides any older phase or milestone instruction)
+## Cognition drivers (frozen work; the rules still bind any change that touches them)
 
-State of play, work order and owner actions: `plan/HANDOFF.md`. Read it before taking a row.
-
-The accounts do not play yet: no raids, one fleet save in a lifetime, no recyclers, no applications,
-no social exchanges (`plan/details/specs/play-coverage.md`). Until a cohort read shows each of those
-six aspects moving, the work is making the existing engine play, not adding to it.
-
-- **Work order:** P0 → P1 → P2 from `python3 plan/tasks/task.py ready`. Every P3 row, the `WIK-*`
-  corpus, `JEV-*`, the strategy-pipeline PHP rows and new cognition work are **frozen** (`deferred`,
-  with the reason in the row). Do not unfreeze one without the owner.
-- **Behaviour before sources.** A slice starts from a step of the player's day (`LOOP-001`) and a
-  situation that proves it (`scripts/cohort-scenario.php`), never from a wiki page. New strategy is a
-  YAML edit under `resources/behavior/` that an existing planner reads; a new class needs a step no
-  planner owns.
-- **Shrink before grow.** A class or data file nothing calls is deleted or wired (`QUAL-5`,
-  `QUAL-6`) before anything is added beside it.
-- **Proof is live.** A row is done when the cohort read or a cohort situation shows the behaviour,
-  not when its own test passes. `AUTH-001` turns the authenticity research into that read.
-- **The harness** implements only `impl` rows at P0–P2 that name a `file_ref`. Rows with an empty
-  `file_ref` (`SIM-001`, `AUTH-001`) belong to the strong lane: the owner or a stronger model. Wiki
-  ingestion runs only with `HARNESS_INGEST=1`.
-- **North-star gate.** An open code row's proof must name an `aspect:`, `situation:` or `invariant:`
-  (or `harness:` for the loop itself); the ledger, the harness and the writer refuse anything else.
-  Before touching a row, say which aspect it moves and what an observer would see change.
-- **Done means proven.** Every open code row states a proof (`task.py show CODE`); `task.py done`
-  runs it and refuses to close on a failure. The tools: `bash scripts/ogamex scorecard` (every aspect
-  of a player's day, PASS/FAIL), `situation NAME` (plant, drive, read back in seconds), `prove CODE`,
-  `test-one Name`. The workflow is `.github/skills/ai-task-execute/SKILL.md`; follow it exactly.
-- **Agents never share a file.** `task.py claim` locks the row and its files for you, the harness
-  respects those locks, tests queue on one lane, and commits name their files (`git add <files>`,
-  never `-A`). The rules are in the skill's "Never get in another agent's way".
-- **Comments** state why, in one or two lines. Incident history ("found 30 Sep…") goes in the commit
-  message, not the code.
+- `plan/details/specs/phase-3-cognition.md` and `plan/details/research/phase-3-current-state.md` say
+  what shipped versus what was only proposed.
+- Never duplicate a capability a supported driver provides (FAtiMA/CiF, CBRKit, AgentOS, PsychSim): no
+  ported algorithm, no second implementation to compare against. Around a driver the module owns only
+  scope, attribution, permission, current-validity, validation, budgets, persistence, failure mapping
+  and wire translation; its proposals carry the weight ordinary module policy gives them.
+- The native engines (`NativeAffectEngine`, `NativeExperienceEngine`, `NativeSocialCognition`) stay the
+  default and the fallback. Drivers sit behind small module-owned contracts; no standalone framework,
+  generic planner or second player runtime.
+- Semantic retrieval, ML compression, Theory of Mind, strategic advice and deferred model batches need
+  their documented activation gates. Mem0 is rejected. Validate libraries and performance through
+  pinned real-adapter experiments, never claims.
