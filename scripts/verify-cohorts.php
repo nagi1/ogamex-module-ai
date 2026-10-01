@@ -278,8 +278,10 @@ foreach ($playedThisHour as $accountId) {
     // after the planet's last build ended and the planet still has a legal step and no build.
     $lastSession = (int) strtotime((string) DB::table('ai_work_items')->where('player_id', $accountId)
         ->where('kind', AiWorkKind::RunSession->value)->where('state', AiWorkState::Completed->value)->max('updated_at'));
-    $lastBuildEnd = BuildingQueue::query()->whereIn('planet_id', $ownPlanets)->where('time_end', '<=', time())
-        ->groupBy('planet_id')->selectRaw('planet_id, max(time_end) as ended')->pluck('ended', 'planet_id');
+    // A build ordered around the last session is that session's work: its orders run minutes after it
+    // and finish within seconds, so the planet is idle only when a session passed with no order for it.
+    $lastBuildEnd = BuildingQueue::query()->whereIn('planet_id', $ownPlanets)->where('canceled', 0)
+        ->groupBy('planet_id')->selectRaw('planet_id, max(greatest(time_end, time_start + 300)) as ended')->pluck('ended', 'planet_id');
     $idle = array_filter($ownPlanets, static fn (int $id): bool => in_array($id, $planned, true)
         && !in_array($id, $busyPlanets, true)
         && !in_array($id, $ordered, true)
