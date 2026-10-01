@@ -1,23 +1,23 @@
 {
-    "at": "2026-10-01T22:06:23+00:00",
+    "at": "2026-10-01T22:06:44+00:00",
     "hours": 2,
     "aspects": {
         "economy": {
-            "count": 1593,
+            "count": 1574,
             "floor": 20,
             "pass": true,
             "player": "fills the build queue on every planet each login",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "research": {
-            "count": 243,
+            "count": 241,
             "floor": 4,
             "pass": true,
             "player": "keeps the research lab busy",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "shipyard": {
-            "count": 1198,
+            "count": 1187,
             "floor": 2,
             "pass": true,
             "player": "builds ships and defence from what the economy leaves",
