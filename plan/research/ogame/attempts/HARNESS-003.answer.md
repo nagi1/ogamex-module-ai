@@ -1,55 +1,46 @@
-### FILE: docker/entrypoint.sh
-```bash
-#!/usr/bin/env bash
+### FILE: resources/docker/entrypoint.sh
+```sh
+#!/bin/sh
+set -eu
+
+# One entrypoint for every cohort container; the role decides what it runs. The host
+# image copies this file in from the module (COPY modules/AI/resources/docker/entrypoint.sh
+# /usr/local/bin/entrypoint.sh) and every role execs it, so the scheduler loop is fixed
+# here once instead of per deployment.
 #
-# Container entrypoint: with no arguments it runs the Laravel scheduler in the
-# foreground, with arguments it execs them (php-fpm, horizon, a queue worker).
+# The scheduler role runs `schedule:work`, never the old
+# `php artisan schedule:run --verbose; sleep 60` loop. That loop's phase drifts through
+# the minute: an event due at minute 0 or minute 10 only ran when an invocation happened
+# to start inside that minute, and the fixed 60 second sleep then left a dead window after
+# every run. Measured 30 Sep 2026 on grand, both `ai:record-score-samples` and the two
+# everyTenMinutes passes (`ai:advance-alliance-life`, `ai:reconcile-language-requests`)
+# went a day without dispatch while every '*'-minute and sub-minute event kept running,
+# which killed the growth curve and stopped alliance life advancing. `schedule:work`
+# sleeps to the next due event instead of a fixed minute, so an aligned event can no
+# longer be skipped.
 #
-# Laravel decides which passes are due by matching each schedule's cron
-# expression against the wall-clock minute, so an hourly or every-ten-minutes
-# event fires only when an invocation of `schedule:run` happens to start inside
-# the minute the expression names. A loop of `schedule:run; sleep 60` drifts
-# later by the runtime of every run; once the drift crosses a minute, part of
-# each minute is spent inside `sleep`, the ten-minute and hourly passes never
-# see their own minute again and silently stop firing while the every-minute
-# passes keep running. Sleeping to the top of the next minute re-aligns every
-# iteration with the boundaries the cron expressions are evaluated against.
-#
-# This file is baked into the image, so a change to it needs a rebuild, not a
-# container restart.
+# This file lives in the image, so the loop only changes after a rebuild
+# (`docker compose build`); a container restart keeps running the old entrypoint.
 
-set -euo pipefail
+role="${CONTAINER_ROLE:-web}"
 
-APP_DIR="${APP_DIR:-/var/www/html}"
-PHP_BIN="${PHP_BIN:-php}"
-
-log() {
-    printf '[entrypoint] %s\n' "$*"
-}
-
-# Seconds left in the current minute, always 1..60: the loop never busy-spins
-# and every `schedule:run` starts on the :00 second a cron expression matches.
-seconds_until_next_minute() {
-    local second
-    second=$(( $(date +%s) % 60 ))
-    printf '%s\n' "$((60 - second))"
-}
-
-run_scheduler() {
-    while true; do
-        sleep "$(seconds_until_next_minute)"
-        "$PHP_BIN" artisan schedule:run --verbose --no-interaction || log 'schedule:run exited non-zero'
-    done
-}
-
-if [ "$#" -gt 0 ]; then
-    exec "$@"
-fi
-
-if [ -d "$APP_DIR" ]; then
-    cd "$APP_DIR"
-fi
-
-log "scheduler loop starting (${PHP_BIN} artisan schedule:run)"
-run_scheduler
+case "$role" in
+    scheduler)
+        # Straight into the schedule worker: the first due event is waited for, not slept past.
+        exec php artisan schedule:work
+        ;;
+    horizon)
+        exec php artisan horizon
+        ;;
+    worker)
+        exec php artisan queue:work --tries=3 --timeout=90
+        ;;
+    web)
+        exec php-fpm
+        ;;
+    *)
+        echo "unknown CONTAINER_ROLE: $role" >&2
+        exit 1
+        ;;
+esac
 ```

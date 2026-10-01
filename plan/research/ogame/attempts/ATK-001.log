@@ -1,46 +1,5 @@
-ActiveNeighbourRaidTest: [90mTests:[39m    [31;1m2 failed[39;22m[90m (0 assertions)[39m
+ActiveNeighbourRaidTest: suite not collectable
 
-FAIL  Modules\AI\tests\Feature\ActiveNeighbourRaidTest
-  ⨯ a mid-phase account raids an active neighbour whose warehouse pays   0.44s  
-  ⨯ a mid-phase account leaves an active neighbour that holds nothing    0.09s  
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\ActiveNeighbourR…  BadMethodCallException   
-  Call to undefined method Modules\AI\Models\AiProfile::factory()
+Pest\Exceptions\TestCaseClassOrTraitNotFound 
 
-  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
-     63▕      * @throws \BadMethodCallException
-     64▕      */
-     65▕     protected static function throwBadMethodCallException($method)
-     66▕     {
-  ➜  67▕         throw new BadMethodCallException(sprintf(
-     68▕             'Call to undefined method %s::%s()', static::class, $method
-     69▕         ));
-     70▕     }
-     71▕ }
-
-      +4 vendor frames 
-  5   Modules/AI/tests/Feature/ActiveNeighbourRaidTest.php:31
-  6   Modules/AI/tests/Feature/ActiveNeighbourRaidTest.php:79
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\ActiveNeighbourR…  BadMethodCallException   
-  Call to undefined method Modules\AI\Models\AiProfile::factory()
-
-  at vendor/laravel/framework/src/Illuminate/Support/Traits/ForwardsCalls.php:67
-     63▕      * @throws \BadMethodCallException
-     64▕      */
-     65▕     protected static function throwBadMethodCallException($method)
-     66▕     {
-  ➜  67▕         throw new BadMethodCallException(sprintf(
-     68▕             'Call to undefined method %s::%s()', static::class, $method
-     69▕         ));
-     70▕     }
-     71▕ }
-
-      +4 vendor frames 
-  5   Modules/AI/tests/Feature/ActiveNeighbourRaidTest.php:31
-  6   Modules/AI/tests/Feature/ActiveNeighbourRaidTest.php:102
-
-
-  Tests:    2 failed (0 assertions)
-  Duration: 1.05s
+  The class or trait [Modules\AI\Tests\Support\AiQueueModuleTestCase] could not be found. Please check the name, and make sure it is autoloadable.

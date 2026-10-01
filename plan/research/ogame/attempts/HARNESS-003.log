@@ -1,4 +1,4 @@
 every block in your answer was refused, so nothing was written.
 
 These blocks from your answer were refused and NOT written:
-- docker/entrypoint.sh (outside the module or not a module file type)
+- resources/docker/entrypoint.sh (outside the module or not a module file type)

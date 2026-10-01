@@ -1,0 +1,52 @@
+InboundHostileFleetSaveTest: [90mTests:[39m    [31;1m3 failed[39;22m[90m (4 assertions)[39m
+
+on inboundHostilePlantAttack(IsolatedAccountTestCase $case, int $missionId, int $targetPlanetId): void
+     45▕ {
+  ➜  46▕     $foreign = $case->createForeignPlanet();
+     47▕ 
+     48▕     FleetMission::query()->whereKey($missionId)->update([
+     49▕         'user_id' => (int) Planet::query()->whereKey($foreign->getPlanetId())->value('user_id'),
+     50▕         'planet_id_from' => $foreign->getPlanetId(),
+
+  1   Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:46
+  2   Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:73
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\InboundHostileFleetSaveTest > an…   Error   
+  Call to protected method Tests\IsolatedAccountTestCase::createForeignPlanet() from global scope
+
+  at Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:46
+     42▕  * $targetPlanetId, still unprocessed.
+     43▕  */
+     44▕ function inboundHostilePlantAttack(IsolatedAccountTestCase $case, int $missionId, int $targetPlanetId): void
+     45▕ {
+  ➜  46▕     $foreign = $case->createForeignPlanet();
+     47▕ 
+     48▕     FleetMission::query()->whereKey($missionId)->update([
+     49▕         'user_id' => (int) Planet::query()->whereKey($foreign->getPlanetId())->value('user_id'),
+     50▕         'planet_id_from' => $foreign->getPlanetId(),
+
+  1   Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:46
+  2   Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:91
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\InboundHostileFleetSaveTest > an…   Error   
+  Call to protected method Tests\IsolatedAccountTestCase::createForeignPlanet() from global scope
+
+  at Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:46
+     42▕  * $targetPlanetId, still unprocessed.
+     43▕  */
+     44▕ function inboundHostilePlantAttack(IsolatedAccountTestCase $case, int $missionId, int $targetPlanetId): void
+     45▕ {
+  ➜  46▕     $foreign = $case->createForeignPlanet();
+     47▕ 
+     48▕     FleetMission::query()->whereKey($missionId)->update([
+     49▕         'user_id' => (int) Planet::query()->whereKey($foreign->getPlanetId())->value('user_id'),
+     50▕         'planet_id_from' => $foreign->getPlanetId(),
+
+  1   Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:46
+  2   Modules/AI/tests/Feature/InboundHostileFleetSaveTest.php:109
+
+
+  Tests:    3 failed (4 assertions)
+  Duration: 1.16s
