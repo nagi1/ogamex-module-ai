@@ -22,6 +22,7 @@ use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\BuildingQueue;
 use OGame\Models\ResearchQueue;
 use OGame\Models\Resources;
+use OGame\GameObjects\Models\UnitObject;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
@@ -113,7 +114,9 @@ test('the first step is the easiest unlock the host asks for', function (): void
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
     $machineName = chainStepMachineName($plan);
 
-    expect(chainHostPrerequisites()[$machineName]['easiest'])->toBe(1);
+    // A fleetless account opens with the facility its first hull needs (the robotics factory, which the
+    // host first asks for at level two), so the first rung is the lowest level the host ever names.
+    expect(chainHostPrerequisites()[$machineName]['easiest'])->toBeLessThanOrEqual(2);
 });
 
 // One ambition at a time. Asking for the union of every ambition's prerequisites is a ladder with no
@@ -312,7 +315,11 @@ test('a warehouse that will fill during the absence preempts a routine step on a
 function chainCheapestUnmetAmbition(PlanetService $planet): GameObject
 {
     $objects = [...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()];
-    usort($objects, static fn (GameObject $left, GameObject $right): int => $left->price->resources->sum() <=> $right->price->resources->sum());
+    $player = $planet->getPlayer();
+    // An account with no ship that can fly goes for a hull before any technology.
+    $flying = static fn (GameObject $object): bool => $object instanceof UnitObject
+        && $object->properties->speed->calculate($player)->totalValue > 0;
+    usort($objects, static fn (GameObject $left, GameObject $right): int => [! $flying($left), $left->price->resources->sum()] <=> [! $flying($right), $right->price->resources->sum()]);
 
     foreach ($objects as $object) {
         foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {

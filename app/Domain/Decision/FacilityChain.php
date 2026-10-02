@@ -6,9 +6,11 @@ use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Calculations\CalculationType;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\Enums\PlanetType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 
 /**
  * The building this planet still needs before the next thing the account wants to produce is
@@ -254,7 +256,7 @@ class FacilityChain
      */
     private function nextAmbition(PlanetService $planet): ?GameObject
     {
-        foreach ($this->ambitions() as $ambition) {
+        foreach ($this->ambitions($planet) as $ambition) {
             foreach (ObjectService::getRecursiveRequirements($ambition->machine_name) as $machineName => $level) {
                 if ($this->currentLevel($planet, $machineName) < $level) {
                     return $ambition;
@@ -385,16 +387,44 @@ class FacilityChain
         return $player !== null && count($player->planets->allMoons()) >= 2;
     }
 
-    /** @return list<GameObject> what this account could produce, cheapest first */
-    private function ambitions(): array
+    /**
+     * What this account could produce, cheapest first. An account with no ship that can fly goes for a
+     * hull before any technology: a player opens with mines, the robotics factory and the shipyard to
+     * get a first cargo ship, and only then chases research. Without it the cheapest technologies
+     * come first and the shipyard stays unbuilt, so no fleet, raid or save is ever possible.
+     *
+     * @return list<GameObject>
+     */
+    private function ambitions(PlanetService $planet): array
     {
         $objects = [...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()];
+        $player = $planet->getPlayer();
+        $fleetless = $player !== null && $this->ownsNoMovableShip($player);
 
         usort(
             $objects,
-            static fn (GameObject $left, GameObject $right): int => $left->price->resources->sum() <=> $right->price->resources->sum(),
+            fn (GameObject $left, GameObject $right): int => [$fleetless && ! $this->isFlyingHull($left, $player), $left->price->resources->sum()]
+                <=> [$fleetless && ! $this->isFlyingHull($right, $player), $right->price->resources->sum()],
         );
 
         return $objects;
+    }
+
+    private function ownsNoMovableShip(PlayerService $player): bool
+    {
+        foreach ($player->planets->all() as $planet) {
+            if (MovableFleet::of($player, $planet->getShipUnits())->units !== []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isFlyingHull(GameObject $object, PlayerService|null $player): bool
+    {
+        return $object instanceof UnitObject
+            && $player !== null
+            && $object->properties->speed->calculate($player)->totalValue > 0;
     }
 }
