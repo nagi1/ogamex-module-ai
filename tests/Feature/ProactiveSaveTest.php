@@ -10,7 +10,10 @@ use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCandidateReason;
 use Modules\AI\Enums\AiCapability;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Models\Planet;
 use Tests\IsolatedAccountTestCase;
 
@@ -75,6 +78,23 @@ test('the factory offers a proactive save only for an upcoming absence', functio
     expect(array_map(static fn ($c) => $c->type, $offered->candidates))->toContain(AiCandidateActionType::FleetSave)
         ->and(array_map(static fn ($c) => $c->reason, $offered->candidates))->toContain(AiCandidateReason::ProactiveSave->value)
         ->and(array_map(static fn ($c) => $c->type, $quiet->candidates))->not->toContain(AiCandidateActionType::FleetSave);
+});
+
+test('a save already waiting to run is not offered again', function (): void {
+    proactiveSaveProfile($this->currentUserId, AiArchetype::Fleeter);
+    proactiveSaveDestination($this->currentUserId);
+    $this->planetAddUnit('large_cargo', 1);
+    AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::FleetSave,
+        'due_at' => now(),
+        'idempotency_key' => 'waiting-save:' . $this->currentUserId,
+        'state' => AiWorkState::Pending,
+    ]);
+
+    $offered = app(CandidateActionFactory::class)->create(proactiveSaveSnapshot($this->currentUserId, $this->currentPlanetId, 180));
+
+    expect(array_map(static fn ($c) => $c->type, $offered->candidates))->not->toContain(AiCandidateActionType::FleetSave);
 });
 
 // The save flies fast enough to stay away the whole absence, but no faster: an

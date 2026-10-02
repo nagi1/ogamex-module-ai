@@ -7,6 +7,9 @@ use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCandidateReason;
 use Modules\AI\Enums\AiCandidateRejectionReason;
 use Modules\AI\Enums\AiCapability;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Models\AiWorkItem;
 
 class CandidateActionFactory
 {
@@ -120,6 +123,12 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleFleetSaveCandidates(PerceptionSnapshot $perception): array
     {
+        // A player does not save the same fleet twice: while a save is still waiting to run, planning
+        // another only queues a second dispatch that finds the hangar empty.
+        if ($this->saveWaiting($perception->playerId)) {
+            return [];
+        }
+
         if ($perception->fleetsaveEligible) {
             return [app()->makeWith(CandidateAction::class, [
                 'type' => AiCandidateActionType::FleetSave,
@@ -148,6 +157,15 @@ class CandidateActionFactory
             'features' => $this->features(AiCandidateActionType::FleetSave, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
+    }
+
+    private function saveWaiting(int $playerId): bool
+    {
+        return AiWorkItem::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiWorkKind::FleetSave)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Retry, AiWorkState::Leased])
+            ->exists();
     }
 
     /** @return array<int, CandidateAction> */
