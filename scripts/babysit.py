@@ -5,12 +5,12 @@ One pass, then exit; scripts/babysitter.sh runs it on a clock. It measures from 
 scorecard, prints one verdict, and applies only fixes that are safe to repeat:
 
   - harness process gone            -> restart it (same env the owner launched it with)
-  - in_progress row, no touch 45min -> task.py unstick (the row goes back to the writers)
+  - in_progress row, no touch 5 min -> task.py unstick (the row goes back to the writers)
   - nothing delivered or committed  -> say which rows are looping and why, and ask for no new work
 
 It never edits code, never closes a row and never touches the price gate.
 """
-import json, os, re, sqlite3, subprocess, sys, time
+import glob, json, os, re, sqlite3, subprocess, sys, time
 from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,7 +18,7 @@ DB = os.path.join(ROOT, "plan/tasks/tasks.db")
 STATE = "/tmp/babysitter-state.json"
 STATUS = os.path.join(ROOT, "plan/research/ogame/babysitter.json")
 WINDOW_MIN = int(os.environ.get("BABYSIT_WINDOW", "60"))
-STUCK_MIN = int(os.environ.get("BABYSIT_STUCK", "45"))
+STUCK_MIN = int(os.environ.get("BABYSIT_STUCK", "5"))
 CODE = ("app/", "tests/", "resources/behavior/", "config/", "database/")
 
 
@@ -38,6 +38,29 @@ def ledger():
         if n >= 3:
             loops.append((code, n, (re.findall(r"REOPENED[^|]*", notes) or [""])[-1][:140]))
     return done, stuck, sorted(loops, key=lambda x: -x[1])
+
+
+def workers_busy_with():
+    """Codes named by a worker heartbeat younger than the stuck threshold: someone is on them."""
+    busy = set()
+    for path in glob.glob(os.path.join(ROOT, "plan/research/ogame/workers/*.json")):
+        if time.time() - os.path.getmtime(path) < STUCK_MIN * 60:
+            busy.update(re.findall(r"[A-Z]+-\d+", open(path).read()))
+    return busy
+
+
+def advance(actions):
+    """Give back rows held for STUCK_MIN with no change and no worker heartbeat, so a writer takes them."""
+    con = sqlite3.connect(DB)
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STUCK_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+    busy = workers_busy_with()
+    for code, assignee in con.execute("select code, assignee from tasks where status='in_progress' and updated_at < ?", (cutoff,)).fetchall():
+        # "harness:delivered" is a finished slice waiting for its proof, not a claim that went quiet.
+        if code in busy or (assignee or "").startswith(("claude", "harness:delivered")):
+            continue
+        sh("python3", "plan/tasks/task.py", "unstick", code)
+        actions.append(f"unstuck {code} (held by {assignee or 'nobody'}, no change or heartbeat for {STUCK_MIN} min)")
+    return actions
 
 
 def commits():
@@ -69,6 +92,10 @@ def harness_alive():
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "advance":
+        for line in advance([]):
+            print(f"BABYSIT advance: {line}")
+        return
     actions = []
     if not harness_alive():
         env = {**os.environ, "IMPL_WORKERS": "6", "MODEL_CONCURRENCY": "8", "OGAMEX_RUNNER": "local-docker-dev"}
@@ -76,10 +103,8 @@ def main():
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         actions.append("restarted the harness (it was not running)")
 
-    done, stuck, loops = ledger()
-    for code, assignee in stuck:
-        sh("python3", "plan/tasks/task.py", "unstick", code)
-        actions.append(f"unstuck {code} (held by {assignee or 'nobody'} with no change for {STUCK_MIN} min)")
+    done, _, loops = ledger()
+    advance(actions)
 
     code_lines, other_lines = commits()
     changed, junk = tree()
