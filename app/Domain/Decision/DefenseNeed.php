@@ -15,6 +15,10 @@ readonly class DefenseNeed
     public function __construct(
         public float $defenceValue,
         public string $reason,
+        public float $protectedValue = 0.0,
+        public float $currentDefenseValue = 0.0,
+        public ?string $threatBand = null,
+        public ?string $intent = null,
     ) {
     }
 }

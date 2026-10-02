@@ -61,9 +61,15 @@ class DefenseNeedEvaluator
             return null;
         }
 
-        // What piles up before the account next looks at the planet, plus the pile itself once a
-        // hostile is on its way and spending it is no longer an option.
-        $exposure = $this->hourlyProduction($planet) * $this->absenceHours($profile->activity_band);
+        // What piles up before the account next looks at the planet, what is standing on it, plus the
+        // pile itself once a hostile is on its way and spending it is no longer an option.
+        // A raider weighs what stands on the planet as much as what the mines pile up: hulls left in
+        // orbit and the solar satellites a planet keeps for power are carried away by the same attack,
+        // so they are part of the exposure the wall is sized to. The ships come from the host's own
+        // collection, so a satellite, a cargo hull and a warship are all counted at the host's price
+        // with no hull named here.
+        $exposure = $this->hourlyProduction($planet) * $this->absenceHours($profile->activity_band)
+            + $this->unitValue($planet->getShipUnits());
         if ($inbound) {
             $exposure += $this->metalEquivalent($planet->getResources());
         }
@@ -88,6 +94,10 @@ class DefenseNeedEvaluator
         return app()->makeWith(DefenseNeed::class, [
             'defenceValue' => $exposure,
             'reason' => 'defense:need:' . $this->contact($inbound),
+            'protectedValue' => $exposure,
+            'currentDefenseValue' => $this->unitValue($planet->getDefenseUnits()),
+            'threatBand' => $this->contact($inbound),
+            'intent' => $inbound ? 'reinforce' : 'hold',
         ]);
     }
 
@@ -108,8 +118,14 @@ class DefenseNeedEvaluator
         return $this->standingUnits($planet) >= $ceiling;
     }
 
-    /** The defence units this planet holds, built plus already ordered. */
-    private function standingUnits(PlanetService $planet): int
+    /**
+     * The defence units this planet holds, built plus already ordered. Public because "this planet is
+     * still bare" is the question the unit planner asks before it spreads the account's wall orders:
+     * a planet whose first order is in the yard is no longer naked, so the next bare sibling gets the
+     * next order instead of the same planet taking every one (measured live 2 Oct 2026: one planet
+     * holding 21,084 units while 7-8 siblings sat at zero defence).
+     */
+    public function standingUnits(PlanetService $planet): int
     {
         return $planet->getDefenseUnits()->getAmount() + $this->pendingDefenseUnits($planet);
     }

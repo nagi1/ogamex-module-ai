@@ -44,6 +44,10 @@ use OGame\Services\PlayerService;
  * and it is the only role that is collected before it is chosen: the account's wall spreads across
  * its planets one login at a time, each login serving the first planet still standing at zero.
  *
+ * A bare planet whose yard cannot yet take any defence unit is reached by the building planner's
+ * defence-prerequisite step, not here: a wall waits on the shipyard that builds it. A planet that
+ * holds an order in the yard is served, whether or not the host has finished building it.
+ *
  * The pass's plan is marked, because where the order is placed decides whether it happens: the
  * session's building steps are executed first and spend the balance the wall was priced against, so
  * the host refused the wall order and the planet stayed bare on every login (QUAL-003). The marker
@@ -88,6 +92,15 @@ class QueueableUnitPlanner
 
         $underAttack = $this->underAttack($player);
 
+        // Whether the pass below has a planet to serve. A sibling that stands no wall while one
+        // already does owns the account's wall effort: the pass serves it, and when it cannot be
+        // served the building planner's own wall pass stands the yard it waits on. Adding wall
+        // where one already stands instead is the shape the invariant reads -- a planet at zero
+        // defence beside a sibling holding a wall -- so nothing below collects more wall while a
+        // sibling is still bare (measured live 3 Oct 2026: a planet at zero beside one holding
+        // 1,225 units).
+        $nakedBesideWalled = $this->nakedBesideWalled($planets);
+
         // Standing defence is collected across the account and chosen once at the end. Returning on
         // the first planet that wanted anything let the planet with the most to lose take every order:
         // need grows with production, so the homeworld's need was never satisfied and its colonies were
@@ -95,7 +108,10 @@ class QueueableUnitPlanner
         $standing = [];
 
         // A planet that stands no defence beside a sibling that already holds one takes the file's
-        // floor before every other role, and across the whole account. The roles below are per planet
+        // floor before every other role, and across the whole account. It is also the only planet the
+        // account may buy wall for: the survivor below is the bare sibling, and the walled planets
+        // are left alone until it is served, so a login's one wall order cannot be stacked where a
+        // wall already stands. The roles below are per planet
         // and each can keep re-firing on a single planet -- power for a planet that stays short, a
         // cargo fleet that never catches the next report, a colony ship for the next planet -- so the
         // naked planet was answered only when every one of those happened to fall quiet, and the
@@ -104,6 +120,7 @@ class QueueableUnitPlanner
         // where cargo comes first; the standing pass below still reaches the floor for that case.
         if ($this->anyPlanetHoldsDefence($planets)) {
             foreach ($planets as $planet) {
+                // The balance is refreshed before the wall is priced: the host refuses an unaffordable batch.
                 $planet->updateResources(false);
                 // Defence already paid for in the yard counts as standing: a planet whose first wall is
                 // ordered is no longer bare, so the next bare sibling takes the order instead of the same
@@ -209,6 +226,15 @@ class QueueableUnitPlanner
                 continue;
             }
 
+            // The login places one wall order and it belongs to a bare sibling, so a planet that
+            // already holds a wall -- built or paid for in the yard -- collects no further wall
+            // while one of its siblings stands at zero. Only the wall is withheld: the roles above
+            // are this planet's too, so a walled planet still gets its cargo, its probes and the
+            // shipyard a later order needs.
+            if ($nakedBesideWalled && $this->defenseNeed->standingUnits($planet) > 0) {
+                continue;
+            }
+
             // A planet that stands no defence at all takes the floor even while the economy is
             // saving. Being short of the next step is what such a planet is, so the veto below
             // dropped the floor every session and left the account naked beside its own wall
@@ -222,16 +248,24 @@ class QueueableUnitPlanner
                 // the ratio at all), so the host's own cheapest defence unit is the wall here too --
                 // the same fallback the opening pass takes -- rather than the planet staying bare
                 // however often the session offers it.
-                $order = $this->cheapestQueueableDefence($planet, $need, $bare);
-            } elseif ($bare || ! $this->starvesSaving($planet, $profile, $defense->unit, $defense->amount)) {
-                $order = $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $defense->amount, $bare);
-            } else {
-                $order = null;
+                $fallback = $this->cheapestQueueableDefence($planet, $need, $bare);
+                if ($fallback !== null) {
+                    $standing[] = [$planet, $fallback];
+                }
+
+                continue;
             }
 
-            if ($order !== null) {
-                $standing[] = [$planet, $order];
+            // The host takes the whole price when the order is placed, so the batch is capped by what
+            // this planet can pay for and skipped when that is nothing: an order it cannot pay for is a
+            // refusal, and spending the login's one wall order on it is what left a poor planet bare
+            // while the account believed it had walled it.
+            $amount = min($defense->amount, $this->affordable($planet, $defense->unit));
+            if ($amount < self::FIRST_CARGO_AMOUNT || (! $bare && $this->starvesSaving($planet, $profile, $defense->unit, $amount))) {
+                continue;
             }
+
+            $standing[] = [$planet, $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $amount, $bare)];
         }
 
         if ($standing !== []) {
@@ -546,8 +580,7 @@ class QueueableUnitPlanner
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool
     {
-        if (! ObjectService::objectRequirementsMet($unit->machine_name, $planet)
-            || ! ObjectService::objectCharacterClassMet($unit->machine_name, $planet)) {
+        if (! $this->requirementsMet($planet, $unit)) {
             return false;
         }
 
@@ -557,12 +590,63 @@ class QueueableUnitPlanner
     }
 
     /**
+     * Whether the host lets this planet build the unit at all: its requirement graph and its character
+     * class, with affordability left out. A wall is legal to order whenever the yard can take the unit;
+     * how much of it the planet can pay for is a separate question, asked below.
+     */
+    private function requirementsMet(PlanetService $planet, UnitObject $unit): bool
+    {
+        return ObjectService::objectRequirementsMet($unit->machine_name, $planet)
+            && ObjectService::objectCharacterClassMet($unit->machine_name, $planet);
+    }
+
+    /**
+     * How many of the unit the planet can pay for out of the balance it holds now.
+     *
+     * The host's own affordability gate, with the requirement graph left to `requirementsMet` above:
+     * the host returns zero for any amount once its requirements_met argument is false, so passing
+     * false here would read every planet as unable to pay and leave the bare sibling beside the
+     * account's wall with no order at all (QUAL-003).
+     */
+    private function affordable(PlanetService $planet, UnitObject $unit): int
+    {
+        return ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true);
+    }
+
+    /**
      * Whether this planet stands no defence at all: the state the doctrine's floor is written for,
      * and the one the economy's saving must not veto.
      */
     private function holdsNoDefence(PlanetService $planet): bool
     {
         return $planet->getDefenseUnits()->getAmount() === 0;
+    }
+
+    /**
+     * Whether one planet of the account stands no wall while a sibling already holds one: the state
+     * the wall order above is spent on, and the one that outranks adding wall anywhere else.
+     *
+     * @param  array<int, PlanetService>  $planets
+     */
+    private function nakedBesideWalled(array $planets): bool
+    {
+        $walled = false;
+        $bare = false;
+        // A sibling counts as walled the moment it is paid for, for the same reason the wall order
+        // above reads its own yard: the invariant is read on built units, so the account leaves its
+        // opening when the first order is placed.
+
+        foreach ($planets as $planet) {
+            if ($this->defenseNeed->standingUnits($planet) > 0) {
+                $walled = true;
+
+                continue;
+            }
+
+            $bare = true;
+        }
+
+        return $walled && $bare;
     }
 
     /**
@@ -606,8 +690,14 @@ class QueueableUnitPlanner
         }
 
         $defense = $this->defenseComposition->plan($player, $planet, $need);
-        if ($defense !== null && $this->queueable($planet, $defense->unit)) {
-            return $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $defense->amount, true);
+        if ($defense !== null && $this->requirementsMet($planet, $defense->unit)) {
+            // The host refuses an order it cannot pay for whole (QueueUnits: queue_not_created), and a
+            // planet whose plan repeats that refusal every login stays naked forever, so the order is
+            // capped by what this planet can actually pay for right now.
+            $amount = min($defense->amount, $this->affordable($planet, $defense->unit));
+            if ($amount >= self::FIRST_CARGO_AMOUNT) {
+                return $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $amount, true);
+            }
         }
 
         return $this->cheapestQueueableDefence($planet, $need);
@@ -624,7 +714,7 @@ class QueueableUnitPlanner
         $bestPrice = INF;
 
         foreach (ObjectService::getDefenseObjects() as $unit) {
-            if (! $unit instanceof UnitObject || ! $this->queueable($planet, $unit)) {
+            if (! $unit instanceof UnitObject || ! $this->requirementsMet($planet, $unit)) {
                 continue;
             }
 
@@ -642,9 +732,15 @@ class QueueableUnitPlanner
         }
 
         $amount = min(
-            ObjectService::getObjectMaxBuildAmount($best->machine_name, $planet, true),
+            $this->affordable($planet, $best),
             max(self::FIRST_CARGO_AMOUNT, (int) ceil(($need?->defenceValue ?? 0.0) / $bestPrice))
         );
+
+        // The host refuses an order it cannot pay for whole, so a planet holding less than one unit's
+        // price is left to a later login rather than sent a batch that creates no queue row.
+        if ($amount < self::FIRST_CARGO_AMOUNT) {
+            return null;
+        }
 
         return $this->unit($planet, $best, 'role:defense:standing:'.$best->machine_name, $amount, $aheadOfEconomy);
     }

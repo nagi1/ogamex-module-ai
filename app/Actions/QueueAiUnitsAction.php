@@ -96,6 +96,11 @@ class QueueAiUnitsAction implements QueueAiUnits
             $planet = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
             $remaining = app(DefenseCompositionPlanner::class)->remainingCeiling($planet);
             $amount = $remaining === null ? $amount : min($amount, max(0, $remaining));
+            // The order was priced a session ago and other work on this planet has spent the balance
+            // since: the host's add() returns silently for a batch it cannot pay for whole, so the wall
+            // never appeared while the planet stayed naked (live 2 Oct 2026: 4 x QueueUnits refused with
+            // queue_not_created). What this planet can pay for now is the order.
+            $amount = min($amount, ObjectService::getObjectMaxBuildAmount(ObjectService::getObjectById($unitId)->machine_name, $planet, true));
             if ($amount < 1) {
                 return AiActionResult::rejected(AiQueueActionReason::NothingQueueable);
             }

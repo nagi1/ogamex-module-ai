@@ -9,6 +9,11 @@ namespace Modules\AI\Domain\Decision;
  * a role is not a name this module keeps, and how many fit is what the host says the planet can pay
  * for. The reason names the role that selected it, so a trace can show why this unit rather than
  * another without restating the arithmetic.
+ *
+ * `aheadOfEconomy` marks the one order whose placement decides whether it happens at all: the first
+ * wall of a planet that stands bare beside a walled sibling. The session's building steps spend the
+ * balance this order was priced against when they run first, so the host refuses the wall and the
+ * planet stays naked (QUAL-003); the schedule runs a marked order before those steps instead.
  */
 readonly class QueueableUnit
 {
@@ -17,6 +22,7 @@ readonly class QueueableUnit
         public int $unitId,
         public int $amount,
         public string $reason,
+        public bool $aheadOfEconomy = false,
     ) {
     }
 }

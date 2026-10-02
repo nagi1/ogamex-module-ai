@@ -10,6 +10,7 @@ use Modules\AI\Actions\AdvanceAiCampaignStateAction;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Domain\Routine\SessionPlanner;
@@ -94,6 +95,14 @@ final class Situation
         return $this;
     }
 
+    /** An account that holds resources back for a goal it has named, instead of spending what it holds. */
+    public function goalSaver(): self
+    {
+        $this->profile->update(['stockpile_strategy' => AiStockpileStrategy::GoalSaver]);
+
+        return $this;
+    }
+
     public function resources(int $metal, int $crystal, int $deuterium): self
     {
         $this->host('planetAddResources', new Resources($metal, $crystal, $deuterium));
@@ -118,6 +127,23 @@ final class Situation
         return $this;
     }
 
+    /**
+     * The same object level on every planet the account owns: a build state the whole account shares,
+     * for a story where a rule applies to each planet rather than to the logged-in one. The account's
+     * planets refresh independent of the session's own current planet, so planting on the current one
+     * alone leaves the others bare.
+     */
+    public function levelEveryPlanet(string $machineName, int $level): self
+    {
+        $objectId = ObjectService::getObjectByMachineName($machineName)->id;
+
+        foreach (Planet::query()->where('user_id', $this->profile->player_id)->where('planet_type', 1)->pluck('id') as $planetId) {
+            app(PlanetServiceFactory::class)->make((int) $planetId, true)?->setObjectLevel($objectId, $level, true);
+        }
+
+        return $this;
+    }
+
     public function research(string $machineName, int $level): self
     {
         $this->host('playerSetResearchLevel', $machineName, $level);
@@ -126,6 +152,14 @@ final class Situation
     }
 
     public function ships(string $machineName, int $amount): self
+    {
+        $this->host('planetAddUnit', $machineName, $amount);
+
+        return $this;
+    }
+
+    /** Units already standing on the logged-in planet, defence included: the wall a sibling is compared against. */
+    public function defence(string $machineName, int $amount): self
     {
         $this->host('planetAddUnit', $machineName, $amount);
 
