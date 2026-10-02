@@ -1,66 +1,67 @@
 the delivered change passed its tests but its live proof failed:
 PASS test:EveryPlanetBuildsSessionSituationTest 2s
 PASS aspect:economy 1s
-FAIL invariant:IDLE_QUEUES 17s —  ! [IDLE_QUEUES] player 54 played this hour with 3 of 3 planets buildable and idle
-PROOF: FAIL PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 54 played this hour with 3 of 3 planets buildable and idle
+FAIL invariant:IDLE_QUEUES 23s —  ! [IDLE_QUEUES] player 117 played this hour with 1 of 1 planets buildable and idle
+PROOF: FAIL PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 117 played this hour with 1 of 1 planets buildable and idle
 
 LIVE EVIDENCE
 --- ogamex pulse 30 (live, now):
-PULSE last 30 min, 100 accounts: 251 sessions on 100 accounts
-  backlog: 380 work item(s) more than a minute late, oldest 10 min — live verdicts read worker lag
-  sessions chose: QueueUnits 34%, Colonize 23%, FleetSave 12%, Transfer 12%, Build 6%, DoNothing 4%, ThrottleMine 3%, Expedition 2%, Spy 2%, Raid 0%, Recall 0%, Research 0%
-  host orders: buildings 444, research 137, units 110
-  missions launched: Transport 17, Attack 6, Deployment 18, Espionage 3, Colonisation 7, Expedition 5
+PULSE last 30 min, 100 accounts: 550 sessions on 100 accounts
+  backlog: 189 work item(s) more than a minute late, oldest 13 min — live verdicts read worker lag
+  sessions chose: FleetSave 35%, QueueUnits 20%, Transfer 11%, Colonize 9%, Raid 7%, ThrottleMine 5%, DoNothing 5%, Build 3%, Spy 2%, Expedition 2%, Research 1%, Recall 1%
+  host orders: buildings 1351, research 359, units 376
+  missions launched: Deployment 138, Transport 40, Attack 32, Espionage 11, Colonisation 19, Expedition 10
   work (kind: state count):
-    RunSession: Pending 86, Completed 251, Retry 16
-    BuildFirstBuilding: Pending 176, Completed 476, Retry 28
-    Transfer: Pending 13, Completed 24, Retry 5
-    QueueResearch: Pending 62, Retry 13, Completed 143
-    QueueUnits: Completed 110, Pending 48, Retry 12
-    FleetSave: Pending 10, Completed 25
-    Colonize: Completed 44, Pending 5, Retry 2
-    SetMinePercent: Pending 5, Completed 7, Retry 1
-    Expedition: Completed 5, Pending 1
-    Spy: Retry 2, Completed 5
-    Recall: Completed 1
-    Raid: Completed 6
+    RunSession: Completed 550, Pending 102
+    BuildFirstBuilding: Completed 1489, Pending 104, Retry 6
+    FleetSave: Completed 149, Retry 2, Pending 23
+    QueueResearch: Completed 388, Pending 40
+    Colonize: Completed 32, Pending 3
+    QueueUnits: Completed 382, Retry 7, Pending 45
+    Raid: Completed 36, Retry 2, Pending 3
+    Transfer: Completed 62, Retry 1, Pending 6
+    Recall: Completed 6, Pending 1
+    SetMinePercent: Completed 28, Pending 2
+    Spy: Completed 13
+    Expedition: Completed 10
   refused: 
-    37 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
-    8 × DispatchFleet: You don't have sufficient storage capacity!
-    6 × DispatchFleet: Not enough resources on the planet to send the fleet.
-    2 × QueueResearch: already_researching
+    28 × QueueBuilding: shipyard_busy
+    23 × DispatchFleet: You don't have sufficient storage capacity!
+    20 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    11 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    10 × QueueBuilding: Maximum number of items already in queue.
+    10 × QueueResearch: already_researching
+    6 × DispatchFleet: no_transport_fleet
+    5 × RecallFleet: no_deployment_to_recall
+    2 × CreateColony: This mission is not possible.
+    2 × DispatchFleet: This mission is not possible.
     2 × DispatchFleet: no_disposable_fleet
-    1 × QueueUnits: queue_not_created
-    1 × QueueBuilding: shipyard_busy
-    1 × DispatchFleet: source_short_at_dispatch
-    1 × RecallFleet: no_deployment_to_recall
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: large_cargo, heavy_fighter
 --- ogamex why subject (live, now):
 WHY 35 (Miner): what the next session will see
 
-  published: build, queue_units, spy, throttle_mine
-  NOT published: research, colonize
+  published: build, queue_units, spy
+  NOT published: research, colonize, throttle_mine
 
   player_id                    35
-  observed_at                  1790970764
+  observed_at                  1790980302
   account_state                "active"
   recovery_factor              0
   fleet_slots_free             2
   colonize_eligible            true
-  target_reports               7 item(s): [{"report_id":730,"observed_at":1790959487,"expires_at":1791045887,"confidence":0.21687500000000004,"travel_cost":0.017638888888888888,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":true},{"report_id":609,"obser
+  target_reports               7 item(s): [{"report_id":730,"observed_at":1790959487,"expires_at":1791045887,"confidence":0,"travel_cost":0.017638888888888888,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":true},{"report_id":609,"observed_at":1790955978
   fleetsave_eligible           false
   fleetsave_skip_reason        null
   inbound_fleets               0 item(s)
   reaction_wake_at             null
   recall_eligible              false
-  planets                      4 planet(s)
+  planets                      5 planet(s)
 
   decision: Transfer
-    Build         64.8  resource_need=30, safety=10, archetype_preference=25, seeded_variation=-0.2
-    Transfer      41.6  resource_need=27, safety=15, seeded_variation=-0.4
-    ThrottleMine  39.7  resource_need=30, safety=10, seeded_variation=-0.3
-    QueueUnits    39.5  resource_need=30, safety=10, seeded_variation=-0.5
-    Spy           39.5  resource_need=30, safety=10, seeded_variation=-0.5
-    Expedition    38.6  resource_need=9, safety=30, seeded_variation=-0.4
-    DoNothing      5.5  safety=5, seeded_variation=0.5
-  turned down by the candidate factory: 
-    report:424: raid_not_viable
+    Build         65.1  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.1
+    Transfer      42.1  resource_need=27, safety=15, seeded_variation=0.1
+    Spy           40.0  resource_need=30, safety=10, seeded_variation=-0
+    QueueUnits    39.8  resource_need=30, safety=10, seeded_variation=-0.2
+    Expedition    39.0  resource_need=9, safety=30, seeded_variation=-0
+    DoNothing      5.3  safety=5, seeded_variation=0.3
+  turned down by the candidate factory: nothing

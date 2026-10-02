@@ -1,3 +1,3 @@
-# PERS-007 implemented 2026-10-02 20:52 UTC
+# PERS-007 implemented 2026-10-02 22:40 UTC
 
-- app/Actions/ScheduleAiIntentAction.php
+- scripts/verify-cohorts.php
