@@ -294,7 +294,9 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
      */
     private function liftableStock(PlayerService $player, PlanetService $origin, UnitCollection $fleet): Resources
     {
-        $stock = new Resources($origin->metal()->get(), $origin->crystal()->get(), $origin->deuterium()->get());
+        // Half the deuterium stays on the planet: the flight is paid from it, and a hold that took it
+        // all leaves the dispatch short of fuel.
+        $stock = new Resources($origin->metal()->get(), $origin->crystal()->get(), floor($origin->deuterium()->get() / 2));
         $capacity = $fleet->getTotalCargoCapacity($player);
 
         if ($stock->sum() <= $capacity) {
