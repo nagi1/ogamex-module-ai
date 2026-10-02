@@ -191,6 +191,7 @@ class HarnessStatusController
         $attempts = glob($this->path('plan/research/ogame/attempts/*.{count,stuck}'), GLOB_BRACE) ?: [];
         $parts[] = 'attempts:'.count($attempts).':'.max([0, ...array_map('filemtime', $attempts)]);
         $scorecards = glob($this->path('plan/research/ogame/scorecards/*.json')) ?: [];
+        $parts[] = 'babysitter:'.(@filemtime($this->path('plan/research/ogame/babysitter.json')) ?: 0);
         $parts[] = 'scorecards:'.count($scorecards).':'.max([0, ...array_map('filemtime', $scorecards)]);
 
         return md5(implode('|', $parts));
@@ -218,6 +219,7 @@ class HarnessStatusController
             'model' => $this->model(),
             'rows' => $this->rows(),
             'cohort' => $this->cohort(),
+            'babysitter' => $this->babysitter(),
         ];
     }
 
@@ -515,6 +517,24 @@ class HarnessStatusController
     /**
      * The newest cohort verdict the harness wrote: the invariants and aspects it flagged.
      *
+     * @return array<string, mixed>
+     */
+    private function babysitter(): array|null
+    {
+        $file = $this->path('plan/research/ogame/babysitter.json');
+        $status = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+
+        if (!is_array($status)) {
+            return null;
+        }
+
+        // A watcher that stopped is itself the finding: say how old its last read is.
+        $status['age_minutes'] = (int) floor((time() - (int) ($status['written'] ?? 0)) / 60);
+
+        return $status;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function cohort(): array

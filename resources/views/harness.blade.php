@@ -180,6 +180,15 @@
         <div class="note" id="waitingNote" hidden></div>
     </section>
 
+    <section class="panel" id="babysitterPanel" aria-label="Babysitter">
+        <h2>Babysitter <small id="babyMeta">is the harness delivering value?</small></h2>
+        <div class="kv" id="babyKv"></div>
+        <ul class="plain" id="babyLoops"></ul>
+        <div class="note" id="babyFixed"></div>
+        <div class="note" id="babyHistory"></div>
+        <div class="empty" id="babyEmpty" hidden>The babysitter has not reported. Start it: <code>bash scripts/babysitter.sh</code></div>
+    </section>
+
     <div class="cols">
         <section class="panel" aria-label="Writer">
             <h2>Writer <small>last hour</small></h2>
@@ -348,6 +357,24 @@
             + '<span class="r ' + (call.finish === 'stop' ? '' : 'no') + '">' + (call.finish === 'stop' ? Math.round(call.output / 1000) + 'k tok · ' + Math.round(call.seconds) + 's' : 'cut off (' + esc(call.finish) + ')') + '</span></li>').join('');
     }
 
+    function renderBabysitter(b) {
+        $('babyEmpty').hidden = !!b;
+        ['babyKv', 'babyLoops', 'babyFixed', 'babyHistory'].forEach(id => $(id).hidden = !b);
+        if (!b) return;
+        const stale = b.age_minutes > 25;
+        $('babyMeta').textContent = 'read ' + b.at + 'Z, ' + b.age_minutes + ' min ago' + (stale ? ' - the watcher has stopped' : '');
+        const ok = b.verdict === 'ADVANCING' && !stale;
+        $('babyKv').innerHTML =
+            '<div><b class="' + (ok ? 'ok' : 'no') + '">' + (stale ? 'SILENT' : b.verdict) + '</b><span>last ' + b.window + ' min</span></div>'
+            + '<div><b>' + b.delivered.length + '</b><span>rows delivered' + (b.delivered.length ? ': ' + esc(b.delivered.join(' ')) : '') + '</span></div>'
+            + '<div><b class="' + (b.code_lines ? 'ok' : 'no') + '">' + b.code_lines + '</b><span>code lines vs ' + b.other_lines + ' other</span></div>'
+            + '<div><b class="' + (b.junk > 20 ? 'wn' : '') + '">' + b.junk + '/' + b.changed + '</b><span>changed files that are logs or ledger</span></div>'
+            + '<div><b>' + b.passing + '/' + b.total + '</b><span>aspects pass' + (b.failing.length ? ' (failing: ' + esc(b.failing.join(', ')) + ')' : '') + '</span></div>';
+        $('babyLoops').innerHTML = b.loops.map(l => '<li><span class="no">' + esc(l.code) + '</span><span class="r">reopened ' + l.reopened + 'x - ' + esc(l.why) + '</span></li>').join('');
+        $('babyFixed').textContent = b.fixed.length ? 'Fixed this pass: ' + b.fixed.join('; ') : '';
+        $('babyHistory').textContent = 'History: ' + b.history.map(h => h.at + ' ' + (h.verdict === 'ADVANCING' ? '+' : '!') + h.delivered).join('  ');
+    }
+
     function renderCohort(cohort) {
         $('cohortAt').textContent = cohort.at ? 'read ' + cohort.at : '';
         const body = [];
@@ -375,7 +402,7 @@
 
     function render(data) {
         renderState(data); renderStar(data.northStar); renderStories(data.stories); renderQueue(data.queue); renderRows(data.rows);
-        renderWriter(data.model); renderCohort(data.cohort); renderNow(data);
+        renderWriter(data.model); renderBabysitter(data.babysitter); renderCohort(data.cohort); renderNow(data);
     }
 
     /* ---- log: the last hour, persisted ---- */

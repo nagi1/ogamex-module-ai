@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.path.join(ROOT, "plan/tasks/tasks.db")
 STATE = "/tmp/babysitter-state.json"
+STATUS = os.path.join(ROOT, "plan/research/ogame/babysitter.json")
 WINDOW_MIN = int(os.environ.get("BABYSIT_WINDOW", "60"))
 STUCK_MIN = int(os.environ.get("BABYSIT_STUCK", "45"))
 CODE = ("app/", "tests/", "resources/behavior/", "config/", "database/")
@@ -100,6 +101,14 @@ def main():
         print("  CIRCLES: the tree fills with logs while no code lands; read the LOOP rows above")
     for a in actions:
         print(f"  FIXED: {a}")
+
+    previous = json.load(open(STATUS)) if os.path.exists(STATUS) else {}
+    now = {"at": datetime.now(timezone.utc).strftime("%H:%M"), "verdict": verdict, "delivered": done,
+           "code_lines": code_lines, "other_lines": other_lines, "changed": changed, "junk": junk,
+           "passing": passing, "total": total, "failing": failing, "window": WINDOW_MIN,
+           "loops": [{"code": c, "reopened": n, "why": w} for c, n, w in loops[:5]], "fixed": actions}
+    history = (previous.get("history") or [])[-23:] + [{"at": now["at"], "verdict": verdict, "delivered": len(done), "passing": passing, "fixed": actions}]
+    json.dump({**now, "history": history, "written": time.time()}, open(STATUS, "w"))
 
 
 if __name__ == "__main__":
