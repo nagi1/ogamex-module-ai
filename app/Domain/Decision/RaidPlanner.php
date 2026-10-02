@@ -65,9 +65,6 @@ class RaidPlanner
 
     private const LOOT_TIER_DEFENDED = 2.0;
 
-    /** RAID-009: the fleet raids on the storage-fill schedule, so the warehouse must be near full. */
-    private const RAID_STORAGE_FILL_RATIO = 0.8;
-
     /**
      * The fraction of sampled runs the attacking fleet must survive before a
      * raid flies. The fleet-loss rate is its complement (1 - SURVIVAL_FLOOR): a
@@ -102,37 +99,6 @@ class RaidPlanner
     private function player(int $playerId): PlayerService
     {
         return $this->players[$playerId] ??= $this->playerServiceFactory->make($playerId, true);
-    }
-
-    /**
-     * Whether the account's fleet planet has a warehouse worth flying for.
-     *
-     * A fleeter raids on the storage-fill schedule (8-12h), not ad hoc every
-     * session: the fleet flies when the mines have filled the warehouse
-     * (RAID-009). The ratio is the corpus' own near-full threshold (E3); the
-     * exact number is persona flavour.
-     */
-    public function storageReady(int $playerId): bool
-    {
-        if (!User::query()->whereKey($playerId)->exists()) {
-            return true;
-        }
-
-        $player = $this->player($playerId);
-        $origin = $this->origin($player);
-        if ($origin === null) {
-            return true;
-        }
-
-        $origin = $this->planetServiceFactory->makeForPlayer($player, $origin->getPlanetId(), false);
-        $stored = $origin->metal()->get() + $origin->crystal()->get() + $origin->deuterium()->get();
-        $capacity = $origin->metalStorage()->get() + $origin->crystalStorage()->get() + $origin->deuteriumStorage()->get();
-
-        if ($capacity <= 0) {
-            return false;
-        }
-
-        return $stored / $capacity >= self::RAID_STORAGE_FILL_RATIO;
     }
 
     public function plan(int $playerId, int $reportId): ?QueueableRaid

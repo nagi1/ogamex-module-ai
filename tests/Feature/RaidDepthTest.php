@@ -273,53 +273,7 @@ test('an unviable target is dropped before the profit test', function (): void {
         ->and(array_column($generation->candidates, 'reason'))->not->toContain('fresh_visible_report');
 });
 
-test('the raid storage gate opens only when the warehouse is full', function (): void {
-    raidDepthProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
-
-    $planner = app(RaidPlanner::class);
-
-    // An empty warehouse keeps the fleet home: nothing has filled yet (RAID-009).
-    expect($planner->storageReady($this->currentUserId))->toBeFalse();
-
-    // Fill the warehouse well past the near-full bar.
-    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
-
-    expect($planner->storageReady($this->currentUserId))->toBeTrue();
-});
-
-test('an unfilled warehouse drops every visible target', function (): void {
-    raidDepthProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
-
-    $now = CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC');
-    $snapshot = app()->makeWith(PerceptionSnapshot::class, [
-        'playerId' => $this->currentUserId,
-        'observedAt' => $now,
-        'planets' => [['id' => $this->currentPlanetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
-        'targetReports' => [[
-            'report_id' => 8,
-            'observed_at' => $now->getTimestamp(),
-            'expires_at' => $now->addHour()->getTimestamp(),
-            'confidence' => 0.8,
-            'travel_cost' => 0.2,
-            'attack_permitted' => true,
-            'score_viable' => true,
-        ]],
-        'availableActions' => array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
-        'fleetsaveEligible' => false,
-        'recoveryFactor' => 0.1,
-        'sourceTimestamps' => [],
-        'fleetSlotsFree' => 2,
-    ]);
-
-    $generation = app(CandidateActionFactory::class)->create($snapshot);
-
-    expect($generation->rejections)->toHaveKey('report:8', AiCandidateRejectionReason::StorageNotFull->value)
-        ->and(array_column($generation->candidates, 'reason'))->not->toContain('fresh_visible_report');
-});
-
-// The successful half of the raid gate: a permitted, fresh, viable report on a full warehouse whose
+// The successful half of the raid gate: a permitted, fresh, viable report whose
 // planner accepts the flight becomes a candidate, and its source timestamp is the report that made it.
 test('a viable report is offered as a fresh-report raid candidate', function (): void {
     raidDepthProfile($this->currentUserId);
@@ -362,15 +316,6 @@ test('a viable report is offered as a fresh-report raid candidate', function ():
 
     expect($raid)->not->toBeNull()
         ->and($raid?->sourceTimestamps)->toHaveKey(AiCandidateReason::reportSource($reportId));
-});
-
-// A warehouse that cannot hold anything cannot fill, so the raid storage gate stays shut (RAID-009).
-test('the storage gate stays shut when the warehouse cannot hold anything', function (): void {
-    raidDepthProfile($this->currentUserId);
-    $this->planetAddUnit('small_cargo', 1);
-    Planet::query()->whereKey($this->currentPlanetId)->update(['metal_max' => 0, 'crystal_max' => 0, 'deuterium_max' => 0]);
-
-    expect(app(RaidPlanner::class)->storageReady($this->currentUserId))->toBeFalse();
 });
 
 // A report that names its target user is compared against that user's own score rather than a null.

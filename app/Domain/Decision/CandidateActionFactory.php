@@ -228,10 +228,6 @@ class CandidateActionFactory
         $candidates = [];
         $rejections = [];
 
-        // The fleet raids on the storage-fill schedule, not ad hoc every
-        // session (RAID-009): computed once, it gates every visible target.
-        $storageReady = $this->raidPlanner->storageReady($perception->playerId);
-
         // Raid candidates are assembled solely from the published report
         // projection. The scorer never receives unseen defender information.
         foreach ($perception->targetReports as $report) {
@@ -251,11 +247,6 @@ class CandidateActionFactory
             // without the field stay viable rather than silently disappearing.
             if (!($report['score_viable'] ?? true)) {
                 $rejections[$reportKey] = AiCandidateRejectionReason::ScoreBelowViability->value;
-                continue;
-            }
-
-            if (!$storageReady) {
-                $rejections[$reportKey] = AiCandidateRejectionReason::StorageNotFull->value;
                 continue;
             }
 
