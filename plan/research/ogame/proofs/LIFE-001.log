@@ -1,2 +1,2 @@
-FAIL invariant:LIFE_FIGHTS 20s —  ! [LIFE_FIGHTS] 96 of 609 battles today had combat rounds (16%): the raids pillage empty planets instead of fighting
-PROOF: FAIL LIFE-001 (invariant:LIFE_FIGHTS) at invariant:LIFE_FIGHTS:  ! [LIFE_FIGHTS] 96 of 609 battles today had combat rounds (16%): the raids pillage empty planets instead of fighting
+FAIL invariant:LIFE_FIGHTS 17s —  ! [LIFE_FIGHTS] 97 of 611 battles today had combat rounds (16%): the raids pillage empty planets instead of fighting
+PROOF: FAIL LIFE-001 (invariant:LIFE_FIGHTS) at invariant:LIFE_FIGHTS:  ! [LIFE_FIGHTS] 97 of 611 battles today had combat rounds (16%): the raids pillage empty planets instead of fighting
