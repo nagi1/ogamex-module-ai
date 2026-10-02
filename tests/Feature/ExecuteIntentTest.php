@@ -235,7 +235,8 @@ test('a session that chose something else still refills the queues only when the
 })->with([
     'a spy errand leaves the stock free' => [AiCandidateActionType::Spy, true],
     'a transfer ferries what the builds leave' => [AiCandidateActionType::Transfer, true],
-    'a save moves everything away' => [AiCandidateActionType::FleetSave, false],
+    'a calm save places the builds first' => [AiCandidateActionType::FleetSave, true],
+    'a quiet login has nothing to spend' => [AiCandidateActionType::DoNothing, false],
 ]);
 
 // The buildings are placed before the shipyard spends: the host cancels a building it cannot pay

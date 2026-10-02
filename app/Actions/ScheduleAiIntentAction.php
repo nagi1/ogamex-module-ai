@@ -159,6 +159,9 @@ class ScheduleAiIntentAction
         // engine happens to pick the shipyard left the bare planet naked while the account kept
         // colonising (measured live 2 Oct 2026: 1 planet at zero defence beside a sibling holding
         // 1,746). A login is one wall order whichever action was chosen.
+        // The wall's own facility may be refused by the economy in the same login (the planet is saving
+        // for its next mine), so the unit plan is asked before the building steps for every chosen
+        // action: a bare planet's wall is the one order whose placement decides whether it happens.
         $units = $this->queueableUnitPlanner->plan($profile->player_id);
         $unitsFirst = $units instanceof QueueableUnit && $units->aheadOfEconomy;
 
@@ -176,10 +179,11 @@ class ScheduleAiIntentAction
 
         // A player refills the build queues and the lab every login before turning to the shipyard or
         // the fleet; choosing a raid or a ship must not leave nine planets idle until the next session.
-        // A save moves everything away and a quiet session has nothing to spend on: neither refills
-        // the queues. A ferry does: the player builds first and ships what is left, and the transfer
+        // A quiet session has nothing to spend on and never refills the queues. A save does when nothing
+        // is inbound: the player places the builds and then moves the fleet, while an attacked account
+        // saves at once. A ferry does too: the player builds first and ships what is left, and the transfer
         // clamps itself to the stock still on the pad.
-        $economySteps = $this->fillsEconomy($type) && $this->economyOffered($trace)
+        $economySteps = ($this->fillsEconomy($type) || $this->isCalmSave($type, $trace)) && $this->economyOffered($trace)
             ? $this->fillQueues($profile, $sessionWorkItem, ':economy')
             : 0;
 
@@ -193,7 +197,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
             AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem),
             AiCandidateActionType::Recycle => $this->scheduleRecycle($profile, $sessionWorkItem),
-            AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem),
+            AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
             AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
@@ -223,6 +227,11 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Colonize => true,
             default => false,
         };
+    }
+
+    private function isCalmSave(AiCandidateActionType $type, DecisionTrace $trace): bool
+    {
+        return $type === AiCandidateActionType::FleetSave && $trace->perception->inboundFleets === [];
     }
 
     /** Only what the engine offered this session, so legality and persona policy stay its own. */
@@ -396,7 +405,7 @@ class ScheduleAiIntentAction
      * destination travel with the intent, so the save moves the fleet to the
      * planet the session saw rather than a re-decided one.
      */
-    private function scheduleFleetSave(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    private function scheduleFleetSave(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt): void
     {
         $plan = $this->queueableFleetSavePlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableFleetSave) {
@@ -422,7 +431,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_JUMP_GATE_PLANET_ID => $plan->jumpGatePlanetId,
             self::PAYLOAD_SPEED => $plan->speed,
             self::PAYLOAD_REASON => 'fleetsave',
-        ]);
+        ], $dueAt);
     }
 
     /**
