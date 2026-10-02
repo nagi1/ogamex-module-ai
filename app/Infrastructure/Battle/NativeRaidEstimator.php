@@ -8,7 +8,6 @@ use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\BattleEngine\BattleEngine;
 use OGame\GameMissions\BattleEngine\Models\AttackerFleet;
 use OGame\GameMissions\BattleEngine\Models\DefenderFleet;
-use OGame\GameMissions\BattleEngine\PhpBattleEngine;
 use OGame\GameMissions\BattleEngine\RustBattleEngine;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
@@ -98,12 +97,8 @@ class NativeRaidEstimator
 
         $defender = DefenderFleet::fromPlanet($target);
 
-        // The engine the host fights with, not one the module prefers: an
-        // operator who pins `php` gets the same simulator their battles use.
-        $engine = match ($this->settings->battleEngine()) {
-            'php' => new PhpBattleEngine([$attacker], $target, [$defender], $this->settings),
-            default => new RustBattleEngine([$attacker], $target, [$defender], $this->settings),
-        };
+        // The Rust engine is the one the universe fights with, so it is the only one the estimate runs.
+        $engine = new RustBattleEngine([$attacker], $target, [$defender], $this->settings);
 
         // The screen is the one bounded pass the decision path may afford; the
         // confirmation is a wider sample on the winner only.
