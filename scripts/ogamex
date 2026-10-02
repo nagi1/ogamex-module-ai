@@ -169,8 +169,16 @@ TEXT
 with_test_lane() {
     # The harness passes this when the calling attempt already holds the lane for its whole verdict.
     if [ "${OGAMEX_LANE_HELD:-}" = 1 ]; then
-        "$@"
-        return
+        # The harness holds lane 1's lock for a whole verdict; the run itself goes to a database of
+        # its own, never the one the scheduler and queue worker write to.
+        local rc=0 had_override="${AI_DB_OVERRIDE:-}"
+        if [ -z "$had_override" ]; then
+            export AI_DB_OVERRIDE="ogamex-test-harness"
+            prepare_lane_database
+        fi
+        "$@" || rc=$?
+        [ -n "$had_override" ] || unset AI_DB_OVERRIDE
+        return $rc
     fi
     # Lane 1 is the harness's lock and the shared test database. Lanes 2..N are the same tests on a
     # database of their own (ogamex-test-laneN, migrated once), so a proof run no longer waits behind
@@ -178,7 +186,9 @@ with_test_lane() {
     local claims="$MODULE_ROOT/plan/research/ogame/claims" lock lane key rc=0 told=0 held="" had_override="${AI_DB_OVERRIDE:-}"
     mkdir -p "$claims"
     while [ -z "$held" ]; do
-        for lane in $(seq 1 "${OGAMEX_LANES:-4}"); do
+        # Lane 1 is the database the running scheduler and queue worker write to, so a suite there reads
+        # their rows as its own; the lanes start at 2 and the lane count is how many private databases run.
+        for lane in $(seq 2 $(( ${OGAMEX_LANES:-4} + 1 ))); do
             key='verify:shared-test-database'
             [ "$lane" = 1 ] || key="verify:test-lane-$lane"
             lock="$claims/$(printf '%s' "$key" | sha256sum | cut -c1-16).lock"
@@ -197,14 +207,14 @@ with_test_lane() {
         sleep 1
     done
     trap 'rm -f "$held"' INT TERM
-    if [ "$lane" != 1 ] && [ -z "${AI_DB_OVERRIDE:-}" ]; then
+    if [ -z "${AI_DB_OVERRIDE:-}" ]; then
         export AI_DB_OVERRIDE="ogamex-test-lane$lane"
         prepare_lane_database
     fi
     "$@" || rc=$?
     rm -f "$held"
     trap - INT TERM
-    [ "$lane" = 1 ] || [ "$had_override" != "" ] || unset AI_DB_OVERRIDE
+    [ "$had_override" != "" ] || unset AI_DB_OVERRIDE
     return $rc
 }
 
