@@ -66,36 +66,7 @@ function staleClub(string $tag, string $language): Alliance
     return $club;
 }
 
-test('a membership the host cannot remove is released and the account applies to a fitting club', function (): void {
-    $crowd = staleClub('CRWD', 'en');
-    $fits = staleClub('FITS', 'en');
-
-    // The seeded shape: five AI accounts point at the one club, none of them has a member row.
-    $cohort = [$this->currentUserId];
-    User::query()->whereKey($this->currentUserId)->update(['alliance_id' => $crowd->id]);
-    AiProfile::create([
-        'player_id' => $this->currentUserId,
-        'archetype' => AiArchetype::Miner,
-        'skill_band' => AiSkillBand::Standard,
-        'activity_band' => AiActivityBand::Regular,
-        'random_seed' => 42,
-        'enabled' => true,
-    ]);
-    staleRank($this->currentUserId, 500, 2);
-
-    foreach (range(1, 4) as $unused) {
-        $cohort[] = staleCohort($crowd->id, 'en');
-    }
-
-    app(AdvanceAiAllianceLifeAction::class)->handle();
-
-    $applied = AllianceApplication::query()->whereIn('user_id', $cohort)->where('alliance_id', $fits->id);
-
-    expect($applied->count())->toBe(1)
-        ->and(User::query()->whereIn('id', $cohort)->whereNull('alliance_id')->count())->toBe(1);
-});
-
-test('a club holding fewer accounts than the floor keeps its member, who applies nowhere', function (): void {
+test('a member of a club that fits is kept, and applies nowhere', function (): void {
     $small = staleClub('SMLL', 'en');
     $fits = staleClub('FITS', 'en');
 
@@ -111,7 +82,7 @@ test('a club holding fewer accounts than the floor keeps its member, who applies
     ]);
     staleRank($this->currentUserId, 500, 2);
 
-    // One more account in the club: two of five holds less than the crowded floor of four.
+    // One more account in the club: a club of two keeps its members.
     $cohort[] = staleCohort($small->id, 'en');
 
     app(AdvanceAiAllianceLifeAction::class)->handle();

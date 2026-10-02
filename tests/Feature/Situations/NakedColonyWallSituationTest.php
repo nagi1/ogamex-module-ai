@@ -1,6 +1,7 @@
 <?php
 
 use Modules\AI\Domain\Decision\DefenseNeedEvaluator;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Tests\Support\Situation;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Models\Planet;
@@ -32,4 +33,20 @@ test('an account whose sibling holds a wall reaches the colony that has no shipy
     $colony = app(PlanetServiceFactory::class)->make($colonyId, true);
 
     expect(app(DefenseNeedEvaluator::class)->standingUnits($colony))->toBeGreaterThan(0, 'expected the wall on the colony that started without a shipyard; ' . $situation->account());
+});
+
+// The walled homeworld spends a login on the sibling that holds nothing rather than on growing the wall it
+// already has. The colony is planted first so the sibling is bare from the moment the wall stands.
+test('a walled homeworld reaches its naked colony with a wall order', function (): void {
+    $situation = Situation::of($this)
+        ->levelEveryPlanet('robot_factory', 2)
+        ->levelEveryPlanet('shipyard', 4)
+        ->levelEveryPlanet('solar_plant', 30)
+        ->colony()
+        ->defence('light_laser', 1_200)
+        ->stockEveryPlanet(5_000_000, 5_000_000, 5_000_000)
+        ->session();
+
+    $situation->expectQueued('rocket_launcher')
+        ->expectWork(AiWorkKind::QueueUnits);
 });

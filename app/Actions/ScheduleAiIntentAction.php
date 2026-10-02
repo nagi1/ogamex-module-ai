@@ -178,24 +178,43 @@ class ScheduleAiIntentAction
         }
 
         // A player refills the build queues and the lab every login before turning to the shipyard or
-        // the fleet; choosing a raid or a ship must not leave nine planets idle until the next session.
-        // A quiet session has nothing to spend on and never refills the queues. A save does when nothing
-        // is inbound: the player places the builds and then moves the fleet, while an attacked account
-        // saves at once. A ferry does too: the player builds first and ships what is left, and the transfer
-        // clamps itself to the stock still on the pad.
-        $economySteps = ($this->fillsEconomy($type) || $this->isCalmSave($type, $trace)) && $this->economyOffered($trace)
-            ? $this->fillQueues($profile, $sessionWorkItem, ':economy')
+        // the fleet; choosing a raid, a ship, nothing at all or answering an inbound fleet must not
+        // leave a planet idle until the next session. The refill asks the planner, never the decision
+        // trace: a planet is buildable exactly when the planner offers it a step -- the same call the
+        // cohort read-out makes -- so asking the trace instead lets the two disagree and the account
+        // read idle while it had a legal order to place. A planet the planner offers no step for
+        // enqueues nothing, so a login with nothing to spend stays quiet.
+        // A Save answers first: its intent is written ahead of these steps, so the fleet still moves
+        // before the last order lands.
+        // An attacked account saves before it builds: work falls due in the order it was written and
+        // same-instant work keeps that order, so the save is written here -- ahead of the building
+        // steps -- or the stock it moves has already been spent by them and the fleet stays on the
+        // ground. The calm save has no such errand and takes the match arm below, after the builds.
+        if ($type === AiCandidateActionType::FleetSave && !$this->isCalmSave($type, $trace)) {
+            $this->scheduleFleetSave($profile, $sessionWorkItem, $this->clock->now());
+        }
+
+        // A session that decided nothing is a player with no intent to spend and never refills the
+        // queues; a session the engine offered no economy step is one with nothing legal to place.
+        $economySteps = $this->refillsQueues($type, $trace)
+            ? $this->fillQueues($profile, $sessionWorkItem, $this->economyKey($type))
             : 0;
 
         match ($type) {
-            AiCandidateActionType::Build, AiCandidateActionType::Research => $this->fillQueues($profile, $sessionWorkItem, ''),
+            // Build and Research are filled by the pass above under the session's own key, so the
+            // refill and the session's objective are one work item.
+            AiCandidateActionType::Build, AiCandidateActionType::Research => null,
             // The shipyard gets what the buildings leave, so its order waits until they are placed:
             // the host cancels a building it cannot pay for, and a ship order placed first would cause it.
             // A marked wall is already written above; the repeat finds that row and leaves its time.
             AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $units),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
-            AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem),
+            // The ferry moves stock the buildings were priced against, so it waits for them the way
+            // the shipyard and the save do: a transfer written at the session's own instant runs
+            // between the second and third planet's build and the host then refuses those builds,
+            // leaving the planets idle until the next login.
+            AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
             AiCandidateActionType::Recycle => $this->scheduleRecycle($profile, $sessionWorkItem),
             AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
             AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
@@ -207,31 +226,28 @@ class ScheduleAiIntentAction
         };
     }
 
-    /**
-     * Whether the economy is filled before the selected action. A save moves the stock away, so a
-     * building priced against it would be cancelled; Build and Research fill it themselves; an idle
-     * session is a player who did not log in to play.
-     */
-    private function fillsEconomy(AiCandidateActionType $type): bool
-    {
-        return match ($type) {
-            AiCandidateActionType::QueueUnits,
-            AiCandidateActionType::Spy,
-            AiCandidateActionType::Raid,
-            AiCandidateActionType::Expedition,
-            AiCandidateActionType::Recycle,
-            AiCandidateActionType::Recall,
-            AiCandidateActionType::Transfer,
-            AiCandidateActionType::Phalanx,
-            AiCandidateActionType::ThrottleMine,
-            AiCandidateActionType::Colonize => true,
-            default => false,
-        };
-    }
-
     private function isCalmSave(AiCandidateActionType $type, DecisionTrace $trace): bool
     {
         return $type === AiCandidateActionType::FleetSave && $trace->perception->inboundFleets === [];
+    }
+
+    /** Whether this session refills the build queues and the lab before its own objective. */
+    private function refillsQueues(AiCandidateActionType $type, DecisionTrace $trace): bool
+    {
+        return $type !== AiCandidateActionType::DoNothing && $this->economyOffered($trace);
+    }
+
+    /**
+     * The key the queue refill owns. Build and Research own the session's own key, so the refill is
+     * the session's objective; every other action takes a key of its own, leaving the objective's key
+     * to the objective.
+     */
+    private function economyKey(AiCandidateActionType $type): string
+    {
+        return match ($type) {
+            AiCandidateActionType::Build, AiCandidateActionType::Research => '',
+            default => ':economy',
+        };
     }
 
     /** Only what the engine offered this session, so legality and persona policy stay its own. */
@@ -361,7 +377,7 @@ class ScheduleAiIntentAction
      * The same for a transfer the plan approved: source, target and the shipment travel with the
      * intent, so the ferry funds the body the session saw rather than a re-decided shortfall.
      */
-    private function scheduleTransfer(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    private function scheduleTransfer(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt): void
     {
         $plan = $this->queueableTransferPlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableTransfer) {
@@ -375,7 +391,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_CRYSTAL => $plan->crystal,
             self::PAYLOAD_DEUTERIUM => $plan->deuterium,
             self::PAYLOAD_REASON => 'transfer:' . $plan->sourcePlanetId . ':' . $plan->targetPlanetId,
-        ]);
+        ], $dueAt);
     }
 
     /**
