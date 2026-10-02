@@ -1,3 +1,42 @@
-the delivered change passed its tests but its live proof failed:
-FAIL aspect:colonisation 1s —  FAIL colonisation 0 floor 1 settles new planets while slots remain
-PROOF: FAIL QUAL-008 (aspect:colonisation) at aspect:colonisation:  FAIL colonisation 0 floor 1 settles new planets while slots remain
+the writer used its 40 turns before a check passed.
+tests (ColonisationSituationTest, JumpGateTest, SensorPhalanxTest, BuildingChainReachabilityTest): Tests:    2 failed, 12 passed, 7 pending (104 assertions)
+
+FAILED  Modules\AI\tests\Feature\Sens…  UniqueConstraintViolationException   
+  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-400-11-1' for key 'planets.planets_galaxy_system_planet_planet_type_unique' (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test_test_2, SQL: insert into `planets` (`name`, `metal_mine`, `metal_mine_percent`, `solar_plant`, `solar_plant_percent`, `deuterium_synthesizer`, `deuterium_synthesizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `galaxy`, `system`, `planet`, `time_last_update`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 159, 78, 86, 0, 0, 0, 0, 0, 0, 3178, 1, 400, 11, 1704063600, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+
+  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
+     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
+     50▕ 
+     51▕             $this->recordsHaveBeenModified();
+     52▕ 
+  ➜  53▕             $result = $statement->execute();
+     54▕ 
+     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
+     56▕ 
+     57▕             return $result;
+
+      +15 vendor frames 
+  16  Modules/AI/tests/Feature/SensorPhalanxTest.php:101
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Modules\AI\tests\Feature\BuildingChainReachabilityTest > the chai…   
+  Failed asserting that an array contains 124.
+
+  at Modules/AI/tests/Feature/BuildingChainReachabilityTest.php:205
+    201▕ 
+    202▕     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
+    203▕ 
+    204▕     expect($plan)->not->toBeNull()
+  ➜ 205▕         ->and(chainStepId($plan))->toBeIn(chainEconomyTargetIds())
+    206▕         ->and($plan?->reason)->toMatch('/^(economy|storage):/');
+    207▕ });
+    208▕ 
+    209▕ // A chain step the host refuses used to cost the account its whole build capability. A player who
+
+  1   Modules/AI/tests/Feature/BuildingChainReachabilityTest.php:205
+
+
+  Tests:    2 failed, 12 passed, 7 pending (104 assertions)
+  Duration: 2.66s
+
+[1A  Parallel: 4 processes

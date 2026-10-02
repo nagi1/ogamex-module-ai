@@ -1,25 +1,8 @@
-tests (RaidWithShipyardSituationTest, ExpeditionSituationTest, DebrisRecycleSituationTest, ColonisationSituationTest, ShipyardSituationTest, RaidFromReportSituationTest, ShipyardRestraintSituationTest, DecisionEngineTest, IdleOverrideAndAntiBotCadenceTest, PersonaPolicyMechanicsTest): Tests:    1 failed, 18 passed (31 assertions)
-
-FAILED  Modules\AI\tests\Feature\Situations\RaidWithShipyardSituationTest…   
-  expected Raid work, but the account created work: [BuildFirstBuilding(Completed), BuildFirstBuilding(Completed), QueueUnits(Completed)], executors refused: [], queued: [metal_mine, solar_plant, rocket_launcher], flew: [], not offered: [] and its last decision ranked: Build 66.0 (safety=10, resource_need=30, seeded_variation=1, archetype_preference=25); QueueUnits 40.7 (safety=10, resource_need=30, seeded_variation=0.7); DoNothing 3.3 (safety=5, seeded_variation=-1.7)
-Failed asserting that false is true.
-
-  at Modules/AI/tests/Support/Situation.php:450
-    446▕     }
-    447▕ 
-    448▕     public function expectWork(AiWorkKind $kind): self
-    449▕     {
-  ➜ 450▕         expect(in_array($kind, $this->work(), true))->toBeTrue('expected ' . $kind->name . ' work, but ' . $this->account());
-    451▕ 
-    452▕         return $this;
-    453▕     }
-    454▕
-
-  1   Modules/AI/tests/Support/Situation.php:450
-  2   Modules/AI/tests/Feature/Situations/RaidWithShipyardSituationTest.php:26
-
-
-  Tests:    1 failed, 18 passed (31 assertions)
-  Duration: 3.84s
-
-[1A  Parallel: 4 processes
+the delivered change passed its tests but its live proof failed:
+FAIL test:ExpeditionSituationTest 2s — {"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":1,"duration_ms":1519,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\ExpeditionSituationTest::__pest_evaluable_a_fleet_with_nothing_to_raid_or_recycle_flies_an_expedition_within_a_few_logins","file":"/var/
+PASS test:DebrisRecycleSituationTest 2s
+PASS test:ColonisationSituationTest 2s
+PASS test:ShipyardSituationTest 2s
+PASS test:RaidFromReportSituationTest 1s
+PASS test:ShipyardRestraintSituationTest 3s
+PROOF: FAIL ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy) at test:ExpeditionSituationTest: {"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":1,"duration_ms":1519,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\ExpeditionSituationTest::__pest_evaluable_a_fleet_with_nothing_to_raid_or_recycle_flies_an_expedition_within_a_few_logins","file":"/var/

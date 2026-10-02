@@ -1,4 +1,4 @@
-PASS test:BothQueuesSituationTest 1s
+PASS test:BothQueuesSituationTest 2s
 PASS test:ResearchSituationTest 1s
 PASS aspect:research 1s
 PASS aspect:work_failures 1s

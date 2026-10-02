@@ -1,61 +1,68 @@
-SocialContactInitiationTest: [90mTests:[39m    [31;1m5 failed[39;22m[90m (11 assertions)[39m
+the delivered change passed its tests but its live proof failed:
+FAIL situation:inbound-message 184s —  read-back: 0 exchange(s), 0 reply message(s) from account 3 — last decisions: p4 12/eligible_transfer | p3 3/published_capability:build | p4 12/eligible_transfer | p3 3/published_capability:build | p4 12/eligible_transfer | p3 1/always_available
+FAIL aspect:social 0s — too early: the cohort has played under an hour on this change (not yet passing on 0.10h)
+FAIL aspect:chat 1s — too early: the cohort has played under an hour on this change (not yet passing on 0.10h)
+PROOF: FAIL SOC-001 (situation:inbound-message aspect:social aspect:chat) at situation:inbound-message:  read-back: 0 exchange(s), 0 reply message(s) from account 3 — last decisions: p4 12/eligible_transfer | p3 3/published_capability:build | p4 12/eligible_transfer | p3 3/published_capability:build | p4 12/eligible_transfer | p3 1/always_available
 
-change answered past its freshness window is history, not an opening', function (): void {
-     70▕     $now = CarbonImmutable::parse(SOCIAL_CONTACT_NOW);
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 20 accounts: 512 sessions on 20 accounts
+  backlog: 76 work item(s) more than a minute late
+  sessions chose: QueueUnits 21%, DoNothing 18%, ThrottleMine 16%, Build 15%, Transfer 12%, Colonize 9%, Spy 3%, Expedition 2%, Research 2%
+  host orders: buildings 821, research 91, units 105
+  missions launched: Espionage 18, Expedition 10, Colonisation 8, Transport 11
+  work (kind: state count):
+    QueueUnits: Completed 112, Pending 13
+    BuildFirstBuilding: Completed 980, Retry 11, Pending 64
+    Colonize: Completed 45, Pending 4, Retry 1
+    Spy: Completed 19
+    RunSession: Completed 512, Retry 4, Pending 16
+    QueueResearch: Completed 130, Pending 9
+    Expedition: Completed 12, Retry 1, Pending 1
+    SetMinePercent: Completed 90
+    Transfer: Completed 59, Pending 2
+  refused: 
+    48 × DispatchFleet: no_transport_fleet
+    35 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    7 × QueueUnits: queue_not_created
+    6 × QueueResearch: already_researching
+    5 × QueueBuilding: Maximum number of items already in queue.
+    2 × DispatchFleet: You are conducting too many expeditions at the same time.
+    1 × DispatchFleet: Maximum number of fleets reached.
+    1 × QueueBuilding: shipyard_busy
+    1 × CreateColony: Maximum number of fleets reached.
+    1 × CreateColony: This mission is not possible.
+--- ogamex why subject (live, now):
+WHY 3 (Miner): what the next session will see
 
-  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:66
+  published: research
+  NOT published: build, queue_units, colonize, spy, throttle_mine
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\SocialContactInitiationTest > an exchang…   
-  Failed asserting that 5 is identical to 0.
+  player_id                    3
+  observed_at                  1790901009
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             3
+  colonize_eligible            true
+  target_reports               10 item(s): [{"report_id":17,"observed_at":1790892964,"expires_at":1790979364,"confidence":0.4413194444444445,"travel_cost":0.021861111111111112,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":false},{"report_id":15,"observe
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      5 planet(s)
 
-  at Modules/AI/tests/Feature/SocialContactInitiationTest.php:76
-     72▕ 
-     73▕     $answered = app(EvaluateAiSocialExchangeAction::class)->handle($cue->id, 0.0, $now);
-     74▕ 
-     75▕     expect($answered->state)->toBe(AiSocialExchangeState::Responded)
-  ➜  76▕         ->and(socialContactOpenings($cue->id))->toBe(0);
-     77▕ });
-     78▕ 
-     79▕ test('an answer still owed between the two stops a reach-out, at the cap and past it', function (int $pending): void {
-     80▕     $now = CarbonImmutable::parse(SOCIAL_CONTACT_NOW);
-
-  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:76
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\SocialContactInitiationTest > an answer…    
-  Failed asserting that 5 is identical to 0.
-
-  at Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
-     87▕ 
-     88▕     $answered = app(EvaluateAiSocialExchangeAction::class)->handle($cue->id, 0.0, $now);
-     89▕ 
-     90▕     expect($answered->state)->toBe(AiSocialExchangeState::Responded)
-  ➜  91▕         ->and(socialContactOpenings($cue->id))->toBe(0);
-     92▕ })->with([
-     93▕     'at the cap' => 1,
-     94▕     'past the cap' => 2,
-     95▕ ]);
-
-  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
-
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\SocialContactInitiationTest > an answer…    
-  Failed asserting that 5 is identical to 0.
-
-  at Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
-     87▕ 
-     88▕     $answered = app(EvaluateAiSocialExchangeAction::class)->handle($cue->id, 0.0, $now);
-     89▕ 
-     90▕     expect($answered->state)->toBe(AiSocialExchangeState::Responded)
-  ➜  91▕         ->and(socialContactOpenings($cue->id))->toBe(0);
-     92▕ })->with([
-     93▕     'at the cap' => 1,
-     94▕     'past the cap' => 2,
-     95▕ ]);
-
-  1   Modules/AI/tests/Feature/SocialContactInitiationTest.php:91
-
-
-  Tests:    5 failed (11 assertions)
-  Duration: 1.46s
+  decision: Research
+    Research      54.1  resource_need=30, safety=10, archetype_preference=17.5, seeded_variation=-3.4
+    DoNothing      8.4  safety=5, seeded_variation=3.4
+  turned down by the candidate factory: 
+    report:17: storage_not_full
+    report:15: storage_not_full
+    report:14: storage_not_full
+    report:13: storage_not_full
+    report:12: storage_not_full
+    report:11: storage_not_full
+    report:10: storage_not_full
+    report:8: storage_not_full
+    report:6: storage_not_full
+    report:4: storage_not_full

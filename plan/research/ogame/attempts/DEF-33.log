@@ -1,5 +1,4 @@
 the delivered change passed its tests but its live proof failed:
 PASS test:RaidDepthTest 4s
-PASS test:RaidFromReportSituationTest 2s
-FAIL aspect:raids 0s —  FAIL raids 0 floor 1 raids a profitable target
-PROOF: FAIL DEF-33 (test:RaidDepthTest test:RaidFromReportSituationTest aspect:raids) at aspect:raids:  FAIL raids 0 floor 1 raids a profitable target
+FAIL test:RaidFromReportSituationTest 2s — {"tool":"pest","result":"failed","tests":2,"passed":1,"assertions":2,"duration_ms":963,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\RaidFromReportSituationTest::__pest_evaluable_a_report_on_an_undefended_inactive_with_stock_and_cargo_ships_on_hand_is_a_raid","file":"/v
+PROOF: FAIL DEF-33 (test:RaidDepthTest test:RaidFromReportSituationTest aspect:raids) at test:RaidFromReportSituationTest: {"tool":"pest","result":"failed","tests":2,"passed":1,"assertions":2,"duration_ms":963,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\RaidFromReportSituationTest::__pest_evaluable_a_report_on_an_undefended_inactive_with_stock_and_cargo_ships_on_hand_is_a_raid","file":"/v

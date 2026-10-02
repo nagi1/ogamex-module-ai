@@ -1,0 +1,3 @@
+PASS test:DefenseNeedCeilingTest 2s
+FAIL? invariant:WALL_CEILING 29s —  ! [WALL_CEILING] planet 3 holds 24,845 defence units
+PROOF: PASS DEF-001 (test:DefenseNeedCeilingTest invariant:WALL_CEILING?)

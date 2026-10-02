@@ -1,0 +1,3 @@
+PASS test:AllianceFitTest 2s
+PASS? invariant:ALLIANCE_SHARE 28s
+PROOF: PASS DEF-002 (test:AllianceFitTest invariant:ALLIANCE_SHARE?)

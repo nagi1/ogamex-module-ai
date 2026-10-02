@@ -1,10 +1,10 @@
-PASS test:ExpeditionSituationTest 6s
+PASS test:ExpeditionSituationTest 3s
 PASS test:DebrisRecycleSituationTest 1s
-PASS test:ColonisationSituationTest 1s
+PASS test:ColonisationSituationTest 2s
 PASS test:ShipyardSituationTest 2s
-PASS test:RaidFromReportSituationTest 1s
+PASS test:RaidFromReportSituationTest 2s
 PASS test:ShipyardRestraintSituationTest 3s
-FAIL aspect:fleet_breadth 0s —  FAIL fleet_breadth 100 floor 80 uses the fleet for more than one thing (expeditions are at most 80% of missions)
-FAIL aspect:raids 1s —  FAIL raids 0 floor 2 raids a profitable target
+PASS aspect:fleet_breadth 0s
+PASS aspect:raids 1s
 PASS aspect:economy 0s
-PROOF: FAIL ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy) at aspect:fleet_breadth:  FAIL fleet_breadth 100 floor 80 uses the fleet for more than one thing (expeditions are at most 80% of missions)
+PROOF: PASS ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy)

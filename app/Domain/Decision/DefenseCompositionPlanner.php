@@ -145,6 +145,21 @@ class DefenseCompositionPlanner
     }
 
     /**
+     * How many more defence units this planet may hold before it reaches the ceiling the behaviour
+     * file states, or null when the file states none. The planner's own gate reads the same number;
+     * the unit executor asks again because a session backlog lets several sessions order the same
+     * shortfall before any of those orders reaches the yard.
+     */
+    public function remainingCeiling(PlanetService $planet): ?int
+    {
+        $ceiling = $this->ceilingUnits();
+
+        return $ceiling === null
+            ? null
+            : $ceiling - $this->heldDefenseUnits($planet->getDefenseUnits(), $this->pendingDefence($planet));
+    }
+
+    /**
      * Defence this planet has already paid for and is waiting on, by machine name.
      *
      * The host takes the whole price when the order is placed, so an order in the yard is a wall the

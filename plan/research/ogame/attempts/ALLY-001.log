@@ -1,48 +1,55 @@
 the delivered change passed its tests but its live proof failed:
-PASS test:AllianceApplicationSituationTest 1s
-PASS test:AllianceLeaderSituationTest 2s
-PASS situation:alliance-application 54s
+PASS test:AllianceApplicationSituationTest 2s
+PASS test:AllianceLeaderSituationTest 1s
+PASS situation:alliance-application 128s
 FAIL aspect:alliance 1s —  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
 PROOF: FAIL ALLY-001 (test:AllianceApplicationSituationTest test:AllianceLeaderSituationTest situation:alliance-application aspect:alliance) at aspect:alliance:  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
 
 LIVE EVIDENCE
 --- ogamex pulse 30 (live, now):
-PULSE last 30 min, 20 accounts: 431 sessions on 20 accounts
-  backlog: 74 work item(s) more than a minute late, oldest 9 min — live verdicts read worker lag
-  sessions chose: QueueUnits 77%, DoNothing 13%, ThrottleMine 6%, Build 2%, Expedition 1%, Research 0%
-  host orders: buildings 381, research 29, units 313
-  missions launched: Expedition 5
+PULSE last 30 min, 20 accounts: 730 sessions on 20 accounts
+  backlog: 80 work item(s) more than a minute late
+  sessions chose: QueueUnits 66%, Expedition 12%, Colonize 9%, Transfer 5%, DoNothing 3%, Research 2%, Build 1%, ThrottleMine 1%
+  host orders: buildings 184, research 45, units 1044
+  missions launched: Expedition 13, Transport 4, Colonisation 1
   work (kind: state count):
-    BuildFirstBuilding: Completed 439, Retry 4, Pending 28
-    QueueUnits: Completed 329, Retry 5, Pending 22
-    RunSession: Completed 431, Pending 18, Retry 2
-    QueueResearch: Completed 50, Pending 2, Retry 1
-    SetMinePercent: Completed 24, Retry 1, Pending 2
-    Expedition: Completed 5, Retry 1
+    QueueUnits: Completed 493, Retry 4, Pending 14
+    QueueResearch: Completed 274, Retry 5, Pending 12
+    Expedition: Completed 89, Pending 2
+    BuildFirstBuilding: Completed 344, Retry 8, Pending 31
+    Colonize: Completed 71, Pending 2
+    RunSession: Completed 730, Retry 3, Pending 17
+    SetMinePercent: Completed 5, Pending 1
+    Transfer: Completed 35
   refused: 
-    8 × QueueUnits: queue_not_created
-    1 × QueueBuilding: shipyard_busy
+    75 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    70 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    31 × QueueBuilding: Maximum number of items already in queue.
+    31 × DispatchFleet: no_transport_fleet
+    24 × QueueUnits: queue_not_created
+    1 × DispatchFleet: You are conducting too many expeditions at the same time.
 --- ogamex why subject (live, now):
 WHY 3 (Miner): what the next session will see
 
-  published: queue_units
-  NOT published: build, research, colonize, spy, throttle_mine
+  published: 
+  NOT published: build, research, queue_units, colonize, spy, throttle_mine
 
   player_id                    3
-  observed_at                  1790886730
+  observed_at                  1790936535
   account_state                "active"
   recovery_factor              0
-  fleet_slots_free             1
+  fleet_slots_free             13
   colonize_eligible            true
-  target_reports               0 item(s)
+  target_reports               10 item(s): [{"report_id":17,"observed_at":1790892964,"expires_at":1790979364,"confidence":0,"travel_cost":0.021861111111111112,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":false},{"report_id":15,"observed_at":1790892960,
   fleetsave_eligible           false
   fleetsave_skip_reason        null
   inbound_fleets               0 item(s)
   reaction_wake_at             null
   recall_eligible              false
-  planets                      2 planet(s)
+  planets                      7 planet(s)
 
-  decision: QueueUnits
-    QueueUnits    38.1  resource_need=30, safety=10, seeded_variation=-1.9
-    DoNothing      8.5  safety=5, seeded_variation=3.5
+  decision: Transfer
+    Expedition    39.5  resource_need=9, safety=30, seeded_variation=0.5
+    Transfer      30.5  resource_need=12, safety=15, seeded_variation=3.5
+    DoNothing      8.0  safety=5, seeded_variation=3
   turned down by the candidate factory: nothing

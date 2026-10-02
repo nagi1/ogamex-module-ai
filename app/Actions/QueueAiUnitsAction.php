@@ -3,7 +3,9 @@
 namespace Modules\AI\Actions;
 
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Modules\AI\Contracts\QueueAiUnits;
+use Modules\AI\Domain\Decision\DefenseCompositionPlanner;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -12,6 +14,7 @@ use OGame\Models\Planet;
 use OGame\Models\UnitQueue;
 use OGame\Services\ObjectService;
 use OGame\Services\PlayerGameStateService;
+use OGame\Services\PlayerService;
 use OGame\Services\UnitQueueService;
 
 /**
@@ -57,6 +60,10 @@ class QueueAiUnitsAction implements QueueAiUnits
                 return AiActionResult::rejected(AiQueueActionReason::NotAUnit);
             }
 
+            if ($unit->type === GameObjectType::Defense) {
+                return $this->queueDefence($player, $planetId, $unitId, $amount);
+            }
+
             $this->unitQueueService->add($planet, $unitId, $amount);
             $queueId = UnitQueue::query()
                 ->where('planet_id', $planetId)
@@ -69,5 +76,39 @@ class QueueAiUnitsAction implements QueueAiUnits
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * The defence order, trimmed to what the planet's standing wall has left of the behaviour file's
+     * ceiling, with the reading and the writing under one lock.
+     *
+     * The planner refuses a wall at the ceiling, but a session backlog runs several intents on the
+     * same planet at once and each reads the same shortfall before any of them reaches the yard, so
+     * the ceiling is applied where the units are written. The planet row is locked across the read
+     * and the write, so a worker that waited sees what the one before it bought (live 2 Oct 2026: a
+     * planet the file caps at 20,000 units held 24,900, one batch per concurrent worker).
+     */
+    private function queueDefence(PlayerService $player, int $planetId, int $unitId, int $amount): AiActionResult
+    {
+        return DB::transaction(function () use ($player, $planetId, $unitId, $amount): AiActionResult {
+            DB::table('planets')->where('id', $planetId)->lockForUpdate()->value('id');
+
+            $planet = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);
+            $remaining = app(DefenseCompositionPlanner::class)->remainingCeiling($planet);
+            $amount = $remaining === null ? $amount : min($amount, max(0, $remaining));
+            if ($amount < 1) {
+                return AiActionResult::rejected(AiQueueActionReason::NothingQueueable);
+            }
+
+            $this->unitQueueService->add($planet, $unitId, $amount);
+            $queueId = UnitQueue::query()
+                ->where('planet_id', $planetId)
+                ->where('object_id', $unitId)
+                ->where('processed', 0)
+                ->latest('id')
+                ->value('id');
+
+            return $queueId === null ? AiActionResult::rejected(AiQueueActionReason::QueueNotCreated) : AiActionResult::queued($queueId);
+        });
     }
 }

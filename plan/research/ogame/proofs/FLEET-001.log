@@ -1,0 +1,4 @@
+PASS test:InboundAttackSessionSituationTest 2s
+PASS test:FleetSaveBeforeBedSituationTest 9s
+FAIL? aspect:fleet_save 0s —  FAIL fleet_save 0 floor 1 saves the fleet before going offline or under attack
+PROOF: PASS FLEET-001 (test:InboundAttackSessionSituationTest test:FleetSaveBeforeBedSituationTest aspect:fleet_save?)

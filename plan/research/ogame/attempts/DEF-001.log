@@ -1,41 +1,53 @@
-DefenseNeedCeilingTest: [90mTests:[39m    [31;1m4 failed[39;22m[90m (0 assertions)[39m
+the delivered change passed its tests but its live proof failed:
+FAIL invariant:WALL_CEILING 25s —  ! [WALL_CEILING] planet 3 holds 24,900 defence units
+PROOF: FAIL DEF-001 (invariant:WALL_CEILING) at invariant:WALL_CEILING:  ! [WALL_CEILING] planet 3 holds 24,900 defence units
 
-nthesizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 167, 20, 121, 0, 0, 0, 0, 0, 0, 15481, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 20 accounts: 642 sessions on 20 accounts
+  backlog: 66 work item(s) more than a minute late
+  sessions chose: QueueUnits 67%, Expedition 11%, Colonize 9%, Transfer 5%, DoNothing 4%, Research 2%, Build 1%, ThrottleMine 1%
+  host orders: buildings 184, research 38, units 1017
+  missions launched: Expedition 10, Transport 4, Colonisation 1
+  work (kind: state count):
+    QueueUnits: Completed 437, Pending 12, Retry 3
+    QueueResearch: Completed 238, Retry 7, Pending 12
+    BuildFirstBuilding: Completed 326, Retry 6, Pending 30
+    RunSession: Completed 642, Retry 1, Pending 19
+    SetMinePercent: Completed 4, Pending 1
+    Expedition: Completed 74, Pending 2
+    Transfer: Completed 30
+    Colonize: Completed 60, Pending 2
+  refused: 
+    63 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    59 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    27 × QueueBuilding: Maximum number of items already in queue.
+    26 × DispatchFleet: no_transport_fleet
+    23 × QueueUnits: queue_not_created
+    1 × DispatchFleet: You are conducting too many expeditions at the same time.
+--- ogamex why subject (live, now):
+WHY 3 (Miner): what the next session will see
 
-  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
-     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
-     50▕ 
-     51▕             $this->recordsHaveBeenModified();
-     52▕ 
-  ➜  53▕             $result = $statement->execute();
-     54▕ 
-     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
-     56▕ 
-     57▕             return $result;
+  published: queue_units
+  NOT published: build, research, colonize, spy, throttle_mine
 
-      +15 vendor frames 
-  16  Modules/AI/tests/Feature/DefenseNeedCeilingTest.php:64
-  17  Modules/AI/tests/Feature/DefenseNeedCeilingTest.php:149
+  player_id                    3
+  observed_at                  1790936582
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             13
+  colonize_eligible            true
+  target_reports               10 item(s): [{"report_id":17,"observed_at":1790892964,"expires_at":1790979364,"confidence":0,"travel_cost":0.021861111111111112,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":false},{"report_id":15,"observed_at":1790892960,
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      7 planet(s)
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\DefenseNeedCeilingTest >…  QueryException   
-  SQLSTATE[HY000]: General error: 1364 Field 'galaxy' doesn't have a default value (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test, SQL: insert into `planets` (`name`, `metal_mine`, `metal_mine_percent`, `solar_plant`, `solar_plant_percent`, `deuterium_synthesizer`, `deuterium_synthesizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 239, 67, 46, 0, 0, 0, 0, 0, 0, 15483, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
-
-  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
-     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
-     50▕ 
-     51▕             $this->recordsHaveBeenModified();
-     52▕ 
-  ➜  53▕             $result = $statement->execute();
-     54▕ 
-     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
-     56▕ 
-     57▕             return $result;
-
-      +15 vendor frames 
-  16  Modules/AI/tests/Feature/DefenseNeedCeilingTest.php:64
-  17  Modules/AI/tests/Feature/DefenseNeedCeilingTest.php:158
-
-
-  Tests:    4 failed (0 assertions)
-  Duration: 0.98s
+  decision: Expedition
+    QueueUnits    41.0  resource_need=30, safety=10, seeded_variation=1
+    Expedition    39.2  resource_need=9, safety=30, seeded_variation=0.2
+    Transfer      27.5  resource_need=12, safety=15, seeded_variation=0.5
+    DoNothing      6.7  safety=5, seeded_variation=1.7
+  turned down by the candidate factory: nothing

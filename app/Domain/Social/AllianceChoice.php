@@ -176,6 +176,7 @@ class AllianceChoice
     /** How much the account is around, from its own profile; null when it states no pace. */
     private function band(int $playerId): int|null
     {
+        // The pace the club or applicant states comes from its own profile row.
         return AiProfile::query()->where('player_id', $playerId)->first()?->activity_band?->value;
     }
 

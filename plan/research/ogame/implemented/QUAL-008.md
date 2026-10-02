@@ -1,4 +1,5 @@
-# QUAL-008 implemented 2026-10-01 21:44 UTC
+# QUAL-008 implemented 2026-10-01 22:58 UTC
 
-- tests/Feature/Situations/ColonisationWithoutShipTest.php
-- app/Domain/Decision/QueueableColonyPlanner.php
+- app/Domain/Decision/FacilityChain.php
+- tests/Feature/BuildingChainReachabilityTest.php
+- tests/Feature/SensorPhalanxTest.php

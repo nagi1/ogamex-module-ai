@@ -1,2 +1,2 @@
-these files are not called by any runtime code, so no account can ever execute them: app/Domain/Decision/PillageCap.php.
-Do not write a new class. EDIT the planner, engine or action that already owns this decision, and have the Feature test drive that path. A data file under resources/behavior must be loaded by name in that class.
+the writer used its 40 turns before a check passed.
+proof unchanged: test:AI {"tool":"pest","result":"failed","tests":1457,"passed":1396,"assertions":7438,"duration_ms":107208,"failed":43,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\AIRouteTest::__pest_evaluable_the_page_renders_the_pilot_window_from_the_same_answer_the_report_command_prints","file":"/var/www/Modules

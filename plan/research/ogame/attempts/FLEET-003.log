@@ -1,2 +1,57 @@
-the scenario inbound-attack did not hold:
-Scenario field "player_id" must be a scalar value.
+the delivered change passed its tests but its live proof failed:
+PASS test:InboundAttackSituationTest 1s
+FAIL situation:inbound-attack 183s —  read-back: 0 fleet-save work item(s) () — last decisions: p4 12/eligible_transfer | p3 11/eligible_expedition | p4 12/eligible_transfer | p3 11/eligible_expedition | p4 5/published_capability:queue_units | p3 1/always_available
+FAIL aspect:fleet_save 3s —  FAIL fleet_save 0 floor 1 saves the fleet before going offline or under attack
+PROOF: FAIL FLEET-003 (test:InboundAttackSituationTest situation:inbound-attack aspect:fleet_save) at situation:inbound-attack:  read-back: 0 fleet-save work item(s) () — last decisions: p4 12/eligible_transfer | p3 11/eligible_expedition | p4 12/eligible_transfer | p3 11/eligible_expedition | p4 5/published_capability:queue_units | p3 1/always_available
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 20 accounts: 517 sessions on 20 accounts
+  backlog: 44 work item(s) more than a minute late, oldest 6 min — live verdicts read worker lag
+  sessions chose: QueueUnits 59%, Expedition 14%, Transfer 11%, Colonize 8%, DoNothing 4%, Research 2%, Build 1%, ThrottleMine 1%, Raid 0%
+  host orders: buildings 176, research 39, units 897
+  missions launched: Expedition 10, Transport 4, Colonisation 1
+  work (kind: state count):
+    Expedition: Completed 71, Pending 2
+    BuildFirstBuilding: Completed 310, Pending 18, Retry 8
+    QueueUnits: Completed 309, Retry 3, Pending 12
+    QueueResearch: Completed 193, Retry 4, Pending 10
+    RunSession: Completed 517, Pending 17, Retry 2, Leased 1
+    Colonize: Completed 43, Pending 1
+    Transfer: Completed 56, Pending 1
+    SetMinePercent: Completed 5
+    Raid: Retry 1, Pending 1
+  refused: 
+    60 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    52 × DispatchFleet: no_transport_fleet
+    42 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    27 × QueueBuilding: Maximum number of items already in queue.
+    16 × QueueUnits: queue_not_created
+    1 × DispatchFleet: You are conducting too many expeditions at the same time.
+--- ogamex why subject (live, now):
+WHY 3 (Miner): what the next session will see
+
+  published: queue_units
+  NOT published: build, research, colonize, spy, throttle_mine
+
+  player_id                    3
+  observed_at                  1790936808
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             13
+  colonize_eligible            true
+  target_reports               10 item(s): [{"report_id":17,"observed_at":1790892964,"expires_at":1790979364,"confidence":0,"travel_cost":0.021861111111111112,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":false},{"report_id":15,"observed_at":1790892960,
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      7 planet(s)
+
+  decision: QueueUnits
+    Expedition    36.5  resource_need=9, safety=30, seeded_variation=-2.5
+    QueueUnits    36.0  resource_need=30, safety=10, seeded_variation=-4
+    Recycle       25.7  resource_need=12, safety=15, seeded_variation=-1.3
+    Transfer      23.6  resource_need=12, safety=15, seeded_variation=-3.4
+    DoNothing      5.9  safety=5, seeded_variation=0.9
+  turned down by the candidate factory: nothing
