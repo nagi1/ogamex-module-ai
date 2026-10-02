@@ -538,22 +538,14 @@ class RaidPlanner
     }
 
     /**
-     * Which targets a phase may raid (RV-011): inactives in every phase, active
-     * players once a colony exists, and their fleets only once astrophysics 23 is
-     * behind the account. A probed-empty active target (ships is []) is a farm;
-     * an active target with ships, or unseen ships (null), waits for the late phase.
+     * Which targets an account may raid: inactives from the first day, every other player once the
+     * account has a colony, since an experienced player fights whoever the simulation says is worth it.
+     * Whether a fight is worth it is the Rust screen's answer below (win odds and net profit after
+     * losses), never a milestone the account must reach first.
      */
     private function targetEligible(GamePhase $phase, EspionageReport $report): bool
     {
-        if ($phase === GamePhase::Late) {
-            return true;
-        }
-
-        if ($this->targetInactive($report)) {
-            return true;
-        }
-
-        return $phase === GamePhase::Mid && $report->ships === [];
+        return $this->targetInactive($report) || $phase !== GamePhase::Early;
     }
 
     /**

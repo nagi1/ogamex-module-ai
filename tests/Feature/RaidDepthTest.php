@@ -575,7 +575,7 @@ test('a colonised account raids an active, fleet-less player', function (): void
     expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
 });
 
-test('an active fleet still waits for the late phase after colonising', function (): void {
+test('a colonised account fights an active fleet it beats, without waiting for a research milestone', function (): void {
     raidDepthProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetAddUnit('small_cargo', 20);
@@ -586,6 +586,21 @@ test('an active fleet still waits for the late phase after colonising', function
     $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $coordinates = $foreign->getPlanetCoordinates();
     $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], null, ['light_fighter' => 5]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeInstanceOf(QueueableRaid::class);
+});
+
+test('a colonised account refuses an active fleet the simulation says would beat it', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $this->planetAddUnit('light_fighter', 5);
+    $foreign = $this->createForeignPlanet();
+    makeTargetActive($foreign);
+    $foreign->addUnit('battle_ship', 200);
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], null, ['battle_ship' => 200]);
 
     expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeNull();
 });
