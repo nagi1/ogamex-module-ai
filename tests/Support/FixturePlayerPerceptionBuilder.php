@@ -12,12 +12,17 @@ use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
  */
 final class FixturePlayerPerceptionBuilder extends PlayerPerceptionBuilder
 {
+    /** The absence the session handed in, so a test can read what the account believed was ahead. */
+    public ?int $lastAbsenceMinutes = null;
+
     public function __construct(private readonly PerceptionSnapshot $snapshot)
     {
     }
 
     public function build(int $playerId, ?int $upcomingAbsenceMinutes = null): PerceptionSnapshot
     {
+        $this->lastAbsenceMinutes = $upcomingAbsenceMinutes;
+
         return $this->snapshot;
     }
 }

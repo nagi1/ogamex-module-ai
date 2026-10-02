@@ -62,7 +62,9 @@ class SessionDecisionService
         // is offered only when the gap until the next session is a real one.
         $plan = $this->sessionPlanner->plan($profile, $now, $schedule->generation);
         // Carbon 3 signs its differences: measured from the session's end forward to the next login, the gap is positive.
-        $upcomingAbsenceMinutes = (int) $plan->sessionEndsAt->diffInMinutes($plan->nextDueAt);
+        // The login that really comes next, not the routine's: an accelerated universe is back in seconds,
+        // and a save before an absence that never happens only parks a fleet that should be fighting.
+        $upcomingAbsenceMinutes = max(0, (int) $plan->sessionEndsAt->diffInMinutes($this->nextDueTimeCalculator->fromSession($plan, $now)));
 
         $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
         $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;

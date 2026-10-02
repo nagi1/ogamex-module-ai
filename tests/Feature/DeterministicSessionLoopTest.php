@@ -97,6 +97,22 @@ test('an explicit session interval accelerates only the successor schedule', fun
     expect(app(NextDueTimeCalculator::class)->fromSession($plan, $now)->equalTo($now->addSeconds(5)))->toBeTrue();
 });
 
+test('an accelerated session sees the absence it will really have, not the routine gap', function (): void {
+    config(['ai.population.session_interval_seconds' => 5]);
+    $now = CarbonImmutable::create(2026, 9, 11, 12, 0, 0, 'UTC');
+    Date::setTestNow($now);
+
+    $profile = aiDeterministicProfile(AiArchetype::Miner, $this->currentUserId);
+    $builder = $this->app->makeWith(FixturePlayerPerceptionBuilder::class, [
+        'snapshot' => aiDeterministicSnapshot($this->currentUserId, $this->currentPlanetId, $now, [], false),
+    ]);
+    $this->app->instance(PlayerPerceptionBuilder::class, $builder);
+
+    aiDeterministicRun($profile);
+
+    expect($builder->lastAbsenceMinutes)->toBeLessThan(2);
+});
+
 test('a hostile reaction wake pulls the next session earlier (V2)', function (): void {
     config(['ai.population.session_interval_seconds' => 3600]);
     $now = CarbonImmutable::create(2026, 9, 11, 12, 0, 0, 'UTC');
