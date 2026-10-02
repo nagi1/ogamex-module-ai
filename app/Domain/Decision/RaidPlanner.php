@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Attack\DailyAttackBudget;
 use Modules\AI\Domain\Raid\RaidEstimate;
 use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiRaidExperienceFeature;
@@ -577,14 +578,13 @@ class RaidPlanner
      */
     private function withinBashingLimit(int $playerId, int $targetPlanetId): bool
     {
-        $attacks = FleetMission::query()
-            ->where('user_id', $playerId)
-            ->where('planet_id_to', $targetPlanetId)
-            ->where('mission_type', AttackMission::getTypeId())
-            ->where('time_arrival', '>=', now()->subHours(self::BASHING_WINDOW_HOURS)->timestamp)
-            ->count();
-
-        return $attacks < self::BASHING_LIMIT;
+        return ! app(DailyAttackBudget::class)->exhausted(
+            playerId: $playerId,
+            targetPlanetId: $targetPlanetId,
+            missionType: AttackMission::getTypeId(),
+            cap: self::BASHING_LIMIT,
+            windowHours: self::BASHING_WINDOW_HOURS,
+        );
     }
 
     /**

@@ -1,0 +1,36 @@
+# The fit an account weighs before asking a club to take it in (DEF-002).
+#
+# A player joins a club they can talk to and whose pace they can keep up with, not the biggest one:
+# the fit is the applicant's language and activity band against the club's, both read from host
+# state — the club's through its founder, its `users.lang` and its profile's `activity_band`. A
+# club no account of this language and pace fits is never asked, so the account stays free for the
+# pass's founder half instead of joining the crowd: the clubs that then appear each carry the
+# language and pace of the archetype that founded them, which is how a cohort ends up in several
+# clubs rather than one. No member ceiling: a ceiling is the least player-authentic of the three.
+#
+# source: ALLIANCE_SHARE
+
+fit:
+  language:
+    match: 3.0
+    mismatch: -3.0
+
+  band:
+    # Steps between the applicant's AiActivityBand and the club's: 0 is the same pace, 1 is a
+    # neighbour still able to keep up, anything further is not a fit at all.
+    tolerance: 1
+    match: 2.0
+    neighbour: 1.0
+    mismatch: -2.0
+
+# What the account's rank against the population says it can reach: a weak account aims at a
+# catch-all, a strong one at a high points-per-member core, a mid one balances the two.
+tier:
+  strong_rank_ratio: 0.15
+  newbie_rank_ratio: 0.5
+  strong_quality_weight: 2.0
+  newbie_size_weight: 2.0
+  mid_quality_weight: 1.0
+  mid_size_weight: 1.0
+  size_cap: 100
+  pitch: 1.0

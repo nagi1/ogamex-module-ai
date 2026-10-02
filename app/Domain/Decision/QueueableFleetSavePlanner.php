@@ -8,6 +8,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\RandomSource;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\DeploymentMission;
+use OGame\GameMissions\EspionageMission;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
 use OGame\Models\User;
@@ -51,7 +52,41 @@ class QueueableFleetSavePlanner
         // The reactive save (an inbound hostile) is not a matter of taste: a save under
         // attack always wins, so it uses the base band. Aggression only moves the proactive
         // save below, where the account chooses how much fleet it is willing to risk.
-        return $this->saveFor($player, $planets, $profile->archetype);
+        return $this->saveFor($player, $planets, $profile->archetype, 0.5, null, $this->threatenedPlanetIds($player));
+    }
+
+    /**
+     * The own planets a hostile fleet is inbound to, from the host's real fleet picture:
+     * a mission aimed at one of the account's planets, sent by someone else and still
+     * unprocessed. An inbound hostile is owned by the attacker, so the account's own
+     * missions can never answer what a reactive save has to move (V6). Which mission
+     * types are hostile is the host's own reading — the perception's, not a module list.
+     *
+     * @return array<int, true>
+     */
+    private function threatenedPlanetIds(PlayerService $player): array
+    {
+        $planetIds = [];
+        foreach ($player->planets->all() as $planet) {
+            $planetIds[] = $planet->getPlanetId();
+        }
+
+        if ($planetIds === []) {
+            return [];
+        }
+
+        $threatened = [];
+        foreach (FleetMission::query()
+            ->whereIn('planet_id_to', $planetIds)
+            ->where('user_id', '!=', $player->getId())
+            ->where('processed', 0)
+            ->where('canceled', 0)
+            ->where('mission_type', '!=', EspionageMission::getTypeId())
+            ->get(['planet_id_to']) as $mission) {
+            $threatened[(int) $mission->planet_id_to] = true;
+        }
+
+        return $threatened;
     }
 
     /**
@@ -88,10 +123,11 @@ class QueueableFleetSavePlanner
 
     /**
      * @param array<int, PlanetService> $planets
+     * @param array<int, true> $preferredPlanetIds
      */
-    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null): ?QueueableFleetSave
+    private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null, array $preferredPlanetIds = []): ?QueueableFleetSave
     {
-        $origin = $this->origin($planets);
+        $origin = $this->origin($planets, $preferredPlanetIds);
         if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
             return null;
         }
@@ -266,12 +302,21 @@ class QueueableFleetSavePlanner
     }
 
     /**
-     * The first planet carrying a movable fleet.
+     * The first planet carrying a movable fleet, preferring the planets a hostile
+     * is inbound to: a reactive save has to move the fleet the attack is aimed
+     * at, not whichever own body happens to come first in the host's list.
      *
      * @param array<int, PlanetService> $planets
+     * @param array<int, true> $preferredPlanetIds
      */
-    private function origin(array $planets): ?PlanetService
+    private function origin(array $planets, array $preferredPlanetIds = []): ?PlanetService
     {
+        foreach ($planets as $planet) {
+            if (isset($preferredPlanetIds[$planet->getPlanetId()]) && $planet->getShipUnits()->units !== []) {
+                return $planet;
+            }
+        }
+
         foreach ($planets as $planet) {
             if ($planet->getShipUnits()->units !== []) {
                 return $planet;

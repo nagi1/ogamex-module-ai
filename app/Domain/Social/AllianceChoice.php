@@ -3,43 +3,61 @@
 namespace Modules\AI\Domain\Social;
 
 use Modules\AI\Enums\AiToMStance;
+use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\PsychSimTheoryOfMind;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
 use OGame\Models\AllianceMember;
 use OGame\Models\Highscore;
+use OGame\Models\User;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Picks the alliance a human-like account would apply to, from host data alone.
  *
- * The join decision is "how good am I, and which tier will actually take me" (alliance FAQ):
- * a weak account lands in a mass/open alliance, a mid account in a normal active one, and a
- * strong account in a high points-per-member core. The account's rank against the whole
- * population picks the tier; the host's own alliance rows supply size, points and the pitch.
- * An alliance that already rejected the account is never re-applied to.
+ * The join decision is "which club will actually take me, and can I keep up with it" (alliance
+ * FAQ). The account's rank against the population stays the first filter: a weak account looks
+ * for a mass/open club, a strong one for a high points-per-member core, a mid one balances the
+ * two (all in resources/behavior/alliance_fit.yaml). Among the clubs the rank admits, the fit rule
+ * decides: the applicant's language and activity band against the club's, both read from host
+ * state — the club's through its founder. A club no account of this language and pace fits is
+ * never asked, so the account stays free for the pass's founder half; the club that then appears
+ * carries that account's language and pace, so a cohort spreads over clubs instead of piling into
+ * one. An alliance that already rejected the account is never re-applied to.
  */
 class AllianceChoice
 {
-    private const STRONG_RANK_RATIO = 0.15;
+    private const FIT_FILE = '/resources/behavior/alliance_fit.yaml';
 
-    private const NEWBIE_RANK_RATIO = 0.5;
+    /** @var array<string, mixed>|null */
+    private array|null $policy = null;
+
+    private bool $policyRead = false;
 
     public function choose(int $playerId): ?Alliance
     {
+        $policy = $this->policy();
         $rank = (int) Highscore::query()->where('player_id', $playerId)->value('general_rank');
         $population = (int) Highscore::query()->where('general_rank', '>', 0)->count();
 
-        if ($rank <= 0 || $population <= 0) {
+        if ($policy === null || $rank <= 0 || $population <= 0) {
             return null;
         }
 
         $ratio = $rank / $population;
+        $account = $this->accountFit($playerId);
         $best = null;
-        $bestScore = -1.0;
+        $bestScore = -INF;
 
         foreach ($this->openCandidates($playerId) as $alliance) {
-            $score = $this->score($alliance, $ratio);
+            $club = $this->clubFit($alliance);
+
+            if (! $this->fits($account, $club, $policy['fit'])) {
+                continue;
+            }
+
+            $score = $this->tierScore($alliance, $ratio, $policy['tier']) + $this->fitScore($account, $club, $policy['fit']);
 
             if ($score > $bestScore) {
                 $best = $alliance;
@@ -50,10 +68,47 @@ class AllianceChoice
         return $best;
     }
 
-    /** Whether the account has at least one open alliance it has not already been rejected by. */
+    /**
+     * Whether some open alliance fits the account. Without one the pass's founder half gives the
+     * account a club of its own, whose language and pace are the account's own — so the cohort's
+     * clubs are founded by accounts of different archetypes instead of all draining into the
+     * first club that exists.
+     */
     public function hasOpenCandidate(int $playerId): bool
     {
-        return $this->openCandidates($playerId) !== [];
+        $policy = $this->policy();
+
+        if ($policy === null) {
+            return $this->openCandidates($playerId) !== [];
+        }
+
+        $account = $this->accountFit($playerId);
+
+        foreach ($this->openCandidates($playerId) as $alliance) {
+            if ($this->fits($account, $this->clubFit($alliance), $policy['fit'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the club the account sits in still fits it: the same language and pace rule that picked
+     * it. A club that does not is one a player leaves, which is how a cohort that all joined one club
+     * spreads out instead of staying piled into it.
+     */
+    public function currentClubFits(int $playerId): bool
+    {
+        $policy = $this->policy();
+        $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
+        $club = $allianceId === null ? null : Alliance::query()->find($allianceId);
+
+        if ($policy === null || $club === null) {
+            return true;
+        }
+
+        return $this->fits($this->accountFit($playerId), $this->clubFit($club), $policy['fit']);
     }
 
     /** @return list<Alliance> */
@@ -81,24 +136,124 @@ class AllianceChoice
         return app(PsychSimTheoryOfMind::class)->stanceToward($playerId, (int) $alliance->founder_user_id) === AiToMStance::Defect;
     }
 
-    private function score(Alliance $alliance, float $rankRatio): float
+    /** @return array{language: string|null, band: int|null} */
+    private function accountFit(int $playerId): array
+    {
+        return ['language' => $this->language($playerId), 'band' => $this->band($playerId)];
+    }
+
+    /**
+     * The club's own language and pace, read from its founder: the one account whose host state
+     * stands for the club the founder keeps.
+     *
+     * @return array{language: string|null, band: int|null}
+     */
+    private function clubFit(Alliance $alliance): array
+    {
+        $founderId = (int) $alliance->founder_user_id;
+
+        return ['language' => $this->language($founderId), 'band' => $this->band($founderId)];
+    }
+
+    /** The account's declared client language, or null when the host holds none. */
+    private function language(int $playerId): string|null
+    {
+        $lang = strtolower(trim((string) User::query()->whereKey($playerId)->value('lang')));
+
+        return $lang === '' ? null : $lang;
+    }
+
+    /** How much the account is around, from its own profile; null when it states no pace. */
+    private function band(int $playerId): int|null
+    {
+        return AiProfile::query()->where('player_id', $playerId)->first()?->activity_band?->value;
+    }
+
+    private function fits(array $account, array $club, array $fit): bool
+    {
+        if ($account['language'] !== null && $club['language'] !== null && $account['language'] !== $club['language']) {
+            return false;
+        }
+
+        return $this->bandDistance($account['band'], $club['band']) <= (int) $fit['band']['tolerance'];
+    }
+
+    /** Steps between two paces; an unstated pace on either side is no distance at all. */
+    private function bandDistance(int|null $account, int|null $club): int
+    {
+        if ($account === null || $club === null) {
+            return 0;
+        }
+
+        return abs($account - $club);
+    }
+
+    private function fitScore(array $account, array $club, array $fit): float
+    {
+        return $this->languageScore($account['language'], $club['language'], $fit['language'])
+            + $this->bandScore($account['band'], $club['band'], $fit['band']);
+    }
+
+    private function languageScore(string|null $account, string|null $club, array $weights): float
+    {
+        if ($account === null || $club === null) {
+            return 0.0;
+        }
+
+        return (float) ($account === $club ? $weights['match'] : $weights['mismatch']);
+    }
+
+    private function bandScore(int|null $account, int|null $club, array $weights): float
+    {
+        if ($account === null || $club === null) {
+            return 0.0;
+        }
+
+        return match ($this->bandDistance($account, $club)) {
+            0 => (float) $weights['match'],
+            1 => (float) $weights['neighbour'],
+            default => (float) $weights['mismatch'],
+        };
+    }
+
+    private function tierScore(Alliance $alliance, float $rankRatio, array $tier): float
     {
         $members = (int) AllianceMember::query()->where('alliance_id', $alliance->id)->count();
         $points = (int) (AllianceHighscore::query()->where('alliance_id', $alliance->id)->value('general') ?? 0);
         // Log scale keeps a million-point elite core comparable with a catch-all's raw size.
         $quality = log10(max(1.0, $points / max(1, $members)));
-        $size = min($members, 100);
+        $size = min($members, (int) $tier['size_cap']);
         // A readable pitch is the applicant's own filter: demanding alliances write one.
-        $pitch = trim((string) ($alliance->external_text . $alliance->application_text)) !== '' ? 1.0 : 0.0;
+        $pitch = trim((string) ($alliance->external_text . $alliance->application_text)) !== '' ? (float) $tier['pitch'] : 0.0;
 
-        if ($rankRatio <= self::STRONG_RANK_RATIO) {
-            return $quality * 2.0 + $pitch;
+        if ($rankRatio <= (float) $tier['strong_rank_ratio']) {
+            return $quality * (float) $tier['strong_quality_weight'] + $pitch;
         }
 
-        if ($rankRatio >= self::NEWBIE_RANK_RATIO) {
-            return $size * 2.0 + $pitch;
+        if ($rankRatio >= (float) $tier['newbie_rank_ratio']) {
+            return $size * (float) $tier['newbie_size_weight'] + $pitch;
         }
 
-        return $quality + $size + $pitch;
+        return $quality * (float) $tier['mid_quality_weight'] + $size * (float) $tier['mid_size_weight'] + $pitch;
+    }
+
+    /**
+     * Read by name from resources/behavior so the fit the cohort invariant states is a number a
+     * tuning pass moves without touching this class. A missing or unreadable file leaves the
+     * account with no fit rule: it then weighs clubs on the host's own appeal alone.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function policy(): array|null
+    {
+        if ($this->policyRead) {
+            return $this->policy;
+        }
+
+        $this->policyRead = true;
+        $path = dirname(__DIR__, 3) . self::FIT_FILE;
+        $parsed = is_file($path) ? Yaml::parseFile($path) : null;
+
+        return $this->policy = is_array($parsed) ? $parsed : null;
     }
 }

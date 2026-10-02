@@ -342,6 +342,47 @@ final class Situation
         return $this;
     }
 
+    /**
+     * The account's own day: its first login, then every login its real schedule books, until $hours of
+     * game time have passed. The clock jumps from one login to the next as a live worker's would, so a
+     * behaviour that needs a night, a long gap or many logins is proven here in seconds, not by waiting
+     * for the live cohort to have played long enough.
+     */
+    public function day(int $hours = 24): self
+    {
+        $end = now()->addHours($hours);
+        $this->session();
+
+        for ($login = 0; $login < 200; $login++) {
+            $next = AiWorkItem::query()->where('player_id', $this->profile->player_id)
+                ->where('state', AiWorkState::Pending)->where('kind', AiWorkKind::RunSession)
+                ->orderBy('due_at')->first();
+            if ($next === null || $next->due_at->greaterThan($end)) {
+                break;
+            }
+            $next->due_at->isFuture() && $this->host('travelTo', $next->due_at);
+            app()->makeWith(ProcessAiWork::class, ['workItemId' => $next->id])->handle();
+            $this->settleIntents();
+        }
+
+        return $this;
+    }
+
+    /** Run every intent already due, as the minute worker would. */
+    private function settleIntents(): void
+    {
+        for ($round = 0; $round < 12; $round++) {
+            $item = AiWorkItem::query()->where('player_id', $this->profile->player_id)
+                ->where('state', AiWorkState::Pending)->where('kind', '!=', AiWorkKind::RunSession)
+                ->where('due_at', '<=', now()->addMinutes(30))->orderBy('due_at')->orderBy('id')->first();
+            if ($item === null) {
+                return;
+            }
+            $item->due_at->isFuture() && $this->host('travelTo', $item->due_at);
+            app()->makeWith(ProcessAiWork::class, ['workItemId' => $item->id])->handle();
+        }
+    }
+
     /** $count sessions, $minutesApart apart: a story that takes more than one login, such as a raid after a spy. */
     public function sessions(int $count, int $minutesApart = 45): self
     {

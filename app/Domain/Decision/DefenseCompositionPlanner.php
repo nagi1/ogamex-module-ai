@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Models\AiProfile;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
 use OGame\Models\UnitQueue;
 use OGame\Services\ObjectService;
@@ -77,6 +78,16 @@ class DefenseCompositionPlanner
         $held = fn (string $machineName): int => $current->getAmountByMachineName($machineName)
             + ($pending[$machineName] ?? 0);
 
+        // One planet's wall stops at the ceiling the behaviour file states. Exposure has no bound
+        // of its own, and the ratio applied to a wall that already exists grows with it, so without
+        // this the account's whole defence budget lands on one planet (measured live 30 Sep 2026:
+        // 1,285,633 defence units on a single planet, 60+ over the ceiling).
+        $ceiling = $this->ceilingUnits();
+        $remaining = $ceiling === null ? null : $ceiling - $this->heldDefenseUnits($current, $pending);
+        if ($remaining !== null && $remaining <= 0) {
+            return null;
+        }
+
         // The wall's size in doctrine layers. A wall whose anchor is still below the doctrine's
         // stated count is built to that stated wall; a larger anchor scales every ratio with it, so
         // a bigger wall is the same doctrine rather than a different one. A need extends that
@@ -113,7 +124,7 @@ class DefenseCompositionPlanner
 
             $best = app()->makeWith(DefenseComposition::class, [
                 'unit' => $unit,
-                'amount' => min($target - $have, $affordable),
+                'amount' => $remaining === null ? min($target - $have, $affordable) : min($target - $have, $affordable, $remaining),
                 'doctrine' => $key,
                 'reason' => 'defense:'.$key.':'.$unit->machine_name,
             ]);
@@ -160,6 +171,36 @@ class DefenseCompositionPlanner
         }
 
         return $pending;
+    }
+
+    /**
+     * The ceiling on the defence units one planet may hold, read from the behaviour file, or null
+     * when the file states none. The number is policy, not a price or a unit: a file without it
+     * deliberately caps nothing, which is what a doctrine fixture written for a unit test means.
+     */
+    private function ceilingUnits(): ?int
+    {
+        $parsed = Yaml::parseFile($this->doctrineFile ?? module_path('AI', self::DOCTRINE_FILE));
+        $units = is_array($parsed) ? ($parsed['standing_wall_ceiling']['units'] ?? null) : null;
+
+        return is_numeric($units) && (int) $units > 0 ? (int) $units : null;
+    }
+
+    /**
+     * The defence units a planet already holds, built or waiting in the yard: what is left of the
+     * ceiling. Ships in the same queue do not count, because the ceiling is about the wall.
+     *
+     * @param  array<string, int>  $pending
+     */
+    private function heldDefenseUnits(UnitCollection $current, array $pending): int
+    {
+        $total = 0;
+
+        foreach ($this->defenceObjectsByMachineName() as $machineName => $object) {
+            $total += $current->getAmountByMachineName($machineName) + ($pending[$machineName] ?? 0);
+        }
+
+        return $total;
     }
 
     /**

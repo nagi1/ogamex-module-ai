@@ -28,7 +28,7 @@ class EvaluateAiSocialExchangeAction
     /**
      * A compensation promise without a stated deadline gets this many hours to be kept,
      * so the offer is a real promise instead of an open-ended debt that can never be
-     * declared broken. It is policy taste, not a fact the message can contradict.
+     * declared broken. That window is policy taste, not a fact the message can contradict.
      */
     private const COMPENSATION_DUE_WINDOW_HOURS = 48;
 

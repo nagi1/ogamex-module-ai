@@ -25,7 +25,7 @@ class AdvanceAiAllianceLifeAction
 
     public function handle(): int
     {
-        $advanced = $this->foundFirstAlliance();
+        $advanced = $this->foundFirstAlliance() + $this->leaveOneMisfit();
 
         foreach (AiProfile::query()->where('enabled', true)->pluck('player_id') as $playerId) {
             if ($this->alreadyEngaged($playerId)) {
@@ -48,6 +48,32 @@ class AdvanceAiAllianceLifeAction
         $advanced += $this->foundWhenLockedOut();
 
         return $advanced;
+    }
+
+    /**
+     * A member whose club no longer fits its language and pace leaves it, one account per pass so the
+     * cohort spreads out the way players drift apart, not in one exodus. A founder keeps the club it
+     * keeps; the leaver applies to a fitting club, or founds its own, on the passes that follow.
+     */
+    private function leaveOneMisfit(): int
+    {
+        foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
+            $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
+
+            if ($allianceId === null || Alliance::query()->whereKey($allianceId)->value('founder_user_id') === $playerId) {
+                continue;
+            }
+
+            if (app(AllianceChoice::class)->currentClubFits($playerId)) {
+                continue;
+            }
+
+            app(AllianceService::class)->leaveAlliance($playerId);
+
+            return 1;
+        }
+
+        return 0;
     }
 
     /**

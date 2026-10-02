@@ -29,7 +29,7 @@ use OGame\Services\AllianceService;
  */
 class ReviewAiAllianceApplicationsAction
 {
-    /** An application must sit this long before the leader decides. */
+    /** An application must sit this long before the leader decides, so the leader reads it. */
     private const MINIMUM_APPLICATION_AGE_MINUTES = 15;
 
     /** The leader accepts at most this many per pass. */
@@ -175,11 +175,13 @@ class ReviewAiAllianceApplicationsAction
 
     private function ageMinutes(AllianceApplication $application, CarbonImmutable $now): int
     {
-        if ($application->created_at === null) {
+        $stamp = $application->created_at ?? $application->updated_at;
+
+        if ($stamp === null) {
             return 0;
         }
 
-        return max(0, (int) $application->created_at->diffInMinutes($now));
+        return max(0, (int) $stamp->diffInMinutes($now));
     }
 
     private function accept(Alliance $alliance, AllianceApplication $application): bool

@@ -6,10 +6,12 @@ use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Models\AiProfile;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
+use OGame\Models\UnitQueue;
 use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Whether this planet wants a wall at all, and how big: the size half of the defence decision.
@@ -51,6 +53,14 @@ class DefenseNeedEvaluator
 
         $inbound = $this->inbound($player);
 
+        // The ceiling outranks the exposure clock: a planet that already holds the wall the
+        // behaviour file caps wants nothing further, whatever the account's production would pile
+        // up while it is away. Exposure is unbounded, and left to it the account builds the whole
+        // account's wall on one planet.
+        if ($this->atCeiling($planet)) {
+            return null;
+        }
+
         // What piles up before the account next looks at the planet, plus the pile itself once a
         // hostile is on its way and spending it is no longer an option.
         $exposure = $this->hourlyProduction($planet) * $this->absenceHours($profile->activity_band);
@@ -68,6 +78,60 @@ class DefenseNeedEvaluator
             'defenceValue' => $exposure,
             'reason' => 'defense:need:' . $this->contact($inbound),
         ]);
+    }
+
+    /**
+     * Whether this planet already holds the wall the behaviour file caps, built or paid for in the
+     * yard. The yard counts because the host takes the whole price when the order is placed, so a
+     * planet with the ceiling queued has bought it (measured live: 50.8M paid but unbuilt units on
+     * grand while the planets read under the ceiling on built units alone).
+     */
+    private function atCeiling(PlanetService $planet): bool
+    {
+        $ceiling = $this->ceilingUnits();
+
+        if ($ceiling === null) {
+            return false;
+        }
+
+        return $this->standingUnits($planet) >= $ceiling;
+    }
+
+    /** The defence units this planet holds, built plus already ordered. */
+    private function standingUnits(PlanetService $planet): int
+    {
+        return $planet->getDefenseUnits()->getAmount() + $this->pendingDefenseUnits($planet);
+    }
+
+    /** Defence this planet has paid for and is waiting on, from the host's own unit queue. */
+    private function pendingDefenseUnits(PlanetService $planet): int
+    {
+        $defenceObjectIds = array_map(
+            static fn ($object): int => $object->id,
+            ObjectService::getDefenseObjects()
+        );
+
+        if ($defenceObjectIds === []) {
+            return 0;
+        }
+
+        return (int) UnitQueue::query()
+            ->where('planet_id', $planet->getPlanetId())
+            ->whereIn('object_id', $defenceObjectIds)
+            ->where('processed', 0)
+            ->sum('object_amount');
+    }
+
+    /**
+     * The ceiling on one planet's wall from the behaviour file, or null when the file states none.
+     * The number is policy, so it lives there and not here; a file without it caps nothing.
+     */
+    private function ceilingUnits(): ?int
+    {
+        $parsed = Yaml::parseFile(module_path('AI', 'resources/behavior/defence-doctrines.yaml'));
+        $units = is_array($parsed) ? ($parsed['standing_wall_ceiling']['units'] ?? null) : null;
+
+        return is_numeric($units) && (int) $units > 0 ? (int) $units : null;
     }
 
     /**

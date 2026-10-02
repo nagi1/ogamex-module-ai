@@ -196,6 +196,15 @@ test('the chain empties once the host graph is satisfied', function (): void {
             : $this->planetSetObjectLevel($machineName, $levels['deepest']);
     }
 
+    // Satisfying the host graph is not the whole chain: an account holding every planet slot the host
+    // grants it still has to raise its own ceiling, so the fixture frees a slot before asking the chain
+    // to be empty of prerequisites.
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+    while ($player->planets->planetCount() >= $player->getMaxPlanetAmount()) {
+        $this->playerSetResearchLevel('astrophysics', $player->getResearchLevel('astrophysics') + 1);
+        $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+    }
+
     chainPowered();
     chainStoraged();
 

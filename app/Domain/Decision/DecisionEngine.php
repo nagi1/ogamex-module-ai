@@ -54,6 +54,8 @@ class DecisionEngine
      */
     private function situationalErrand(array $scored, ScoredCandidate $selected): ScoredCandidate
     {
+        // ARB-001: the errand slot is spent on what the situation offers, not on the chore that
+        // fills itself.
         if (!in_array($scored[0]->candidate->type, [AiCandidateActionType::Build, AiCandidateActionType::Research], true)) {
             return $selected;
         }

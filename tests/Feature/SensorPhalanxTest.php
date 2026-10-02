@@ -98,14 +98,21 @@ test('a moon with a phalanx publishes a scan candidate for an in-range report', 
     $moon = phalanxArmedMoon($this->currentUserId, $this->currentPlanetId);
     $moonModel = Planet::query()->find($moon->getPlanetId());
 
+    // The host's allocator drops an account's planets anywhere in positions 4-12 of this very system,
+    // so the neighbour of the moon is not free by construction: the target is the first free position
+    // of the system instead.
+    $taken = Planet::query()->where('galaxy', $moonModel->galaxy)->where('system', $moonModel->system)->pluck('planet')->all();
+    $position = collect(range(1, 15))->first(static fn (int $candidate): bool => !in_array($candidate, $taken, true));
+    expect($position)->not->toBeNull();
+
     $target = Planet::factory()->create([
         'user_id' => User::factory()->create()->id,
         'galaxy' => $moonModel->galaxy,
         'system' => $moonModel->system,
-        'planet' => $moonModel->planet + 1,
+        'planet' => $position,
         'time_last_update' => now()->subHour()->getTimestamp(),
     ]);
-    phalanxReport($this->currentUserId, $moonModel->galaxy, $moonModel->system, $moonModel->planet + 1, ['metal' => 100], $target->user_id);
+    phalanxReport($this->currentUserId, $moonModel->galaxy, $moonModel->system, $position, ['metal' => 100], $target->user_id);
 
     $plan = app(QueueablePhalanxPlanner::class)->plan($this->currentUserId);
 

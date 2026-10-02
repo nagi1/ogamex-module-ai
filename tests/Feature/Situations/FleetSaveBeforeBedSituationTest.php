@@ -37,3 +37,17 @@ test('a login in the middle of the day does not save the fleet', function (): vo
         ->session()
         ->expectNoWork(AiWorkKind::FleetSave);
 });
+
+// The aspect without the wait: a whole simulated day of the account's own logins, and the night in it
+// is when the fleet is saved. No live cohort, no hour of real play.
+test('an account that plays a whole day saves its fleet before its night', function (): void {
+    Situation::of($this)
+        ->archetype(AiArchetype::Fleeter)
+        ->resources(500_000, 300_000, 200_000)
+        ->ships('light_fighter', 400)
+        ->ships('cruiser', 60)
+        ->crowd(10)
+        ->colony()
+        ->day(24)
+        ->expectWork(AiWorkKind::FleetSave);
+});

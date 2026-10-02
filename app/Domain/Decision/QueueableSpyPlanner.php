@@ -41,9 +41,6 @@ class QueueableSpyPlanner
     /** Bounded: only this many unscouted, nearest candidate targets are inspected per decision. */
     private const MAX_CANDIDATES = 20;
 
-    /** How many nearest planets are looked through to find them; a universe of active neighbours ends the search here. */
-    private const MAX_SCANNED = 400;
-
     /** A report stays fresh this long; scouting and raiding agree on the window. */
     private const INTEL_TTL_HOURS = 24;
 
@@ -160,17 +157,26 @@ class QueueableSpyPlanner
             return null;
         }
 
-        // A scout looks at the nearest neighbours it has not already read, not at the oldest planets in the
-        // universe: once those are probed or watched the first rows never change and the account stops spying.
+        // A scout looks at the quiet neighbours it has not already read, not at the closest rows in the
+        // universe: in a crowded universe the nearest bodies all belong to accounts that played minutes ago,
+        // so the activity star would refuse every one of them and the cap would never reach a farm. The
+        // candidate set is therefore a farm first and a neighbour second -- owners whose own last-activity
+        // stamp (the host's column) is oldest come first, and within that the nearest body to the origin wins
+        // (INT-003) -- and only then is the set capped. The stamp is the ordering key only; the host's
+        // isInactive() below stays the authority on whether a candidate really is a farm.
         $home = $idleOrigins[0]->getPlanetCoordinates();
         $candidates = Planet::query()
-            ->where('user_id', '!=', $player->getId())
-            ->where('destroyed', 0)
-            ->orderByRaw('ABS(CAST(`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planet` AS SIGNED) - ?), `id`', [$home->galaxy, $home->system, $home->position])
-            ->limit(self::MAX_SCANNED)
+            ->leftJoin('users', 'users.id', '=', 'planets.user_id')
+            ->where('planets.user_id', '!=', $player->getId())
+            ->where('planets.destroyed', 0)
+            ->select('planets.*')
+            // A stamp of zero means the host never recorded a login for that owner; it is the absence of the
+            // host's inactivity input, not the strongest case of it (the cohort's own bot accounts never sign
+            // in through the web). Such rows come last, so a real last-login stamp -- however old -- outranks
+            // them and a farm is reached before the cap fills with accounts the activity star then refuses.
+            ->orderByRaw('CASE WHEN COALESCE(`users`.`time`, 0) = 0 THEN 1 ELSE 0 END ASC, COALESCE(`users`.`time`, 0) ASC, ABS(CAST(`planets`.`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`planets`.`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planets`.`planet` AS SIGNED) - ?), `planets`.`id`', [$home->galaxy, $home->system, $home->position])
             ->cursor()
             ->reject(static fn (Planet $planet): bool => isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"]))
-            ->reject(fn (Planet $planet): bool => $this->activityIntelReader->activityAt($this->planetServiceFactory->makeFromModel($planet)))
             ->take(self::MAX_CANDIDATES)
             ->values();
 
@@ -197,17 +203,28 @@ class QueueableSpyPlanner
             if ($owner?->getUsername(false) === 'Legor') {
                 continue;
             }
+            if ($this->activityIntelReader->activityAt($target)) {
+                continue;
+            }
 
             $origin = $this->closestOrigin($idleOrigins, $planet, $fleetMissions);
             $distance = $fleetMissions->calculateFleetMissionDistance($origin, new Coordinate((int) $planet->galaxy, (int) $planet->system, (int) $planet->planet));
-            $scored[] = ['planet' => $planet, 'origin' => $origin, 'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance];
+            $scored[] = [
+                'planet' => $planet,
+                'origin' => $origin,
+                'inactive' => $owner?->isInactive() ?? false,
+                'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance,
+            ];
         }
 
         if ($scored === []) {
             return null;
         }
 
-        usort($scored, static fn (array $left, array $right): int => $right['score'] <=> $left['score']);
+        // The farm comes before the known-rich active player: the host's own inactivity rule is what makes a
+        // target raidable at all, so a quiet neighbour outranks a nearer active one that merely looked rich
+        // in an older report. Among equals the closest known-rich body wins (INT-003).
+        usort($scored, static fn (array $left, array $right): int => [$right['inactive'], $right['score']] <=> [$left['inactive'], $left['score']]);
 
         return [$scored[0]['origin'], $scored[0]['planet']];
     }

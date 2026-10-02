@@ -262,7 +262,7 @@ class RunAiConversationCycleAction
 
         $playerId = (int) $observation->player_id;
         $counterpartyPlayerId = (int) $observation->subject_player_id;
-        $turns = $this->answeredTurns($playerId, $counterpartyPlayerId);
+        $turns = $this->answeredTurns($playerId, $counterpartyPlayerId, $now);
 
         if ($turns >= self::MAXIMUM_RESPONSE_TURNS) {
             return false;
@@ -292,13 +292,20 @@ class RunAiConversationCycleAction
      * A reply that was composed and sealed counts as this AI's turn even while its delivery
      * is still pending. An attempt that expired counts as no turn at all, because the AI
      * never actually spoke to anyone.
+     *
+     * The count is per conversation, not per counterparty for the rest of the account's
+     * life: a reply stops counting once its window has closed. Counting every reply ever
+     * composed means an account that has answered a neighbour twice never records another
+     * exchange with them, so with no player writing first the lane reads as health while
+     * every pair has gone permanently quiet.
      */
-    private function answeredTurns(int $playerId, int $counterpartyPlayerId): int
+    private function answeredTurns(int $playerId, int $counterpartyPlayerId, CarbonImmutable $now): int
     {
         return AiConversationReply::query()
             ->where('player_id', $playerId)
             ->where('counterparty_player_id', $counterpartyPlayerId)
             ->whereIn('state', [AiConversationReplyState::Sealed, AiConversationReplyState::Delivered])
+            ->where('expires_at', '>', $now)
             ->count();
     }
 

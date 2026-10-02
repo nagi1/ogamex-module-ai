@@ -41,6 +41,17 @@ minimum_deterrent:
   sources: [GF-007]
   claim_type: DOCUMENTED
 
+# The ceiling on one planet's standing wall: no planet holds more defence units than this,
+# built or already paid for in the yard. Exposure alone has no bound -- production times the
+# hours the account is away -- so an account that sizes from it never stops buying and lands
+# the account's whole wall on one planet. Measured live 30 Sep 2026: 60+ planets above this
+# number, worst 1,285,633 units on one planet, with 50.8M paid-but-unbuilt defence units on
+# grand and 101.8M on pve. A wall is worth what an attacker's raiding fleet would carry away;
+# the number is where that stops being true, so past it the account stops buying.
+standing_wall_ceiling:
+  units: 20000
+  reason: defense:need:ceiling
+
 
 doctrines:
   early_game:

@@ -90,6 +90,14 @@ class FacilityChain
             $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'slot-ceiling');
         }
 
+        // A planet-capped account — every colony slot it has unlocked is already settled —
+        // reaches the technology that raises the planet ceiling, never named here either. The
+        // mission's own answer only asks for the level that first makes colonising possible, so
+        // without this the account settles its one colony and stops with capacity to spare.
+        foreach ($this->planetCeilingResearch($planet) as $machineName => $level) {
+            $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'planet-ceiling');
+        }
+
         // A moon the account owns wants its sensor phalanx: the station is module taste, and
         // the host's own recursive requirement graph puts the lunar base first (RV-008).
         if ($planet->getPlanetType() === PlanetType::Moon) {
@@ -181,6 +189,28 @@ class FacilityChain
         $ceiling = ObjectService::getObjectByCalculationType(CalculationType::MAX_FLEET_SLOTS);
 
         return $ceiling === null ? [] : [$ceiling->machine_name => 1];
+    }
+
+    /**
+     * The technology that raises the planet ceiling, as a chain step only while the account holds as
+     * many planets as the host allows it. The object is never named: it is the one the host publishes
+     * as carrying `MAX_COLONIES`, so a mod-added technology behind that value takes the step with no
+     * edit here. One level is asked for at a time -- the account climbs the technology the way it
+     * stands any other prerequisite, and the step disappears the moment the host reports a free slot.
+     *
+     * @return array<string, int>
+     */
+    private function planetCeilingResearch(PlanetService $planet): array
+    {
+        $player = $planet->getPlayer();
+
+        if ($player === null || $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
+            return [];
+        }
+
+        $ceiling = ObjectService::getObjectByCalculationType(CalculationType::MAX_COLONIES);
+
+        return $ceiling === null ? [] : [$ceiling->machine_name => $player->getResearchLevel($ceiling->machine_name) + 1];
     }
 
     /**
