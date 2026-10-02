@@ -77,6 +77,24 @@ test('a single-role fleet is never split', function (): void {
         ->and($plan->shadowDestinationPlanetId)->toBe(0);
 });
 
+test('a split plan whose civil hulls are gone sends the military wave alone instead of dividing by a zero speed', function (): void {
+    shadowWaveProfile($this->currentUserId, AiArchetype::Fleeter);
+    $this->playerSetResearchLevel('computer_technology', 1);
+    $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
+    $this->planetAddUnit('light_fighter', 5);
+    $this->planetAddUnit('large_cargo', 3);
+
+    Planet::factory()->create(['user_id' => $this->currentUserId, 'galaxy' => 5, 'system' => 10, 'planet' => 15, 'time_last_update' => now()->subHour()->getTimestamp()]);
+    app(PlanetServiceFactory::class)->createMoonForPlanet($this->planetService, 2_000_000, 20);
+    $plan = app(QueueableFleetSavePlanner::class)->plan($this->currentUserId);
+
+    $this->planetService->removeUnit('large_cargo', 3);
+    $result = app(QueueAiFleetSave::class)->handle($this->currentUserId, $plan->originPlanetId, $plan->destinationPlanetId, $plan->shadowDestinationPlanetId);
+
+    expect($result->successful)->toBeTrue($result->reason)
+        ->and(FleetMission::query()->where('user_id', $this->currentUserId)->where('mission_type', DeploymentMission::getTypeId())->count())->toBe(1);
+});
+
 function shadowWaveProfile(int $playerId, AiArchetype $archetype): AiProfile
 {
     return AiProfile::create([

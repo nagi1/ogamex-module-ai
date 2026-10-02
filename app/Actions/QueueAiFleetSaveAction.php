@@ -219,25 +219,38 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
     {
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
-        $mission = $fleetMissions->createNewFromPlanet(
-            $origin,
-            $destination->getPlanetCoordinates(),
-            $destination->getPlanetType(),
-            DeploymentMission::getTypeId(),
-            $military,
-            new Resources(),
-            $speed,
-        );
+        // A wave with no hulls has no speed to fly at: the host divides by it, so an all-military or
+        // all-civil fleet sends the one wave it has.
+        $mission = null;
 
-        $fleetMissions->createNewFromPlanet(
-            $origin,
-            $shadow->getPlanetCoordinates(),
-            $shadow->getPlanetType(),
-            DeploymentMission::getTypeId(),
-            $civil,
-            $this->liftableStock($player, $origin, $civil),
-            $speed,
-        );
+        if ($military->units !== []) {
+            $mission = $fleetMissions->createNewFromPlanet(
+                $origin,
+                $destination->getPlanetCoordinates(),
+                $destination->getPlanetType(),
+                DeploymentMission::getTypeId(),
+                $military,
+                new Resources(),
+                $speed,
+            );
+        }
+
+        if ($civil->units !== []) {
+            $civilMission = $fleetMissions->createNewFromPlanet(
+                $origin,
+                $shadow->getPlanetCoordinates(),
+                $shadow->getPlanetType(),
+                DeploymentMission::getTypeId(),
+                $civil,
+                $this->liftableStock($player, $origin, $civil),
+                $speed,
+            );
+            $mission ??= $civilMission;
+        }
+
+        if ($mission === null) {
+            return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
+        }
 
         return AiActionResult::queued($mission->id);
     }
