@@ -1,42 +1,42 @@
 the delivered change passed its tests but its live proof failed:
-PASS test:EveryPlanetBuildsSessionSituationTest 1s
+PASS test:EveryPlanetBuildsSessionSituationTest 2s
 PASS aspect:economy 1s
-FAIL invariant:IDLE_QUEUES 26s —  ! [IDLE_QUEUES] player 103 played this hour with 3 of 3 planets buildable and idle
-PROOF: FAIL PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 103 played this hour with 3 of 3 planets buildable and idle
+FAIL invariant:IDLE_QUEUES 26s —  ! [IDLE_QUEUES] player 67 played this hour with 2 of 2 planets buildable and idle
+PROOF: FAIL PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 67 played this hour with 2 of 2 planets buildable and idle
 
 LIVE EVIDENCE
 --- ogamex pulse 30 (live, now):
-PULSE last 30 min, 100 accounts: 503 sessions on 100 accounts
-  backlog: 231 work item(s) more than a minute late, oldest 18 min — live verdicts read worker lag
-  sessions chose: FleetSave 43%, QueueUnits 20%, Transfer 9%, Build 5%, Raid 5%, DoNothing 4%, Colonize 4%, ThrottleMine 4%, Research 2%, Expedition 2%, Spy 1%, Recall 1%
-  host orders: buildings 1264, research 274, units 429
-  missions launched: Attack 22, Deployment 172, Expedition 8, Transport 26, Colonisation 14, Espionage 5
+PULSE last 30 min, 100 accounts: 534 sessions on 100 accounts
+  backlog: 194 work item(s) more than a minute late, oldest 21 min — live verdicts read worker lag
+  sessions chose: FleetSave 45%, QueueUnits 18%, Transfer 10%, ThrottleMine 4%, Colonize 4%, Build 4%, DoNothing 4%, Raid 4%, Research 3%, Expedition 2%, Spy 1%, Recall 1%
+  host orders: buildings 1295, research 282, units 389
+  missions launched: Deployment 171, Espionage 5, Attack 18, Transport 32, Colonisation 14, Expedition 6
   work (kind: state count):
-    RunSession: Completed 503, Pending 93, Leased 9, Retry 1
-    Recall: Completed 9, Pending 2
-    FleetSave: Completed 203, Pending 26
-    QueueUnits: Completed 416, Retry 7, Pending 42
-    BuildFirstBuilding: Completed 1389, Pending 140, Retry 6
-    Expedition: Completed 12
-    QueueResearch: Completed 315, Pending 28, Retry 1
-    Transfer: Completed 56, Pending 5
-    Raid: Completed 26, Pending 2
-    SetMinePercent: Completed 18, Retry 1, Pending 4
-    Colonize: Completed 17, Pending 1
-    Spy: Completed 5
+    RunSession: Completed 534, Pending 102
+    QueueResearch: Completed 329, Retry 1, Pending 40
+    FleetSave: Completed 217, Retry 1, Pending 26
+    QueueUnits: Completed 397, Retry 10, Pending 54
+    Recall: Completed 6, Pending 2
+    BuildFirstBuilding: Completed 1421, Retry 6, Pending 169
+    Transfer: Completed 51, Pending 7
+    Raid: Completed 22, Pending 1
+    Colonize: Completed 18, Pending 1
+    SetMinePercent: Completed 22, Retry 3, Pending 1
+    Spy: Completed 5, Pending 2
+    Expedition: Completed 8, Pending 1
   refused: 
-    41 × DispatchFleet: Not enough resources on the planet to send the fleet.
-    34 × DispatchFleet: You don't have sufficient storage capacity!
-    21 × QueueBuilding: shipyard_busy
-    20 × QueueUnits: queue_not_created
-    8 × RecallFleet: no_deployment_to_recall
-    6 × DispatchFleet: no_transport_fleet
-    6 × DispatchFleet: source_short_at_dispatch
-    5 × DispatchFleet: Maximum number of fleets reached.
-    4 × QueueResearch: already_researching
+    49 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    35 × DispatchFleet: You don't have sufficient storage capacity!
+    19 × QueueBuilding: shipyard_busy
+    17 × QueueUnits: queue_not_created
+    6 × RecallFleet: no_deployment_to_recall
+    5 × QueueBuilding: Maximum number of items already in queue.
+    4 × DispatchFleet: Maximum number of fleets reached.
     3 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: battlecruiser
-    2 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
-    2 × QueueUnits: nothing_queueable
+    3 × DispatchFleet: no_transport_fleet
+    3 × QueueResearch: already_researching
+    3 × DispatchFleet: source_short_at_dispatch
+    2 × QueueBuilding: Not enough fields on this planet. Upgrade your Terraformer or use a planet field item to get more fields.
 --- ogamex why subject (live, now):
 WHY 35 (Miner): what the next session will see
 
@@ -44,7 +44,7 @@ WHY 35 (Miner): what the next session will see
   NOT published: research, colonize, throttle_mine
 
   player_id                    35
-  observed_at                  1790983093
+  observed_at                  1790983771
   account_state                "active"
   recovery_factor              0
   fleet_slots_free             2
@@ -58,10 +58,10 @@ WHY 35 (Miner): what the next session will see
   planets                      5 planet(s)
 
   decision: Transfer
-    Build         64.7  resource_need=30, safety=10, archetype_preference=25, seeded_variation=-0.3
-    Transfer      42.2  resource_need=27, safety=15, seeded_variation=0.2
-    Spy           40.2  resource_need=30, safety=10, seeded_variation=0.2
+    Build         65.1  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.1
+    Transfer      41.6  resource_need=27, safety=15, seeded_variation=-0.4
+    Spy           40.0  resource_need=30, safety=10, seeded_variation=0
     QueueUnits    39.5  resource_need=30, safety=10, seeded_variation=-0.5
-    Expedition    39.4  resource_need=9, safety=30, seeded_variation=0.4
-    DoNothing      5.4  safety=5, seeded_variation=0.4
+    Expedition    39.1  resource_need=9, safety=30, seeded_variation=0.1
+    DoNothing      4.7  safety=5, seeded_variation=-0.3
   turned down by the candidate factory: nothing
