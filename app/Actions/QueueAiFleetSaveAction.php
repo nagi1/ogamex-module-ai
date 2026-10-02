@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiFleetSave;
+use Modules\AI\Domain\Decision\MovableFleet;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -87,7 +88,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             if ($shadowDestinationPlanetId > 0
                 && Planet::query()->whereKey($shadowDestinationPlanetId)->where('user_id', $playerId)->exists()) {
                 $shadow = $this->planetServiceFactory->makeForPlayer($player, $shadowDestinationPlanetId, false);
-                [$military, $civil] = $this->splitFleet($origin);
+                [$military, $civil] = $this->splitFleet($player, $origin);
                 if ($military->units !== [] && $civil->units !== []) {
                     return $this->dispatchShadowWaves($player, $origin, $destination, $shadow, $military, $civil, $speed);
                 }
@@ -97,7 +98,12 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             // resources cannot be raided, and a stripped planet is unprofitable
             // to hit (FS-006). Lift the planet's stock up to what the fleet can
             // carry.
-            $cargo = $this->liftableStock($player, $origin, $origin->getShipUnits());
+            $flying = MovableFleet::of($player, $origin->getShipUnits());
+            if ($flying->units === []) {
+                return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
+            }
+
+            $cargo = $this->liftableStock($player, $origin, $flying);
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(
@@ -105,7 +111,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 $destination->getPlanetCoordinates(),
                 $destination->getPlanetType(),
                 DeploymentMission::getTypeId(),
-                $origin->getShipUnits(),
+                $flying,
                 $cargo,
                 $speed,
             );
@@ -188,7 +194,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             }
 
             $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
-            $fleet = $origin->getShipUnits();
+            $fleet = MovableFleet::of($player, $origin->getShipUnits());
             if ($fleet->units === []) {
                 return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
             }
@@ -261,7 +267,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
      *
      * @return array{0: UnitCollection, 1: UnitCollection}
      */
-    private function splitFleet(PlanetService $origin): array
+    private function splitFleet(PlayerService $player, PlanetService $origin): array
     {
         $militaryNames = array_map(static fn ($object): string => $object->machine_name, ObjectService::getMilitaryShipObjects());
         $civilNames = array_map(static fn ($object): string => $object->machine_name, ObjectService::getCivilShipObjects());
@@ -269,7 +275,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
         $military = new UnitCollection();
         $civil = new UnitCollection();
 
-        foreach ($origin->getShipUnits()->units as $entry) {
+        foreach (MovableFleet::of($player, $origin->getShipUnits())->units as $entry) {
             $name = $entry->unitObject->machine_name;
             if (in_array($name, $militaryNames, true)) {
                 $military->addUnit($entry->unitObject, $entry->amount);

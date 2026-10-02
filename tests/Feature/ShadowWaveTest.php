@@ -95,6 +95,22 @@ test('a split plan whose civil hulls are gone sends the military wave alone inst
         ->and(FleetMission::query()->where('user_id', $this->currentUserId)->where('mission_type', DeploymentMission::getTypeId())->count())->toBe(1);
 });
 
+test('solar satellites stay home: they have no speed, and a save that carried them divided by zero', function (): void {
+    shadowWaveProfile($this->currentUserId, AiArchetype::Fleeter);
+    $this->playerSetResearchLevel('computer_technology', 1);
+    $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
+    $this->planetAddUnit('large_cargo', 3);
+    $this->planetAddUnit('solar_satellite', 40);
+
+    Planet::factory()->create(['user_id' => $this->currentUserId, 'galaxy' => 5, 'system' => 10, 'planet' => 15, 'time_last_update' => now()->subHour()->getTimestamp()]);
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($this->planetService, 2_000_000, 20);
+
+    $result = app(QueueAiFleetSave::class)->handle($this->currentUserId, $this->planetService->getPlanetId(), $moon->getPlanetId(), 0);
+
+    expect($result->successful)->toBeTrue($result->reason)
+        ->and($this->planetService->getObjectAmount('solar_satellite'))->toBe(40);
+});
+
 function shadowWaveProfile(int $playerId, AiArchetype $archetype): AiProfile
 {
     return AiProfile::create([
