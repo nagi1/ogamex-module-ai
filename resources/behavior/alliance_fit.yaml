@@ -14,9 +14,6 @@
 #
 # source: ALLIANCE_SHARE
 
-crowded_share: 0.5
-# A pair or a trio is a friendship, not a crowd.
-crowded_min_members: 4
 
 fit:
   language:

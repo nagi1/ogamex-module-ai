@@ -53,7 +53,7 @@ class AllianceChoice
         foreach ($this->openCandidates($playerId) as $alliance) {
             $club = $this->clubFit($alliance);
 
-            if ($this->crowded($alliance, $policy) || ! $this->fits($account, $club, $policy['fit'])) {
+            if (! $this->fits($account, $club, $policy['fit'])) {
                 continue;
             }
 
@@ -85,7 +85,7 @@ class AllianceChoice
         $account = $this->accountFit($playerId);
 
         foreach ($this->openCandidates($playerId) as $alliance) {
-            if (! $this->crowded($alliance, $policy) && $this->fits($account, $this->clubFit($alliance), $policy['fit'])) {
+            if ($this->fits($account, $this->clubFit($alliance), $policy['fit'])) {
                 return true;
             }
         }
@@ -108,17 +108,7 @@ class AllianceChoice
             return true;
         }
 
-        return ! $this->crowded($club, $policy) && $this->fits($this->accountFit($playerId), $this->clubFit($club), $policy['fit']);
-    }
-
-    /** Whether the club already holds most of the AI accounts, which is when players split off. */
-    private function crowded(Alliance $alliance, array $policy): bool
-    {
-        $accounts = AiProfile::query()->where('enabled', true)->count();
-        $held = User::query()->where('alliance_id', $alliance->id)
-            ->whereIn('id', AiProfile::query()->where('enabled', true)->select('player_id'))->count();
-
-        return $held >= (int) $policy['crowded_min_members'] && $held / $accounts > (float) $policy['crowded_share'];
+        return $this->fits($this->accountFit($playerId), $this->clubFit($club), $policy['fit']);
     }
 
     /** @return list<Alliance> */

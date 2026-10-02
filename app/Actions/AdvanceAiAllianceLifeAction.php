@@ -27,10 +27,8 @@ use OGame\Services\AllianceService;
  * A club only receives applications while the host marks it open, so a club this action founds is
  * opened for applications: a closed club is invisible to the join half above, and a cohort seated
  * into closed clubs would found new ones forever while the application lane never fires (ALLY-001).
- * A club that has grown past the cohort's share is left one member at a time, which is what keeps
- * applications appearing in a cohort that otherwise sits still.
  *
- * A cohort where every account is seated, every club fits and none is crowded has no reason to move
+ * A cohort where every account is seated and every club fits has no reason to move
  * under the rules above, so the lane stops for good. The membership is therefore re-read each pass:
  * a member whose club is no longer the club it would choose today leaves it, which is how a player
  * who has outgrown or drifted from their club keeps the join half fed.
@@ -103,9 +101,9 @@ class AdvanceAiAllianceLifeAction
 
     /**
      * Whether the club the account sits in is still the club it would choose today: the same rank
-     * and fit rule that picks a club for an account with no seat. A club that is crowded, no longer
+     * and fit rule that picks a club for an account with no seat. A club that no longer
      * fits its language and pace, or is outscored by another is one a player leaves, which is how a
-     * cohort seated once — every member in a club that fits and nothing crowded — keeps the join
+     * cohort seated once — every member in a club that fits — keeps the join
      * half, and so the lane the scorecard's alliance aspect measures, moving (ALLY-001).
      */
     private function stillTheClubItWouldChoose(int $playerId, int $allianceId): bool

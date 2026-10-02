@@ -197,23 +197,3 @@ test('a member of a club that fits does not leave', function (): void {
 
     expect(User::query()->whereKey($this->currentUserId)->value('alliance_id'))->toBe($near->id);
 });
-
-test('a club holding most of the AI accounts is left one member at a time, and not asked again', function (): void {
-    $club = allianceFitClub('CROWD', 'en', AiActivityBand::Regular, 1, 40);
-    $members = [$this->currentUserId];
-    foreach (range(1, 4) as $unused) {
-        $members[] = User::factory()->create(['lang' => 'en'])->id;
-    }
-    foreach ($members as $id) {
-        allianceFitProfile($id, AiActivityBand::Regular);
-        allianceFitSpeaks($id, 'en');
-        allianceFitRank($id, 500 + $id, 2);
-        allianceFitMember($club->id, $id);
-        User::query()->whereKey($id)->update(['alliance_id' => $club->id]);
-    }
-
-    app(AdvanceAiAllianceLifeAction::class)->handle();
-
-    expect(User::query()->where('alliance_id', $club->id)->count())->toBeLessThan(count($members))
-        ->and(app(AllianceChoice::class)->choose($this->currentUserId))->toBeNull();
-});
