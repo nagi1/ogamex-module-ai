@@ -301,6 +301,17 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             return $stock;
         }
 
-        return $capacity > 0 ? $stock->multiply($capacity / $stock->sum()) : new Resources();
+        if ($capacity <= 0) {
+            return new Resources();
+        }
+
+        // Whole units, rounded down: the host refuses a hold that is full by a fraction.
+        $share = $capacity / $stock->sum();
+
+        return new Resources(
+            floor($stock->metal->get() * $share),
+            floor($stock->crystal->get() * $share),
+            floor($stock->deuterium->get() * $share),
+        );
     }
 }

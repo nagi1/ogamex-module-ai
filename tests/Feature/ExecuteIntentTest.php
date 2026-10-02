@@ -146,6 +146,18 @@ test('a save the account does not take is counted as lost, not hidden', function
         ->and((int) AiStopCounter::query()->where('reason', AiStopReason::SaveLost->value)->sum('occurrences'))->toBe(1);
 });
 
+test('a save of a stock that does not divide into the hold loads whole units and flies', function (): void {
+    intentSaveSkips(false);
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_003, 777_777, 333_331));
+    $this->planetAddUnit('large_cargo', 7);
+
+    $intent = intentSchedule($profile, AiCandidateActionType::FleetSave, $this->currentPlanetId);
+    $result = intentExecute($intent, $this->currentPlanetId);
+
+    expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
+});
+
 test('a fleet save selection schedules and executes a deployment', function (): void {
     intentSaveSkips(false);
     $profile = intentProfile($this->currentUserId);
