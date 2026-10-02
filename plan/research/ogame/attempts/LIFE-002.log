@@ -1,46 +1,47 @@
 the delivered change passed its tests but its live proof failed:
-FAIL invariant:LIFE_CAPITAL 22s —  ! [LIFE_CAPITAL] 8 of 100 accounts own a military hull dearer than the median (`bomber`, `destroyer`, `deathstar`, `reaper`): there is no war fleet
+FAIL invariant:LIFE_CAPITAL 20s —  ! [LIFE_CAPITAL] 8 of 100 accounts own a military hull dearer than the median (`bomber`, `destroyer`, `deathstar`, `reaper`): there is no war fleet
 PROOF: FAIL LIFE-002 (invariant:LIFE_CAPITAL) at invariant:LIFE_CAPITAL:  ! [LIFE_CAPITAL] 8 of 100 accounts own a military hull dearer than the median (`bomber`, `destroyer`, `deathstar`, `reaper`): there is no war fleet
 
 LIVE EVIDENCE
 --- ogamex pulse 30 (live, now):
-PULSE last 30 min, 100 accounts: 201 sessions on 100 accounts
-  backlog: 524 work item(s) more than a minute late, oldest 17 min — live verdicts read worker lag
-  sessions chose: FleetSave 33%, QueueUnits 22%, Recycle 11%, Transfer 7%, Build 6%, ThrottleMine 5%, Raid 5%, Colonize 4%, DoNothing 2%, Expedition 1%, Spy 1%, Recall 0%
-  host orders: buildings 468, research 146, units 63
-  missions launched: Colonisation 9, Deployment 36, Expedition 2, Transport 10, Attack 4, Espionage 2, Recycle 7
+PULSE last 30 min, 100 accounts: 161 sessions on 97 accounts
+  backlog: 214 work item(s) more than a minute late, oldest 26 min — live verdicts read worker lag
+  sessions chose: FleetSave 33%, QueueUnits 22%, Transfer 7%, Colonize 7%, ThrottleMine 7%, Recycle 6%, Build 6%, Raid 5%, Spy 2%, DoNothing 2%, Expedition 1%, Recall 1%
+  host orders: buildings 532, research 156, units 70
+  missions launched: Colonisation 5, Deployment 38, Transport 10, Recycle 8, Attack 8, Espionage 5, Expedition 1
   work (kind: state count):
-    RunSession: Pending 93, Completed 201, Retry 9
-    BuildFirstBuilding: Pending 255, Completed 505, Retry 28
-    Transfer: Pending 8, Completed 17, Retry 1
-    QueueResearch: Completed 151, Pending 76, Retry 10
-    FleetSave: Pending 29, Completed 53, Retry 1
-    Colonize: Pending 2, Retry 1, Completed 12
-    QueueUnits: Completed 61, Pending 35, Retry 7
-    Recycle: Completed 21, Pending 5, Retry 1
-    Spy: Completed 2, Retry 1, Pending 1
-    Expedition: Completed 3, Pending 1
-    SetMinePercent: Pending 9, Retry 1, Completed 5
-    Raid: Completed 5, Pending 5, Retry 1
+    BuildFirstBuilding: Completed 580, Retry 30, Pending 77
+    QueueUnits: Completed 67, Retry 9, Pending 8
+    RunSession: Completed 161, Retry 9, Pending 93
+    Recycle: Completed 23, Retry 1
+    QueueResearch: Completed 162, Retry 15, Pending 23
+    Transfer: Completed 16, Retry 2, Pending 2
+    FleetSave: Completed 56, Retry 8, Pending 10
+    Spy: Completed 5, Retry 1
     Recall: Completed 2, Pending 1
+    Colonize: Completed 7, Retry 1
+    Raid: Completed 10, Pending 1
+    SetMinePercent: Completed 8, Retry 4, Pending 1
+    Expedition: Completed 1, Pending 1
   refused: 
     25 × DispatchFleet: no_disposable_fleet
-    10 × DispatchFleet: You don't have sufficient storage capacity!
-    5 × DispatchFleet: Not enough resources on the planet to send the fleet.
-    3 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    9 × DispatchFleet: You don't have sufficient storage capacity!
+    6 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    2 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
     2 × RecallFleet: no_deployment_to_recall
-    1 × QueueBuilding: Not enough fields on this planet. Upgrade your Terraformer or use a planet field item to get more fields.
-    1 × DispatchFleet: You are conducting too many expeditions at the same time.
     1 × DispatchFleet: source_short_at_dispatch
     1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: recycler
+    1 × QueueBuilding: Maximum number of items already in queue.
+    1 × QueueResearch: already_researching
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: colony_ship, small_cargo, heavy_fighter, light_fighter
 --- ogamex why subject (live, now):
 WHY 35 (Miner): what the next session will see
 
-  published: build, queue_units, colonize, spy, throttle_mine
-  NOT published: research
+  published: queue_units, colonize, spy
+  NOT published: build, research, throttle_mine
 
   player_id                    35
-  observed_at                  1790976256
+  observed_at                  1790976944
   account_state                "active"
   recovery_factor              0
   fleet_slots_free             2
@@ -53,14 +54,11 @@ WHY 35 (Miner): what the next session will see
   recall_eligible              false
   planets                      4 planet(s)
 
-  decision: Recycle
-    Build         65.5  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.5
-    Recycle       44.8  resource_need=30, safety=15, seeded_variation=-0.2
-    Spy           40.3  resource_need=30, safety=10, seeded_variation=0.3
-    QueueUnits    40.2  resource_need=30, safety=10, seeded_variation=0.2
-    Colonize      39.7  resource_need=30, safety=10, seeded_variation=-0.3
-    ThrottleMine  39.7  resource_need=30, safety=10, seeded_variation=-0.3
-    Expedition    39.1  resource_need=9, safety=30, seeded_variation=0.1
-    DoNothing      5.2  safety=5, seeded_variation=0.2
+  decision: Colonize
+    Spy           40.1  resource_need=30, safety=10, seeded_variation=0.1
+    Colonize      40.0  resource_need=30, safety=10, seeded_variation=0
+    QueueUnits    40.0  resource_need=30, safety=10, seeded_variation=-0
+    Expedition    38.8  resource_need=9, safety=30, seeded_variation=-0.2
+    DoNothing      4.8  safety=5, seeded_variation=-0.2
   turned down by the candidate factory: 
     report:424: raid_not_viable

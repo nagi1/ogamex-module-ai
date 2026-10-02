@@ -1,2 +1,2 @@
-FAIL invariant:NAKED_BESIDE_WALLED 17s —  ! [NAKED_BESIDE_WALLED] player 59: 1 planet(s) at zero defence while one holds 1,162 units
-PROOF: FAIL QUAL-DEDUP (invariant:NAKED_BESIDE_WALLED) at invariant:NAKED_BESIDE_WALLED:  ! [NAKED_BESIDE_WALLED] player 59: 1 planet(s) at zero defence while one holds 1,162 units
+FAIL invariant:NAKED_BESIDE_WALLED 18s —  ! [NAKED_BESIDE_WALLED] player 64: 1 planet(s) at zero defence while one holds 1,707 units
+PROOF: FAIL QUAL-DEDUP (invariant:NAKED_BESIDE_WALLED) at invariant:NAKED_BESIDE_WALLED:  ! [NAKED_BESIDE_WALLED] player 64: 1 planet(s) at zero defence while one holds 1,707 units
