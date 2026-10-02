@@ -13,6 +13,7 @@ use Modules\AI\Domain\Routine\RoutineProfile;
 use Modules\AI\Domain\Routine\SessionPlan;
 use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Domain\Scheduling\NextDueTimeCalculator;
+use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiSkillBand;
@@ -57,8 +58,8 @@ test('each archetype keeps a routine the others do not', function (AiArchetype $
 ]);
 
 test('a casual player looks in less often than a fleeter', function () {
-    $casual = RoutineProfile::fromAiProfile(aiRoutineProfile([], AiArchetype::Casual));
-    $fleeter = RoutineProfile::fromAiProfile(aiRoutineProfile([], AiArchetype::Fleeter));
+    $casual = RoutineProfile::fromAiProfile(aiRoutineProfile([], AiArchetype::Casual, AiActivityBand::Casual));
+    $fleeter = RoutineProfile::fromAiProfile(aiRoutineProfile([], AiArchetype::Fleeter, AiActivityBand::Hardcore));
 
     expect($casual->sessionsPerDay)->toBeLessThan($fleeter->sessionsPerDay);
 });
@@ -139,13 +140,14 @@ test('registry fails closed when a profile policy is missing', function () {
 });
 
 /** @param array<string, mixed> $settings */
-function aiRoutineProfile(array $settings, AiArchetype $archetype = AiArchetype::Miner): AiProfile
+function aiRoutineProfile(array $settings, AiArchetype $archetype = AiArchetype::Miner, AiActivityBand|null $band = null): AiProfile
 {
     return app()->makeWith(AiProfile::class, ['attributes' => [
         'id' => 1,
         'player_id' => 1,
         'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
+        'activity_band' => $band,
         'random_seed' => 42,
         'settings' => $settings,
     ]]);

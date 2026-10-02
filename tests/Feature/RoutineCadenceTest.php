@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Routine\SessionPlanner;
+use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
@@ -128,8 +129,19 @@ function aiCadenceProfile(AiArchetype $archetype): AiProfile
         'player_id' => 900_000 + $archetype->value,
         'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
+        'activity_band' => aiCadenceBand($archetype),
         'random_seed' => 4_200 + $archetype->value,
     ]]);
+}
+
+// Pace is the account's own band, not its archetype; each persona here is given the band its kind of player keeps.
+function aiCadenceBand(AiArchetype $archetype): AiActivityBand
+{
+    return match ($archetype) {
+        AiArchetype::Casual => AiActivityBand::Casual,
+        AiArchetype::Fleeter => AiActivityBand::Hardcore,
+        default => AiActivityBand::Regular,
+    };
 }
 
 /** @return array<string, array{0: AiArchetype}> */
@@ -154,11 +166,11 @@ function aiCadenceArchetypes(): array
 function aiCadencePresence(): array
 {
     return [
-        'casual' => [AiArchetype::Casual, 2, 3],
+        'casual' => [AiArchetype::Casual, 1, 3],
         'trader' => [AiArchetype::Trader, 4, 8],
         'turtle' => [AiArchetype::Turtle, 4, 8],
         'miner' => [AiArchetype::Miner, 4, 8],
-        'fleeter' => [AiArchetype::Fleeter, 10, 16],
+        'fleeter' => [AiArchetype::Fleeter, 10, 18],
     ];
 }
 

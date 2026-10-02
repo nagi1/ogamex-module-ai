@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Application;
-use Modules\AI\Actions\BuildAiPilotReportAction;
+use Modules\AI\Support\CollectorCrawlerBonusCalculator;
 use OGame\Services\ModuleSlotService;
 use Tests\IsolatedAccountTestCase;
 
@@ -40,13 +40,19 @@ class CollectorCrawlerRuntimeTestCase extends IsolatedAccountTestCase
 uses(CollectorCrawlerRuntimeTestCase::class);
 
 /**
- * Drive the report the pilot is planned from -- the account executes this, not the calculator.
+ * The two figures the Collector's crawler wing is valued by, read from the calculator itself: the pilot
+ * report never carried them, so the old helper called a method that does not exist.
  *
  * @return array{crawler_production_bonus_percent: float, crawler_energy_multiplier: float}
  */
 function collectorCrawlerReport(int $crawlers, int $efficiency): array
 {
-    return app(BuildAiPilotReportAction::class)->execute($crawlers, $efficiency);
+    $calculator = app(CollectorCrawlerBonusCalculator::class);
+
+    return [
+        'crawler_production_bonus_percent' => $calculator->productionBonusPercent($crawlers, $efficiency),
+        'crawler_energy_multiplier' => $calculator->energyMultiplier($efficiency),
+    ];
 }
 
 it('values one crawler at 0.045 percent of base production for a Collector', function () {

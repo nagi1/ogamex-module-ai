@@ -223,7 +223,9 @@ test('it publishes the research capability and queues the technology the plan ap
     expect(capabilityOwnedState($this->currentUserId)['available_actions'])->toBe([
         AiCapability::Build->value => false,
         AiCapability::Research->value => true,
-        AiCapability::QueueUnits->value => false,
+        // The account owns no ship, so its goal is a hull; the satisfied facilities are that hull's own, and
+        // a player with the yard standing queues the first cargo.
+        AiCapability::QueueUnits->value => true,
         AiCapability::Colonize->value => false,
         AiCapability::Spy->value => false,
         AiCapability::ThrottleMine->value => false,
