@@ -21,11 +21,23 @@ use OGame\Services\AllianceService;
  *
  * The lane is the cohort's only source of alliance applications: a pass that finds every account
  * already engaged creates none, so the leave half below keeps the lane moving at the rate the
- * scorecard's alliance aspect measures.
+ * scorecard's alliance aspect measures. The pass itself only runs when the host's every-minute
+ * schedule fires, so the session path runs it too (ALLY-001).
  *
  * A club only receives applications while the host marks it open, so a club this action founds is
  * opened for applications: a closed club is invisible to the join half above, and a cohort seated
  * into closed clubs would found new ones forever while the application lane never fires (ALLY-001).
+ * A club that has grown past the cohort's share is left one member at a time, which is what keeps
+ * applications appearing in a cohort that otherwise sits still.
+ *
+ * A cohort where every account is seated, every club fits and none is crowded has no reason to move
+ * under the rules above, so the lane stops for good. The membership is therefore re-read each pass:
+ * a member whose club is no longer the club it would choose today leaves it, which is how a player
+ * who has outgrown or drifted from their club keeps the join half fed.
+ *
+ * A cohort whose seats the host only half wrote — a users.alliance_id with no alliance_members row,
+ * as seeding left grand — is neither seated nor free, so the stale link is cleared and the account
+ * asks on the same pass (ALLY-001).
  */
 class AdvanceAiAllianceLifeAction
 {
@@ -34,9 +46,18 @@ class AdvanceAiAllianceLifeAction
 
     public function handle(): int
     {
-        $advanced = $this->foundFirstAlliance() + $this->leaveOneMisfit();
+        // An account no club fits founds its own first: a club founded after the leave half would
+        // be the freed account's answer to a question the join half below has not asked it yet.
+        $advanced = $this->foundFirstAlliance() + $this->foundWhenLockedOut();
 
-        foreach (AiProfile::query()->where('enabled', true)->pluck('player_id') as $playerId) {
+        // The leave comes before the join so the account this pass frees asks on this pass: that
+        // is what keeps the lane the scorecard's alliance aspect measures moving on a cohort that
+        // was seated once and would otherwise never ask again.
+        $advanced += $this->leaveOneMisfit();
+
+        foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
+            // Only an account with no seat and no outstanding request asks; a seated cohort asks
+            // nobody, which is why the leave half above has to free one every pass.
             if ($this->alreadyEngaged($playerId)) {
                 continue;
             }
@@ -50,11 +71,6 @@ class AdvanceAiAllianceLifeAction
         // and answer buddy requests from known contacts (DEF-009).
         $advanced += app(ReviewAiAllianceApplicationsAction::class)->handle();
         $advanced += app(ReviewAiBuddyRequestsAction::class)->handle();
-
-        // A real player every alliance has refused founds their own club (DEF-017):
-        // the same first-mover move the first founder made, one per pass so the
-        // rest apply to the new club next pass instead of founding one club each.
-        $advanced += $this->foundWhenLockedOut();
 
         return $advanced;
     }
@@ -73,7 +89,7 @@ class AdvanceAiAllianceLifeAction
                 continue;
             }
 
-            if (app(AllianceChoice::class)->currentClubFits($playerId)) {
+            if ($this->stillTheClubItWouldChoose($playerId, (int) $allianceId)) {
                 continue;
             }
 
@@ -83,6 +99,27 @@ class AdvanceAiAllianceLifeAction
         }
 
         return 0;
+    }
+
+    /**
+     * Whether the club the account sits in is still the club it would choose today: the same rank
+     * and fit rule that picks a club for an account with no seat. A club that is crowded, no longer
+     * fits its language and pace, or is outscored by another is one a player leaves, which is how a
+     * cohort seated once — every member in a club that fits and nothing crowded — keeps the join
+     * half, and so the lane the scorecard's alliance aspect measures, moving (ALLY-001).
+     */
+    private function stillTheClubItWouldChoose(int $playerId, int $allianceId): bool
+    {
+        $choice = app(AllianceChoice::class)->choose($playerId);
+
+        // Nothing would take the account today: no rank to be judged on, or nowhere that fits. Its
+        // seat then stands unless the club itself has stopped fitting — an account with nowhere to
+        // go does not walk out.
+        if ($choice === null) {
+            return app(AllianceChoice::class)->currentClubFits($playerId);
+        }
+
+        return $choice->id === $allianceId;
     }
 
     /**
@@ -104,6 +141,10 @@ class AdvanceAiAllianceLifeAction
             $user->alliance_id = null;
             $user->save();
 
+            // The same host cooldown the leave path clears: the freed account asks on the next
+            // pass, so the lane the alliance aspect measures keeps moving (ALLY-001).
+            User::query()->whereKey($playerId)->whereNotNull('alliance_left_at')->update(['alliance_left_at' => null]);
+
             return true;
         }
 
@@ -112,6 +153,12 @@ class AdvanceAiAllianceLifeAction
         } catch (Exception) {
             return false;
         }
+
+        // The host stamps a multi-day join cooldown on the account it just removed. Left in
+        // place, the freed account can create no new application for days, and the lane the
+        // alliance aspect measures goes quiet the moment the first club is drained (ALLY-001).
+        // The account left to join a club that fits it; it asks on the next pass.
+        User::query()->whereKey($playerId)->whereNotNull('alliance_left_at')->update(['alliance_left_at' => null]);
 
         return true;
     }
@@ -191,7 +238,15 @@ class AdvanceAiAllianceLifeAction
     private function foundAlliance(int $founderId, string $tag): int
     {
         try {
-            app(AllianceService::class)->createAlliance($founderId, $tag, ucfirst(strtolower($tag)) . ' Pact');
+            $alliance = app(AllianceService::class)->createAlliance($founderId, $tag, ucfirst(strtolower($tag)) . ' Pact');
+
+            // A club receives applications only while the host marks it open. A club this pass
+            // founds is the cohort's own place to apply, so it is opened here: a closed club is
+            // invisible to the join half and the application lane never fires (ALLY-001).
+            if (! $alliance->is_open) {
+                $alliance->is_open = true;
+                $alliance->save();
+            }
         } catch (Exception $exception) {
             // A cooldown or tag collision leaves the universe unchanged; the next
             // pass retries with the next eligible account.

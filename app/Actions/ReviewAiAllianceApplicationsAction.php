@@ -72,7 +72,7 @@ class ReviewAiAllianceApplicationsAction
     {
         $founderIds = AiProfile::query()->where('enabled', true)->pluck('player_id');
 
-        return Alliance::query()->whereIn('founder_user_id', $founderIds)->get()->all();
+        return Alliance::query()->whereIn('founder_user_id', $founderIds)->orderBy('id')->get()->all();
     }
 
     private function review(Alliance $alliance): int
