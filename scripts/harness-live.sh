@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
 # Keeps the harness working until a peak window opens: no budget, no stopping after one pass.
 #
-# Each pass runs the whole chain, because a stage the loop skips is where work silently strands:
-#   sweep   harvest the keep-set wiki pages this corpus does not hold yet
-#   run     turn every ingested source without a passing plan into one
-#   promote give every validated plan a task row, so the implement stage can see it
-#   implement write the task's code against its plan and verify it with its own test
-# A validated plan that is never promoted is invisible to the implement stage, and no amount of
-# looping fixes that -- the loop has to call promote itself (found 28 Sep 2026: 122 validated,
-# 98 promoted, 24 stranded). Only a peak window stops the loop. DEV TOOLING — never run in a universe.
-#
-# The two network-bound stages run as parallel shards, because off-peak hours are the scarce budget
-# and one worker waits on the model for most of them: PLAN_WORKERS planning workers take disjoint
-# slices of the same queue, IMPL_WORKERS implement disjoint slices of the todo list. Tune with
-# PLAN_WORKERS / PLAN_BUDGET / IMPL_WORKERS; every worker keeps its own peak gate. Worker count is not
-# a spend control -- MODEL_CONCURRENCY is, and it is enforced across processes by the pipeline.
+# One pass: pick the ready north-star rows, let IMPL_WORKERS writers implement disjoint slices of them
+# (each verifies its own slice with its own tests), then, once HARNESS_BATCH rows are delivered or nothing
+# is left to attempt, read the cohort, restart the canary and prove the whole batch live. Slow checks
+# run per batch, never per row. Only a peak window stops the loop (HARNESS_IGNORE_PEAK=1 skips it).
+# Worker count is not a spend control -- MODEL_CONCURRENCY is, enforced across processes by the pipeline.
+# DEV TOOLING — never run in a universe.
 #
 # `-u` is not cosmetic: python buffers stdout when it is redirected to a file, so without it the log
 # stays empty until the process exits and the watch page shows nothing happening.
@@ -66,62 +58,11 @@ IDLE_INTERVAL=${IDLE_INTERVAL:-300}
     fi
     # Claims a vanished agent or a killed worker left behind, before the queue is read.
     python3 plan/tasks/task.py reap
-    proposals_before=$(ls plan/research/ogame/proposals | wc -l)
     markers_before=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)
 
-    # Direction reset, 1 Oct 2026 (AGENTS.md): ingesting more wiki pages grew the backlog faster than
-    # the accounts learned to play -- 120 open WIK rows while raids, fleet saves and social were dead.
-    # Sweep, plan and promote run only when an operator asks for them.
-    ingest=${HARNESS_INGEST:-0}
-    [ "$ingest" = 1 ] && python3 -u scripts/strategy-pipeline.py sweep --max 12
-
-    # Planning and implementation are network-bound: one source at a time waits on the model for tens
-    # of seconds per call, so a sixty-source queue was an hour spent waiting. The queue is sharded
-    # instead -- `run --shard k/N` takes every Nth pending source, so N workers cover it exactly once
-    # with no lock file and no claim table to keep consistent. Each worker keeps its own peak gate, so
-    # a window that opens mid-pass stops the workers rather than the pass.
-    plan_workers=${PLAN_WORKERS:-4}
-    plan_budget=${PLAN_BUDGET:-20}
     impl_workers=${IMPL_WORKERS:-3}
-    # Every model call is paced through a shared slot file (strategy-pipeline.py), so the workers can
-    # outnumber the cap without flooding the API: the cap is what decides how many calls are in flight.
-    # DeepSeek counts concurrency, not requests per minute, and the cohorts share this key.
     export MODEL_CONCURRENCY="${MODEL_CONCURRENCY:-4}"
-
-    # How many sources are actually waiting, before any worker is spawned. Six workers were being
-    # started for an empty queue every pass, and each one is a python start plus a module import to
-    # discover it has nothing to do.
-    plan_queue_before=$(python3 - <<'PY'
-import importlib.util
-
-spec = importlib.util.spec_from_file_location('sp', 'scripts/strategy-pipeline.py')
-pipeline = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(pipeline)
-print(len(pipeline.pending_sources()))
-PY
-)
-
-    [ "$ingest" = 1 ] || plan_queue_before=0
-    if [ "${plan_queue_before:-0}" -gt 0 ]; then
-      [ "$plan_queue_before" -lt "$plan_workers" ] && plan_workers=$plan_queue_before
-      echo "--- ${plan_queue_before} source(s) to plan across ${plan_workers} worker(s), ${impl_workers} implementing $(date -u '+%F %T') UTC ---"
-
-      rm -f /tmp/harness-plan-rc.* /tmp/harness-impl-rc.*
-      rm -f plan/research/ogame/workers/*.json
-      for shard in $(seq 0 $((plan_workers - 1))); do
-        (
-          HARNESS_WORKER="plan-$shard" python3 -u scripts/strategy-pipeline.py run \
-            --max "$plan_budget" --shard "$shard/$plan_workers"
-          echo $? > "/tmp/harness-plan-rc.$shard"
-        ) &
-      done
-      wait
-    else
-      echo "--- nothing to plan, going straight to implementation $(date -u '+%F %T') UTC ---"
-      rm -f /tmp/harness-plan-rc.* /tmp/harness-impl-rc.*
-    fi
-
-    [ "$ingest" = 1 ] && python3 -u scripts/strategy-pipeline.py promote
+    rm -f /tmp/harness-impl-rc.*
 
     python3 - <<'PY' > /tmp/harness-queue.txt
 import glob
@@ -176,7 +117,7 @@ PY
     done
     wait
 
-    if grep -qs '^3$' /tmp/harness-plan-rc.* /tmp/harness-impl-rc.*; then
+    if grep -qs '^3$' /tmp/harness-impl-rc.*; then
       echo "=== parked mid-pass: peak window $(date -u '+%F %T') UTC ==="
       bash scripts/canary.sh down >> "$LOG" 2>&1 || true
       python3 -u scripts/strategy-pipeline.py wait-until-offpeak
@@ -193,7 +134,9 @@ PY
     ready_now=$(printf '%s\n' "$queue_state" | sed -n 's/^READY: //p')
     unproven_now=$(printf '%s\n' "$queue_state" | sed -n 's/^UNPROVEN: //p' | wc -w)
     last_verify=$(cat /tmp/harness-last-verify 2>/dev/null || echo 0)
-    if [ "${ready_now:-0}" -gt 0 ] && [ "$unproven_now" -lt "${HARNESS_BATCH:-10}" ]; then
+    # A batch also closes on a clock: one row the writer keeps failing must not hold the verdict on the others.
+    if [ "${ready_now:-0}" -gt 0 ] && [ "$unproven_now" -lt "${HARNESS_BATCH:-10}" ] \
+       && [ $(( $(date +%s) - last_verify )) -lt "${HARNESS_VERIFY_EVERY:-1200}" ]; then
       echo "--- batch ${unproven_now}/${HARNESS_BATCH:-10} delivered, ${ready_now} ready: verification waits $(date -u '+%F %T') UTC ---"
       sleep 10
       continue
@@ -299,31 +242,11 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       done
     fi
 
-    proposals_after=$(ls plan/research/ogame/proposals | wc -l)
     markers_after=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)
 
-    # A queued source is spendable work whatever the last pass did with it, so the loop must not sit
-    # out a minute with fifty-three sources waiting. Only an empty queue justifies waiting.
-    plan_queue=$(python3 - <<'PY'
-import importlib.util
-
-spec = importlib.util.spec_from_file_location('sp', 'scripts/strategy-pipeline.py')
-pipeline = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(pipeline)
-print(len(pipeline.pending_sources()))
-PY
-)
-
-    # Off-peak time is the scarce resource, so a pass that got something done rolls straight into
-    # the next one. So does a pass that still has sources to plan.
-    if [ "$markers_after" -gt "$markers_before" ] || [ "$proposals_after" -gt "$proposals_before" ]; then
+    # Off-peak time is the scarce resource, so a pass that delivered something rolls straight into the next.
+    if [ "$markers_after" -gt "$markers_before" ]; then
       echo "--- progress this pass, continuing immediately $(date -u '+%F %T') UTC ---"
-      continue
-    fi
-
-    [ "$ingest" = 1 ] || plan_queue=0
-    if [ "${plan_queue:-0}" -gt 0 ]; then
-      echo "--- ${plan_queue} source(s) still to plan, continuing immediately $(date -u '+%F %T') UTC ---"
       continue
     fi
 
