@@ -343,6 +343,86 @@ if (Schema::hasTable('settings')) {
     }
 }
 
+// Authenticity (AUTH-001): what a neighbour or an operator could observe about the cohort as a
+// crowd, from account-authenticity.md. Each signature is read from state the host or the module
+// already keeps, over the last seven days. They are measurement thresholds for this log, like the
+// quality ones above, and a failing signature is raised like any other invariant.
+//
+//   AUTH_UPTIME      an account whose finished sessions cover this many hours of the day (the host's own
+//                    round-the-clock flag is 18) never sleeps
+//   AUTH_REPETITION  an account whose most common five-action run is this share of its recent actions
+//   AUTH_SAVE        a cohort that has saved this many fleets and never once lost one
+//   AUTH_CONTACT     a cohort in which fewer than this share of accounts ever wrote to another player
+//   AUTH_GROWTH      an account whose public score is this many times the cohort median, or a tenth of it
+$AUTH_UPTIME_HOURS = 18;
+$AUTH_REPEAT_SHARE = 0.5;
+$AUTH_SAVES_WITHOUT_LOSS = 20;
+$AUTH_CONTACT_SHARE = 0.25;
+$AUTH_GROWTH_RATIO = 10;
+$week = now()->subDays(7);
+
+$authUptime = [];
+$sessions = DB::table('ai_work_items')->whereIn('player_id', $playerIds)->where('kind', AiWorkKind::RunSession->value)
+    ->where('state', AiWorkState::Completed->value)->where('updated_at', '>=', $week)
+    ->selectRaw('player_id, count(distinct hour(updated_at)) as hours')->groupBy('player_id')->get();
+foreach ($sessions as $row) {
+    if ((int) $row->hours >= $AUTH_UPTIME_HOURS) {
+        $authUptime[] = sprintf('player %d is active in %d of 24 hours of the day', $row->player_id, $row->hours);
+    }
+}
+
+$authRepetition = [];
+foreach ($playerIds as $accountId) {
+    $kinds = DB::table('ai_work_items')->where('player_id', $accountId)->where('kind', '!=', AiWorkKind::RunSession->value)
+        ->orderByDesc('id')->limit(300)->pluck('kind')->all();
+    if (count($kinds) < 50) {
+        continue;
+    }
+    $grams = [];
+    for ($i = 0; $i + 5 <= count($kinds); $i++) {
+        $gram = implode(',', array_slice($kinds, $i, 5));
+        $grams[$gram] = ($grams[$gram] ?? 0) + 1;
+    }
+    $share = max($grams) / array_sum($grams);
+    if ($share > $AUTH_REPEAT_SHARE) {
+        $authRepetition[] = sprintf('player %d repeats one five-action run for %.0f%% of its recent actions', $accountId, $share * 100);
+    }
+}
+
+$authSave = [];
+$saves = DB::table('ai_work_items')->whereIn('player_id', $playerIds)->where('kind', AiWorkKind::FleetSave->value)->where('updated_at', '>=', $week);
+$savesTotal = (clone $saves)->count();
+$savesFailed = (clone $saves)->where('state', AiWorkState::Failed->value)->count();
+if ($savesTotal >= $AUTH_SAVES_WITHOUT_LOSS && $savesFailed === 0) {
+    $authSave[] = sprintf('%d fleet saves in a week and none ever failed: a human loses one now and then', $savesTotal);
+}
+
+$authContact = [];
+if (Schema::hasTable('chat_messages')) {
+    $talkers = DB::table('chat_messages')->whereIn('sender_id', $playerIds)->where('created_at', '>=', $week)
+        ->whereColumn('recipient_id', '!=', 'sender_id')->distinct()->count('sender_id');
+    if ($talkers / count($playerIds) < $AUTH_CONTACT_SHARE) {
+        $authContact[] = sprintf('only %d of %d accounts wrote to another player this week', $talkers, count($playerIds));
+    }
+}
+
+$authGrowth = [];
+// Growth is compared among accounts that have played for days: an account seeded this hour has a
+// score of nothing, and measuring it against its elders reads a young cohort as an abnormal one.
+$seasoned = DB::table('ai_work_items')->whereIn('player_id', $playerIds)->groupBy('player_id')
+    ->havingRaw('min(created_at) < ?', [now()->subDays(3)])->pluck('player_id')->all();
+$scores = DB::table('highscores')->whereIn('player_id', $seasoned)->pluck('general', 'player_id')->map(fn ($v): float => (float) $v)->all();
+if (count($scores) >= 5) {
+    $sorted = array_values($scores);
+    sort($sorted);
+    $median = $sorted[intdiv(count($sorted), 2)];
+    foreach ($scores as $accountId => $score) {
+        if ($median > 0 && ($score > $median * $AUTH_GROWTH_RATIO || $score < $median / $AUTH_GROWTH_RATIO)) {
+            $authGrowth[] = sprintf('player %d scores %s against a cohort median of %s', $accountId, number_format($score), number_format($median));
+        }
+    }
+}
+
 // Named invariants, one line per violation, and a machine-readable verdict at the end. The harness
 // reads that line to raise a task for anything the cohorts fail, so a repeated "QUALITY: FAIL" is not
 // a dead end someone has to notice by eye.
@@ -352,6 +432,11 @@ $invariants = [
     'ALLIANCE_SHARE' => $allianceShare,
     'IDLE_QUEUES' => $idleQueues,
     'UNIVERSE_SPEED' => $tooFast,
+    'AUTH_UPTIME' => $authUptime,
+    'AUTH_REPETITION' => $authRepetition,
+    'AUTH_SAVE' => $authSave,
+    'AUTH_CONTACT' => $authContact,
+    'AUTH_GROWTH' => $authGrowth,
 ];
 
 $fired = array_keys(array_filter($invariants, static fn (array $rows): bool => $rows !== []));
@@ -368,6 +453,10 @@ foreach ($invariants as $name => $rows) {
 }
 
 echo $fired === [] ? '' : 'QUALITY: FAIL '.implode(' ', $fired)."\n";
+
+foreach (array_filter(array_keys($invariants), fn (string $name): bool => str_starts_with($name, 'AUTH_')) as $name) {
+    echo 'AUTHENTICITY: '.($invariants[$name] === [] ? 'PASS' : 'FAIL').' '.$name."\n";
+}
 
 // Information, not a violation: planets the planner had nothing to queue on because the host refused
 // every candidate. When this covers most planets of most accounts the run is over (reseed).
