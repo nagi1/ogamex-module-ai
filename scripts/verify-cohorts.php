@@ -392,7 +392,10 @@ foreach ($playerIds as $accountId) {
 $authSave = [];
 $saves = DB::table('ai_work_items')->whereIn('player_id', $playerIds)->where('kind', AiWorkKind::FleetSave->value)->where('updated_at', '>=', $week);
 $savesTotal = (clone $saves)->count();
-$savesFailed = (clone $saves)->where('state', AiWorkState::Failed->value)->count();
+// A save is lost when its work failed or when the account chose not to take it (the stop counter).
+$savesLost = (int) DB::table('ai_stop_counters')->where('reason', 'save_lost')->where('observed_on', '>=', $week->toDateString())->sum('occurrences');
+$savesFailed = (clone $saves)->where('state', AiWorkState::Failed->value)->count() + $savesLost;
+$savesTotal += $savesLost;
 if ($savesTotal >= $AUTH_SAVES_WITHOUT_LOSS && $savesFailed === 0) {
     $authSave[] = sprintf('%d fleet saves in a week and none ever failed: a human loses one now and then', $savesTotal);
 }

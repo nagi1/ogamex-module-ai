@@ -27,6 +27,7 @@ use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
+use Modules\AI\Domain\Decision\SaveFailurePolicy;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Enums\AiWorkKind;
@@ -115,6 +116,7 @@ class ScheduleAiIntentAction
         private QueueableMinePercentPlanner $queueableMinePercentPlanner,
         private QueueablePhalanxPlanner $queueablePhalanxPlanner,
         private RaidPlanner $raidPlanner,
+        private SaveFailurePolicy $saveFailurePolicy,
         private AiClock $clock,
     ) {
     }
@@ -149,9 +151,10 @@ class ScheduleAiIntentAction
         $type = $trace->selected->candidate->type;
         // A player refills the build queues and the lab every login before turning to the shipyard or
         // the fleet; choosing a raid or a ship must not leave nine planets idle until the next session.
-        // A transfer or a save is priced against the very balance a queue would spend, and a session
-        // that placed no order has nothing to spend on: neither may refill the queues.
-        $economySteps = $this->fillsEconomy($type) && !in_array($type, [AiCandidateActionType::Transfer, AiCandidateActionType::FleetSave, AiCandidateActionType::DoNothing], true) && $this->economyOffered($trace)
+        // A save moves everything away and a quiet session has nothing to spend on: neither refills
+        // the queues. A ferry does: the player builds first and ships what is left, and the transfer
+        // clamps itself to the stock still on the pad.
+        $economySteps = $this->fillsEconomy($type) && $this->economyOffered($trace)
             ? $this->fillQueues($profile, $sessionWorkItem, ':economy')
             : 0;
 
@@ -175,9 +178,9 @@ class ScheduleAiIntentAction
     }
 
     /**
-     * Whether the economy is filled before the selected action. Transfers and saves move the stock
-     * away, so a building priced against it would be cancelled; Build and Research fill it themselves;
-     * an idle session is a player who did not log in to play.
+     * Whether the economy is filled before the selected action. A save moves the stock away, so a
+     * building priced against it would be cancelled; Build and Research fill it themselves; an idle
+     * session is a player who did not log in to play.
      */
     private function fillsEconomy(AiCandidateActionType $type): bool
     {
@@ -188,6 +191,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Expedition,
             AiCandidateActionType::Recycle,
             AiCandidateActionType::Recall,
+            AiCandidateActionType::Transfer,
             AiCandidateActionType::Phalanx,
             AiCandidateActionType::ThrottleMine,
             AiCandidateActionType::Colonize => true,
@@ -362,6 +366,14 @@ class ScheduleAiIntentAction
     {
         $plan = $this->queueableFleetSavePlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableFleetSave) {
+            return;
+        }
+
+        // A save that is not taken now and then is what a person does; the loss is counted so the
+        // cohort read can see it (AUTH_SAVE).
+        if ($this->saveFailurePolicy->shouldSkip((int) $profile->random_seed, (int) $sessionWorkItem->id) !== null) {
+            app(RecordAiStopReasonAction::class)->handle(AiStopReason::SaveLost, ['player_id' => $profile->player_id]);
+
             return;
         }
 

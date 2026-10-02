@@ -62,6 +62,7 @@ class QueueAiTransferAction implements QueueAiTransfer
                 return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
 
+            $shipment = $this->fittedToHold($player, $source, $shipment);
             $fleet = $this->transportFleet($player, $source, $shipment);
             if ($fleet === null) {
                 return AiActionResult::rejected(AiQueueActionReason::NoTransportFleet);
@@ -138,6 +139,27 @@ class QueueAiTransferAction implements QueueAiTransfer
      * source's fleet cannot carry it. Ships without cargo capacity are never taken, so a ferry run
      * never moves the combat fleet.
      */
+    /**
+     * A player ships what the hold takes: a store of millions beside a few hundred cargo ships sends
+     * a full fleet's load, it is not refused for being bigger than the fleet.
+     */
+    private function fittedToHold(PlayerService $player, PlanetService $source, Resources $shipment): Resources
+    {
+        $capacity = $source->getShipUnits()->getTotalCargoCapacity($player);
+        $total = $shipment->sum();
+        if ($capacity <= 0 || $total <= $capacity) {
+            return $shipment;
+        }
+
+        $share = $capacity / $total;
+
+        return new Resources(
+            floor($shipment->metal->get() * $share),
+            floor($shipment->crystal->get() * $share),
+            floor($shipment->deuterium->get() * $share),
+        );
+    }
+
     private function transportFleet(PlayerService $player, PlanetService $source, Resources $shipment): ?UnitCollection
     {
         $fleet = new UnitCollection();

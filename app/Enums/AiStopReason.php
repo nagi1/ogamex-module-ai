@@ -47,4 +47,7 @@ enum AiStopReason: string
 
     /** A session's only candidate was DoNothing, so nothing else was available to choose. */
     case QuietDecision = 'quiet_decision';
+
+    /** A save the account could have taken was not taken (the overnight gamble): a lost save is counted, never hidden. */
+    case SaveLost = 'save_lost';
 }

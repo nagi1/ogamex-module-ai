@@ -7,11 +7,14 @@ use Modules\AI\Domain\Decision\CandidateAction;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
+use Modules\AI\Domain\Decision\SaveFailurePolicy;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCandidateActionType;
+use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Models\AiStopCounter;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Models\EspionageReport;
@@ -116,7 +119,35 @@ test('a colonize selection schedules and executes a colony mission', function ()
     expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
 });
 
+// The skip draw is pinned: the seam is the policy itself, the one thing these two tests must control.
+function intentSaveSkips(bool $skips): void
+{
+    app()->instance(SaveFailurePolicy::class, new class ($skips) extends SaveFailurePolicy {
+        public function __construct(private bool $skips)
+        {
+        }
+
+        public function shouldSkip(?int $seed, int $key): ?string
+        {
+            return $this->skips ? 'overnight_gamble' : null;
+        }
+    });
+}
+
+test('a save the account does not take is counted as lost, not hidden', function (): void {
+    intentSaveSkips(true);
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+    $this->planetAddUnit('large_cargo', 5);
+
+    $intent = intentSchedule($profile, AiCandidateActionType::FleetSave, $this->currentPlanetId);
+
+    expect($intent)->toBeNull()
+        ->and((int) AiStopCounter::query()->where('reason', AiStopReason::SaveLost->value)->sum('occurrences'))->toBe(1);
+});
+
 test('a fleet save selection schedules and executes a deployment', function (): void {
+    intentSaveSkips(false);
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());
     $this->planetAddUnit('large_cargo', 5);
@@ -163,7 +194,7 @@ test('a login fills the build queue on every planet the account owns', function 
 });
 
 // The two dataset sides are the boundary of the rule: a fleet errand leaves the stock to the
-// economy, a decision that spends or moves the stock keeps it.
+// economy, a decision that moves all of it away keeps it.
 test('a session that chose something else still refills the queues only when the stock is free', function (AiCandidateActionType $selected, bool $refills): void {
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());
@@ -177,7 +208,8 @@ test('a session that chose something else still refills the queues only when the
         ->and($economy?->kind)->toBe($refills ? AiWorkKind::BuildFirstBuilding : null);
 })->with([
     'a spy errand leaves the stock free' => [AiCandidateActionType::Spy, true],
-    'a transfer moves the stock' => [AiCandidateActionType::Transfer, false],
+    'a transfer ferries what the builds leave' => [AiCandidateActionType::Transfer, true],
+    'a save moves everything away' => [AiCandidateActionType::FleetSave, false],
 ]);
 
 // The buildings are placed before the shipyard spends: the host cancels a building it cannot pay

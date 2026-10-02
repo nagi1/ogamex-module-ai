@@ -186,6 +186,17 @@ test('a transfer intent with nothing worth ferrying drops safely', function (): 
         ->and($result[2])->toBe(0);
 });
 
+test('a shipment bigger than the hold sends what the hold takes instead of being refused', function (): void {
+    transferProfile($this->currentUserId);
+    $targetId = transferTarget($this->secondPlanetService);
+    transferSource();
+
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $targetId, 900_000, 900_000, 0);
+
+    expect($result->reason)->not->toBe(AiQueueActionReason::NoTransportFleet->value)
+        ->and(FleetMission::query()->where('user_id', $this->currentUserId)->exists())->toBeTrue();
+});
+
 test('the ferry refuses an empty shipment and a fleet with no hold', function (): void {
     transferProfile($this->currentUserId);
     transferTarget($this->secondPlanetService);
@@ -281,9 +292,9 @@ test('a ferry the host refuses is reported, not thrown', function (): void {
     $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
     expect($plan)->toBeInstanceOf(QueueableTransfer::class);
 
-    // A shipment far past what the source owns or can carry: the host refuses it and the adapter
-    // reports the refusal rather than letting the exception escape.
-    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $plan->targetPlanetId, 9_000_000, 9_000_000, 0);
+    // A ferry to the planet it leaves from: the host refuses it and the adapter reports the refusal
+    // rather than letting the exception escape.
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $plan->sourcePlanetId, $plan->sourcePlanetId, 100_000, 100_000, 0);
 
     expect($result->successful)->toBeFalse();
 });
