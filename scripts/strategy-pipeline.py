@@ -50,31 +50,19 @@ PROPOSALS = os.path.join(MODULE, "plan/research/ogame/proposals")
 IMPLEMENTED = os.path.join(MODULE, "plan/research/ogame/implemented")
 ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 
-# How many tries one task may spend in a window, and how long before its budget resets. The window is
-# not the stop: a row that fails the same way twice is stuck (record_failure) and waits for a person.
-MAX_ATTEMPTS = 3
 
 # The writer works like an engineer at a terminal: it reads, searches and edits a working copy and runs
 # the slice's checks itself, so a misquoted SEARCH or a guessed column costs one tool call, not an
 # attempt. The working copy outlives a failed check and a failed attempt (ATTEMPTS/CODE.work.json); the
 # bounds below stop a writer that circles. One attempt: at most this many model turns, checks, seconds.
-AGENT_STEPS = 40
-AGENT_CHECKS = 6
-AGENT_SECONDS = 40 * 60
 # Past this prompt size the conversation restarts from the task plus the working copy's diff and the last
 # check, instead of growing until the provider truncates it. The work is kept; only the chatter goes.
 AGENT_CONTEXT_TOKENS = 100_000
 # The same call with nothing changed in between, or the same check failure, this many times ends the attempt.
-AGENT_REPEATS = 3
 # Consecutive read-only calls before reading is refused and the writer must edit or give up.
 AGENT_READ_STREAK = 15
 TOOL_RESULT_CHARS = 12_000
 READ_LINES = 400
-# Short on purpose: a retry resumes the kept working copy with the failure as input, and the same failure
-# twice already makes the row stuck. A 45 minute pause only idled the off-peak window (2 Oct 2026).
-COOLOFF_SECONDS = 5 * 60
-# A stuck row's wait, in seconds: no clock ends it, `task.py unstick` does.
-NEVER = 10 ** 9
 # Reads older than the grand reseed (1 Oct 2026 15:39 UTC) measured a universe at 90,000x speed.
 COHORT_RESET = datetime.datetime(2026, 10, 1, 15, 39, tzinfo=datetime.timezone.utc)
 SCORECARDS = os.path.join(MODULE, "plan/research/ogame/scorecards")
@@ -427,10 +415,6 @@ def failure_signature(reason):
     return " ".join(re.sub(r"\d+", "", text).split())
 
 
-def stuck(code):
-    return os.path.exists(os.path.join(ATTEMPTS, f"{code}.stuck"))
-
-
 def block_row(code, note):
     """Take a row out of the queue with the reason in its notes: the ledger's own `block`."""
     if not os.path.exists(TASKS_DB):
@@ -441,39 +425,13 @@ def block_row(code, note):
 
 
 def record_failure(code, reason):
-    """Count a failed attempt, keep its output for the next one, and stop on a repeat.
-
-    A failure whose signature equals the previous one's is the terminal state: the row is stuck,
-    blocked, and no clock brings it back, because a third attempt with the same input fails the same
-    way and costs the same. A different failure is progress and gets another try carrying its reason.
-    """
+    """Keep a failed delivery's output as the writer's next input. Nothing is counted against the row and
+    nothing stops it: the next attempt resumes the kept working copy with this reason."""
     os.makedirs(ATTEMPTS, exist_ok=True)
-    path = os.path.join(ATTEMPTS, f"{code}.count")
-    attempts = int(read(path).strip() or 0) + 1 if os.path.exists(path) else 1
-
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(str(attempts))
+    with open(os.path.join(ATTEMPTS, f"{code}.count"), "w", encoding="utf-8") as handle:
+        handle.write("1")
     with open(os.path.join(ATTEMPTS, f"{code}.log"), "w", encoding="utf-8") as handle:
         handle.write(reason)
-
-    normalised = failure_signature(reason)
-    signature = hashlib.sha1(normalised.encode()).hexdigest()[:12]
-    sig_path = os.path.join(ATTEMPTS, f"{code}.sig")
-    with open(sig_path, "a", encoding="utf-8") as handle:
-        handle.write(signature + "\n")
-    signatures = read(sig_path).split()
-
-    if len(signatures) < 2 or signatures[-1] != signatures[-2]:
-        print(f"  attempt {attempts} failed; retrying with this output")
-        return False
-
-    first = next((line.strip() for line in reason.splitlines() if line.strip()), "")
-    with open(os.path.join(ATTEMPTS, f"{code}.stuck"), "w", encoding="utf-8") as handle:
-        handle.write(normalised + "\n---\n" + "\n".join(reason.splitlines()[:40]) + "\n")
-    block_row(code, f"stuck: same failure twice: {first[:200]}")
-    print(f"  attempt {attempts} failed the same way twice; {code} is stuck and blocked")
-
-    return True
 
 
 def waits_upstream(code, failing):
@@ -567,26 +525,6 @@ def reopen(code):
     print(f"{code}: back to the writer with the failing proof step")
 
     return 0
-
-
-def cooling_off(code):
-    """How long this task should wait before its next attempt, or 0 when it may be attempted now."""
-    if stuck(code):
-        return NEVER
-
-    path = os.path.join(ATTEMPTS, f"{code}.count")
-    if not os.path.exists(path):
-        return 0
-
-    age = int(time.time() - os.path.getmtime(path))
-    if age > COOLOFF_SECONDS:
-        # A budget that ran out on different failures resets; a stuck row never reaches here.
-        os.remove(path)
-        return 0
-
-    attempts = int(read(path).strip() or 0)
-
-    return max(0, COOLOFF_SECONDS - age) if attempts >= MAX_ATTEMPTS else 0
 
 
 def plan_numbers(source_id):
@@ -1061,15 +999,6 @@ def self_check():
     assert failure_signature("Tests: 2 failed 1.04s at /var/www/a.php:32 row 18915 c0ffee12ab") == \
         failure_signature("Tests: 7 failed 2.5s at /tmp/b.php:41 row 99 deadbe3f12"), "volatile parts are not the failure"
     assert failure_signature("no test") != failure_signature("no tests found"), "different words are different failures"
-    probe_code = f"__self-check-{os.getpid()}__"
-    try:
-        assert record_failure(probe_code, "boom 1") is False, "the first failure only counts"
-        assert record_failure(probe_code, "boom 2") is True and stuck(probe_code), "the same failure twice is stuck"
-        assert cooling_off(probe_code) == NEVER, "no clock ends a stuck row"
-    finally:
-        for suffix in ("count", "log", "sig", "stuck"):
-            if os.path.exists(os.path.join(ATTEMPTS, f"{probe_code}.{suffix}")):
-                os.remove(os.path.join(ATTEMPTS, f"{probe_code}.{suffix}"))
     red, green = {"pass": False, "steps": [{"step": "test:X", "pass": False, "line": "boom"}]}, {"pass": True, "steps": []}
     assert proof_change(red, green) is None, "a proof that passes is accepted"
     assert proof_change(red, red).startswith("proof unchanged: test:X boom"), "an attempt that moved nothing is refused"
@@ -1236,7 +1165,7 @@ WRITER_TOOLS = [
         }, "required": ["path", "content"]}}},
     {"type": "function", "function": {
         "name": "check",
-        "description": f"Verify the working copy in the real tree: lint, automatic refusals, the tests that name what you touched, then the proof. A pass delivers the task. A fail restores the tree, keeps your copy and returns the output. {AGENT_CHECKS} per attempt.",
+        "description": f"Verify the working copy in the real tree: lint, automatic refusals, the tests that name what you touched, then the proof. A pass delivers the task. A fail restores the tree, keeps your copy and returns the output. Check as often as you need.",
         "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {
         "name": "give_up",
@@ -1789,11 +1718,10 @@ def status():
     attemptable = [code for code, _, file_ref, _, _, _ in rows
                    if code in ready_codes and code not in marked
                    and (file_ref or os.path.exists(os.path.join(PROPOSALS, f"{code}.md")))]
-    waiting = {code: cooling_off(code) for code in attemptable if 0 < cooling_off(code) < NEVER}
     proofs = {code: proof for code, _, _, proof, _, _ in rows}
-    held = {code: moves_no_failing_aspect(proofs[code]) for code in attemptable if code not in waiting}
+    held = {code: moves_no_failing_aspect(proofs[code]) for code in attemptable}
     held = {code: why for code, why in held.items() if why}
-    ready = [code for code in attemptable if code not in waiting and code not in held and not stuck(code)]
+    ready = [code for code in attemptable if code not in held]
     proven = [code for code, state, _, _, stamped, _ in rows if state == "done" and stamped]
     closed_blind = [code for code, state, _, _, stamped, _ in rows if state == "done" and not stamped]
     unproven = [code for code, state, *_ in rows if code in marked and state != "done"]
@@ -1801,14 +1729,11 @@ def status():
 
     print(f"P0-P2 code rows: {len(proven)} proven, {len(closed_blind)} closed before proofs existed, "
           f"{len(unproven)} delivered but NOT proven, "
-          f"{len(ready)} ready now, {len(waiting)} cooling off")
+          f"{len(ready)} ready now")
     if unproven:
         print("delivered, not proven: " + ", ".join(sorted(unproven)))
     for code, why in sorted(held.items()):
         print(f"WAITING: {code} — {why}")
-    stuck_rows = sorted(os.path.basename(path)[:-len(".stuck")] for path in glob.glob(os.path.join(ATTEMPTS, "*.stuck")))
-    if stuck_rows:
-        print("STUCK: " + ", ".join(stuck_rows) + "  (same failure twice; `task.py unstick CODE` after a change)")
     if no_proof:
         print("OFF THE NORTH STAR (no aspect, situation or invariant in the proof; cannot be taken or closed): "
               + ", ".join(sorted(no_proof)))
@@ -1816,9 +1741,6 @@ def status():
     print(f"model today: {usage_today()}")
     print(f"READY: {len(ready)}")
     print(f"UNPROVEN: {' '.join(sorted(unproven))}")
-
-    if waiting:
-        print(f"next one free in {min(waiting.values()) // 60} min")
 
     return 0
 
@@ -2368,64 +2290,60 @@ def call_line(name, args):
 
 
 def write_slice(code, context, working, failure, dropped):
-    """Run the writer until the slice is delivered or the attempt ends.
+    """Run the writer until the slice is delivered. It has no turn, time or check budget: a failed check
+    goes straight back to it with the failure, and the only exits are delivery, `give_up` (a specification
+    that cannot hold, which blocks the row for the owner), and a pause the provider or a peak window forces.
 
     Returns ("delivered", (written, proof after)), ("later", None) when nothing is counted (a held lane, a
-    provider error, an unrunnable proof) or ("failed", reason). The working copy is saved after every change.
+    provider error, an unrunnable proof, a peak window) or ("gave_up", reason). The working copy is saved
+    after every change.
     """
     conversation = writer_conversation(context, working, failure, dropped)
-    started, checks, version, checked_version = time.time(), 0, 0, -1
-    seen, repeats, reads, last_signature, same_failures, silent = {}, 0, 0, None, 0, 0
+    checks, version, checked_version = 0, 0, -1
+    seen, reads, silent, step = {}, 0, 0, 0
     last_failure = failure
 
-    for step in range(1, AGENT_STEPS + 1):
-        if time.time() - started > AGENT_SECONDS * 1.2:
-            return "failed", f"the writer ran out of time ({AGENT_SECONDS // 60} min) before a check passed.\n{last_failure}"
+    while True:
+        step += 1
         if in_peak(datetime.datetime.now(datetime.timezone.utc)):
-            # An attempt now runs for minutes; one started before a window must not bill inside it.
+            # An attempt runs for as long as it takes; one started before a window must not bill inside it.
             print("  a peak window opened; the attempt parks with its working copy kept")
             save_work(code, working, last_failure)
             return "later", None
         refresh_claims()
         publish("implementing", f"{code} step {step}")
-        # An attempt never ends on work nobody checked (ATK-001 edited, wrote a test and spent its last turns
-        # reading logs): near the end of its turns or time the harness runs the check the writer did not.
-        forced = bool(working) and checked_version != version and checks < AGENT_CHECKS and (
-            step > AGENT_STEPS - 4 or time.time() - started > AGENT_SECONDS * 0.9)
-        if forced:
-            print("  the writer's turns are nearly spent with changes unchecked; the harness runs the check")
-            message, data = {}, {}
-            calls = [{"id": "", "function": {"name": "check", "arguments": "{}"}}]
-        if not forced:
-            payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
-                       "reasoning_effort": WRITER_REASONING_EFFORT, "messages": conversation,
-                       "tools": WRITER_TOOLS, "tool_choice": "auto"}
-            try:
-                data = model_call(payload, purpose=f"implementing {code} step {step}")
-            except urllib.error.HTTPError as error:
-                print(f"  the provider refused the request ({error.code}): {error.read().decode(errors='replace')[:400]}")
-                return "later", None
-            if not data.get("choices"):
-                print(f"  the provider returned no answer, not counted as an attempt: {json.dumps(data)[:400]}")
-                return "later", None
-            choice = data["choices"][0]
-            message = choice.get("message") or {}
-            calls = message.get("tool_calls") or []
-            if choice.get("finish_reason") == "length":
-                return "failed", "unfinished: the writer's turn hit the output cap; take smaller steps, one edit per call."
+        payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
+                   "reasoning_effort": WRITER_REASONING_EFFORT, "messages": conversation,
+                   "tools": WRITER_TOOLS, "tool_choice": "auto"}
+        try:
+            data = model_call(payload, purpose=f"implementing {code} step {step}")
+        except urllib.error.HTTPError as error:
+            print(f"  the provider refused the request ({error.code}): {error.read().decode(errors='replace')[:400]}")
+            save_work(code, working, last_failure)
+            return "later", None
+        if not data.get("choices"):
+            print(f"  the provider returned no answer, not counted as an attempt: {json.dumps(data)[:400]}")
+            save_work(code, working, last_failure)
+            return "later", None
+        choice = data["choices"][0]
+        message = choice.get("message") or {}
+        calls = message.get("tool_calls") or []
+        if choice.get("finish_reason") == "length":
+            conversation.append({"role": "user", "content": "Your last turn hit the output cap and was lost: take smaller "
+                                 "steps, one edit per call."})
+            continue
 
-            # In thinking mode the provider requires the reasoning of a tool-calling turn to be sent back with it.
-            conversation.append({"role": "assistant", "content": message.get("content") or "",
-                                 **({"reasoning_content": message["reasoning_content"]} if message.get("reasoning_content") else {}),
-                                 **({"tool_calls": calls} if calls else {})})
+        # In thinking mode the provider requires the reasoning of a tool-calling turn to be sent back with it.
+        conversation.append({"role": "assistant", "content": message.get("content") or "",
+                             **({"reasoning_content": message["reasoning_content"]} if message.get("reasoning_content") else {}),
+                             **({"tool_calls": calls} if calls else {})})
 
         if not calls:
             silent += 1
-            if silent >= 2 and working and checks < AGENT_CHECKS:
+            if working and checked_version != version:
+                # Changes nobody checked: the harness runs the check the writer did not.
                 calls = [{"id": "", "function": {"name": "check", "arguments": "{}"}}]
             if not calls:
-                if silent >= 2:
-                    return "failed", "the writer stopped calling tools without a change to check:\n" + (message.get("content") or "")[:1200]
                 conversation.append({"role": "user", "content": "Use the tools: edit_file/write_file to change the "
                                      "code, check when it is done, give_up if the specification cannot hold."})
                 continue
@@ -2443,20 +2361,15 @@ def write_slice(code, context, working, failure, dropped):
 
             key = (name, json.dumps(args, sort_keys=True), version)
             if result is None and key in seen and name != "give_up":
-                repeats += 1
                 result = ("You already made this exact call and nothing has changed since, so the answer is the same:\n"
                           + seen[key][:1500] + "\nDo something different.")
-                if repeats >= AGENT_REPEATS:
-                    return "failed", f"the writer kept repeating calls whose answer it had.\n{last_failure}"
 
             if result is None and name == "give_up":
-                return "failed", f"the writer gave up: {args.get('reason', '')}\n{last_failure}"
+                return "gave_up", f"the writer gave up: {args.get('reason', '')}\n{last_failure}"
 
             if result is None and name == "check":
                 if not working:
                     result = "Your working copy is empty: there is nothing to check. Edit the code first."
-                elif checks >= AGENT_CHECKS:
-                    return "failed", f"the writer used its {AGENT_CHECKS} checks.\n{last_failure}"
                 else:
                     checks += 1
                     checked_version = version
@@ -2468,16 +2381,12 @@ def write_slice(code, context, working, failure, dropped):
                         return "delivered", verdict
                     last_failure = verdict.reason
                     save_work(code, working, last_failure)
-                    signature = failure_signature(verdict.reason)
-                    same_failures = same_failures + 1 if signature == last_signature else 1
-                    last_signature = signature
-                    if same_failures >= AGENT_REPEATS:
-                        return "failed", verdict.reason
-                    result = (f"CHECK {checks}/{AGENT_CHECKS} FAILED; the tree is restored and your working copy is kept.\n"
+                    result = (f"CHECK {checks} FAILED; the tree is restored and your working copy is kept.\n"
                               + verdict.reason[:6000])
-                    if same_failures > 1:
+                    if checks > 1 and failure_signature(verdict.reason) == failure_signature(seen.get("last_check", "")):
                         result += ("\n\nThis is the SAME failure as your previous check: your edits since did not reach its "
                                    "cause. Read the failing line and the code it runs before you edit again.")
+                    seen["last_check"] = verdict.reason
                     seen[key] = result
 
             if result is None and reads >= AGENT_READ_STREAK and name in ("read_file", "search", "list_files"):
@@ -2507,8 +2416,6 @@ def write_slice(code, context, working, failure, dropped):
             if reads == AGENT_READ_STREAK:
                 result += (f"\n\n[{reads} calls without a change: reading closes after this one. Make the edit, or give_up "
                            "with the reason.]")
-            if AGENT_STEPS - step == 5:
-                result += "\n\n[5 turns left in this attempt: finish the change and call check.]"
             if len(result) > TOOL_RESULT_CHARS:
                 result = result[:TOOL_RESULT_CHARS] + "\n… (cut; narrow the call)"
             # A check the harness ran for a writer that stopped calling tools answers as the user.
@@ -2519,8 +2426,6 @@ def write_slice(code, context, working, failure, dropped):
         if (data.get("usage") or {}).get("prompt_tokens", 0) > AGENT_CONTEXT_TOKENS:
             print("  the conversation grew past its bound; the writer restarts from its working copy and the last check")
             conversation = writer_conversation(context, working, last_failure)
-
-    return "failed", f"the writer used its {AGENT_STEPS} turns before a check passed.\n{last_failure}"
 
 
 # The files this process claimed while the writer edited, beyond the plan's own.
@@ -2808,16 +2713,6 @@ def implement(code, answer_file=None):
         publish("working", f"skipped {code} (already done)")
         return 0
 
-    cooldown = cooling_off(code)
-    if cooldown >= NEVER:
-        say(f"{code}: stuck on a repeated failure — waits for `task.py unstick {code}`")
-        return 0
-    if cooldown > 0:
-        # Not parked: the budget ages out and the task is picked up again on its own.
-        say(f"{code}: cooling off for another {cooldown // 3600}h {cooldown % 3600 // 60}m")
-        publish("working", f"skipped {code} (cooling off, retries itself)")
-        return 0
-
     # The row itself, in the ledger every agent claims from: a file lock alone let an interactive
     # agent and a harness worker take the same task and both write it.
     if not ledger.on_path(task_row(code)["proof"]):
@@ -2907,9 +2802,9 @@ def implement(code, answer_file=None):
         outcome, result = write_slice(code, context, working, failure or previous_failure(code), dropped)
         if outcome == "later":
             return 0
-        if outcome == "failed":
-            print(f"  attempt ended: {result.splitlines()[0][:160]}; the working copy is kept for the next one")
-            record_failure(code, result)
+        if outcome == "gave_up":
+            print(f"  {result.splitlines()[0][:200]}")
+            block_row(code, result.splitlines()[0][:300])
             return 1
         written, after = result
     drop_work(code)

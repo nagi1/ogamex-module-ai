@@ -23,48 +23,11 @@ pgrep -f 'scripts/harness-log.py' >/dev/null || nohup python3 -u scripts/harness
 # Tests in the dev stack, situations and scorecards in the cohorts: `scripts/ogamex prove` needs both.
 export OGAMEX_RUNNER="${OGAMEX_RUNNER:-local-docker-dev}"
 COMPOSE_DIR=../../local-docker-dev
-# Only used when a whole pass produced nothing: there is no point hammering an empty queue, but
-# there is also no point sleeping while there is work left.
-IDLE_INTERVAL=${IDLE_INTERVAL:-300}
+# Poll interval of the verifier and of a writer with nothing to claim. A writer holding a row never waits.
+IDLE_INTERVAL=${IDLE_INTERVAL:-20}
 
-{
-  echo "=== harness started $(date -u '+%F %T') UTC ==="
-
-  # A park left behind by an earlier harness would keep overwriting the status this one publishes.
-  pkill -f 'strategy-pipeline.py wait-until-offpeak' 2>/dev/null || true
-
-  # Boot the canary once, outside the pass: from here on a check is a few queries, not a universe.
-  bash scripts/canary.sh up || echo "canary unavailable; the live gate will report it"
-
-  while true; do
-    # One gate for the whole pass, before anything runs: sweeping and promoting used to happen before
-    # the first per-call gate, so a pass that began at 05:59 kept working into the window.
-    python3 -u scripts/strategy-pipeline.py peak-gate
-    if [ $? -eq 3 ]; then
-      echo "=== parked: peak window $(date -u '+%F %T') UTC ==="
-      # Nothing of ours runs during peak: the canary is stopped too, so the machine is quiet and the
-      # dashboard cannot be mistaken for work in progress.
-      bash scripts/canary.sh down >> "$LOG" 2>&1 || true
-      # The park is free time for checks that make no provider call (HARNESS-004): drive every
-      # situation on both cohorts once, so the next pass starts from a fresh read of what plays.
-      for universe in ${HARNESS_UNIVERSES:-grand}; do
-        echo "--- situations on $universe during the park $(date -u '+%F %T') UTC ---"
-        PROVE_UNIVERSE=$universe bash scripts/ogamex situation all || true
-      done
-      python3 -u scripts/strategy-pipeline.py wait-until-offpeak
-      bash scripts/canary.sh up >> "$LOG" 2>&1 || true
-      echo "=== peak over, resuming $(date -u '+%F %T') UTC ==="
-      continue
-    fi
-    # Claims a vanished agent or a killed worker left behind, before the queue is read.
-    python3 plan/tasks/task.py reap
-    markers_before=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)
-
-    impl_workers=${IMPL_WORKERS:-3}
-    export MODEL_CONCURRENCY="${MODEL_CONCURRENCY:-4}"
-    rm -f /tmp/harness-impl-rc.*
-
-    python3 - <<'PY' > /tmp/harness-queue.txt
+ready_rows() {
+    python3 - <<'PY'
 import glob
 import os
 import sqlite3
@@ -97,54 +60,69 @@ rows = sorted(rows, key=lambda row: attempts(row[0]))  # stable: keeps the prior
 print('\n'.join(code for code, file_ref in rows if code in proposals or file_ref))
 PY
 
-    # Known ceiling: two workers can in principle be handed two plans that name the same file, and the
-    # loser would overwrite the winner's file without knowing. Slices almost always own their own
-    # paths, and `implement` rolls its own files back when verification fails, so this is a stated
-    # risk rather than a solved problem. Upgrade path: a per-path lock taken before writing.
-    for shard in $(seq 0 $((impl_workers - 1))); do
-      (
-        rc=0
-        while read -r code; do
-          # The queue above already holds only attemptable codes: a planned row or a hand-written
-          # one with a file to edit. The old "must have a proposal" gate lives there now.
-          HARNESS_WORKER="impl-$shard" python3 -u scripts/strategy-pipeline.py implement "$code"
-          # Exit 3 is the peak park. Sleeping out the window is what makes an unattended run come back
-          # by itself; exiting would silently end the night's work at the first peak minute.
-          [ $? -eq 3 ] && { rc=3; break; }
-        done < <(awk -v k="$shard" -v n="$impl_workers" 'NR % n == k' /tmp/harness-queue.txt)
-        echo "$rc" > "/tmp/harness-impl-rc.$shard"
-      ) &
-    done
-    wait
+}
 
-    if grep -qs '^3$' /tmp/harness-impl-rc.*; then
-      echo "=== parked mid-pass: peak window $(date -u '+%F %T') UTC ==="
+# A writer takes the first ready row it can claim and keeps it until it is delivered: `implement` has no
+# turn, time or attempt budget, so it returns only when the row is delivered, blocked by its own
+# `give_up`, or paused by a provider error or a peak window (exit 3). Rows another writer holds are skipped.
+writer() {
+  while true; do
+    started=$(date +%s)
+    for code in $(ready_rows); do
+      HARNESS_WORKER="impl-$1" python3 -u scripts/strategy-pipeline.py implement "$code"
+      if [ $? -eq 3 ]; then
+        python3 -u scripts/strategy-pipeline.py wait-until-offpeak
+        break
+      fi
+    done
+    # Nothing claimable this round (all held, or the queue is empty): poll, do not spin.
+    [ $(( $(date +%s) - started )) -lt 10 ] && sleep "$IDLE_INTERVAL"
+  done
+}
+
+{
+  echo "=== harness started $(date -u '+%F %T') UTC ==="
+
+  # A park left behind by an earlier harness would keep overwriting the status this one publishes.
+  pkill -f 'strategy-pipeline.py wait-until-offpeak' 2>/dev/null || true
+
+  # Boot the canary once, outside the pass: from here on a check is a few queries, not a universe.
+  bash scripts/canary.sh up || echo "canary unavailable; the live gate will report it"
+
+  export MODEL_CONCURRENCY="${MODEL_CONCURRENCY:-4}"
+  for worker in $(seq 0 $(( ${IMPL_WORKERS:-3} - 1 ))); do writer "$worker" & done
+
+  # The verifier. It never waits on a writer: it proves delivered rows as they appear, once a batch is
+  # ready, nothing is left to write, or HARNESS_VERIFY_EVERY seconds have passed. A failed proof reopens
+  # the row and a writer picks it up again.
+  while true; do
+    python3 -u scripts/strategy-pipeline.py peak-gate
+    if [ $? -eq 3 ]; then
+      echo "=== parked: peak window $(date -u '+%F %T') UTC ==="
       bash scripts/canary.sh down >> "$LOG" 2>&1 || true
+      for universe in ${HARNESS_UNIVERSES:-grand}; do
+        echo "--- situations on $universe during the park $(date -u '+%F %T') UTC ---"
+        PROVE_UNIVERSE=$universe bash scripts/ogamex situation all || true
+      done
       python3 -u scripts/strategy-pipeline.py wait-until-offpeak
       bash scripts/canary.sh up >> "$LOG" 2>&1 || true
       echo "=== peak over, resuming $(date -u '+%F %T') UTC ==="
       continue
     fi
+    # Claims a vanished agent or a killed worker left behind.
+    python3 plan/tasks/task.py reap
 
-    # Batch gate. Writing is cheap and verification is not (a cohort read, a canary restart and a
-    # 3-minute live situation per row), and it used to run after every pass even when nothing had been
-    # delivered: 5 idle hours were spent re-verifying an empty queue (2 Oct 2026). Keep writing until
-    # HARNESS_BATCH rows are delivered or nothing attemptable is left, then verify the whole batch once.
     queue_state=$(python3 -u scripts/strategy-pipeline.py status)
     ready_now=$(printf '%s\n' "$queue_state" | sed -n 's/^READY: //p')
     unproven_now=$(printf '%s\n' "$queue_state" | sed -n 's/^UNPROVEN: //p' | wc -w)
     last_verify=$(cat /tmp/harness-last-verify 2>/dev/null || echo 0)
-    # A batch also closes on a clock: one row the writer keeps failing must not hold the verdict on the others.
-    if [ "${ready_now:-0}" -gt 0 ] && [ "$unproven_now" -lt "${HARNESS_BATCH:-10}" ] \
-       && [ $(( $(date +%s) - last_verify )) -lt "${HARNESS_VERIFY_EVERY:-1200}" ]; then
-      echo "--- batch ${unproven_now}/${HARNESS_BATCH:-10} delivered, ${ready_now} ready: verification waits $(date -u '+%F %T') UTC ---"
-      sleep 10
-      continue
+    since=$(( $(date +%s) - last_verify ))
+    if [ "$unproven_now" -eq 0 ] && [ "$since" -lt "${HARNESS_READ_EVERY:-1800}" ]; then
+      sleep "$IDLE_INTERVAL"; continue
     fi
-    if [ "$unproven_now" -eq 0 ] && [ $(( $(date +%s) - last_verify )) -lt "${HARNESS_READ_EVERY:-1800}" ]; then
-      echo "--- nothing delivered, nothing ready, last read under $(( ${HARNESS_READ_EVERY:-1800} / 60 )) min old; idle ${IDLE_INTERVAL}s $(date -u '+%F %T') UTC ---"
-      sleep "$IDLE_INTERVAL"
-      continue
+    if [ "$unproven_now" -gt 0 ] && [ "${ready_now:-0}" -gt 0 ] && [ "$unproven_now" -lt "${HARNESS_BATCH:-10}" ] \
+       && [ "$since" -lt "${HARNESS_VERIFY_EVERY:-900}" ]; then
+      sleep "$IDLE_INTERVAL"; continue
     fi
     date +%s > /tmp/harness-last-verify
 
@@ -241,25 +219,5 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
         fi
       done
     fi
-
-    markers_after=$(ls plan/research/ogame/implemented 2>/dev/null | wc -l)
-
-    # Off-peak time is the scarce resource, so a pass that delivered something rolls straight into the next.
-    if [ "$markers_after" -gt "$markers_before" ]; then
-      echo "--- progress this pass, continuing immediately $(date -u '+%F %T') UTC ---"
-      continue
-    fi
-
-    echo "--- pass made no progress, checking what is actually queued $(date -u '+%F %T') UTC ---"
-    queue_state=$(python3 -u scripts/strategy-pipeline.py status)
-    printf '%s\n' "$queue_state"
-
-    # Attemptable work is not a reason to sleep: the failures that produced this pass are had per
-    # attempt, and the attempt budget already bounds the waste. A short pause keeps it from spinning
-    # when every remaining task is blocked by another worker's claim.
-    case "$queue_state" in
-      *"READY: 0"*) echo "--- nothing attemptable, re-checking in ${IDLE_INTERVAL}s $(date -u '+%F %T') UTC ---"; sleep "$IDLE_INTERVAL" ;;
-      *) echo "--- attemptable work still queued, going again in 10s $(date -u '+%F %T') UTC ---"; sleep 10 ;;
-    esac
   done
 } >> "$LOG" 2>&1
