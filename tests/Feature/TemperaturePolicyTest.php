@@ -45,7 +45,7 @@ $policy = Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/temperature
 
 $energyPerSatellite = static function (int $maxTemperature) use ($policy): int {
     $satellite = $policy['solar_satellite'];
-    $unclamped = intdiv($maxTemperature + $satellite['base_temperature'], $satellite['degrees_per_energy']);
+    $unclamped = intdiv($maxTemperature + $satellite['energy_offset'], $satellite['degrees_per_energy']);
 
     return min($unclamped, $satellite['max_energy']);
 };

@@ -12,8 +12,8 @@ solar_satellite:
   # The end of the slot list this building wants: the hottest planet owned.
   prefers: hottest
   # Energy per satellite follows the published production curve
-  # floor((max_temperature + base_temperature) / degrees_per_energy).
-  base_temperature: 140
+  # floor((max_temperature + energy_offset) / degrees_per_energy).
+  energy_offset: 140
   degrees_per_energy: 10
   # Ceiling per satellite. The cap wins over the curve, however hot the slot.
   max_energy: 65
