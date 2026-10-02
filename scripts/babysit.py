@@ -149,6 +149,26 @@ def harness_alive():
     return subprocess.run(["pgrep", "-f", "^bash scripts/harness-live.sh"], capture_output=True).returncode == 0
 
 
+def stuck_scenarios(actions):
+    """A refusal one account repeats is a planner offering what the host will never take. Raise it once."""
+    out = subprocess.run(["bash", "scripts/ogamex", "stuck", "60", "4"], cwd=ROOT, capture_output=True, text=True, timeout=120,
+                         env={**os.environ, "OGAMEX_RUNNER": "local-docker-dev"}).stdout
+    con = sqlite3.connect(DB)
+    for found in re.finditer(r"^\s+(\d+) attempts,\s+(\d+) stuck accounts\s+(.+)\n\s+e\.g\. (.+)$", out, re.M):
+        attempts, accounts, reason, sample = int(found[1]), int(found[2]), found[3], found[4]
+        if accounts < 3:
+            continue
+        code = "STUCK-" + re.sub(r"[^A-Za-z0-9]+", "-", reason).strip("-")[:36]
+        if con.execute("select 1 from tasks where code=? and status not in ('done')", (code,)).fetchone():
+            continue
+        sh("python3", "plan/tasks/task.py", "add", code, f"{accounts} accounts keep failing the same way: {reason}",
+           "impl", "P0", "--proof", "aspect:work_failures",
+           "--notes", f"Raised by the babysitter from `bash scripts/ogamex stuck`: {attempts} attempts in an hour, e.g. {sample} (player x repeats). "
+                      "Find which planner offers it (bash scripts/ogamex account PLAYER), make the planner stop offering it or do the "
+                      "step the host needs first (build the ship, load less, wait for the slot), and prove it with a situation test.")
+        actions.append(f"raised {code}: {accounts} accounts repeat '{reason}'")
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "advance":
         for line in advance([]):
@@ -165,6 +185,7 @@ def main():
     advance(actions)
     scratch_files(actions)
     slow_verification(actions)
+    stuck_scenarios(actions)
 
     code_lines, other_lines = commits()
     changed, junk = tree()
