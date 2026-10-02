@@ -457,6 +457,9 @@ def assert_window_matches_config():
 
 
 def in_peak(now):
+    # Owner switch: the peak window is a price gate, not a correctness one. Off unless asked for.
+    if os.environ.get("HARNESS_IGNORE_PEAK") == "1":
+        return False
     if now.isoweekday() not in PEAK_WEEKDAYS:
         return False
     clock = now.strftime("%H:%M")
@@ -1639,6 +1642,9 @@ def self_check():
         assert missed.startswith("refused") and "Scenario file not found" in missed, "a miss shows the closest real lines"
         assert tool_write({"path": target, "content": "<?php\n"}, working, held).startswith("refused"), "an existing file is never rewritten"
         assert tool_read({"path": ".env", "host": True}, working).startswith("refused"), "credentials are not readable"
+        assert tool_read({"path": "plan/research/ogame/attempts/x.log"}, working).startswith("refused"), "harness state is not readable"
+        assert not [hit for hit in tool_search({"pattern": "implementing"}, working).splitlines()
+                    if hit.startswith("plan/research/ogame/")], "search never returns harness logs"
         assert tool_read({"path": "../../../etc/passwd"}, working).startswith("refused"), "nothing outside the repository"
         save_work(probe_code, working, "boom")
         assert load_work(probe_code)[0] == working and load_work(probe_code)[1] == "boom", "the copy survives the attempt"
@@ -2600,26 +2606,30 @@ def status():
     if os.path.exists(TASKS_DB):
         connection = sqlite3.connect(TASKS_DB)
         rows = connection.execute(
-            "select code, status, coalesce(file_ref, ''), coalesce(proof, ''), coalesce(notes, '') like '% PROVEN %' from tasks "
+            "select code, status, coalesce(file_ref, ''), coalesce(proof, ''), coalesce(notes, '') like '% PROVEN %', "
+            "assignee = 'harness:delivered' from tasks "
             "where kind = 'impl' and priority in ('P0', 'P1', 'P2')").fetchall()
         ready_codes = {code for (code,) in connection.execute("select code from ready_tasks")}
         connection.close()
     else:
         ready_codes = set()
 
+    # Delivered is what the ledger says, not whether a marker file survived: five P0/P1 rows sat
+    # `harness:delivered` with no marker, so neither the queue nor the proof stage ever saw them.
     marked = {code for code, *_ in rows if os.path.exists(os.path.join(IMPLEMENTED, f"{code}.md"))}
-    attemptable = [code for code, _, file_ref, _, _ in rows
+    marked |= {code for code, _, _, _, _, delivered in rows if delivered}
+    attemptable = [code for code, _, file_ref, _, _, _ in rows
                    if code in ready_codes and code not in marked
                    and (file_ref or os.path.exists(os.path.join(PROPOSALS, f"{code}.md")))]
     waiting = {code: cooling_off(code) for code in attemptable if 0 < cooling_off(code) < NEVER}
-    proofs = {code: proof for code, _, _, proof, _ in rows}
+    proofs = {code: proof for code, _, _, proof, _, _ in rows}
     held = {code: moves_no_failing_aspect(proofs[code]) for code in attemptable if code not in waiting}
     held = {code: why for code, why in held.items() if why}
     ready = [code for code in attemptable if code not in waiting and code not in held and not stuck(code)]
-    proven = [code for code, state, _, _, stamped in rows if state == "done" and stamped]
-    closed_blind = [code for code, state, _, _, stamped in rows if state == "done" and not stamped]
+    proven = [code for code, state, _, _, stamped, _ in rows if state == "done" and stamped]
+    closed_blind = [code for code, state, _, _, stamped, _ in rows if state == "done" and not stamped]
     unproven = [code for code, state, *_ in rows if code in marked and state != "done"]
-    no_proof = [code for code, state, _, proof, _ in rows if state in ("todo", "in_progress", "blocked") and not ledger.on_path(proof)]
+    no_proof = [code for code, state, _, proof, _, _ in rows if state in ("todo", "in_progress", "blocked") and not ledger.on_path(proof)]
 
     print(f"P0-P2 code rows: {len(proven)} proven, {len(closed_blind)} closed before proofs existed, "
           f"{len(unproven)} delivered but NOT proven, "
@@ -3007,8 +3017,12 @@ def tool_target(path, host=False):
     if os.path.basename(full).startswith(".env") or f"{os.sep}.git" in full[len(os.path.realpath(ROOT)):]:
         return None, None, "credentials and git internals are not readable"
     inside = full.startswith(os.path.realpath(MODULE) + os.sep)
+    clean = os.path.relpath(full, os.path.realpath(MODULE)) if inside else None
+    if clean and (clean + "/").startswith("plan/research/ogame/"):
+        # The harness's own state: its logs hold the writer's earlier calls, so reading them is a circle (ATK-001).
+        return None, None, "harness state (logs, attempts, proofs) is not source; read the code"
 
-    return full, os.path.relpath(full, os.path.realpath(MODULE)) if inside else None, None
+    return full, clean, None
 
 
 def tool_read(args, working):
@@ -3040,7 +3054,7 @@ def tool_search(args, working):
         compiled = re.compile(pattern)
     except re.error as error:
         return f"refused: the pattern is not a valid regular expression ({error})"
-    command = ["grep", "-rnIE", "--exclude-dir=node_modules", "--exclude-dir=.git", "--exclude-dir=storage",
+    command = ["grep", "-rnIE", "--exclude-dir=node_modules", "--exclude-dir=.git", "--exclude-dir=storage", "--exclude-dir=ogame",
                "--exclude=.env*", "--exclude-dir=vendor", "-e", pattern, full]
     if f"{os.sep}vendor" in full:
         command.remove("--exclude-dir=vendor")
@@ -3206,12 +3220,12 @@ def write_slice(code, context, working, failure, dropped):
     provider error, an unrunnable proof) or ("failed", reason). The working copy is saved after every change.
     """
     conversation = writer_conversation(context, working, failure, dropped)
-    started, checks, version = time.time(), 0, 0
+    started, checks, version, checked_version = time.time(), 0, 0, -1
     seen, repeats, reads, last_signature, same_failures, silent = {}, 0, 0, None, 0, 0
     last_failure = failure
 
     for step in range(1, AGENT_STEPS + 1):
-        if time.time() - started > AGENT_SECONDS:
+        if time.time() - started > AGENT_SECONDS * 1.2:
             return "failed", f"the writer ran out of time ({AGENT_SECONDS // 60} min) before a check passed.\n{last_failure}"
         if in_peak(datetime.datetime.now(datetime.timezone.utc)):
             # An attempt now runs for minutes; one started before a window must not bill inside it.
@@ -3220,27 +3234,36 @@ def write_slice(code, context, working, failure, dropped):
             return "later", None
         refresh_claims()
         publish("implementing", f"{code} step {step}")
-        payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
-                   "reasoning_effort": WRITER_REASONING_EFFORT, "messages": conversation,
-                   "tools": WRITER_TOOLS, "tool_choice": "auto"}
-        try:
-            data = model_call(payload, purpose=f"implementing {code} step {step}")
-        except urllib.error.HTTPError as error:
-            print(f"  the provider refused the request ({error.code}): {error.read().decode(errors='replace')[:400]}")
-            return "later", None
-        if not data.get("choices"):
-            print(f"  the provider returned no answer, not counted as an attempt: {json.dumps(data)[:400]}")
-            return "later", None
-        choice = data["choices"][0]
-        message = choice.get("message") or {}
-        calls = message.get("tool_calls") or []
-        if choice.get("finish_reason") == "length":
-            return "failed", "unfinished: the writer's turn hit the output cap; take smaller steps, one edit per call."
+        # An attempt never ends on work nobody checked (ATK-001 edited, wrote a test and spent its last turns
+        # reading logs): near the end of its turns or time the harness runs the check the writer did not.
+        forced = bool(working) and checked_version != version and checks < AGENT_CHECKS and (
+            step > AGENT_STEPS - 4 or time.time() - started > AGENT_SECONDS * 0.9)
+        if forced:
+            print("  the writer's turns are nearly spent with changes unchecked; the harness runs the check")
+            message, data = {}, {}
+            calls = [{"id": "", "function": {"name": "check", "arguments": "{}"}}]
+        if not forced:
+            payload = {"model": MODEL, "max_tokens": WRITER_MAX_TOKENS, "thinking": WRITER_THINKING,
+                       "reasoning_effort": WRITER_REASONING_EFFORT, "messages": conversation,
+                       "tools": WRITER_TOOLS, "tool_choice": "auto"}
+            try:
+                data = model_call(payload, purpose=f"implementing {code} step {step}")
+            except urllib.error.HTTPError as error:
+                print(f"  the provider refused the request ({error.code}): {error.read().decode(errors='replace')[:400]}")
+                return "later", None
+            if not data.get("choices"):
+                print(f"  the provider returned no answer, not counted as an attempt: {json.dumps(data)[:400]}")
+                return "later", None
+            choice = data["choices"][0]
+            message = choice.get("message") or {}
+            calls = message.get("tool_calls") or []
+            if choice.get("finish_reason") == "length":
+                return "failed", "unfinished: the writer's turn hit the output cap; take smaller steps, one edit per call."
 
-        # In thinking mode the provider requires the reasoning of a tool-calling turn to be sent back with it.
-        conversation.append({"role": "assistant", "content": message.get("content") or "",
-                             **({"reasoning_content": message["reasoning_content"]} if message.get("reasoning_content") else {}),
-                             **({"tool_calls": calls} if calls else {})})
+            # In thinking mode the provider requires the reasoning of a tool-calling turn to be sent back with it.
+            conversation.append({"role": "assistant", "content": message.get("content") or "",
+                                 **({"reasoning_content": message["reasoning_content"]} if message.get("reasoning_content") else {}),
+                                 **({"tool_calls": calls} if calls else {})})
 
         if not calls:
             silent += 1
@@ -3282,6 +3305,7 @@ def write_slice(code, context, working, failure, dropped):
                     return "failed", f"the writer used its {AGENT_CHECKS} checks.\n{last_failure}"
                 else:
                     checks += 1
+                    checked_version = version
                     verdict = check_in_lane(code, working)
                     if verdict is None or verdict == 0:
                         save_work(code, working, last_failure)

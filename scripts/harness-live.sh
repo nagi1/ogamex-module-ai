@@ -33,7 +33,7 @@ export OGAMEX_RUNNER="${OGAMEX_RUNNER:-local-docker-dev}"
 COMPOSE_DIR=../../local-docker-dev
 # Only used when a whole pass produced nothing: there is no point hammering an empty queue, but
 # there is also no point sleeping while there is work left.
-IDLE_INTERVAL=60
+IDLE_INTERVAL=${IDLE_INTERVAL:-300}
 
 {
   echo "=== harness started $(date -u '+%F %T') UTC ==="
@@ -185,6 +185,26 @@ PY
       continue
     fi
 
+    # Batch gate. Writing is cheap and verification is not (a cohort read, a canary restart and a
+    # 3-minute live situation per row), and it used to run after every pass even when nothing had been
+    # delivered: 5 idle hours were spent re-verifying an empty queue (2 Oct 2026). Keep writing until
+    # HARNESS_BATCH rows are delivered or nothing attemptable is left, then verify the whole batch once.
+    queue_state=$(python3 -u scripts/strategy-pipeline.py status)
+    ready_now=$(printf '%s\n' "$queue_state" | sed -n 's/^READY: //p')
+    unproven_now=$(printf '%s\n' "$queue_state" | sed -n 's/^UNPROVEN: //p' | wc -w)
+    last_verify=$(cat /tmp/harness-last-verify 2>/dev/null || echo 0)
+    if [ "${ready_now:-0}" -gt 0 ] && [ "$unproven_now" -lt "${HARNESS_BATCH:-10}" ]; then
+      echo "--- batch ${unproven_now}/${HARNESS_BATCH:-10} delivered, ${ready_now} ready: verification waits $(date -u '+%F %T') UTC ---"
+      sleep 10
+      continue
+    fi
+    if [ "$unproven_now" -eq 0 ] && [ $(( $(date +%s) - last_verify )) -lt "${HARNESS_READ_EVERY:-1800}" ]; then
+      echo "--- nothing delivered, nothing ready, last read under $(( ${HARNESS_READ_EVERY:-1800} / 60 )) min old; idle ${IDLE_INTERVAL}s $(date -u '+%F %T') UTC ---"
+      sleep "$IDLE_INTERVAL"
+      continue
+    fi
+    date +%s > /tmp/harness-last-verify
+
     # The behaviour board: every Situation-kit story against the code as it stands, in seconds. Its
     # summary line is the cheapest "is the account playing better than last pass" signal there is.
     echo "--- behaviour board $(date -u '+%F %T') UTC ---"
@@ -269,7 +289,7 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       for universe in ${HARNESS_UNIVERSES:-grand}; do
         (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc "cd /var/www && php artisan queue:restart") || true
       done
-      for code in $(printf '%s\n' $due | head -n 5); do
+      for code in $(printf '%s\n' $due | head -n "${HARNESS_BATCH:-10}"); do
         echo "--- proving $code $(date -u '+%F %T') UTC ---"
         if ! python3 plan/tasks/task.py done "$code"; then
           echo "--- $code delivered, NOT proven yet $(date -u '+%F %T') UTC ---"
