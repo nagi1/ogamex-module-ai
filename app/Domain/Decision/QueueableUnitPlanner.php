@@ -277,7 +277,54 @@ class QueueableUnitPlanner
             return $standing[0][1];
         }
 
+        return $this->capitalFleet($player, $planets, $profile);
+    }
+
+    /**
+     * What a player does with a full yard and nothing urgent: spends half of what the richest planet
+     * can afford on the strongest military hull the host lets it build, so the war fleet grows as
+     * research unlocks bigger hulls and a mod-added hull counts with no edit. Strongest is the
+     * catalogue's own price order; the economy's saving can still veto the order.
+     *
+     * @param array<int, PlanetService> $planets
+     */
+    private function capitalFleet(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
+    {
+        usort($planets, static fn (PlanetService $a, PlanetService $b): int => $b->metal()->get() <=> $a->metal()->get());
+
+        foreach ($planets as $planet) {
+            $hulls = array_filter(
+                ObjectService::getMilitaryShipObjects(),
+                fn (UnitObject $hull): bool => $this->canAttack($player, $hull) && $this->queueable($planet, $hull),
+            );
+            if ($hulls === []) {
+                continue;
+            }
+
+            usort($hulls, fn (UnitObject $a, UnitObject $b): int => $this->hullPrice($planet, $b) <=> $this->hullPrice($planet, $a));
+            $hull = $hulls[0];
+            $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 2));
+            if ($this->starvesSaving($planet, $profile, $hull, $amount)) {
+                continue;
+            }
+
+            return $this->unit($planet, $hull, 'role:capital:'.$hull->machine_name, $amount);
+        }
+
         return null;
+    }
+
+    /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */
+    private function canAttack(PlayerService $player, UnitObject $hull): bool
+    {
+        return $hull->properties->attack->calculate($player)->totalValue > 1;
+    }
+
+    private function hullPrice(PlanetService $planet, UnitObject $hull): float
+    {
+        $price = ObjectService::getObjectPrice($hull->machine_name, $planet);
+
+        return $price->metal->get() + $price->crystal->get() + $price->deuterium->get();
     }
 
     /**
