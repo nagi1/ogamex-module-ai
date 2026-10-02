@@ -24,3 +24,19 @@ test('debris beside the planet and recyclers on hand is a recycle the account se
         ->session()
         ->expectWork(AiWorkKind::Recycle);
 });
+
+// The work item is only the decision. A player with a recycler and a field beside the planet has the
+// hull in the air before the session ends — the harvest the cohort read looks for — while a build and
+// a research chore are also on offer and would otherwise take the login's single errand slot.
+test('the same session puts the recycler in the air, not the chore, when debris lies beside the planet', function (): void {
+    DebrisField::query()->delete();
+    FleetMission::query()->delete();
+
+    Situation::of($this)
+        ->resources(1_000_000, 1_000_000, 1_000_000)
+        ->level('shipyard', 4)
+        ->ships('recycler', 1)
+        ->debris(40_000, 20_000)
+        ->session()
+        ->expectMission('Recycle');
+});

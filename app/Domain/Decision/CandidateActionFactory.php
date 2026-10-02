@@ -218,25 +218,9 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::Recycle,
             'reason' => AiCandidateReason::EligibleRecycle->value,
             'parameters' => [],
-            'features' => $this->features(AiCandidateActionType::Recycle, $this->debrisNeed($perception, $plan->mass), 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::Recycle, 0.0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
-    }
-
-    /**
-     * How much the field the plan chose is worth to this account: the mass the host still holds,
-     * set against the stock the account already has. A pile larger than everything it owns is
-     * worth the trip the way a full store is worth building; a scrap beside a rich account is not.
-     *
-     * @param float $mass metal plus crystal in the field, as the host counts it
-     */
-    private function debrisNeed(PerceptionSnapshot $perception, float $mass): float
-    {
-        if ($mass <= 0.0) {
-            return 0.0;
-        }
-
-        return min(1.0, $mass / max(1.0, $perception->totalResources()));
     }
 
     private function raidCandidatesFromVisibleReports(PerceptionSnapshot $perception): CandidateGeneration
@@ -360,9 +344,10 @@ class CandidateActionFactory
             // Only offered once the transfer planner found something worth moving, so it presses like a full
             // store; at 0.4 it never outranked an expedition and the cohort never moved a resource.
             AiCandidateActionType::Transfer => [0.9, 0.3, 0.0, 0.0],
-            // The field's own worth is the need: a pile the size of the account's store is as
-            // pressing as a full store, a scrap beside a rich account is not.
-            AiCandidateActionType::Recycle => [$resourceNeed, 0.3, 0.0, 0.0],
+            // The planner offers this only for a field above its own minimum mass with an own body
+            // that carries the harvest hull or can build it, so the trip is already proved worth
+            // taking: as pressing as a full store, the reading the raid row uses.
+            AiCandidateActionType::Recycle => [1.0, 0.3, 0.0, 0.0],
             AiCandidateActionType::Phalanx => [0.5, 0.2, 0.3, 0.0],
             // The planner has already proved this raid pays, so it is as pressing as a full store.
             AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],

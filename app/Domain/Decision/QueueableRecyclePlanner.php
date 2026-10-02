@@ -14,6 +14,7 @@ use OGame\Models\FleetMission;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
 use OGame\Services\FleetMissionService;
+use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 
@@ -78,7 +79,7 @@ class QueueableRecyclePlanner
             }
 
             $shipName = RecycleMission::getHarvesterMachineNameForPosition((int) $field->planet);
-            $origin = $this->origin($player, $shipName);
+            $origin = $this->origin($player, $shipName) ?? $this->builderOrigin($player, $shipName);
             if ($origin === null) {
                 continue;
             }
@@ -116,6 +117,22 @@ class QueueableRecyclePlanner
     {
         foreach ($player->planets->all() as $planet) {
             if ($planet->getShipUnits()->getAmountByMachineName($shipName) > 0) {
+                return $planet;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The own body that can build the harvest hull when none carries it yet: the
+     * executor queues the hull before the field can be collected, so a field with no
+     * hull on hand is still a harvest the account can take.
+     */
+    private function builderOrigin(PlayerService $player, string $shipName): ?PlanetService
+    {
+        foreach ($player->planets->all() as $planet) {
+            if (ObjectService::objectRequirementsMet($shipName, $planet)) {
                 return $planet;
             }
         }

@@ -120,10 +120,59 @@ class FacilityChain
             }
         }
 
+        // A planet that holds no defence at all while a sibling already stands a wall wants the
+        // facilities the host's own smallest defence unit needs: the yard cannot take a defence order
+        // before those stand, so the planet stays naked beside its walled sibling forever, and the
+        // wall keeps growing where it already is (measured live 2 Oct 2026: planets at zero defence
+        // beside a sibling holding 21,084 units). The unit is never named: it is the cheapest the
+        // host's defence registry offers, and its prerequisites are the host's recursive graph.
+        foreach ($this->wallPrerequisites($planet) as $machineName => $level) {
+            $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'wall-prerequisite');
+        }
+
         // A prerequisite requested at several levels appears once per level, so the account climbs
-        // to the next one it is missing. Unmet host prerequisites come first, then facilities before
-        // research: an ordinary player stands the factory before chasing the technology or yard it
-        // enables.
+        // to the next one it is missing.
+        $this->sortOrdered($ordered, $planet);
+
+        return $this->withProducers($ordered, $producers, $planet);
+    }
+
+    /**
+     * The facilities the host's own smallest defence unit needs, for the planet the rule applies to,
+     * as a list of its own.
+     *
+     * `pending()` already carries them among the chain's steps, but a chain step is one candidate the
+     * economy ranks against the mines: a planet whose stock overflows is spending, and the surplus pass
+     * asked first, so the wall's prerequisites never got their turn and the planet stayed naked beside
+     * its walled sibling (measured live 2 Oct 2026: 7-8 planets at zero defence while one held the
+     * wall). The building planner gives this list its own pass ahead of the economy, and nothing is
+     * named here: the unit is the cheapest the host registers and the steps are the host's own graph.
+     *
+     * @return list<BuildCandidate>
+     */
+    public function wallPending(PlanetService $planet): array
+    {
+        $ordered = [];
+        $producers = [];
+
+        foreach ($this->wallPrerequisites($planet) as $machineName => $level) {
+            $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'wall-prerequisite');
+        }
+
+        $this->sortOrdered($ordered, $planet);
+
+        return $this->withProducers($ordered, $producers, $planet);
+    }
+
+    /**
+     * The chain's stated order: unmet host prerequisites first, then facilities before research
+     * (an ordinary player stands the factory before chasing the technology or yard it enables), then
+     * by the level asked for and the price of the step.
+     *
+     * @param array<string, array{level: int, candidate: BuildCandidate}> $ordered
+     */
+    private function sortOrdered(array &$ordered, PlanetService $planet): void
+    {
         usort($ordered, function (array $left, array $right) use ($planet): int {
             $leftObject = ObjectService::getObjectById($left['candidate']->buildingId);
             $rightObject = ObjectService::getObjectById($right['candidate']->buildingId);
@@ -142,9 +191,18 @@ class FacilityChain
             return [$left['level'], ObjectService::getObjectPrice($leftObject->machine_name, $planet)->sum()]
                 <=> [$right['level'], ObjectService::getObjectPrice($rightObject->machine_name, $planet)->sum()];
         });
+    }
 
-        // The producers come first: a step the planet cannot pay for is unreachable until its
-        // producer stands, so the producer is the easier unlock by definition.
+    /**
+     * The final step list: the producers first, because a step the planet cannot pay for is
+     * unreachable until its producer stands, then the ordered prerequisites.
+     *
+     * @param array<string, array{level: int, candidate: BuildCandidate}> $ordered
+     * @param array<string, GameObject> $producers
+     * @return list<BuildCandidate>
+     */
+    private function withProducers(array $ordered, array $producers, PlanetService $planet): array
+    {
         return [...$this->producerSteps($producers, $planet), ...array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $ordered)];
     }
 
@@ -374,6 +432,77 @@ class FacilityChain
         // host's, so a missing player reads as level zero rather than crashing a
         // decision on data the host itself would not normally be without.
         return $planet->getPlayer()?->getResearchLevel($machineName) ?? 0;
+    }
+
+    /**
+     * The facilities the host's own smallest defence unit requires, or none when this planet does not
+     * need them.
+     *
+     * A planet needs them exactly when it holds no defence while a sibling of the same account
+     * already stands one: that is the account past its opening, with a wall it built everywhere it
+     * could reach, so the reasons the unit planner has for waiting no longer apply and the facility
+     * that gates the wall is as much a prerequisite as a laboratory gating a technology.
+     *
+     * @return array<string, int>
+     */
+    private function wallPrerequisites(PlanetService $planet): array
+    {
+        if (! $this->nakedBesideWalled($planet)) {
+            return [];
+        }
+
+        $unit = $this->smallestDefenceUnit();
+
+        return $unit === null ? [] : ObjectService::getRecursiveRequirements($unit->machine_name);
+    }
+
+    /**
+     * Whether this planet holds nothing while a sibling of the same account holds something.
+     *
+     * "Holds" is the unit planner's own answer -- built plus already paid for in the yard -- and not the
+     * built-only count: the account has left its opening the moment its first wall order is placed, so the
+     * sibling's bare neighbour is reached from that login rather than one login behind a wall that is
+     * already standing in the queue (QUAL-003: the two planners disagreed about when a wall stands).
+     */
+    private function nakedBesideWalled(PlanetService $planet): bool
+    {
+        $defence = app(DefenseNeedEvaluator::class);
+
+        if ($defence->standingUnits($planet) > 0) {
+            return false;
+        }
+
+        $player = $planet->getPlayer();
+        if ($player === null) {
+            return false;
+        }
+
+        foreach ($player->planets->all() as $sibling) {
+            if ($sibling->getPlanetId() !== $planet->getPlanetId() && $defence->standingUnits($sibling) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The defence unit the host prices lowest: the smallest thing it will accept as a wall. */
+    private function smallestDefenceUnit(): ?GameObject
+    {
+        $cheapest = null;
+        $cheapestPrice = INF;
+
+        foreach (ObjectService::getDefenseObjects() as $defence) {
+            $price = ObjectService::getObjectRawPrice($defence->machine_name)->sum();
+            if ($price <= 0 || $price >= $cheapestPrice) {
+                continue;
+            }
+
+            $cheapest = $defence;
+            $cheapestPrice = $price;
+        }
+
+        return $cheapest;
     }
 
     /**
