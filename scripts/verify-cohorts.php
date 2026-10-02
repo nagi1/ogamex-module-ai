@@ -429,7 +429,45 @@ if (count($scores) >= 5) {
 // Named invariants, one line per violation, and a machine-readable verdict at the end. The harness
 // reads that line to raise a task for anything the cohorts fail, so a repeated "QUALITY: FAIL" is not
 // a dead end someone has to notice by eye.
+// What an administrator sees in the universe: players fight each other and moons appear. A day of raids
+// that only pillage empty planets has no combat rounds, no debris and no moons, which reads as a dead
+// universe however many missions ran.
+//   LIFE_FIGHTS  at least this share of the day's battles has a defender and combat rounds
+//   LIFE_MOONS   a universe with this many battles in a day and no moon at all
+$LIFE_FIGHT_SHARE = 0.2;
+$LIFE_MOON_BATTLES = 100;
+$lifeFights = [];
+$lifeMoons = [];
+$dayBattles = DB::table('battle_reports')->where('created_at', '>=', now()->subDay())->get(['rounds']);
+if ($dayBattles->count() >= $LIFE_MOON_BATTLES) {
+    $fought = $dayBattles->filter(fn ($row): bool => count(json_decode((string) $row->rounds, true) ?: []) > 0)->count();
+    if ($fought / $dayBattles->count() < $LIFE_FIGHT_SHARE) {
+        $lifeFights[] = sprintf('%d of %d battles today had combat rounds (%.0f%%): the raids pillage empty planets instead of fighting', $fought, $dayBattles->count(), 100 * $fought / $dayBattles->count());
+    }
+    if (DB::table('planets')->where('planet_type', 3)->count() === 0) {
+        $lifeMoons[] = sprintf('%d battles today and not one moon in the universe', $dayBattles->count());
+    }
+}
+
+//   LIFE_CAPITAL  under a tenth of the accounts own a military hull dearer than the median military hull: the host's own
+//                 catalogue says which that is, so a mod-added capital ship counts with no edit here
+$lifeCapital = [];
+$military = collect(ObjectService::getMilitaryShipObjects())->filter(fn ($ship): bool => $ship->machine_name !== 'espionage_probe');
+if ($military->count() >= 3) {
+    $priceOf = fn ($ship): float => (float) ($ship->price->resources->metal->get() + $ship->price->resources->crystal->get() + $ship->price->resources->deuterium->get());
+    $prices = $military->map($priceOf)->sort()->values();
+    $median = $prices[intdiv($prices->count(), 2)];
+    $capital = $military->filter(fn ($ship): bool => $priceOf($ship) > $median)->map(fn ($ship): string => '`'.$ship->machine_name.'`');
+    $owners = DB::table('planets')->whereIn('user_id', $playerIds)->whereRaw($capital->map(fn (string $column): string => "$column > 0")->implode(' or '))->distinct()->count('user_id');
+    if ($owners / count($playerIds) < 0.1) {
+        $lifeCapital[] = sprintf('%d of %d accounts own a military hull dearer than the median (%s): there is no war fleet', $owners, count($playerIds), $capital->implode(', '));
+    }
+}
+
 $invariants = [
+    'LIFE_CAPITAL' => $lifeCapital,
+    'LIFE_FIGHTS' => $lifeFights,
+    'LIFE_MOONS' => $lifeMoons,
     'NAKED_BESIDE_WALLED' => $nakedBesideWalled,
     'WALL_CEILING' => $overCeiling,
     'ALLIANCE_SHARE' => $allianceShare,
