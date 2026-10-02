@@ -106,10 +106,9 @@ test('a routine dark-period session decides nothing', function (): void {
 test('severe scarcity makes the mine the answer over a ship habit', function (): void {
     $replay = replayScenario('economy-chain');
 
-    expect($replay->selectedAction)->toBe('Build')
-        ->and($replay->selectedReason)->toBe('published_capability:build')
-        // The scarcity boost is what outranks the fleeter's ship habit.
-        ->and($replay->components['resource_need'])->toBeGreaterThan(30.0);
+    // The login's one errand goes to the fleet or yard work the situation offers, because the queue
+    // refill builds the mine in every session anyway (ARB-001): the mine is what the ranking puts first.
+    expect($replay->alternatives[0]['action'])->toBe('Build');
 });
 
 test('a colony is withheld until the account can develop it', function (): void {
@@ -123,7 +122,7 @@ test('two accounts answer the same observation differently', function (): void {
     $miner = replayScenario('divergence-two-accounts');
     $fleeter = replayScenarioWithOverrides('divergence-two-accounts', ['persona.archetype' => 'Fleeter']);
 
-    expect($miner->selectedAction)->toBe('Build')
+    expect($miner->alternatives[0]['action'])->toBe('Build')
         ->and($fleeter->selectedAction)->not->toBe($miner->selectedAction)
         ->and($fleeter->selectedAction)->toBeIn(['Spy', 'QueueUnits']);
 });

@@ -331,7 +331,8 @@ class CandidateActionFactory
             AiCandidateActionType::Expedition => [0.3, 0.6, 0.0, 0.0],
             AiCandidateActionType::Transfer, AiCandidateActionType::Recycle => [0.4, 0.3, 0.0, 0.0],
             AiCandidateActionType::Phalanx => [0.5, 0.2, 0.3, 0.0],
-            AiCandidateActionType::Raid => [0.7, 0.1, $confidence, $travelCost],
+            // The planner has already proved this raid pays, so it is as pressing as a full store.
+            AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],
             default => [$resourceNeed, 0.2, 0.0, 0.0],
         };
 
