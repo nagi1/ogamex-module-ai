@@ -1,2 +1,4 @@
-PASS test:EveryPlanetBuildsSessionSituationTest 1s
+PASS test:EveryPlanetBuildsSessionSituationTest 2s
+PASS aspect:economy 1s
+PASS invariant:IDLE_QUEUES 22s
 PROOF: PASS PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES)
