@@ -357,7 +357,12 @@ class CandidateActionFactory
             AiCandidateActionType::FleetSave => [0.0, 1.0, 0.0, 0.0],
             AiCandidateActionType::Recall => [0.0, 0.7, 0.0, 0.0],
             AiCandidateActionType::Expedition => [0.3, 0.6, 0.0, 0.0],
-            AiCandidateActionType::Transfer, AiCandidateActionType::Recycle => [0.4, 0.3, 0.0, 0.0],
+            // Only offered once the transfer planner found something worth moving, so it presses like a full
+            // store; at 0.4 it never outranked an expedition and the cohort never moved a resource.
+            AiCandidateActionType::Transfer => [0.9, 0.3, 0.0, 0.0],
+            // The field's own worth is the need: a pile the size of the account's store is as
+            // pressing as a full store, a scrap beside a rich account is not.
+            AiCandidateActionType::Recycle => [$resourceNeed, 0.3, 0.0, 0.0],
             AiCandidateActionType::Phalanx => [0.5, 0.2, 0.3, 0.0],
             // The planner has already proved this raid pays, so it is as pressing as a full store.
             AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],
