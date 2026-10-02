@@ -1,4 +1,4 @@
 PASS test:AllianceApplicationSituationTest 1s
-PASS test:AllianceLeaderSituationTest 1s
+PASS test:AllianceLeaderSituationTest 2s
 PASS aspect:alliance 1s
 PROOF: PASS ALLY-001 (test:AllianceApplicationSituationTest test:AllianceLeaderSituationTest aspect:alliance)

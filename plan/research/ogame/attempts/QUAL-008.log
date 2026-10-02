@@ -1,42 +1,42 @@
-the writer used its 40 turns before a check passed.
-tests (ColonisationSituationTest, JumpGateTest, SensorPhalanxTest, BuildingChainReachabilityTest): Tests:    2 failed, 12 passed, 7 pending (104 assertions)
+the delivered change passed its tests but its live proof failed:
+PASS test:ColonisationSituationTest 2s
+FAIL aspect:colonisation 0s —  FAIL colonisation 0 floor 3 settles new planets while slots remain
+PROOF: FAIL QUAL-008 (test:ColonisationSituationTest aspect:colonisation) at aspect:colonisation:  FAIL colonisation 0 floor 3 settles new planets while slots remain
 
-FAILED  Modules\AI\tests\Feature\Sens…  UniqueConstraintViolationException   
-  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-400-11-1' for key 'planets.planets_galaxy_system_planet_planet_type_unique' (Connection: mysql, Host: mysql, Port: 3306, Database: ogamex-test_test_2, SQL: insert into `planets` (`name`, `metal_mine`, `metal_mine_percent`, `solar_plant`, `solar_plant_percent`, `deuterium_synthesizer`, `deuterium_synthesizer_percent`, `crystal_mine`, `crystal_mine_percent`, `crawler_percent`, `planet_type`, `diameter`, `field_max`, `temp_min`, `temp_max`, `metal`, `crystal`, `deuterium`, `fusion_plant`, `destroyed`, `field_current`, `user_id`, `galaxy`, `system`, `planet`, `time_last_update`, `updated_at`, `created_at`) values (FakePlanetName, 0, 10, 0, 10, 0, 10, 0, 10, 10, 1, 300, 159, 78, 86, 0, 0, 0, 0, 0, 0, 3178, 1, 400, 11, 1704063600, 2024-01-01 00:00:00, 2024-01-01 00:00:00))
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 1107 sessions on 80 accounts
+  backlog: 72 work item(s) more than a minute late
+  sessions chose: Build 88%, ThrottleMine 4%, Research 4%, DoNothing 4%
+  host orders: buildings 1047, research 321, units 0
+  missions launched: none
+  work (kind: state count):
+    RunSession: Retry 16, Completed 1106, Pending 84, Leased 1
+    BuildFirstBuilding: Completed 1075, Pending 62, Retry 1
+    QueueResearch: Completed 441, Pending 49, Retry 9
+    SetMinePercent: Completed 51
+  refused: nothing
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
 
-  at vendor/laravel/framework/src/Illuminate/Database/MySqlConnection.php:53
-     49▕             $this->bindValues($statement, $this->prepareBindings($bindings));
-     50▕ 
-     51▕             $this->recordsHaveBeenModified();
-     52▕ 
-  ➜  53▕             $result = $statement->execute();
-     54▕ 
-     55▕             $this->lastInsertId = $this->getPdo()->lastInsertId($sequence);
-     56▕ 
-     57▕             return $result;
+  published: build
+  NOT published: research, queue_units, colonize, spy, throttle_mine
 
-      +15 vendor frames 
-  16  Modules/AI/tests/Feature/SensorPhalanxTest.php:101
+  player_id                    35
+  observed_at                  1790947497
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             1
+  colonize_eligible            true
+  target_reports               0 item(s)
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      1 planet(s)
 
-  ────────────────────────────────────────────────────────────────────────────  
-   FAILED  Modules\AI\tests\Feature\BuildingChainReachabilityTest > the chai…   
-  Failed asserting that an array contains 124.
-
-  at Modules/AI/tests/Feature/BuildingChainReachabilityTest.php:205
-    201▕ 
-    202▕     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
-    203▕ 
-    204▕     expect($plan)->not->toBeNull()
-  ➜ 205▕         ->and(chainStepId($plan))->toBeIn(chainEconomyTargetIds())
-    206▕         ->and($plan?->reason)->toMatch('/^(economy|storage):/');
-    207▕ });
-    208▕ 
-    209▕ // A chain step the host refuses used to cost the account its whole build capability. A player who
-
-  1   Modules/AI/tests/Feature/BuildingChainReachabilityTest.php:205
-
-
-  Tests:    2 failed, 12 passed, 7 pending (104 assertions)
-  Duration: 2.66s
-
-[1A  Parallel: 4 processes
+  decision: Build
+    Build         65.4  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.4
+    DoNothing      5.4  safety=5, seeded_variation=0.4
+  turned down by the candidate factory: nothing

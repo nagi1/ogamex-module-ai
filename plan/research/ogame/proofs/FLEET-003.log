@@ -1,4 +1,4 @@
-PASS test:InboundAttackSituationTest 1s
-PASS test:FleetSaveBeforeBedSituationTest 7s
-FAIL? aspect:fleet_save 1s — too early: the cohort has played under an hour on this change (not yet passing on 0.91h)
+PASS test:InboundAttackSituationTest 2s
+PASS test:FleetSaveBeforeBedSituationTest 4s
+PASS? aspect:fleet_save 1s
 PROOF: PASS FLEET-003 (test:InboundAttackSituationTest test:FleetSaveBeforeBedSituationTest aspect:fleet_save?)

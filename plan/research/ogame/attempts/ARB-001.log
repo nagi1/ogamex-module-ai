@@ -1,8 +1,49 @@
 the delivered change passed its tests but its live proof failed:
-FAIL test:ExpeditionSituationTest 2s — {"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":1,"duration_ms":1519,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\ExpeditionSituationTest::__pest_evaluable_a_fleet_with_nothing_to_raid_or_recycle_flies_an_expedition_within_a_few_logins","file":"/var/
+PASS test:ExpeditionSituationTest 2s
 PASS test:DebrisRecycleSituationTest 2s
 PASS test:ColonisationSituationTest 2s
 PASS test:ShipyardSituationTest 2s
-PASS test:RaidFromReportSituationTest 1s
-PASS test:ShipyardRestraintSituationTest 3s
-PROOF: FAIL ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy) at test:ExpeditionSituationTest: {"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":1,"duration_ms":1519,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\ExpeditionSituationTest::__pest_evaluable_a_fleet_with_nothing_to_raid_or_recycle_flies_an_expedition_within_a_few_logins","file":"/var/
+PASS test:RaidFromReportSituationTest 2s
+PASS test:ShipyardRestraintSituationTest 2s
+FAIL aspect:fleet_breadth 1s —  FAIL fleet_breadth 0 floor 80 uses the fleet for more than one thing (expeditions are at most 80% of missions)
+FAIL aspect:raids 1s —  FAIL raids 0 floor 9 raids a profitable target
+PASS aspect:economy 0s
+PROOF: FAIL ARB-001 (test:ExpeditionSituationTest test:DebrisRecycleSituationTest test:ColonisationSituationTest test:ShipyardSituationTest test:RaidFromReportSituationTest test:ShipyardRestraintSituationTest aspect:fleet_breadth aspect:raids aspect:economy) at aspect:fleet_breadth:  FAIL fleet_breadth 0 floor 80 uses the fleet for more than one thing (expeditions are at most 80% of missions)
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 1107 sessions on 80 accounts
+  backlog: 104 work item(s) more than a minute late
+  sessions chose: Build 88%, ThrottleMine 4%, Research 4%, DoNothing 4%
+  host orders: buildings 1043, research 311, units 0
+  missions launched: none
+  work (kind: state count):
+    RunSession: Retry 17, Completed 1107, Pending 83
+    BuildFirstBuilding: Completed 1068, Pending 66, Retry 1
+    QueueResearch: Completed 423, Pending 65, Retry 9
+    SetMinePercent: Completed 52
+  refused: nothing
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build
+  NOT published: research, queue_units, colonize, spy, throttle_mine
+
+  player_id                    35
+  observed_at                  1790947484
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             1
+  colonize_eligible            true
+  target_reports               0 item(s)
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      1 planet(s)
+
+  decision: Build
+    Build         65.3  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.3
+    DoNothing      5.4  safety=5, seeded_variation=0.4
+  turned down by the candidate factory: nothing

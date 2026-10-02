@@ -1,4 +1,43 @@
-every block in your answer was refused, so nothing was written.
+the delivered change passed its tests but its live proof failed:
+PASS test:ShipyardSituationTest 2s
+FAIL aspect:shipyard 1s —  FAIL shipyard 0 floor 9 builds ships and defence from what the economy leaves
+PROOF: FAIL QUAL-009 (test:ShipyardSituationTest aspect:shipyard) at aspect:shipyard:  FAIL shipyard 0 floor 9 builds ships and defence from what the economy leaves
 
-These blocks from your answer were refused and NOT written:
-- tests/Feature/ShipyardWithoutResearchTest.php (EDIT of a file that does not exist — create it with a FILE block)
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 3941 sessions on 100 accounts
+  backlog: 74 work item(s) more than a minute late
+  sessions chose: Build 94%, DoNothing 3%, ThrottleMine 3%, Research 0%
+  host orders: buildings 3681, research 572, units 0
+  missions launched: none
+  work (kind: state count):
+    RunSession: Pending 88, Completed 3941, Retry 12
+    BuildFirstBuilding: Pending 60, Completed 3824, Retry 5
+    QueueResearch: Pending 87, Completed 1238, Retry 2
+    SetMinePercent: Completed 96, Pending 7, Retry 2
+  refused: 
+    2 × QueueResearch: already_researching
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build
+  NOT published: research, queue_units, colonize, spy, throttle_mine
+
+  player_id                    35
+  observed_at                  1790948696
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             1
+  colonize_eligible            true
+  target_reports               0 item(s)
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      1 planet(s)
+
+  decision: Build
+    Build         64.6  resource_need=30, safety=10, archetype_preference=25, seeded_variation=-0.4
+    DoNothing      5.3  safety=5, seeded_variation=0.3
+  turned down by the candidate factory: nothing

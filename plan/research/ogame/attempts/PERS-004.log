@@ -1,0 +1,65 @@
+the delivered change passed its tests but its live proof failed:
+PASS invariant:WALL_CEILING 17s
+FAIL invariant:NAKED_BESIDE_WALLED 14s —  ! [NAKED_BESIDE_WALLED] player 47: 1 planet(s) at zero defence while one holds 1,225 units
+PASS aspect:shipyard 1s
+PROOF: FAIL PERS-004 (invariant:WALL_CEILING invariant:NAKED_BESIDE_WALLED aspect:shipyard) at invariant:NAKED_BESIDE_WALLED:  ! [NAKED_BESIDE_WALLED] player 47: 1 planet(s) at zero defence while one holds 1,225 units
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 245 sessions on 100 accounts
+  backlog: 479 work item(s) more than a minute late, oldest 15 min — live verdicts read worker lag
+  sessions chose: QueueUnits 31%, Colonize 23%, FleetSave 14%, Transfer 13%, Build 6%, DoNothing 5%, ThrottleMine 4%, Spy 2%, Recall 1%, Expedition 1%, Research 0%
+  host orders: buildings 436, research 138, units 126
+  missions launched: Deployment 20, Attack 3, Transport 17, Expedition 6, Colonisation 7, Espionage 3
+  work (kind: state count):
+    RunSession: Pending 89, Completed 245, Retry 13
+    BuildFirstBuilding: Pending 207, Completed 477, Retry 15
+    Transfer: Pending 13, Completed 26, Retry 5
+    QueueResearch: Pending 63, Retry 11, Completed 145
+    FleetSave: Pending 12, Completed 25
+    QueueUnits: Completed 125, Pending 40, Retry 5
+    Colonize: Completed 26, Pending 15, Retry 4
+    SetMinePercent: Pending 4, Completed 6, Retry 2
+    Expedition: Completed 6
+    Spy: Completed 4, Pending 2
+    Recall: Completed 1, Pending 1
+    Raid: Completed 3
+  refused: 
+    19 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    7 × DispatchFleet: You don't have sufficient storage capacity!
+    5 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    2 × QueueResearch: already_researching
+    2 × DispatchFleet: no_disposable_fleet
+    1 × DispatchFleet: source_short_at_dispatch
+    1 × RecallFleet: no_deployment_to_recall
+    1 × DispatchFleet: no_transport_fleet
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build, queue_units, spy, throttle_mine
+  NOT published: research, colonize
+
+  player_id                    35
+  observed_at                  1790971426
+  account_state                "active"
+  recovery_factor              0
+  fleet_slots_free             2
+  colonize_eligible            true
+  target_reports               7 item(s): [{"report_id":730,"observed_at":1790959487,"expires_at":1791045887,"confidence":0.17090277777777774,"travel_cost":0.017638888888888888,"activity":false,"attack_permitted":true,"score_viable":false,"defenceless":true},{"report_id":609,"obser
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      4 planet(s)
+
+  decision: Transfer
+    Build         65.1  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.1
+    Transfer      42.3  resource_need=27, safety=15, seeded_variation=0.3
+    QueueUnits    40.1  resource_need=30, safety=10, seeded_variation=0.1
+    ThrottleMine  39.9  resource_need=30, safety=10, seeded_variation=-0.1
+    Spy           39.6  resource_need=30, safety=10, seeded_variation=-0.4
+    Expedition    38.9  resource_need=9, safety=30, seeded_variation=-0.1
+    DoNothing      5.3  safety=5, seeded_variation=0.3
+  turned down by the candidate factory: 
+    report:424: raid_not_viable

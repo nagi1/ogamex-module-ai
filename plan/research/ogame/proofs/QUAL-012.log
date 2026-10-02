@@ -1,0 +1,2 @@
+PASS invariant:AUTH_SAVE 17s
+PROOF: PASS QUAL-012 (invariant:AUTH_SAVE)

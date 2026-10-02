@@ -1,5 +1,5 @@
 PASS test:BothQueuesSituationTest 2s
-PASS test:ResearchSituationTest 1s
-PASS aspect:research 1s
+PASS test:ResearchSituationTest 2s
+PASS aspect:research 0s
 PASS aspect:work_failures 1s
 PROOF: PASS QUAL-006 (test:BothQueuesSituationTest test:ResearchSituationTest aspect:research aspect:work_failures)

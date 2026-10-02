@@ -1,1 +1,1 @@
-{"code": "QUAL-009", "pass": false, "steps": [{"step": "aspect:shipyard", "pass": false, "seconds": 1, "suspect": false, "line": " FAIL shipyard 0 floor 2 builds ships and defence from what the economy leaves"}]}
+{"code": "QUAL-009", "pass": true, "steps": [{"step": "test:ShipyardSituationTest", "pass": true, "seconds": 2, "suspect": false, "line": "{\"tool\":\"pest\",\"result\":\"passed\",\"tests\":1,\"passed\":1,\"assertions\":1,\"duration_ms\":1342}"}]}

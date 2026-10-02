@@ -1,3 +1,3 @@
 PASS test:ColonisationSituationTest 2s
-PASS aspect:colonisation 0s
+PASS aspect:colonisation 1s
 PROOF: PASS QUAL-008 (test:ColonisationSituationTest aspect:colonisation)

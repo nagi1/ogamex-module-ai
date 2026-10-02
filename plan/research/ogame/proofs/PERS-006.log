@@ -1,0 +1,4 @@
+PASS test:InboundAttackSessionSituationTest 44s
+PASS situation:inbound-attack 1s
+PASS aspect:fleet_save 1s
+PROOF: PASS PERS-006 (test:InboundAttackSessionSituationTest situation:inbound-attack aspect:fleet_save)

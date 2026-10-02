@@ -1,0 +1,6 @@
+PASS test:InboundMessageSituationTest 1s
+PASS test:AllianceLeaderSituationTest 1s
+PASS test:InactiveNeighbourSituationTest 2s
+PASS situation:every-planet-builds 52s
+PASS situation:inbound-message 132s
+PROOF: PASS SIM-001 (test:InboundMessageSituationTest test:AllianceLeaderSituationTest test:InactiveNeighbourSituationTest situation:every-planet-builds situation:inbound-message)

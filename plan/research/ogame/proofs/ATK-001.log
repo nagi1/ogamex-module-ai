@@ -1,6 +1,6 @@
-PASS test:InactiveNeighbourSituationTest 2s
-PASS test:InactiveNeighbourSessionSituationTest 2s
-PASS test:RaidFromReportSituationTest 2s
-PASS? aspect:raids 0s
-FAIL? aspect:espionage 1s —  FAIL espionage 0 floor 2 probes neighbours before deciding whom to hit
+PASS test:InactiveNeighbourSituationTest 1s
+PASS test:InactiveNeighbourSessionSituationTest 3s
+PASS test:RaidFromReportSituationTest 1s
+PASS? aspect:raids 1s
+PASS? aspect:espionage 0s
 PROOF: PASS ATK-001 (test:InactiveNeighbourSituationTest test:InactiveNeighbourSessionSituationTest test:RaidFromReportSituationTest aspect:raids? aspect:espionage?)

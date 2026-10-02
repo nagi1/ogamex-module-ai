@@ -1,0 +1,4 @@
+PASS test:RoutineCadenceTest 6s
+PASS test:RoutineAndPolicyTest 2s
+PASS aspect:economy 1s
+PROOF: PASS PERS-003 (test:RoutineCadenceTest test:RoutineAndPolicyTest aspect:economy)

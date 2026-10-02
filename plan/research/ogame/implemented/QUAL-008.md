@@ -1,5 +1,6 @@
-# QUAL-008 implemented 2026-10-01 22:58 UTC
+# QUAL-008 implemented 2026-10-02 13:39 UTC
 
-- app/Domain/Decision/FacilityChain.php
-- tests/Feature/BuildingChainReachabilityTest.php
-- tests/Feature/SensorPhalanxTest.php
+- resources/behavior/colonisation.yaml
+- tests/Feature/ColonisationGrowthTest.php
+- app/Domain/Decision/QueueableColonyPlanner.php
+- app/Domain/Perception/PlayerObservationService.php

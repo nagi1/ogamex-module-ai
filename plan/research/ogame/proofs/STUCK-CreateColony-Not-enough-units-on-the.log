@@ -1,0 +1,2 @@
+PASS aspect:work_failures 1s
+PROOF: PASS STUCK-CreateColony-Not-enough-units-on-the (aspect:work_failures)

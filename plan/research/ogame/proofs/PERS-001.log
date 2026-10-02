@@ -1,0 +1,4 @@
+PASS test:RoutineCadenceTest 4s
+PASS test:AllianceFitTest 2s
+PASS aspect:alliance 0s
+PROOF: PASS PERS-001 (test:RoutineCadenceTest test:AllianceFitTest aspect:alliance)

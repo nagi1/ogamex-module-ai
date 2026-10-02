@@ -1,0 +1,2 @@
+PASS harness:self-check 0s
+PROOF: PASS QUAL-7 (harness:self-check)
