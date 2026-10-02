@@ -109,6 +109,18 @@ def slow_verification(actions):
         actions.append(f"raised {code}: {step} {reason}")
 
 
+def scratch_files(actions):
+    """Writer debris: untracked diagnostics and probe tests are circles, not delivery. Remove them."""
+    for line in sh("git", "status", "--short", "--untracked-files=all").splitlines():
+        if not line.startswith("?? "):
+            continue
+        path = line[3:].strip()
+        name = os.path.basename(path)
+        if name.startswith("diagnose-") or re.search(r"(Probe|Debug|Scratch)(Test)?\.php$", name):
+            os.remove(os.path.join(ROOT, path))
+            actions.append(f"removed writer scratch file {path}")
+
+
 def commits():
     log = sh("git", "log", f"--since={WINDOW_MIN} minutes ago", "--numstat", "--relative", "--format=%h")
     code = other = 0
@@ -151,6 +163,7 @@ def main():
 
     done, _, loops = ledger()
     advance(actions)
+    scratch_files(actions)
     slow_verification(actions)
 
     code_lines, other_lines = commits()
