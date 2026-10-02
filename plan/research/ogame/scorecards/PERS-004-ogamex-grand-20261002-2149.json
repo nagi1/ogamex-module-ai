@@ -1,37 +1,37 @@
 {
-    "at": "2026-10-02T21:45:56+00:00",
+    "at": "2026-10-02T21:49:39+00:00",
     "hours": 2,
     "aspects": {
         "economy": {
-            "count": 2408,
+            "count": 2401,
             "floor": 100,
             "pass": true,
             "player": "fills the build queue on every planet each login",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "research": {
-            "count": 712,
+            "count": 710,
             "floor": 17,
             "pass": true,
             "player": "keeps the research lab busy",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "shipyard": {
-            "count": 418,
+            "count": 405,
             "floor": 9,
             "pass": true,
             "player": "builds ships and defence from what the economy leaves",
             "owner": "app/Domain/Decision/QueueableUnitPlanner.php"
         },
         "espionage": {
-            "count": 48,
+            "count": 46,
             "floor": 9,
             "pass": true,
             "player": "probes neighbours before deciding whom to hit",
             "owner": "app/Domain/Decision/QueueableSpyPlanner.php"
         },
         "raids": {
-            "count": 31,
+            "count": 38,
             "floor": 9,
             "pass": true,
             "player": "raids a profitable target",
@@ -52,35 +52,35 @@
             "owner": "app/Domain/Decision/QueueableRecyclePlanner.php"
         },
         "expeditions": {
-            "count": 27,
+            "count": 24,
             "floor": 5,
             "pass": true,
             "player": "sends expeditions when the fleet has nothing better to do",
             "owner": "app/Domain/Decision/QueueableExpeditionPlanner.php"
         },
         "colonisation": {
-            "count": 55,
+            "count": 54,
             "floor": 1,
             "pass": true,
             "player": "settles new planets while slots remain",
             "owner": "app/Domain/Decision/QueueableColonyPlanner.php"
         },
         "fleet_save": {
-            "count": 207,
+            "count": 216,
             "floor": 5,
             "pass": true,
             "player": "saves the fleet before going offline or under attack",
             "owner": "app/Domain/Decision/QueueableFleetSavePlanner.php"
         },
         "social": {
-            "count": 1231,
+            "count": 1307,
             "floor": 5,
             "pass": true,
             "player": "answers and starts exchanges with other players",
             "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
         },
         "chat": {
-            "count": 1231,
+            "count": 1307,
             "floor": 5,
             "pass": true,
             "player": "writes to other players",
