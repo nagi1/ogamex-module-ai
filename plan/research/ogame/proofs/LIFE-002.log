@@ -1,2 +1,2 @@
-FAIL invariant:LIFE_CAPITAL 22s —  ! [LIFE_CAPITAL] 8 of 100 accounts own a military hull dearer than the median (`bomber`, `destroyer`, `deathstar`, `reaper`): there is no war fleet
+FAIL invariant:LIFE_CAPITAL 23s —  ! [LIFE_CAPITAL] 8 of 100 accounts own a military hull dearer than the median (`bomber`, `destroyer`, `deathstar`, `reaper`): there is no war fleet
 PROOF: FAIL LIFE-002 (invariant:LIFE_CAPITAL) at invariant:LIFE_CAPITAL:  ! [LIFE_CAPITAL] 8 of 100 accounts own a military hull dearer than the median (`bomber`, `destroyer`, `deathstar`, `reaper`): there is no war fleet

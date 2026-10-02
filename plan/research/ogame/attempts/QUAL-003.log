@@ -5,37 +5,37 @@ PROOF: FAIL QUAL-003 (invariant:NAKED_BESIDE_WALLED aspect:shipyard) at invarian
 
 LIVE EVIDENCE
 --- ogamex pulse 30 (live, now):
-PULSE last 30 min, 100 accounts: 369 sessions on 100 accounts
-  backlog: 273 work item(s) more than a minute late, oldest 21 min — live verdicts read worker lag
-  sessions chose: FleetSave 29%, QueueUnits 22%, Colonize 11%, Transfer 9%, Recycle 7%, Raid 5%, DoNothing 5%, Build 4%, Recall 4%, ThrottleMine 2%, Research 1%, Expedition 1%, Spy 1%
-  host orders: buildings 926, research 302, units 163
-  missions launched: Attack 14, Deployment 91, Transport 23, Recycle 9, Espionage 8, Colonisation 17, Expedition 5
+PULSE last 30 min, 100 accounts: 476 sessions on 100 accounts
+  backlog: 239 work item(s) more than a minute late, oldest 22 min — live verdicts read worker lag
+  sessions chose: FleetSave 28%, QueueUnits 20%, Colonize 12%, Transfer 11%, Raid 6%, Recycle 5%, DoNothing 5%, ThrottleMine 4%, Build 2%, Spy 2%, Recall 2%, Expedition 1%, Research 1%
+  host orders: buildings 1043, research 327, units 170
+  missions launched: Deployment 104, Transport 35, Espionage 7, Colonisation 22, Attack 19, Expedition 5, Recycle 8
   work (kind: state count):
-    QueueUnits: Completed 151, Pending 18
-    BuildFirstBuilding: Completed 1047, Pending 155, Retry 4
-    QueueResearch: Completed 310, Pending 48, Retry 1
-    Transfer: Completed 32, Pending 11
-    SetMinePercent: Completed 16, Retry 1, Pending 1
-    Recycle: Completed 29
-    FleetSave: Completed 104, Retry 2, Pending 16
-    Colonize: Completed 23, Pending 1
-    RunSession: Completed 369, Pending 101, Retry 1
-    Spy: Completed 8
-    Raid: Completed 16, Retry 1, Pending 6
-    Expedition: Completed 5
-    Recall: Completed 10, Pending 3
+    FleetSave: Completed 110, Pending 12
+    RunSession: Completed 476, Pending 102
+    QueueResearch: Completed 339, Pending 38
+    BuildFirstBuilding: Completed 1174, Retry 14, Pending 135
+    QueueUnits: Completed 157, Retry 3, Pending 14
+    Recall: Completed 12, Pending 4
+    Transfer: Completed 46, Pending 11
+    SetMinePercent: Completed 16, Retry 1, Pending 4
+    Colonize: Completed 32, Pending 2
+    Raid: Completed 23, Retry 1, Pending 3
+    Spy: Completed 7, Retry 1, Pending 1
+    Expedition: Completed 5, Pending 2
+    Recycle: Completed 26
   refused: 
-    17 × DispatchFleet: You don't have sufficient storage capacity!
-    12 × DispatchFleet: no_disposable_fleet
-    9 × DispatchFleet: Not enough resources on the planet to send the fleet.
-    8 × RecallFleet: no_deployment_to_recall
-    5 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
-    4 × QueueBuilding: Maximum number of items already in queue.
-    4 × QueueResearch: already_researching
-    3 × DispatchFleet: Maximum number of fleets reached.
+    15 × DispatchFleet: You don't have sufficient storage capacity!
+    11 × DispatchFleet: Not enough resources on the planet to send the fleet.
+    9 × RecallFleet: no_deployment_to_recall
+    8 × QueueBuilding: Maximum number of items already in queue.
+    7 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    6 × QueueResearch: already_researching
+    4 × DispatchFleet: Maximum number of fleets reached.
+    4 × DispatchFleet: no_disposable_fleet
     2 × DispatchFleet: This mission is not possible.
-    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: colony_ship, small_cargo, heavy_fighter, light_fighter
-    1 × DispatchFleet: source_short_at_dispatch
+    2 × DispatchFleet: no_transport_fleet
+    2 × CreateColony: This mission is not possible.
     1 × CreateColony: Not enough resources on the planet to send the fleet.
 --- ogamex why subject (live, now):
 WHY 35 (Miner): what the next session will see
@@ -44,7 +44,7 @@ WHY 35 (Miner): what the next session will see
   NOT published: research, colonize, throttle_mine
 
   player_id                    35
-  observed_at                  1790978278
+  observed_at                  1790978877
   account_state                "active"
   recovery_factor              0
   fleet_slots_free             2
@@ -58,11 +58,11 @@ WHY 35 (Miner): what the next session will see
   planets                      5 planet(s)
 
   decision: Transfer
-    Build         65.5  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.5
-    Transfer      42.4  resource_need=27, safety=15, seeded_variation=0.4
-    Spy           40.2  resource_need=30, safety=10, seeded_variation=0.2
-    QueueUnits    40.2  resource_need=30, safety=10, seeded_variation=0.2
+    Build         65.4  resource_need=30, safety=10, archetype_preference=25, seeded_variation=0.4
+    Transfer      41.9  resource_need=27, safety=15, seeded_variation=-0.1
+    QueueUnits    39.8  resource_need=30, safety=10, seeded_variation=-0.2
+    Spy           39.5  resource_need=30, safety=10, seeded_variation=-0.5
     Expedition    39.1  resource_need=9, safety=30, seeded_variation=0.1
-    DoNothing      4.7  safety=5, seeded_variation=-0.3
+    DoNothing      4.6  safety=5, seeded_variation=-0.4
   turned down by the candidate factory: 
     report:424: raid_not_viable
