@@ -1073,6 +1073,18 @@ def live_evidence(failing):
     return "\n\nLIVE EVIDENCE\n" + "\n".join(parts) if parts else ""
 
 
+def still_passes(line):
+    """True when a `FAIL test:Name` proof line names a test that now passes on its own."""
+    match = re.match(r"FAIL test:(\w+)", line)
+    if not match:
+        return False
+    env = dict(os.environ, OGAMEX_RUNNER=os.environ.get("OGAMEX_RUNNER", "local-docker-dev"))
+    result = subprocess.run(["bash", os.path.join(MODULE, "scripts/ogamex"), "test-one", match.group(1)],
+                            capture_output=True, text=True, timeout=600, env=env)
+
+    return '"result":"passed"' in result.stdout
+
+
 def reopen(code):
     """Send a delivered row back to the writer when its live proof failed, with that failure as feedback.
 
@@ -1087,6 +1099,13 @@ def reopen(code):
     failing = [line for line in text.splitlines() if line.startswith("FAIL ") and "too early" not in line]
     if not failing:
         print(f"{code}: nothing to send back (no failing step, or only steps that wait for the cohort)")
+        return 0
+
+    # A test that failed beside a running writer or a concurrent suite and passes alone is not the
+    # writer's to fix: ATK-001 went back for a 40-turn attempt on a test that passed six runs in a row.
+    failing = [line for line in failing if not still_passes(line)]
+    if not failing:
+        print(f"{code}: its failing test steps pass on a re-run; stays delivered for the next proof")
         return 0
 
     upstream = waits_upstream(code, failing)
