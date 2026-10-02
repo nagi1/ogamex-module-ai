@@ -149,6 +149,31 @@ class ScheduleAiIntentAction
         // Every case is listed: adding a capability means deciding here where it is executed, and
         // a capability with no executor must not be published to begin with.
         $type = $trace->selected->candidate->type;
+        // The unit plan is read here, before the building steps are enqueued, because one order's
+        // placement decides whether it happens at all: the first wall of a planet that stands bare
+        // beside a walled sibling is priced against the balance those steps spend, so the host
+        // refuses it and the planet stays naked session after session (QUAL-003).
+        //
+        // It is read for every chosen action, not only QueueUnits: the wall candidate is one of a
+        // dozen and the economy's habit outranks it in most logins, so waiting for the sessions the
+        // engine happens to pick the shipyard left the bare planet naked while the account kept
+        // colonising (measured live 2 Oct 2026: 1 planet at zero defence beside a sibling holding
+        // 1,746). A login is one wall order whichever action was chosen.
+        $units = $this->queueableUnitPlanner->plan($profile->player_id);
+        $unitsFirst = $units instanceof QueueableUnit && $units->aheadOfEconomy;
+
+        // The marked wall is written before the building steps, because work falls due in the order
+        // it was written and same-instant work keeps that order: written after them, the steps have
+        // already spent the balance the wall was priced against, the host refuses it, and the planet
+        // stands naked beside its walled sibling again on the next login (QUAL-003).
+        //
+        // A wall placed on a login that chose something else keeps a key of its own, so the session's
+        // own action still owns the primary key: a retried session converges on that action, and the
+        // wall is one more order in the login rather than the login's objective.
+        if ($unitsFirst) {
+            $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now(), $units, $type === AiCandidateActionType::QueueUnits ? '' : ':wall');
+        }
+
         // A player refills the build queues and the lab every login before turning to the shipyard or
         // the fleet; choosing a raid or a ship must not leave nine planets idle until the next session.
         // A save moves everything away and a quiet session has nothing to spend on: neither refills
@@ -162,7 +187,8 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Build, AiCandidateActionType::Research => $this->fillQueues($profile, $sessionWorkItem, ''),
             // The shipyard gets what the buildings leave, so its order waits until they are placed:
             // the host cancels a building it cannot pay for, and a ship order placed first would cause it.
-            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
+            // A marked wall is already written above; the repeat finds that row and leaves its time.
+            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $units),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
             AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem),
@@ -256,9 +282,8 @@ class ScheduleAiIntentAction
      * unit name three different objectives, which is how an account ends up building combat ships
      * while it claims to be assembling cargo.
      */
-    private function scheduleUnits(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt): void
+    private function scheduleUnits(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt, ?QueueableUnit $plan, string $keySuffix = ''): void
     {
-        $plan = $this->queueableUnitPlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableUnit) {
             return;
         }
@@ -268,7 +293,7 @@ class ScheduleAiIntentAction
             self::PAYLOAD_UNIT_ID => $plan->unitId,
             self::PAYLOAD_AMOUNT => $plan->amount,
             self::PAYLOAD_REASON => $plan->reason,
-        ], $dueAt);
+        ], $dueAt, $keySuffix);
     }
 
     /**
@@ -280,6 +305,15 @@ class ScheduleAiIntentAction
     {
         $plan = $this->queueableColonyPlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableColony) {
+            return;
+        }
+
+        // The colony ship comes before the mission: a dispatch with no ship at the origin is refused
+        // on every login and the ship is never built.
+        $ship = $this->queueableUnitPlanner->colonyShipFor($profile->player_id, $plan->planetId);
+        if ($ship instanceof QueueableUnit) {
+            $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now(), $ship);
+
             return;
         }
 

@@ -145,6 +145,7 @@ Proof (a task is done when its proof passes; see .github/skills/ai-task-execute)
   stories                               every Situation-kit story, PASS/FAIL with the kit's diagnosis (~5 s)
 
 Live (on a cohort, PROVE_UNIVERSE=grand by default; all read-only except situation):
+  stuck [minutes] [repeats]             accounts failing the same way again and again, by action and reason
   pulse [minutes]                       what the cohort did in the last N minutes, refusals, worker backlog
   account <player_id> [minutes]         one account: planets, queues, fleets, recent work, refusals, decisions
   why <player_id>                       what its next session will see: published actions, every input flag,
@@ -441,6 +442,9 @@ case "$command_name" in
         ;;
     economy)
         in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/economy-explain.php'; foreach (explain_economy(${1:?usage: economy PLAYER_ID}) as \$line) { echo \$line, PHP_EOL; }"
+        ;;
+    stuck)
+        in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/live-stuck.php "${1:-120}" "${2:-3}"
         ;;
     pulse)
         in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/live-pulse.php "${1:-15}" "${@:2}"

@@ -103,6 +103,20 @@ test('a yard power order is scheduled and executed as a satellite', function ():
     expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
 });
 
+test('a colonize selection with no colony ship orders the ship instead of a doomed mission', function (): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetAddResources(intentPlenty());
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->playerSetResearchLevel('astrophysics', 4);
+    $this->playerSetResearchLevel('combustion_drive', 4);
+    $this->playerSetResearchLevel('impulse_drive', 4);
+
+    $intent = intentSchedule($profile, AiCandidateActionType::Colonize, $this->currentPlanetId);
+
+    expect($intent?->kind)->toBe(AiWorkKind::QueueUnits)
+        ->and($intent?->payload['reason'])->toBe('role:colony');
+});
+
 test('a colonize selection schedules and executes a colony mission', function (): void {
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());

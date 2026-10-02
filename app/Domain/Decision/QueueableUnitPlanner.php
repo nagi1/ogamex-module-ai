@@ -39,6 +39,15 @@ use OGame\Services\PlayerService;
  * attack per metal-equivalent cost, the colony ship is the ship the host's own colonisation mission
  * consumes, and defence is the component `DefenseCompositionPlanner` says this account's doctrine is
  * most behind on. A mod-added hull with a better ratio becomes its role's unit with no edit here.
+ *
+ * The standing wall pass below is the one place the account's whole planet list is weighed at once,
+ * and it is the only role that is collected before it is chosen: the account's wall spreads across
+ * its planets one login at a time, each login serving the first planet still standing at zero.
+ *
+ * The pass's plan is marked, because where the order is placed decides whether it happens: the
+ * session's building steps are executed first and spend the balance the wall was priced against, so
+ * the host refused the wall order and the planet stayed bare on every login (QUAL-003). The marker
+ * lets the schedule run the login's first wall ahead of those steps.
  */
 class QueueableUnitPlanner
 {
@@ -84,6 +93,35 @@ class QueueableUnitPlanner
         // need grows with production, so the homeworld's need was never satisfied and its colonies were
         // never reached -- 125 of 158 grand-test planets sat at zero defence while one held 40,643.
         $standing = [];
+
+        // A planet that stands no defence beside a sibling that already holds one takes the file's
+        // floor before every other role, and across the whole account. The roles below are per planet
+        // and each can keep re-firing on a single planet -- power for a planet that stays short, a
+        // cargo fleet that never catches the next report, a colony ship for the next planet -- so the
+        // naked planet was answered only when every one of those happened to fall quiet, and the
+        // account stayed walled in one place (measured live 2 Oct 2026: 1 naked planet beside a
+        // sibling holding 1,475). While no wall stands anywhere the account is still in its opening,
+        // where cargo comes first; the standing pass below still reaches the floor for that case.
+        if ($this->anyPlanetHoldsDefence($planets)) {
+            foreach ($planets as $planet) {
+                $planet->updateResources(false);
+                // Defence already paid for in the yard counts as standing: a planet whose first wall is
+                // ordered is no longer bare, so the next bare sibling takes the order instead of the same
+                // planet taking every one while its sibling stays at zero built units. The account can
+                // only place one wall order per session, so the pass walks the planets in order and
+                // leaves the already-served ones to the next login.
+                if ($this->defenseNeed->standingUnits($planet) > 0) {
+                    continue;
+                }
+
+                $standingDefence = $this->standingDefence($player, $planet);
+                if ($standingDefence === null) {
+                    continue;
+                }
+
+                return $standingDefence;
+            }
+        }
 
         // Power outranks the habits below but not an incoming attack. A planet that is throttling
         // loses production every hour it stays short, wherever it sits on the account, so it is
@@ -171,9 +209,28 @@ class QueueableUnitPlanner
                 continue;
             }
 
+            // A planet that stands no defence at all takes the floor even while the economy is
+            // saving. Being short of the next step is what such a planet is, so the veto below
+            // dropped the floor every session and left the account naked beside its own wall
+            // (measured live 2 Oct 2026: a planet at zero defence beside a sibling holding 1,099).
+            $bare = $this->holdsNoDefence($planet);
             $defense = $this->defenseComposition->plan($player, $planet, $need);
-            if ($defense !== null && !$this->starvesSaving($planet, $profile, $defense)) {
-                $standing[] = [$planet, $defense];
+
+            if ($defense === null) {
+                // The doctrine names nothing this planet's yard can build (a mid-game doctrine's ratio
+                // names nothing below a level-two shipyard, while the anchor it could build is not in
+                // the ratio at all), so the host's own cheapest defence unit is the wall here too --
+                // the same fallback the opening pass takes -- rather than the planet staying bare
+                // however often the session offers it.
+                $order = $this->cheapestQueueableDefence($planet, $need, $bare);
+            } elseif ($bare || ! $this->starvesSaving($planet, $profile, $defense->unit, $defense->amount)) {
+                $order = $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $defense->amount, $bare);
+            } else {
+                $order = null;
+            }
+
+            if ($order !== null) {
+                $standing[] = [$planet, $order];
             }
         }
 
@@ -182,21 +239,38 @@ class QueueableUnitPlanner
             // everywhere it is wanted instead of forever in one place. Counting units rather than
             // pricing them keeps this one comparison and no second valuation.
             usort($standing, static fn (array $a, array $b): int => $a[0]->getDefenseUnits()->getAmount() <=> $b[0]->getDefenseUnits()->getAmount());
-            [$planet, $defense] = $standing[0];
 
-            return $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $defense->amount);
+            return $standing[0][1];
         }
 
         return null;
     }
 
-    private function unit(PlanetService $planet, UnitObject $ship, string $reason, int $amount = self::FIRST_CARGO_AMOUNT): QueueableUnit
+    /**
+     * The colony ship a colonisation still lacks: a player with a free slot and no ship at the origin
+     * orders the ship first. Null when the ship is there already or the yard cannot take it yet.
+     */
+    public function colonyShipFor(int $playerId, int $planetId): QueueableUnit|null
+    {
+        $planet = collect($this->playerServiceFactory->make($playerId, true)->planets->all())
+            ->first(fn (PlanetService $candidate): bool => $candidate->getPlanetId() === $planetId);
+        $ship = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
+
+        if ($planet === null || $this->ownsColonyShip($planet) || ! $this->queueable($planet, $ship)) {
+            return null;
+        }
+
+        return $this->unit($planet, $ship, 'role:colony');
+    }
+
+    private function unit(PlanetService $planet, UnitObject $ship, string $reason, int $amount = self::FIRST_CARGO_AMOUNT, bool $aheadOfEconomy = false): QueueableUnit
     {
         return app()->makeWith(QueueableUnit::class, [
             'planetId' => $planet->getPlanetId(),
             'unitId' => $ship->id,
             'amount' => $amount,
             'reason' => $reason,
+            'aheadOfEconomy' => $aheadOfEconomy,
         ]);
     }
 
@@ -483,22 +557,115 @@ class QueueableUnitPlanner
     }
 
     /**
+     * Whether this planet stands no defence at all: the state the doctrine's floor is written for,
+     * and the one the economy's saving must not veto.
+     */
+    private function holdsNoDefence(PlanetService $planet): bool
+    {
+        return $planet->getDefenseUnits()->getAmount() === 0;
+    }
+
+    /**
+     * Whether any planet of the account stands a wall at all: the state that says the opening is over,
+     * so the floor of a sibling holding nothing outranks the account's habits rather than waiting on
+     * them.
+     *
+     * @param  array<int, PlanetService>  $planets
+     */
+    private function anyPlanetHoldsDefence(array $planets): bool
+    {
+        foreach ($planets as $planet) {
+            // A wall already paid for in the yard counts here for the same reason it counts in the
+            // pass above: the account has left its opening the moment its first wall is bought, so
+            // the bare siblings are served from that login on rather than one session behind the
+            // homeworld's queue (measured live 2 Oct 2026: a sibling left at zero defence while the
+            // account's only wall sat in the yard).
+            if ($this->defenseNeed->standingUnits($planet) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The first wall a planet that holds nothing takes.
+     *
+     * The doctrine names the shape, but only among units this planet's yard can actually build: a
+     * mid-game doctrine's ratio names nothing below a level-two shipyard, while the anchor it could
+     * build is not in the ratio at all. A young colony's yard sits below every one of them, so the
+     * composition answered null and the planet stayed naked beside a sibling's wall however often the
+     * session offered it (measured live 2 Oct 2026: one planet at zero defence beside a sibling
+     * holding 1,496). The fallback is the host's own cheapest defence unit, so no unit is named here.
+     */
+    private function standingDefence(PlayerService $player, PlanetService $planet): ?QueueableUnit
+    {
+        $need = $this->defenseNeed->evaluate($player, $planet);
+        if ($need === null) {
+            return $this->cheapestQueueableDefence($planet, null);
+        }
+
+        $defense = $this->defenseComposition->plan($player, $planet, $need);
+        if ($defense !== null && $this->queueable($planet, $defense->unit)) {
+            return $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $defense->amount, true);
+        }
+
+        return $this->cheapestQueueableDefence($planet, $need);
+    }
+
+    /**
+     * The defence unit the host prices lowest that this planet's yard can build, in the count the need
+     * is worth: the same value-to-units arithmetic the composition does, with the host's price of the
+     * unit the doctrine cannot name here.
+     */
+    private function cheapestQueueableDefence(PlanetService $planet, ?DefenseNeed $need, bool $aheadOfEconomy = true): ?QueueableUnit
+    {
+        $best = null;
+        $bestPrice = INF;
+
+        foreach (ObjectService::getDefenseObjects() as $unit) {
+            if (! $unit instanceof UnitObject || ! $this->queueable($planet, $unit)) {
+                continue;
+            }
+
+            $price = $this->metalEquivalent(ObjectService::getObjectRawPrice($unit->machine_name));
+            if ($price <= 0.0 || $price >= $bestPrice) {
+                continue;
+            }
+
+            $best = $unit;
+            $bestPrice = $price;
+        }
+
+        if ($best === null) {
+            return null;
+        }
+
+        $amount = min(
+            ObjectService::getObjectMaxBuildAmount($best->machine_name, $planet, true),
+            max(self::FIRST_CARGO_AMOUNT, (int) ceil(($need?->defenceValue ?? 0.0) / $bestPrice))
+        );
+
+        return $this->unit($planet, $best, 'role:defense:standing:'.$best->machine_name, $amount, $aheadOfEconomy);
+    }
+
+    /**
      * Whether this order would spend a resource the planet is saving for an economy step: a player
      * mines while short, and defence comes from what the economy leaves.
      */
-    private function starvesSaving(PlanetService $planet, AiProfile $profile, DefenseComposition $defense): bool
+    private function starvesSaving(PlanetService $planet, AiProfile $profile, UnitObject $unit, int $amount): bool
     {
         $saving = $this->buildingPlanner->savingFor($planet, $profile);
         if ($saving === null) {
             return false;
         }
 
-        $price = ObjectService::getObjectPrice($defense->unit->machine_name, $planet);
+        $price = ObjectService::getObjectPrice($unit->machine_name, $planet);
         $held = $planet->getResources();
 
         foreach (['metal', 'crystal', 'deuterium'] as $resource) {
             if ($price->{$resource}->get() > 0 && $saving->{$resource}->get() > 0
-                && $held->{$resource}->get() - $price->{$resource}->get() * $defense->amount < $saving->{$resource}->get()) {
+                && $held->{$resource}->get() - $price->{$resource}->get() * $amount < $saving->{$resource}->get()) {
                 return true;
             }
         }
