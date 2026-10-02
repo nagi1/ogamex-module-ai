@@ -93,6 +93,11 @@ reap_stale_test_sessions() {
 COVERAGE_DATABASE="${AI_COVERAGE_DATABASE:-ogamex-test-ai-coverage}"
 
 prepare_coverage_database() {
+    prepare_coverage_database_for "$COVERAGE_DATABASE"
+}
+
+prepare_coverage_database_for() {
+    local AI_DB_OVERRIDE="$1"
     # Creating the database needs a connection without one selected, so it is done with a raw
     # client rather than through the application, which could not connect to a missing database.
     run_core php -r '
@@ -167,24 +172,46 @@ with_test_lane() {
         "$@"
         return
     fi
-    local claims="$MODULE_ROOT/plan/research/ogame/claims" lock rc=0 told=0
-    lock="$claims/$(printf '%s' 'verify:shared-test-database' | sha256sum | cut -c1-16).lock"
+    # Lane 1 is the harness's lock and the shared test database. Lanes 2..N are the same tests on a
+    # database of their own (ogamex-test-laneN, migrated once), so a proof run no longer waits behind
+    # whoever holds lane 1: the wait was most of a 40 s test step.
+    local claims="$MODULE_ROOT/plan/research/ogame/claims" lock lane key rc=0 told=0 held="" had_override="${AI_DB_OVERRIDE:-}"
     mkdir -p "$claims"
-    until (set -o noclobber; printf 'verify:shared-test-database\npid %s at %s UTC (ogamex)\n' "$$" "$(date -u '+%F %T')" > "$lock") 2>/dev/null; do
-        # A run killed mid-test leaves its lock; the harness ages its own out after 30 minutes too.
-        if [ $(( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || date +%s) )) -gt 1800 ]; then
-            rm -f "$lock"
-            continue
-        fi
-        [ "$told" = 1 ] || echo "waiting for the test lane, held by: $(sed -n 2p "$lock" 2>/dev/null)" >&2
+    while [ -z "$held" ]; do
+        for lane in $(seq 1 "${OGAMEX_LANES:-4}"); do
+            key='verify:shared-test-database'
+            [ "$lane" = 1 ] || key="verify:test-lane-$lane"
+            lock="$claims/$(printf '%s' "$key" | sha256sum | cut -c1-16).lock"
+            # A run killed mid-test leaves its lock; the harness ages its own out after 30 minutes too.
+            if [ -e "$lock" ] && [ $(( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || date +%s) )) -gt 1800 ]; then
+                rm -f "$lock"
+            fi
+            if (set -o noclobber; printf '%s\npid %s at %s UTC (ogamex)\n' "$key" "$$" "$(date -u '+%F %T')" > "$lock") 2>/dev/null; then
+                held="$lock"
+                break
+            fi
+        done
+        [ -n "$held" ] && break
+        [ "$told" = 1 ] || echo "waiting for a test lane (all ${OGAMEX_LANES:-4} held)" >&2
         told=1
-        sleep 2
+        sleep 1
     done
-    trap 'rm -f "$lock"' INT TERM
+    trap 'rm -f "$held"' INT TERM
+    if [ "$lane" != 1 ] && [ -z "${AI_DB_OVERRIDE:-}" ]; then
+        export AI_DB_OVERRIDE="ogamex-test-lane$lane"
+        prepare_lane_database
+    fi
     "$@" || rc=$?
-    rm -f "$lock"
+    rm -f "$held"
     trap - INT TERM
+    [ "$lane" = 1 ] || [ "$had_override" != "" ] || unset AI_DB_OVERRIDE
     return $rc
+}
+
+# A lane database is created and migrated the first time its lane runs.
+prepare_lane_database() {
+    [ -e "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE" ] && return
+    prepare_coverage_database_for "$AI_DB_OVERRIDE" && : > "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE"
 }
 
 # The cohorts are their own stacks (grand, pve); the dev stack holds no AI population, so a
@@ -261,7 +288,17 @@ prove_row() {
         : > "$out"
         case "$kind" in
             test) with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
-            situation) in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
+            situation)
+                # A situation has a Situation-kit story that plays it in about a second on the test database;
+                # the live run waits for real workers and took 183 s. The kit story is the proof, the live
+                # run is the fallback for a situation no story covers yet.
+                story="$(printf '%s' "$name" | sed -E 's/(^|-)([a-z])/\U\2/g')SituationTest"
+                if [ -f "$MODULE_ROOT/tests/Feature/Situations/$story.php" ]; then
+                    with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$story" 2>&1 | tee "$out" >&"$progress" || rc=1
+                else
+                    in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup 2>&1 | tee "$out" >&"$progress" || rc=1
+                fi
+                ;;
             invariant)
                 # verify-cohorts names a violated invariant as "[NAME]"; its absence is the pass, but
                 # only when the read itself ran (it ends with a QUALITY line).
@@ -290,7 +327,10 @@ prove_row() {
             *) echo "unknown proof step $step" > "$out"; rc=1 ;;
         esac
         [ "$rc" = 0 ] || [ "$kind" != test ] || tests_failed=1
-        printf '%s\t%s\t%s\t%s\t%s\n' "$step" "$rc" "$(( $(date +%s) - started ))" "$suspect" "$(step_line "$kind" "$name" "$out")" >> "$results"
+        took=$(( $(date +%s) - started ))
+        # A verification step has a minute. The babysitter reads this file and builds the missing fast path.
+        [ "$took" -le "${PROVE_STEP_BUDGET:-60}" ] || printf '%s\t%s\t%s\t%s\n' "$(date -u '+%F %T')" "$code" "$step" "$took" >> "$MODULE_ROOT/plan/research/ogame/slow-steps.log"
+        printf '%s\t%s\t%s\t%s\t%s\n' "$step" "$rc" "$took" "$suspect" "$(step_line "$kind" "$name" "$out")" >> "$results"
     done
     local verdict_rc=0
     python3 - "$code" "$results" "$as_json" "$MODULE_ROOT/plan/research/ogame/proofs/$code.log" "$steps" <<'PY' || verdict_rc=$?

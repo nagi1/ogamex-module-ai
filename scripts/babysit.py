@@ -63,6 +63,52 @@ def advance(actions):
     return actions
 
 
+SLOW_LOG = os.path.join(ROOT, "plan/research/ogame/slow-steps.log")
+OWNERS = {"invariant": "scripts/verify-cohorts.php", "aspect": "scripts/play-scorecard.php", "harness": "scripts/strategy-pipeline.py"}
+
+
+def slow_verification(actions):
+    """A verification step has a minute (scripts/ogamex logs any step over it). Find out why, then fix it.
+
+    A test that is slow only while it queued is already fixed by the parallel lanes; one that is slow
+    alone, or a live step that is slow, gets a row for the harness to build its fast path.
+    """
+    if not os.path.exists(SLOW_LOG):
+        return
+    since = datetime.now(timezone.utc) - timedelta(minutes=WINDOW_MIN)
+    steps = {}
+    for line in open(SLOW_LOG):
+        at, code, step, took = line.rstrip("\n").split("\t")[:4]
+        if datetime.strptime(at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc) >= since:
+            steps.setdefault(step.rstrip("?"), []).append((code, int(took)))
+    con = sqlite3.connect(DB)
+    for step, seen in steps.items():
+        kind, _, name = step.partition(":")
+        worst = max(t for _, t in seen)
+        if kind == "test":
+            alone = time.time()
+            subprocess.run(["bash", "scripts/ogamex", "test-one", name], cwd=ROOT, capture_output=True, timeout=300,
+                           env={**os.environ, "OGAMEX_RUNNER": "local-docker-dev"})
+            alone = int(time.time() - alone)
+            if alone <= 60:
+                actions.append(f"{step} took {worst}s in a proof but {alone}s alone: it was waiting for a test lane")
+                continue
+            file_ref = f"tests/Feature/{name}.php"
+            reason = f"runs {alone}s on its own"
+        else:
+            file_ref = OWNERS.get(kind, "scripts/ogamex")
+            reason = f"took {worst}s inside a proof"
+        code = "FAST-" + re.sub(r"[^A-Za-z0-9]+", "-", step).strip("-")[:40]
+        if con.execute("select 1 from tasks where code=?", (code,)).fetchone():
+            continue
+        sh("python3", "plan/tasks/task.py", "add", code, f"Verification step {step} {reason}; give it a path that answers in under 60 s",
+           "impl", "P0", "--file", file_ref, "--proof", "harness:self-check",
+           "--notes", f"Raised by the babysitter. A proof step has 60 s. {step} {reason} (rows: {', '.join(c for c, _ in seen)}). "
+                      "Make it fast without weakening what it proves: read stored results instead of recomputing, build the "
+                      "state with the Situation kit instead of waiting, or split the test. The step must then pass in under 60 s.")
+        actions.append(f"raised {code}: {step} {reason}")
+
+
 def commits():
     log = sh("git", "log", f"--since={WINDOW_MIN} minutes ago", "--numstat", "--relative", "--format=%h")
     code = other = 0
@@ -105,6 +151,7 @@ def main():
 
     done, _, loops = ledger()
     advance(actions)
+    slow_verification(actions)
 
     code_lines, other_lines = commits()
     changed, junk = tree()
