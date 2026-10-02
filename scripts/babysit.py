@@ -169,6 +169,16 @@ def stuck_scenarios(actions):
         actions.append(f"raised {code}: {accounts} accounts repeat '{reason}'")
 
 
+def commit_records(actions):
+    """Run records and the ledger are generated every minute; commit them so the tree shows only code in flight."""
+    paths = ["plan/research/ogame", "plan/tasks/tasks.db"]
+    sh("git", "add", "-A", "--", *paths)
+    if subprocess.run(["git", "diff", "--cached", "--quiet", "--", *paths], cwd=ROOT).returncode == 0:
+        return
+    sh("git", "commit", "-q", "-m", "harness run records and ledger snapshot (babysitter)", "--", *paths)
+    actions.append("committed the harness run records and ledger")
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "advance":
         for line in advance([]):
@@ -186,6 +196,7 @@ def main():
     scratch_files(actions)
     slow_verification(actions)
     stuck_scenarios(actions)
+    commit_records(actions)
 
     code_lines, other_lines = commits()
     changed, junk = tree()
