@@ -1,44 +1,44 @@
 {
-    "at": "2026-10-02T22:18:57+00:00",
+    "at": "2026-10-02T22:20:30+00:00",
     "hours": 2,
     "aspects": {
         "economy": {
-            "count": 3164,
+            "count": 3146,
             "floor": 100,
             "pass": true,
             "player": "fills the build queue on every planet each login",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "research": {
-            "count": 889,
+            "count": 880,
             "floor": 17,
             "pass": true,
             "player": "keeps the research lab busy",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "shipyard": {
-            "count": 527,
+            "count": 525,
             "floor": 9,
             "pass": true,
             "player": "builds ships and defence from what the economy leaves",
             "owner": "app/Domain/Decision/QueueableUnitPlanner.php"
         },
         "espionage": {
-            "count": 58,
+            "count": 56,
             "floor": 9,
             "pass": true,
             "player": "probes neighbours before deciding whom to hit",
             "owner": "app/Domain/Decision/QueueableSpyPlanner.php"
         },
         "raids": {
-            "count": 80,
+            "count": 83,
             "floor": 9,
             "pass": true,
             "player": "raids a profitable target",
             "owner": "app/Domain/Decision/RaidPlanner.php"
         },
         "transport": {
-            "count": 158,
+            "count": 162,
             "floor": 5,
             "pass": true,
             "player": "moves resources to where they are spent",
@@ -52,7 +52,7 @@
             "owner": "app/Domain/Decision/QueueableRecyclePlanner.php"
         },
         "expeditions": {
-            "count": 24,
+            "count": 23,
             "floor": 5,
             "pass": true,
             "player": "sends expeditions when the fleet has nothing better to do",
@@ -101,7 +101,7 @@
             "owner": "app/Actions/ExecuteAiIntentAction.php"
         },
         "fleet_breadth": {
-            "count": 6,
+            "count": 5,
             "floor": 80,
             "pass": true,
             "player": "uses the fleet for more than one thing (expeditions are at most 80% of missions)",

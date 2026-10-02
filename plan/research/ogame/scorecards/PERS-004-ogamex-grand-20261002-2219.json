@@ -1,5 +1,5 @@
 {
-    "at": "2026-10-02T22:18:57+00:00",
+    "at": "2026-10-02T22:19:41+00:00",
     "hours": 2,
     "aspects": {
         "economy": {
@@ -38,7 +38,7 @@
             "owner": "app/Domain/Decision/RaidPlanner.php"
         },
         "transport": {
-            "count": 158,
+            "count": 159,
             "floor": 5,
             "pass": true,
             "player": "moves resources to where they are spent",
