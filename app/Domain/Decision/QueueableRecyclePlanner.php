@@ -89,7 +89,7 @@ class QueueableRecyclePlanner
             );
 
             if ($best === null || $distance < $best['distance']) {
-                $best = ['field' => $field, 'origin' => $origin, 'distance' => $distance];
+                $best = ['field' => $field, 'origin' => $origin, 'distance' => $distance, 'mass' => $mass];
             }
         }
 
@@ -104,6 +104,7 @@ class QueueableRecyclePlanner
             'targetPosition' => (int) $best['field']->planet,
             'targetType' => PlanetType::DebrisField->value,
             'missionType' => RecycleMission::getTypeId(),
+            'mass' => $best['mass'],
         ]);
     }
 

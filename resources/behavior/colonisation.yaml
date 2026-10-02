@@ -1,0 +1,17 @@
+# What decides a colonisation, in the account's own terms: the reach of the slot
+# walk (QueueableColonyPlanner) and the development horizon the perception gate
+# (PlayerObservationService) holds a new colony to.
+#
+# The colony the account settles is only as reachable as the slot walk is far:
+# a walk that visits too few systems finds no empty slot in a crowded universe
+# and the account never colonises at all, while one that visits the whole
+# universe stalls the session. The bound is a cap, and the cap wins.
+colonisation:
+  # Hard ceiling on coordinate checks per decision, so a full universe can never
+  # stall a session. The walk spreads it over every galaxy the host reports.
+  max_coordinate_checks: 600
+
+  # How many hours of the account's own production a new colony's opening may
+  # cost: a colony is founded only when the existing economy can bring it online
+  # inside this horizon, never as a leap into a body that would sit at zero.
+  development_horizon_hours: 48

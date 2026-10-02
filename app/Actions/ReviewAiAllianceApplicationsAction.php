@@ -29,7 +29,7 @@ use OGame\Services\AllianceService;
  */
 class ReviewAiAllianceApplicationsAction
 {
-    /** An application must sit this long before the leader decides, so the leader reads it. */
+    /** An application must sit this long before the leader decides it, so the leader reads it. */
     private const MINIMUM_APPLICATION_AGE_MINUTES = 15;
 
     /** The leader accepts at most this many per pass. */

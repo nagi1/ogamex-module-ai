@@ -32,8 +32,9 @@ constraints:
 # Launcher — so without a floor no account ever builds its first wall, which no experienced
 # player does: the first few units are bought against probes, not against a modelled attack.
 #
-# NOT READ BY CODE YET: the evaluator still derives need from exposure alone, so this value is
-# recorded evidence awaiting the change that consumes it. Do not treat it as live behaviour.
+# The evaluator reads this floor (DefenseNeedEvaluator::minimumDeterrent) for any planet that holds
+# no defence at all, so a colony whose own production is near zero is not left naked beside the
+# walled planets of the same account.
 minimum_deterrent:
   value: 4000 # two Rocket Launchers, the smallest thing the host will accept as a wall
   reason: defense:need:minimum-deterrent

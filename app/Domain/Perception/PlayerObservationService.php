@@ -33,6 +33,8 @@ use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
+use RuntimeException;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Reduces only the AI account's own current state into a transport-safe input.
@@ -53,8 +55,8 @@ class PlayerObservationService
     /** RAID-008: a target scoring under this fraction of ours is not worth the fleet. */
     private const VIABILITY_SCORE_DIVISOR = 5;
 
-    /** CL3: the storage horizon (48 h) a colony's opening must repay inside, from E3. */
-    private const COLONY_DEVELOPMENT_HOURS = 48.0;
+    /** CL3: the storage horizon a colony's opening must repay inside, read from behaviour. */
+    private const COLONY_POLICY_FILE = '/resources/behavior/colonisation.yaml';
 
     /** V2: the reaction window a hostile inbound wakes the account inside, in seconds before impact. */
     private const REACTION_WINDOW_MIN_SECONDS = 120;
@@ -152,9 +154,9 @@ class PlayerObservationService
      *
      * A colony starts at zero, and developing it is paid from what the account already produces;
      * the cheapest production object the host offers is the opening step, and the account is eligible
-     * once its production covers that cost inside the storage horizon (the same 48 h E3 uses). The
-     * host supplies every object and price, so a mod that changes either changes this gate with no
-     * module edit.
+     * once its production covers that cost inside the storage horizon the behaviour file states.
+     * The host supplies every object and price, so a mod that changes either changes this gate with
+     * no module edit.
      */
     private function canDevelopColony(PlayerService $player): bool
     {
@@ -175,7 +177,23 @@ class PlayerObservationService
             $cheapest = min($cheapest, $price->metal->get() + $price->crystal->get() + $price->deuterium->get());
         }
 
-        return $perHour * self::COLONY_DEVELOPMENT_HOURS >= $cheapest;
+        return $perHour * $this->developmentHorizonHours() >= $cheapest;
+    }
+
+    /**
+     * How many hours of the account's own production a new colony's opening may cost, read by name
+     * from the behaviour file so the horizon is a number a writer retunes rather than a constant.
+     */
+    private function developmentHorizonHours(): float
+    {
+        $parsed = Yaml::parseFile(module_path('AI', self::COLONY_POLICY_FILE));
+        $hours = is_array($parsed) ? ($parsed['colonisation']['development_horizon_hours'] ?? null) : null;
+
+        if (!is_numeric($hours) || (float) $hours <= 0.0) {
+            throw new RuntimeException('colonisation: the file must state development_horizon_hours.');
+        }
+
+        return (float) $hours;
     }
 
     /**

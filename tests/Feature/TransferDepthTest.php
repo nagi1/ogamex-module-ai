@@ -48,7 +48,7 @@ test('a short colony is funded from the planet that can spare it', function (): 
 
     $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
 
-    expect($plan)->toBeInstanceOf(QueueableTransfer::class)
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class, transferDiagnosis($this->currentUserId, $targetId))
         ->and($plan?->sourcePlanetId)->toBe($this->currentPlanetId)
         ->and($plan?->targetPlanetId)->toBe($targetId)
         ->and($plan?->metal + $plan?->crystal)->toBeGreaterThanOrEqual(50_000);
@@ -548,6 +548,57 @@ function transferSnapshot(int $playerId, int $planetId): PerceptionSnapshot
         'sourceTimestamps' => [],
         'fleetSlotsFree' => 2,
     ]);
+}
+
+/** Temporary diagnosis of a ferry that was expected and was not planned. */
+function transferDiagnosis(int $playerId, int $targetId): string
+{
+    $player = app(\OGame\Factories\PlayerServiceFactory::class)->make($playerId, true);
+    $profile = AiProfile::query()->where('player_id', $playerId)->first();
+    $lines = ['player=' . $playerId . ' target=' . $targetId . ' profile=' . ($profile?->enabled ? 'yes' : 'no') . ' planets=' . count($player->planets->all())];
+
+    foreach ($player->planets->all() as $planet) {
+        $planet->updateResources(false);
+        $planet->updateResourceProductionStats(false);
+        $planet->updateResourceStorageStats(false);
+        $buildings = $planet->getBuildingArray();
+        $lines[] = sprintf(
+            'planet %d type=%s res=%d/%d/%d energy=%d storage=%d/%d/%d',
+            $planet->getPlanetId(),
+            $planet->getPlanetType()->value,
+            (int) $planet->metal()->get(),
+            (int) $planet->crystal()->get(),
+            (int) $planet->deuterium()->get(),
+            (int) $planet->energy()->get(),
+            (int) $planet->metalStorage()->get(),
+            (int) $planet->crystalStorage()->get(),
+            (int) $planet->deuteriumStorage()->get(),
+        );
+        $lines[] = 'planet ' . $planet->getPlanetId() . ' buildings=' . json_encode($buildings);
+    }
+
+    if ($profile !== null) {
+        $eco = app(\Modules\AI\Domain\Decision\EconomyUpgrades::class);
+        $energy = app(\Modules\AI\Domain\Decision\EnergyCapacity::class);
+        $chain = app(\Modules\AI\Domain\Decision\FacilityChain::class);
+        $floor = app(\Modules\AI\Domain\Decision\ReserveFloor::class);
+        foreach ($player->planets->all() as $planet) {
+            $reserve = $floor->floor($planet, \Modules\AI\Domain\Decision\ReserveFloor::ECONOMY_HOURS);
+            $lines[] = sprintf(
+                'planet %d storage_plan=%d energy_plan=%d chain_plan=%d production_plan=%d floor=%d/%d/%d',
+                $planet->getPlanetId(),
+                count($eco->storage($planet, $profile)),
+                count($energy->pending($planet)),
+                count($chain->pending($planet)),
+                count($eco->production($planet, $profile)),
+                (int) $reserve->metal->get(),
+                (int) $reserve->crystal->get(),
+                (int) $reserve->deuterium->get(),
+            );
+        }
+    }
+
+    return implode(' | ', $lines);
 }
 
 /**

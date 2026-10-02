@@ -108,14 +108,14 @@ class QueueableUnitPlanner
             $need = $this->defenseNeed->evaluate($player, $planet);
 
             // Cargo first, and only while the account owns no ship at all: a fleet begins with
-            // one hull that can carry, and nothing else is worth building before that exists.
+            // one hull that can carry. A planet that owns nothing but cannot queue one yet still
+            // falls through -- defence is reactive and standing, and waiting for a hull is what
+            // left a fleetless account with no wall of its own.
             if ($this->ownsNoShip($planet)) {
                 $cargo = $this->bestCargo($player, $planet);
                 if ($cargo !== null) {
                     return $this->unit($planet, $cargo, 'role:cargo:'.$cargo->machine_name);
                 }
-
-                continue;
             }
 
             // Defence is reactive and time-sensitive: an inbound hostile makes it worth buying

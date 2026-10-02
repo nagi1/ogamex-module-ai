@@ -48,9 +48,11 @@ class DecisionEngine
      * that was going to happen — and the fleet errand the situation actually offers (a raid from a
      * report, debris at home, a colony ship, an expedition) never gets picked. The best candidate
      * that is neither a queue chore nor doing nothing takes the slot, unless doing nothing scores
-     * higher: a quiet login is still a legitimate choice.
+     * higher: a quiet login is still a legitimate choice, so the floor for taking the slot is
+     * DoNothing's own score rather than zero. When no errand is offered at all the chore keeps the
+     * slot, which is what an account with only an economy to tend does.
      *
-     * @param array<int, ScoredCandidate> $scored
+     * @param array<int, ScoredCandidate> $scored the whole ranked list, best first
      */
     private function situationalErrand(array $scored, ScoredCandidate $selected): ScoredCandidate
     {

@@ -14,6 +14,8 @@ use OGame\Models\User;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
+use RuntimeException;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Answers whether this account can colonise now, and where.
@@ -32,8 +34,7 @@ use OGame\Services\SettingsService;
  */
 class QueueableColonyPlanner
 {
-    /** Hard ceiling on coordinate checks per decision, so a full universe can never stall a session. */
-    private const MAX_SCANS = 600;
+    private const POLICY_FILE = '/resources/behavior/colonisation.yaml';
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -107,6 +108,23 @@ class QueueableColonyPlanner
     }
 
     /**
+     * The ceiling on coordinate checks per decision, read by name from the behaviour file: a walk
+     * that visits too few systems finds no empty slot in a crowded universe and the account never
+     * colonises, while one that visits the whole universe stalls a session. The cap wins.
+     */
+    private function maxCoordinateChecks(): int
+    {
+        $parsed = Yaml::parseFile(module_path('AI', self::POLICY_FILE));
+        $checks = is_array($parsed) ? ($parsed['colonisation']['max_coordinate_checks'] ?? null) : null;
+
+        if (!is_numeric($checks) || (int) $checks < 1) {
+            throw new RuntimeException('colonisation: the file must state max_coordinate_checks.');
+        }
+
+        return (int) $checks;
+    }
+
+    /**
      * The largest empty, colonisable coordinate from a seeded start, bounded.
      *
      * An experienced player colonises the bigger slots, not the first empty one:
@@ -120,13 +138,14 @@ class QueueableColonyPlanner
      */
     private function emptySlot(PlayerService $player, int $seed): ?Coordinate
     {
+        $maxScans = $this->maxCoordinateChecks();
         $galaxies = max(1, $this->settings->numberOfGalaxies());
         $systems = max(1, $this->settings->numberOfSystems());
         // The walk is bounded by systems rather than by a running counter: one
-        // comparison caps the whole decision at MAX_SCANS coordinates, so a full
-        // universe cannot stall a session and the bound never needs a per-check
-        // branch.
-        $systemsPerGalaxy = min($systems, max(1, intdiv(self::MAX_SCANS, 12 * $galaxies)));
+        // comparison caps the whole decision at the behaviour file's coordinate
+        // ceiling, so a full universe cannot stall a session and the bound never
+        // needs a per-check branch.
+        $systemsPerGalaxy = min($systems, max(1, intdiv($maxScans, 12 * $galaxies)));
 
         $best = null;
         $bestFields = -1.0;

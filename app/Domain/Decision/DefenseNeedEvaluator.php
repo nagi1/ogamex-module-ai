@@ -68,6 +68,17 @@ class DefenseNeedEvaluator
             $exposure += $this->metalEquivalent($planet->getResources());
         }
 
+        // A planet with no defence at all takes the file's floor before exposure is weighed: a young
+        // colony's output is near zero, so exposure alone leaves it naked beside the walled planets
+        // the same account already holds (measured live 30 Sep 2026: 7-8 planets at zero defence while
+        // one held the wall). One wall unit's worth is all this says; the doctrine still sizes it.
+        if ($this->standingUnits($planet) === 0) {
+            $floor = $this->minimumDeterrent();
+            if ($floor !== null && $exposure < $floor->defenceValue) {
+                return $floor;
+            }
+        }
+
         // A wall already worth at least this much wants nothing further; the two planners agree on
         // the value through this comparison and nowhere else.
         if ($exposure <= $this->unitValue($planet->getDefenseUnits())) {
@@ -132,6 +143,28 @@ class DefenseNeedEvaluator
         $units = is_array($parsed) ? ($parsed['standing_wall_ceiling']['units'] ?? null) : null;
 
         return is_numeric($units) && (int) $units > 0 ? (int) $units : null;
+    }
+
+    /**
+     * The floor under the exposure-derived need for a planet that holds nothing, from the behaviour
+     * file, or null when the file states none. The number is policy and the reason is its trace, so
+     * both live there and not here.
+     */
+    private function minimumDeterrent(): ?DefenseNeed
+    {
+        $parsed = Yaml::parseFile(module_path('AI', 'resources/behavior/defence-doctrines.yaml'));
+        $block = is_array($parsed) ? ($parsed['minimum_deterrent'] ?? null) : null;
+        $value = is_array($block) ? ($block['value'] ?? null) : null;
+        $reason = is_array($block) ? ($block['reason'] ?? null) : null;
+
+        if (! is_numeric($value) || (float) $value <= 0.0 || ! is_string($reason)) {
+            return null;
+        }
+
+        return app()->makeWith(DefenseNeed::class, [
+            'defenceValue' => (float) $value,
+            'reason' => $reason,
+        ]);
     }
 
     /**

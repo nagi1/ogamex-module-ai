@@ -169,7 +169,11 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleExpeditionCandidates(PerceptionSnapshot $perception): array
     {
-        if ($perception->fleetSlotsFree < 1 || $this->queueableExpeditionPlanner->plan($perception->playerId) === null) {
+        if ($perception->fleetSlotsFree < 1) {
+            return [];
+        }
+
+        if ($this->queueableExpeditionPlanner->plan($perception->playerId) === null) {
             return [];
         }
 
@@ -201,7 +205,12 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleRecycleCandidates(PerceptionSnapshot $perception): array
     {
-        if ($perception->fleetSlotsFree < 1 || $this->queueableRecyclePlanner->plan($perception->playerId) === null) {
+        if ($perception->fleetSlotsFree < 1) {
+            return [];
+        }
+
+        $plan = $this->queueableRecyclePlanner->plan($perception->playerId);
+        if (!$plan instanceof QueueableRecycle) {
             return [];
         }
 
@@ -209,9 +218,25 @@ class CandidateActionFactory
             'type' => AiCandidateActionType::Recycle,
             'reason' => AiCandidateReason::EligibleRecycle->value,
             'parameters' => [],
-            'features' => $this->features(AiCandidateActionType::Recycle, 0, 0, 0, $perception->recoveryFactor),
+            'features' => $this->features(AiCandidateActionType::Recycle, $this->debrisNeed($perception, $plan->mass), 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
+    }
+
+    /**
+     * How much the field the plan chose is worth to this account: the mass the host still holds,
+     * set against the stock the account already has. A pile larger than everything it owns is
+     * worth the trip the way a full store is worth building; a scrap beside a rich account is not.
+     *
+     * @param float $mass metal plus crystal in the field, as the host counts it
+     */
+    private function debrisNeed(PerceptionSnapshot $perception, float $mass): float
+    {
+        if ($mass <= 0.0) {
+            return 0.0;
+        }
+
+        return min(1.0, $mass / max(1.0, $perception->totalResources()));
     }
 
     private function raidCandidatesFromVisibleReports(PerceptionSnapshot $perception): CandidateGeneration
@@ -315,10 +340,13 @@ class CandidateActionFactory
     }
 
     /**
-     * The feature profile per action intent, in one table (specs/decision-doctrine.md D-table):
-     * resource_need is economy pressure, safety is exposure removed, target_confidence intel
-     * quality, travel_cost fuel, recovery the post-loss appetite. The taste values live here in one
-     * place; the host-derived values (confidence, travel_cost, recovery) arrive per candidate.
+     * probe
+     * The feature profile per action intent (specs/decision-doctrine.md D-table): resource_need is
+     * economy pressure, safety is exposure removed, target_confidence intel quality, travel_cost
+     * fuel, recovery the post-loss appetite. The host-derived values (confidence, travel_cost) arrive
+     * per candidate; resource_need, safety and recovery are the floor a plan starts from, and the
+     * errand's own plan replaces the floor when it can price it. Every capability a subject
+     * account can queue is offered, so the choice among errands is the only question left.
      *
      * @return array{resource_need:float,safety:float,target_confidence:float,travel_cost:float,recovery:float}
      */

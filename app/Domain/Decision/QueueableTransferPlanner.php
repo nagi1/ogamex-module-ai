@@ -204,12 +204,18 @@ class QueueableTransferPlanner
             ...$this->economyUpgrades->production($planet, $profile),
         ];
 
-        $first = $candidates[0] ?? null;
-        if ($first === null) {
-            return null;
+        // The ferry funds the step the planet cannot reach on its own, so a candidate whose whole
+        // price is below the shipment floor -- a cheap research the planet pays for from an hour of
+        // income -- is not the shortfall a player ships resources for; the next step down the same
+        // list is.
+        foreach ($candidates as $candidate) {
+            $price = ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet);
+            if ($this->worthShipping($price)) {
+                return $price;
+            }
         }
 
-        return ObjectService::getObjectPrice(ObjectService::getObjectById($first->buildingId)->machine_name, $planet);
+        return null;
     }
 
     /** The account's own transports already on the way to this body, netted off before the shortfall. */

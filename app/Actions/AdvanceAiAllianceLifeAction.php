@@ -7,6 +7,7 @@ use Modules\AI\Domain\Social\AllianceChoice;
 use Modules\AI\Models\AiProfile;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
+use OGame\Models\AllianceMember;
 use OGame\Models\Highscore;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
@@ -17,6 +18,14 @@ use OGame\Services\AllianceService;
  * membership and a pending application leave the account alone, and an alliance that already
  * rejected it is skipped by the choice, so the pass never spams the same alliance. An account
  * every alliance has refused founds its own club instead of staying alone forever (DEF-017).
+ *
+ * The lane is the cohort's only source of alliance applications: a pass that finds every account
+ * already engaged creates none, so the leave half below keeps the lane moving at the rate the
+ * scorecard's alliance aspect measures.
+ *
+ * A club only receives applications while the host marks it open, so a club this action founds is
+ * opened for applications: a closed club is invisible to the join half above, and a cohort seated
+ * into closed clubs would found new ones forever while the application lane never fires (ALLY-001).
  */
 class AdvanceAiAllianceLifeAction
 {
@@ -68,12 +77,43 @@ class AdvanceAiAllianceLifeAction
                 continue;
             }
 
-            app(AllianceService::class)->leaveAlliance($playerId);
-
-            return 1;
+            if ($this->releaseMisfit($playerId, (int) $allianceId)) {
+                return 1;
+            }
         }
 
         return 0;
+    }
+
+    /**
+     * Take the misfit out of the club. The host's leaveAlliance is the normal path; a membership
+     * the host cannot remove — a users.alliance_id written without an alliance_members row, as
+     * seeding left them — makes it refuse, and the account would stay engaged forever while the
+     * lane the scorecard measures creates no application. That stale link is cleared instead, so
+     * the freed account is decided by the apply half on the next pass.
+     */
+    private function releaseMisfit(int $playerId, int $allianceId): bool
+    {
+        if (! AllianceMember::query()->where('alliance_id', $allianceId)->where('user_id', $playerId)->exists()) {
+            $user = User::query()->find($playerId);
+
+            if ($user === null) {
+                return false;
+            }
+
+            $user->alliance_id = null;
+            $user->save();
+
+            return true;
+        }
+
+        try {
+            app(AllianceService::class)->leaveAlliance($playerId);
+        } catch (Exception) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
