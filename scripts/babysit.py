@@ -116,7 +116,7 @@ def scratch_files(actions):
             continue
         path = line[3:].strip()
         name = os.path.basename(path)
-        if name.startswith("diagnose-") or re.search(r"(Probe|Debug|Scratch)(Test)?\.php$", name):
+        if name.startswith("diagnose-") or re.search(r"(Probe|Debug|Scratch|Diagnosis)(Test)?\.php$|^Tmp", name):
             os.remove(os.path.join(ROOT, path))
             actions.append(f"removed writer scratch file {path}")
 
@@ -169,6 +169,100 @@ def stuck_scenarios(actions):
         actions.append(f"raised {code}: {accounts} accounts repeat '{reason}'")
 
 
+USAGE = os.path.join(ROOT, "plan/research/ogame/model-usage.jsonl")
+BURN_CALLS = int(os.environ.get("BABYSIT_BURN_CALLS", "150"))
+
+
+def burn_watchdog(actions):
+    """A row that spends many model calls an hour while no code lands on its files is a loop, not work.
+
+    The writer is stopped and the row is handed to the strong lane (claude), where the harness leaves it
+    alone: another thousand calls would only add test files that diagnose the same gap.
+    """
+    if not os.path.exists(USAGE):
+        return
+    since = datetime.now(timezone.utc) - timedelta(minutes=WINDOW_MIN)
+    calls = {}
+    for line in open(USAGE).readlines()[-3000:]:
+        try:
+            row = json.loads(line)
+            at = datetime.strptime(row["at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except (ValueError, KeyError):
+            continue
+        found = re.match(r"implementing (\S+)", row.get("purpose") or "")
+        if found and at >= since:
+            calls[found[1]] = calls.get(found[1], 0) + 1
+    con = sqlite3.connect(DB)
+    for code, n in calls.items():
+        row = con.execute("select status, file_ref, assignee from tasks where code=?", (code,)).fetchone()
+        if row is None or row[0] != "in_progress" or n < BURN_CALLS or (row[2] or "").startswith("claude"):
+            continue
+        files = [f.split(" (")[0].strip() for f in (row[1] or "").split(";") if f.strip()]
+        landed = sh("git", "log", f"--since={WINDOW_MIN} minutes ago", "--oneline", "--", *files) if files else ""
+        if landed.strip():
+            continue
+        subprocess.run(["pkill", "-f", f"^python3 -u scripts/strategy-pipeline.py implement {code}"])
+        sh("python3", "plan/tasks/task.py", "unstick", code)
+        sh("python3", "plan/tasks/task.py", "claim", code, "claude")
+        con.execute("update tasks set notes=coalesce(notes,'')||? where code=?",
+                    (f" | BURN {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC: {n} writer calls in {WINDOW_MIN} min and nothing landed on its files; writer stopped, row handed to the strong lane (claude).", code))
+        con.commit()
+        actions.append(f"stopped {code}: {n} writer calls in {WINDOW_MIN} min, nothing landed; handed to claude")
+
+
+HOST_OBJECTS = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "app/GameObjects")
+
+
+def host_machine_names():
+    names = set()
+    for dirpath, _, files in os.walk(HOST_OBJECTS):
+        for name in files:
+            if name.endswith(".php"):
+                names.update(re.findall(r"machine_name = '([a-z_]+)'", open(os.path.join(dirpath, name)).read()))
+    return names
+
+
+def code_guard(actions):
+    """New writer code must keep the AI a player, not a script: no else/elseif, no Mockery, no host object named in app/.
+
+    Violations are flagged for the strong lane and a row is raised once per file; nothing is rewritten here.
+    """
+    names = host_machine_names()
+    diff = sh("git", "diff", "HEAD", "-U0", "--", "app", "tests")
+    added = {}
+    current = None
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:]
+        elif line.startswith("+") and not line.startswith("+++") and current:
+            added.setdefault(current, []).append(line[1:])
+    for path in sh("git", "ls-files", "--others", "--exclude-standard", "--", "app", "tests").split():
+        added[path] = open(os.path.join(ROOT, path)).read().splitlines()
+    flagged = []
+    for path, lines in added.items():
+        for text in lines:
+            code_part = text.split("//")[0]
+            if re.search(r"(^|[\s}])(else|elseif)\b(?!\s*:)", code_part) and path.endswith(".php") and not code_part.strip().startswith(("*", "/*")):
+                flagged.append((path, "else/elseif"))
+            if "Mockery" in text and path.startswith("tests/"):
+                flagged.append((path, "Mockery"))
+            if path.startswith("app/") and path.endswith(".php"):
+                hit = [n for n in re.findall(r"'([a-z]+(?:_[a-z]+)*)'", code_part) if n in names and n not in ("metal", "crystal", "deuterium", "energy")]
+                if hit:
+                    flagged.append((path, f"names host object {hit[0]}"))
+    con = sqlite3.connect(DB)
+    for path, rule in sorted(set(flagged)):
+        code = "RULE-" + re.sub(r"[^A-Za-z0-9]+", "-", os.path.basename(path))[:30]
+        if con.execute("select 1 from tasks where code=? and status!='done'", (code,)).fetchone():
+            continue
+        sh("python3", "plan/tasks/task.py", "add", code, f"New code in {path} breaks a module rule: {rule}", "impl", "P0",
+           "--file", path, "--proof", "test:AI",
+           "--notes", "Raised by the babysitter code guard. Gate 1 (the object catalogue is read, never named), the no-else rule and the "
+                      "no-Mockery rule keep the account a player rather than a script. Rewrite the lines with early returns, a lookup "
+                      "or a catalogue read, keep the behaviour, and keep the suite green.")
+        actions.append(f"raised {code}: {rule} in {path}")
+
+
 def commit_records(actions):
     """Run records and the ledger are generated every minute; commit them so the tree shows only code in flight."""
     paths = ["plan/research/ogame", "plan/tasks/tasks.db"]
@@ -196,6 +290,8 @@ def main():
     scratch_files(actions)
     slow_verification(actions)
     stuck_scenarios(actions)
+    burn_watchdog(actions)
+    code_guard(actions)
     commit_records(actions)
 
     code_lines, other_lines = commits()
