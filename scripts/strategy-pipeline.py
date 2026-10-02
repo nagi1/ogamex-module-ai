@@ -71,7 +71,9 @@ AGENT_REPEATS = 3
 AGENT_READ_STREAK = 15
 TOOL_RESULT_CHARS = 12_000
 READ_LINES = 400
-COOLOFF_SECONDS = 45 * 60
+# Short on purpose: a retry resumes the kept working copy with the failure as input, and the same failure
+# twice already makes the row stuck. A 45 minute pause only idled the off-peak window (2 Oct 2026).
+COOLOFF_SECONDS = 5 * 60
 # A stuck row's wait, in seconds: no clock ends it, `task.py unstick` does.
 NEVER = 10 ** 9
 # Reads older than the grand reseed (1 Oct 2026 15:39 UTC) measured a universe at 90,000x speed.
