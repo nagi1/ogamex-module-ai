@@ -61,7 +61,8 @@ class SessionDecisionService
         // see the absence this session is about to enter (V6): a proactive save
         // is offered only when the gap until the next session is a real one.
         $plan = $this->sessionPlanner->plan($profile, $now, $schedule->generation);
-        $upcomingAbsenceMinutes = (int) $plan->nextDueAt->diffInMinutes($plan->sessionEndsAt);
+        // Carbon 3 signs its differences: measured from the session's end forward to the next login, the gap is positive.
+        $upcomingAbsenceMinutes = (int) $plan->sessionEndsAt->diffInMinutes($plan->nextDueAt);
 
         $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
         $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;

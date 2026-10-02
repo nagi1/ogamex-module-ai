@@ -12,6 +12,7 @@ use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiProfile;
@@ -59,6 +60,8 @@ final class Situation
 
     private ?Alliance $alliance = null;
 
+    private int $logins = 0;
+
     private function __construct(private readonly object $test)
     {
         // The conversation lane is a language-model call and has no part in a rule about play.
@@ -70,9 +73,12 @@ final class Situation
             'player_id' => $playerId,
             'archetype' => AiArchetype::Miner,
             'skill_band' => AiSkillBand::Standard,
-            'random_seed' => 20_000 + $playerId,
+            'random_seed' => 20_007,
             'enabled' => true,
         ]);
+        // A session is a login inside the account's waking day. The test clock starts at midnight, where a
+        // login is the last one before a long night and rightly saves the fleet instead of using it.
+        $this->awake();
     }
 
     /** The account the test case already made, as an AI-managed Miner of ordinary skill. */
@@ -265,6 +271,36 @@ final class Situation
         return $this;
     }
 
+    /** The clock at the account's last chance to log in before its own night, as a player's last look before bed. */
+    public function beforeBed(int $minutesBefore = 5): self
+    {
+        $planner = app(SessionPlanner::class);
+        $instant = now()->toImmutable();
+
+        for ($step = 0; $step < 2880 && $planner->isAwake($this->profile, $instant); $step++) {
+            $instant = $instant->addMinute();
+        }
+
+        $this->host('travelTo', $instant->subMinutes($minutesBefore));
+
+        return $this;
+    }
+
+    /** The clock an hour into the account's waking day: a login with the next one soon after it. */
+    public function awake(): self
+    {
+        $planner = app(SessionPlanner::class);
+        $instant = now()->toImmutable();
+
+        for ($step = 0; $step < 2880 && !$planner->isAwake($this->profile, $instant); $step++) {
+            $instant = $instant->addMinute();
+        }
+
+        $this->host('travelTo', $instant->addHour());
+
+        return $this;
+    }
+
     public function minutesLater(int $minutes): self
     {
         $this->host('travel', $minutes)->minutes();
@@ -279,7 +315,10 @@ final class Situation
      */
     public function session(int $rounds = 12, int $windowMinutes = 30): self
     {
+        // The decision's seeded variation is keyed on this id, so an auto-increment id made every run of the
+        // same story draw different variation. A fixed id per login makes a story repeatable.
         $session = AiWorkItem::create([
+            'id' => 7_000_000 + 1_000 * $this->logins++,
             'player_id' => $this->profile->player_id,
             'kind' => AiWorkKind::RunSession,
             'due_at' => now(),
