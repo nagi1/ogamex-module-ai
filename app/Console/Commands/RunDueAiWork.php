@@ -7,6 +7,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiWorkItem;
@@ -40,11 +41,18 @@ class RunDueAiWork extends Command
                             ->where('lease_until', '<', now());
                     });
             })
+            // Orders already due go before sessions: an accelerated session is claimable whenever it is
+            // dispatched, so by due time alone the batch fills with sessions and the building, transfer
+            // and save orders they scheduled wait behind them.
+            ->orderByRaw('kind = ? asc', [AiWorkKind::RunSession->value])
             ->oldest('due_at')
             ->limit($admission->limit);
 
         if ((int) config('ai.population.session_interval_seconds', 0) <= 0) {
             $work->where('due_at', '<=', now());
+        }
+        if ((int) config('ai.population.session_interval_seconds', 0) > 0) {
+            $work->where(fn (Builder $due) => $due->where('kind', AiWorkKind::RunSession->value)->orWhere('due_at', '<=', now()));
         }
 
         $work->pluck('id')

@@ -40,6 +40,35 @@ test('dispatcher limits to due pending or retry work', function () {
     Bus::assertDispatchedTimes(ProcessAiWork::class, 1);
 });
 
+// An accelerated universe runs sessions whenever they are dispatched, so by due time alone a full batch of
+// them would starve the building and transfer orders those sessions scheduled.
+test('an accelerated pass dispatches due orders before sessions', function (): void {
+    config(['ai.population.session_interval_seconds' => 5]);
+    $order = AiWorkItem::create([
+        'player_id' => $this->currentUserId,
+        'kind' => AiWorkKind::BuildFirstBuilding,
+        'due_at' => now()->subSeconds(30),
+        'idempotency_key' => 'due-order',
+        'state' => AiWorkState::Pending,
+    ]);
+    foreach (range(1, 3) as $n) {
+        AiWorkItem::create([
+            'player_id' => $this->currentUserId,
+            'kind' => AiWorkKind::RunSession,
+            'due_at' => now()->subHour(),
+            'idempotency_key' => 'older-session-' . $n,
+            'state' => AiWorkState::Pending,
+        ]);
+    }
+    Bus::fake();
+    $command = app(RunDueAiWork::class);
+    $command->setLaravel($this->app);
+
+    $command->run(app()->makeWith(ArrayInput::class, ['parameters' => ['--limit' => 1]]), app(NullOutput::class));
+
+    Bus::assertDispatched(ProcessAiWork::class, static fn (ProcessAiWork $job): bool => $job->workItemId === $order->id);
+});
+
 // A worker the queue kills mid-handle (a timeout, an OOM) leaves its item Leased with the job gone,
 // so no retry will ever arrive and the item would stay stuck forever. This pass is the only thing
 // that admits work, so it has to reclaim the lease itself. A live lease must still be left alone.
