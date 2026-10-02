@@ -8,7 +8,15 @@
 # language and pace of the archetype that founded them, which is how a cohort ends up in several
 # clubs rather than one. No member ceiling: a ceiling is the least player-authentic of the three.
 #
+# A club that already holds more than this share of the AI accounts is no longer asked and its members leave it
+# one at a time: real players do not all end up in one club, they split off and
+# start their own once one club is most of the neighbourhood.
+#
 # source: ALLIANCE_SHARE
+
+crowded_share: 0.5
+# A pair or a trio is a friendship, not a crowd.
+crowded_min_members: 4
 
 fit:
   language:
