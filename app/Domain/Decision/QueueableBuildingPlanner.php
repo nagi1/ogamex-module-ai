@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Persona\SavingsGoal;
+use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
@@ -92,6 +94,17 @@ class QueueableBuildingPlanner
 
         $passes = $this->passes($profile);
 
+        // What every planet is holding back, once per session: reading it walks the same candidate
+        // lists the passes do, so asking again inside each pass would repeat a planet's whole economy.
+        // It is also what keeps this list honest: the cohort reads "buildable" from exactly these
+        // steps, so a planet whose pile the goal reserves must not be offered here -- otherwise the
+        // read-out says buildable while the account rightly saves, and the invariant flags a saver
+        // for behaving as designed.
+        $goals = [];
+        foreach ($planets as $planet) {
+            $goals[$planet->getPlanetId()] = $this->savingsGoal($planet, $profile);
+        }
+
         $steps = [];
         foreach ($passes as $candidates) {
             foreach ($planets as $planet) {
@@ -99,7 +112,7 @@ class QueueableBuildingPlanner
                     return array_values($steps);
                 }
 
-                $steps = $this->withStep($steps, $planet, $profile, $candidates);
+                $steps = $this->withStep($steps, $planet, $profile, $candidates, $goals[$planet->getPlanetId()]);
             }
         }
 
@@ -118,6 +131,11 @@ class QueueableBuildingPlanner
     public function passes(AiProfile $profile): array
     {
         return [
+            // A planet holding no defence while a sibling already stands a wall is past the
+            // account's opening with a sibling walled everywhere else: the facilities the wall
+            // itself waits on come before the economy, so the planet is not left naked behind a
+            // stock it is busy spending (QUAL-003).
+            'wall' => fn (PlanetService $planet): array => $this->facilityChain->wallPending($planet),
             'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
             'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
             'routine' => fn (PlanetService $planet): array => [
@@ -137,7 +155,7 @@ class QueueableBuildingPlanner
      * @param callable(PlanetService): list<BuildCandidate> $pass
      * @return array<int|string, QueueableBuilding|QueueableResearch>
      */
-    private function withStep(array $steps, PlanetService $planet, AiProfile $profile, callable $pass): array
+    private function withStep(array $steps, PlanetService $planet, AiProfile $profile, callable $pass, ?SavingsGoal $goal): array
     {
         $candidates = $pass($planet);
         $isResearch = static fn (BuildCandidate $candidate): bool => ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research;
@@ -153,7 +171,7 @@ class QueueableBuildingPlanner
                 continue;
             }
 
-            $step = $this->firstQueueable($planet, $profile, array_values(array_filter($candidates, static fn (BuildCandidate $candidate): bool => $isResearch($candidate) === $research)));
+            $step = $this->firstQueueable($planet, $profile, array_values(array_filter($candidates, static fn (BuildCandidate $candidate): bool => $isResearch($candidate) === $research)), $goal);
             if ($step !== null) {
                 $steps[$key] = $step;
             }
@@ -167,9 +185,13 @@ class QueueableBuildingPlanner
      *
      * @param list<BuildCandidate> $candidates
      */
-    private function firstQueueable(PlanetService $planet, AiProfile $profile, array $candidates): QueueableBuilding|QueueableResearch|null
+    private function firstQueueable(PlanetService $planet, AiProfile $profile, array $candidates, ?SavingsGoal $goal): QueueableBuilding|QueueableResearch|null
     {
         foreach ($candidates as $candidate) {
+            if (!$this->canSpendFor($planet, $goal, $candidate)) {
+                continue;
+            }
+
             // Which queue takes a step is the host's object type, not this module's opinion: the
             // chain hands over prerequisites, and a technology among them is research.
             if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {
@@ -247,15 +269,79 @@ class QueueableBuildingPlanner
      */
     public function savingFor(PlanetService $planet, AiProfile $profile): ?Resources
     {
+        $candidate = $this->savingCandidate($planet, $profile);
+        if ($candidate === null) {
+            return null;
+        }
+
+        return $this->withReserve($planet, ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet), ReserveFloor::ECONOMY_HOURS);
+    }
+
+    /** The first step in the planner's own order this planet cannot yet pay for, or null when it can pay for all of them. */
+    private function savingCandidate(PlanetService $planet, AiProfile $profile): ?BuildCandidate
+    {
         foreach ($this->passes($profile) as $pass) {
             foreach ($pass($planet) as $candidate) {
                 if ($this->refusal($planet, $candidate) === 'price plus reserve') {
-                    return $this->withReserve($planet, ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet), ReserveFloor::ECONOMY_HOURS);
+                    return $candidate;
                 }
             }
         }
 
         return null;
+    }
+
+    /**
+     * What this planet is holding resources back for, or null when it spends freely.
+     *
+     * Only a goal saver holds anything back (PERS-007). The strategy decides how the pile is spent, never
+     * whether the account spends at all: every other strategy leaves the balance alone, so the decision
+     * doctrine's spend-first rule stands for the immediate spender. The goal is the first step the planet
+     * cannot yet pay for -- the step it would buy the moment it could -- and no object is named here, so
+     * a goal it reaches is replaced by the next one with no edit.
+     */
+    private function savingsGoal(PlanetService $planet, AiProfile $profile): ?SavingsGoal
+    {
+        // The profile's own cast is the gate: a strategy the module does not manage leaves the
+        // balance alone, so nothing is held back and the account spends as before.
+        if ($profile->stockpile_strategy !== AiStockpileStrategy::GoalSaver) {
+            return null;
+        }
+
+        $candidate = $this->savingCandidate($planet, $profile);
+        if ($candidate === null) {
+            return null;
+        }
+
+        $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+
+        return app()->makeWith(SavingsGoal::class, [
+            'cost' => ObjectService::getObjectPrice($machineName, $planet),
+            'objectId' => $candidate->buildingId,
+        ]);
+    }
+
+    /**
+     * Whether the planet can pay for this candidate out of what the goal leaves spendable.
+     *
+     * A saving player holds the goal's price back and spends what is left over, so a cheaper upgrade
+     * that would burn the reserved pile waits its turn. The goal's own purchase is the exception:
+     * spending the reserve is what the reserve is for.
+     */
+    private function canSpendFor(PlanetService $planet, ?SavingsGoal $goal, BuildCandidate $candidate): bool
+    {
+        if ($goal === null || $goal->covers($candidate->buildingId)) {
+            return true;
+        }
+
+        $object = ObjectService::getObjectById($candidate->buildingId);
+        $hours = $object->type === GameObjectType::Research ? ReserveFloor::RESEARCH_HOURS : ReserveFloor::ECONOMY_HOURS;
+        $required = $this->withReserve($planet, ObjectService::getObjectPrice($object->machine_name, $planet), $hours);
+        $spendable = $goal->spendable($planet->getResources());
+
+        return $spendable->metal->get() >= $required->metal->get()
+            && $spendable->crystal->get() >= $required->crystal->get()
+            && $spendable->deuterium->get() >= $required->deuterium->get();
     }
 
     /**
