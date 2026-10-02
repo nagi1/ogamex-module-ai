@@ -11,14 +11,16 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\AiRuntimeSettings;
 
 #[Description('Dispatch due AI work items without making decisions.')]
-#[Signature('ai:run-due-work {--limit=100}')]
+#[Signature('ai:run-due-work {--limit=}')]
 class RunDueAiWork extends Command
 {
     public function handle(): int
     {
-        $requestedLimit = max(1, (int) $this->option('limit'));
+        // No flag means the configured batch: the scheduler fires once a minute, so a fixed 100 starved a cohort larger than that.
+        $requestedLimit = max(1, (int) ($this->option('limit') ?? app(AiRuntimeSettings::class)->dispatchBatchSize()));
         $admission = app(ResolveAiAdmissionAction::class)->forDispatch($requestedLimit);
 
         // A refusal is a state an operator chose, not a failure of this command, so the pass
