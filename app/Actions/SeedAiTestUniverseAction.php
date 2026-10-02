@@ -136,6 +136,8 @@ class SeedAiTestUniverseAction
             ],
         );
 
+        $user->forceFill(['lang' => $this->language($seed)])->save();
+
         if ($created) {
             $this->personalise($user, $index, $seed, $now, $archetype, $skill);
         }
@@ -194,6 +196,21 @@ class SeedAiTestUniverseAction
                 $planet->setPlanetName($name);
             }
         }
+    }
+
+    /**
+     * A universe is not one language: roughly half the accounts speak English and the rest are spread
+     * over the locales the host ships, so alliances form around a shared language as they do for people.
+     */
+    private function language(int $seed): string
+    {
+        // users.lang is a two-character column, so a regional locale such as zh-TW is not a value it holds.
+        $others = array_values(array_filter(
+            array_map('basename', glob(lang_path('*'), GLOB_ONLYDIR) ?: []),
+            fn (string $locale): bool => strlen($locale) === 2 && $locale !== 'en',
+        ));
+
+        return ($seed % 100) < 50 || $others === [] ? 'en' : $others[intdiv($seed, 100) % count($others)];
     }
 
     private function email(int $index): string
