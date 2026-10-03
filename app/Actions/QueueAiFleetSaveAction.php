@@ -103,9 +103,18 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
             }
 
-            $cargo = $this->liftableStock($player, $origin, $flying);
-
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
+            // The host refuses a flight whose fuel is more than the planet holds or the fleet's own
+            // tanks carry (the two refusals STUCK rows measured on a hundred accounts): a fleet too
+            // big to fuel sheds its thirstiest hull until it can fly, rather than being offered again.
+            $flying = $this->trimmedToFuel($player, $origin, $flying, $destination, $speed, $fleetMissions);
+            if ($flying === null) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
+
+            $cargo = $this->liftableStock($player, $origin, $flying, $destination, $speed, $fleetMissions);
+
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
                 $destination->getPlanetCoordinates(),
@@ -229,6 +238,10 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
         // all-civil fleet sends the one wave it has.
         $mission = null;
 
+        // Each wave is fuelled on its own: the military wave leaves first and the civil wave is trimmed
+        // against what that leaves in the tank.
+        $military = $this->trimmedToFuel($player, $origin, $military, $destination, $speed, $fleetMissions) ?? new UnitCollection();
+
         if ($military->units !== []) {
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
@@ -241,6 +254,8 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             );
         }
 
+        $civil = $this->trimmedToFuel($player, $origin, $civil, $shadow, $speed, $fleetMissions) ?? new UnitCollection();
+
         if ($civil->units !== []) {
             $civilMission = $fleetMissions->createNewFromPlanet(
                 $origin,
@@ -248,7 +263,7 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
                 $shadow->getPlanetType(),
                 DeploymentMission::getTypeId(),
                 $civil,
-                $this->liftableStock($player, $origin, $civil),
+                $this->liftableStock($player, $origin, $civil, $shadow, $speed, $fleetMissions),
                 $speed,
             );
             $mission ??= $civilMission;
@@ -292,11 +307,13 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
     /**
      * The planet's stock, scaled to the fleet's cargo hold (FS-006).
      */
-    private function liftableStock(PlayerService $player, PlanetService $origin, UnitCollection $fleet): Resources
+    private function liftableStock(PlayerService $player, PlanetService $origin, UnitCollection $fleet, PlanetService $destination, float $speed, FleetMissionService $fleetMissions): Resources
     {
-        // Half the deuterium stays on the planet: the flight is paid from it, and a hold that took it
-        // all leaves the dispatch short of fuel.
-        $stock = new Resources($origin->metal()->get(), $origin->crystal()->get(), floor($origin->deuterium()->get() / 2));
+        // The flight is paid from the planet's deuterium, so only what is left after the fuel (and at most
+        // half of it) goes into the hold: a hold that took it all leaves the dispatch short of fuel.
+        $fuel = (float) $fleetMissions->calculateConsumption($origin, $fleet, $destination->getPlanetCoordinates(), 0, $speed);
+        $spare = max(0.0, floor($origin->deuterium()->get()) - ceil($fuel));
+        $stock = new Resources($origin->metal()->get(), $origin->crystal()->get(), min(floor($origin->deuterium()->get() / 2), $spare));
         $capacity = $fleet->getTotalCargoCapacity($player);
 
         if ($stock->sum() <= $capacity) {
@@ -315,5 +332,44 @@ class QueueAiFleetSaveAction implements QueueAiFleetSave
             floor($stock->crystal->get() * $share),
             floor($stock->deuterium->get() * $share),
         );
+    }
+
+    /**
+     * The fleet that can be fuelled from this planet and by its own tanks, or null when no hull can.
+     * The thirstiest hull by fuel per unit is shed first until the flight fits both limits.
+     */
+    private function trimmedToFuel(PlayerService $player, PlanetService $origin, UnitCollection $fleet, PlanetService $destination, float $speed, FleetMissionService $fleetMissions): ?UnitCollection
+    {
+        $units = [];
+        foreach ($fleet->units as $entry) {
+            $units[$entry->unitObject->machine_name] = $entry;
+        }
+
+        while ($units !== []) {
+            $candidate = new UnitCollection();
+            foreach ($units as $entry) {
+                $candidate->addUnit($entry->unitObject, $entry->amount);
+            }
+
+            $fuel = (float) $fleetMissions->calculateConsumption($origin, $candidate, $destination->getPlanetCoordinates(), 0, $speed);
+            if ($fuel <= floor($origin->deuterium()->get()) && $fuel <= $candidate->getTotalFuelCapacity($player)) {
+                return $candidate;
+            }
+
+            $thirstiest = null;
+            $worst = -1.0;
+            foreach ($units as $name => $entry) {
+                $single = new UnitCollection();
+                $single->addUnit($entry->unitObject, $entry->amount);
+                $perHull = (float) $fleetMissions->calculateConsumption($origin, $single, $destination->getPlanetCoordinates(), 0, $speed);
+                if ($perHull > $worst) {
+                    $worst = $perHull;
+                    $thirstiest = $name;
+                }
+            }
+            unset($units[$thirstiest]);
+        }
+
+        return null;
     }
 }

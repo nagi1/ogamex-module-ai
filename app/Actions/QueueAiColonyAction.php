@@ -6,6 +6,7 @@ use Exception;
 use Modules\AI\Contracts\QueueAiColony;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
@@ -55,6 +56,10 @@ class QueueAiColonyAction implements QueueAiColony
             // mission, never from a module constant.
             $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
             $units->addUnit($colonyShip, 1);
+
+            if (!app(FlightFuel::class)->affordable($player, $planet, $units, new Coordinate($galaxy, $system, $position), 10)) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(

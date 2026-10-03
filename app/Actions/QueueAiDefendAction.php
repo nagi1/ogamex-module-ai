@@ -6,6 +6,7 @@ use Exception;
 use Modules\AI\Contracts\QueueAiDefend;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\AcsDefendMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
@@ -63,6 +64,10 @@ class QueueAiDefendAction implements QueueAiDefend
             }
             if ($fleet->units === []) {
                 return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
+            }
+
+            if (!app(FlightFuel::class)->affordable($player, $source, $fleet, $target->getPlanetCoordinates(), self::SPEED, self::HOLDING_HOURS)) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);

@@ -6,6 +6,7 @@ use Exception;
 use Modules\AI\Contracts\QueueAiSpy;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
@@ -56,6 +57,10 @@ class QueueAiSpyAction implements QueueAiSpy
             $count = min(max(1, $probeCount), $planet->getShipUnits()->getAmountByMachineName($probe->machine_name));
             $units = new UnitCollection();
             $units->addUnit($probe, $count);
+
+            if (!app(FlightFuel::class)->affordable($player, $planet, $units, new Coordinate($targetGalaxy, $targetSystem, $targetPosition), 10)) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $mission = $fleetMissions->createNewFromPlanet(
