@@ -21,15 +21,29 @@ use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
 
-test('the spy planner skips a just-touched target', function (): void {
+test('the spy planner scouts a just-touched target only when no quiet one is left', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
 
-    // The only foreign planet is touched now: probing it would be the tell, so
-    // the planner scouts nothing rather than advertise on an active body.
-    $this->createForeignPlanet();
+    // The only foreign planet is touched now: an account that acts every few minutes is still the
+    // one that fights back, so it is read once the quiet bodies are.
+    $active = $this->createForeignPlanet();
 
-    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
+    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeInstanceOf(QueueableSpy::class);
+
+    $quiet = User::factory()->create();
+    Planet::factory()->create([
+        'user_id' => $quiet->id,
+        'galaxy' => 5,
+        'system' => 10,
+        'planet' => 15,
+        'time_last_update' => now()->subMinutes(30)->getTimestamp(),
+    ]);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan->targetGalaxy)->toBe(5)
+        ->and($plan->targetGalaxy)->not->toBe($active->getPlanetCoordinates()->galaxy);
 });
 
 test('the spy planner prefers the closer target', function (): void {

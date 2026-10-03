@@ -12,6 +12,7 @@ use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\EspionageMission;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
@@ -169,6 +170,8 @@ class QueueableSpyPlanner
             ->leftJoin('users', 'users.id', '=', 'planets.user_id')
             ->where('planets.user_id', '!=', $player->getId())
             ->where('planets.destroyed', 0)
+            ->where(fn ($owner) => $owner->whereNull('users.vacation_mode')->orWhere('users.vacation_mode', 0))
+            ->whereIn('planets.planet_type', [PlanetType::Planet->value, PlanetType::Moon->value])
             ->select('planets.*')
             // A stamp of zero means the host never recorded a login for that owner; it is the absence of the
             // host's inactivity input, not the strongest case of it (the cohort's own bot accounts never sign
@@ -197,22 +200,16 @@ class QueueableSpyPlanner
 
             $owner = $target->getPlayer();
 
-            if ($owner?->isInVacationMode() === true) {
-                continue;
-            }
             if ($owner?->getUsername(false) === 'Legor') {
                 continue;
             }
-            if ($this->activityIntelReader->activityAt($target)) {
-                continue;
-            }
-
             $origin = $this->closestOrigin($idleOrigins, $planet, $fleetMissions);
             $distance = $fleetMissions->calculateFleetMissionDistance($origin, new Coordinate((int) $planet->galaxy, (int) $planet->system, (int) $planet->planet));
             $scored[] = [
                 'planet' => $planet,
                 'origin' => $origin,
                 'inactive' => $owner?->isInactive() ?? false,
+                'quiet' => !$this->activityIntelReader->activityAt($target),
                 'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance,
             ];
         }
@@ -221,10 +218,11 @@ class QueueableSpyPlanner
             return null;
         }
 
-        // The farm comes before the known-rich active player: the host's own inactivity rule is what makes a
-        // target raidable at all, so a quiet neighbour outranks a nearer active one that merely looked rich
-        // in an older report. Among equals the closest known-rich body wins (INT-003).
-        usort($scored, static fn (array $left, array $right): int => [$right['inactive'], $right['score']] <=> [$left['inactive'], $left['score']]);
+        // The farm comes first, then the neighbour away from the keyboard, then the one at it: a player who
+        // has read every quiet body still scouts the active ones, since an account that acts every few
+        // minutes is the only kind that fights back and leaves debris. Among equals the closest known-rich
+        // body wins (INT-003).
+        usort($scored, static fn (array $left, array $right): int => [$right['inactive'], $right['quiet'], $right['score']] <=> [$left['inactive'], $left['quiet'], $left['score']]);
 
         return [$scored[0]['origin'], $scored[0]['planet']];
     }
