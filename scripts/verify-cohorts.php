@@ -245,7 +245,8 @@ if (Schema::hasColumn('users', 'alliance_id')) {
 // A player who logs in fills every planet's build queue where something can be built. IDLE_QUEUES
 // counts only the planets the planner has a step for and that have no building in progress: a planet
 // whose every candidate the host refuses (no free field, lab busy, price plus reserve) is SATURATED,
-// which is information about the universe, not a defect of the account, and is printed below.
+// which is information about the universe, not a defect of the account, and is printed below for the
+// accounts the stored state could not already clear.
 $IDLE_SHARE = 0.5;
 $idleQueues = [];
 $saturated = [];
@@ -271,8 +272,6 @@ foreach ($playedThisHour as $accountId) {
         continue;
     }
 
-    $player = app(PlayerServiceFactory::class)->make($accountId, true);
-    $planned = array_map(static fn ($step): int => $step->planetId, $buildingPlanner->steps($accountId, $player));
     // At 1000x a build ends in minutes, so a planet read between its last build ending and the
     // account's next turn is waiting, not neglected. Idle means the account finished a session
     // after the planet's last build ended and the planet still has a legal step and no build.
@@ -282,10 +281,26 @@ foreach ($playedThisHour as $accountId) {
     // and finish within seconds, so the planet is idle only when a session passed with no order for it.
     $lastBuildEnd = BuildingQueue::query()->whereIn('planet_id', $ownPlanets)->where('canceled', 0)
         ->groupBy('planet_id')->selectRaw('planet_id, max(greatest(time_end, time_start + 300)) as ended')->pluck('ended', 'planet_id');
-    $idle = array_filter($ownPlanets, static fn (int $id): bool => in_array($id, $planned, true)
-        && !in_array($id, $busyPlanets, true)
+    // The planner costs about a second per account and is the whole price of this read, so it is asked
+    // only about an account the stored state cannot already clear: more than the idle share of its
+    // planets must be free of a build, an order and a newer session than their last build.
+    $waiting = array_filter($ownPlanets, static fn (int $id): bool => !in_array($id, $busyPlanets, true)
         && !in_array($id, $ordered, true)
         && $lastSession > (int) ($lastBuildEnd[$id] ?? 0));
+    if (count($waiting) / count($ownPlanets) <= $IDLE_SHARE) {
+        continue;
+    }
+
+    $player = app(PlayerServiceFactory::class)->make($accountId, true);
+    // "Buildable" means the building planner has a *building* step for the planet. A step that is a
+    // technology belongs to the account's one lab, not to this planet's build queue: the account is
+    // researching, which is play, and the lab step carries its planet's id, so an account researching
+    // read as buildable with an empty build queue on every pass.
+    $planned = array_values(array_map(
+        static fn ($step): int => $step->planetId,
+        array_filter($buildingPlanner->steps($accountId, $player), static fn ($step): bool => $step instanceof QueueableBuilding),
+    ));
+    $idle = array_filter($waiting, static fn (int $id): bool => in_array($id, $planned, true));
 
     if (count($idle) / count($ownPlanets) > $IDLE_SHARE) {
         $idleQueues[] = sprintf('player %d played this hour with %d of %d planets buildable and idle', $accountId, count($idle), count($ownPlanets));
