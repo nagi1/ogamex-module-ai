@@ -88,6 +88,10 @@ one phase still dominates, say which: that is the next fix. If due work dominate
 - (1) segfault and (5) speed: time-control thread. Not touched here.
 - NAKED_BESIDE_WALLED players 40, 46, 80, 117 and AUTH_UPTIME 24/24 hours for players 35+: unproven whether the 12:xx code was live when the run read them. Re-read both after the restart above, then report for one of the players: planets with defence units, yard queue, shipyard level, resources, and the last 3 `QueueUnits` outcomes.
 
+### Cloud thread: the 160 deferred rows (Nagi asked why)
+About 120 are WIK rows, annotated in an earlier sweep: roughly 60 are already covered by existing classes (each row's note names the class), about 40 are documentation-only with no numbers to build, and the missiles/moonshot ones were excluded by DISC-14. The rest are PIPE, hosted-AI (DEF-005, REV, JEV) or closed rows with a stale `deferred` label. They stay `deferred` only because `task.py` closes a row through its proof, and these have none.
+Request: for each deferred row whose note says it is covered by an existing class, run `python3 plan/tasks/task.py done <ROW>` (with the proof the note names if there is one, otherwise the closest passing test), so the count drops. Report any row whose note does not hold up instead of closing it. Leave PIPE, JEV, DEF-005 and REV-8/9 deferred.
+
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
 Read `AGENTS.md` (three gates) first. The cohort is `local-docker-dev/docker-compose.grand.yml` (db ogamex-grand, 100 AI
