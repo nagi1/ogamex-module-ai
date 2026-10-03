@@ -219,6 +219,29 @@ dlopen of the same .so twice in one process: RustBattleEngine and RustCaseSimila
 
 **Local changes of this cycle (pushed with this file):** directed rows with a `file_ref` are no longer held by a passing count-based aspect (strategy-pipeline.py); file_refs set on the STUCK-*, QUAL-010 and QUAL-013 rows; sidecar-ab scripts.
 
+## Results 2: segfault fixed, Step C done, 2026-10-03 ~19:20 UTC (verifier)
+
+**Segfault root cause: not the sim, not the Rust code.** The `ogamex-capacity-*` compose stack mounts the same repo and restarts (every start runs `docker/entrypoint.sh` -> `rust/compile.sh`), and `compile.sh`
+did `cp` over `storage/rust-libs/libbattle_engine_ffi.so` in place. Any running PHP process with the old file mapped (the sim, queue workers) then crashed at its next Rust call (call through a null GOT slot).
+The .so mtimes 16:24, 16:53, 17:40 matched the restarts. Fixed in host 018f4c73: install by `cp` to a temp name plus `mv -f` (new inode). After that: no segfault in six 1 h sims.
+
+**Step C (scripts/sidecar-ab.sh 1 20: 1 simulated hour, 20 accounts, same snapshot and start instant, real sidecars, cache wiped per run). 364,223 trace+work rows compared per run.**
+| run | config | speed | differing rows vs R0a |
+|---|---|---|---|
+| R0b | baseline again | x6 | **0** (the sim is deterministic) |
+| R1 | + Rust CBRKit | x6 | **0** |
+| R2 | + PsychSim and AgentOS caches | x7 | **0** |
+| R3 | + Fatima cache | | **450** (decision traces present in R0a, missing in R3) |
+Decision: R1 and R2 stay ON. **The Fatima cache stays OFF** (`AI_COGNITION_FATIMA_CACHE` default false is right): it changes behaviour (traces vanish), so a cached appraisal is not equal to a fresh one.
+Cloud thread: find why (probably the instance/belief state a Fatima appraisal mutates server-side, which a cached answer skips).
+
+**Step D numbers (R0, 1 h, 20 accounts, sidecars up):** x6-x8, 434-445 jumps (8 simulated s each), 111-131 sessions. PROFILE: `due work` 410 s of 438 s (94%), 0.95 s per jump; maintenance ai:advance-alliance-life 2.5 s/call;
+everything else under 10 s. Sidecar calls in that hour (container logs): **Fatima ~3,100** (953 POST /scenarios instance creations, ~250 beliefs + ~250 socialexchanges per character, 226 GET /scenarios),
+CBRKit 146 /retrieve, AgentOS 0, PsychSim 0. So a session costs ~22 Fatima calls (~3.5 s). Slowest sidecar per call and most calls per session: **Fatima**. Rust CBRKit and the caches cut ~3%, not the cost.
+Next hotspot: the Fatima call sequence per appraisal (create instance every time: 953 instances; GET /scenarios as a health probe 226 times). Ideas in order: do not create an instance per appraisal, drop the GET probe,
+a combined endpoint, keep-alive; then a second Fatima replica routed by player id.
+**Surprise:** all four sidecars had been down for hours (see Results above); the circuit breakers had opened, so earlier sims/live ran without cognition.
+
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
 Read `AGENTS.md` (three gates) first. The cohort is `local-docker-dev/docker-compose.grand.yml` (db ogamex-grand, 100 AI
