@@ -3,17 +3,26 @@
 # evidence_reaction: how far the same evidence moves the account's mood.
 # idle_override_probability: the "opened the game, did nothing, closed it" rate (FS-018).
 # All three are unmeasured starting rates; the review loop's hourly sample is the way to tune them.
+# exposure_awareness: how much of the real exposure the account sizes its wall to (PERS-009). A novice
+# underestimates what an absence costs, a veteran sizes to it. threat_memory: extra weight on the exposure
+# when this planet was attacked in the last day, which only a veteran carries forward.
 novice:
+  exposure_awareness: 0.6
+  threat_memory: 1.0
   variation_weight: 8.0
   selection_margin: 10.0
   evidence_reaction: 1.0
   idle_override_probability: 0.05
 standard:
+  exposure_awareness: 1.0
+  threat_memory: 1.0
   variation_weight: 4.0
   selection_margin: 2.5
   evidence_reaction: 0.5
   idle_override_probability: 0.02
 veteran:
+  exposure_awareness: 1.2
+  threat_memory: 1.5
   variation_weight: 1.0
   selection_margin: 1.0
   evidence_reaction: 0.2

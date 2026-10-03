@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Models\AiProfile;
+use OGame\Models\BattleReport;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
 use OGame\Models\UnitQueue;
@@ -79,6 +80,14 @@ class DefenseNeedEvaluator
             + $this->unitValue($planet->getShipUnits());
         if ($inbound) {
             $exposure += $this->metalEquivalent($planet->getResources());
+        }
+
+        // The skill band decides how much of that exposure the account sizes its wall to: a novice
+        // underestimates what an absence costs and builds a thinner wall than a veteran, who also
+        // remembers that this planet was hit in the last day (PERS-009).
+        $exposure *= $profile->skill_band->exposureAwareness();
+        if ($this->attackedRecently($planet)) {
+            $exposure *= $profile->skill_band->threatMemory();
         }
 
         // A planet with no defence at all takes the file's floor before exposure is weighed: a young
@@ -211,6 +220,19 @@ class DefenseNeedEvaluator
     private function absenceHours(?AiActivityBand $band): float
     {
         return self::HOURS_PER_DAY / max(1, $band?->value ?? AiActivityBand::Regular->value);
+    }
+
+    /** Whether a battle report names this planet's owner as the defender within the last day. */
+    private function attackedRecently(PlanetService $planet): bool
+    {
+        $coordinates = $planet->getPlanetCoordinates();
+
+        return BattleReport::query()
+            ->where('planet_galaxy', $coordinates->galaxy)
+            ->where('planet_system', $coordinates->system)
+            ->where('planet_position', $coordinates->position)
+            ->where('created_at', '>=', now()->subDay())
+            ->exists();
     }
 
     /**

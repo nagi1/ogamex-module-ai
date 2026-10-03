@@ -42,6 +42,18 @@ enum AiSkillBand: int
         return $this->rate('idle_override_probability');
     }
 
+    /** How much of the real exposure the account sizes its wall to (PERS-009). */
+    public function exposureAwareness(): float
+    {
+        return $this->rate('exposure_awareness');
+    }
+
+    /** Extra weight on exposure after the planet was attacked in the last day; only a veteran carries it. */
+    public function threatMemory(): float
+    {
+        return $this->rate('threat_memory');
+    }
+
     private function rate(string $key): float
     {
         static $rates = null;
