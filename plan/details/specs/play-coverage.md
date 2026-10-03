@@ -71,3 +71,28 @@ returned a new test for `OpenAiCampaignAction`, every campaign test passed, and 
 `implemented` marker while the campaign was never opened. The marker was deleted and the `file_ref`
 removed (30 Sep 2026). A row whose work is an observation must never carry one.
 
+
+## The player's day, step by step (LOOP-001, read from the code 3 Oct 2026)
+
+Each step an experienced player takes in one sitting, what does it, and whether anything plays it.
+"Runs" is read from the code path (the session, the work-item kind and the scorecard aspect that
+measures it); the live read is the scorecard (`bash scripts/ogamex scorecard`).
+
+| Step of the day | Owner | Runs | Row |
+| --- | --- | --- | --- |
+| Log in on the account's own waking window, answer messages | `SessionPlanner`, `RunAiConversationCycleAction` | yes; accelerated cohorts now keep the night (QUAL-010) | `QUAL-010` |
+| React to an inbound fleet: wall the targeted planet | `QueueableUnitPlanner` (threatened planets) | yes (PERS-006) | `PERS-006` |
+| Save the fleet when the attack cannot be stopped | `QueueableFleetSavePlanner` | reactive yes; proactive before an absence open | `FLEET-003` |
+| Scout the hit before the fight (phalanx on moons) | `QueueablePhalanxPlanner` | only with a moon | `LIFE-003` |
+| Queue buildings and research on every planet | `QueueableBuildingPlanner`, `FacilityChain`, `EconomyUpgrades` | yes | `ECON-001` |
+| Throttle mines while short | `QueueableMinePercentPlanner` | yes | none |
+| Build ships and defence from what is left | `QueueableUnitPlanner` | yes; ship orders now clamp to what is affordable | `STUCK-QueueUnits-queue-not-created` |
+| Move resources to the planet that needs them | `QueueableTransferPlanner` | yes; one ferry at a time, fuel room in the hold | `STUCK-DispatchFleet-no-transport-fleet` |
+| Probe neighbours, then raid the profitable ones | `QueueableSpyPlanner`, `RaidPlanner` | yes; every persona may raid, skill sets the risk | `LIFE-001` |
+| Pick up the wreckage | `QueueableRecyclePlanner` | yes; raids now count debris for a harvester owner | `LIFE-003` |
+| Send expeditions with idle hulls | `QueueableExpeditionPlanner` | yes | none |
+| Settle new planets | `QueueableColonyPlanner` | yes | none |
+| Apply to, review and leave alliances | `AdvanceAiAllianceLifeAction` | now from the session path (ALLY-001) | `ALLY-001` |
+| Trade on the market | none | **no step plays it**: `TraderPolicy` and `AiEconomicRole::ActiveTrader` exist with no action behind them | `LOOP-002` |
+| Defend an ally's planet or fly a joint attack | none | **no step plays it**: no hold or ACS mission is planned | `LOOP-003` |
+| Abandon or relocate a poor planet | none | **no step plays it** | `LOOP-004` |
