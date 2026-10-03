@@ -313,7 +313,7 @@ def delegate_to_claude(actions):
 def run_claude_lane(actions):
     """Start the lane when a row waits and no run is going; the script's own flock is the guard."""
     waiting = sqlite3.connect(DB).execute("select count(*) from tasks where assignee=? and status in ('todo','in_progress')", (LANE,)).fetchone()[0]
-    if waiting == 0 or subprocess.run(["pgrep", "-f", "scripts/claude-lane.py"], capture_output=True).returncode == 0:
+    if waiting == 0 or subprocess.run(["pgrep", "-f", r"^\S*python3? scripts/claude-lane\.py"], capture_output=True).returncode == 0:
         return
     subprocess.Popen(["setsid", "nohup", sys.executable, "scripts/claude-lane.py"], cwd=ROOT,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
