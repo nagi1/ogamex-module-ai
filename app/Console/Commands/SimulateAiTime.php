@@ -40,7 +40,8 @@ use Throwable;
     {--maintenance=900 : Simulated seconds between campaign, alliance and score-sample passes}
     {--highscore-every=3600 : Simulated seconds between the three highscore generators (each walks every player; the real schedule runs them every 300 s)}
     {--max-wall= : Stop after this many real seconds and keep the state, so a later run continues}
-    {--external-cognition : Keep the HTTP cognition/memory sidecars and the language provider (a session then waits on their 2-5 s timeouts)}
+    {--native-cognition : Opt-in only: skip the Fatima/CBRKit/AgentOS sidecars and the language lane and play on the native engines}
+    {--workers=1 : Fork this many processes per simulated instant, each running a share of the due sessions against the sidecars at the same time}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
     {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
     {--force-db : Allow a database whose name does not contain "sim"}')]
@@ -69,12 +70,7 @@ class SimulateAiTime extends Command
         }
 
         config(['queue.default' => 'sync']);
-        if (!$this->option('external-cognition')) {
-            // A session in hybrid mode calls the affect, experience and memory sidecars over HTTP (2 to 5 s
-            // connect/read timeouts each) and the conversation lane calls a paid language provider. Measured
-            // on grand: 181 sessions took 908 s, about 5 s each, nearly all of it waiting on those calls. The
-            // native engines are the floor the sidecars sit on, so the simulation plays on them alone, and any
-            // request that still escapes throws at once instead of waiting for a timeout (or spending money).
+        if ($this->option('native-cognition')) {
             config([
                 'ai.cognition.mode' => 'native',
                 'ai.cognition.memory.driver' => 'native',
@@ -83,6 +79,9 @@ class SimulateAiTime extends Command
                 'ai.language.enabled' => false,
             ]);
             Http::preventStrayRequests();
+        }
+        if (!$this->option('native-cognition')) {
+            $this->probeSidecars();
         }
         if (!$this->option('keep-accelerated')) {
             config(['ai.population.session_interval_seconds' => 0]);
@@ -119,11 +118,13 @@ class SimulateAiTime extends Command
 
             // One commit per simulated instant instead of one per statement group: every session and order
             // writes dozens of rows, and each commit is an fsync. Inner transactions become savepoints.
-            $ran = DB::transaction(function () use ($players): array {
+            $drain = function () use ($players): array {
                 $this->timed('fleet arrivals', fn () => $this->runFleetArrivals());
 
                 return $this->timed('due work (all sessions and orders)', fn (): array => $this->drainDueWork($players));
-            });
+            };
+            // Forked workers each need their own connection, so the one-commit-per-instant wrapper only applies to a single process.
+            $ran = $this->workerCount() > 1 ? $drain() : DB::transaction($drain);
             foreach ($ran as $key => $count) {
                 $hour[$key] += $count;
                 $total[$key] += $count;
@@ -312,18 +313,145 @@ class SimulateAiTime extends Command
 
             foreach ($due as $row) {
                 $attempted[$row->id] = true;
+            }
 
-                try {
-                    app()->makeWith(ProcessAiWork::class, ['workItemId' => (int) $row->id])->handle();
-                    $ran[(string) $row->kind === (string) AiWorkKind::RunSession->value ? 'sessions' : 'other']++;
-                } catch (Throwable $exception) {
-                    $ran['errors']++;
-                    $this->noteError('work item: ' . $exception->getMessage());
-                }
+            foreach ($this->runRows($due->values()->all()) as $key => $count) {
+                $ran[$key] += $count;
             }
         }
 
         return $ran;
+    }
+
+    private function workerCount(): int
+    {
+        $workers = max(1, (int) $this->option('workers'));
+
+        if ($workers > 1 && !function_exists('pcntl_fork')) {
+            return 1;
+        }
+
+        return $workers;
+    }
+
+    /**
+     * Run the due rows: in this process, or split across forked workers that all stand at the same simulated
+     * instant. A session spends most of its wall time waiting on the sidecars, so concurrent sessions overlap
+     * those waits. Sessions of different accounts already run concurrently in production.
+     *
+     * @param list<object> $rows
+     * @return array{sessions: int, other: int, errors: int}
+     */
+    private function runRows(array $rows): array
+    {
+        $workers = $this->workerCount();
+
+        if ($workers <= 1 || count($rows) < $workers * 2) {
+            return $this->processRows($rows);
+        }
+
+        // No open connection may cross the fork: a child closing a shared socket would cut the parent's session.
+        DB::purge();
+        $directory = sys_get_temp_dir() . '/ai-sim-' . getmypid() . '-' . bin2hex(random_bytes(3));
+        @mkdir($directory);
+        $children = [];
+
+        foreach (range(0, $workers - 1) as $index) {
+            $share = array_values(array_filter($rows, fn (int $position): bool => $position % $workers === $index, ARRAY_FILTER_USE_KEY));
+            $pid = pcntl_fork();
+
+            if ($pid === 0) {
+                $this->errors = [];
+                $result = $this->processRows($share);
+                file_put_contents("{$directory}/{$index}.json", json_encode(['ran' => $result, 'errors' => $this->errors]));
+                DB::purge();
+
+                exit(0);
+            }
+
+            $children[$index] = $pid;
+        }
+
+        $total = ['sessions' => 0, 'other' => 0, 'errors' => 0];
+        foreach ($children as $index => $pid) {
+            pcntl_waitpid($pid, $status);
+            $file = "{$directory}/{$index}.json";
+            $report = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+
+            if (!is_array($report)) {
+                $total['errors']++;
+                $this->noteError("worker {$index} died without a report (status {$status})");
+
+                continue;
+            }
+
+            foreach ($report['ran'] as $key => $count) {
+                $total[$key] += $count;
+            }
+            foreach ($report['errors'] as $message => $count) {
+                $this->errors[$message] = ($this->errors[$message] ?? 0) + $count;
+            }
+            @unlink($file);
+        }
+        @rmdir($directory);
+
+        return $total;
+    }
+
+    /**
+     * @param list<object> $rows
+     * @return array{sessions: int, other: int, errors: int}
+     */
+    private function processRows(array $rows): array
+    {
+        $ran = ['sessions' => 0, 'other' => 0, 'errors' => 0];
+
+        foreach ($rows as $row) {
+            try {
+                app()->makeWith(ProcessAiWork::class, ['workItemId' => (int) $row->id])->handle();
+                $ran[(string) $row->kind === (string) AiWorkKind::RunSession->value ? 'sessions' : 'other']++;
+            } catch (Throwable $exception) {
+                $ran['errors']++;
+                $this->noteError('work item: ' . $exception->getMessage());
+            }
+        }
+
+        return $ran;
+    }
+
+    /**
+     * Say plainly which sidecars answer before an hour of play depends on them. A sidecar that is down costs
+     * its connect timeout on every call it is tried, which is what made sessions take seconds each.
+     */
+    private function probeSidecars(): void
+    {
+        $sidecars = [
+            'fatima (affect)' => config('ai.cognition.fatima.base_url'),
+            'cbrkit (experience)' => config('ai.cognition.experience.cbrkit.base_url'),
+            'agentos (memory)' => config('ai.cognition.memory.agentos.base_url'),
+        ];
+
+        foreach ($sidecars as $name => $url) {
+            $parts = parse_url((string) $url);
+            if (!is_array($parts) || !isset($parts['host'])) {
+                $this->warn("SIDECAR {$name}: no base_url configured");
+
+                continue;
+            }
+
+            $started = microtime(true);
+            $socket = @fsockopen($parts['host'], (int) ($parts['port'] ?? 80), $errno, $error, 1.0);
+            $took = (microtime(true) - $started) * 1000;
+
+            if ($socket === false) {
+                $this->warn(sprintf('SIDECAR %s DOWN at %s (%s): every call will wait out its timeout. Start it, or the sim is slow and plays without it.', $name, $url, $error));
+
+                continue;
+            }
+
+            fclose($socket);
+            $this->line(sprintf('SIDECAR %s up at %s (%.0f ms to connect)', $name, $url, $took));
+        }
     }
 
     /** @param list<int> $players */

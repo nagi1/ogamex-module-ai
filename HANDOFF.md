@@ -84,14 +84,17 @@ one phase still dominates, say which: that is the next fix. If due work dominate
   Parallel session workers are not built: one process per account shard would sit at different simulated instants over one database, so battles and
   fleet arrivals could resolve out of order. If the PROFILE shows sessions dominate, the answer is `--accounts=K` runs, not shards.
 
-### Sim speed root cause (fast-time thread, 17:15 UTC) -- rerun please
-181 sessions in 908 s = 5 s per session, and 699 tiny jumps cost far less than that: the cost is the session, and the session's cost is waiting on
-HTTP. In hybrid cognition mode every session calls the Fatima, CBRKit and AgentOS sidecars (config/cognition.php, 2 s connect / 5 s read timeouts) and the
-conversation lane calls the language provider. `ai:sim` now plays on the native engines by default (`ai.cognition.mode=native`, native memory and
-experience drivers, conversation and language off) and `Http::preventStrayRequests()` makes any escaped request throw at once, so it shows in the error
-digest instead of hanging. `--external-cognition` restores the old behaviour. Expect sessions near the speed of a test (well under a second).
-Please rerun `sim --hours=6 --accounts=20` on a fresh SIM_DB and report the SIM, JUMPS and full PROFILE lines (do not grep them), then the 12 h, 100-account
-run with `--max-wall=300`. Any `Attempted request to` rows in the digest name a remaining HTTP caller: paste them.
+### Sim keeps the sidecars (fast-time thread, 17:40 UTC; SUPERSEDES the "native by default" note) -- owner order
+Nagi: the sim must call the real Fatima, CBRKit and AgentOS sidecars and the language lane. `ai:sim` is back to external cognition by default; the
+native engines are an explicit opt-in (`--native-cognition`) and nothing forces them. Speed now comes from elsewhere:
+- At start `ai:sim` probes the three sidecars and prints `SIDECAR <name> up (N ms)` or `SIDECAR <name> DOWN`. A sidecar that is down costs its 2 s connect
+  timeout on every call, which alone would explain 5 s per session. **Please paste those three lines**; if one is down, start it (that is a 20x speedup by itself)
+  and rerun before profiling anything else.
+- `--workers=N` (needs pcntl) forks N processes per simulated instant; each runs a share of the due sessions at the same simulated time, so sessions overlap their
+  sidecar waits the way production workers do. Try `--workers=8`. Fatima serialises its own calls (`lock_seconds`), so expect the gain from CBRKit/AgentOS/DB, not Fatima.
+  If a worker dies the digest says `worker N died without a report`.
+Please rerun `sim --hours=6 --accounts=20` twice, `--workers=1` and `--workers=8`, each on its own fresh SIM_DB, and report the SIDECAR lines, the SIM and JUMPS
+lines and the full PROFILE of each.
 
 ### Faster sim and tests (fast-time thread, 17:25 UTC) -- measure both
 - `ai:sim` commits once per simulated instant (the whole drain is one transaction, inner ones are savepoints) instead of per statement group: fewer fsyncs.
