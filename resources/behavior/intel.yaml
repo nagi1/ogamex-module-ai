@@ -1,0 +1,23 @@
+# Architecture step 7: the two intel products a played account carries in its head — what a target has
+# paid before (IntelBook) and how quiet a system is (GalaxyMap). Every number a probe, a raid or a colony
+# site reads lives here, so a host retunes the account's memory without touching code.
+
+# Per-target priority: one bounded counter per player and target coordinate. A raid that came home with
+# loot raises it, one that came home empty lowers it, and the bound stops either from running away.
+target_priority:
+  win_step: 1
+  loss_step: 1
+  ceiling: 5
+  floor: -3
+
+# The system map: what one galaxy+system looks like from the reports this account has received.
+galaxy_map:
+  # A report older than this is not the neighbourhood any more.
+  report_window_hours: 168
+  # The metal-equivalent one point of threat or opportunity stands for, and the bound on a system, so one
+  # fat report cannot dwarf the map.
+  scale: 10000
+  ceiling: 100
+  # Loot standing behind a fight is worth less than loot in the open: a defenceless report counts whole,
+  # a defended one this share.
+  defended_opportunity_share: 0.25

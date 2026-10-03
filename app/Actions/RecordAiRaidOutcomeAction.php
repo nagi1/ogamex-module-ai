@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Domain\Intel\IntelBook;
 use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiExperienceFeatureVersion;
 use Modules\AI\Enums\AiExperienceOutcome;
@@ -32,6 +33,12 @@ class RecordAiRaidOutcomeAction
             + 2.0 * (float) ($loot['deuterium'] ?? 0);
 
         $outcome = $metalEquivalent > 0 ? AiExperienceOutcome::Succeeded : AiExperienceOutcome::Failed;
+
+        app(IntelBook::class)->recordOutcome(
+            $playerId,
+            IntelBook::key((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position),
+            $metalEquivalent > 0,
+        );
 
         return app(RecordAiExperienceOutcomeAction::class)->handle(
             $playerId,
