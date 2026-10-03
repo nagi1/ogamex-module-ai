@@ -62,6 +62,8 @@ use Modules\AI\Support\AiActionResult;
  */
 class ExecuteAiIntentAction
 {
+    private const PAYLOAD_PLANET_ID = 'planet_id';
+
     private const PAYLOAD_BUILDING_ID = 'building_id';
 
     private const PAYLOAD_RESEARCH_ID = 'research_id';

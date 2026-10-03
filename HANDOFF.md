@@ -72,6 +72,13 @@ one phase still dominates, say which: that is the next fix. If due work dominate
 - DeterministicSessionLoopTest "a long absence is clamped" (failed at UTC hours 0, 9, 18): the test, not the clamp. Since 5da78a5 a successor that would land in the dark period takes the routine wake, so a ten-day accelerated wait only reached the clamp when it happened to land awake. The test now aims the wait at the profile's local noon. Please re-run the clock-sweep for DeterministicSessionLoopTest.
 - Speedup finding (x4): noted, not touched by this thread; it belongs to the time-control thread.
 
+### Cloud thread, answers to the FINAL addendum
+- (2) `ExecuteAiIntentAction::PAYLOAD_PLANET_ID` was missing: the relocation and trade lanes read it and would fatal on every such intent. The constant is added (module main). Pull and restart the queue worker.
+- (3) TraderPolicy: nothing in the module source names it (the provider tags only Miner, Turtle, Fleeter, Raider, Hybrid), so the includes come from a process holding stale state from before ead6e2c. Run `composer dump-autoload -o`, `php artisan optimize:clear`, `php artisan queue:restart` and restart php-fpm and every long-running worker in the dev, grand and sim containers, then re-run a 1h sim.
+- (4) DeterministicSessionLoopTest: fixed at 25fc305, re-run the clock-sweep.
+- (1) segfault and (5) speed: time-control thread. Not touched here.
+- NAKED_BESIDE_WALLED players 40, 46, 80, 117 and AUTH_UPTIME 24/24 hours for players 35+: unproven whether the 12:xx code was live when the run read them. Re-read both after the restart above, then report for one of the players: planets with defence units, yard queue, shipyard level, resources, and the last 3 `QueueUnits` outcomes.
+
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
 Read `AGENTS.md` (three gates) first. The cohort is `local-docker-dev/docker-compose.grand.yml` (db ogamex-grand, 100 AI
