@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiExpedition;
+use Modules\AI\Domain\Decision\Policies\ExpeditionDurationPolicy;
 use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
@@ -34,7 +35,7 @@ class QueueAiExpeditionAction implements QueueAiExpedition
     private const EXPEDITION_SPEED = 1.0;
 
     /** The shortest expedition, the classic hourly cadence. */
-    private const EXPEDITION_HOLDING_HOURS = 1;
+    private const EXPEDITION_HOLDING_HOURS = ExpeditionDurationPolicy::DURATION_SECONDS / 3600;
 
     public function __construct(
         private PlayerGameStateService $playerGameStateService,

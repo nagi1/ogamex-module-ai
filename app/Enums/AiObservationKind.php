@@ -13,4 +13,6 @@ enum AiObservationKind: int
     case AllianceChatMessageReceived = 6;
     case AllyUnderAttack = 7;
     case TransferReceived = 8;
+    case ExpeditionResult = 9;
+    case ExpeditionFleetLost = 10;
 }

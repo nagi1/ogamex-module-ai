@@ -12,4 +12,6 @@ enum AiActionType: int
     case CreateColony = 6;
     case SetMinePercent = 7;
     case PhalanxScan = 8;
+    case TradeResources = 9;
+    case RelocatePlanet = 10;
 }

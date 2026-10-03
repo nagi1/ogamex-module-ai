@@ -22,6 +22,9 @@ class CandidateActionFactory
         private readonly QueueableFleetSavePlanner $queueableFleetSavePlanner,
         private readonly QueueableRecyclePlanner $queueableRecyclePlanner,
         private readonly QueueablePhalanxPlanner $queueablePhalanxPlanner,
+        private readonly QueueableDefendPlanner $queueableDefendPlanner,
+        private readonly QueueableTradePlanner $queueableTradePlanner,
+        private readonly QueueableRelocationPlanner $queueableRelocationPlanner,
     ) {
     }
 
@@ -39,6 +42,9 @@ class CandidateActionFactory
                 ...$this->eligibleRecallCandidates($perception),
                 ...$this->eligibleExpeditionCandidates($perception),
                 ...$this->eligibleTransferCandidates($perception),
+                ...$this->eligibleDefendCandidates($perception),
+                ...$this->eligibleTradeCandidates($perception),
+                ...$this->eligibleRelocationCandidates($perception),
                 ...$this->eligibleRecycleCandidates($perception),
                 ...$this->phalanxCandidate($perception)->candidates,
                 ...$raidGeneration->candidates,
@@ -220,6 +226,54 @@ class CandidateActionFactory
         ])];
     }
 
+    /** @return array<int, CandidateAction> A relocation needs no fleet slot, only a poor slot, a free better one and the dark matter. */
+    private function eligibleRelocationCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($this->queueableRelocationPlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Relocate,
+            'reason' => AiCandidateReason::EligibleRelocation->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::Relocate, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> A merchant call needs no fleet slot, only dark matter and an overflow beside a shortage. */
+    private function eligibleTradeCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($this->queueableTradePlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Trade,
+            'reason' => AiCandidateReason::EligibleTrade->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::Trade, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> */
+    private function eligibleDefendCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($perception->fleetSlotsFree < 1 || $this->queueableDefendPlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Defend,
+            'reason' => AiCandidateReason::AllyUnderAttack->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::Defend, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
     /** @return array<int, CandidateAction> */
     private function eligibleRecycleCandidates(PerceptionSnapshot $perception): array
     {
@@ -367,6 +421,13 @@ class CandidateActionFactory
             // taking: as pressing as a full store, the reading the raid row uses.
             AiCandidateActionType::Recycle => [1.0, 0.3, 0.0, 0.0],
             AiCandidateActionType::Phalanx => [0.5, 0.2, 0.3, 0.0],
+            // An ally was just attacked and a co-member's combat hulls are idle at home: the help an
+            // alliance exists for, as pressing as a full store so it is not outranked by a ferry.
+            AiCandidateActionType::Defend => [0.9, 0.3, 0.0, 0.0],
+            // Offered only when a store overflows beside a thin one and the account holds the dark matter.
+            AiCandidateActionType::Trade => [0.8, 0.3, 0.0, 0.0],
+            // A move the account can already pay for and that never stops improving the planet: a slow errand.
+            AiCandidateActionType::Relocate => [0.6, 0.3, 0.0, 0.0],
             // The planner has already proved this raid pays, so it is as pressing as a full store.
             AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],
             default => [$resourceNeed, 0.2, 0.0, 0.0],

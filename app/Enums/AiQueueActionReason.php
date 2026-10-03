@@ -32,4 +32,5 @@ enum AiQueueActionReason: string
     case PhalanxScanRefused = 'phalanx_scan_refused';
     case JumpGateJumped = 'jump_gate_jumped';
     case JumpGateUnavailable = 'jump_gate_unavailable';
+    case GiftNotAllowed = 'gift_not_allowed';
 }

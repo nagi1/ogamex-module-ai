@@ -22,6 +22,12 @@ use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
+use Modules\AI\Domain\Decision\QueueableDefend;
+use Modules\AI\Domain\Decision\QueueableDefendPlanner;
+use Modules\AI\Domain\Decision\QueueableRelocation;
+use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
+use Modules\AI\Domain\Decision\QueueableTrade;
+use Modules\AI\Domain\Decision\QueueableTradePlanner;
 use Modules\AI\Domain\Decision\QueueableTransfer;
 use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Domain\Decision\QueueableUnit;
@@ -118,6 +124,9 @@ class ScheduleAiIntentAction
         private QueueableRecyclePlanner $queueableRecyclePlanner,
         private QueueableMinePercentPlanner $queueableMinePercentPlanner,
         private QueueablePhalanxPlanner $queueablePhalanxPlanner,
+        private QueueableDefendPlanner $queueableDefendPlanner,
+        private QueueableTradePlanner $queueableTradePlanner,
+        private QueueableRelocationPlanner $queueableRelocationPlanner,
         private RaidPlanner $raidPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
         private AiClock $clock,
@@ -238,6 +247,9 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
             AiCandidateActionType::ThrottleMine => $this->scheduleMinePercent($profile, $sessionWorkItem),
             AiCandidateActionType::Phalanx => $this->schedulePhalanx($profile, $sessionWorkItem),
+            AiCandidateActionType::Defend => $this->scheduleDefend($profile, $sessionWorkItem),
+            AiCandidateActionType::Trade => $this->scheduleTrade($profile, $sessionWorkItem),
+            AiCandidateActionType::Relocate => $this->scheduleRelocation($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
 
@@ -561,6 +573,52 @@ class ScheduleAiIntentAction
      * A phalanx scan of one raid target: the moon and the target travel with the intent,
      * so the scan runs against what the session saw.
      */
+    private function scheduleRelocation(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableRelocationPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableRelocation) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Relocate, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_GALAXY => $plan->galaxy,
+            self::PAYLOAD_SYSTEM => $plan->system,
+            self::PAYLOAD_POSITION => $plan->position,
+            self::PAYLOAD_REASON => 'relocate:' . $plan->planetId,
+        ]);
+    }
+
+    private function scheduleTrade(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableTradePlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableTrade) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Trade, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            'give_resource' => $plan->giveResource,
+            'receive_resource' => $plan->receiveResource,
+            self::PAYLOAD_AMOUNT => $plan->giveAmount,
+            self::PAYLOAD_REASON => 'trade:' . $plan->planetId . ':' . $plan->giveResource,
+        ]);
+    }
+
+    private function scheduleDefend(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableDefendPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableDefend) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Defend, [
+            self::PAYLOAD_SOURCE_PLANET_ID => $plan->sourcePlanetId,
+            self::PAYLOAD_TARGET_PLANET_ID => $plan->targetPlanetId,
+            self::PAYLOAD_REASON => 'defend:' . $plan->targetPlanetId,
+        ]);
+    }
+
     private function schedulePhalanx(AiProfile $profile, AiWorkItem $sessionWorkItem): void
     {
         $plan = $this->queueablePhalanxPlanner->plan($profile->player_id);

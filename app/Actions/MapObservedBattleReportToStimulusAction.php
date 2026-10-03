@@ -15,9 +15,8 @@ use OGame\Models\BattleReport;
  * an absolute figure the module would have to price from unit costs itself.
  *
  * Three limits are deliberate and version one. Only loss is read, so a battle can
- * produce harm but never aid. No threat is derived, because whether the attacker can
- * strike again is not in this row; that needs the follow-up signals the experience
- * extractor owns. An observer that did not come off worse is declined instead of
+ * produce harm but never aid. Threat is derived only from repetition: an attacker's earlier
+ * reports against the same defender in the last day (DEF-34). An observer that did not come off worse is declined instead of
  * appraised, because Anger, Fear and Gratitude cannot express having won, and a
  * fabricated value would be worse than recording nothing.
  */
@@ -64,9 +63,27 @@ class MapObservedBattleReportToStimulusAction
             'archetype' => $archetype,
             'harm' => $ownShare,
             'aid' => 0.0,
-            'threat' => 0.0,
+            'threat' => $isDefender ? $this->threat($ownShare, $playerId, $attackerPlayerId, $battleReport) : 0.0,
             'relationshipTrust' => $this->trust($playerId, $counterpartyPlayerId),
         ]);
+    }
+
+    /**
+     * An attacker who keeps coming back is a danger beyond this one exchange (DEF-34): each earlier
+     * report in the day where the same attacker hit the same defender adds a tenth to the harm,
+     * so a repeat raider is the one Fear can overtake Anger for. A first attack carries no threat
+     * beyond its harm, which is what version one declared.
+     */
+    private function threat(float $harm, int $defenderId, int $attackerId, BattleReport $battleReport): float
+    {
+        $earlier = BattleReport::query()
+            ->where('planet_user_id', $defenderId)
+            ->where('attacker->player_id', $attackerId)
+            ->where('id', '<', $battleReport->id)
+            ->where('created_at', '>=', now()->subDay())
+            ->count();
+
+        return min(1.0, $harm + 0.1 * $earlier);
     }
 
     /**

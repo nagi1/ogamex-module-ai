@@ -3,6 +3,7 @@
 namespace Modules\AI\Observers;
 
 use Illuminate\Support\Facades\DB;
+use Modules\AI\Actions\RecordObservedExpeditionResultAction;
 use Modules\AI\Actions\RecordObservedTransferAction;
 use OGame\Models\Message;
 
@@ -18,11 +19,21 @@ class ObserveCommittedFleetMessage
 {
     public function created(Message $message): void
     {
-        if ($message->key !== 'transport_received') {
+        $messageId = $message->id;
+
+        // The expedition's own result message is the inbound half of the mission: what came back
+        // (IMPL-67). Same durable row the player reads, so the same after-commit boundary.
+        if (str_starts_with((string) $message->key, 'expedition_')) {
+            DB::afterCommit(static function () use ($messageId): void {
+                app(RecordObservedExpeditionResultAction::class)->handle($messageId);
+            });
+
             return;
         }
 
-        $messageId = $message->id;
+        if ($message->key !== 'transport_received') {
+            return;
+        }
 
         // A transport can arrive before its transaction commits; cognition must not.
         DB::afterCommit(static function () use ($messageId): void {

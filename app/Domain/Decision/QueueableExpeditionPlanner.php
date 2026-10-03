@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
@@ -31,6 +33,9 @@ class QueueableExpeditionPlanner
     /** The window over which a system's outgoing expedition load is counted for rotation. */
     private const ROTATION_WINDOW_HOURS = 24;
 
+    /** Fleets lost to the host's black-hole outcome inside the window before the account stands down (IMPL-67). */
+    private const LOSSES_BEFORE_STANDING_DOWN = 2;
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
     ) {
@@ -44,6 +49,17 @@ class QueueableExpeditionPlanner
         }
 
         if (!User::query()->whereKey($playerId)->exists()) {
+            return null;
+        }
+
+        // A player who has lost two expedition fleets in a day stops sending a third: the recorded
+        // results are the planner's feedback, not just the count of outgoing missions.
+        $losses = AiObservation::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiObservationKind::ExpeditionFleetLost)
+            ->where('observed_at', '>=', now()->subHours(self::ROTATION_WINDOW_HOURS))
+            ->count();
+        if ($losses >= self::LOSSES_BEFORE_STANDING_DOWN) {
             return null;
         }
 

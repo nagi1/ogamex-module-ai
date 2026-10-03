@@ -22,4 +22,7 @@ enum AiCandidateActionType: int
     case Recycle = 13;
     case ThrottleMine = 14;
     case Phalanx = 15;
+    case Defend = 16;
+    case Trade = 17;
+    case Relocate = 18;
 }

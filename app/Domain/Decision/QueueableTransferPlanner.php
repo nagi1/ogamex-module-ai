@@ -3,14 +3,20 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Actions\QueueAiTransferAction;
+use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\AllyGiftGuard;
+use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\TransportMission;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\BattleReport;
 use OGame\Models\FleetMission;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
@@ -45,12 +51,14 @@ class QueueableTransferPlanner
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
+        private PlanetServiceFactory $planetServiceFactory,
         private EconomyUpgrades $economyUpgrades,
         private EnergyCapacity $energyCapacity,
         private FacilityChain $facilityChain,
         private DefenseNeedEvaluator $defenseNeed,
         private ReserveFloor $reserveFloor,
         private QueueAiTransferAction $transferAction,
+        private AllyGiftGuard $giftGuard,
     ) {
     }
 
@@ -104,7 +112,74 @@ class QueueableTransferPlanner
             ]);
         }
 
-        return $this->surplus($planets, $player);
+        return $this->surplus($planets, $player) ?? $this->allyGift($planets, $player, $playerId);
+    }
+
+    /** How long after seeing an ally attacked a gift is still offered. */
+    private const ALLY_GIFT_WINDOW_HOURS = 6;
+
+    /**
+     * A tenth of what the richest body holds, sent to an alliance co-member just seen attacked
+     * (IMPL-71): a player helps an ally rebuild after a raid. Nothing leaves unless AllyGiftGuard
+     * passes the exact shipment, so the planner never offers what the adapter would refuse.
+     *
+     * @param array<PlanetService> $planets
+     */
+    private function allyGift(array $planets, PlayerService $player, int $playerId): ?QueueableTransfer
+    {
+        $reports = AiObservation::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiObservationKind::AllyUnderAttack)
+            ->where('observed_at', '>=', now()->subHours(self::ALLY_GIFT_WINDOW_HOURS))
+            ->orderByDesc('observed_at')
+            ->pluck('source_id');
+
+        foreach ($reports as $reportId) {
+            $allyId = BattleReport::query()->whereKey($reportId)->value('planet_user_id');
+            $targetId = $allyId === null ? null : Planet::query()->where('user_id', $allyId)->orderBy('id')->value('id');
+            if ($targetId === null) {
+                continue;
+            }
+
+            foreach ($planets as $source) {
+                $floor = $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS);
+                $share = AllyGiftGuard::MAX_STOCK_SHARE;
+                $gift = new Resources(
+                    floor(min($source->metal()->get() * $share, max(0.0, $source->metal()->get() - $floor->metal->get()))),
+                    floor(min($source->crystal()->get() * $share, max(0.0, $source->crystal()->get() - $floor->crystal->get()))),
+                    0.0,
+                );
+                if ($gift->sum() <= 0 || !$this->hasCargo($source, $player)) {
+                    continue;
+                }
+                if ($this->giftGuard->refusal(
+                    $playerId,
+                    (int) $targetId,
+                    (int) $gift->metal->get(),
+                    (int) $gift->crystal->get(),
+                    0,
+                    $source->metal()->get(),
+                    $source->crystal()->get(),
+                    $source->deuterium()->get(),
+                ) !== null) {
+                    continue 2;
+                }
+                $targetPlanet = $this->planetServiceFactory->make((int) $targetId, true);
+                if ($targetPlanet === null || !$this->canPayFuel($source, $targetPlanet, $gift, $player)) {
+                    continue;
+                }
+
+                return app()->makeWith(QueueableTransfer::class, [
+                    'sourcePlanetId' => $source->getPlanetId(),
+                    'targetPlanetId' => (int) $targetId,
+                    'metal' => (int) $gift->metal->get(),
+                    'crystal' => (int) $gift->crystal->get(),
+                    'deuterium' => 0,
+                ]);
+            }
+        }
+
+        return null;
     }
 
     private function transferWaiting(int $playerId): bool
