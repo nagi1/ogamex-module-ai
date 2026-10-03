@@ -264,13 +264,27 @@ def code_guard(actions):
 
 
 def commit_records(actions):
-    """Run records and the ledger are generated every minute; commit them so the tree shows only code in flight."""
+    """Run records and the ledger change every minute; one commit every six hours keeps them out of the
+    tree without burying the real work in snapshot commits (40 of 47 commits in a day were this)."""
+    last = sh("git", "log", "-1", "--format=%ct", "--grep=harness run records").strip()
+    if last and time.time() - int(last) < 6 * 3600:
+        return
     paths = ["plan/research/ogame", "plan/tasks/tasks.db"]
     sh("git", "add", "-A", "--", *paths)
     if subprocess.run(["git", "diff", "--cached", "--quiet", "--", *paths], cwd=ROOT).returncode == 0:
         return
     sh("git", "commit", "-q", "-m", "harness run records and ledger snapshot (babysitter)", "--", *paths)
     actions.append("committed the harness run records and ledger")
+
+
+def reopen_churn(actions):
+    """A row that is done, reopened and done again is the harness going in circles, not delivering."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    stamps = re.findall(r"REOPENED (\d{4}-\d\d-\d\d \d\d:\d\d) UTC",
+                        " ".join(n or "" for (n,) in sqlite3.connect(DB).execute("select notes from tasks")))
+    recent = [t for t in stamps if datetime.strptime(t, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc) > cutoff]
+    if len(recent) >= 3:
+        actions.append(f"CHURN: {len(recent)} rows reopened in the last hour; the quality read and the proofs disagree")
 
 
 def main():
@@ -293,6 +307,7 @@ def main():
     burn_watchdog(actions)
     code_guard(actions)
     commit_records(actions)
+    reopen_churn(actions)
 
     code_lines, other_lines = commits()
     changed, junk = tree()
