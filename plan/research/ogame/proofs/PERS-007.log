@@ -1,4 +1,4 @@
 PASS test:EveryPlanetBuildsSessionSituationTest 2s
 PASS aspect:economy 1s
-FAIL invariant:IDLE_QUEUES 46s —  ! [IDLE_QUEUES] player 58 played this hour with 5 of 6 planets buildable and idle
-PROOF: FAIL PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 58 played this hour with 5 of 6 planets buildable and idle
+FAIL invariant:IDLE_QUEUES 49s —  ! [IDLE_QUEUES] player 50 played this hour with 3 of 5 planets buildable and idle
+PROOF: FAIL PERS-007 (test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 50 played this hour with 3 of 5 planets buildable and idle
