@@ -281,24 +281,51 @@ LANE = "claude-lane"
 LANE_QUEUE = 3  # rows waiting for the strong lane at once; it works one run at a time
 
 
+def lane_reason(con, row, attempts):
+    """Why a row needs the strong lane, or "" when the DeepSeek writers should keep it.
+
+    The lane is the CTO/plumber, not a second driver: it takes what a writer failed at, what other rows
+    wait on, and the infrastructure the writers stand on. Routine rows (STUCK-*, test merges) stay with the writers.
+    """
+    code, file_ref, notes, row_id = row
+    if "BURN" in notes or notes.count("REOPENED") >= 2:
+        return "a writer failed it"
+    if attempts.get(code, 0) >= 3:
+        return f"{attempts[code]} writer attempts did not land it"
+    waiting = con.execute("select count(*) from dependencies d join tasks t on t.id=d.task_id "
+                          "where d.depends_on=? and t.status not in ('done','deferred')", (row_id,)).fetchone()[0]
+    if waiting:
+        return f"{waiting} row(s) wait on it"
+    if any(path.strip().startswith(("scripts/", "plan/", "app/Providers/", "config/")) for path in (file_ref or "").split(";")):
+        return "infrastructure"
+    return ""
+
+
 def delegate_to_claude(actions):
-    """Stuck, very important and reopened rows go to Claude Code (scripts/claude-lane.py), and only there.
+    """Hard, blocking and infrastructure rows go to Claude Code (scripts/claude-lane.py), and only there.
 
     A writer already on the row is stopped first (the harness would respawn it on the files otherwise);
     `claim` then takes the row and its files so no writer touches them again.
     """
     con = sqlite3.connect(DB)
     queued = con.execute("select count(*) from tasks where assignee=? and status in ('todo','in_progress')", (LANE,)).fetchone()[0]
+    attempts = {}
+    for path in glob.glob(os.path.join(ROOT, "plan/research/ogame/attempts/*.count")):
+        try:
+            attempts[os.path.basename(path)[:-6]] = int(open(path).read().strip() or 0)
+        except ValueError:
+            continue
     rows = con.execute(
-        "select code, priority, status, coalesce(notes,'') from tasks where kind='impl' "
+        "select code, file_ref, coalesce(notes,''), id, priority from tasks where kind='impl' "
         "and status in ('todo','in_progress') and (assignee is null or assignee='' or assignee like 'harness%') "
-        "and code not like 'WIK-%' order by priority, updated_at").fetchall()
-    for code, priority, status, notes in rows:
+        "and priority in ('P0','P1') and code not like 'WIK-%' and code not like 'STUCK-%' order by priority, updated_at").fetchall()
+    for code, file_ref, notes, row_id, priority in rows:
         if queued >= LANE_QUEUE:
             break
-        reopened = notes.count("REOPENED") >= 2 and "CLAUDE-LANE" not in notes
-        urgent = priority == "P0" and (code.startswith(("STUCK-", "LIFE-", "FLEET-")) or status == "in_progress")
-        if not (reopened or urgent) or notes.count("CLAUDE-LANE") >= 2:
+        if notes.count("CLAUDE-LANE") >= 2:
+            continue
+        reason = lane_reason(con, (code, file_ref, notes, row_id), attempts)
+        if not reason:
             continue
         subprocess.run(["pkill", "-f", f"^python3 -u scripts/strategy-pipeline.py implement {code}"])
         sh("python3", "plan/tasks/task.py", "unstick", code)
@@ -306,7 +333,7 @@ def delegate_to_claude(actions):
         if sqlite3.connect(DB).execute("select assignee from tasks where code=?", (code,)).fetchone()[0] != LANE:
             continue
         queued += 1
-        actions.append(f"delegated {code} ({'reopened' if reopened else 'urgent'}) to the claude lane")
+        actions.append(f"delegated {code} to the claude lane: {reason}")
     run_claude_lane(actions)
 
 

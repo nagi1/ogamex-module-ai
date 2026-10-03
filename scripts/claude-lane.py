@@ -7,6 +7,7 @@ alone; this script is the only thing that works those rows. One run at a time (f
 a wall-clock and a dollar bound on every run, and the run must end through `task.py done` or leave a note.
 """
 import fcntl
+import json
 import os
 import sqlite3
 import shutil
@@ -25,7 +26,10 @@ RUN_SECONDS = 45 * 60
 RUN_BUDGET_USD = "12"
 MAX_TURNS = "150"
 
-PROMPT = """You are the strong lane of the OGameX AI module harness. Work exactly one task row: {code}.
+PROMPT = """You are the strong lane of the OGameX AI module harness: its CTO and plumber, not its main driver.
+The DeepSeek writers do the routine rows. You are given what they could not do, what other rows wait on, and the
+infrastructure they stand on. Work exactly one task row: {code}. Prefer the fix that unblocks the most other rows
+(a missing seam, a wrong proof, a harness or ledger fault) over a local patch, and say in your reply which rows it frees.
 
 Read first, in this order: Modules/AI/AGENTS.md, then `python3 plan/tasks/task.py show {code}` (from Modules/AI),
 then .github/skills/ai-task-execute/SKILL.md and follow that workflow. The row is already claimed for you
@@ -90,14 +94,33 @@ def main():
                # One worker at a time: the run may not start sub-agents of its own either.
                "--disallowedTools", "Agent",
                "--max-turns", MAX_TURNS, "--max-budget-usd", RUN_BUDGET_USD,
-               "--output-format", "text"]
+               "--output-format", "json"]
     started = time.time()
-    with open(log, "w") as out:
+    verdict, report = "", {}
+    try:
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=RUN_SECONDS)
+        verdict = f"exit {result.returncode}"
         try:
-            result = subprocess.run(command, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, timeout=RUN_SECONDS)
-            verdict = f"exit {result.returncode}"
-        except subprocess.TimeoutExpired:
-            verdict = f"timed out after {RUN_SECONDS // 60} min"
+            report = json.loads(result.stdout)
+        except ValueError:
+            report = {"result": result.stdout + result.stderr}
+    except subprocess.TimeoutExpired:
+        verdict = f"timed out after {RUN_SECONDS // 60} min"
+        report = {"result": verdict}
+    with open(log, "w") as out:
+        out.write(str(report.get("result", "")) + "\n")
+
+    # What the run cost, for the harness page: tokens by kind and the API-equivalent price. On a
+    # subscription nothing is billed per run; the price says how much of the quota the run weighed.
+    usage = report.get("usage") or {}
+    with open(os.path.join(LOG_DIR, "usage.jsonl"), "a") as ledger:
+        ledger.write(json.dumps({
+            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "code": code, "verdict": verdict,
+            "input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0),
+            "cache_read": usage.get("cache_read_input_tokens", 0), "cache_write": usage.get("cache_creation_input_tokens", 0),
+            "usd": report.get("total_cost_usd", 0), "turns": report.get("num_turns", 0),
+            "seconds": int(time.time() - started),
+        }) + "\n")
 
     # A run that ended with the row still claimed and unchanged must not be picked again at once.
     con = sqlite3.connect(DB)

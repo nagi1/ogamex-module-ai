@@ -191,6 +191,7 @@ class HarnessStatusController
         $attempts = glob($this->path('plan/research/ogame/attempts/*.{count,stuck}'), GLOB_BRACE) ?: [];
         $parts[] = 'attempts:'.count($attempts).':'.max([0, ...array_map('filemtime', $attempts)]);
         $scorecards = glob($this->path('plan/research/ogame/scorecards/*.json')) ?: [];
+        $parts[] = 'usage:'.(@filemtime($this->path('plan/research/ogame/claude-lane/usage.jsonl')) ?: 0);
         $lane = glob($this->path('plan/research/ogame/claude-lane/*.log')) ?: [];
         $parts[] = 'claudeLane:'.count($lane).':'.max([0, ...array_map('filemtime', $lane), ...array_map('filesize', $lane)]);
         $parts[] = 'babysitter:'.(@filemtime($this->path('plan/research/ogame/babysitter.json')) ?: 0);
@@ -223,6 +224,7 @@ class HarnessStatusController
             'cohort' => $this->cohort(),
             'babysitter' => $this->babysitter(),
             'claudeLane' => $this->claudeLane(),
+            'spend' => $this->spend(),
         ];
     }
 
@@ -515,6 +517,63 @@ class HarnessStatusController
         }
 
         return $ledger;
+    }
+
+    /**
+     * What the harness has burned: DeepSeek tokens priced at the module's own rates, and Claude lane runs
+     * at their API-equivalent price. Claude is on a subscription, so that price is quota weight, not a bill.
+     *
+     * @return array<string, mixed>
+     */
+    private function spend(): array
+    {
+        $rates = (require dirname(__DIR__, 3).'/config/pricing.php')['rates']['deepseek.deepseek-flash'];
+        $day = gmdate('Y-m-d');
+        $deepseek = ['total' => 0.0, 'today' => 0.0, 'calls' => 0, 'tokens' => 0, 'rows' => []];
+
+        foreach (@file($this->path('plan/research/ogame/model-usage.jsonl'), FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $call = json_decode($line, true);
+            if (!is_array($call)) {
+                continue;
+            }
+
+            $prompt = (int) ($call['prompt'] ?? 0);
+            $cached = min($prompt, (int) ($call['cache_hit'] ?? 0));
+            $output = (int) ($call['output'] ?? 0);
+            $usd = (($prompt - $cached) * $rates['input'] + $cached * $rates['cached_input'] + $output * $rates['output']) / 1_000_000;
+            $at = (string) ($call['at'] ?? '');
+            // DeepSeek bills peak hours at twice the rate (config/routing.php windows, weekdays only).
+            $hour = (int) substr($at, 11, 2);
+            $weekday = $at !== '' && (int) gmdate('N', (int) strtotime($at)) <= 5;
+            $usd *= $weekday && (($hour >= 1 && $hour < 4) || ($hour >= 6 && $hour < 10)) ? 2 : 1;
+
+            $code = preg_match('/^implementing (\S+)/', (string) ($call['purpose'] ?? ''), $found) === 1 ? $found[1] : 'other';
+            $deepseek['total'] += $usd;
+            $deepseek['today'] += str_starts_with($at, $day) ? $usd : 0;
+            $deepseek['calls']++;
+            $deepseek['tokens'] += $prompt + $output;
+            $deepseek['rows'][$code] = ($deepseek['rows'][$code] ?? 0) + $usd;
+        }
+
+        arsort($deepseek['rows']);
+        $deepseek['rows'] = array_map(static fn (string $code, float $usd): array => ['code' => $code, 'usd' => round($usd, 2)], array_keys(array_slice($deepseek['rows'], 0, 6, true)), array_slice($deepseek['rows'], 0, 6, true));
+
+        $claude = ['runs' => 0, 'tokens' => 0, 'usd' => 0.0, 'today' => 0.0, 'rows' => []];
+        foreach (@file($this->path('plan/research/ogame/claude-lane/usage.jsonl'), FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $run = json_decode($line, true);
+            if (!is_array($run)) {
+                continue;
+            }
+
+            $claude['runs']++;
+            $claude['tokens'] += (int) $run['input'] + (int) $run['output'] + (int) $run['cache_read'] + (int) $run['cache_write'];
+            $claude['usd'] += (float) $run['usd'];
+            $claude['today'] += str_starts_with((string) $run['at'], $day) ? (float) $run['usd'] : 0;
+            $claude['rows'][] = ['code' => $run['code'], 'usd' => round((float) $run['usd'], 2), 'tokens' => (int) $run['input'] + (int) $run['output'] + (int) $run['cache_read'], 'turns' => $run['turns']];
+        }
+        $claude['rows'] = array_slice(array_reverse($claude['rows']), 0, 6);
+
+        return ['deepseek' => $deepseek, 'claude' => $claude, 'since' => '1 Oct 2026'];
     }
 
     /**

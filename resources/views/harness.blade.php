@@ -132,6 +132,16 @@
         .kcard .w { color: var(--warn); font-size: 11px; }
         .ledger { max-height: 60vh; overflow: auto; margin-top: 10px; }
         .ledger th { position: sticky; top: 0; background: var(--panel); cursor: pointer; }
+        .glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+        .gcard { background: var(--panel); border: 1px solid var(--line, #2a3140); border-radius: 8px; padding: 12px 14px; }
+        .gcard .t { font-size: 12px; opacity: .65; text-transform: uppercase; letter-spacing: .04em; }
+        .gcard .v { font-size: 20px; font-weight: 600; margin: 4px 0 2px; }
+        .gcard .s { font-size: 12px; opacity: .75; }
+        .spend { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+        .spend h3 { margin: 0 0 6px; font-size: 13px; }
+        details.more > summary { cursor: pointer; padding: 10px 14px; background: var(--panel); border-radius: 8px; font-weight: 600; }
+        details.more[open] > summary { margin-bottom: 12px; }
+        details.more > .stack { gap: 14px; }
     </style>
 </head>
 <body>
@@ -143,6 +153,22 @@
 </header>
 
 <div class="stack">
+    <section class="glance" aria-label="At a glance">
+        <div class="gcard"><div class="t">DeepSeek writers</div><div class="v" id="gDeep">—</div><div class="s" id="gDeepS"></div></div>
+        <div class="gcard"><div class="t">Claude lane</div><div class="v" id="gLane">—</div><div class="s" id="gLaneS"></div></div>
+        <div class="gcard"><div class="t">Babysitter</div><div class="v" id="gBaby">—</div><div class="s" id="gBabyS"></div></div>
+        <div class="gcard"><div class="t">Cohort</div><div class="v" id="gCohort">—</div><div class="s" id="gCohortS"></div></div>
+    </section>
+
+    <section class="panel" id="spendPanel" aria-label="Spend">
+        <h2>What it has cost <small id="spendMeta"></small></h2>
+        <div class="spend">
+            <div><h3>DeepSeek (billed)</h3><div class="kv" id="spendDeep"></div><ul class="plain" id="spendDeepRows"></ul></div>
+            <div><h3>Claude lane (subscription)</h3><div class="kv" id="spendClaude"></div><ul class="plain" id="spendClaudeRows"></ul>
+                <div class="note">Claude is on the Pro subscription, so nothing is billed per run. The dollar figure is what the same tokens would cost on the API, which is how much quota a run weighs. The CLI does not expose the plan's remaining quota; /usage in Claude Code shows it.</div></div>
+        </div>
+    </section>
+
     <!-- 1. The goal. Everything else on the page exists to move this number. -->
     <section class="panel" aria-label="North star">
         <div class="star-head">
@@ -151,22 +177,6 @@
             <div class="note" id="starAt" style="margin:0"></div>
         </div>
         <div class="chips" id="chips"></div>
-    </section>
-
-    <!-- 1b. The behaviour board: what an account does today, story by story, seconds old. -->
-    <section class="panel" id="storiesPanel" aria-label="Behaviour board" hidden>
-        <h2>Behaviour board <small id="storiesMeta"></small></h2>
-        <div id="storiesFailing"></div>
-        <details class="passing-stories" id="storiesPassing"><summary></summary><ul></ul></details>
-    </section>
-
-    <!-- 2. What the harness has produced. Zero values go dim; stuck only draws the eye when it is not zero. -->
-    <section class="counters" aria-label="Output">
-        <div class="counter" id="cProven"><div class="n">—</div><div class="l">proven (the proof passed)</div></div>
-        <div class="counter" id="cDelivered"><div class="n">—</div><div class="l">delivered, awaiting live proof</div></div>
-        <div class="counter" id="cReady"><div class="n">—</div><div class="l">ready to attempt now</div></div>
-        <div class="counter" id="cCooling"><div class="n">—</div><div class="l">cooling after 3 failed attempts</div></div>
-        <div class="counter" id="cStuck" hidden><div class="n">—</div><div class="l">stuck: same failure twice</div></div>
     </section>
 
     <!-- 3. The working surface: every row the harness is on, and what happened to it. -->
@@ -189,6 +199,17 @@
         </table></div>
         <ul class="plain" id="laneRuns"></ul>
         <div class="empty" id="laneEmpty" hidden>No row is handed to Claude. The babysitter delegates stuck, P0 and twice-reopened rows.</div>
+    </section>
+
+    <details class="more"><summary>Details: counters, babysitter, writer, cohort, behaviour board, output log</summary>
+    <div class="stack">
+    <!-- 2. What the harness has produced. Zero values go dim; stuck only draws the eye when it is not zero. -->
+    <section class="counters" aria-label="Output">
+        <div class="counter" id="cProven"><div class="n">—</div><div class="l">proven (the proof passed)</div></div>
+        <div class="counter" id="cDelivered"><div class="n">—</div><div class="l">delivered, awaiting live proof</div></div>
+        <div class="counter" id="cReady"><div class="n">—</div><div class="l">ready to attempt now</div></div>
+        <div class="counter" id="cCooling"><div class="n">—</div><div class="l">cooling after 3 failed attempts</div></div>
+        <div class="counter" id="cStuck" hidden><div class="n">—</div><div class="l">stuck: same failure twice</div></div>
     </section>
 
     <section class="panel" id="babysitterPanel" aria-label="Babysitter">
@@ -224,6 +245,13 @@
         </section>
     </div>
 
+    <!-- 1b. The behaviour board: what an account does today, story by story, seconds old. -->
+    <section class="panel" id="storiesPanel" aria-label="Behaviour board" hidden>
+        <h2>Behaviour board <small id="storiesMeta"></small></h2>
+        <div id="storiesFailing"></div>
+        <details class="passing-stories" id="storiesPassing"><summary></summary><ul></ul></details>
+    </section>
+
     <!-- 4. The output: the last hour, persisted by scripts/harness-log.py. -->
     <section class="panel" aria-label="Harness output">
         <h2>Harness output <small id="logMeta"></small></h2>
@@ -242,6 +270,8 @@
         </div>
         <div id="log" role="log" aria-live="off" tabindex="0"></div>
     </section>
+
+    </div></details>
 
     <!-- 5. The backlog, closed by default: it is reference, not news. -->
     <section class="panel" aria-label="Task ledger">
@@ -368,6 +398,37 @@
             + '<span class="r ' + (call.finish === 'stop' ? '' : 'no') + '">' + (call.finish === 'stop' ? Math.round(call.output / 1000) + 'k tok · ' + Math.round(call.seconds) + 's' : 'cut off (' + esc(call.finish) + ')') + '</span></li>').join('');
     }
 
+    function money(v) { return '$' + Number(v).toFixed(2); }
+    function mtok(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); }
+
+    function renderGlance(data) {
+        const w = data.workers || [];
+        $('gDeep').textContent = (data.model.calls ? 'working' : 'quiet');
+        $('gDeepS').textContent = w.length + ' writer(s), ' + data.model.calls + ' model calls in the last hour';
+        const lane = data.claudeLane;
+        $('gLane').textContent = lane.running ? 'running' : 'idle';
+        $('gLaneS').textContent = lane.queue.filter(r => r.who === 'lane').length + ' row(s) handed over, ' + lane.runs.length + ' recent run(s)';
+        const b = data.babysitter;
+        const stale = b && b.age_minutes > 25;
+        $('gBaby').textContent = !b ? 'not reporting' : stale ? 'silent' : b.verdict.toLowerCase();
+        $('gBabyS').textContent = b ? b.delivered.length + ' delivered, ' + b.code_lines + ' code lines in ' + b.window + ' min' : 'start scripts/babysitter.sh';
+        const v = (data.cohort && data.cohort.violations) || [];
+        $('gCohort').textContent = v.length ? v.length + ' invariant(s) failing' : 'healthy';
+        $('gCohortS').textContent = v.map(x => x.name).join(', ');
+    }
+
+    function renderSpend(sp) {
+        if (!sp) return;
+        $('spendMeta').textContent = 'since ' + sp.since;
+        const d = sp.deepseek, c = sp.claude;
+        $('spendDeep').innerHTML = '<div><b>' + money(d.total) + '</b><span>total</span></div><div><b>' + money(d.today) + '</b><span>today (UTC)</span></div>'
+            + '<div><b>' + mtok(d.tokens) + '</b><span>tokens in ' + d.calls + ' calls</span></div>';
+        $('spendDeepRows').innerHTML = d.rows.map(r => '<li><span>' + esc(r.code) + '</span><span class="r">' + money(r.usd) + '</span></li>').join('');
+        $('spendClaude').innerHTML = '<div><b>' + c.runs + '</b><span>runs</span></div><div><b>' + mtok(c.tokens) + '</b><span>tokens</span></div>'
+            + '<div><b>' + money(c.usd) + '</b><span>API-equivalent, ' + money(c.today) + ' today</span></div>';
+        $('spendClaudeRows').innerHTML = c.rows.length ? c.rows.map(r => '<li><span>' + esc(r.code) + '</span><span class="r">' + money(r.usd) + ', ' + mtok(r.tokens) + ' tokens, ' + r.turns + ' turns</span></li>').join('') : '<li><span class="r">no run recorded yet</span></li>';
+    }
+
     function renderLane(lane) {
         if (!lane) return;
         const idle = !lane.queue.length && !lane.runs.length;
@@ -424,7 +485,7 @@
 
     function render(data) {
         renderState(data); renderStar(data.northStar); renderStories(data.stories); renderQueue(data.queue); renderRows(data.rows);
-        renderWriter(data.model); renderBabysitter(data.babysitter); renderLane(data.claudeLane); renderCohort(data.cohort); renderNow(data);
+        renderWriter(data.model); renderBabysitter(data.babysitter); renderLane(data.claudeLane); renderGlance(data); renderSpend(data.spend); renderCohort(data.cohort); renderNow(data);
     }
 
     /* ---- log: the last hour, persisted ---- */
