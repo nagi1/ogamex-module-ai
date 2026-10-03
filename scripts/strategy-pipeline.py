@@ -1777,7 +1777,10 @@ def status():
                    if code in ready_codes and code not in marked
                    and (file_ref or os.path.exists(os.path.join(PROPOSALS, f"{code}.md")))]
     proofs = {code: proof for code, _, _, proof, _, _ in rows}
-    held = {code: moves_no_failing_aspect(proofs[code]) for code in attemptable}
+    # A row a person or the stuck report wrote with its file named is directed work: a passing count-based
+    # aspect does not make it moot (all 15 aspects pass while the accounts play badly).
+    directed = {code for code, _, file_ref, *_ in rows if file_ref}
+    held = {code: (None if code in directed else moves_no_failing_aspect(proofs[code])) for code in attemptable}
     held = {code: why for code, why in held.items() if why}
     ready = [code for code in attemptable if code not in held]
     proven = [code for code, state, _, _, stamped, _ in rows if state == "done" and stamped]
@@ -2854,7 +2857,7 @@ def implement_row(code, answer_file=None):
         say(ledger.off_path_reason(code))
         return 0
 
-    held = moves_no_failing_aspect(task_row(code)["proof"])
+    held = None if task_row(code)["file_ref"] else moves_no_failing_aspect(task_row(code)["proof"])
     if held:
         say(f"{code}: nothing to move — {held}")
         return 0
