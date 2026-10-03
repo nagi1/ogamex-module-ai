@@ -25,6 +25,7 @@ enum AiQueueActionReason: string
     case NoTransportFleet = 'no_transport_fleet';
     case SourceShortAtDispatch = 'source_short_at_dispatch';
     case FuelTankShort = 'fuel_tank_short';
+    case RaidWavePlanned = 'raid_wave_planned';
     case PercentApplied = 'percent_applied';
     case PercentRefused = 'percent_refused';
     case AllianceApplied = 'alliance_applied';

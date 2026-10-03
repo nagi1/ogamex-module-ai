@@ -12,6 +12,7 @@ use Modules\AI\Enums\GamePhase;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiPhalanxScan;
+use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Domain\Raid\ReportedPlanet;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Models\AiProfile;
@@ -132,6 +133,8 @@ class RaidPlanner
         // The fuel and loot quotes need the origin's owner context, which the
         // planets collection does not carry by itself.
         $origin = $this->planetServiceFactory->makeForPlayer($player, $origin->getPlanetId(), false);
+        // A detached instance (no cache), so the claims of this login's earlier orders come off in memory only.
+        $origin = app(LoginReservations::class)->withoutClaims($origin);
 
         $target = $this->target($report);
         if ($target === null) {
@@ -455,12 +458,13 @@ class RaidPlanner
     }
 
     /**
-     * The first planet carrying a fleet.
+     * The first planet carrying a fleet that this login has not already promised to another order.
      */
     private function origin(PlayerService $player): ?PlanetService
     {
+        $claims = app(LoginReservations::class);
         foreach ($player->planets->all() as $planet) {
-            if ($planet->getShipUnits()->units !== []) {
+            if ($planet->getShipUnits()->units !== [] && $claims->freeShips($planet) > 0) {
                 return $planet;
             }
         }

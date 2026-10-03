@@ -47,7 +47,14 @@ use Modules\AI\Domain\Decision\QueueableTransfer;
 use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
+use Modules\AI\Domain\Decision\RaidPlanner;
+use Modules\AI\Domain\Login\FleetSlots;
+use Modules\AI\Domain\Login\LoginReservations;
+use Modules\AI\Domain\Login\ManagerDoctrine;
+use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiActionResult;
 
@@ -137,6 +144,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Relocate => $this->relocate($workItem, $planetId),
             AiWorkKind::JumpGate => $this->jumpGate($workItem, $planetId),
             AiWorkKind::Missile => $this->missile($workItem, $planetId),
+            AiWorkKind::RaidWave => $this->raidWave($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -544,6 +552,78 @@ class ExecuteAiIntentAction
             ['source_planet_id' => $step->sourceMoonId, 'target_planet_id' => $step->targetMoonId],
             $step->sourceMoonId,
         ];
+    }
+
+    /**
+     * The second half of a login (architecture step 5): the probes the login sent have reported, so the
+     * account reads the fresh reports and writes a raid for each one its planner approves, up to the
+     * archetype's waves and the free fleet slots. The raids are ordinary Raid work, due now.
+     *
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function raidWave(AiWorkItem $workItem, int $planetId): array
+    {
+        $profile = AiProfile::query()->where('player_id', $workItem->player_id)->where('enabled', true)->first();
+        if ($profile === null) {
+            return [null, [], 0];
+        }
+
+        $since = (int) ($workItem->payload['since'] ?? 0);
+        $reportIds = \OGame\Models\Message::query()
+            ->where('user_id', $workItem->player_id)
+            ->whereNotNull('espionage_report_id')
+            ->where('created_at', '>=', \Carbon\Carbon::createFromTimestamp(max(0, $since - 60)))
+            ->orderByDesc('id')
+            ->pluck('espionage_report_id');
+
+        $doctrine = app(ManagerDoctrine::class);
+        $limit = min(
+            $doctrine->int($profile->archetype, 'raid_waves'),
+            app(FleetSlots::class)->free($workItem->player_id) - $doctrine->int($profile->archetype, 'keep_slots_free'),
+        );
+        $claims = app(LoginReservations::class);
+        $claims->reset();
+        $placed = 0;
+
+        try {
+            foreach ($reportIds->unique() as $reportId) {
+                if ($placed >= $limit) {
+                    break;
+                }
+
+                $plan = app(RaidPlanner::class)->plan($workItem->player_id, (int) $reportId);
+                if (!$plan instanceof QueueableRaid) {
+                    continue;
+                }
+
+                AiWorkItem::query()->firstOrCreate(
+                    ['idempotency_key' => 'intent:wave:' . $workItem->id . ':' . $reportId],
+                    [
+                        'player_id' => $workItem->player_id,
+                        'kind' => AiWorkKind::Raid,
+                        'due_at' => now(),
+                        'schedule_generation' => (int) ($workItem->schedule_generation ?? 1),
+                        'state' => AiWorkState::Pending,
+                        'payload' => [
+                            self::PAYLOAD_PLANET_ID => $plan->originPlanetId,
+                            self::PAYLOAD_TARGET_GALAXY => $plan->targetGalaxy,
+                            self::PAYLOAD_TARGET_SYSTEM => $plan->targetSystem,
+                            self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
+                            self::PAYLOAD_TARGET_TYPE => $plan->targetType,
+                            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+                            self::PAYLOAD_LAUNCH_UNITS => $plan->launchUnits,
+                            self::PAYLOAD_REASON => 'raid_wave:' . $reportId,
+                        ],
+                    ],
+                );
+                $claims->claim($plan->originPlanetId, $plan->launchUnits);
+                $placed++;
+            }
+        } finally {
+            $claims->reset();
+        }
+
+        return [AiActionResult::succeeded(AiQueueActionReason::RaidWavePlanned), ['raids' => $placed], $planetId];
     }
 
     /**

@@ -40,6 +40,9 @@ use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Domain\Decision\ThreatResponsePlan;
 use Modules\AI\Domain\Decision\ThreatResponsePlanner;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
+use Modules\AI\Domain\Login\FleetSlots;
+use Modules\AI\Domain\Login\LoginReservations;
+use Modules\AI\Domain\Login\ManagerDoctrine;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Enums\AiThreatResponse;
@@ -119,6 +122,12 @@ class ScheduleAiIntentAction
      */
     private const SECONDS_BETWEEN_PLANETS = 20;
 
+    /** The key suffix of the manager placing the next order; empty for the session's own objective. */
+    private string $managerSuffix = '';
+
+    /** Whether the last schedule call wrote an order, so a manager knows when its planner ran dry. */
+    private bool $enqueued = false;
+
     public function __construct(
         private QueueableBuildingPlanner $queueableBuildingPlanner,
         private QueueableUnitPlanner $queueableUnitPlanner,
@@ -152,6 +161,11 @@ class ScheduleAiIntentAction
      */
     private function enqueue(AiProfile $profile, AiWorkItem $sessionWorkItem, AiWorkKind $kind, array $payload, ?CarbonImmutable $dueAt = null, string $keySuffix = ''): void
     {
+        // A manager's extra order carries the manager's own key, so the session's objective keeps the
+        // primary key and a retried login converges on the same set of orders (architecture step 3).
+        $keySuffix = $keySuffix !== '' ? $keySuffix : $this->managerSuffix;
+        $this->enqueued = true;
+
         AiWorkItem::query()->firstOrCreate(
             ['idempotency_key' => 'intent:session:' . $sessionWorkItem->id . $keySuffix],
             [
@@ -166,6 +180,20 @@ class ScheduleAiIntentAction
     }
 
     public function handle(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace): void
+    {
+        // The login's claims start empty and are cleared again when it ends, so a worker process that runs
+        // the next account's login never carries this one's promised ships.
+        app(LoginReservations::class)->reset();
+
+        try {
+            $this->schedule($profile, $sessionWorkItem, $trace);
+        } finally {
+            app(LoginReservations::class)->reset();
+            $this->managerSuffix = '';
+        }
+    }
+
+    private function schedule(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace): void
     {
         // An account the host no longer has, or one with no planets, has nothing an intent could
         // be spent on: the session records what it decided and stops scheduling (L2), so the
@@ -305,6 +333,132 @@ class ScheduleAiIntentAction
             && $type !== AiCandidateActionType::DoNothing) {
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $capital, ':capital');
         }
+
+        $this->runManagers($profile, $sessionWorkItem, $trace, $type, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS));
+    }
+
+    /**
+     * Every manager acts on every login (architecture step 3). The engine's selection above is the login's
+     * first errand; the managers below then do what a player does in the same login: send every raid the
+     * reports and the slots allow, probe a batch of targets, ferry, keep the expedition slot busy, colonise
+     * and pick up debris. Arbitration is fixed priority over the shared fleet slots, and the ships each order
+     * takes are claimed so the next order plans from what is left. An idle login (DoNothing) is the humaniser's
+     * moment and stays idle. How much each manager does is the archetype's doctrine (`managers.yaml`).
+     */
+    private function runManagers(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace, AiCandidateActionType $type, CarbonImmutable $afterEconomy): void
+    {
+        if ($type === AiCandidateActionType::DoNothing) {
+            return;
+        }
+
+        $doctrine = app(ManagerDoctrine::class);
+        $archetype = $profile->archetype;
+        $slots = app(FleetSlots::class)->free($profile->player_id) - $doctrine->int($archetype, 'keep_slots_free');
+
+        // Military: raid waves on every report the planner approves, the selected one already placed.
+        $waves = $doctrine->int($archetype, 'raid_waves') - ($type === AiCandidateActionType::Raid ? 1 : 0);
+        $selectedReport = (int) ($trace->selected->candidate->parameters['report_id'] ?? 0);
+        foreach ($trace->candidates as $scored) {
+            if ($waves <= 0 || $slots <= 0) {
+                break;
+            }
+            $candidate = $scored->candidate;
+            $reportId = (int) ($candidate->parameters['report_id'] ?? 0);
+            if ($candidate->type !== AiCandidateActionType::Raid || $reportId === 0 || $reportId === $selectedReport) {
+                continue;
+            }
+            if ($this->placeRaid($profile, $sessionWorkItem, $reportId, ':raid:' . $reportId)) {
+                $waves--;
+                $slots--;
+            }
+        }
+
+        // Missiles take no fleet slot.
+        if ($doctrine->bool($archetype, 'missiles') && $type !== AiCandidateActionType::Missile) {
+            $this->asManager(':missile', fn () => $this->scheduleMissile($profile, $sessionWorkItem));
+        }
+
+        // Intel: a batch of probes, each to a different target (the spy planner skips targets already promised).
+        $probes = $doctrine->int($archetype, 'probes_per_login') - ($type === AiCandidateActionType::Spy ? 1 : 0);
+        $probed = 0;
+        for ($i = 0; $i < $probes && $slots > 0; $i++) {
+            if (!$this->asManager(':spy:' . $i, fn () => $this->scheduleSpy($profile, $sessionWorkItem))) {
+                break;
+            }
+            $slots--;
+            $probed++;
+        }
+
+        // The rest of the login, one order each while slots remain.
+        $errands = [
+            'transfer' => [AiCandidateActionType::Transfer, fn () => $this->scheduleTransfer($profile, $sessionWorkItem, $afterEconomy)],
+            'expedition' => [AiCandidateActionType::Expedition, fn () => $this->scheduleExpedition($profile, $sessionWorkItem)],
+            'colony' => [AiCandidateActionType::Colonize, fn () => $this->scheduleColony($profile, $sessionWorkItem)],
+            'recycle' => [AiCandidateActionType::Recycle, fn () => $this->scheduleRecycle($profile, $sessionWorkItem)],
+        ];
+        foreach ($errands as $key => [$errandType, $schedule]) {
+            if ($slots <= 0) {
+                break;
+            }
+            if ($type === $errandType || !$doctrine->bool($archetype, $key)) {
+                continue;
+            }
+            if ($this->asManager(':' . $key, $schedule)) {
+                $slots--;
+            }
+        }
+
+        // Continuation (architecture step 5): the probes just sent come back in a minute or two, and a player
+        // reads them and raids inside the same login instead of waiting for the next one.
+        $minutes = $doctrine->int($archetype, 'continuation_minutes');
+        if ($probed > 0 && $minutes > 0) {
+            $this->asManager(':wave', fn () => $this->enqueue($profile, $sessionWorkItem, AiWorkKind::RaidWave, [
+                self::PAYLOAD_PLANET_ID => (int) (Planet::query()->where('user_id', $profile->player_id)->orderBy('id')->value('id') ?? 0),
+                'since' => $this->clock->now()->timestamp,
+                self::PAYLOAD_REASON => 'raid_wave',
+            ], $this->clock->now()->addMinutes($minutes)));
+        }
+    }
+
+    /** Runs one manager's schedule call under its own key; true when it wrote an order. */
+    private function asManager(string $suffix, \Closure $schedule): bool
+    {
+        $this->managerSuffix = $suffix;
+        $this->enqueued = false;
+
+        try {
+            $schedule();
+        } finally {
+            $this->managerSuffix = '';
+        }
+
+        return $this->enqueued;
+    }
+
+    /**
+     * One raid on one report, planned against the report and the ships this login has not yet promised,
+     * and its ships claimed for the rest of the login.
+     */
+    private function placeRaid(AiProfile $profile, AiWorkItem $sessionWorkItem, int $reportId, string $keySuffix): bool
+    {
+        $plan = $this->raidPlanner->plan($profile->player_id, $reportId);
+        if (!$plan instanceof QueueableRaid) {
+            return false;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Raid, [
+            self::PAYLOAD_PLANET_ID => $plan->originPlanetId,
+            self::PAYLOAD_TARGET_GALAXY => $plan->targetGalaxy,
+            self::PAYLOAD_TARGET_SYSTEM => $plan->targetSystem,
+            self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
+            self::PAYLOAD_TARGET_TYPE => $plan->targetType,
+            self::PAYLOAD_MISSION_TYPE => $plan->missionType,
+            self::PAYLOAD_LAUNCH_UNITS => $plan->launchUnits,
+            self::PAYLOAD_REASON => 'raid:' . $reportId,
+        ], null, $keySuffix);
+        app(LoginReservations::class)->claim($plan->originPlanetId, $plan->launchUnits);
+
+        return true;
     }
 
     /**
@@ -796,5 +950,6 @@ class ScheduleAiIntentAction
             self::PAYLOAD_LAUNCH_UNITS => $plan->launchUnits,
             self::PAYLOAD_REASON => 'raid:' . $reportId,
         ]);
+        app(LoginReservations::class)->claim($plan->originPlanetId, $plan->launchUnits);
     }
 }

@@ -1,0 +1,104 @@
+# How much each archetype does per login once the managers act every login (architecture step 3).
+#
+# A login is no longer one errand. Every manager below acts on every login that is not an idle moment, up to
+# the numbers here; the arbiter is fixed priority (safety, queues, military, intel, logistics, expedition,
+# colony, salvage). These are personality numbers, written the way a veteran would describe the player:
+# a raider probes a dozen farms and sends every wave its slots allow, a miner probes a few and ferries.
+#
+#   probes_per_login     espionage missions the intel manager may send in one login
+#   raid_waves           raid missions the military manager may send in one login (fleet slots still cap it)
+#   keep_slots_free      fleet slots the military and intel managers leave for a save or an expedition
+#   expedition           whether the expedition manager runs every login
+#   transfer             whether the logistics manager ferries every login
+#   colony               whether the colony manager runs every login
+#   recycle              whether a debris field is harvested every login
+#   missiles             whether missiles are fired at a reported wall every login
+#   continuation_minutes minutes after the login's probes before it reads the reports and raids (0 = off)
+
+default:
+  probes_per_login: 3
+  raid_waves: 2
+  keep_slots_free: 1
+  expedition: true
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: false
+  continuation_minutes: 3
+
+miner:
+  probes_per_login: 2
+  raid_waves: 1
+  keep_slots_free: 1
+  expedition: true
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: false
+  continuation_minutes: 0
+
+turtle:
+  probes_per_login: 1
+  raid_waves: 1
+  keep_slots_free: 1
+  expedition: false
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: true
+  continuation_minutes: 0
+
+fleeter:
+  probes_per_login: 8
+  raid_waves: 5
+  keep_slots_free: 1
+  expedition: true
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: true
+  continuation_minutes: 3
+
+raider:
+  probes_per_login: 12
+  raid_waves: 8
+  keep_slots_free: 1
+  expedition: false
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: true
+  continuation_minutes: 3
+
+hybrid:
+  probes_per_login: 5
+  raid_waves: 3
+  keep_slots_free: 1
+  expedition: true
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: true
+  continuation_minutes: 3
+
+trader:
+  probes_per_login: 2
+  raid_waves: 1
+  keep_slots_free: 1
+  expedition: true
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: false
+  continuation_minutes: 0
+
+casual:
+  probes_per_login: 2
+  raid_waves: 2
+  keep_slots_free: 1
+  expedition: true
+  transfer: true
+  colony: true
+  recycle: true
+  missiles: false
+  continuation_minutes: 0

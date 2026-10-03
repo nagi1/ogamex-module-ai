@@ -243,6 +243,8 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->singleton(AiRuntimeSettings::class, static fn ($app): AiRuntimeSettings => new AiRuntimeSettings($app->make(SettingsService::class)));
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
+        // One login's claims on ships and fleet slots; reset at the start of every schedule pass.
+        $this->app->singleton(\Modules\AI\Domain\Login\LoginReservations::class);
         $this->app->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
         $this->app->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
         $this->app->bind(ContextBuilder::class, NativeContextBuilder::class);
