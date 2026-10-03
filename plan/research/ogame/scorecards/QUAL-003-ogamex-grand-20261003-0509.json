@@ -1,30 +1,30 @@
 {
-    "at": "2026-10-03T05:07:56+00:00",
+    "at": "2026-10-03T05:09:33+00:00",
     "hours": 2,
     "aspects": {
         "economy": {
-            "count": 6462,
+            "count": 6357,
             "floor": 100,
             "pass": true,
             "player": "fills the build queue on every planet each login",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "research": {
-            "count": 770,
+            "count": 763,
             "floor": 17,
             "pass": true,
             "player": "keeps the research lab busy",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "shipyard": {
-            "count": 1632,
+            "count": 1613,
             "floor": 9,
             "pass": true,
             "player": "builds ships and defence from what the economy leaves",
             "owner": "app/Domain/Decision/QueueableUnitPlanner.php"
         },
         "espionage": {
-            "count": 86,
+            "count": 84,
             "floor": 9,
             "pass": true,
             "player": "probes neighbours before deciding whom to hit",
@@ -38,7 +38,7 @@
             "owner": "app/Domain/Decision/RaidPlanner.php"
         },
         "transport": {
-            "count": 928,
+            "count": 921,
             "floor": 5,
             "pass": true,
             "player": "moves resources to where they are spent",
@@ -52,7 +52,7 @@
             "owner": "app/Domain/Decision/QueueableRecyclePlanner.php"
         },
         "expeditions": {
-            "count": 107,
+            "count": 103,
             "floor": 5,
             "pass": true,
             "player": "sends expeditions when the fleet has nothing better to do",
@@ -73,14 +73,14 @@
             "owner": "app/Domain/Decision/QueueableFleetSavePlanner.php"
         },
         "social": {
-            "count": 1540,
+            "count": 1516,
             "floor": 5,
             "pass": true,
             "player": "answers and starts exchanges with other players",
             "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
         },
         "chat": {
-            "count": 1540,
+            "count": 1516,
             "floor": 5,
             "pass": true,
             "player": "writes to other players",

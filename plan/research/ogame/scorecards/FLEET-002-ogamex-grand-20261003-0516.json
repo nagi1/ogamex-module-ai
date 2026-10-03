@@ -1,94 +1,94 @@
 {
-    "at": "2026-10-03T05:07:56+00:00",
-    "hours": 2,
+    "at": "2026-10-03T05:16:50+00:00",
+    "hours": 11,
     "aspects": {
         "economy": {
-            "count": 6462,
-            "floor": 100,
+            "count": 26979,
+            "floor": 550,
             "pass": true,
             "player": "fills the build queue on every planet each login",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "research": {
-            "count": 770,
-            "floor": 17,
+            "count": 5185,
+            "floor": 92,
             "pass": true,
             "player": "keeps the research lab busy",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "shipyard": {
-            "count": 1632,
-            "floor": 9,
+            "count": 6721,
+            "floor": 46,
             "pass": true,
             "player": "builds ships and defence from what the economy leaves",
             "owner": "app/Domain/Decision/QueueableUnitPlanner.php"
         },
         "espionage": {
-            "count": 86,
-            "floor": 9,
+            "count": 523,
+            "floor": 46,
             "pass": true,
             "player": "probes neighbours before deciding whom to hit",
             "owner": "app/Domain/Decision/QueueableSpyPlanner.php"
         },
         "raids": {
-            "count": 116,
-            "floor": 9,
+            "count": 648,
+            "floor": 46,
             "pass": true,
             "player": "raids a profitable target",
             "owner": "app/Domain/Decision/RaidPlanner.php"
         },
         "transport": {
-            "count": 928,
-            "floor": 5,
+            "count": 2817,
+            "floor": 23,
             "pass": true,
             "player": "moves resources to where they are spent",
             "owner": "app/Domain/Decision/QueueableTransferPlanner.php"
         },
         "recycle": {
-            "count": 0,
-            "floor": 1,
-            "pass": false,
+            "count": 66,
+            "floor": 5,
+            "pass": true,
             "player": "harvests debris it or others left",
             "owner": "app/Domain/Decision/QueueableRecyclePlanner.php"
         },
         "expeditions": {
-            "count": 107,
-            "floor": 5,
+            "count": 373,
+            "floor": 23,
             "pass": true,
             "player": "sends expeditions when the fleet has nothing better to do",
             "owner": "app/Domain/Decision/QueueableExpeditionPlanner.php"
         },
         "colonisation": {
-            "count": 23,
-            "floor": 1,
+            "count": 255,
+            "floor": 3,
             "pass": true,
             "player": "settles new planets while slots remain",
             "owner": "app/Domain/Decision/QueueableColonyPlanner.php"
         },
         "fleet_save": {
-            "count": 0,
-            "floor": 5,
-            "pass": false,
+            "count": 1102,
+            "floor": 23,
+            "pass": true,
             "player": "saves the fleet before going offline or under attack",
             "owner": "app/Domain/Decision/QueueableFleetSavePlanner.php"
         },
         "social": {
-            "count": 1540,
-            "floor": 5,
+            "count": 5592,
+            "floor": 23,
             "pass": true,
             "player": "answers and starts exchanges with other players",
             "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
         },
         "chat": {
-            "count": 1540,
-            "floor": 5,
+            "count": 5593,
+            "floor": 23,
             "pass": true,
             "player": "writes to other players",
             "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
         },
         "alliance": {
             "count": 0,
-            "floor": 1,
+            "floor": 3,
             "pass": false,
             "player": "applies to, recruits for or leaves an alliance",
             "owner": "app/Actions/ReviewAiAllianceApplicationsAction.php"
