@@ -3,6 +3,8 @@
 namespace Modules\AI\Providers;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\QueueAiColonyAction;
@@ -92,6 +94,9 @@ use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
+use OGame\Console\Commands\Scheduler\GenerateAllianceHighscores;
+use OGame\Console\Commands\Scheduler\GenerateHighscoreRanks;
+use OGame\Console\Commands\Scheduler\GenerateHighscores;
 use OGame\Events\Game\BuildingCompleted;
 use OGame\Events\Game\PlanetCreated;
 use OGame\Models\AllianceMember;
@@ -188,6 +193,21 @@ class AIServiceProvider extends ModuleServiceProvider
         $schedule->command('ai:advance-alliance-life')->everyMinute()->withoutOverlapping(5);
         $schedule->command('ai:reconcile-language-requests')->everyMinute()->withoutOverlapping(5);
         $schedule->command('ai:record-score-samples')->everyMinute()->withoutOverlapping(5);
+        // The host schedules player highscores, alliance highscores and rank generation
+        // everyFiveMinutes(), which the drifting `schedule:run; sleep 60` loop almost never
+        // lands on, so ranks stayed unwritten and alliance choice/review had nothing to read.
+        // Run the same three, in the host's order, on the first tick of each five-minute window;
+        // Cache::add makes it once per window however many ticks arrive. Mitigation only: the
+        // host entrypoint now runs schedule:work.
+        $schedule->call(static function (): void {
+            $window = intdiv(time(), 300);
+            if (! Cache::add('ai:highscore-window:'.$window, 1, 600)) {
+                return;
+            }
+            foreach ([GenerateHighscores::class, GenerateAllianceHighscores::class, GenerateHighscoreRanks::class] as $command) {
+                Artisan::call($command);
+            }
+        })->name('ai:highscore-tick')->everyMinute()->withoutOverlapping(5);
         // Retention is enforced on a quiet hour rather than at the moment a row
         // expires: a nightly sweep is one delete per table instead of a job per
         // row, and the windows are measured in days.
