@@ -21,6 +21,7 @@ class ArchetypePolicyRegistry implements ArchetypePolicyResolver
 
     public function for(AiArchetype $archetype): ArchetypePolicy
     {
+        $archetype = $archetype->growthStyle();
         if (!isset($this->policies[$archetype->value])) {
             throw app()->makeWith(LogicException::class, ['message' => 'No policy registered for ' . $archetype->name]);
         }

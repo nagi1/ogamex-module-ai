@@ -16,4 +16,14 @@ enum AiArchetype: int
     case Casual = 5;
     case Raider = 6;
     case Hybrid = 7;
+
+    /** Trader and Casual are migration-only: a stored profile grows like the style its behaviour moved into (economic role, activity band). */
+    public function growthStyle(): self
+    {
+        return match ($this) {
+            self::Trader => self::Miner,
+            self::Casual => self::Hybrid,
+            default => $this,
+        };
+    }
 }

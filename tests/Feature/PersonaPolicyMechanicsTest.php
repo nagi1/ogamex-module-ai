@@ -12,10 +12,8 @@ use Modules\AI\Domain\Decision\CandidateAction;
 use Modules\AI\Domain\Decision\CandidateGeneration;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
-use Modules\AI\Domain\Decision\Policies\CasualPolicy;
 use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
-use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Domain\Decision\UtilityScorer;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
@@ -135,7 +133,7 @@ test('a candidate the policy denies is dropped before scoring', function (): voi
 
 function aiPersonaRegisterPolicies(Container $app): void
 {
-    $app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
+    $app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class], ArchetypePolicy::class);
     $app->singleton(ArchetypePolicyResolver::class, static fn (Container $container): ArchetypePolicyRegistry => $container->makeWith(ArchetypePolicyRegistry::class, [
         'policies' => $container->tagged(ArchetypePolicy::class),
     ]));

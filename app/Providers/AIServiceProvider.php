@@ -69,12 +69,10 @@ use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
-use Modules\AI\Domain\Decision\Policies\CasualPolicy;
 use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\HybridPolicy;
 use Modules\AI\Domain\Decision\Policies\RaiderPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
-use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Enums\AiCampaignConsultationMode;
 use Modules\AI\Enums\AiCognitionDriver;
@@ -295,8 +293,6 @@ class AIServiceProvider extends ModuleServiceProvider
             FleeterPolicy::class,
             RaiderPolicy::class,
             HybridPolicy::class,
-            TraderPolicy::class,
-            CasualPolicy::class,
         ], ArchetypePolicy::class);
         $this->app->singleton(ArchetypePolicyResolver::class, fn (): ArchetypePolicyRegistry => app()->makeWith(ArchetypePolicyRegistry::class, [
             'policies' => $this->app->tagged(ArchetypePolicy::class),

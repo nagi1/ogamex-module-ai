@@ -10,10 +10,8 @@ use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeSocialCognition;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
-use Modules\AI\Domain\Decision\Policies\CasualPolicy;
 use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
-use Modules\AI\Domain\Decision\Policies\TraderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiConversationReplyState;
@@ -56,7 +54,7 @@ beforeEach(function (): void {
     $this->app->bind(RandomSource::class, SeededRandomSource::class);
     $this->app->bind(SocialCognition::class, NativeSocialCognition::class);
     $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
-    $this->app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class, TraderPolicy::class, CasualPolicy::class], ArchetypePolicy::class);
+    $this->app->tag([MinerPolicy::class, TurtlePolicy::class, FleeterPolicy::class], ArchetypePolicy::class);
     $this->app->singleton(ArchetypePolicyResolver::class, fn ($app): ArchetypePolicyRegistry => $app->makeWith(ArchetypePolicyRegistry::class, [
         'policies' => $app->tagged(ArchetypePolicy::class),
     ]));

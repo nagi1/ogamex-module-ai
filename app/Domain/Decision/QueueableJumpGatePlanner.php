@@ -6,6 +6,7 @@ use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\EspionageMission;
 use OGame\Models\FleetMission;
+use OGame\Models\User;
 use OGame\Services\JumpGateService;
 
 /**
@@ -26,6 +27,10 @@ class QueueableJumpGatePlanner
     public function plan(int $playerId): ?QueueableJumpGate
     {
         if (!AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->exists()) {
+            return null;
+        }
+
+        if (!User::query()->whereKey($playerId)->exists()) {
             return null;
         }
 
