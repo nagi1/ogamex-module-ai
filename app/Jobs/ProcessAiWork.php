@@ -120,7 +120,7 @@ class ProcessAiWork implements ShouldQueue
         return DB::transaction(function () use ($leaseToken): AiWorkItem|null {
             /** @var AiWorkItem|null $workItem */
             $workItem = AiWorkItem::query()->lockForUpdate()->find($this->workItemId);
-            if ($workItem === null || (!$this->acceleratedSession($workItem) && $workItem->due_at->isFuture()) || !$this->isClaimable($workItem)) {
+            if ($workItem === null || !$this->isClaimable($workItem) || !$this->dueForAccount($workItem)) {
                 return null;
             }
 
@@ -142,9 +142,50 @@ class ProcessAiWork implements ShouldQueue
         }
 
         // Acceleration shortens the waits, not the night: a dark-period session keeps its due time.
-        $profile = AiProfile::query()->where('player_id', $workItem->player_id)->first();
+        $profile = $this->workProfile($workItem);
 
         return $profile === null || app(SessionPlanner::class)->isAwake($profile, now()->toImmutable());
+    }
+
+    /**
+     * Whether the account's own clock has come for this item.
+     *
+     * An accelerated session is claimable the moment its account is awake (that is what shortens the
+     * waits), and any item is claimable once its own due time has passed. A session is the exception:
+     * the one a session leaves behind is due seconds later, so a worker that is minutes behind finds
+     * every session in the cohort overdue, and an overdue session used to be claimable at any hour --
+     * which put the whole population online through its own night (AUTH_UPTIME). A session therefore
+     * keeps the hour it was scheduled for: only the night session the routine placed in the dark
+     * period itself, the reaction wake to an attack landing then, is run at night.
+     */
+    private function dueForAccount(AiWorkItem $workItem): bool
+    {
+        if ($workItem->due_at->isFuture()) {
+            return $this->acceleratedSession($workItem);
+        }
+
+        return $workItem->kind !== AiWorkKind::RunSession || $this->sessionKeepsItsOwnHour($workItem);
+    }
+
+    /**
+     * A session scheduled inside the account's waking window waits for its waking day however late the
+     * worker is; one scheduled inside the dark period is a wake the routine meant to take.
+     */
+    private function sessionKeepsItsOwnHour(AiWorkItem $workItem): bool
+    {
+        $profile = $this->workProfile($workItem);
+        if ($profile === null) {
+            return true;
+        }
+
+        $planner = app(SessionPlanner::class);
+
+        return $planner->isAwake($profile, now()->toImmutable()) || !$planner->isAwake($profile, $workItem->due_at->toImmutable());
+    }
+
+    private function workProfile(AiWorkItem $workItem): AiProfile|null
+    {
+        return AiProfile::query()->where('player_id', $workItem->player_id)->first();
     }
 
     private function isClaimable(AiWorkItem $workItem): bool
