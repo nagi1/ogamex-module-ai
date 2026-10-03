@@ -203,6 +203,9 @@ $defenceSum = collect(ObjectService::getDefenseObjects())
 // Moons are left out when the host says which rows are moons: a moon without defence is ordinary,
 // and counting it would make this invariant cry wolf until nobody reads it.
 $planetQuery = DB::table('planets')->whereIn('user_id', $playerIds);
+// A colony founded this hour has no shipyard and a few hundred metal: a player builds mines first and
+// walls it once the yard exists, so a planet is only counted bare after that lead time.
+$planetQuery->where('created_at', '<=', now()->subHour());
 if (Schema::hasColumn('planets', 'planet_type')) {
     $planetQuery->where('planet_type', '!=', 3);
 }
