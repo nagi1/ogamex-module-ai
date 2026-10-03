@@ -8,12 +8,11 @@ use Modules\AI\Enums\AiCandidateActionType;
 class MinerPolicy extends ConfiguredArchetypePolicy
 {
     protected array $preferences = [
+        AiCandidateActionType::Raid->value => 0.15,
         AiCandidateActionType::Build->value => 1.0,
         AiCandidateActionType::Research->value => 0.7,
         AiCandidateActionType::FleetSave->value => 0.9,
     ];
-
-    protected array $allowed = [AiCandidateActionType::Raid->value => false];
 
     public function archetype(): AiArchetype
     {
