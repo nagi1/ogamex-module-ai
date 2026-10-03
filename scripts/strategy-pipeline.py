@@ -2335,8 +2335,11 @@ def row_calls(code):
 def hand_to_lane(code, last_failure):
     """Release the writer's claim and give the row to the claude lane, with the last failure as its brief."""
     cli = os.path.join(MODULE, "plan/tasks/task.py")
+    # This process still holds the row's file claims; `claim` refuses while a writer holds them.
+    release_claims(list(HELD_CLAIMS))
     subprocess.run([sys.executable, cli, "unstick", code], capture_output=True)
-    subprocess.run([sys.executable, cli, "claim", code, "claude-lane"], capture_output=True)
+    claimed = subprocess.run([sys.executable, cli, "claim", code, "claude-lane"], capture_output=True, text=True)
+    print(f"  {claimed.stdout.strip() or claimed.stderr.strip()}"[:200])
     connection = sqlite3.connect(TASKS_DB)
     connection.execute("update tasks set notes=coalesce(notes,'') || ? where code=?",
                        (f" | WRITER-HANDOFF {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: "
