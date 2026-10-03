@@ -12,6 +12,7 @@ use Modules\AI\Enums\GamePhase;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiPhalanxScan;
+use Modules\AI\Domain\Raid\ReportedPlanet;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
@@ -22,10 +23,8 @@ use OGame\GameMissions\BattleEngine\Services\LootService;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\GameObjects\Models\Units\UnitEntry;
-use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
-use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
@@ -175,7 +174,7 @@ class RaidPlanner
 
         $estimate = $this->defencelessTarget($target)
             ? $this->defencelessEstimate($player, $origin, $target)
-            : $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
+            : $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target, $profile->random_seed);
         if ($estimate->samples === 0) {
             return $this->reject('no_samples', $playerId, $reportId);
         }
@@ -292,12 +291,12 @@ class RaidPlanner
             $launch[$hull->unitObject->machine_name] = $hull->amount;
             $fleet = $this->fleet($launch);
 
-            $screen = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $profile->random_seed, 1);
+            $screen = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target, $fleet, $profile->random_seed, 1);
             if ($screen->samples === 0 || $screen->pWin < 1.0) {
                 continue;
             }
 
-            $confirm = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $profile->random_seed, $profile->skill_band->raidConfirmSamples());
+            $confirm = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target, $fleet, $profile->random_seed, $profile->skill_band->raidConfirmSamples());
             if ($confirm->pWin >= $profile->skill_band->raidSurvivalFloor()) {
                 return $launch;
             }
@@ -549,15 +548,13 @@ class RaidPlanner
     }
 
     /**
-     * The target planet a report points at, if it still exists.
+     * The target planet as the report saw it, never the live planet: a player plans against the last
+     * report and meets the truth at dispatch (architecture review 2.5). Null when the planet is gone or the
+     * report could not see the fleet or the defence.
      */
     private function target(EspionageReport $report): ?PlanetService
     {
-        return $this->planetServiceFactory->makeForCoordinate(
-            new Coordinate((int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position),
-            false,
-            PlanetType::from((int) $report->planet_type),
-        );
+        return app(ReportedPlanet::class)->of($report);
     }
 
     /**
