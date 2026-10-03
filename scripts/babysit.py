@@ -170,7 +170,7 @@ def stuck_scenarios(actions):
 
 
 USAGE = os.path.join(ROOT, "plan/research/ogame/model-usage.jsonl")
-BURN_CALLS = int(os.environ.get("BABYSIT_BURN_CALLS", "150"))
+BURN_CALLS = int(os.environ.get("BABYSIT_BURN_CALLS", "1000000"))  # owner 3 Oct 2026: writers run free; a stuck row is delegated, not cut off
 
 
 def burn_watchdog(actions):
@@ -203,7 +203,7 @@ def burn_watchdog(actions):
             continue
         subprocess.run(["pkill", "-f", f"^python3 -u scripts/strategy-pipeline.py implement {code}"])
         sh("python3", "plan/tasks/task.py", "unstick", code)
-        sh("python3", "plan/tasks/task.py", "claim", code, "claude")
+        sh("python3", "plan/tasks/task.py", "claim", code, "claude-lane")
         con.execute("update tasks set notes=coalesce(notes,'')||? where code=?",
                     (f" | BURN {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC: {n} writer calls in {WINDOW_MIN} min and nothing landed on its files; writer stopped, row handed to the strong lane (claude).", code))
         con.commit()
@@ -277,6 +277,49 @@ def commit_records(actions):
     actions.append("committed the harness run records and ledger")
 
 
+LANE = "claude-lane"
+LANE_QUEUE = 3  # rows waiting for the strong lane at once; it works one run at a time
+
+
+def delegate_to_claude(actions):
+    """Stuck, very important and reopened rows go to Claude Code (scripts/claude-lane.py), and only there.
+
+    A writer already on the row is stopped first (the harness would respawn it on the files otherwise);
+    `claim` then takes the row and its files so no writer touches them again.
+    """
+    con = sqlite3.connect(DB)
+    queued = con.execute("select count(*) from tasks where assignee=? and status in ('todo','in_progress')", (LANE,)).fetchone()[0]
+    rows = con.execute(
+        "select code, priority, status, coalesce(notes,'') from tasks where kind='impl' "
+        "and status in ('todo','in_progress') and (assignee is null or assignee='' or assignee like 'harness%') "
+        "and code not like 'WIK-%' order by priority, updated_at").fetchall()
+    for code, priority, status, notes in rows:
+        if queued >= LANE_QUEUE:
+            break
+        reopened = notes.count("REOPENED") >= 2 and "CLAUDE-LANE" not in notes
+        urgent = priority == "P0" and (code.startswith(("STUCK-", "LIFE-", "FLEET-")) or status == "in_progress")
+        if not (reopened or urgent) or notes.count("CLAUDE-LANE") >= 2:
+            continue
+        subprocess.run(["pkill", "-f", f"^python3 -u scripts/strategy-pipeline.py implement {code}"])
+        sh("python3", "plan/tasks/task.py", "unstick", code)
+        sh("python3", "plan/tasks/task.py", "claim", code, LANE)
+        if sqlite3.connect(DB).execute("select assignee from tasks where code=?", (code,)).fetchone()[0] != LANE:
+            continue
+        queued += 1
+        actions.append(f"delegated {code} ({'reopened' if reopened else 'urgent'}) to the claude lane")
+    run_claude_lane(actions)
+
+
+def run_claude_lane(actions):
+    """Start the lane when a row waits and no run is going; the script's own flock is the guard."""
+    waiting = sqlite3.connect(DB).execute("select count(*) from tasks where assignee=? and status in ('todo','in_progress')", (LANE,)).fetchone()[0]
+    if waiting == 0 or subprocess.run(["pgrep", "-f", "scripts/claude-lane.py"], capture_output=True).returncode == 0:
+        return
+    subprocess.Popen(["setsid", "nohup", sys.executable, "scripts/claude-lane.py"], cwd=ROOT,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    actions.append("started a claude lane run")
+
+
 def reopen_churn(actions):
     """A row that is done, reopened and done again is the harness going in circles, not delivering."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -305,6 +348,7 @@ def main():
     slow_verification(actions)
     stuck_scenarios(actions)
     burn_watchdog(actions)
+    delegate_to_claude(actions)
     code_guard(actions)
     commit_records(actions)
     reopen_churn(actions)

@@ -57,12 +57,12 @@ ATTEMPTS = os.path.join(MODULE, "plan/research/ogame/attempts")
 # bounds below stop a writer that circles. One attempt: at most this many model turns, checks, seconds.
 # Past this prompt size the conversation restarts from the task plus the working copy's diff and the last
 # check, instead of growing until the provider truncates it. The work is kept; only the chatter goes.
-AGENT_CONTEXT_TOKENS = 100_000
+AGENT_CONTEXT_TOKENS = 800_000
 # The same call with nothing changed in between, or the same check failure, this many times ends the attempt.
 # Consecutive read-only calls before reading is refused and the writer must edit or give up.
-AGENT_READ_STREAK = 15
-TOOL_RESULT_CHARS = 12_000
-READ_LINES = 400
+AGENT_READ_STREAK = 80
+TOOL_RESULT_CHARS = 80_000
+READ_LINES = 3_000
 # Reads older than the grand reseed (1 Oct 2026 15:39 UTC) measured a universe at 90,000x speed.
 COHORT_RESET = datetime.datetime(2026, 10, 1, 15, 39, tzinfo=datetime.timezone.utc)
 SCORECARDS = os.path.join(MODULE, "plan/research/ogame/scorecards")
@@ -2028,7 +2028,7 @@ def scenario_problems(paths):
 # billed in full, so the cap is the provider's own ceiling (65,536, where 24 default-effort calls stopped).
 WRITER_MAX_TOKENS = 65536
 WRITER_THINKING = {"type": "enabled"}
-WRITER_REASONING_EFFORT = "low"
+WRITER_REASONING_EFFORT = "high"
 
 
 def work_path(code):
