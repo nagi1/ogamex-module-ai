@@ -40,6 +40,7 @@ use Throwable;
     {--highscore-every=3600 : Simulated seconds between the three highscore generators (each walks every player; the real schedule runs them every 300 s)}
     {--max-wall= : Stop after this many real seconds and keep the state, so a later run continues}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
+    {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
     {--force-db : Allow a database whose name does not contain "sim"}')]
 class SimulateAiTime extends Command
 {
@@ -118,6 +119,13 @@ class SimulateAiTime extends Command
                 }
                 $hourIndex = $currentHour;
                 $hour = ['sessions' => 0, 'other' => 0, 'errors' => 0];
+            }
+
+            if ($total['errors'] >= max(1, (int) $this->option('max-errors')) && $total['sessions'] === 0) {
+                $this->error('SIM ABORTED: ' . $total['errors'] . ' errors and no session has run -- the build is broken, the numbers would mean nothing.');
+                $this->reportErrors();
+
+                return self::FAILURE;
             }
 
             if ($wallLimit !== null && microtime(true) - $wallStart > $wallLimit) {

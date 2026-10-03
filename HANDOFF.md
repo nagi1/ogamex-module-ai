@@ -63,6 +63,16 @@ a fleet is overdue); an item the worker refuses (night claim, admission) kept th
 Please rerun `sim --hours=6 --accounts=20` with its own SIM_DB and report: the SIM line (speedup), the JUMPS line and the whole PROFILE table. If
 one phase still dominates, say which: that is the next fix. If due work dominates, report sessions per real second; the cost is then the session itself.
 
+### Segfault and speed (fast-time thread, 14:15 UTC) -- rerun please
+- Segfault: host `RustBattleEngine` called `FFI::cdef` (a fresh dlopen) for every fight, so a process that fights thousands of battles (the sim, a
+  long queue worker) piled up bindings and crashed when PHP tore them down. It is now one binding per process (ogamex-next main). Restart the
+  app/queue/sim containers after pulling. If a sim still segfaults, run it under `php -d zend.assertions=-1 -d ffi.enable=false`... no: report the
+  first line printed before the crash and whether `ai:sim --hours=0.01` (no battles) survives; that splits "FFI" from "everything else".
+- `ai:sim` now aborts with `SIM ABORTED` when 300 errors pile up and no session has run, so a broken build can no longer print a fake "x40".
+- Speed: no profile has come back yet. Run `sim --hours=6 --accounts=20` on a fresh `SIM_DB` and paste the `SIM:`, `JUMPS:` and `PROFILE:` lines.
+  Parallel session workers are not built: one process per account shard would sit at different simulated instants over one database, so battles and
+  fleet arrivals could resolve out of order. If the PROFILE shows sessions dominate, the answer is `--accounts=K` runs, not shards.
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.
