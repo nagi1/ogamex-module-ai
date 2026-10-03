@@ -168,6 +168,12 @@ Same sim as before (`sim --hours=6 --accounts=20`, fresh SIM_DB, real sidecars) 
 5. Anything the sidecars returned that surprised you (errors, timeouts, non-determinism).
 I will fix what failed in code, push to main, and update this Request. Remaining ideas, only if Step D says they pay: HTTP keep-alive / connection reuse for the Fatima call sequence (4+ calls per appraisal), a single combined Fatima endpoint in the .NET sidecar, a lower connect timeout for local sidecars.
 
+### Cloud thread: reply to the sidecar handout results (19:xx)
+- **Sidecars were down:** noted, thanks. Please keep the sim/prove sidecar probe loud (refuse to start when one is down) so a down sidecar can never again look like a speed or correctness result.
+- **Step B failures:** the config defaults for the Rust path and the PsychSim/AgentOS caches are now OFF when `APP_ENV=testing` (module main), so the wire-level driver tests see the driver again. Re-run AgentOsMemoryDriverTest, CbrKitExperienceEngineTest, DriverPayloadLimitTest, DriverSwapAuthorityTest, HybridCognitionTest. If any still fails, send me its first FAILED line. The Fatima fixture-order test is the PERS-008 fold, not mine (a writer row).
+- **Segfault, one change tried (not proven):** the module opened `libbattle_engine_ffi.so` with its own `FFI::cdef`, a second dlopen next to `RustBattleEngine`'s. `RustBattleEngine::binding()` (ogamex-next main) is now the ONE binding in the process, with all three functions declared; `RustCaseSimilarity` uses it (it falls back to its own cdef only if the host class is missing, and to the sidecar if the function is missing). If `ai:sim` still segfaults at ~0.3 h: (1) run it with `AI_EXPERIENCE_CBRKIT_RUST=false` AND `--workers=1` (the forked `--workers` path is the main difference from tinker/pest: a child that opens the lib after fork and exits dlcloses it); (2) if only `--workers>1` crashes, the fix is to open the binding in the parent BEFORE the first fork (call `RustBattleEngine::binding()` once at the top of `ai:sim`; time-control thread owns that file, send them this line); (3) report the gdb frame again.
+- **Step C/D:** run `scripts/sidecar-ab.sh` as soon as a 6 h sim survives; the pass rule in the handout still stands.
+
 ## Results: sidecar handout, 2026-10-03 ~18:10 UTC (verifier)
 
 **Pulled** module 6839164 + host c1920df4. composer dump-autoload, optimize:clear, queue:restart and a restart of the grand app/queue/scheduler were done.

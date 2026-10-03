@@ -51,6 +51,9 @@ class RustCaseSimilarity
             // @phpstan-ignore-next-line
             $ffi->free_battle_result($pointer);
         } catch (Throwable) {
+            // A binding without the function (a library built before it existed): stop trying.
+            self::$binding = false;
+
             return null;
         }
 
@@ -104,6 +107,17 @@ class RustCaseSimilarity
     {
         if (!extension_loaded('ffi')) {
             return false;
+        }
+
+        // The host binds the library once per process for its battle engine; this shares that binding
+        // instead of dlopening the same .so a second time.
+        $shared = '\\OGame\\GameMissions\\BattleEngine\\RustBattleEngine';
+        if (!config('ai.cognition.experience.cbrkit.rust_library') && class_exists($shared) && method_exists($shared, 'binding')) {
+            try {
+                return $shared::binding();
+            } catch (Throwable) {
+                return false;
+            }
         }
 
         $path = (string) (config('ai.cognition.experience.cbrkit.rust_library') ?: base_path('storage/rust-libs/libbattle_engine_ffi.so'));

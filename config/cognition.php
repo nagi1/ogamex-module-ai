@@ -53,7 +53,7 @@ return [
         'driver' => env('AI_MEMORY_DRIVER', 'agentos'),
         'agentos' => [
             // Reuse the ranking for an identical recall request (the driver keeps no store of its own).
-            'cache' => filter_var(env('AI_MEMORY_AGENTOS_CACHE', true), FILTER_VALIDATE_BOOLEAN),
+            'cache' => filter_var(env('AI_MEMORY_AGENTOS_CACHE', env('APP_ENV') !== 'testing'), FILTER_VALIDATE_BOOLEAN),
             'base_url' => env('AI_MEMORY_AGENTOS_URL', 'http://host.docker.internal:8093'),
             'connect_timeout_seconds' => (int) env('AI_MEMORY_AGENTOS_CONNECT_TIMEOUT_SECONDS', 2),
             'timeout_seconds' => (int) env('AI_MEMORY_AGENTOS_TIMEOUT_SECONDS', 5),
@@ -102,7 +102,7 @@ return [
             'maximum_cases' => (int) env('AI_EXPERIENCE_CBRKIT_MAXIMUM_CASES', 200),
             // Score the casebase in-process with the host's Rust library (the same measure the sidecar
             // computes) and use the sidecar only when the library or its function is not there.
-            'rust' => filter_var(env('AI_EXPERIENCE_CBRKIT_RUST', true), FILTER_VALIDATE_BOOLEAN),
+            'rust' => filter_var(env('AI_EXPERIENCE_CBRKIT_RUST', env('APP_ENV') !== 'testing'), FILTER_VALIDATE_BOOLEAN),
             'rust_library' => env('AI_EXPERIENCE_CBRKIT_RUST_LIBRARY'),
         ],
     ],
@@ -140,7 +140,7 @@ return [
 
     'psychsim' => [
         // Reuse the stance for an identical temptation (the world is rebuilt from it alone).
-        'cache' => filter_var(env('AI_COGNITION_PSYCHSIM_CACHE', true), FILTER_VALIDATE_BOOLEAN),
+        'cache' => filter_var(env('AI_COGNITION_PSYCHSIM_CACHE', env('APP_ENV') !== 'testing'), FILTER_VALIDATE_BOOLEAN),
         'base_url' => env('AI_COGNITION_PSYCHSIM_URL', 'http://host.docker.internal:8094'),
         'connect_timeout_seconds' => (int) env('AI_COGNITION_PSYCHSIM_CONNECT_TIMEOUT_SECONDS', 2),
         'timeout_seconds' => (int) env('AI_COGNITION_PSYCHSIM_TIMEOUT_SECONDS', 5),
