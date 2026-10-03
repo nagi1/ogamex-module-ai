@@ -140,11 +140,23 @@ class ReviewAiAllianceApplicationsAction
         $rank = (int) Highscore::query()->where('player_id', $playerId)->value('general_rank');
         $population = (int) Highscore::query()->where('general_rank', '>', 0)->count();
 
-        if ($rank <= 0 || $population <= 0) {
+        if ($rank > 0 && $population > 0) {
+            return $rank / $population;
+        }
+
+        // The rank columns are written by the host's ranking pass; a universe where it has not run
+        // (the cohort's) holds points with every rank at zero, and every applicant read as a farm and
+        // was declined, so no club ever accepted or welcomed anyone (ALLY-001). The points order the
+        // ranking pass would write is the same answer; only an account with no points is a farm.
+        $points = (float) (Highscore::query()->where('player_id', $playerId)->value('general') ?? 0);
+        if ($points <= 0) {
             return null;
         }
 
-        return $rank / $population;
+        $scored = (int) Highscore::query()->where('general', '>', 0)->count();
+        $ahead = (int) Highscore::query()->where('general', '>', $points)->count();
+
+        return ($ahead + 1) / max(1, $scored);
     }
 
     private function shouldAccept(float $ratio, Alliance $alliance): bool

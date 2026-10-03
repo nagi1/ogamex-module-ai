@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Exception;
 use Modules\AI\Domain\Social\AllianceChoice;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceMember;
@@ -44,6 +45,12 @@ class AdvanceAiAllianceLifeAction
     /** The first club's tag; later founders derive their own from their name. */
     private const FIRST_ALLIANCE_TAG = 'ORBITAL';
 
+    /** A member the founder's affinity has fallen below this is a grudge the founder acts on. */
+    private const KICK_AFFINITY = -0.2;
+
+    /** A member silent for this long is cleared from the roster, as a leader prunes the dead. */
+    private const KICK_INACTIVE_DAYS = 7;
+
     public function handle(): int
     {
         // An account no club fits founds its own first: a club founded after the leave half would
@@ -54,6 +61,7 @@ class AdvanceAiAllianceLifeAction
         // is what keeps the lane the scorecard's alliance aspect measures moving on a cohort that
         // was seated once and would otherwise never ask again.
         $advanced += $this->leaveOneMisfit();
+        $advanced += $this->kickOneEnemy();
 
         foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
             // Only an account with no seat and no outstanding request asks; a seated cohort asks
@@ -94,6 +102,54 @@ class AdvanceAiAllianceLifeAction
             }
 
             if ($this->releaseMisfit($playerId, (int) $allianceId)) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * The leader's half of a club drifting apart: a founder removes one member per pass that it has come to
+     * hate (affinity under the grudge line) or that has gone inactive by the host's own rule. Players are
+     * kicked from clubs; without it a club only ever shrank by its members' own choice (ALLY-001).
+     */
+    private function kickOneEnemy(): int
+    {
+        $founders = AiProfile::query()->where('enabled', true)->pluck('player_id')->all();
+
+        foreach (Alliance::query()->whereIn('founder_user_id', $founders)->orderBy('id')->get() as $alliance) {
+            $founderId = (int) $alliance->founder_user_id;
+
+            foreach (AllianceMember::query()->where('alliance_id', $alliance->id)->where('user_id', '!=', $founderId)->pluck('user_id') as $memberId) {
+                $hated = AiRelationship::query()
+                    ->where('player_id', $founderId)
+                    ->where('other_player_id', $memberId)
+                    ->where('affinity', '<', self::KICK_AFFINITY)
+                    ->exists();
+                $member = User::query()->find($memberId);
+                // A cohort account's login stamp stays at zero (its sessions do not pass the host's login),
+                // so only a human member with a real stamp is judged inactive; a cohort member is kicked
+                // for a grudge only.
+                $stamp = (int) ($member?->time ?? 0);
+                $inactive = $stamp > 0
+                    && !in_array((int) $memberId, $founders, true)
+                    && !AiProfile::query()->where('player_id', $memberId)->exists()
+                    && $stamp < now()->subDays(self::KICK_INACTIVE_DAYS)->timestamp;
+
+                if (!$hated && !$inactive) {
+                    continue;
+                }
+
+                try {
+                    app(AllianceService::class)->kickMember((int) $alliance->id, (int) $memberId, $founderId);
+                } catch (Exception) {
+                    continue;
+                }
+
+                // The kicked account asks elsewhere on the next pass, as a leaver does.
+                User::query()->whereKey($memberId)->whereNotNull('alliance_left_at')->update(['alliance_left_at' => null]);
+
                 return 1;
             }
         }
