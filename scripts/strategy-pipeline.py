@@ -482,6 +482,10 @@ def still_passes(line):
     return '"result":"passed"' in result.stdout
 
 
+# How long the cohort plays on a delivered change before a failing live step counts as the writer's to fix.
+LIVE_SETTLE_SECONDS = 45 * 60
+
+
 def reopen(code):
     """Send a delivered row back to the writer when its live proof failed, with that failure as feedback.
 
@@ -508,6 +512,15 @@ def reopen(code):
     upstream = waits_upstream(code, failing)
     if upstream:
         print(f"{code}: its live proof fails, but it waits on {', '.join(upstream)}; stays delivered")
+        return 0
+
+    # A live step (an aspect, an invariant, a situation on the cohort) judges accounts that have not played
+    # on the new code yet. Sending the row back a minute after delivery gave the writer the same failure it
+    # had, and QUAL-003 went round that loop for 1,600 calls. Tests go back at once; live failures settle first.
+    marker = os.path.join(IMPLEMENTED, f"{code}.md")
+    live_only = all("test:" not in line for line in failing)
+    if live_only and os.path.exists(marker) and time.time() - os.path.getmtime(marker) < LIVE_SETTLE_SECONDS:
+        print(f"{code}: its live proof fails, but the cohort has had under {LIVE_SETTLE_SECONDS // 60} min on this change; stays delivered")
         return 0
     connection = sqlite3.connect(TASKS_DB, timeout=30)
     connection.execute("update tasks set status='todo', assignee=null, updated_at=datetime('now') "

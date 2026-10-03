@@ -207,9 +207,18 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       fi
     done
     if [ -n "$due" ]; then
-      for universe in ${HARNESS_UNIVERSES:-grand}; do
-        (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc "cd /var/www && php artisan queue:restart") || true
+      # Workers are restarted onto new code only when a row was delivered since the last restart; a re-proof
+      # of the same code every 20 minutes restarted them for nothing and added to the backlog it then read.
+      restart=0
+      for code in $due; do
+        [ ! -f /tmp/harness-last-restart ] || [ "plan/research/ogame/implemented/$code.md" -nt /tmp/harness-last-restart ] && restart=1
       done
+      if [ "$restart" = 1 ]; then
+        touch /tmp/harness-last-restart
+        for universe in ${HARNESS_UNIVERSES:-grand}; do
+          (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-app sh -lc "cd /var/www && php artisan queue:restart") || true
+        done
+      fi
       for code in $(printf '%s\n' $due | head -n "${HARNESS_BATCH:-10}"); do
         echo "--- proving $code $(date -u '+%F %T') UTC ---"
         if ! python3 plan/tasks/task.py done "$code"; then
