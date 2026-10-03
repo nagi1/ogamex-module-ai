@@ -109,6 +109,7 @@ class NativeRaidEstimator
             'p20NetProfit' => $this->lowerQuantile($sampled['netProfits'], 0.2),
             'p20Loot' => $this->lowerQuantile($sampled['loots'], 0.2),
             'pWin' => $sampled['survived'] / max(1, count($sampled['netProfits'])),
+            'p20Debris' => $this->lowerQuantile($sampled['debris'], 0.2),
         ]);
     }
 
@@ -117,12 +118,13 @@ class NativeRaidEstimator
      * the P20 loot (worth-flying) and the survived-run count (fleet survival)
      * from identical draws — never a second pass.
      *
-     * @return array{netProfits: list<float>, loots: list<float>, survived: int}
+     * @return array{netProfits: list<float>, loots: list<float>, debris: list<float>, survived: int}
      */
     private function sample(BattleEngine $engine, int $seed, int $samples): array
     {
         $netProfits = [];
         $loots = [];
+        $debris = [];
         $survived = 0;
 
         for ($i = 0; $i < $samples; $i++) {
@@ -131,6 +133,7 @@ class NativeRaidEstimator
             $result = $engine->simulateBattle($seed + $i, true);
 
             $loots[] = $this->metalEquivalent($result->loot);
+            $debris[] = isset($result->debris) ? $this->metalEquivalent($result->debris) : 0.0;
             $netProfits[] = $loots[$i] - $this->metalEquivalent($result->attackerResourceLoss);
 
             // getAmount(), not ->units === []: the round sanitizer keeps
@@ -138,7 +141,7 @@ class NativeRaidEstimator
             $survived += $result->attackerUnitsResult->getAmount() > 0 ? 1 : 0;
         }
 
-        return ['netProfits' => $netProfits, 'loots' => $loots, 'survived' => $survived];
+        return ['netProfits' => $netProfits, 'loots' => $loots, 'debris' => $debris, 'survived' => $survived];
     }
 
     /**

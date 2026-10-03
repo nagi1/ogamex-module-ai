@@ -54,4 +54,28 @@ enum AiSkillBand: int
             self::Veteran => 0.01,
         };
     }
+
+    /**
+     * The share of simulated runs a raiding fleet must survive. A novice only flies when the odds
+     * are nearly safe; a veteran accepts a fight a fifth of which it loses, because it has read the
+     * simulation rather than feared it.
+     */
+    public function raidSurvivalFloor(): float
+    {
+        return match ($this) {
+            self::Novice => 0.9,
+            self::Standard => 0.8,
+            self::Veteran => 0.7,
+        };
+    }
+
+    /** How many runs the confirming simulation draws: a veteran checks a launch harder than a novice does. */
+    public function raidConfirmSamples(): int
+    {
+        return match ($this) {
+            self::Novice => 10,
+            self::Standard => 30,
+            self::Veteran => 50,
+        };
+    }
 }
