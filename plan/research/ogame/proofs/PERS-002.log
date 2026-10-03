@@ -1,0 +1,3 @@
+PASS test:PersonaDecompositionTest 2s
+PASS aspect:economy 0s
+PROOF: PASS PERS-002 (test:PersonaDecompositionTest aspect:economy)

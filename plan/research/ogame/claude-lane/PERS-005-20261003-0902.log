@@ -1,0 +1,5 @@
+**Changed:** `DefenseCompositionPlanner` was already in place. The live `NAKED_BESIDE_WALLED` failure was player 35's planet 596: 22k metal, 116 deuterium, no robotics factory, so it couldn't afford the yard its wall needs. The ferry skipped it because its 50k metal+crystal shipment floor ignored a deuterium-only gap. I added `QueueableTransferPlanner::wallNeed`, which ferries a bare planet beside a walled sibling the first wall-prerequisite shortfall regardless of that floor. Commit `9038885`, with new test `NakedColonyFerryTest`.
+
+**Proof:** Live `prove PERS-005` was run before the change: `NAKED_BESIDE_WALLED` fails (player 35, one planet at zero defence), `WALL_CEILING` and `aspect:shipyard` pass. `NakedColonyFerryTest`, `TransferDepthTest`, `TransferObservationTest`, `NakedPlanetWallFirstTest` and `gate` pass. I haven't re-run the live proof since the change.
+
+**Left:** The row is `blocked` as a placeholder for cohort time (there was no `delivered` status or `note` command). Once the workers have run the new code for an hour, run `prove PERS-005`, then `task.py done PERS-005`. This also helps PERS-004, which waits on the same `NAKED_BESIDE_WALLED` check.

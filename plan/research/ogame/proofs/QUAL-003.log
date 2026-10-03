@@ -1,1 +1,3 @@
-PROOF: PASS QUAL-003 (invariant:NAKED_BESIDE_WALLED aspect:shipyard)
+FAIL invariant:NAKED_BESIDE_WALLED 13s —  ! [NAKED_BESIDE_WALLED] player 35: 1 planet(s) at zero defence while one holds 1,219 units
+PASS aspect:shipyard 0s
+PROOF: FAIL QUAL-003 (invariant:NAKED_BESIDE_WALLED aspect:shipyard) at invariant:NAKED_BESIDE_WALLED:  ! [NAKED_BESIDE_WALLED] player 35: 1 planet(s) at zero defence while one holds 1,219 units

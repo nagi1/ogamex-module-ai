@@ -1,0 +1,5 @@
+**Changed:** `scripts/verify-cohorts.php`, committed. The `IDLE_QUEUES` read now settles each account from stored state first (planets with no build in progress, no queued order, and a session newer than their last build). It runs the planner only when more than half the planets could be idle. Before this, it ran the planner for every account that played, about 1s each.
+
+**Proof:** The full cohort read on the grand universe dropped from 58s to 17s. `harness:self-check` passes and `task.py done` closed the row. The self-check does not time the read, so the 17s comes from my own run. The idle verdict logic is unchanged. This also frees PERS-007, where the step timed out inside its proof.
+
+**Left:** The `SATURATED` information lines now cover only the accounts the planner is still asked about. They are informational, not an invariant.

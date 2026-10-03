@@ -1,0 +1,5 @@
+**What changed:** I made no code change and committed nothing. The wall-prerequisite pass (`wallPending` in `FacilityChain`) that a writer left uncommitted already fixes the cause. A colony now gets the facilities its wall waits on before the wall. Observers should see every planet, colonies included, holding some defence after a day of play. The row moves aspect `shipyard`.
+
+**Proof verdict:** Fail, and the row stays open. `NakedBesideWalledPoorSiblingTest` now passes, and the live invariant went from five accounts to one. Player 35 still has one planet at zero defence. That planet, p275, is mid-climb: the economy report says it would queue a shipyard next.
+
+**What is left:** I marked the row `blocked` with a note and released the claim. Re-run `bash scripts/ogamex prove QUAL-003` after the cohort has played a few hours, and if player 35 still fails, read `ogamex economy 35`. The `FacilityChain` and `ScheduleAiIntentAction` edits are still uncommitted and mixed with other rows' work, so they should be committed with the rows that own them. This frees no other rows.

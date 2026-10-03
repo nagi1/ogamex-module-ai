@@ -1,0 +1,7 @@
+PERS-007 is closed and committed. The aspect it moves is the economy: a planet no longer sits idle while called buildable. A goal-saving account keeps building with what its reserve leaves over. A bare planet gets its wall facilities even while a saving is held. A planet whose shipyard is busy moves on to its next candidate instead of wasting its step on a refused order.
+
+I changed `QueueableBuildingPlanner.php` and `SavingsGoal.php`. `FacilityChain.php` also has uncommitted edits, which I left alone because the war-hull ordering in it isn't part of this row.
+
+`task.py done PERS-007` passed all three steps (`test:EveryPlanetBuildsSessionSituationTest`, `aspect:economy`, `invariant:IDLE_QUEUES`), and the gate is clean. The `QueueableBuildingPlanner` test-one filter found no tests, so the planner is covered only by the situation test and the proof.
+
+Nothing is left on this row, but the ledger shows `IDLE_QUEUES` reopened it several times before, so check the next cohort read. This frees no other rows.

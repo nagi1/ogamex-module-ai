@@ -1,0 +1,3 @@
+Nothing changed in code: another agent already holds the one file this fix belongs in, so I stopped. The row moves the `work_failures` aspect: accounts would stop queueing a station upgrade while ships or defence are in production.
+Proof was not run. The cause is that `QueueableBuildingPlanner::refusal()` never asked the host's `isObjectUpgradeBlocked`, so planners offered upgrades that `QueueAiBuildingAction` then refused. The uncommitted PERS-007 diff in that file already adds a "shipyard busy" refusal in `refusal()`, but `lock` said another agent is editing the file.
+I unclaimed and blocked the row with a note. Once PERS-007 commits, someone needs to add a situation test for the shipyard-busy case and check `bash scripts/ogamex stuck` for `shipyard_busy`.

@@ -1,0 +1,3 @@
+I changed no code. The row was stale: commit 2630e50 had already cut `verify-cohorts.php` from 58s to 17s. The `invariant:NAKED_BESIDE_WALLED` step in QUAL-003's proof now runs in 13s, under the 60s limit. This was a harness row, so it moves no aspect of play.
+Proof: `harness:self-check` passes, and `task.py done FAST-invariant-NAKED-BESIDE-WALLED` accepted the row.
+QUAL-003 itself is still open. Its invariant step now fails on a real violation: player 35 has 1 planet at zero defence while another holds 1,219 units. PERS-005 is the open fix for that, so I left it alone.

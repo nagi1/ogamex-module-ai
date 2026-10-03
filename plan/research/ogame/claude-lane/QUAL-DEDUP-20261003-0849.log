@@ -1,0 +1,5 @@
+**Changed:** I merged the near-duplicate wall tests into `NakedBesideWalledSituationTest` and committed as 286b475. I deleted 22 files and kept five. The merged file has 10 stories, `NakedPlanetWallFirstTest` still proves the prerequisite-yard-first rule, and the every-sibling and poor-colony tests stay as separate stories. This is test hygiene, so it frees no other rows.
+
+**Proof:** `done` refused. `invariant:NAKED_BESIDE_WALLED` still fails live: player 35 has a planet at zero defence while another holds 1,219 units. The 13 tests that name the touched stories pass and `gate` is clean. That failure is the live behaviour QUAL-003 is meant to fix, not a test problem.
+
+**Left:** I set the row to `blocked` with a note to re-run `done` once QUAL-003 changes that live behaviour. The proof gates a cleanup row on a behaviour invariant, so you may want to move it to QUAL-003.

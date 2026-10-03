@@ -1,0 +1,2 @@
+PASS harness:self-check 0s
+PROOF: PASS FAST-invariant-IDLE-QUEUES (harness:self-check)

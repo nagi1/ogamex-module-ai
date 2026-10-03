@@ -1,0 +1,10 @@
+**What changed:** I found the cause in the spy planner, not the raid planner, and fixed it in `QueueableSpyPlanner` (commit `f0bc954`). It skipped every body with a fresh planet update stamp. In a running universe that is all 100 cohort accounts, so scouting only ever reached the fixed farm accounts. In the last 24 hours there were 960 espionage reports and 1 on a cohort account.
+- It now ranks quiet bodies first and reads active ones after, as a player would.
+- It also filters out debris fields and vacationers in the candidate query.
+- This is the "raids fight" aspect: an observer should see accounts probe and then raid other accounts that have fleets and defence, which gives combat rounds and debris.
+- It also unblocks the LIFE-MOONS invariant, which needs debris, though I didn't check that one.
+
+**Proof:** `invariant:LIFE_FIGHTS` still fails (115 of 1,017 battles had combat rounds, 11%). That is expected, because the measure is a rolling 24 hours that predates the fix. `SpyDepthTest`, `ColonySpyExecutorTest`, `ExecuteIntentTest`, `ActivityIntelReaderTest`, `SensorPhalanxTest`, `InactiveNeighbourSituationTest` and `gate` pass.
+- `RaidDepthTest` fails 7 tests and one `CoverageCompletionTest` raid-planner test fails, all with `Class "FFI" not found` in the test container, so the Rust battle engine can't run there. I didn't touch that path and didn't check whether they failed before my change.
+
+**What is left:** the row is blocked with a note, not closed, because `task.py` has no note-only command. After about 24 hours of play, run `bash scripts/ogamex prove LIFE-001` and check the share of reports whose `planet_user_id` is a cohort account, then unblock. If cohort reports appear but raids on them don't, the cause is `RaidPlanner` or `score_viable`.

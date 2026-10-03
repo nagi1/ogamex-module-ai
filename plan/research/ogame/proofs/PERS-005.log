@@ -1,0 +1,4 @@
+PASS invariant:WALL_CEILING 16s
+FAIL invariant:NAKED_BESIDE_WALLED 12s —  ! [NAKED_BESIDE_WALLED] player 35: 1 planet(s) at zero defence while one holds 1,219 units
+PASS aspect:shipyard 1s
+PROOF: FAIL PERS-005 (invariant:WALL_CEILING invariant:NAKED_BESIDE_WALLED aspect:shipyard) at invariant:NAKED_BESIDE_WALLED:  ! [NAKED_BESIDE_WALLED] player 35: 1 planet(s) at zero defence while one holds 1,219 units

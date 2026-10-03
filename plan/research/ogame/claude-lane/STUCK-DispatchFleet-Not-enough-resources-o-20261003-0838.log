@@ -1,0 +1,8 @@
+The planner now skips ferries the source can't fuel. I couldn't confirm that was the cause because tinker printed nothing, so I inferred it from the code, which matches the symptom. The row is closed, but the proof only checks the refusal-rate floor, so it doesn't show the fix worked.
+
+- **What changed:** `QueueableTransferPlanner` no longer offers a transfer when the source's own deuterium can't pay the flight's fuel. `QueueAiTransferAction` now gets the fuel figure from a public `flightFuel` and returns a typed `SourceShortAtDispatch` refusal instead of a host exception. I changed one existing test to expect no plan for a source with empty tanks, and gave the colony in the surplus-ferry test 20k deuterium. Both are in `tests/Feature/TransferDepthTest.php`, which passes 24/24 and `gate` is clean. Transfers now only start when the source holds the fuel, as a player would.
+- **Proof:** `task.py done` accepted the row on `aspect:work_failures` (PASS), committed with the trailer. The 120-minute stuck counters still show the old refusals, so that PASS says little about this fix.
+- **What's left:**
+  - Read `bash scripts/ogamex stuck` in about two hours to see whether the Transfer refusals stop.
+  - Account 78's `CreateColony` refusal ("not enough resources", 21 attempts) comes from the colonise planner, not transfers, and I didn't touch it.
+  - The scorecard shows recycle, fleet_save and alliance still failing.

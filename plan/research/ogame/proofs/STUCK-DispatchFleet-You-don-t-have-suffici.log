@@ -1,0 +1,3 @@
+PASS test:TransferDepthTest 4s
+PASS aspect:work_failures 1s
+PROOF: PASS STUCK-DispatchFleet-You-don-t-have-suffici (test:TransferDepthTest aspect:work_failures)

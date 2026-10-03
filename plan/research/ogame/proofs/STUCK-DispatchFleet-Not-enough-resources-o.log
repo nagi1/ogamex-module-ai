@@ -1,0 +1,2 @@
+PASS aspect:work_failures 0s
+PROOF: PASS STUCK-DispatchFleet-Not-enough-resources-o (aspect:work_failures)

@@ -1,0 +1,4 @@
+Row QUAL-003 is committed but not closed: the proof still fails. It moves the `shipyard` aspect and the NAKED_BESIDE_WALLED invariant, and no other rows are freed.
+- **Changed:** I committed the pending wall pass in `FacilityChain` and `ScheduleAiIntentAction` (5f90d89). A bare colony now gets the facilities its wall waits on before its next routine build. `NakedBesideWalled*` passes 13/13 and live went from 5 accounts to 1.
+- **Proof:** FAIL. `aspect:shipyard` passes, but `invariant:NAKED_BESIDE_WALLED` fails for player 35: 1 planet at zero defence while another holds 1,219 units. Its p275 is idle and would queue the research lab, so it is still climbing.
+- **Left:** I marked the row blocked, because `task.py` has no way to leave it delivered. Re-run `bash scripts/ogamex prove QUAL-003` after a few cohort hours. If player 35 still fails, read `ogamex economy 35`.
