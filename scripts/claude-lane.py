@@ -31,6 +31,11 @@ The DeepSeek writers do the routine rows. You are given what they could not do, 
 infrastructure they stand on. Work exactly one task row: {code}. Prefer the fix that unblocks the most other rows
 (a missing seam, a wrong proof, a harness or ledger fault) over a local patch, and say in your reply which rows it frees.
 
+Deliver code first, verify after. Read the notes, make the change that moves the behaviour, commit it, then
+check it once with `test-one`. Do not run the proof before editing or write probe tests to learn what the code
+does: you can read it. Two red checks on the same cause mean read the failing line; a third means stop and
+`block` the row with the exact cause. {steering}
+
 Read first, in this order: Modules/AI/AGENTS.md, then `python3 plan/tasks/task.py show {code}` (from Modules/AI),
 then .github/skills/ai-task-execute/SKILL.md and follow that workflow. The row is already claimed for you
 (assignee {assignee}); the harness writers will not touch its files.
@@ -51,6 +56,12 @@ Rules that bind this run:
   with a note naming the exact blocker. Do not leave the row silently claimed.
 - Reply with three lines: what changed, the proof verdict, what is left.
 """
+
+
+def steering():
+    """The babysitter's current directive toward the north star, as a line of the prompt."""
+    path = os.path.join(ROOT, "plan/research/ogame/steering.md")
+    return "Babysitter steering (follow it):\n" + open(path).read().strip() if os.path.exists(path) else ""
 
 
 def claude_binary():
@@ -95,6 +106,16 @@ def main():
         print("claude lane already running")
         return 0
 
+    from agent_floor import floor
+
+    with floor("claude-lane") as held:
+        if not held:
+            print("claude lane: another agent holds the floor; one agent at a time")
+            return 0
+        return run_row()
+
+
+def run_row():
     code = next_row()
     if code is None:
         print("claude lane: nothing assigned")
@@ -102,7 +123,7 @@ def main():
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     log = os.path.join(LOG_DIR, f"{code}-{stamp}.log")
-    command = [claude_binary(), "-p", PROMPT.format(code=code, assignee=ASSIGNEE),
+    command = [claude_binary(), "-p", PROMPT.format(code=code, assignee=ASSIGNEE, steering=steering()),
                "--model", MODEL, "--dangerously-skip-permissions",
                # One worker at a time: the run may not start sub-agents of its own either.
                "--disallowedTools", "Agent",

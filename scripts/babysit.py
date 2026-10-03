@@ -368,6 +368,49 @@ def run_claude_lane(actions):
     actions.append("started a claude lane run")
 
 
+STEERING = os.path.join(ROOT, "plan/research/ogame/steering.md")
+
+
+def steer(actions, verdict, failing, loops, passing, total):
+    """Write the directive every agent reads at the start of a row: where the north star is, what to move next.
+
+    The north star is accounts a player cannot tell from experienced humans, measured by the scorecard's
+    aspects. The babysitter does not edit code; it names the failing aspects, the open rows whose proof
+    moves them, the rows to stop circling, and the rule that code lands before it is proven.
+    """
+    con = sqlite3.connect(DB)
+    lines = [f"North star: accounts nobody can tell from experienced humans. Scorecard {passing}/{total} aspects pass; "
+             f"last {WINDOW_MIN} min: {verdict}."]
+    targets = []
+    for aspect in failing[:5]:
+        rows = [r[0] for r in con.execute(
+            "select code from tasks where kind='impl' and status in ('todo','in_progress') and proof like ? "
+            "order by priority, id limit 3", (f"%aspect:{aspect}%",))]
+        targets.append(f"- {aspect} fails" + (f": rows {', '.join(rows)} move it; take those before anything else." if rows
+                                              else ": no open row moves it; say so in your notes instead of inventing one."))
+    if targets:
+        lines += ["Move these first (a failing aspect is an account that visibly plays wrong):"] + targets
+    for code, n, why in loops[:3]:
+        lines.append(f"- STOP circling {code} (reopened {n}x: {why}). More proof runs will not fix it; change the code that "
+                     "owns the decision, or block the row naming the cause.")
+    lines += ["Rules: deliver the code change first, then check once; never write probe tests or re-run a proof to learn what "
+              "the code does; a row that fails the same check twice is read, not re-run; one agent in the tree at a time."]
+    if verdict == "STALLED":
+        lines.append("The last hour landed no code. Stop reading; make an edit in the first few calls of your row.")
+    text = "\n".join(lines) + "\n"
+    if not os.path.exists(STEERING) or open(STEERING).read() != text:
+        open(STEERING, "w").write(text)
+        actions.append(f"steering updated: {len(targets)} failing aspect(s) named, {min(len(loops), 3)} looping row(s) flagged")
+
+
+def one_agent(actions):
+    """Two agents in the tree is a fault: say which, the floor lock (scripts/agent_floor.py) keeps it from recurring."""
+    names = subprocess.run(["pgrep", "-fa", r"scripts/(claude-lane|strategy-pipeline)\.py"], capture_output=True, text=True).stdout
+    running = [l for l in names.splitlines() if "claude-lane.py" in l or " implement " in l]
+    if len(running) > 1:
+        actions.append(f"{len(running)} agents were running at once; the floor lock lets only one work, the rest leave")
+
+
 def reopen_churn(actions):
     """A row that is done, reopened and done again is the harness going in circles, not delivering."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -412,6 +455,8 @@ def main():
 
     advancing = bool(done) or code_lines > 0 or moved
     verdict = "ADVANCING" if advancing else "STALLED"
+    steer(actions, verdict, failing, loops, passing, total)
+    one_agent(actions)
     print(f"BABYSIT {datetime.now(timezone.utc):%H:%M}Z {verdict} (last {WINDOW_MIN} min)")
     print(f"  delivered rows: {len(done)} {' '.join(done)}")
     print(f"  commits: {code_lines} code/test/behaviour lines vs {other_lines} other lines")
