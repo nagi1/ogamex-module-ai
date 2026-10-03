@@ -325,6 +325,26 @@ test('a ferry the host refuses for fuel is reported, not thrown', function (): v
     expect($result->successful)->toBeFalse();
 });
 
+// A fleet padded with combat hulls burns more fuel than its tanks hold; the ferry loads cargo ships first.
+test('the ferry takes cargo hulls before combat hulls that also have a hold', function (): void {
+    transferProfile($this->currentUserId);
+    $targetId = transferTarget($this->secondPlanetService);
+    transferSource();
+    $this->planetAddUnit('cruiser', 300);
+    $this->planetAddUnit('large_cargo', 80);
+
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $targetId, 200_000, 200_000, 0);
+
+    $mission = FleetMission::query()
+        ->where('mission_type', \OGame\GameMissions\TransportMission::getTypeId())
+        ->latest('id')
+        ->first();
+
+    expect($result->successful)->toBeTrue($result->reason)
+        ->and($mission?->cruiser)->toBe(0)
+        ->and($mission?->large_cargo)->toBeGreaterThan(0);
+});
+
 // A hull with no cargo hold at all is skipped by the ferry loop rather than counted as capacity.
 test('a hull with no cargo hold is never taken on a ferry', function (): void {
     transferProfile($this->currentUserId);

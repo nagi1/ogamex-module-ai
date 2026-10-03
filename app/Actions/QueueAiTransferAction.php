@@ -10,6 +10,7 @@ use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\TransportMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
@@ -69,6 +70,10 @@ class QueueAiTransferAction implements QueueAiTransfer
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+            if ($fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED) > $fleet->getTotalFuelCapacity($player)) {
+                return AiActionResult::rejected(AiQueueActionReason::NoTransportFleet);
+            }
+
             $shipment = $this->leavingFuelBehind($source, $shipment, $fleet, $target, $fleetMissions);
 
             $mission = $fleetMissions->createNewFromPlanet(
@@ -168,11 +173,8 @@ class QueueAiTransferAction implements QueueAiTransfer
             return null;
         }
 
-        foreach ($source->getShipUnits()->units as $entry) {
+        foreach ($this->holdsByCapacity($player, $source) as $entry) {
             $capacity = $entry->unitObject->properties->capacity->calculate($player)->totalValue;
-            if ($capacity <= 0) {
-                continue;
-            }
 
             $amount = min((int) ceil($remaining / $capacity), $entry->amount);
 
@@ -184,5 +186,25 @@ class QueueAiTransferAction implements QueueAiTransfer
         }
 
         return null;
+    }
+
+    /**
+     * Biggest holds first: a player ferries with cargo ships, and a fleet padded with fighters
+     * burns more deuterium than its own tanks carry, which the host refuses as storage capacity.
+     *
+     * @return array<UnitEntry>
+     */
+    private function holdsByCapacity(PlayerService $player, PlanetService $source): array
+    {
+        $entries = [];
+        foreach ($source->getShipUnits()->units as $entry) {
+            $capacity = $entry->unitObject->properties->capacity->calculate($player)->totalValue;
+            if ($capacity > 0) {
+                $entries[] = [$capacity, $entry];
+            }
+        }
+        usort($entries, static fn (array $a, array $b): int => $b[0] <=> $a[0]);
+
+        return array_map(static fn (array $pair) => $pair[1], $entries);
     }
 }
