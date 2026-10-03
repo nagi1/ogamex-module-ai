@@ -14,6 +14,7 @@ use Modules\AI\Contracts\QueueAiRecycle;
 use Modules\AI\Contracts\QueueAiResearch;
 use Modules\AI\Contracts\QueueAiSpy;
 use Modules\AI\Contracts\QueueAiDefend;
+use Modules\AI\Contracts\QueueAiJumpGate;
 use Modules\AI\Contracts\QueueAiRelocation;
 use Modules\AI\Contracts\QueueAiTrade;
 use Modules\AI\Contracts\QueueAiTransfer;
@@ -36,6 +37,8 @@ use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Domain\Decision\QueueableDefend;
 use Modules\AI\Domain\Decision\QueueableDefendPlanner;
+use Modules\AI\Domain\Decision\QueueableJumpGate;
+use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
 use Modules\AI\Domain\Decision\QueueableRelocation;
 use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableTrade;
@@ -130,6 +133,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Defend => $this->defend($workItem, $planetId),
             AiWorkKind::Trade => $this->trade($workItem, $planetId),
             AiWorkKind::Relocate => $this->relocate($workItem, $planetId),
+            AiWorkKind::JumpGate => $this->jumpGate($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -510,6 +514,27 @@ class ExecuteAiIntentAction
             app(QueueAiTrade::class)->handle($workItem->player_id, $step->planetId, $step->giveResource, $step->receiveResource, $step->giveAmount),
             ['give_resource' => $step->giveResource, 'receive_resource' => $step->receiveResource, 'give_amount' => $step->giveAmount],
             $step->planetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function jumpGate(AiWorkItem $workItem, int $planetId): array
+    {
+        $step = $this->fromPayload(QueueableJumpGate::class, [
+            'sourceMoonId' => $workItem->payload[self::PAYLOAD_SOURCE_PLANET_ID] ?? null,
+            'targetMoonId' => $workItem->payload[self::PAYLOAD_TARGET_PLANET_ID] ?? null,
+        ]) ?? app(QueueableJumpGatePlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueableJumpGate) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiJumpGate::class)->handle($workItem->player_id, $step->sourceMoonId, $step->targetMoonId),
+            ['source_planet_id' => $step->sourceMoonId, 'target_planet_id' => $step->targetMoonId],
+            $step->sourceMoonId,
         ];
     }
 

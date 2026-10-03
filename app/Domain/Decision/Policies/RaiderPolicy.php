@@ -17,6 +17,7 @@ class RaiderPolicy extends ConfiguredArchetypePolicy
         AiCandidateActionType::Defend->value => 0.4,
         AiCandidateActionType::Trade->value => 0.3,
         AiCandidateActionType::Relocate->value => 0.3,
+        AiCandidateActionType::JumpGate->value => 0.3,
     ];
 
     public function archetype(): AiArchetype

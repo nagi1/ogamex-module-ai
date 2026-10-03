@@ -16,6 +16,7 @@ class TraderPolicy extends ConfiguredArchetypePolicy
         AiCandidateActionType::Defend->value => 0.3,
         AiCandidateActionType::Trade->value => 1.0,
         AiCandidateActionType::Relocate->value => 0.4,
+        AiCandidateActionType::JumpGate->value => 0.2,
     ];
 
     public function archetype(): AiArchetype

@@ -34,4 +34,14 @@ final class MarketRatioBand
 
         return true;
     }
+
+    /**
+     * Whether one rate the merchant quotes sits inside the band around the host's base rate for it.
+     */
+    public function rateInBand(float $rate, float $baseRate): bool
+    {
+        $band = (float) Yaml::parseFile(dirname(__DIR__, 3) . self::BEHAVIOR_FILE)['offer_band_percent'] / 100;
+
+        return $baseRate > 0.0 && abs($rate - $baseRate) / $baseRate <= $band;
+    }
 }

@@ -25,6 +25,7 @@ class CandidateActionFactory
         private readonly QueueableDefendPlanner $queueableDefendPlanner,
         private readonly QueueableTradePlanner $queueableTradePlanner,
         private readonly QueueableRelocationPlanner $queueableRelocationPlanner,
+        private readonly QueueableJumpGatePlanner $queueableJumpGatePlanner,
     ) {
     }
 
@@ -45,6 +46,7 @@ class CandidateActionFactory
                 ...$this->eligibleDefendCandidates($perception),
                 ...$this->eligibleTradeCandidates($perception),
                 ...$this->eligibleRelocationCandidates($perception),
+                ...$this->eligibleJumpGateCandidates($perception),
                 ...$this->eligibleRecycleCandidates($perception),
                 ...$this->phalanxCandidate($perception)->candidates,
                 ...$raidGeneration->candidates,
@@ -242,6 +244,22 @@ class CandidateActionFactory
         ])];
     }
 
+    /** @return array<int, CandidateAction> A jump needs no fleet slot: a gate-moon under threat, a ready partner and ships to carry. */
+    private function eligibleJumpGateCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($this->queueableJumpGatePlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::JumpGate,
+            'reason' => AiCandidateReason::EligibleJumpGate->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::JumpGate, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
     /** @return array<int, CandidateAction> A merchant call needs no fleet slot, only dark matter and an overflow beside a shortage. */
     private function eligibleTradeCandidates(PerceptionSnapshot $perception): array
     {
@@ -428,6 +446,8 @@ class CandidateActionFactory
             AiCandidateActionType::Trade => [0.8, 0.3, 0.0, 0.0],
             // A move the account can already pay for and that never stops improving the planet: a slow errand.
             AiCandidateActionType::Relocate => [0.6, 0.3, 0.0, 0.0],
+            // A fleet standing at a threatened moon can leave at once: as pressing as a save.
+            AiCandidateActionType::JumpGate => [1.0, 0.2, 0.0, 0.0],
             // The planner has already proved this raid pays, so it is as pressing as a full store.
             AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],
             default => [$resourceNeed, 0.2, 0.0, 0.0],

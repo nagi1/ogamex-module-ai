@@ -16,6 +16,7 @@ class CasualPolicy extends ConfiguredArchetypePolicy
         AiCandidateActionType::Defend->value => 0.2,
         AiCandidateActionType::Trade->value => 0.3,
         AiCandidateActionType::Relocate->value => 0.1,
+        AiCandidateActionType::JumpGate->value => 0.2,
     ];
 
     public function archetype(): AiArchetype

@@ -24,6 +24,8 @@ use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Domain\Decision\QueueableDefend;
 use Modules\AI\Domain\Decision\QueueableDefendPlanner;
+use Modules\AI\Domain\Decision\QueueableJumpGate;
+use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
 use Modules\AI\Domain\Decision\QueueableRelocation;
 use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableTrade;
@@ -127,6 +129,7 @@ class ScheduleAiIntentAction
         private QueueableDefendPlanner $queueableDefendPlanner,
         private QueueableTradePlanner $queueableTradePlanner,
         private QueueableRelocationPlanner $queueableRelocationPlanner,
+        private QueueableJumpGatePlanner $queueableJumpGatePlanner,
         private RaidPlanner $raidPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
         private AiClock $clock,
@@ -250,6 +253,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Defend => $this->scheduleDefend($profile, $sessionWorkItem),
             AiCandidateActionType::Trade => $this->scheduleTrade($profile, $sessionWorkItem),
             AiCandidateActionType::Relocate => $this->scheduleRelocation($profile, $sessionWorkItem),
+            AiCandidateActionType::JumpGate => $this->scheduleJumpGate($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
 
@@ -602,6 +606,20 @@ class ScheduleAiIntentAction
             'receive_resource' => $plan->receiveResource,
             self::PAYLOAD_AMOUNT => $plan->giveAmount,
             self::PAYLOAD_REASON => 'trade:' . $plan->planetId . ':' . $plan->giveResource,
+        ]);
+    }
+
+    private function scheduleJumpGate(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableJumpGatePlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableJumpGate) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::JumpGate, [
+            self::PAYLOAD_SOURCE_PLANET_ID => $plan->sourceMoonId,
+            self::PAYLOAD_TARGET_PLANET_ID => $plan->targetMoonId,
+            self::PAYLOAD_REASON => 'jump_gate:' . $plan->sourceMoonId,
         ]);
     }
 

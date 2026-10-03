@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiTrade;
+use Modules\AI\Domain\Market\MarketRatioBand;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -52,6 +53,11 @@ class QueueAiTradeAction implements QueueAiTrade
             ]);
 
             $rate = (float) ($called['tradeRates']['receive'][$receiveResource]['rate'] ?? 0.0);
+            // An offer outside the documented band around the base rate is not taken (WIK-226); the
+            // merchant stays called for the next pass.
+            if (!app(MarketRatioBand::class)->rateInBand($rate, MerchantService::getBaseRate($receiveResource))) {
+                return AiActionResult::rejected(AiQueueActionReason::NothingQueueable);
+            }
             $desired = (int) floor($giveAmount * $rate / MerchantService::getBaseRate($giveResource));
             if ($desired <= 0) {
                 return AiActionResult::rejected(AiQueueActionReason::NothingQueueable);

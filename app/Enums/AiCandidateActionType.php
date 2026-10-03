@@ -25,4 +25,5 @@ enum AiCandidateActionType: int
     case Defend = 16;
     case Trade = 17;
     case Relocate = 18;
+    case JumpGate = 19;
 }

@@ -54,30 +54,56 @@ class QueueablePhalanxPlanner
         }
 
         $player ??= $this->playerServiceFactory->make($playerId, true);
-        $moon = $this->phalanxMoon($playerId, $player);
-        if ($moon === null) {
-            return null;
+        // Every phalanx moon is tried (WIK-096): the first one may have nothing in range while another
+        // sees the target. A moon with no fresh report in range then scans its own system.
+        foreach ($this->phalanxMoons($playerId, $player) as [$moonModel, $phalanxLevel]) {
+            $selection = $this->scanTarget($playerId, $moonModel, $phalanxLevel);
+            $targetPlanetId = $selection[1] ?? $this->systemTarget($playerId, $moonModel, $phalanxLevel);
+            if ($targetPlanetId === null) {
+                continue;
+            }
+
+            return app()->makeWith(QueueablePhalanx::class, [
+                'moonPlanetId' => (int) $moonModel->id,
+                'targetPlanetId' => $targetPlanetId,
+            ]);
         }
 
-        [$moonModel, $phalanxLevel] = $moon;
-        $selection = $this->scanTarget($playerId, $moonModel, $phalanxLevel);
-        if ($selection === null) {
-            return null;
-        }
-
-        return app()->makeWith(QueueablePhalanx::class, [
-            'moonPlanetId' => (int) $moonModel->id,
-            'targetPlanetId' => $selection[1],
-        ]);
+        return null;
     }
 
     /**
-     * The account's first owned moon that carries a sensor phalanx.
-     *
-     * @return array{0: Planet, 1: int}|null [moon model, phalanx level]
+     * A not-yet-scanned planet of another player in the moon's own system, inside the host's range.
      */
-    private function phalanxMoon(int $playerId, PlayerService $player): ?array
+    private function systemTarget(int $playerId, Planet $moon, int $phalanxLevel): ?int
     {
+        $candidates = Planet::query()
+            ->where('galaxy', $moon->galaxy)
+            ->where('system', $moon->system)
+            ->where('planet_type', PlanetType::Planet->value)
+            ->where('user_id', '!=', $playerId)
+            ->orderBy('planet')
+            ->get();
+
+        foreach ($candidates as $candidate) {
+            $coordinate = new Coordinate($candidate->galaxy, $candidate->system, $candidate->planet);
+            if ($this->phalanx->canScanTarget($moon->galaxy, $moon->system, $phalanxLevel, $coordinate, $playerId)
+                && !$this->recentlyScanned($playerId, (int) $candidate->id)) {
+                return (int) $candidate->id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The account's owned moons that carry a sensor phalanx.
+     *
+     * @return list<array{0: Planet, 1: int}> [moon model, phalanx level]
+     */
+    private function phalanxMoons(int $playerId, PlayerService $player): array
+    {
+        $found = [];
         $moons = Planet::query()
             ->where('user_id', $playerId)
             ->where('planet_type', PlanetType::Moon->value)
@@ -88,11 +114,11 @@ class QueueablePhalanxPlanner
             $level = $service->getObjectLevel('sensor_phalanx');
 
             if ($level > 0) {
-                return [$moon, $level];
+                $found[] = [$moon, $level];
             }
         }
 
-        return null;
+        return $found;
     }
 
     /**
