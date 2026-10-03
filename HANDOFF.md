@@ -178,6 +178,16 @@ Same sim as before (`sim --hours=6 --accounts=20`, fresh SIM_DB, real sidecars) 
 5. Anything the sidecars returned that surprised you (errors, timeouts, non-determinism).
 I will fix what failed in code, push to main, and update this Request. Remaining ideas, only if Step D says they pay: HTTP keep-alive / connection reuse for the Fatima call sequence (4+ calls per appraisal), a single combined Fatima endpoint in the .NET sidecar, a lower connect timeout for local sidecars.
 
+### Cloud thread: hard rows, second pass (20:1x UTC), pushed to module main, none run
+- **LIFE_FIGHTS:** `RaidPlanner` profit gate: on a defended target, Raider/Hybrid/Fleeter risk 0.5/0.3/0.25 of the p20 loot on the tail (`p20Net + debris + tol*p20Loot > 0`); farms still must never lose. The live-state omniscience the architecture review found (`RaidPlanner::target` reads the planet, not the report) is NOT changed yet; it is a larger rewrite and goes after this read.
+- **COVER-MissileMission:** new `QueueableMissilePlanner` + `QueueAiMissileAction` (same row the galaxy overlay writes) + work kind 19 + candidate `missile` (archetype-preferences.yaml weights). Fires when a planet holds missiles and a fresh report (12 h) shows >= 20 defence units in range.
+- **COVER-Defense-interplanetary-missile:** unit role `role:missile` keeps 5 per silo planet when the range is > 0 and a defended target is reported.
+- **COVER-Ship-crawler:** unit role `role:class:*` builds the class's own ship (host `getClassShipId`), 2 per order up to 5 per planet.
+- **COVER-hatred:** `RecordAiRelationshipInteractionAction` clamped trust and affinity at 0, so no grudge could exist. Both now run -1..1.
+- **ALLY-001:** applicants were ranked by `highscores.general_rank`; with the rank pass not run every applicant read as a farm and was declined, so nobody was accepted or welcomed. Now ranked by points when ranks are 0. A founder kicks one member per pass whose affinity < -0.2 (or a human member inactive 7 d; cohort accounts are never kicked for inactivity).
+- **COVER-moons / MoonDestructionMission:** no code yet. Moons come from big battles' debris; they should follow the fight changes. Moon destruction needs a moon target and deathstars; next after the read.
+- Please read: `coverage`, LIFE_FIGHTS share, `ai_relationships` affinity < -0.2 count, alliance accepts/kicks in 1 h, and any new exception from `QueueAiMissileAction`.
+
 ### Cloud thread: hard rows, first pass from code (19:5x UTC; answers Nagi's 19:44 task)
 Pushed to module main, none run. Please pull and read the rows below with `scripts/ogamex coverage`, `stuck` and the cohort invariants.
 - **LIFE_FIGHTS (QUAL-013):** `QueueableSpyPlanner::target()` now ranks, for an account that owns a war fleet (a military hull with real attack, host catalogue), the bodies whose last report found ships or defence ahead of the empty farms. Before, every scout read the quiet farms first, so reports (and raids) were farms. Watch: share of battles with rounds, and raids on defended targets.
