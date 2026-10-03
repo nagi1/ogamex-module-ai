@@ -2360,10 +2360,15 @@ def call_line(name, args):
 # same: QUAL-003 spent 1,609 calls in one endless attempt (no failure counter ever moved) writing tests that
 # fail on purpose to print state. Past the budget the writer stops and the row goes to the strong lane with
 # what the writer learned; the lane (Claude Code) decides the design the one-file slice could not.
-ROW_CALL_BUDGET = 80
+ROW_CALL_BUDGET = 250
 # Checks one attempt may spend: each is a full verification, and a writer that fails five of them is
 # circling, so the row goes to the strong lane with what was learned instead of a sixth.
 MAX_CHECKS = 5
+
+
+def routine_row(code):
+    """Rows the claude lane never takes; the babysitter's delegation applies the same rule (lane_reason)."""
+    return code.startswith(("FAST-", "RULE-", "STUCK-", "WIK-", "JEV-")) or code == "QUAL-DEDUP"
 
 
 def row_calls(code):
@@ -2412,8 +2417,12 @@ def write_slice(code, context, working, failure, dropped):
     while True:
         step += 1
         if step % 10 == 1 and row_calls(code) >= ROW_CALL_BUDGET:
-            print(f"  {code} has cost {ROW_CALL_BUDGET}+ calls; handing it to the claude lane")
             save_work(code, working, last_failure)
+            if routine_row(code):
+                # FAST/RULE/STUCK/WIK/JEV rows and test merges are never Claude's (nine rows in ten stay with
+                # DeepSeek): a spent budget there means the brief or the proof is wrong, which is the owner's.
+                return "gave_up", f"{code} spent {ROW_CALL_BUDGET}+ calls and is a routine row: its brief or its proof needs the owner, not Claude"
+            print(f"  {code} has cost {ROW_CALL_BUDGET}+ calls; handing it to the claude lane")
             return "handoff", last_failure
         if in_peak(datetime.datetime.now(datetime.timezone.utc)):
             # An attempt runs for as long as it takes; one started before a window must not bill inside it.
