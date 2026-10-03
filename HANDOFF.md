@@ -51,6 +51,10 @@ Please run, in this order, and report what each prints:
   mentioned the name in its notes. It now prefers the row whose gap_ref, then title, carries the name.
 - Please check on the first cycle: a `prove LIFE-001` log shows `--- simulating 12h` and a `SIM:` line; report the speedup.
 
+- The hourly cohort read in `harness-live.sh` now runs `sim --hours=6 --accounts=30` first (primary verdict, the live read stays below it as
+  the secondary line); `HARNESS_READ_SIM_HOURS=0` turns it off. The babysitter's steering block, which every writer and the Claude lane
+  read, now says to use `sim` / `prove` / `clock-sweep` instead of waiting. Please confirm the log shows `=== simulated read` and its `SIM:` line.
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.

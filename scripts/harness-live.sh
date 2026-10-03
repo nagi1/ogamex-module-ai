@@ -167,6 +167,18 @@ writer() {
       # what a player does that these accounts never do. Both verdicts go to the same quality file.
       cohort_output="$cohort_output
 $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
+      # Primary read: a short simulation on a copy of the cohort, so the verdict judges the current code over real
+      # play-hours instead of whatever the live cohort managed since the last restart. Its QUALITY/PLAY lines come
+      # first, which is the verdict `quality` reads; the live read stays below as the secondary line.
+      # HARNESS_READ_SIM_HOURS=0 turns this off.
+      if [ "${HARNESS_READ_SIM_HOURS:-6}" -gt 0 ]; then
+        sim_read=$(OGAMEX_RUNNER=local-docker-dev PROVE_UNIVERSE=$universe bash scripts/ogamex sim \
+          --hours="${HARNESS_READ_SIM_HOURS:-6}" --accounts="${HARNESS_READ_SIM_ACCOUNTS:-30}" --max-wall="${HARNESS_READ_SIM_WALL:-600}" 2>&1 || true)
+        cohort_output="=== simulated read (${HARNESS_READ_SIM_HOURS:-6}h on a copy) ===
+$sim_read
+=== live read ===
+$cohort_output"
+      fi
       printf '%s\n' "$cohort_output"
       printf '%s\n' "$cohort_output" > "/tmp/harness-quality-$universe.txt"
       case "$cohort_output" in
