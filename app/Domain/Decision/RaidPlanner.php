@@ -131,6 +131,12 @@ class RaidPlanner
             return null;
         }
 
+        // A player does not raid someone the galaxy view marks as a newbie (under a fifth of their
+        // points) unless that account has gone idle: the host's own isNewbie answer, WIK-045.
+        if ($this->protectedNewbie($player, (int) $report->planet_user_id)) {
+            return null;
+        }
+
         if (!$this->withinBashingLimit($playerId, $target->getPlanetId())) {
             return null;
         }
@@ -556,6 +562,16 @@ class RaidPlanner
         // Fresh load: the inactivity stamp is the decision input and a cached
         // player would carry the stamp from whenever the factory first built it.
         return $this->playerServiceFactory->make($targetUserId, true)->isInactive();
+    }
+
+    /** The host's newbie mark (below 20% of the raider's points, and not inactive) on the target's owner. */
+    private function protectedNewbie(PlayerService $player, int $targetUserId): bool
+    {
+        if ($targetUserId <= 0 || !User::query()->whereKey($targetUserId)->exists()) {
+            return false;
+        }
+
+        return $this->playerServiceFactory->make($targetUserId, true)->isNewbie($player);
     }
 
     /**
