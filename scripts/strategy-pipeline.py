@@ -89,7 +89,7 @@ APP_TIMEOUT_SECONDS = 15 * 60
 # this key, so the harness keeps its own ceiling far below it and paces every call through a shared
 # slot file, because the workers are separate processes.
 MODEL_SLOTS = os.path.join(MODULE, "plan/research/ogame/model-slots")
-MODEL_CONCURRENCY = int(os.environ.get("MODEL_CONCURRENCY", "4"))
+MODEL_CONCURRENCY = int(os.environ.get("MODEL_CONCURRENCY", "1"))
 MODEL_ATTEMPTS = 5
 MODEL_RETRY_CODES = (429, 500, 502, 503)
 # deepseek-flash (V4.1) thinks by default at high effort, and a non-streaming answer sends no byte

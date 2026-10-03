@@ -89,8 +89,8 @@ writer() {
   # Boot the canary once, outside the pass: from here on a check is a few queries, not a universe.
   bash scripts/canary.sh up || echo "canary unavailable; the live gate will report it"
 
-  export MODEL_CONCURRENCY="${MODEL_CONCURRENCY:-4}"
-  for worker in $(seq 0 $(( ${IMPL_WORKERS:-3} - 1 ))); do writer "$worker" & done
+  export MODEL_CONCURRENCY="${MODEL_CONCURRENCY:-1}"
+  for worker in $(seq 0 $(( ${IMPL_WORKERS:-1} - 1 ))); do writer "$worker" & done
 
   # The verifier. It never waits on a writer: it proves delivered rows as they appear, once a batch is
   # ready, nothing is left to write, or HARNESS_VERIFY_EVERY seconds have passed. A failed proof reopens

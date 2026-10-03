@@ -383,7 +383,7 @@ def main():
         return
     actions = []
     if not harness_alive():
-        env = {**os.environ, "IMPL_WORKERS": "6", "MODEL_CONCURRENCY": "8", "OGAMEX_RUNNER": "local-docker-dev"}
+        env = {**os.environ, "IMPL_WORKERS": "1", "MODEL_CONCURRENCY": "1", "OGAMEX_RUNNER": "local-docker-dev"}
         subprocess.Popen(["setsid", "nohup", "bash", "scripts/harness-live.sh"], cwd=ROOT, env=env,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         actions.append("restarted the harness (it was not running)")
