@@ -1076,8 +1076,8 @@ class HarnessStatusController
      *
      * @return array<string, mixed>
      */
-    /** The loop republishes its status at least every few minutes; silence this long is a stopped harness. */
-    private const STOPPED_SECONDS = 600;
+    /** A simulated proof or read runs up to ~15 minutes without publishing; silence past 30 is a stopped harness. */
+    private const STOPPED_SECONDS = 1800;
 
     private function harnessState(): array
     {
