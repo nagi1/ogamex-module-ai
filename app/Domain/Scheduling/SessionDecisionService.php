@@ -97,7 +97,7 @@ class SessionDecisionService
         // window before impact instead of at its next ordinary session.
         if ($perception->reactionWakeAt !== null) {
             $reactionWakeAt = CarbonImmutable::createFromTimestamp($perception->reactionWakeAt);
-            if ($reactionWakeAt->greaterThan($now) && $reactionWakeAt->lessThan($nextDueAt)) {
+            if ($reactionWakeAt->greaterThan($now) && $reactionWakeAt->lessThan($nextDueAt) && $this->wakesForReaction($profile, $reactionWakeAt)) {
                 $nextDueAt = $reactionWakeAt;
             }
         }
@@ -116,6 +116,21 @@ class SessionDecisionService
         $this->scheduleSuccessor($profile, $routine, $schedule, $plan->sessionEndsAt, $nextDueAt, $nextGeneration, $now);
 
         return $trace;
+    }
+
+    /**
+     * A sleeping player is rarely pulled out of bed by an alert: most of the time the attack lands
+     * unanswered and is read at the next waking session. Roughly one dark-period inbound in ten wakes
+     * the account, chosen from the profile's seed and the minute so a retry decides the same way
+     * (AUTH_UPTIME: a reaction that always woke the account filled every hour of the day).
+     */
+    private function wakesForReaction(AiProfile $profile, CarbonImmutable $wakeAt): bool
+    {
+        if ($this->sessionPlanner->isAwake($profile, $wakeAt)) {
+            return true;
+        }
+
+        return crc32($profile->random_seed . ':' . intdiv($wakeAt->getTimestamp(), 3600)) % 10 === 0;
     }
 
     private function scheduleFor(AiProfile $profile, RoutineProfile $routine, CarbonImmutable $now): AiSchedule
