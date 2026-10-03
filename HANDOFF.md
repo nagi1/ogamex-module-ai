@@ -596,7 +596,23 @@ and pushed as `c694d0c`.
   `ConversationCycleTest`, `BattleObservationTest` x2, `AllyUnderAttackObservationTest`,
   `AiExploitationGuardTest` (trust/affinity now `-1..1`, the old `0.0` clamp asserted);
   `AiAdmissionLimitTest`, `LaunchActivityGuardSituationTest`, `WarFleetBuysHullSituationTest`.
-- `ARCH-GOALS` has been attempted and refused (no marker); `ARCH-INTEL` is in progress (step 98+).
-- A fresh 1 h / 20-account sim on the tree **with** the phase machine was started at 20:36 UTC
-  (`SIM_DB=ogamex-sim-phase`, real sidecars up); its verdict is appended below when it lands.
+- `ARCH-GOALS` has been attempted and refused (no marker); `ARCH-INTEL` is in progress (step 121+).
+- Fresh 1 h / 20-account sim **on the tree with the phase machine** (`SIM_DB=ogamex-sim-phase`,
+  real sidecars up, started 20:36 UTC):
+
+```
+SIM: 1.0 h played in 575 s (x6), 694 session(s), 1064 other work item(s), 0 error(s)
+JUMPS: 563 (average 6 simulated seconds per jump)
+PLAY: 15 of 15 aspects pass
+QUALITY: 109 violation(s) across 2 invariant(s) -> FAIL NAKED_BESIDE_WALLED AUTH_UPTIME
+AUTHENTICITY: FAIL AUTH_UPTIME; PASS AUTH_REPETITION AUTH_SAVE AUTH_CONTACT AUTH_GROWTH
+SATURATED: player 39 (7 planets), 48 (6), 53 (4) — every candidate refused
+```
+
+  **The 694 sessions is a backlog drain at the start of the run, not a cadence change.** The hourly
+  buckets split `20:00 -> 672` (24 min, the drain) and `21:00 -> 22` (36 min), i.e. a steady state of
+  **0.6 sessions/minute** — identical to the earlier 2 h run's steady bucket (`21:00 -> 44` over 72 min
+  = 0.6/min). `c694d0c` touches no scheduling: `ScheduleAiIntentAction`/`ExecuteAiIntentAction` only
+  thread the phase into `ManagerDoctrine::int()`, and `ManagerDoctrine` only multiplies a manager's
+  number. The phase machine did not regress play — same 15/15 aspects and the same two invariants.
 
