@@ -1,0 +1,4 @@
+# Starter aid: a reward dispatched every day from the second day of registration, collectable by hand,
+# none after the seventh day.
+first_day: 2
+last_day: 7

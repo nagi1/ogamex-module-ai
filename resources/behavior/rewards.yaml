@@ -1,0 +1,5 @@
+# Rewards event: runs 7 or 14 days, five levels with one reward each; command staff earns 20% extra tritium.
+durations_days: [7, 14]
+levels: 5
+rewards_per_level: 1
+command_staff_tritium_bonus: 0.20

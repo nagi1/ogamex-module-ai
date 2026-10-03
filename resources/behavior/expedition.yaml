@@ -1,0 +1,4 @@
+# Expedition debris fields are a share of the expedition's resource value, not an absolute ceiling.
+debris_field_share:
+  discoverer: 0.20
+  default: 0.10

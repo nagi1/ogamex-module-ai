@@ -1,0 +1,3 @@
+# Outlaw status as the source states it: a fixed duration from the moment it is applied.
+# Recalling the mission that earned it does not shorten or clear it.
+duration_days: 7
