@@ -117,7 +117,7 @@ test('a planet near its cap ships its surplus to the best-developed body', funct
     $colony->updateResources(false);
     $colony->updateResourceProductionStats(false);
     $colony->updateResourceStorageStats(false);
-    $colony->addResources(new Resources(120_000, 120_000, 0));
+    $colony->addResources(new Resources(120_000, 120_000, 20_000));
     // The cargo rides with the source: a surplus ferry leaves from where the hulls are.
     $colony->addUnit('large_cargo', 8);
 
@@ -299,28 +299,17 @@ test('a ferry the host refuses is reported, not thrown', function (): void {
     expect($result->successful)->toBeFalse();
 });
 
-// A flight the host refuses after the adapter has already picked the fleet travels through the
-// catch: the ferry is reported as refused, never thrown.
-test('a ferry the host refuses for fuel is reported, not thrown', function (): void {
+// A flight the source cannot fuel is not planned: the host refused it for resources every session.
+test('a source that cannot pay the flight fuel is not offered as a ferry', function (): void {
     transferProfile($this->currentUserId);
     $targetId = transferTarget($this->secondPlanetService);
     transferSource();
-    // A long flight with no deuterium left: the host's sanity check refuses it after the adapter
-    // built the fleet, which is the only path that reaches the catch.
     Planet::query()->whereKey($targetId)->update(['galaxy' => 5, 'system' => 10, 'planet' => 15]);
     $this->planetDeductResources(new Resources(0, 0, 1_000_000));
 
-    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
-    expect($plan)->toBeInstanceOf(QueueableTransfer::class);
+    expect(app(QueueableTransferPlanner::class)->plan($this->currentUserId))->toBeNull();
 
-    $result = app(QueueAiTransfer::class)->handle(
-        $this->currentUserId,
-        $plan->sourcePlanetId,
-        $plan->targetPlanetId,
-        $plan->metal,
-        $plan->crystal,
-        $plan->deuterium,
-    );
+    $result = app(QueueAiTransfer::class)->handle($this->currentUserId, $this->currentPlanetId, $targetId, 60_000, 60_000, 0);
 
     expect($result->successful)->toBeFalse();
 });

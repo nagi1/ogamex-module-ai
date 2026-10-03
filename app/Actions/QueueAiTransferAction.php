@@ -70,8 +70,12 @@ class QueueAiTransferAction implements QueueAiTransfer
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
-            if ($fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED) > $fleet->getTotalFuelCapacity($player)) {
+            $fuel = $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
+            if ($fuel > $fleet->getTotalFuelCapacity($player)) {
                 return AiActionResult::rejected(AiQueueActionReason::NoTransportFleet);
+            }
+            if ($fuel > floor($source->deuterium()->get())) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
 
             $shipment = $this->leavingFuelBehind($source, $shipment, $fleet, $target, $fleetMissions);
@@ -163,6 +167,22 @@ class QueueAiTransferAction implements QueueAiTransfer
             floor($shipment->crystal->get() * $share),
             floor($shipment->deuterium->get() * $share),
         );
+    }
+
+    /**
+     * The deuterium the ferry's own flight burns from this source, or null when it has no fleet that
+     * can carry the shipment. The planner asks it before publishing, so a source that cannot pay the
+     * fuel is not offered the way a player does not plan a run with empty tanks.
+     */
+    public function flightFuel(PlayerService $player, PlanetService $source, PlanetService $target, Resources $shipment): float|null
+    {
+        $fleet = $this->transportFleet($player, $source, $this->fittedToHold($player, $source, $shipment));
+        if ($fleet === null) {
+            return null;
+        }
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
+        return (float) $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
     }
 
     private function transportFleet(PlayerService $player, PlanetService $source, Resources $shipment): ?UnitCollection

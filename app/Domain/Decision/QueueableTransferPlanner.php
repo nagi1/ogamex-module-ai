@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Actions\QueueAiTransferAction;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\TransportMission;
@@ -45,6 +46,7 @@ class QueueableTransferPlanner
         private EnergyCapacity $energyCapacity,
         private FacilityChain $facilityChain,
         private ReserveFloor $reserveFloor,
+        private QueueAiTransferAction $transferAction,
     ) {
     }
 
@@ -116,7 +118,7 @@ class QueueableTransferPlanner
 
             $floor = $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS);
             $shipment = $this->aboveFloor($source, $floor, $source->getPlanetType() === PlanetType::Moon);
-            if (!$this->worthShipping($shipment) || !$this->hasCargo($source, $player)) {
+            if (!$this->worthShipping($shipment) || !$this->hasCargo($source, $player) || !$this->canPayFuel($source, $drop, $shipment, $player)) {
                 continue;
             }
 
@@ -252,16 +254,13 @@ class QueueableTransferPlanner
             $floor = $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS);
             // A resource the shipment does not carry keeps no floor: the source only reserves what it
             // actually spends, so a metal-and-crystal ferry is not blocked by a deuterium reserve.
-            // ponytail: deuterium fuel is not reserved here (it is distance- and fleet-dependent), so
-            // a source that can spare the cargo but not the fuel is rejected by the host at dispatch —
-            // a recoverable failure, upgrade path is quoting fuel in the planner.
             $required = new Resources(
                 $need->metal->get() > 0 ? $need->metal->get() + $floor->metal->get() : 0,
                 $need->crystal->get() > 0 ? $need->crystal->get() + $floor->crystal->get() : 0,
                 $need->deuterium->get() > 0 ? $need->deuterium->get() + $floor->deuterium->get() : 0,
             );
 
-            if ($source->hasResources($required) && $this->hasCargo($source, $player)) {
+            if ($source->hasResources($required) && $this->hasCargo($source, $player) && $this->canPayFuel($source, $target, $need, $player)) {
                 return $source;
             }
         }
@@ -278,6 +277,14 @@ class QueueableTransferPlanner
     private function hasCargo(PlanetService $source, PlayerService $player): bool
     {
         return $source->getShipUnits()->getTotalCargoCapacity($player) > 0;
+    }
+
+    /** The flight burns the source's own deuterium on top of the cargo; a source with empty tanks cannot launch. */
+    private function canPayFuel(PlanetService $source, PlanetService $target, Resources $need, PlayerService $player): bool
+    {
+        $fuel = $this->transferAction->flightFuel($player, $source, $target, $need);
+
+        return $fuel !== null && $fuel <= floor($source->deuterium()->get());
     }
 
     private function worthShipping(Resources $need): bool
