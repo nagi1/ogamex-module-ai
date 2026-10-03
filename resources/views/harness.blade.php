@@ -403,11 +403,11 @@
 
     function renderGlance(data) {
         const w = data.workers || [];
-        $('gDeep').textContent = (data.model.calls ? 'working' : 'quiet');
+        $('gDeep').textContent = data.claudeLane.running ? 'waiting for Claude' : (data.model.calls ? 'working' : 'quiet');
         $('gDeepS').textContent = w.length + ' writer(s), ' + data.model.calls + ' model calls in the last hour';
         const lane = data.claudeLane;
-        $('gLane').textContent = lane.running ? 'running' : 'idle';
-        $('gLaneS').textContent = lane.queue.filter(r => r.who === 'lane').length + ' row(s) handed over, ' + lane.runs.length + ' recent run(s)';
+        $('gLane').textContent = lane.running ? 'working: ' + (lane.current ? lane.current.code : '…') : 'idle';
+        $('gLaneS').textContent = (lane.current ? lane.current.minutes + ' min into this run, ' : '') + lane.queue.filter(r => r.who === 'lane').length + ' row(s) handed over';
         const b = data.babysitter;
         const stale = b && b.age_minutes > 25;
         $('gBaby').textContent = !b ? 'not reporting' : stale ? 'silent' : b.verdict.toLowerCase();
@@ -434,7 +434,7 @@
         const idle = !lane.queue.length && !lane.runs.length;
         $('laneEmpty').hidden = !idle;
         $('laneKv').innerHTML =
-            '<div><b class="' + (lane.running ? 'ok' : '') + '">' + (lane.running ? 'RUNNING' : 'idle') + '</b><span>' + esc(lane.model) + '</span></div>'
+            '<div><b class="' + (lane.running ? 'ok' : '') + '">' + (lane.running ? 'RUNNING ' + (lane.current ? lane.current.code + ' · ' + lane.current.minutes + ' min' : '') : 'idle') + '</b><span>' + esc(lane.model) + '</span></div>'
             + '<div><b>' + lane.queue.length + '</b><span>rows handed to Claude</span></div>';
         $('laneQueue').innerHTML = lane.queue.map(r => '<tr><td>' + esc(r.code) + '</td><td>' + esc(r.priority) + '</td><td>' + esc(r.status) + '</td><td>' + esc(r.who) + '</td><td>' + r.runs + '</td><td>' + esc(r.title) + '</td></tr>').join('');
         $('laneRuns').innerHTML = lane.runs.map(r => '<li><span>' + esc(r.at) + ' ' + esc(r.name) + ' (' + r.kb + ' kb)</span><span class="r">' + esc(r.tail) + '</span></li>').join('');

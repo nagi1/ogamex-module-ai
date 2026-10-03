@@ -130,6 +130,10 @@ def run_row():
                "--max-turns", MAX_TURNS, "--max-budget-usd", RUN_BUDGET_USD,
                "--output-format", "json"]
     started = time.time()
+    # The page reads this to show which row Claude is on while the run is going (the log is written at its end).
+    current = os.path.join(LOG_DIR, "current.json")
+    with open(current, "w") as marker:
+        json.dump({"code": code, "started": int(started)}, marker)
     verdict, report = "", {}
     try:
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=RUN_SECONDS)
@@ -143,6 +147,8 @@ def run_row():
         report = {"result": verdict}
     with open(log, "w") as out:
         out.write(str(report.get("result", "")) + "\n")
+
+    os.path.exists(current) and os.remove(current)
 
     # What the run cost, for the harness page: tokens by kind and the API-equivalent price. On a
     # subscription nothing is billed per run; the price says how much of the quota the run weighed.

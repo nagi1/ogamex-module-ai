@@ -622,7 +622,15 @@ class HarnessStatusController
             // The page stays up without the ledger.
         }
 
-        return ['running' => $running, 'model' => 'claude-sonnet-5-5', 'queue' => $queue, 'runs' => $runs];
+        $current = json_decode((string) @file_get_contents($directory.'/current.json'), true);
+
+        return [
+            'running' => $running,
+            'current' => $running && is_array($current) ? ['code' => $current['code'], 'minutes' => (int) floor((time() - (int) $current['started']) / 60)] : null,
+            'model' => 'claude-sonnet-5-5',
+            'queue' => $queue,
+            'runs' => $runs,
+        ];
     }
 
     /**
