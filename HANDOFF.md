@@ -648,6 +648,14 @@ The row is filed rather than patched here on purpose: the fix needs a *cadence f
 `NextStepAffordableSituationTest` requires an early wake within 20 minutes for a drained account, so
 choosing the floor is a behaviour decision, not a mechanical edit. **Until it is fixed, ECON-001 should
 be considered harmful in a 1000× cohort.**
+
+**Fixed the same evening (`0901428`)**: the harness took `PACE-001` as soon as it was filed and delivered
+the shape the row asked for — `resources/behavior/session-pacing.yaml` holds
+`shortfall_wake.floor_minutes: 15`, and `planetAffordabilityEta()` now returns
+`now + max(arrival, floor)`. Only the shortfall wake is floored; a build, a research, a fleet landing or a
+hostile inbound still brings the account back on its own schedule, sooner. `NextStepAffordableSituationTest`
+stays green (15 ≤ its 20-minute bound), and the row's `invariant:AUTH_UPTIME` step still reads red because
+that step measures the **live cohort**, which has not settled since the change.
 - **Module suite: 7 failed / 1548 passed** (`47 -> 19 -> 11 -> 7`). The doctrine-label staleness cluster
   and the `ARCH-*` red specs are green. The 7 left are all **expectations pinned to behaviour that was
   deliberately changed or never implemented**, none from the migration:
