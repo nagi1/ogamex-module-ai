@@ -68,7 +68,9 @@ class LaravelAiLanguageGateway implements LanguageGateway
             'proposals' => $proposals,
             'inputTokens' => self::inputTokens($response->usage),
             'outputTokens' => self::outputTokens($response->usage),
-            'cachedInputTokens' => $response->usage->cacheReadInputTokens,
+            // A provider that served no cache hit reports null, not zero: an int parameter must never
+            // be handed null (the SDK leaves the field absent on a miss).
+            'cachedInputTokens' => (int) ($response->usage->cacheReadInputTokens ?? 0),
             'providerRequestId' => $response->invocationId,
             'provider' => $response->meta->provider,
             'model' => $response->meta->model,
@@ -204,10 +206,18 @@ class LaravelAiLanguageGateway implements LanguageGateway
         return $request->ladder->primary() ?? ['provider' => '', 'model' => ''];
     }
 
-    /** laravel/ai 1.0 renamed promptTokens to inputTokens; read whichever the installed SDK carries (IMPL-65). */
+    /**
+     * laravel/ai 1.0 renamed promptTokens to inputTokens, and its `inputTokens` is the TOTAL
+     * including the cache read (the older `promptTokens` already had it subtracted). The module
+     * records the uncached input, so the cache read is never counted twice in the cost.
+     */
     private static function inputTokens(object $usage): int
     {
-        return (int) ($usage->inputTokens ?? $usage->promptTokens ?? 0);
+        if (method_exists($usage, 'uncachedInputTokens')) {
+            return $usage->uncachedInputTokens();
+        }
+
+        return (int) ($usage->promptTokens ?? 0);
     }
 
     /** laravel/ai 1.0 renamed completionTokens to outputTokens. */
