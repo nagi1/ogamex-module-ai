@@ -267,6 +267,98 @@
 							"Significance": 0.5,
 							"Likelihood": 1
 						}]
+				}, 
+				{
+					"KnowledgeBase":
+						{
+							"Perspective": "Raider",
+							"Knowledge":
+								{
+									"SELF":
+										{
+											"DialogueState(Player)": "s1, 1",
+											"RapportLevel(Raider, Other)": "5, 1"
+										}
+								}
+						},
+					"BodyName": null,
+					"VoiceName": null,
+					"EmotionalState":
+						{
+							"Mood": 0,
+							"initialTick": 0,
+							"EmotionalPool": [],
+							"AppraisalConfiguration":
+								{
+									"HalfLifeDecayConstant": 0.5,
+									"EmotionInfluenceOnMoodFactor": 0.3,
+									"MoodInfluenceOnEmotionFactor": 0.3,
+									"MinimumMoodValueForInfluencingEmotions": 0.5,
+									"EmotionalHalfLifeDecayTime": 15,
+									"MoodHalfLifeDecayTime": 60
+								}
+						},
+					"AutobiographicMemory":
+						{
+							"Tick": 0,
+							"records": []
+						},
+					"OtherAgents":
+						{
+							"dictionary": []
+						},
+					"Goals": [
+						{
+							"Name": "Safe(SELF)",
+							"Significance": 0.3,
+							"Likelihood": 1
+						}]
+				}, 
+				{
+					"KnowledgeBase":
+						{
+							"Perspective": "Hybrid",
+							"Knowledge":
+								{
+									"SELF":
+										{
+											"DialogueState(Player)": "s1, 1",
+											"RapportLevel(Hybrid, Other)": "5, 1"
+										}
+								}
+						},
+					"BodyName": null,
+					"VoiceName": null,
+					"EmotionalState":
+						{
+							"Mood": 0,
+							"initialTick": 0,
+							"EmotionalPool": [],
+							"AppraisalConfiguration":
+								{
+									"HalfLifeDecayConstant": 0.5,
+									"EmotionInfluenceOnMoodFactor": 0.3,
+									"MoodInfluenceOnEmotionFactor": 0.3,
+									"MinimumMoodValueForInfluencingEmotions": 0.5,
+									"EmotionalHalfLifeDecayTime": 15,
+									"MoodHalfLifeDecayTime": 60
+								}
+						},
+					"AutobiographicMemory":
+						{
+							"Tick": 0,
+							"records": []
+						},
+					"OtherAgents":
+						{
+							"dictionary": []
+						},
+					"Goals": [
+						{
+							"Name": "Safe(SELF)",
+							"Significance": 0.5,
+							"Likelihood": 1
+						}]
 				}],
 			"WorldModel":
 				{
