@@ -32,6 +32,7 @@ use Modules\AI\Console\Commands\ReconcileLanguageRequests;
 use Modules\AI\Console\Commands\RecordAiScoreSamples;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
+use Modules\AI\Console\Commands\RunAiCampaign;
 use Modules\AI\Console\Commands\RunCognitionConformance;
 use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Console\Commands\RunLanguageConformance;
@@ -128,6 +129,7 @@ class AIServiceProvider extends ModuleServiceProvider
 
     protected array $commands = [
         AdvanceAiCampaigns::class,
+        RunAiCampaign::class,
         AdvanceAiAllianceLife::class,
         BondExistingAllianceMembers::class,
         ExplainAiDecision::class,
@@ -188,6 +190,7 @@ class AIServiceProvider extends ModuleServiceProvider
             $dueWork->everyMinute();
         }
         $dueWork->withoutOverlapping(5);
+        $schedule->command('ai:run-campaign')->everyFifteenMinutes()->withoutOverlapping(5);
         $schedule->command('ai:advance-campaigns')->everyMinute()->withoutOverlapping(5);
         // These three used to be every-ten-minutes and hourly, and stopped firing altogether: the
         // container's scheduler loop is `schedule:run; sleep 60`, so its phase drifts and an event
