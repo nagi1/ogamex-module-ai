@@ -28,6 +28,7 @@ use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Domain\Decision\SaveFailurePolicy;
+use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Enums\AiWorkKind;
@@ -35,6 +36,8 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use OGame\Models\Planet;
+use OGame\Models\UnitQueue;
 
 /**
  * Turns a session's selected intent into the one work item that carries it out.
@@ -177,6 +180,19 @@ class ScheduleAiIntentAction
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now(), $units, $type === AiCandidateActionType::QueueUnits ? '' : ':wall');
         }
 
+        // Every *other* bare sibling takes its wall in the same login: a player clicks through all the
+        // naked colonies before logging off, and the invariant reads the account, so the one order the
+        // pass above places left the rest at zero for as many logins as the account has planets -- more
+        // than a day of its own sessions (QUAL-003: 3 planets at zero beside one holding 1,312 units).
+        // Each order keeps a key of its own planet, so a retried session converges on the same set.
+        foreach ($this->queueableUnitPlanner->standingDefenceOrders($profile->player_id) as $order) {
+            if ($unitsFirst && $units instanceof QueueableUnit && $order->planetId === $units->planetId) {
+                continue;
+            }
+
+            $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now(), $order, ':wall:planet:' . $order->planetId);
+        }
+
         // A player refills the build queues and the lab every login before turning to the shipyard or
         // the fleet; choosing a raid, a ship, nothing at all or answering an inbound fleet must not
         // leave a planet idle until the next session. The refill asks the planner, never the decision
@@ -207,7 +223,7 @@ class ScheduleAiIntentAction
             // The shipyard gets what the buildings leave, so its order waits until they are placed:
             // the host cancels a building it cannot pay for, and a ship order placed first would cause it.
             // A marked wall is already written above; the repeat finds that row and leaves its time.
-            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $units),
+            AiCandidateActionType::QueueUnits => $this->scheduleShipyard($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $units),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
             // The ferry moves stock the buildings were priced against, so it waits for them the way
@@ -224,6 +240,56 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Phalanx => $this->schedulePhalanx($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
+
+        // The war fleet's own order, on a login that chose something else: a player with a war chest
+        // keeps the shipyard busy whichever page they opened, so the surplus buys the best hull the
+        // yard can build without waiting for the sessions the engine happens to pick the shipyard. The
+        // fleet is asked of the planner directly rather than read from the plan above, which only
+        // carries it when no other role on any planet wanted anything: a login is almost always
+        // consumed by a probe, a colony ship or a wall, so the plan the schedule was handed never held
+        // a hull and the account bought none (measured live: 160 QueueUnits orders in half an hour and
+        // no hull above the median military hull anywhere in the cohort). It is written after the
+        // building steps, which are priced against the balance first, and a session that decided
+        // nothing is one with no intent to spend.
+        $capital = $units instanceof QueueableUnit && $units->surplusSpend
+            ? $units
+            : $this->queueableUnitPlanner->capitalFleetOrder($profile->player_id);
+
+        // A player whose yard still holds an unfinished order does not click buy again: the surplus
+        // hull is a habit, not an errand, and a login that ordered on top of an unfinished batch
+        // buried the shipyard under identical hulls (measured live 3 Oct 2026: 425 unit orders in
+        // half an hour against 1,057 buildings). The wall orders above are untouched: keeping a
+        // planet alive is what the yard is for.
+        if ($capital !== null
+            && ! $this->shipyardsBusy($profile->player_id)
+            && ! ($type === AiCandidateActionType::QueueUnits && $units === $capital)
+            && $type !== AiCandidateActionType::DoNothing) {
+            $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $capital, ':capital');
+        }
+    }
+
+    /**
+     * The shipyard arm of a login: the plan's surplus hull, or nothing while the yard already holds an
+     * unfinished order. The hull is what the account buys when no role on any planet wanted anything --
+     * a habit rather than an errand -- so a login that finds the yard busy leaves it alone instead of
+     * stacking a second identical batch behind the first (ARB-001: units ordered on eight of six logins).
+     * The wall, the cargo and the probes above keep their orders: those are the errands.
+     */
+    private function scheduleShipyard(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt, ?QueueableUnit $plan): void
+    {
+        if ($plan instanceof QueueableUnit && $plan->surplusSpend && $this->shipyardsBusy($profile->player_id)) {
+            return;
+        }
+
+        $this->scheduleUnits($profile, $sessionWorkItem, $dueAt, $plan);
+    }
+
+    /** Whether any of the player's yards holds an order the host has not finished building yet. */
+    private function shipyardsBusy(int $playerId): bool
+    {
+        $planets = Planet::query()->where('user_id', $playerId)->pluck('id');
+
+        return UnitQueue::query()->whereIn('planet_id', $planets)->where('processed', 0)->exists();
     }
 
     private function isCalmSave(AiCandidateActionType $type, DecisionTrace $trace): bool
@@ -237,6 +303,18 @@ class ScheduleAiIntentAction
         return $type !== AiCandidateActionType::DoNothing && $this->economyOffered($trace);
     }
 
+    /** Only what the engine offered this session, so legality and persona policy stay its own. */
+    private function economyOffered(DecisionTrace $trace): bool
+    {
+        foreach ($trace->candidates as $scored) {
+            if (in_array($scored->candidate->type, [AiCandidateActionType::Build, AiCandidateActionType::Research], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * The key the queue refill owns. Build and Research own the session's own key, so the refill is
      * the session's objective; every other action takes a key of its own, leaving the objective's key
@@ -248,18 +326,6 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Build, AiCandidateActionType::Research => '',
             default => ':economy',
         };
-    }
-
-    /** Only what the engine offered this session, so legality and persona policy stay its own. */
-    private function economyOffered(DecisionTrace $trace): bool
-    {
-        foreach ($trace->candidates as $scored) {
-            if (in_array($scored->candidate->type, [AiCandidateActionType::Build, AiCandidateActionType::Research], true)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

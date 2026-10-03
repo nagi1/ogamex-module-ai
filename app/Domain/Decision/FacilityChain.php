@@ -152,6 +152,7 @@ class FacilityChain
      */
     public function wallPending(PlanetService $planet): array
     {
+        // Own pass, ahead of the economy: the facilities the wall waits on are a fix, not a choice.
         $ordered = [];
         $producers = [];
 
@@ -530,13 +531,62 @@ class FacilityChain
         $player = $planet->getPlayer();
         $fleetless = $player !== null && $this->ownsNoMovableShip($player);
 
+        // Past the opening the goal is the next war-fleet hull the catalogue prices, because the
+        // cheapest-first ladder spends the account's whole agenda on everything cheaper while the
+        // shipyard and the technology a fighting hull waits on stay untouched -- measured live
+        // 3 Oct 2026: no account in a hundred owned a hull above the median military hull, and the
+        // surplus bought cargo instead. The hull is never named: it is the cheapest the host groups
+        // as a military ship that this planet cannot build yet, and its requirements are the host's
+        // own graph, so a mod-added capital is climbed to with no edit here.
+        $warHull = $fleetless ? null : $this->warHullPending($planet);
+
         usort(
             $objects,
-            fn (GameObject $left, GameObject $right): int => [$fleetless && ! $this->isFlyingHull($left, $player), $left->price->resources->sum()]
-                <=> [$fleetless && ! $this->isFlyingHull($right, $player), $right->price->resources->sum()],
+            fn (GameObject $left, GameObject $right): int => [
+                $left->machine_name !== $warHull,
+                $fleetless && ! $this->isFlyingHull($left, $player),
+                $left->price->resources->sum(),
+            ] <=> [
+                $right->machine_name !== $warHull,
+                $fleetless && ! $this->isFlyingHull($right, $player),
+                $right->price->resources->sum(),
+            ],
         );
 
         return $objects;
+    }
+
+    /**
+     * The cheapest military hull the host's catalogue prices that this planet cannot build yet, or
+     * null once every one of them is available: the next step of the account's war fleet, ordered by
+     * the host's own price so a hull a mod adds takes its place in the queue with no edit here.
+     */
+    private function warHullPending(PlanetService $planet): ?string
+    {
+        $player = $planet->getPlayer();
+        if ($player === null) {
+            return null;
+        }
+
+        // Only a hull that shoots grows a war fleet: the catalogue groups a probe or a satellite as a
+        // military ship, and letting one of them take the ambition spends the climb on a hull that
+        // fights nothing.
+        $hulls = array_filter(
+            ObjectService::getMilitaryShipObjects(),
+            static fn (UnitObject $hull): bool => $hull->properties->attack->calculate($player)->totalValue > 1,
+        );
+        usort($hulls, static fn (GameObject $left, GameObject $right): int =>
+            $left->price->resources->sum() <=> $right->price->resources->sum());
+
+        foreach ($hulls as $hull) {
+            foreach (ObjectService::getRecursiveRequirements($hull->machine_name) as $machineName => $level) {
+                if ($this->currentLevel($planet, $machineName) < $level) {
+                    return $hull->machine_name;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function ownsNoMovableShip(PlayerService $player): bool
