@@ -295,6 +295,14 @@ class ProcessAiWork implements ShouldQueue
             $nextGeneration = max($schedule->generation, (int) $workItem->schedule_generation) + 1;
             $nextDueAt = now()->addMinute();
 
+            // A failed session is retried a minute on only while the account is awake: a retry in the
+            // dark period would put the account on at an hour it sleeps (AUTH_UPTIME), so it takes the
+            // routine's next wake instead.
+            $profile = AiProfile::query()->where('player_id', $workItem->player_id)->first();
+            if ($profile !== null && !app(SessionPlanner::class)->isAwake($profile, $nextDueAt->toImmutable())) {
+                $nextDueAt = app(SessionPlanner::class)->plan($profile, now()->toImmutable(), $schedule->generation)->nextDueAt;
+            }
+
             $schedule->update([
                 'next_due_at' => $nextDueAt,
                 'generation' => $nextGeneration,

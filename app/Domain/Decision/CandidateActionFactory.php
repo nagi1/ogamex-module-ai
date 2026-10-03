@@ -326,6 +326,7 @@ class CandidateActionFactory
 
         $candidates = [];
         $rejections = [];
+        $farms = [];
 
         // Raid candidates are assembled solely from the published report
         // projection. The scorer never receives unseen defender information.
@@ -361,6 +362,10 @@ class CandidateActionFactory
                 continue;
             }
 
+            if ($report['defenceless'] ?? false) {
+                $farms[] = $reportKey;
+            }
+
             $candidates[] = app()->makeWith(CandidateAction::class, [
                 'type' => AiCandidateActionType::Raid,
                 'reason' => AiCandidateReason::FreshVisibleReport->value,
@@ -368,6 +373,25 @@ class CandidateActionFactory
                 'features' => $this->features(AiCandidateActionType::Raid, 0, $report['confidence'], $report['travel_cost'], $perception->recoveryFactor),
                 'sourceTimestamps' => [AiCandidateReason::reportSource($report['report_id']) => date(DATE_ATOM, $report['observed_at'])],
             ]);
+        }
+
+        // A day of raids that only pillage empty planets has no combat, no debris and no moons, which an
+        // administrator reads as a dead universe (LIFE_FIGHTS). When a defended target also clears the
+        // planner, the empty farm waits: the fight is the better play and the farm stays for the sessions
+        // that have nothing defended to hit.
+        if ($farms !== [] && count($farms) < count($candidates)) {
+            $candidates = array_values(array_filter(
+                $candidates,
+                static function (CandidateAction $candidate) use ($farms, &$rejections): bool {
+                    $key = 'report:' . ($candidate->parameters['report_id'] ?? '');
+                    if (!in_array($key, $farms, true)) {
+                        return true;
+                    }
+                    $rejections[$key] = AiCandidateRejectionReason::DefendedTargetPreferred->value;
+
+                    return false;
+                },
+            ));
         }
 
         return app()->makeWith(CandidateGeneration::class, [

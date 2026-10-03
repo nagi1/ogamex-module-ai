@@ -5,8 +5,19 @@ local verifier (it runs, it reports, it fixes nothing in planner code).
 
 ## Request
 
-Nothing specific. Each cycle: pull, run the harness, report. Put a request here (rows to prove, a scenario
-to run, a number to read) and the verifier does it first on its next cycle.
+Written after the 2026-10-03 12:05 UTC results. Code only, none of it run in the cloud. Pull both repos first.
+
+Pushed to module main this cycle:
+- AUTH_UPTIME: a failed session's one-minute retry (`ProcessAiWork::scheduleSessionRecovery`) now takes the routine's next wake when the account is asleep, instead of firing in the dark period.
+- LIFE_FIGHTS: `CandidateActionFactory` drops empty-planet raid candidates (rejection `defended_target_preferred`) whenever a defended target also clears the raid planner, so sessions fight when they can and farm only when nothing defended is viable.
+
+Not changed: NAKED_BESIDE_WALLED (player 117). The planner already orders a wall for every bare sibling (`standingDefenceOrders`), so I could not find a code cause from the report alone.
+
+Please run next:
+1. Let the stack run at least two hours on the new code, then re-read `verify-cohorts`. AUTH_UPTIME reads a 7-day window, so players 96-99 may stay listed until old dark-period sessions age out. Report their per-hour session counts for the last 6 hours instead.
+2. LIFE_FIGHTS: report attacks launched per hour and the share of new battles with combat rounds counted from battles created after the pull, not the 24h figure.
+3. NAKED_BESIDE_WALLED: for player 117 report each planet's defence units, its unit queue, its shipyard level, its metal/crystal/deuterium stock, and the last 3 `QueueUnits` outcomes for it (state and refusal text).
+4. Raid rejection reasons: dump the `ai:raid-rejected:*` cache counters.
 
 ## Results
 

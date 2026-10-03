@@ -9,4 +9,5 @@ enum AiCandidateRejectionReason: string
     case StaleTargetIntel = 'stale_target_intel';
     case ScoreBelowViability = 'score_below_viability';
     case RaidNotViable = 'raid_not_viable';
+    case DefendedTargetPreferred = 'defended_target_preferred';
 }
