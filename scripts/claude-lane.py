@@ -24,7 +24,7 @@ ASSIGNEE = "claude-lane"
 MODEL = "claude-sonnet-5-5"
 RUN_SECONDS = 45 * 60
 RUN_BUDGET_USD = "12"
-MAX_TURNS = "150"
+MAX_TURNS = "100"
 
 PROMPT = """You are the strong lane of the OGameX AI module harness: its CTO and plumber, not its main driver.
 The DeepSeek writers do the routine rows. You are given what they could not do, what other rows wait on, and the
@@ -42,6 +42,11 @@ then .github/skills/ai-task-execute/SKILL.md and follow that workflow. The row i
 
 If the row's notes carry a WRITER-HANDOFF line, a DeepSeek writer spent its call budget on it: read the last failure
 there and the writer's work in plan/research/ogame/attempts/{code}.work.json, and decide the design it could not.
+
+Spend your tokens on the hard part, which is the design and the code. Do NOT do verification work: do not run the
+full suite, cohort reads, scorecards or pulse loops, and do not poll the cohort. Run only the tests that name the
+classes you touched (`test-one`), run `python3 plan/tasks/task.py done {code}` once at the end, and leave the live
+proof to the harness (a row whose live steps need cohort time stays `delivered`). Read files narrowly, not whole.
 
 Rules that bind this run:
 - Say which aspect, situation or invariant the row moves and what an observer would see the account do.

@@ -278,10 +278,10 @@ def commit_records(actions):
 
 
 LANE = "claude-lane"
-LANE_QUEUE = 3  # rows waiting for the strong lane at once; it works one run at a time
+LANE_QUEUE = 1  # one hard row at a time; the writers take the rest
 
 
-WRITER_CALL_LIMIT = 300  # a slice that takes a writer more calls than this needs a design decision, not more calls
+WRITER_CALL_LIMIT = 400  # a slice that takes a writer more calls than this needs a design decision, not more calls
 
 
 def writer_calls():
@@ -296,24 +296,22 @@ def writer_calls():
 
 
 def lane_reason(con, row, attempts, calls):
-    """Why a row needs the strong lane, or "" when the DeepSeek writers should keep it.
+    """Why a row needs Claude, or "" when the DeepSeek writers keep it. DeepSeek does about nine rows in ten.
 
-    The lane is the CTO/plumber, not a second driver: it takes what a writer failed at, what other rows
-    wait on, and the infrastructure the writers stand on. Routine rows (STUCK-*, test merges) stay with the writers.
+    Claude takes only hard code: a row a writer spent its budget on without landing it, or one that other rows
+    wait on. Verification, test merging, harness self-checks and scripts are DeepSeek's (or plain scripts').
     """
     code, file_ref, notes, row_id = row
-    if "BURN" in notes or notes.count("REOPENED") >= 2:
-        return "a writer failed it"
-    if attempts.get(code, 0) >= 3:
-        return f"{attempts[code]} writer attempts did not land it"
+    if code.startswith(("FAST-", "RULE-", "STUCK-", "WIK-", "JEV-")) or code == "QUAL-DEDUP":
+        return ""
+    if "WRITER-HANDOFF" in notes or "BURN" in notes:
+        return "a writer spent its call budget on it without landing it"
     if calls.get(code, 0) >= WRITER_CALL_LIMIT:
-        return f"{calls[code]} writer calls and it is still open (one attempt that never ends has no failure count)"
+        return f"{calls[code]} writer calls and it is still open"
     waiting = con.execute("select count(*) from dependencies d join tasks t on t.id=d.task_id "
                           "where d.depends_on=? and t.status not in ('done','deferred')", (row_id,)).fetchone()[0]
-    if waiting:
-        return f"{waiting} row(s) wait on it"
-    if any(path.strip().startswith(("scripts/", "plan/", "app/Providers/", "config/")) for path in (file_ref or "").split(";")):
-        return "infrastructure"
+    if waiting >= 2:
+        return f"{waiting} rows wait on it"
     return ""
 
 
