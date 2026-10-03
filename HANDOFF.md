@@ -598,7 +598,23 @@ and pushed as `c694d0c`.
   `ConversationCycleTest`, `BattleObservationTest` x2, `AllyUnderAttackObservationTest`,
   `AiExploitationGuardTest` (trust/affinity now `-1..1`, the old `0.0` clamp asserted);
   `AiAdmissionLimitTest`, `LaunchActivityGuardSituationTest`, `WarFleetBuysHullSituationTest`.
-- `ARCH-GOALS` has been attempted and refused (no marker); `ARCH-INTEL` is in progress (step 121+).
+- **`ECON-001` and `ARCH-INTEL` also landed** (both proven, ledger `done`, pushed):
+  `ab80609` (ECON-001: the next login wakes early when the next build step becomes affordable —
+  `SessionDecisionService::affordabilityEta`, `NextStepAffordableSituationTest`) and `4e161df`
+  (ARCH-INTEL step 7: `IntelBook` per-target counter written by `RecordAiRaidOutcomeAction` +
+  `GalaxyMap` threat/opportunity from what the account has seen, read by the spy/colony/unit planners,
+  with `resources/behavior/intel.yaml`; its red spec `MigrationIntelTest` passes).
+- **`ARCH-GOALS` is being written now** (the only row of the three still open).
+- **Module suite: 11 failed / 1544 passed** (`47 -> 19 -> 11`). The doctrine-label staleness cluster is
+  gone. The 11 left: 2 are `ARCH-GOALS`' red spec; `GrowthStallReactionTest` x3 (`Situation::scoreHistory()`
+  missing); `ConversationCycleTest`, `BattleObservationTest` x2, `AllyUnderAttackObservationTest`,
+  `AiExploitationGuardTest` (trust/affinity now `-1..1`, the old `0.0` clamp asserted); `AiAdmissionLimitTest`.
+- **Harness bug fixed and pushed (`77bdad1`)**: `strategy-pipeline.py::migrations_for` read every
+  `app/Models/*.php` in the row's `file_ref`, so a row that CREATES its model (`ARCH-GOALS` /
+  `app/Models/AiGoal.php`) raised `FileNotFoundError` out of `implement_row` and **killed the writer** —
+  the loop kept verifying but never wrote another row (that is why `ARCH-GOALS` looked "attempted and
+  refused"). A missing model file now skips only the declared-`$table` probe. Harness restarted; the
+  writer is on `ARCH-GOALS` again.
 - Fresh 1 h / 20-account sim **on the tree with the phase machine** (`SIM_DB=ogamex-sim-phase`,
   real sidecars up, started 20:36 UTC):
 
