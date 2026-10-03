@@ -55,6 +55,14 @@ Please run, in this order, and report what each prints:
   the secondary line); `HARNESS_READ_SIM_HOURS=0` turns it off. The babysitter's steering block, which every writer and the Claude lane
   read, now says to use `sim` / `prove` / `clock-sweep` instead of waiting. Please confirm the log shows `=== simulated read` and its `SIM:` line.
 
+### Speedup fix (fast-time thread, 13:15 UTC) -- please report the new speedup
+The x4 had no profile, so `ai:sim` now prints `JUMPS:` and a `PROFILE:` table (real seconds per phase: fleet arrivals, due work, each
+maintenance command, next-instant queries) at the end of every run. Likely causes fixed blind: the three highscore generators ran every
+15 simulated minutes and walk every player (now once per `--highscore-every=3600` s); `process-fleet-arrivals` ran on every jump (now only when
+a fleet is overdue); an item the worker refuses (night claim, admission) kept the clock on one-minute jumps all night (now five minutes).
+Please rerun `sim --hours=6 --accounts=20` with its own SIM_DB and report: the SIM line (speedup), the JUMPS line and the whole PROFILE table. If
+one phase still dominates, say which: that is the next fix. If due work dominates, report sessions per real second; the cost is then the session itself.
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.

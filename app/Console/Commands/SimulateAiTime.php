@@ -36,7 +36,8 @@ use Throwable;
     {--from= : Start instant (default: where the last run on this database stopped, else the real now)}
     {--accounts= : Play only the first N enabled accounts}
     {--max-step=900 : Longest jump in simulated seconds when nothing is due}
-    {--maintenance=900 : Simulated seconds between campaign, alliance, score-sample and highscore passes}
+    {--maintenance=900 : Simulated seconds between campaign, alliance and score-sample passes}
+    {--highscore-every=3600 : Simulated seconds between the three highscore generators (each walks every player; the real schedule runs them every 300 s)}
     {--max-wall= : Stop after this many real seconds and keep the state, so a later run continues}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
     {--force-db : Allow a database whose name does not contain "sim"}')]
@@ -48,6 +49,11 @@ class SimulateAiTime extends Command
 
     /** @var array<string, int> */
     private array $errors = [];
+
+    /** @var array<string, array{0: float, 1: int}> seconds and calls per phase, printed as PROFILE at the end */
+    private array $profile = [];
+
+    private CarbonImmutable|null $nextHighscore = null;
 
     public function handle(): int
     {
@@ -88,19 +94,20 @@ class SimulateAiTime extends Command
         $hour = ['sessions' => 0, 'other' => 0, 'errors' => 0];
         $total = ['sessions' => 0, 'other' => 0, 'errors' => 0];
         $stoppedEarly = false;
+        $jumps = 0;
 
         while ($now->lessThan($end)) {
             SimulatedTime::freezeAt($now);
 
-            $this->runFleetArrivals();
-            $ran = $this->drainDueWork($players);
+            $this->timed('fleet arrivals', fn () => $this->runFleetArrivals());
+            $ran = $this->timed('due work (all sessions and orders)', fn (): array => $this->drainDueWork($players));
             foreach ($ran as $key => $count) {
                 $hour[$key] += $count;
                 $total[$key] += $count;
             }
 
             if ($now->greaterThanOrEqualTo($nextMaintenance)) {
-                $this->runMaintenance();
+                $this->runMaintenance($now);
                 $nextMaintenance = $now->addSeconds($maintenanceEvery);
             }
 
@@ -119,7 +126,8 @@ class SimulateAiTime extends Command
                 break;
             }
 
-            $now = $this->nextInstant($now, $end, $nextMaintenance, $players, $maxStep);
+            $now = $this->timed('next-instant queries', fn (): CarbonImmutable => $this->nextInstant($now, $end, $nextMaintenance, $players, $maxStep));
+            $jumps++;
         }
 
         if ($hourIndex >= 0) {
@@ -132,6 +140,8 @@ class SimulateAiTime extends Command
         file_put_contents($stateFile, $stoppedAt->toIso8601String());
 
         $this->reportErrors();
+        $this->line(sprintf('JUMPS: %d (average %.0f simulated seconds per jump)', $jumps, $start->diffInSeconds($stoppedAt) / max(1, $jumps)));
+        $this->reportProfile();
         $wall = max(0.001, microtime(true) - $wallStart);
         $simulated = $start->diffInSeconds($stoppedAt);
         $this->info(sprintf(
@@ -150,6 +160,29 @@ class SimulateAiTime extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    /** @template T @param callable(): T $work @return T */
+    private function timed(string $phase, callable $work): mixed
+    {
+        $started = microtime(true);
+
+        try {
+            return $work();
+        } finally {
+            $this->profile[$phase] ??= [0.0, 0];
+            $this->profile[$phase][0] += microtime(true) - $started;
+            $this->profile[$phase][1]++;
+        }
+    }
+
+    private function reportProfile(): void
+    {
+        uasort($this->profile, fn (array $a, array $b): int => $b[0] <=> $a[0]);
+        $this->line('PROFILE (real seconds spent per phase, biggest first):');
+        foreach ($this->profile as $phase => [$seconds, $calls]) {
+            $this->line(sprintf('  %8.1f s  %6d call(s)  %7.3f s/call  %s', $seconds, $calls, $seconds / max(1, $calls), $phase));
+        }
     }
 
     private function startInstant(string $stateFile): CarbonImmutable
@@ -179,6 +212,12 @@ class SimulateAiTime extends Command
 
     private function runFleetArrivals(): void
     {
+        // The command walks the overdue backlog; calling it when nothing has landed is pure overhead.
+        $due = DB::table('fleet_missions')->where('processed', 0)->where('time_arrival', '<=', SimulatedTime::now()->getTimestamp())->exists();
+        if (!$due) {
+            return;
+        }
+
         try {
             Artisan::call('ogamex:scheduler:process-fleet-arrivals', ['--limit' => self::BATCH]);
         } catch (Throwable $exception) {
@@ -191,7 +230,7 @@ class SimulateAiTime extends Command
      * score-sample passes, language reconciliation and the three highscore generators the module
      * runs on the first tick of each five-minute window.
      */
-    private function runMaintenance(): void
+    private function runMaintenance(CarbonImmutable $now): void
     {
         $commands = [
             'ai:advance-campaigns',
@@ -199,14 +238,18 @@ class SimulateAiTime extends Command
             'ai:reconcile-language-requests',
             'ai:record-score-samples',
             'ai:run-campaign',
-            'ogamex:scheduler:generate-highscores',
-            'ogamex:scheduler:generate-alliance-highscores',
-            'ogamex:scheduler:generate-highscore-ranks',
         ];
+
+        // The highscore generators walk every player and rank them; at the real five-minute cadence they
+        // dominated a simulated quarter hour, and nothing the cohort decides reads them that often.
+        if ($this->nextHighscore === null || $now->greaterThanOrEqualTo($this->nextHighscore)) {
+            array_push($commands, 'ogamex:scheduler:generate-highscores', 'ogamex:scheduler:generate-alliance-highscores', 'ogamex:scheduler:generate-highscore-ranks');
+            $this->nextHighscore = $now->addSeconds(max(300, (int) $this->option('highscore-every')));
+        }
 
         foreach ($commands as $command) {
             try {
-                Artisan::call($command);
+                $this->timed('maintenance: ' . $command, fn (): int => Artisan::call($command));
             } catch (Throwable $exception) {
                 $this->noteError($command . ': ' . $exception->getMessage());
             }
@@ -286,7 +329,11 @@ class SimulateAiTime extends Command
             ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value])
             ->min('due_at');
         if ($nextWork !== null) {
-            $candidates[] = CarbonImmutable::parse($nextWork);
+            // Still due after the drain means the worker refused it (a claim that waits for the waking
+            // window, an admission that is off). Retrying such an item every simulated minute made a night
+            // of hundreds of pointless jumps, so it is looked at again in five minutes.
+            $due = CarbonImmutable::parse($nextWork);
+            $candidates[] = $due->greaterThan($now) ? $due : $now->addSeconds(min($maxStep, 300));
         }
 
         $nextLease = DB::table('ai_work_items')
@@ -307,7 +354,7 @@ class SimulateAiTime extends Command
 
         $next = collect($candidates)->sortBy(fn (CarbonImmutable $at): int => $at->getTimestamp())->first();
 
-        return $next->lessThanOrEqualTo($now) ? $now->addMinute() : $next;
+        return $next->lessThanOrEqualTo($now) ? $now->addSeconds(min($maxStep, 60)) : $next;
     }
 
     /** @param array{sessions: int, other: int, errors: int} $hour */
