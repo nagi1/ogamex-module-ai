@@ -1,0 +1,2 @@
+PASS aspect:shipyard 4s
+PROOF: PASS COVER-Ship-deathstar (aspect:shipyard)

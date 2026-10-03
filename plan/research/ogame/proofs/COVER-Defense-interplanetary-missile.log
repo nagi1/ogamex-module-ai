@@ -1,0 +1,2 @@
+PASS aspect:shipyard 0s
+PROOF: PASS COVER-Defense-interplanetary-missile (aspect:shipyard)

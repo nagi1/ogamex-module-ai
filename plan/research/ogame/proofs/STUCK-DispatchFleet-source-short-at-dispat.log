@@ -1,2 +1,2 @@
-PASS aspect:work_failures 2s
+PASS aspect:work_failures 1s
 PROOF: PASS STUCK-DispatchFleet-source-short-at-dispat (aspect:work_failures)
