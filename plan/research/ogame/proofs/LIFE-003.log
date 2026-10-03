@@ -1,0 +1,2 @@
+PASS invariant:LIFE_MOONS 22s
+PROOF: PASS LIFE-003 (invariant:LIFE_MOONS)

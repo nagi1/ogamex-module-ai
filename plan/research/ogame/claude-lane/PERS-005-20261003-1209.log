@@ -1,0 +1,3 @@
+- **Changed:** PERS-005 moves the shipyard aspect (the NAKED_BESIDE_WALLED invariant), and the code was already shipped. The proof failed because the test double `tests/Support/TimeoutOgameConversationReplyAgent.php` had a `prompt()` signature that no longer matched the vendor one. That fatal-errored every test file that loaded it. I widened the signature and committed it. This fix should unblock any row whose proof or `test-one` run loads that file.
+- **Proof:** PASS. `NakedColonyFerryTest`, `WALL_CEILING`, `NAKED_BESIDE_WALLED` and `aspect:shipyard` all passed, and `task.py done PERS-005` accepted the row.
+- **Left:** The scorecard is 13 of 15 aspects, with `fleet_save` and `alliance` failing. They belong to other rows and need no change here.

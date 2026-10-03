@@ -1,0 +1,8 @@
+Trader and Casual now fold onto Miner and Hybrid through `AiArchetype::growthStyle()`, but PERS-008 is not done. I released the claim and left the row open because `task.py done` failed its proof.
+
+- **What changed:**
+  - `ArchetypePolicyRegistry` resolves a stored Trader to Miner and a stored Casual to Hybrid, so no stored profile is renumbered and no new one is seeded as either.
+  - I deleted `TraderPolicy` and `CasualPolicy` and updated the tests that tagged them.
+  - `QueueableJumpGatePlanner` now returns null when the host account is missing. That was the "User not found" failure the writer's tests kept hitting.
+- **Proof verdict:** `aspect:economy` passed and `aspect:alliance` failed (alliance 0, floor 1). The PERS-008 scorecard read 13 of 15 aspects, with `fleet_save` also at 0. The tests that name the touched classes pass, except `ArchetypeGrowthSituationTest`, which `test-one` found no tests for. The code is committed.
+- **Left:** The alliance and fleet_save aspects need cohort time, not more code on this row. Their owners are `ReviewAiAllianceApplicationsAction` and `QueueableFleetSavePlanner`. `task.py` has no way to add a note to a row, so I could not leave the next-read pointer there. Next, read `bash scripts/ogamex sim --hours=12` for those two aspects.

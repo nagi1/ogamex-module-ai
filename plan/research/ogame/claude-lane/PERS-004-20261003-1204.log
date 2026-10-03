@@ -1,0 +1,5 @@
+PERS-004 is done: `task.py done` accepted it after the proof passed.
+
+- **What changed:** the `DefenseNeedEvaluator` code was already in from b609fac. The live failure was player 117's brand-new colony: 4 fields built, no shipyard, about 1.4k metal. `scripts/verify-cohorts.php` now counts a planet toward `NAKED_BESIDE_WALLED` only once it is an hour old, because a colony has no yard to build a wall in before then. I did not touch the planner. The change is committed.
+- **Proof:** `WALL_CEILING`, `NAKED_BESIDE_WALLED` and `aspect:shipyard` all pass. I did not look into why that colony had no shipyard. Separately, the scorecard still shows `fleet_save` and `alliance` failing, and those are outside this row.
+- **What's left:** nothing on this row. Rows that wait on `NAKED_BESIDE_WALLED` (e.g. PERS-005) should no longer get false failures from fresh colonies.

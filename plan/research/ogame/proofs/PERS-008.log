@@ -1,0 +1,3 @@
+PASS aspect:economy 1s
+FAIL aspect:alliance 0s —  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
+PROOF: FAIL PERS-008 (aspect:economy aspect:alliance) at aspect:alliance:  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance

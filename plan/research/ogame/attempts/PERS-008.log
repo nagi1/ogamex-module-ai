@@ -1,0 +1,69 @@
+the delivered change passed its tests but its live proof failed:
+PASS aspect:economy 1s
+FAIL aspect:alliance 0s —  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
+PROOF: FAIL PERS-008 (aspect:economy aspect:alliance) at aspect:alliance:  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 338 sessions on 100 accounts
+  backlog: 159 work item(s) more than a minute late, oldest 15 min — live verdicts read worker lag
+  sessions chose: Trade 28%, QueueUnits 24%, Raid 16%, Defend 11%, Spy 10%, DoNothing 5%, Transfer 4%, Colonize 1%, Build 1%, Research 1%, ThrottleMine 0%
+  host orders: buildings 395, research 72, units 286
+  missions launched: AcsDefend 39, Espionage 32, Attack 18, Transport 12, Deployment 7, Colonisation 3
+  work (kind: state count):
+    RunSession: Completed 338, Leased 3, Pending 99
+    Trade: Failed 97, Retry 20, Pending 6
+    QueueUnits: Completed 261, Retry 4, Pending 18
+    BuildFirstBuilding: Completed 774, Retry 8, Pending 47
+    Spy: Completed 35, Retry 3, Pending 3
+    QueueResearch: Completed 121, Pending 7
+    Defend: Completed 42, Retry 2, Pending 4
+    Raid: Completed 55, Retry 2, Pending 3
+    FleetSave: Completed 5, Pending 1
+    SetMinePercent: Completed 2
+    Transfer: Completed 12, Retry 1
+    Colonize: Completed 3, Retry 1
+  refused: 
+    37 × DispatchFleet: target_active_at_dispatch
+    8 × QueueBuilding: Maximum number of items already in queue.
+    4 × DispatchFleet: source_short_at_dispatch
+    3 × DispatchFleet: no_disposable_fleet
+    3 × QueueBuilding: shipyard_busy
+    3 × QueueUnits: nothing_queueable
+    1 × QueueResearch: already_researching
+    1 × QueueBuilding: Not enough fields on this planet. Upgrade your Terraformer or use a planet field item to get more fields.
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: queue_units, spy, throttle_mine
+  NOT published: build, research, colonize
+
+  player_id                    35
+  observed_at                  1791037442
+  account_state                "active"
+  recovery_factor              0.1841
+  fleet_slots_free             9
+  colonize_eligible            true
+  target_reports               13 item(s): [{"report_id":1303,"observed_at":1791031866,"expires_at":1791118266,"confidence":0.15317708333333335,"travel_cost":0.2222222222222222,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":1216,"observ
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      6 planet(s)
+
+  decision: Defend
+    Defend        57.8  resource_need=27, safety=15, recovery=3.7, archetype_preference=12.5, seeded_variation=-0.4
+    Transfer      45.8  resource_need=27, safety=15, recovery=3.7, seeded_variation=0.1
+    QueueUnits    43.9  resource_need=30, safety=10, recovery=3.7, seeded_variation=0.2
+    ThrottleMine  43.8  resource_need=30, safety=10, recovery=3.7, seeded_variation=0.1
+    Spy           43.5  resource_need=30, safety=10, recovery=3.7, seeded_variation=-0.1
+    Raid          42.3  resource_need=30, safety=5, travel_cost=-0.1, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Raid          42.3  resource_need=30, safety=5, travel_cost=-0.1, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Expedition    42.3  resource_need=9, safety=30, recovery=3.7, seeded_variation=-0.4
+    Raid          42.1  resource_need=30, safety=5, travel_cost=-0.4, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Raid          42.1  resource_need=30, safety=5, travel_cost=-0.4, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Raid          42.1  resource_need=30, safety=5, travel_cost=-0.4, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Raid          42.1  resource_need=30, safety=5, travel_cost=-0.4, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Raid          42.0  resource_need=30, safety=5, travel_cost=-0.4, recovery=3.7, archetype_preference=3.8, seeded_variation=-0.3, affect=0.4
+    Raid          42.0  resource_need=30,
