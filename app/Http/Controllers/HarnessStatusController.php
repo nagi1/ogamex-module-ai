@@ -191,6 +191,8 @@ class HarnessStatusController
         $attempts = glob($this->path('plan/research/ogame/attempts/*.{count,stuck}'), GLOB_BRACE) ?: [];
         $parts[] = 'attempts:'.count($attempts).':'.max([0, ...array_map('filemtime', $attempts)]);
         $scorecards = glob($this->path('plan/research/ogame/scorecards/*.json')) ?: [];
+        $lane = glob($this->path('plan/research/ogame/claude-lane/*.log')) ?: [];
+        $parts[] = 'claudeLane:'.count($lane).':'.max([0, ...array_map('filemtime', $lane), ...array_map('filesize', $lane)]);
         $parts[] = 'babysitter:'.(@filemtime($this->path('plan/research/ogame/babysitter.json')) ?: 0);
         $parts[] = 'scorecards:'.count($scorecards).':'.max([0, ...array_map('filemtime', $scorecards)]);
 
@@ -220,6 +222,7 @@ class HarnessStatusController
             'rows' => $this->rows(),
             'cohort' => $this->cohort(),
             'babysitter' => $this->babysitter(),
+            'claudeLane' => $this->claudeLane(),
         ];
     }
 
@@ -512,6 +515,55 @@ class HarnessStatusController
         }
 
         return $ledger;
+    }
+
+    /**
+     * The strong lane: Claude Code works the rows the babysitter hands it (scripts/claude-lane.py).
+     *
+     * @return array<string, mixed>
+     */
+    private function claudeLane(): array
+    {
+        $directory = $this->path('plan/research/ogame/claude-lane');
+        $running = false;
+        $handle = @fopen($directory.'/lane.lock', 'c');
+        if ($handle !== false) {
+            // The runner holds this lock for the whole run, so failing to take it means a run is live.
+            $running = !flock($handle, LOCK_EX | LOCK_NB);
+            fclose($handle);
+        }
+
+        $logs = glob($directory.'/*.log') ?: [];
+        usort($logs, static fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
+        $runs = [];
+        foreach (array_slice($logs, 0, 6) as $log) {
+            $tail = array_values(array_filter(array_map('trim', array_slice(file($log) ?: [], -3))));
+            $runs[] = [
+                'name' => basename($log, '.log'),
+                'at' => date('H:i', (int) filemtime($log)),
+                'kb' => (int) round(filesize($log) / 1024),
+                'tail' => $tail === [] ? 'working, nothing written yet' : implode(' / ', $tail),
+            ];
+        }
+
+        $queue = [];
+        try {
+            $connection = new PDO('sqlite:'.$this->taskDatabase(), null, null, [PDO::ATTR_TIMEOUT => 2]);
+            foreach ($this->queryRows($connection, "SELECT code, priority, status, assignee, title, notes FROM tasks WHERE assignee IN ('claude-lane', 'claude') AND status IN ('todo', 'in_progress', 'blocked') ORDER BY priority, updated_at") as $row) {
+                $queue[] = [
+                    'code' => $row['code'],
+                    'priority' => $row['priority'],
+                    'status' => $row['status'],
+                    'who' => $row['assignee'] === 'claude' ? 'interactive' : 'lane',
+                    'title' => mb_substr((string) $row['title'], 0, 90),
+                    'runs' => substr_count((string) $row['notes'], 'CLAUDE-LANE'),
+                ];
+            }
+        } catch (Throwable) {
+            // The page stays up without the ledger.
+        }
+
+        return ['running' => $running, 'model' => 'claude-sonnet-5-5', 'queue' => $queue, 'runs' => $runs];
     }
 
     /**

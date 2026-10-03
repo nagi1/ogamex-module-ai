@@ -180,6 +180,17 @@
         <div class="note" id="waitingNote" hidden></div>
     </section>
 
+    <section class="panel" id="lanePanel" aria-label="Claude lane">
+        <h2>Claude lane <small id="laneMeta">stuck, urgent and reopened rows</small></h2>
+        <div class="kv" id="laneKv"></div>
+        <div class="scroll"><table>
+            <thead><tr><th>row</th><th>pri</th><th>state</th><th>by</th><th>runs</th><th>title</th></tr></thead>
+            <tbody id="laneQueue"></tbody>
+        </table></div>
+        <ul class="plain" id="laneRuns"></ul>
+        <div class="empty" id="laneEmpty" hidden>No row is handed to Claude. The babysitter delegates stuck, P0 and twice-reopened rows.</div>
+    </section>
+
     <section class="panel" id="babysitterPanel" aria-label="Babysitter">
         <h2>Babysitter <small id="babyMeta">is the harness delivering value?</small></h2>
         <div class="kv" id="babyKv"></div>
@@ -357,6 +368,17 @@
             + '<span class="r ' + (call.finish === 'stop' ? '' : 'no') + '">' + (call.finish === 'stop' ? Math.round(call.output / 1000) + 'k tok · ' + Math.round(call.seconds) + 's' : 'cut off (' + esc(call.finish) + ')') + '</span></li>').join('');
     }
 
+    function renderLane(lane) {
+        if (!lane) return;
+        const idle = !lane.queue.length && !lane.runs.length;
+        $('laneEmpty').hidden = !idle;
+        $('laneKv').innerHTML =
+            '<div><b class="' + (lane.running ? 'ok' : '') + '">' + (lane.running ? 'RUNNING' : 'idle') + '</b><span>' + esc(lane.model) + '</span></div>'
+            + '<div><b>' + lane.queue.length + '</b><span>rows handed to Claude</span></div>';
+        $('laneQueue').innerHTML = lane.queue.map(r => '<tr><td>' + esc(r.code) + '</td><td>' + esc(r.priority) + '</td><td>' + esc(r.status) + '</td><td>' + esc(r.who) + '</td><td>' + r.runs + '</td><td>' + esc(r.title) + '</td></tr>').join('');
+        $('laneRuns').innerHTML = lane.runs.map(r => '<li><span>' + esc(r.at) + ' ' + esc(r.name) + ' (' + r.kb + ' kb)</span><span class="r">' + esc(r.tail) + '</span></li>').join('');
+    }
+
     function renderBabysitter(b) {
         $('babyEmpty').hidden = !!b;
         ['babyKv', 'babyLoops', 'babyFixed', 'babyHistory'].forEach(id => $(id).hidden = !b);
@@ -402,7 +424,7 @@
 
     function render(data) {
         renderState(data); renderStar(data.northStar); renderStories(data.stories); renderQueue(data.queue); renderRows(data.rows);
-        renderWriter(data.model); renderBabysitter(data.babysitter); renderCohort(data.cohort); renderNow(data);
+        renderWriter(data.model); renderBabysitter(data.babysitter); renderLane(data.claudeLane); renderCohort(data.cohort); renderNow(data);
     }
 
     /* ---- log: the last hour, persisted ---- */
