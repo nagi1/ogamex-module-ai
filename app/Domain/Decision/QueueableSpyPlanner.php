@@ -158,13 +158,10 @@ class QueueableSpyPlanner
             return null;
         }
 
-        // A scout looks at the quiet neighbours it has not already read, not at the closest rows in the
-        // universe: in a crowded universe the nearest bodies all belong to accounts that played minutes ago,
-        // so the activity star would refuse every one of them and the cap would never reach a farm. The
-        // candidate set is therefore a farm first and a neighbour second -- owners whose own last-activity
-        // stamp (the host's column) is oldest come first, and within that the nearest body to the origin wins
-        // (INT-003) -- and only then is the set capped. The stamp is the ordering key only; the host's
-        // isInactive() below stays the authority on whether a candidate really is a farm.
+        // A scout reads the neighbours nearest to home, not the oldest stamps in the universe: ordering by the
+        // owner's last login pushed every cohort account (whose stamp is zero) behind the fixed farms, so
+        // the nearest rivals were never read and nothing defended was ever raided. The farm-first ranking
+        // below still picks the quiet body among the nearest, and the host's isInactive() stays the authority.
         $home = $idleOrigins[0]->getPlanetCoordinates();
         $candidates = Planet::query()
             ->leftJoin('users', 'users.id', '=', 'planets.user_id')
@@ -173,11 +170,7 @@ class QueueableSpyPlanner
             ->where(fn ($owner) => $owner->whereNull('users.vacation_mode')->orWhere('users.vacation_mode', 0))
             ->whereIn('planets.planet_type', [PlanetType::Planet->value, PlanetType::Moon->value])
             ->select('planets.*')
-            // A stamp of zero means the host never recorded a login for that owner; it is the absence of the
-            // host's inactivity input, not the strongest case of it (the cohort's own bot accounts never sign
-            // in through the web). Such rows come last, so a real last-login stamp -- however old -- outranks
-            // them and a farm is reached before the cap fills with accounts the activity star then refuses.
-            ->orderByRaw('CASE WHEN COALESCE(`users`.`time`, 0) = 0 THEN 1 ELSE 0 END ASC, COALESCE(`users`.`time`, 0) ASC, ABS(CAST(`planets`.`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`planets`.`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planets`.`planet` AS SIGNED) - ?), `planets`.`id`', [$home->galaxy, $home->system, $home->position])
+            ->orderByRaw('ABS(CAST(`planets`.`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`planets`.`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planets`.`planet` AS SIGNED) - ?), `planets`.`id`', [$home->galaxy, $home->system, $home->position])
             ->cursor()
             ->reject(static fn (Planet $planet): bool => isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"]))
             ->take(self::MAX_CANDIDATES)
