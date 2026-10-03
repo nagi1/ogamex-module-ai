@@ -48,6 +48,11 @@ use OGame\Services\PlanetService;
  */
 class EconomyUpgrades
 {
+    /** How many levels of a facility the vault buys for its own sake, and the multiple of the price it keeps first. */
+    private const AMBITION_LEVELS = 3;
+
+    private const AMBITION_VAULT = 6.0;
+
     /** metal-equivalent weights of the accepted trade band, which is how players compare costs. */
     private const CRYSTAL_WEIGHT = 1.5;
 
@@ -189,6 +194,57 @@ class EconomyUpgrades
         usort($entries, static function (array $left, array $right): int {
             return $right['share'] <=> $left['share'] ?: $left['total'] <=> $right['total'];
         });
+
+        return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $entries);
+    }
+
+    /**
+     * The facilities and technologies a planet that is sitting on a pile builds for their own sake:
+     * the nano factory, terraformer, depot, dock, gate and the far end of the research tree are not
+     * production upgrades, so the payback ranking never picks them and no account ever owned one
+     * (COVER-*). A player with six times the price in the vault and nothing urgent buys the next
+     * thing the catalogue offers, cheapest first, a few levels each. Nothing is named: the objects are
+     * the host's own stations and technologies, the gate is the host's requirement check, and the
+     * queue's own refusals (planet type, free fields, price plus reserve) still apply downstream.
+     *
+     * @return list<BuildCandidate>
+     */
+    public function ambitions(PlanetService $planet): array
+    {
+        $entries = [];
+        $production = array_map(static fn ($object): string => $object->machine_name, ObjectService::getGameObjectsWithProduction());
+
+        foreach ([...ObjectService::getStationObjects(), ...ObjectService::getResearchObjects()] as $object) {
+            if (in_array($object->machine_name, $production, true)) {
+                continue;
+            }
+            if ($planet->getObjectLevel($object->machine_name) >= self::AMBITION_LEVELS) {
+                continue;
+            }
+            if (!ObjectService::objectValidPlanetType($object->machine_name, $planet) || !ObjectService::objectRequirementsMet($object->machine_name, $planet)) {
+                continue;
+            }
+
+            $price = ObjectService::getObjectPrice($object->machine_name, $planet);
+            $vault = new Resources(
+                $price->metal->get() * self::AMBITION_VAULT,
+                $price->crystal->get() * self::AMBITION_VAULT,
+                $price->deuterium->get() * self::AMBITION_VAULT,
+            );
+            if ($price->sum() <= 0.0 || !$planet->hasResources($vault)) {
+                continue;
+            }
+
+            $entries[] = [
+                'total' => $price->sum(),
+                'candidate' => app()->makeWith(BuildCandidate::class, [
+                    'buildingId' => $object->id,
+                    'reason' => 'economy:ambition:' . $object->machine_name,
+                ]),
+            ];
+        }
+
+        usort($entries, static fn (array $left, array $right): int => $left['total'] <=> $right['total']);
 
         return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $entries);
     }

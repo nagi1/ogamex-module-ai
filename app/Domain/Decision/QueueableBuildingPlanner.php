@@ -144,6 +144,9 @@ class QueueableBuildingPlanner
             'wall' => fn (PlanetService $planet): array => $this->facilityChain->wallPending($planet),
             'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
             'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
+            // A planet sitting on six times the price of a facility it does not own buys it before another
+            // mine: the nano factory, terraformer and the rest are what a human with a pile builds (COVER-*).
+            'ambition' => fn (PlanetService $planet): array => $this->economyUpgrades->ambitions($planet),
             'routine' => fn (PlanetService $planet): array => [
                 ...$this->energyCapacity->pending($planet),
                 ...$this->facilityChain->pending($planet),
