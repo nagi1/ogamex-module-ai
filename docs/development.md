@@ -714,3 +714,17 @@ the existing Pest 5/PAO/PCOV/TIA and quality gates with real feature scenarios.
 - nWidart Laravel Modules: https://github.com/nWidart/laravel-modules
 - nWidart module publishing: https://nwidart.com/laravel-modules/v6/advanced-tools/publishing-modules
 - Composer path repositories: https://getcomposer.org/doc/05-repositories.md#path
+
+## Simulated time
+
+Game time is calculation over timestamps, so nothing needs to wait for wall-clock hours.
+`Modules\AI\Support\SimulatedTime` freezes or moves every Carbon flavour at once. Dev tooling built on it:
+
+- `php artisan ai:sim --hours=N` (on a database whose name contains "sim") plays the cohort forward with an
+  event-jumping clock; `bash scripts/ogamex sim` clones the cohort, runs it and prints the scorecard and invariants.
+- `PROVE_SIM_HOURS=N bash scripts/ogamex prove CODE` judges live proof steps on a simulated copy.
+- `bash scripts/ogamex clock-sweep TestName [hours]` runs a test at several frozen UTC hours (`OGAMEX_TEST_NOW`).
+- `AI_SIM_NOW=<instant>` freezes any module process at an instant.
+
+Rule for code: read time from `now()`, `Date::now()` or `AiClock`, never `time()` or SQL `NOW()`, so the
+simulated clock reaches it.

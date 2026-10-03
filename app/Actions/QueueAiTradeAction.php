@@ -49,7 +49,7 @@ class QueueAiTradeAction implements QueueAiTrade
             cache()->forever('active_merchant_' . $playerId, [
                 'type' => $giveResource,
                 'trade_rates' => $called['tradeRates'] ?? [],
-                'called_at' => time(),
+                'called_at' => now()->getTimestamp(),
             ]);
 
             $rate = (float) ($called['tradeRates']['receive'][$receiveResource]['rate'] ?? 0.0);

@@ -5,23 +5,48 @@ local verifier (it runs, it reports, it fixes nothing in planner code).
 
 ## Request
 
-Written after the 2026-10-03 12:05 UTC results. Code only, none of it run in the cloud. Pull both repos first.
+Written 2026-10-03 ~12:50 UTC. Code only, none of it run in the cloud. Pull both repos first (host commit b5fb9527 changes
+`tests/TestCase.php`; the module adds `ai:sim`). Rebuild is not needed beyond the usual `composer dump-autoload`.
 
-Pushed to module main this cycle:
-- AUTH_UPTIME: a failed session's one-minute retry (`ProcessAiWork::scheduleSessionRecovery`) now takes the routine's next wake when the account is asleep, instead of firing in the dark period.
-- LIFE_FIGHTS: `CandidateActionFactory` drops empty-planet raid candidates (rejection `defended_target_preferred`) whenever a defended target also clears the raid planner, so sessions fight when they can and farm only when nothing defended is viable.
+### New: fast time. Stop waiting on wall-clock hours
 
-Not changed: NAKED_BESIDE_WALLED (player 117). The planner already orders a wall for every bare sibling (`standingDefenceOrders`), so I could not find a code cause from the report alone.
+Game time is now a thing the harness controls. `Modules\AI\Support\SimulatedTime` freezes/moves every Carbon flavour at once
+(host `now()`, `Date::now()`, the module `AiClock`). Four tools sit on it. Use them instead of waiting two hours:
 
-Answer to the 12:14 UTC failure (accelerated claim test): not caused by 2a70aa5. The claim path has kept the night since 5da78a5, so the test only passes while the clock falls in the profile's waking window. The test now travels to the profile's local noon (tests/Feature/ProcessAiWorkTest.php). Please re-run ProcessAiWorkTest.
-On the retry risk: the night-aware retry now applies only when `ai.population.session_interval_seconds` is 0 (real-time); an accelerated cohort keeps the one-minute retry. Pull ede3f9b+ and restart the queue worker. If AUTH_UPTIME still lists accounts, check whether retries are the cause.
-Observation for the raid gap: Raid already scores resource_need 1.0 in `features`; the `why` output shows no Raid candidate at all, so the gap is upstream (reports `score_viable:false` or planner rejections). Item 4 below (`ai:raid-rejected:*` counters) is the number that decides the next fix.
+1. **`OGAMEX_RUNNER=local-docker-dev bash scripts/ogamex sim --hours=24`**
+   Clones the grand database into `ogamex-sim` (pure SQL, about a minute), then plays 24 simulated hours through the real
+   `ProcessAiWork`, routines, waking windows, night rest, fleet arrivals and the scheduler's maintenance commands. The clock
+   jumps straight to the next instant anything is due, so a quiet night is one jump. Then it prints the scorecard and the
+   `verify-cohorts` invariants (AUTH_UPTIME, LIFE_FIGHTS, NAKED_BESIDE_WALLED ...) read at the simulated instant over the same window.
+   The live cohort is never touched (the command refuses any database whose name lacks "sim").
+   Useful flags (all passed to `ai:sim`): `--accounts=20` plays only the first 20 accounts (fastest), `--max-wall=600`
+   stops after 600 real seconds and keeps state, `SIM_KEEP=1` continues the last copy from where it stopped instead of re-cloning
+   (so `SIM_KEEP=1 ... sim --hours=24` is day 2), `--keep-accelerated` keeps the 5 s session interval (default is real routines).
+   Output ends with `SIM: <h> played in <s> (x<speedup>), <n> sessions, <n> other, <n> errors` and an error digest.
+2. **`PROVE_SIM_HOURS=48 bash scripts/ogamex prove CODE`**: runs the test steps, then simulates 48 h on a copy and judges every
+   live step (situation, invariant, aspect) on that copy over exactly those hours. One run settles a row that used to need a
+   day of waiting. Without the variable `prove` behaves exactly as before.
+3. **`bash scripts/ogamex clock-sweep ProcessAiWorkTest`** runs a test file with the clock frozen at UTC hours 0 3 6 ... 21
+   (`OGAMEX_TEST_NOW`, honoured by the host `tests/TestCase.php`). `CLOCK-SWEEP: FAIL` names the hours it breaks at, so a test
+   that only passes in the profile's waking window is found in one run instead of by luck. Pass your own hours:
+   `clock-sweep ProcessAiWorkTest 2 14`. `OGAMEX_TEST_NOW` also works on any `test-one`.
+4. **`AI_SIM_NOW=2026-10-05T12:00:00Z`** in front of any module script, tinker run or artisan command freezes that process at the
+   instant (the module provider reads it at boot). Unset, nothing changes.
 
-Please run next:
-1. Let the stack run at least two hours on the new code, then re-read `verify-cohorts`. AUTH_UPTIME reads a 7-day window, so players 96-99 may stay listed until old dark-period sessions age out. Report their per-hour session counts for the last 6 hours instead.
-2. LIFE_FIGHTS: report attacks launched per hour and the share of new battles with combat rounds counted from battles created after the pull, not the 24h figure.
-3. NAKED_BESIDE_WALLED: for player 117 report each planet's defence units, its unit queue, its shipyard level, its metal/crystal/deuterium stock, and the last 3 `QueueUnits` outcomes for it (state and refusal text).
-4. Raid rejection reasons: dump the `ai:raid-rejected:*` cache counters.
+Please run, in this order, and report what each prints:
+- `clock-sweep ProcessAiWorkTest` (the 12:14 failure was a time-of-day dependence; this proves the fix holds at every hour).
+- `clock-sweep RunDueAiWorkTest`, `RoutineCadenceTest`, `IdleOverrideAndAntiBotCadenceTest`, `DeterministicSessionLoopTest`,
+  `ProcessAiSessionTest`, `SimulatedTimeTest`. Report only the FAIL lines.
+- `sim --hours=24 --accounts=20 --max-wall=900` first (smoke: does `ai:sim` run, what is the speedup, which errors in the digest), then
+  `sim --hours=48` for the full cohort. Report: speedup, the per-hour session table for players 96-99 (AUTH_UPTIME), attacks launched
+  per hour, LIFE_FIGHTS share, the NAKED_BESIDE_WALLED rows for player 117, and the `ai:raid-rejected:*` counters (file cache on the
+  copy, read them with `AI_SIM_NOW` set to the printed SIM_NOW and `CACHE_STORE=file`).
+- If `ai:sim` throws on first use, fix the cause in `app/Console/Commands/SimulateAiTime.php` (it is new and unrun) and say what you changed.
+
+### Still open from the 12:05 request (answer them through `sim`, not by waiting)
+- AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
+- LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.
+- NAKED_BESIDE_WALLED player 117: per planet defence units, unit queue, shipyard level, stock, last 3 `QueueUnits` outcomes.
 
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 

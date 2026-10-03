@@ -151,7 +151,20 @@ Live (on a cohort, PROVE_UNIVERSE=grand by default; all read-only except situati
   why <player_id>                       what its next session will see: published actions, every input flag,
                                         the real decision over it and what the candidate factory turned down
 
+Fast time (simulated clock, no waiting; always on a copy of the cohort database):
+  sim [--hours=N] [--accounts=N] [--max-wall=S]   clone the cohort to ogamex-sim, play N simulated hours (default 24)
+                                        through the real sessions/routines, then print the scorecard and invariants
+                                        read at the simulated instant. SIM_KEEP=1 continues the last copy instead.
+  sim-clone [db]                        only the clone (default ogamex-sim)
+  clock-sweep <TestName> [hours...]     run one test file at several frozen hours of day (UTC; default 0 3 6 9 12 15 18 21)
+                                        to expose a test that only passes at some time of day
+  prove <CODE> with PROVE_SIM_HOURS=N   simulate N hours first, judge the live steps (aspect/invariant) on the copy
+
 Environment:
+  SIM_DB               simulation database name (default ogamex-sim)
+  SIM_KEEP             1 = keep and continue the simulation database
+  AI_SIM_NOW           freeze any module script/tinker/test run at this instant (e.g. 2026-10-05T12:00:00Z)
+  OGAMEX_TEST_NOW      freeze the clock inside Pest runs (host TestCase honours it); test-one/clock-sweep set it
   OGAMEX_ROOT          OGameX checkout (default: two levels above this script)
   OGAMEX_RUNNER        host (default) or local-docker-dev
   PARALLEL_PROCESSES   pin the number of test workers
@@ -230,8 +243,38 @@ prepare_lane_database() {
 in_universe() {
     local universe="$1"
     shift
+    # While a simulation is active (SIM_ACTIVE_DB), every read lands on the copy at the simulated instant:
+    # the file cache keeps its locks and counters away from the live cohort's Redis.
+    local sim_env=""
+    if [ -n "${SIM_ACTIVE_DB:-}" ]; then
+        sim_env="env DB_DATABASE=$SIM_ACTIVE_DB AI_SIM_NOW=${SIM_ACTIVE_NOW:-} CACHE_STORE=file CACHE_DRIVER=file QUEUE_CONNECTION=sync "
+    fi
     (cd "$OGAMEX_ROOT/local-docker-dev" && docker compose -f "docker-compose.${universe}.yml" exec -T ogamex-app \
-        sh -lc "cd /var/www && $(printf '%q ' "$@")")
+        sh -lc "cd /var/www && ${sim_env}$(printf '%q ' "$@")")
+}
+
+# Clone the cohort database into the simulation copy. Reads DB_DATABASE from the container itself.
+sim_clone() {
+    local target="${1:-${SIM_DB:-ogamex-sim}}"
+    in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/sim-clone.php "$target"
+}
+
+# Play N simulated hours on the copy and leave SIM_ACTIVE_DB / SIM_ACTIVE_NOW pointing at the result.
+sim_run() {
+    local hours="$1"
+    shift
+    local target="${SIM_DB:-ogamex-sim}" out now
+    local sim_args=("--hours=$hours" "$@")
+    [ "${SIM_KEEP:-0}" = 1 ] || sim_clone "$target"
+    out="$(mktemp)"
+    SIM_ACTIVE_DB="$target" in_universe "${PROVE_UNIVERSE:-grand}" php artisan ai:sim "${sim_args[@]}" 2>&1 | tee "$out" || true
+    now="$(sed -n 's/^SIM_NOW: //p' "$out" | tail -n1)"
+    rm -f "$out"
+    if [ -z "$now" ]; then
+        echo "SIM: failed, no SIM_NOW printed" >&2
+        return 1
+    fi
+    export SIM_ACTIVE_DB="$target" SIM_ACTIVE_NOW="$now"
 }
 
 # What a step printed, without the colour codes pest and artisan add.
@@ -286,6 +329,7 @@ prove_row() {
     # steps (a situation on the cohort, an invariant, an aspect) judge a delivered row later.
     ordered="$(for step in $steps; do case "$step" in test:*) echo "$step" ;; esac; done
                [ "${PROVE_FAST:-0}" = 1 ] || for step in $steps; do case "$step" in test:*) ;; *) echo "$step" ;; esac; done)"
+    local sim_done=0
     for step in $ordered; do
         # A trailing ? marks a step suspect: it is reported but never fails the row.
         suspect=0
@@ -293,6 +337,18 @@ prove_row() {
         kind="${step%%:*}"
         name="${step#*:}"
         [ "$kind" = test ] || [ "$tests_failed" = 0 ] || break
+        # PROVE_SIM_HOURS=N: before the first live step, play N simulated hours on a copy of the cohort and
+        # judge every live step on that copy over exactly those hours. No waiting for wall-clock play.
+        if [ "$kind" != test ] && [ "$sim_done" = 0 ] && [ "${PROVE_SIM_HOURS:-0}" -gt 0 ] 2>/dev/null; then
+            sim_done=1
+            echo "--- simulating ${PROVE_SIM_HOURS}h on a copy of the cohort" >&"$progress"
+            if sim_run "$PROVE_SIM_HOURS" >&"$progress"; then
+                hours="$PROVE_SIM_HOURS"
+                age=$(( hours * 3600 ))
+            else
+                echo "SIM: failed, the live steps below judge the live cohort" >&"$progress"
+            fi
+        fi
         echo "--- $step" >&"$progress"
         started=$(date +%s)
         rc=0
@@ -457,6 +513,49 @@ case "$command_name" in
         ;;
     stories)
         python3 "$MODULE_ROOT/scripts/stories.py" "$@"
+        ;;
+    sim-clone)
+        sim_clone "${1:-}"
+        ;;
+    sim)
+        # Defaults to a day; every other flag goes to `ai:sim` (see its signature).
+        sim_hours=24
+        sim_rest=()
+        for sim_arg in "$@"; do
+            case "$sim_arg" in
+                --hours=*) sim_hours="${sim_arg#--hours=}" ;;
+                *) sim_rest+=("$sim_arg") ;;
+            esac
+        done
+        sim_run "$sim_hours" ${sim_rest[@]+"${sim_rest[@]}"}
+        echo
+        echo "=== scorecard at $SIM_ACTIVE_NOW (${sim_hours}h window) ==="
+        in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/play-scorecard.php --hours="$sim_hours" || true
+        echo
+        echo "=== invariants at $SIM_ACTIVE_NOW ==="
+        in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/verify-cohorts.php';" || true
+        ;;
+    clock-sweep)
+        sweep_test="${1:?usage: clock-sweep TestName [hour ...]}"
+        shift
+        sweep_hours=("$@")
+        [ "${#sweep_hours[@]}" -gt 0 ] || sweep_hours=(0 3 6 9 12 15 18 21)
+        sweep_failed=()
+        for sweep_hour in "${sweep_hours[@]}"; do
+            sweep_at="$(printf '2026-10-07T%02d:00:00Z' "$sweep_hour")"
+            if with_test_lane run_core env OGAMEX_TEST_NOW="$sweep_at" ./vendor/bin/pest --testsuite=Modules --filter="$sweep_test" >/tmp/clock-sweep.out 2>&1; then
+                echo "PASS at $sweep_at"
+            else
+                echo "FAIL at $sweep_at"
+                strip_ansi /tmp/clock-sweep.out | grep -m1 -A2 'FAILED' || true
+                sweep_failed+=("$sweep_hour")
+            fi
+        done
+        if [ "${#sweep_failed[@]}" -gt 0 ]; then
+            echo "CLOCK-SWEEP: FAIL ${sweep_test} depends on the hour of day (fails at UTC hour ${sweep_failed[*]})"
+            exit 1
+        fi
+        echo "CLOCK-SWEEP: PASS ${sweep_test} at every hour tried"
         ;;
     test-one)
         with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"

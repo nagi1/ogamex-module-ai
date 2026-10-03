@@ -39,6 +39,7 @@ use Modules\AI\Console\Commands\RunDueAiWork;
 use Modules\AI\Console\Commands\RunLanguageConformance;
 use Modules\AI\Console\Commands\SeedAiTestUniverse;
 use Modules\AI\Console\Commands\SeedGrandTest;
+use Modules\AI\Console\Commands\SimulateAiTime;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\CampaignConsultationGateway;
@@ -103,6 +104,7 @@ use Modules\AI\Support\LongTermMemorySelector;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Support\SocialCognitionSelector;
+use Modules\AI\Support\SimulatedTime;
 use Modules\AI\Support\SystemAiClock;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use OGame\Console\Commands\Scheduler\GenerateAllianceHighscores;
@@ -145,6 +147,7 @@ class AIServiceProvider extends ModuleServiceProvider
         RunLanguageConformance::class,
         SeedAiTestUniverse::class,
         SeedGrandTest::class,
+        SimulateAiTime::class,
     ];
 
     public function boot(): void
@@ -152,6 +155,9 @@ class AIServiceProvider extends ModuleServiceProvider
         // parent::boot() loads the module's routes, views, config, migrations,
         // commands, and schedules through Laravel Modules.
         parent::boot();
+
+        // `AI_SIM_NOW` stands any script, tinker run or command at one instant (dev tooling; unset in production).
+        SimulatedTime::freezeFromEnvironment();
 
         BattleReport::observe(ObserveCommittedBattleReport::class);
         ChatMessage::observe(ObserveCommittedChatMessage::class);
@@ -213,7 +219,7 @@ class AIServiceProvider extends ModuleServiceProvider
         // Cache::add makes it once per window however many ticks arrive. Mitigation only: the
         // host entrypoint now runs schedule:work.
         $schedule->call(static function (): void {
-            $window = intdiv(time(), 300);
+            $window = intdiv(now()->getTimestamp(), 300);
             if (! Cache::add('ai:highscore-window:'.$window, 1, 600)) {
                 return;
             }
