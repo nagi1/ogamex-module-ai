@@ -62,17 +62,27 @@ MAX_RUNS_PER_ROW = 2
 
 
 def next_row():
-    """The next assigned row; one that two runs did not settle goes back to the owner instead of a third."""
+    """The next row for the lane: one assigned to it, else a row a writer handed over while the lane was busy.
+
+    A row that two runs did not settle goes back to the owner instead of a third.
+    """
     con = sqlite3.connect(DB)
     rows = con.execute(
-        "select code, coalesce(notes,'') from tasks where assignee=? and status in ('todo','in_progress') "
-        "order by priority, updated_at", (ASSIGNEE,)).fetchall()
-    for code, notes in rows:
-        if notes.count("CLAUDE-LANE") < MAX_RUNS_PER_ROW:
-            return code
-        con.execute("update tasks set assignee=null, status='blocked', notes=notes||? where code=?",
-                    (f" | CLAUDE-LANE {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC: two runs did not settle it; blocked for the owner (read the run logs).", code))
-        con.commit()
+        "select code, coalesce(notes,''), status from tasks where (assignee=? and status in ('todo','in_progress')) "
+        "or (status='blocked' and notes like '%queued for the claude lane%') order by priority, updated_at", (ASSIGNEE,)).fetchall()
+    for code, notes, status in rows:
+        if notes.count("CLAUDE-LANE") >= MAX_RUNS_PER_ROW:
+            con.execute("update tasks set assignee=null, status='blocked', notes=notes||? where code=?",
+                        (f" | CLAUDE-LANE {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC: two runs did not settle it; blocked for the owner (read the run logs).", code))
+            con.commit()
+            continue
+        if status == "blocked":
+            subprocess.run([sys.executable, os.path.join(ROOT, "plan/tasks/task.py"), "unblock", code], capture_output=True)
+            claimed = subprocess.run([sys.executable, os.path.join(ROOT, "plan/tasks/task.py"), "claim", code, ASSIGNEE], capture_output=True, text=True)
+            if "NOT claimed" in claimed.stdout + claimed.stderr:
+                subprocess.run([sys.executable, os.path.join(ROOT, "plan/tasks/task.py"), "block", code, "queued for the claude lane: a writer spent its call budget"], capture_output=True)
+                continue
+        return code
     return None
 
 

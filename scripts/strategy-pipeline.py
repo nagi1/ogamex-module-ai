@@ -2339,6 +2339,10 @@ def hand_to_lane(code, last_failure):
     release_claims(list(HELD_CLAIMS))
     subprocess.run([sys.executable, cli, "unstick", code], capture_output=True)
     claimed = subprocess.run([sys.executable, cli, "claim", code, "claude-lane"], capture_output=True, text=True)
+    if "NOT claimed" in claimed.stdout + claimed.stderr:
+        # The lane is busy on a row that shares a file with this one. Blocked keeps the writers off it; the
+        # lane takes the row on its turn (claude-lane.py next_row).
+        subprocess.run([sys.executable, cli, "block", code, "queued for the claude lane: a writer spent its call budget"], capture_output=True)
     print(f"  {claimed.stdout.strip() or claimed.stderr.strip()}"[:200])
     connection = sqlite3.connect(TASKS_DB)
     connection.execute("update tasks set notes=coalesce(notes,'') || ? where code=?",
