@@ -228,12 +228,16 @@ test('every persona completes its session and receives one successor schedule', 
 
 test('a long absence is clamped under the host inactive-deletion window', function (): void {
     app(SettingsService::class)->set('inactive_player_deletion_days', 3);
-    config(['ai.population.session_interval_seconds' => 864_000]);
-
     $now = aiDeterministicNow();
+    $profile = aiDeterministicProfile(AiArchetype::Miner, $this->currentUserId);
+    // The successor keeps the night, so a ten-day wait only reaches the clamp when it lands inside the
+    // waking window: it is aimed at the profile's local noon rather than at whatever hour the clock has.
+    $noon = $now->addDays(10)->setTimezone(\Modules\AI\Domain\Routine\RoutineProfile::fromAiProfile($profile)->timezone)->setTime(12, 0);
+    config(['ai.population.session_interval_seconds' => $noon->getTimestamp() - $now->getTimestamp()]);
+
     aiDeterministicInstallPerception($this->app, aiDeterministicSnapshot($this->currentUserId, $this->currentPlanetId, $now, [], true));
 
-    aiDeterministicRun(aiDeterministicProfile(AiArchetype::Miner, $this->currentUserId));
+    aiDeterministicRun($profile);
     $schedule = AiSchedule::query()->where('player_id', $this->currentUserId)->firstOrFail();
 
     // The successor wakes one day before the host would delete it, never the full ten days out.

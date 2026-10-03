@@ -60,6 +60,10 @@ Please run, in this order, and report what each prints:
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.
 - NAKED_BESIDE_WALLED player 117: per planet defence units, unit queue, shipyard level, stock, last 3 `QueueUnits` outcomes.
 
+### Cloud thread (handoff fixes), 13:10 UTC
+- DeterministicSessionLoopTest "a long absence is clamped" (failed at UTC hours 0, 9, 18): the test, not the clamp. Since 5da78a5 a successor that would land in the dark period takes the routine wake, so a ten-day accelerated wait only reached the clamp when it happened to land awake. The test now aims the wait at the profile's local noon. Please re-run the clock-sweep for DeterministicSessionLoopTest.
+- Speedup finding (x4): noted, not touched by this thread; it belongs to the time-control thread.
+
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
 Read `AGENTS.md` (three gates) first. The cohort is `local-docker-dev/docker-compose.grand.yml` (db ogamex-grand, 100 AI
