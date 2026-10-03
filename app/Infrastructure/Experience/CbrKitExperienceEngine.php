@@ -30,6 +30,18 @@ class CbrKitExperienceEngine implements ExperienceEngine
      */
     private array $casebaseCache = [];
 
+    /**
+     * What the driver scored for one (casebase, query features) pair.
+     *
+     * The same object is asked about once per planet that could build it, and the casebase and the
+     * driver are both fixed for the life of this engine, so the repeat asks are answered from here
+     * instead of costing another HTTP round trip that carries the whole casebase. A failed call is
+     * never kept (the null is not stored), so the circuit breaker still sees every retry.
+     *
+     * @var array<string, array<int, float>>
+     */
+    private array $similarityCache = [];
+
     public function __construct(private readonly ExperienceEngine $fallback, private readonly CbrKitClient $client)
     {
     }
@@ -42,7 +54,9 @@ class CbrKitExperienceEngine implements ExperienceEngine
             return [];
         }
 
-        $similarities = $this->client->rank($this->casebase($cases), $query->features);
+        $casebase = $this->casebase($cases);
+        $key = md5(json_encode([$casebase, $query->features]) ?: '');
+        $similarities = $this->similarityCache[$key] ??= $this->client->rank($casebase, $query->features);
 
         if ($similarities === null) {
             return $this->fallback->rankSimilarExperiences($query);
