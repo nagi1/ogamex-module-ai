@@ -12,7 +12,8 @@ namespace Modules\AI\Domain\Raid;
  * own cargo-constrained, fill-ordered plunder against the fuel tier). `pWin` is
  * the fraction of runs the attacking fleet survived (not wiped); the fleet-loss
  * rate is its complement `1 - pWin`. The host battle engine stays the only
- * authority on what actually happens when the attack lands.
+ * authority on what actually happens when the attack lands. `p20Debris` is the metal-equivalent field
+ * the fight leaves behind, which only an account with a harvest hull can count as profit.
  */
 readonly class RaidEstimate
 {
@@ -21,6 +22,7 @@ readonly class RaidEstimate
         public float $p20NetProfit,
         public float $p20Loot,
         public float $pWin,
+        public float $p20Debris = 0.0,
     ) {
     }
 }

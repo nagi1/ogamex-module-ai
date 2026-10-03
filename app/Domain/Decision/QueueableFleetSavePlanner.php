@@ -291,8 +291,8 @@ class QueueableFleetSavePlanner
     private function exposureBand(AiArchetype $archetype, float $aggression = 0.5): int
     {
         $base = match ($archetype) {
-            AiArchetype::Fleeter => 5_000,
-            AiArchetype::Trader => 25_000,
+            AiArchetype::Fleeter, AiArchetype::Raider => 5_000,
+            AiArchetype::Trader, AiArchetype::Hybrid => 25_000,
             AiArchetype::Miner, AiArchetype::Turtle, AiArchetype::Casual => 50_000,
         };
 

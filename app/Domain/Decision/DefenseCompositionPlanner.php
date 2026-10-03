@@ -221,27 +221,23 @@ class DefenseCompositionPlanner
     /**
      * The doctrine the wall moves to once it outgrows the one it started in.
      *
-     * The handover is stated in the doctrine file ("swap to X once the wall passes N ..."), so the
-     * target and the threshold are read from there rather than repeated as constants here.
+     * The handover is the doctrine's structured `swap_after: {doctrine, anchor_count}`, so rewording
+     * the quoted `stop_rule` sentence beside it cannot change which doctrine the wall moves to.
      *
-     * ponytail: the sentence is matched by shape, so rewording it silently disables the handover.
-     * Upgrade path: give the file a structured `stop_rule: {doctrine, anchor_at}` mapping when a
-     * second doctrine needs a handover.
-     *
-     * @param  array<string, array{anchor: array{unit: string, count: int}, ratio: array<string, int>, stop_rule?: string}>  $doctrines
+     * @param  array<string, array{anchor: array{unit: string, count: int}, ratio: array<string, int>, swap_after?: array{doctrine: string, anchor_count: int}}>  $doctrines
      * @param  array<string, UnitObject>  $defenceObjects
      */
     private function afterStopRule(array $doctrines, array $defenceObjects, string $key, PlanetService $planet): string
     {
-        $rule = $doctrines[$key]['stop_rule'] ?? null;
-        if (!is_string($rule) || preg_match('/swap to ([a-z_]+) once the wall passes (\d+)/', $rule, $matches) !== 1) {
+        $swap = $doctrines[$key]['swap_after'] ?? null;
+        if (!is_array($swap) || !isset($swap['doctrine'], $swap['anchor_count'])) {
             return $key;
         }
 
         $anchor = $this->resolveUnit($doctrines[$key]['anchor']['unit'], $defenceObjects);
         $wall = $planet->getDefenseUnits()->getAmountByMachineName($anchor->machine_name);
 
-        return $wall > (int) $matches[2] ? $matches[1] : $key;
+        return $wall > (int) $swap['anchor_count'] ? (string) $swap['doctrine'] : $key;
     }
 
     /**
@@ -329,7 +325,7 @@ class DefenseCompositionPlanner
     /**
      * The doctrine definitions from the behaviour file.
      *
-     * @return array<string, array{anchor: array{unit: string, count: int}, ratio: array<string, int>, stop_rule?: string}>
+     * @return array<string, array{anchor: array{unit: string, count: int}, ratio: array<string, int>, swap_after?: array{doctrine: string, anchor_count: int}}>
      */
     private function doctrines(): array
     {
@@ -339,7 +335,7 @@ class DefenseCompositionPlanner
             throw new RuntimeException('defence-doctrines: the file must define a doctrines mapping.');
         }
 
-        /** @var array<string, array{anchor: array{unit: string, count: int}, ratio: array<string, int>, stop_rule?: string}> $doctrines */
+        /** @var array<string, array{anchor: array{unit: string, count: int}, ratio: array<string, int>, swap_after?: array{doctrine: string, anchor_count: int}}> $doctrines */
         $doctrines = $parsed['doctrines'];
 
         return $doctrines;

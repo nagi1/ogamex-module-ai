@@ -3,7 +3,10 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Actions\QueueAiTransferAction;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\TransportMission;
 use OGame\Models\Enums\PlanetType;
@@ -62,6 +65,12 @@ class QueueableTransferPlanner
             return null;
         }
 
+        // A player does not load the same hulls twice: a ferry still waiting to fly holds the cargo
+        // ships, so a second one offered now fails at dispatch with no transport fleet.
+        if ($this->transferWaiting($playerId)) {
+            return null;
+        }
+
         $player = $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
         if (count($planets) < 2) {
@@ -96,6 +105,15 @@ class QueueableTransferPlanner
         }
 
         return $this->surplus($planets, $player);
+    }
+
+    private function transferWaiting(int $playerId): bool
+    {
+        return AiWorkItem::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiWorkKind::Transfer)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Retry, AiWorkState::Leased])
+            ->exists();
     }
 
     /**

@@ -200,7 +200,8 @@ class QueueableSpyPlanner
 
             $owner = $target->getPlayer();
 
-            if ($owner?->getUsername(false) === 'Legor') {
+            // The host's own protected-administrator signal, so the rule survives any operator rename.
+            if ($owner?->isAdmin() === true) {
                 continue;
             }
             $origin = $this->closestOrigin($idleOrigins, $planet, $fleetMissions);

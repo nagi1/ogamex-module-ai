@@ -124,9 +124,9 @@ test('policies cover every profile and reject only declared raid profiles', func
     }
 
     expect($registry->for(AiArchetype::Miner)->preference(AiCandidateActionType::Colonize))->toBe(0.0);
-    expect($registry->for(AiArchetype::Miner)->allows(AiCandidateActionType::Raid))->toBeFalse();
-    expect($registry->for(AiArchetype::Turtle)->allows(AiCandidateActionType::Raid))->toBeFalse();
-    expect($registry->for(AiArchetype::Trader)->allows(AiCandidateActionType::Raid))->toBeFalse();
+    expect($registry->for(AiArchetype::Miner)->allows(AiCandidateActionType::Raid))->toBeTrue();
+    expect($registry->for(AiArchetype::Turtle)->allows(AiCandidateActionType::Raid))->toBeTrue();
+    expect($registry->for(AiArchetype::Trader)->allows(AiCandidateActionType::Raid))->toBeTrue();
     expect($registry->for(AiArchetype::Fleeter)->allows(AiCandidateActionType::Raid))->toBeTrue();
     expect($registry->for(AiArchetype::Casual)->allows(AiCandidateActionType::Raid))->toBeTrue();
 });

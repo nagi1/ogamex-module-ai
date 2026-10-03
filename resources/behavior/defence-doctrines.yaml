@@ -66,7 +66,9 @@ doctrines:
       Small Shield Dome: 1
       Large Shield Dome: 1
       Anti-ballistic Missile: 20
+    # The quote above is the source's sentence; the planner reads the structured handover below.
     stop_rule: swap to big_gun_heavy once the wall passes 200 Light Lasers
+    swap_after: {doctrine: big_gun_heavy, anchor_count: 200}
     stated_ceiling: keeps away fleets without Battleships and Bombers
     sources: [WIK-013]
     claim_type: CONTESTED

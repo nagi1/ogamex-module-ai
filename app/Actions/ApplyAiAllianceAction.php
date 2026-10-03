@@ -40,6 +40,8 @@ class ApplyAiAllianceAction
 
         return match ($archetype) {
             AiArchetype::Miner => 'Active miner looking for a stable alliance to trade deuterium for protection.',
+            AiArchetype::Raider => 'Active raider looking for an alliance to coordinate hits and share intel.',
+            AiArchetype::Hybrid => 'Mixed builder and fighter looking for a steady alliance.',
             AiArchetype::Fleeter => 'Active fleeter looking for an alliance to coordinate hits and ACS.',
             AiArchetype::Turtle => 'Defensive player seeking a quiet alliance for mutual protection.',
             AiArchetype::Trader => 'Trader seeking an alliance to move resources and share market opportunities.',

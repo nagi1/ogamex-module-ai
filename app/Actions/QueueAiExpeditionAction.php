@@ -65,9 +65,21 @@ class QueueAiExpeditionAction implements QueueAiExpedition
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+            $destination = new Coordinate($galaxy, $system, 16);
+
+            // The host refuses a flight whose fuel exceeds the planet's deuterium or the fleet's own
+            // tanks. A player sends the cargo hull alone before sending nothing, so the strongest
+            // hulls drop out of an expedition the full fleet cannot fuel.
+            if (!$this->canFuel($player, $origin, $fleet, $destination, $fleetMissions)) {
+                $fleet = $this->cargoOnly($player, $origin);
+                if ($fleet === null || !$this->canFuel($player, $origin, $fleet, $destination, $fleetMissions)) {
+                    return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+                }
+            }
+
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
-                new Coordinate($galaxy, $system, 16),
+                $destination,
                 PlanetType::Planet,
                 ExpeditionMission::getTypeId(),
                 $fleet,
@@ -80,6 +92,26 @@ class QueueAiExpeditionAction implements QueueAiExpedition
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    private function canFuel(PlayerService $player, PlanetService $origin, UnitCollection $fleet, Coordinate $destination, FleetMissionService $fleetMissions): bool
+    {
+        $fuel = (float) $fleetMissions->calculateConsumption($origin, $fleet, $destination, self::EXPEDITION_HOLDING_HOURS, self::EXPEDITION_SPEED);
+
+        return $fuel <= floor($origin->deuterium()->get()) && $fuel <= $fleet->getTotalFuelCapacity($player);
+    }
+
+    private function cargoOnly(PlayerService $player, PlanetService $origin): ?UnitCollection
+    {
+        $cargo = app(QueueableExpeditionPlanner::class)->disposableShip($player, $origin);
+        if ($cargo === null) {
+            return null;
+        }
+
+        $fleet = new UnitCollection();
+        $fleet->addUnit($cargo, 1);
+
+        return $fleet;
     }
 
     /**

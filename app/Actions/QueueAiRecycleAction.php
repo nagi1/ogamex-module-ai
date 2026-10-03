@@ -62,9 +62,17 @@ class QueueAiRecycleAction implements QueueAiRecycle
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+            $destination = new Coordinate($targetGalaxy, $targetSystem, $targetPosition);
+
+            // The host refuses a harvest the origin cannot fuel, so it is refused here by name.
+            $fuel = (float) $fleetMissions->calculateConsumption($origin, $fleet, $destination, 0, self::RECYCLE_SPEED);
+            if ($fuel > floor($origin->deuterium()->get()) || $fuel > $fleet->getTotalFuelCapacity($player)) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
+
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
-                new Coordinate($targetGalaxy, $targetSystem, $targetPosition),
+                $destination,
                 PlanetType::from($targetType),
                 RecycleMission::getTypeId(),
                 $fleet,

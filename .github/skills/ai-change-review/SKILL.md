@@ -12,5 +12,10 @@ description: Review a Modules/AI change against its row, its proof and the three
 4. Behaviour values live in `resources/behavior/*.yaml`, loaded by name; tests drive the real path and
    cover the bound, past it and zero.
 
+5. Quality verdict (DEF-003): read the newest `QUALITY:` line from `scripts/verify-cohorts.php` (the
+   harness prints it each pass). A slice whose behaviour fails an invariant is refused unless the
+   review says why the invariant is wrong; a verdict older than the slice's commit is "too early",
+   not a pass.
+
 Do not broaden into unrelated cleanup. Report blockers first, then say explicitly whether
 `task.py done` may close the row.

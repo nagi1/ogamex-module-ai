@@ -14,6 +14,7 @@ use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\AttackMission;
+use OGame\GameMissions\RecycleMission;
 use OGame\GameMissions\BattleEngine\Services\LootService;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitCollection;
@@ -65,18 +66,6 @@ class RaidPlanner
     private const LATE_PHASE_ASTROPHYSICS = 23;
 
     private const LOOT_TIER_DEFENDED = 2.0;
-
-    /**
-     * The fraction of sampled runs the attacking fleet must survive before a
-     * raid flies. The fleet-loss rate is its complement (1 - SURVIVAL_FLOOR): a
-     * coin-flip that profits on paper still loses the fleet too often. ponytail:
-     * one unmeasured floor for every persona; per-archetype tightening is the
-     * upgrade path once play data shows it varies.
-     */
-    private const SURVIVAL_FLOOR = 0.8;
-
-    /** The wide confirmation the winning launch subset pays for; the screen is one draw per candidate. */
-    private const CONFIRM_SAMPLES = 50;
 
     /** A phalanx scan stays authoritative for the raid decision this long. */
     private const PHALANX_SCAN_TTL_HOURS = 2;
@@ -169,18 +158,22 @@ class RaidPlanner
         }
 
         // A fleeter asks "will I survive?" before "does it profit?". Refuse when
-        // the sampled fleet is wiped more than 1 - SURVIVAL_FLOOR of the time.
-        if ($estimate->pWin < self::SURVIVAL_FLOOR) {
+        // the sampled fleet is wiped more than the skill band's survival floor of the time.
+        if ($estimate->pWin < $profile->skill_band->raidSurvivalFloor()) {
             return null;
         }
 
-        if ($estimate->p20NetProfit <= 0.0) {
+        // A fight's wreckage is profit only to an account that can pick it up: one that owns the
+        // host's harvest hull for this position (the recycler fleet a player builds for the field).
+        $debris = $this->canHarvest($origin, $target) ? $estimate->p20Debris : 0.0;
+
+        if ($estimate->p20NetProfit + $debris <= 0.0) {
             return null;
         }
 
         // The launch is not the stock (U6): the smallest counter-selected hulls whose single
         // simulation survives this target fly, not the whole garage.
-        $launchUnits = $this->launchUnits($playerId, $player, $origin, $target, $profile->random_seed);
+        $launchUnits = $this->launchUnits($playerId, $player, $origin, $target, $profile);
         if ($launchUnits === null) {
             return null;
         }
@@ -190,7 +183,11 @@ class RaidPlanner
         // would "profit" (RAID-006, RAID-011). The fuel is the launch fleet's: priced from the whole
         // stock it ran to hundreds of times the real trip and turned away 6 reports in 10.
         $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
-        if (!$this->clearsLootTier($estimate->p20Loot, $fuel, $target->getDefenseUnits()->units !== [])) {
+        if ($fuel > floor($origin->deuterium()->get())) {
+            return null;
+        }
+
+        if (!$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
             return null;
         }
 
@@ -205,6 +202,13 @@ class RaidPlanner
         ]);
     }
 
+    private function canHarvest(PlanetService $origin, PlanetService $target): bool
+    {
+        $harvester = RecycleMission::getHarvesterMachineNameForPosition($target->getPlanetCoordinates()->position);
+
+        return $origin->getShipUnits()->getAmountByMachineName($harvester) > 0;
+    }
+
     /**
      * The launch subset: enough cargo for the haul plus the smallest counter-selected hulls whose
      * single simulation survives this target (U6).
@@ -216,7 +220,7 @@ class RaidPlanner
      *
      * @return array<string, int>|null
      */
-    private function launchUnits(int $playerId, PlayerService $player, PlanetService $origin, PlanetService $target, int $seed): ?array
+    private function launchUnits(int $playerId, PlayerService $player, PlanetService $origin, PlanetService $target, AiProfile $profile): ?array
     {
         $targetMix = [...$target->getShipUnits()->units, ...$target->getDefenseUnits()->units];
         $lootVolume = $this->lootVolume($this->maximumLoot($player, $origin, $target));
@@ -241,13 +245,13 @@ class RaidPlanner
             $launch[$hull->unitObject->machine_name] = $hull->amount;
             $fleet = $this->fleet($launch);
 
-            $screen = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $seed, 1);
+            $screen = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $profile->random_seed, 1);
             if ($screen->samples === 0 || $screen->pWin < 1.0) {
                 continue;
             }
 
-            $confirm = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $seed, self::CONFIRM_SAMPLES);
-            if ($confirm->pWin >= self::SURVIVAL_FLOOR) {
+            $confirm = $this->raidEstimator->estimateFleet($playerId, $origin->getPlanetId(), $target->getPlanetId(), $fleet, $profile->random_seed, $profile->skill_band->raidConfirmSamples());
+            if ($confirm->pWin >= $profile->skill_band->raidSurvivalFloor()) {
                 return $launch;
             }
         }

@@ -79,6 +79,7 @@ class QueueAiTransferAction implements QueueAiTransfer
             }
 
             $shipment = $this->leavingFuelBehind($source, $shipment, $fleet, $target, $fleetMissions);
+            $shipment = $this->fittedBesideFuel($player, $fleet, $shipment, (int) ceil($fuel));
 
             $mission = $fleetMissions->createNewFromPlanet(
                 $source,
@@ -94,6 +95,28 @@ class QueueAiTransferAction implements QueueAiTransfer
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * The flight's fuel rides in the same hold as the cargo, so a shipment that fills the hold
+     * leaves no room for it and the host refuses with insufficient storage capacity. A player
+     * loads what is left of the hold after the fuel.
+     */
+    private function fittedBesideFuel(PlayerService $player, UnitCollection $fleet, Resources $shipment, int $fuel): Resources
+    {
+        $room = max(0, $fleet->getTotalCargoCapacity($player) - $fuel);
+        $total = $shipment->sum();
+        if ($total <= $room) {
+            return $shipment;
+        }
+
+        $share = $room / $total;
+
+        return new Resources(
+            floor($shipment->metal->get() * $share),
+            floor($shipment->crystal->get() * $share),
+            floor($shipment->deuterium->get() * $share),
+        );
     }
 
     /**

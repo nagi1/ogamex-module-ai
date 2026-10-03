@@ -8,12 +8,11 @@ use Modules\AI\Enums\AiCandidateActionType;
 class TurtlePolicy extends ConfiguredArchetypePolicy
 {
     protected array $preferences = [
+        AiCandidateActionType::Raid->value => 0.08,
         AiCandidateActionType::QueueUnits->value => 1.0,
         AiCandidateActionType::Build->value => 0.7,
         AiCandidateActionType::FleetSave->value => 0.6,
     ];
-
-    protected array $allowed = [AiCandidateActionType::Raid->value => false];
 
     public function archetype(): AiArchetype
     {

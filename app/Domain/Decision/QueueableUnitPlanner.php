@@ -100,6 +100,7 @@ class QueueableUnitPlanner
         }
 
         $underAttack = $this->underAttack($player);
+        $threatened = $underAttack ? $this->threatenedPlanetIds($player) : [];
 
         // Whether the pass below has a planet to serve. A sibling that stands no wall while one
         // already does owns the account's wall effort: the pass serves it, and when it cannot be
@@ -168,7 +169,7 @@ class QueueableUnitPlanner
             // Defence is reactive and time-sensitive: an inbound hostile makes it worth buying
             // before anything else on this planet, and the host's own "under attack" is the
             // trigger, so the module keeps no mission-type list.
-            if ($underAttack) {
+            if ($underAttack && $this->isThreatened($planet, $threatened)) {
                 $defense = $this->defenseComposition->plan($player, $planet, $need);
                 if ($defense !== null) {
                     return $this->unit($planet, $defense->unit, 'role:defense:'.$defense->unit->machine_name, $defense->amount);
@@ -666,6 +667,38 @@ class QueueableUnitPlanner
         }
 
         return false;
+    }
+
+    /**
+     * The planets a foreign, non-espionage mission is headed at, which is who the reactive wall is
+     * for: a player reinforces the planet the fleet is coming for, not the first one in the list.
+     * Whether the inbound is hostile stays the host's answer (`underAttack`); a probe is no threat.
+     *
+     * @return list<int>
+     */
+    private function threatenedPlanetIds(PlayerService $player): array
+    {
+        $missions = app()->makeWith(FleetMissionService::class, ['player' => $player])->getActiveFleetMissionsForCurrentPlayer();
+        $ids = [];
+
+        foreach ($missions as $mission) {
+            if ($mission->user_id !== $player->getId() && $mission->mission_type !== EspionageMission::getTypeId()) {
+                $ids[] = (int) $mission->planet_id_to;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * An inbound the host calls hostile but whose destination cannot be read (a moon, a mission the
+     * account has no row for) threatens every planet, as the single flag did before.
+     *
+     * @param list<int> $threatened
+     */
+    private function isThreatened(PlanetService $planet, array $threatened): bool
+    {
+        return $threatened === [] || in_array($planet->getPlanetId(), $threatened, true);
     }
 
     private function underAttack(PlayerService $player): bool

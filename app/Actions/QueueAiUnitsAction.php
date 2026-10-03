@@ -64,6 +64,13 @@ class QueueAiUnitsAction implements QueueAiUnits
                 return $this->queueDefence($player, $planetId, $unitId, $amount);
             }
 
+            // Priced a session ago: the host's add() silently ignores a batch the planet can no longer
+            // pay for whole, so the order is what it can pay for now, as the defence path does.
+            $amount = min($amount, ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true));
+            if ($amount < 1) {
+                return AiActionResult::rejected(AiQueueActionReason::NothingQueueable);
+            }
+
             $this->unitQueueService->add($planet, $unitId, $amount);
             $queueId = UnitQueue::query()
                 ->where('planet_id', $planetId)
