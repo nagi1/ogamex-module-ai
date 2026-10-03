@@ -1460,7 +1460,10 @@ def migrations_for(task, paths, limit=2):
     tables = []
     for path in paths:
         if re.match(r"app/Models/\w+\.php$", path):
-            body = read(os.path.join(MODULE, path))
+            # A row that CREATES its model has no file on disk yet (ARCH-GOALS: app/Models/AiGoal.php).
+            # The table name still comes from the class name, so only the declared-$table probe is lost.
+            full = os.path.join(MODULE, path)
+            body = read(full) if os.path.exists(full) else ""
             declared = re.search(r"protected\s+\$table\s*=\s*'([^']+)'", body)
             # AiProfile -> ai_profile(s): the class name snake-cased, because Laravel's own inference is
             # what named the table in the first place.
