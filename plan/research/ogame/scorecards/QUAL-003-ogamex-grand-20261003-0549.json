@@ -1,23 +1,23 @@
 {
-    "at": "2026-10-03T05:48:51+00:00",
+    "at": "2026-10-03T05:49:40+00:00",
     "hours": 2,
     "aspects": {
         "economy": {
-            "count": 6091,
+            "count": 6070,
             "floor": 100,
             "pass": true,
             "player": "fills the build queue on every planet each login",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "research": {
-            "count": 708,
+            "count": 704,
             "floor": 17,
             "pass": true,
             "player": "keeps the research lab busy",
             "owner": "app/Domain/Decision/QueueableBuildingPlanner.php"
         },
         "shipyard": {
-            "count": 1697,
+            "count": 1691,
             "floor": 9,
             "pass": true,
             "player": "builds ships and defence from what the economy leaves",
@@ -31,14 +31,14 @@
             "owner": "app/Domain/Decision/QueueableSpyPlanner.php"
         },
         "raids": {
-            "count": 135,
+            "count": 134,
             "floor": 9,
             "pass": true,
             "player": "raids a profitable target",
             "owner": "app/Domain/Decision/RaidPlanner.php"
         },
         "transport": {
-            "count": 848,
+            "count": 843,
             "floor": 5,
             "pass": true,
             "player": "moves resources to where they are spent",
@@ -73,14 +73,14 @@
             "owner": "app/Domain/Decision/QueueableFleetSavePlanner.php"
         },
         "social": {
-            "count": 826,
+            "count": 815,
             "floor": 5,
             "pass": true,
             "player": "answers and starts exchanges with other players",
             "owner": "app/Actions/EvaluateAiSocialExchangeAction.php"
         },
         "chat": {
-            "count": 826,
+            "count": 815,
             "floor": 5,
             "pass": true,
             "player": "writes to other players",
