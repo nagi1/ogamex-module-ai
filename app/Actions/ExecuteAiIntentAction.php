@@ -13,6 +13,7 @@ use Modules\AI\Contracts\QueueAiRecall;
 use Modules\AI\Contracts\QueueAiRecycle;
 use Modules\AI\Contracts\QueueAiResearch;
 use Modules\AI\Contracts\QueueAiSpy;
+use Modules\AI\Contracts\QueueAiDefend;
 use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Contracts\QueueAiUnits;
 use Modules\AI\Domain\Decision\QueueableBuilding;
@@ -31,6 +32,8 @@ use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
+use Modules\AI\Domain\Decision\QueueableDefend;
+use Modules\AI\Domain\Decision\QueueableDefendPlanner;
 use Modules\AI\Domain\Decision\QueueableTransfer;
 use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Domain\Decision\QueueableUnit;
@@ -118,6 +121,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Recycle => $this->recycle($workItem, $planetId),
             AiWorkKind::SetMinePercent => $this->minePercent($workItem, $planetId),
             AiWorkKind::Phalanx => $this->phalanx($workItem, $planetId),
+            AiWorkKind::Defend => $this->defend($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -452,6 +456,27 @@ class ExecuteAiIntentAction
             app(QueueAiPhalanx::class)->handle($workItem->player_id, $step->moonPlanetId, $step->targetPlanetId),
             ['target_planet_id' => $step->targetPlanetId],
             $step->moonPlanetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function defend(AiWorkItem $workItem, int $planetId): array
+    {
+        $step = $this->fromPayload(QueueableDefend::class, [
+            'sourcePlanetId' => $workItem->payload[self::PAYLOAD_SOURCE_PLANET_ID] ?? null,
+            'targetPlanetId' => $workItem->payload[self::PAYLOAD_TARGET_PLANET_ID] ?? null,
+        ]) ?? app(QueueableDefendPlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueableDefend) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiDefend::class)->handle($workItem->player_id, $step->sourcePlanetId, $step->targetPlanetId),
+            ['source_planet_id' => $step->sourcePlanetId, 'target_planet_id' => $step->targetPlanetId],
+            $step->sourcePlanetId,
         ];
     }
 

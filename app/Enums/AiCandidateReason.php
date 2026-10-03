@@ -11,6 +11,7 @@ enum AiCandidateReason: string
     case EligibleRecall = 'eligible_recall';
     case EligibleExpedition = 'eligible_expedition';
     case EligibleTransfer = 'eligible_transfer';
+    case AllyUnderAttack = 'ally_under_attack';
     case EligibleRecycle = 'eligible_recycle';
     case FreshVisibleReport = 'fresh_visible_report';
     case PhalanxScanAvailable = 'phalanx_scan_available';

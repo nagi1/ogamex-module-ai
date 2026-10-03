@@ -22,6 +22,7 @@ class CandidateActionFactory
         private readonly QueueableFleetSavePlanner $queueableFleetSavePlanner,
         private readonly QueueableRecyclePlanner $queueableRecyclePlanner,
         private readonly QueueablePhalanxPlanner $queueablePhalanxPlanner,
+        private readonly QueueableDefendPlanner $queueableDefendPlanner,
     ) {
     }
 
@@ -39,6 +40,7 @@ class CandidateActionFactory
                 ...$this->eligibleRecallCandidates($perception),
                 ...$this->eligibleExpeditionCandidates($perception),
                 ...$this->eligibleTransferCandidates($perception),
+                ...$this->eligibleDefendCandidates($perception),
                 ...$this->eligibleRecycleCandidates($perception),
                 ...$this->phalanxCandidate($perception)->candidates,
                 ...$raidGeneration->candidates,
@@ -221,6 +223,22 @@ class CandidateActionFactory
     }
 
     /** @return array<int, CandidateAction> */
+    private function eligibleDefendCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($perception->fleetSlotsFree < 1 || $this->queueableDefendPlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Defend,
+            'reason' => AiCandidateReason::AllyUnderAttack->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::Defend, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> */
     private function eligibleRecycleCandidates(PerceptionSnapshot $perception): array
     {
         if ($perception->fleetSlotsFree < 1) {
@@ -367,6 +385,9 @@ class CandidateActionFactory
             // taking: as pressing as a full store, the reading the raid row uses.
             AiCandidateActionType::Recycle => [1.0, 0.3, 0.0, 0.0],
             AiCandidateActionType::Phalanx => [0.5, 0.2, 0.3, 0.0],
+            // An ally was just attacked and a co-member's combat hulls are idle at home: the help an
+            // alliance exists for, as pressing as a full store so it is not outranked by a ferry.
+            AiCandidateActionType::Defend => [0.9, 0.3, 0.0, 0.0],
             // The planner has already proved this raid pays, so it is as pressing as a full store.
             AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],
             default => [$resourceNeed, 0.2, 0.0, 0.0],
