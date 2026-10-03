@@ -95,8 +95,10 @@ writer() {
   # Boot the canary once, outside the pass: from here on a check is a few queries, not a universe.
   bash scripts/canary.sh up || echo "canary unavailable; the live gate will report it"
 
-  export MODEL_CONCURRENCY="${MODEL_CONCURRENCY:-1}"
-  for worker in $(seq 0 $(( ${IMPL_WORKERS:-1} - 1 ))); do writer "$worker" & done
+  # One agent at a time, not a setting: the floor lock (scripts/agent_floor.py) keeps a second agent out
+  # of the tree, so a larger IMPL_WORKERS or MODEL_CONCURRENCY would only start idle processes.
+  export MODEL_CONCURRENCY=1
+  writer 0 &
 
   # The verifier. It never waits on a writer: it proves delivered rows as they appear, once a batch is
   # ready, nothing is left to write, or HARNESS_VERIFY_EVERY seconds have passed. A failed proof reopens

@@ -1061,6 +1061,15 @@ def self_check():
 
 IMPLEMENT_PROMPT = """You implement ONE task in the OGameX `Modules/AI` module (PHP 8.5, Laravel).
 
+DELIVER FIRST, VERIFY AFTER
+- Your first edit comes within a few reads. Write the complete change that moves the account's behaviour,
+  then `check` once. Do not write probe tests, print-state tests or extra reads to prove what the code
+  will do before it exists; the check and the cohort are the proof, not your reasoning.
+- You have a handful of checks. A failure is information: fix its cause and check again. The same failure
+  twice means read the failing line, not re-check. Past the budget the row goes to a stronger agent.
+- Follow the STEERING block in the task context when one is present: it names the aspect the babysitter
+  wants moved next.
+
 The goal: OGame accounts that play like experienced human players, decided by deterministic rules over
 the host's game data. Your change is judged by THE PROOF in the task -- what accounts visibly do on the
 live cohorts -- not by your test alone. Make the smallest change that makes the account do that.
@@ -1311,6 +1320,12 @@ def test_kit():
     return "\n".join(lines) + "\nTEST FUNCTIONS ALREADY DECLARED IN OTHER TEST FILES (NOT loaded with your test, so do not call them; every function name is global, so a function you declare must use a name NOT in this list):\n" + "\n".join(helpers)
 
 
+def read_steering():
+    """The babysitter's current directive toward the north star, or "" when it has written none."""
+    path = os.path.join(MODULE, "plan/research/ogame/steering.md")
+    return read(path).strip() if os.path.exists(path) else ""
+
+
 def implement_context(code):
     """The shared reference, then this task: its notes, proof, plan and the files it touches.
 
@@ -1324,6 +1339,9 @@ def implement_context(code):
     reference, example_test = reference_context()
 
     parts = [reference, "", f"TASK {task['code']} — {task['title']}", ""]
+    steering = read_steering()
+    if steering:
+        parts += ["STEERING (from the babysitter; follow it)", steering, ""]
 
     # What will judge the slice, so the writer aims at the account's behaviour and not at its own test.
     if task["proof"]:
@@ -2333,7 +2351,10 @@ def call_line(name, args):
 # same: QUAL-003 spent 1,609 calls in one endless attempt (no failure counter ever moved) writing tests that
 # fail on purpose to print state. Past the budget the writer stops and the row goes to the strong lane with
 # what the writer learned; the lane (Claude Code) decides the design the one-file slice could not.
-ROW_CALL_BUDGET = 250
+ROW_CALL_BUDGET = 80
+# Checks one attempt may spend: each is a full verification, and a writer that fails five of them is
+# circling, so the row goes to the strong lane with what was learned instead of a sixth.
+MAX_CHECKS = 5
 
 
 def row_calls(code):
@@ -2453,6 +2474,10 @@ def write_slice(code, context, working, failure, dropped):
                 else:
                     checks += 1
                     checked_version = version
+                    if checks > MAX_CHECKS:
+                        print(f"  {code} failed {MAX_CHECKS} checks; handing it to the claude lane")
+                        save_work(code, working, last_failure)
+                        return "handoff", last_failure
                     verdict = check_in_lane(code, working)
                     if verdict is None or verdict == 0:
                         save_work(code, working, last_failure)
@@ -2768,6 +2793,17 @@ def mark_delivered(code, worker, kept):
 
 
 def implement(code, answer_file=None):
+    """Write one row, holding the single agent floor: a second agent leaves instead of sharing the tree."""
+    from agent_floor import floor
+
+    with floor(f"writer {code}") as held:
+        if not held:
+            print(f"  {code}: another agent holds the floor; one agent at a time, trying again later")
+            return 0
+        return implement_row(code, answer_file)
+
+
+def implement_row(code, answer_file=None):
     """Have the harness write one task's code, then verify it locally.
 
     The writer edits a working copy with tools and runs the checks itself; only a passing check leaves

@@ -12,6 +12,15 @@ open and you say why.
 Run every command from the module root (`Modules/AI`) after `export OGAMEX_RUNNER=local-docker-dev`.
 The commands are the whole workflow; do not invent other ways to check your work.
 
+## Deliver first, verify after
+
+One agent works the tree at a time (`scripts/agent_floor.py`). The order inside a row is: read the notes and
+the `file_ref`, **make the change, commit it**, then verify. Do not run the proof before editing, write probe
+tests to learn what code does, or loop on proof runs: a red check means read its failing line and fix the cause;
+the same failure twice means stop and `task.py block` with the cause. Read `plan/research/ogame/steering.md`
+first when it exists: the babysitter writes there which failing aspects to move next and which rows to stop
+circling. Steps 2 and 4 below are for diagnosis after code has landed, not a gate before it.
+
 ## 1. Pick and read
 
 ```
