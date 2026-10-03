@@ -62,28 +62,28 @@ never `git add -A`, stash, reset, clean or force-push. No `else`/`elseif`, `app(
 
 ## Results
 
-Cycle: 2026-10-03 12:05 UTC
-Pull: ogamex-next f8122d8d, ogamex-module-ai bdd6dff (both already up to date with origin/main; no stack rebuild needed)
-Stack: harness (1 writer, 1 model call), babysitter and the claude lane (one agent in the tree at a time) running.
+Cycle: 2026-10-03 12:14 UTC
+Pull: ogamex-next f8122d8d, ogamex-module-ai 2a70aa5 (the cloud commit) merged under local ce7f94f; also pulled 09bf80c (Timeout reply agent double).
+Stack: grand queue worker restarted onto the pulled code at this time. Harness (1 writer, 1 model call), babysitter and the claude lane running.
+Request items 1-4 need two hours on the new code: not answered yet, they are due in the next cycle.
 
 ### Failing proofs
-None: no row was delivered awaiting its proof this cycle (UNPROVEN is empty, 9 rows READY).
+- **ProcessAiWorkTest::accelerated future sessions are claimable by the worker** (tests/Feature/ProcessAiWorkTest.php:469):
+  expected the future-dated accelerated session to be Completed, got Pending. 27 of 28 tests in the file pass. It passed
+  at about 11:50 UTC, before the pull. The only change to `ProcessAiWork` since is 2a70aa5 (`scheduleSessionRecovery` takes
+  the routine's next wake when the account is asleep). I did not bisect it; it may also depend on the wall-clock hour.
+- **Risk worth checking in that change:** the cohort runs accelerated (`ai.population.session_interval_seconds` = 5). A failed
+  session there now waits for the routine's next wake, possibly hours, instead of one minute. If accelerated mode should
+  keep the minute retry, the isAwake branch needs the same accelerated exception as the claim path (`acceleratedSession`).
+  RaidDepthTest (30 tests) passes on the new `CandidateActionFactory`.
 
-### Passing proofs (last 24h notes)
-- PERS-002 09:01 test:PersonaDecompositionTest aspect:economy
-- PERS-007 08:49 test:EveryPlanetBuildsSessionSituationTest aspect:economy invariant:IDLE_QUEUES
-- FLEET-002 08:38 DebrisBesidePlanetSituationTest, DebrisRecycleSituationTest, aspect:recycle
-- FLEET-003 08:39 InboundAttackSituationTest, FleetSaveBeforeBedSituationTest, aspect:fleet_save
-- FAST-invariant-IDLE-QUEUES 09:00 and FAST-invariant-NAKED-BESIDE-WALLED 09:09 harness:self-check
+### Passing proofs
+Nothing delivered awaiting a proof since 12:05 UTC. Earlier passes (PERS-002, PERS-007, FLEET-002, FLEET-003, the FAST-
+self-checks) are in the ledger notes.
 
 ### Crashes, exceptions, stack traces
-None in the last 60 min: grand queue worker, scheduler and app logs have no exception lines; failed_jobs 0 in the last hour.
+None in the 60 min before this cycle: queue worker, scheduler and app logs clean, failed_jobs 0.
 
-### Scorecard aspects still failing
-Scorecard: 15 of 15 aspects pass (24h window).
-Cohort invariants (verify-cohorts): 102 violations across 3 invariants.
-- LIFE_FIGHTS: 100 of 1110 battles today had combat rounds (9%): raids pillage empty planets instead of fighting.
-- NAKED_BESIDE_WALLED: accounts with a planet at zero defence beside a walled one (e.g. player 117).
-- AUTH_UPTIME: many accounts (e.g. players 96-99) fail the uptime shape.
-Cohort pulse, last 15 min: 1912 sessions on 100 accounts, backlog 14 late items (was 430+), sessions chose QueueUnits 57%, Transfer 29%, Raid 0%; missions launched: Transport 448, Expedition 27, Attack 4, Colonisation 3.
-Raid and fight share is the open gap: attacks fell to 4 in this window.
+### Scorecard aspects and invariants still failing
+Scorecard 15 of 15 pass. Cohort invariants (read 12:05 UTC, before the cloud code): LIFE_FIGHTS 9% of battles with combat
+rounds, NAKED_BESIDE_WALLED, AUTH_UPTIME. Pulse 15 min: 1019 sessions, QueueUnits 58%, Transfer 28%, Raid 0%, 2 attacks.
