@@ -103,28 +103,46 @@ never `git add -A`, stash, reset, clean or force-push. No `else`/`elseif`, `app(
 
 ## Results
 
-Cycle: 2026-10-03 12:14 UTC
-Pull: ogamex-next f8122d8d, ogamex-module-ai 2a70aa5 (the cloud commit) merged under local ce7f94f; also pulled 09bf80c (Timeout reply agent double).
-Stack: grand queue worker restarted onto the pulled code at this time. Harness (1 writer, 1 model call), babysitter and the claude lane running.
-Request items 1-4 need two hours on the new code: not answered yet, they are due in the next cycle.
+Cycle: 2026-10-03 13:04 UTC (INTERIM: the 24h smoke sim and the 48h sim are still running; final numbers follow in the next push)
+Pull: ogamex-next b5fb9527; ogamex-module-ai 22cb3ee (cloud: fast time, hourly simulated read) with local fixes on top. composer dump-autoload done in
+the dev and grand containers; grand queue worker and scheduler restarted; harness (1 writer) and babysitter restarted onto the new code.
 
-### Failing proofs
-- **ProcessAiWorkTest::accelerated future sessions are claimable by the worker** (tests/Feature/ProcessAiWorkTest.php:469):
-  expected the future-dated accelerated session to be Completed, got Pending. 27 of 28 tests in the file pass. It passed
-  at about 11:50 UTC, before the pull. The only change to `ProcessAiWork` since is 2a70aa5 (`scheduleSessionRecovery` takes
-  the routine's next wake when the account is asleep). I did not bisect it; it may also depend on the wall-clock hour.
-- **Risk worth checking in that change:** the cohort runs accelerated (`ai.population.session_interval_seconds` = 5). A failed
-  session there now waits for the routine's next wake, possibly hours, instead of one minute. If accelerated mode should
-  keep the minute retry, the isAwake branch needs the same accelerated exception as the claim path (`acceleratedSession`).
-  RaidDepthTest (30 tests) passes on the new `CandidateActionFactory`.
+### Request item 1: clock-sweep (all eight hours 0 3 6 ... 21)
+- ProcessAiWorkTest: PASS at every hour (the 12:14 failure is gone).
+- RunDueAiWorkTest, RoutineCadenceTest, IdleOverrideAndAntiBotCadenceTest, ProcessAiSessionTest, SimulatedTimeTest: PASS at every hour.
+- **DeterministicSessionLoopTest: FAIL at UTC hours 0, 9, 18.** One test, "a long absence is clamped under the host inactive-deletion window"
+  (tests/Feature/DeterministicSessionLoopTest.php:240): expects next_due_at = now + 2 days exactly, gets about 1.9 days less
+  (1789123920 vs 1789286400 at hour 0; 1789168620 vs 1789286400 at hour 9). At the other hours it passes, so the clamp or the routine's
+  wake window decides the successor time differently depending on the hour. Not fixed (scheduling logic, not mine).
 
-### Passing proofs
-Nothing delivered awaiting a proof since 12:05 UTC. Earlier passes (PERS-002, PERS-007, FLEET-002, FLEET-003, the FAST-
-self-checks) are in the ledger notes.
+### Request item 3: `ai:sim` first use. It ran, and it exposed two bugs in the tooling (fixed, tooling only)
+1. **Every sim crashed after 9 to 55 simulated minutes with `Table 'ogamex-sim.ai_work_items' doesn't exist`.** Cause: three callers share
+   the one default database `ogamex-sim` and each starts by re-cloning it: a manual `sim`, the harness's simulated `prove`, and the
+   harness's hourly simulated read. They dropped each other's tables mid-run. Fix: `prove` uses `ogamex-sim-prove` (scripts/ogamex
+   line 348), the harness read uses `ogamex-sim-read` (scripts/harness-live.sh line 175), and a manual run sets `SIM_DB=ogamex-sim-verify`.
+   Give every new caller its own `SIM_DB`; the default is a trap.
+2. Nothing else threw; the clone takes about 40 s.
 
-### Crashes, exceptions, stack traces
-None in the 60 min before this cycle: queue worker, scheduler and app logs clean, failed_jobs 0.
+### Speedup (this is the finding to act on)
+Measured on the 20-account smoke run: the simulated clock advanced 18 minutes in about 4.5 real minutes, so **about x4, not the
+orders of magnitude the design assumes**. 24 simulated hours would take about 6 real hours and 48 hours about half a day. At that rate
+the harness's per-proof 12 h simulation and per-hour 6 h simulated read are each ~10+ minutes of silence. Where the time goes is the
+first thing to profile (per-jump cost of ProcessAiWork, the Rust battle engine, the scheduler maintenance commands each jump).
+Until it is faster, lower `HARNESS_SIM_HOURS` and `HARNESS_READ_SIM_HOURS`, or the writer idles behind its own proofs.
 
-### Scorecard aspects and invariants still failing
-Scorecard 15 of 15 pass. Cohort invariants (read 12:05 UTC, before the cloud code): LIFE_FIGHTS 9% of battles with combat
-rounds, NAKED_BESIDE_WALLED, AUTH_UPTIME. Pulse 15 min: 1019 sessions, QueueUnits 58%, Transfer 28%, Raid 0%, 2 attacks.
+### Harness fixes made this cycle (all committed)
+- Writer call budget back to 250 (it had been set to 80): past it a writer hands the row to Claude. A spent budget on a routine row (FAST/RULE/
+  STUCK/WIK/JEV rows and test merges like QUAL-DEDUP) now goes to the owner, never to Claude. QUAL-DEDUP had been handed to Claude after 80
+  calls because its proof was `invariant:NAKED_BESIDE_WALLED`, which a test merge cannot move: its proof is now
+  `test:NakedBesideWalledSituationTest situation:naked-beside-walled`.
+- Harness page: "stopped" now means 30 minutes without a status publish (a simulated proof or read is silent for up to ~15).
+- One agent in the tree at a time; Claude lane for hard code only (see State of play below).
+
+### Failing proofs, invariants, crashes
+- Invariants (live cohort, read 12:05 UTC, before the cloud code): LIFE_FIGHTS 9%, NAKED_BESIDE_WALLED, AUTH_UPTIME. Simulated numbers not available yet.
+- QUAL-DEDUP: proof was failing on NAKED_BESIDE_WALLED player 80 (planet at zero defence beside a wall of 2,330 units); proof changed as above.
+- Crashes: none in the queue worker, scheduler or app logs. The only exception seen was the sim table error above.
+
+### Still to report (next push)
+`sim --hours=24 --accounts=20` summary and speedup line, per-hour sessions for players 96-99, attacks per hour, LIFE_FIGHTS share, player 117
+NAKED_BESIDE_WALLED rows, `ai:raid-rejected:*` counters, the full `sim --hours=48`, and the `prove LIFE-001` log with "simulating 12h" and a SIM: line.
