@@ -332,7 +332,9 @@ def reopen_churn(actions):
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "advance":
-        for line in advance([]):
+        actions = advance([])
+        run_claude_lane(actions)
+        for line in actions:
             print(f"BABYSIT advance: {line}")
         return
     actions = []
