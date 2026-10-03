@@ -11,10 +11,31 @@ Written 2026-10-03 ~12:50 UTC. Code only, none of it run in the cloud. Pull both
 ### ARCHITECTURE MIGRATION (Opus thread, 2026-10-03 from 20:00 UTC) -- READ THIS FIRST, it supersedes the row queue
 Owner order: follow `/mnt/project-files/research/ai-architecture-diagnosis.md` (copy: `docs/architecture-diagnosis.md`). Code only, nothing run in the cloud.
 <!-- MIGRATION-STATUS-START -->
-| step | what | state | commit |
+| step | what | state | module commit |
 |---|---|---|---|
-| 2 | Raid planner plans against the espionage report (`ReportedPlanet`), never the live planet | pushed | see git log "architecture step 2" |
+| 2 | Raid planner plans against the spy report (`app/Domain/Raid/ReportedPlanet.php`), never the live planet; a report that could not see fleet or defence plans no raid | pushed | f8f999e |
+| 3 | Managers act every login after the engine's errand: raid waves, missiles, probe batch, ferry, expedition, colony, salvage, fixed priority over free fleet slots; ships claimed per login (`app/Domain/Login/LoginReservations.php`, `FleetSlots.php`); numbers in `resources/doctrine/managers.yaml` | pushed | f976a5d |
+| 5 | Probe then raid in one login: new work kind `RaidWave` (20) a few minutes after the probes turns fresh reports into raids; fleet archetypes accept a bad tail on defended raids | pushed | f976a5d (+ earlier tolerance commit) |
+| 4 | Doctrine per archetype (`resources/doctrine/{miner,raider,turtle,fleeter,hybrid}.yaml`): opening build order, research path, fleet template (capital fleet order), defence template (walled planets); Gate 1 amended in AGENTS.md and cognition-gates.md | pushed | be85f62 |
+| 6 | Battle appraisal (FAtiMA) runs as queued job `AppraiseAiBattleReport`, off the login path; sidecars still used | pushed | 90d8f48 |
+| 1 | One snapshot per login (perf only) | not started | |
+| 7 | GalaxyMap and per-target priority counters (the raid blacklist is the only adaptation today) | not started | |
+| - | Phase machine and `ai_goals` table (part of step 4) | not started | |
 <!-- MIGRATION-STATUS-END -->
+
+**What changed in behaviour (so you know what to look for):**
+- A login now writes several work items: the engine's errand plus `:raid:<report>`, `:spy:<n>`, `:missile`, `:transfer`, `:expedition`, `:colony`, `:recycle`, `:wave` keyed orders. Expect many more Spy and Raid work items per login for raider/fleeter/hybrid.
+- Raids are planned against the last report. Expect some raids to lose ships (the planet changed since the report). That is intended.
+- Openings follow the YAML lists; research follows the path; the capital fleet follows the template.
+- `AppraiseAiBattleReport` jobs appear on the `ai` queue after battles.
+
+**Risks I could not test (check these first, report exact errors):**
+1. `ReportedPlanet` builds a detached `Planet` copy (`replicate()`, `exists=false`) and hands it to the Rust battle engine via `makeFromModel`. If the engine or `PlanetService` touches the DB through that copy, report the stack.
+2. `LoginReservations` is a container singleton; it is reset at the start and end of each schedule and each RaidWave. If two raids from one origin still fail at dispatch with "Not enough units", report it.
+3. `RaidWave` reads `messages.espionage_report_id` created since the probes; if no raids follow probes, report the RaidWave work items' results.
+4. Tests that assert exactly one work item per session will now see more. Report their names; I will adjust them (they encode the old one-errand spine).
+
+
 
 **What the local agent does each cycle (in this order):**
 1. `git pull` both repos on main; `composer dump-autoload`; `php artisan migrate` (new tables may land); `queue:restart`.
