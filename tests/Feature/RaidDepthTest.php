@@ -456,12 +456,16 @@ test('a light-fighter swarm draws cruisers as the launch subset', function (): v
     $foreign = $this->createForeignPlanet();
     $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $foreign->addUnit('light_fighter', 200);
+    // The planner reads the defender from the report, never the live planet (step 2), so the swarm
+    // has to be in the report: a report whose ship list is empty is a report that saw no ships.
     $reportId = raidDepthReport(
         $this->currentUserId,
         $foreign->getPlanetCoordinates()->galaxy,
         $foreign->getPlanetCoordinates()->system,
         $foreign->getPlanetCoordinates()->position,
         ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000],
+        null,
+        ['light_fighter' => 200],
     );
 
     $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
