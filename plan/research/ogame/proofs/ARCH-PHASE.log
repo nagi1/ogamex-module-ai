@@ -1,0 +1,4 @@
+PASS test:MigrationPhaseMachineTest 1s
+PASS aspect:economy 2s
+PASS aspect:research 0s
+PROOF: PASS ARCH-PHASE (test:MigrationPhaseMachineTest aspect:economy aspect:research)
