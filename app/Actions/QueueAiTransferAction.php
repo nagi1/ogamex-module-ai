@@ -97,6 +97,12 @@ class QueueAiTransferAction implements QueueAiTransfer
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
             $fuel = $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
             if ($fuel > $fleet->getTotalFuelCapacity($player)) {
+                // The minimal fleet's own tanks cannot carry a long flight's fuel: a player sends every
+                // hold the planet owns before giving up the run (STUCK no_transport_fleet).
+                $fleet = $this->everyHold($player, $source);
+                $fuel = $fleet->units === [] ? PHP_INT_MAX : $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
+            }
+            if ($fuel > $fleet->getTotalFuelCapacity($player)) {
                 return AiActionResult::rejected(AiQueueActionReason::NoTransportFleet);
             }
             if ($fuel > floor($source->deuterium()->get())) {
@@ -278,5 +284,16 @@ class QueueAiTransferAction implements QueueAiTransfer
         usort($entries, static fn (array $a, array $b): int => $b[0] <=> $a[0]);
 
         return array_map(static fn (array $pair) => $pair[1], $entries);
+    }
+
+    /** Every hull with a hold that the source owns, whole stacks: the widest fleet a ferry can fly with. */
+    private function everyHold(PlayerService $player, PlanetService $source): UnitCollection
+    {
+        $fleet = new UnitCollection();
+        foreach ($this->holdsByCapacity($player, $source) as $entry) {
+            $fleet->addUnit($entry->unitObject, $entry->amount);
+        }
+
+        return $fleet;
     }
 }

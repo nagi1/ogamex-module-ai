@@ -60,6 +60,13 @@ class QueueAiUnitsAction implements QueueAiUnits
                 return AiActionResult::rejected(AiQueueActionReason::NotAUnit);
             }
 
+            // The host's add() returns silently, with nothing queued, for a unit whose requirements or
+            // character class the planet does not meet: ask both first so the refusal has a name
+            // instead of reading as queue_not_created.
+            if (!ObjectService::objectRequirementsMet($unit->machine_name, $planet) || !ObjectService::objectCharacterClassMet($unit->machine_name, $planet)) {
+                return AiActionResult::rejected(AiQueueActionReason::NothingQueueable);
+            }
+
             if ($unit->type === GameObjectType::Defense) {
                 return $this->queueDefence($player, $planetId, $unitId, $amount);
             }
