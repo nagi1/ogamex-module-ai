@@ -1,4 +1,4 @@
 PASS test:AllianceApplicationSituationTest 1s
-PASS test:AllianceLeaderSituationTest 2s
+PASS test:AllianceLeaderSituationTest 1s
 FAIL aspect:alliance 1s —  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
 PROOF: FAIL ALLY-001 (test:AllianceApplicationSituationTest test:AllianceLeaderSituationTest aspect:alliance) at aspect:alliance:  FAIL alliance 0 floor 1 applies to, recruits for or leaves an alliance
