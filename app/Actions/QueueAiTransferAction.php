@@ -181,8 +181,11 @@ class QueueAiTransferAction implements QueueAiTransfer
             return null;
         }
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+        $fuel = (float) $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
 
-        return (float) $fleetMissions->calculateConsumption($source, $fleet, $target->getPlanetCoordinates(), 0, self::TRANSPORT_SPEED);
+        // The tanks too: the dispatch refuses a flight the fleet cannot carry the fuel for, so a ferry
+        // that fails that test is not planned in the first place.
+        return $fuel > $fleet->getTotalFuelCapacity($player) ? null : $fuel;
     }
 
     private function transportFleet(PlayerService $player, PlanetService $source, Resources $shipment): ?UnitCollection
