@@ -1595,6 +1595,19 @@ QUALITY_TASKS = {
 }
 
 
+QUALITY_READ_HOURS = 6  # harness-live.sh reads the scorecard with --hours=6
+
+
+def proven_within_read(connection, code):
+    """Whether the row's last PROVEN note is younger than the window the cohort read judges."""
+    notes = connection.execute("select coalesce(notes,'') from tasks where code=?", (code,)).fetchone()[0]
+    stamps = re.findall(r"PROVEN (\d{4}-\d\d-\d\d \d\d:\d\d) UTC", notes)
+    if not stamps:
+        return False
+    proven = datetime.datetime.strptime(stamps[-1], "%Y-%m-%d %H:%M").replace(tzinfo=datetime.timezone.utc)
+    return datetime.datetime.now(datetime.timezone.utc) - proven < datetime.timedelta(hours=QUALITY_READ_HOURS)
+
+
 def quality(path):
     """Turn a cohort read's failures into tracked tasks, once each, and reopen what regressed.
 
@@ -1622,6 +1635,11 @@ def quality(path):
     for name in fired:
         if name in known and known[name][1] != "done":
             tracked.append(f"{name} ({known[name][0]})")
+            continue
+        if name in known and proven_within_read(connection, known[name][0]):
+            # The read judges hours that reach back before the proof, so the old code can fail it
+            # the minute after the new code passed: reopening there loops done -> todo -> done.
+            tracked.append(f"{name} ({known[name][0]}, proven inside the read's window)")
             continue
         if name in known:
             connection.execute("update tasks set status='todo', assignee=null, updated_at=datetime('now'), "
