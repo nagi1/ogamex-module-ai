@@ -12,6 +12,10 @@ class CasualPolicy extends ConfiguredArchetypePolicy
         AiCandidateActionType::Spy->value => 0.3,
         AiCandidateActionType::DoNothing->value => 0.5,
         AiCandidateActionType::FleetSave->value => 0.7,
+        // Allied defence, merchant trade and relocation: how readily this temperament does each (LOOP-002/003/004).
+        AiCandidateActionType::Defend->value => 0.2,
+        AiCandidateActionType::Trade->value => 0.3,
+        AiCandidateActionType::Relocate->value => 0.1,
     ];
 
     public function archetype(): AiArchetype

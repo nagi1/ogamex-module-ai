@@ -13,6 +13,10 @@ class RaiderPolicy extends ConfiguredArchetypePolicy
         AiCandidateActionType::FleetSave->value => 0.9,
         AiCandidateActionType::Recycle->value => 0.7,
         AiCandidateActionType::QueueUnits->value => 0.6,
+        // Allied defence, merchant trade and relocation: how readily this temperament does each (LOOP-002/003/004).
+        AiCandidateActionType::Defend->value => 0.4,
+        AiCandidateActionType::Trade->value => 0.3,
+        AiCandidateActionType::Relocate->value => 0.3,
     ];
 
     public function archetype(): AiArchetype

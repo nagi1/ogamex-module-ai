@@ -13,6 +13,10 @@ class FleeterPolicy extends ConfiguredArchetypePolicy
         AiCandidateActionType::Raid->value => 0.9,
         AiCandidateActionType::Spy->value => 0.8,
         AiCandidateActionType::QueueUnits->value => 0.6,
+        // Allied defence, merchant trade and relocation: how readily this temperament does each (LOOP-002/003/004).
+        AiCandidateActionType::Defend->value => 0.6,
+        AiCandidateActionType::Trade->value => 0.3,
+        AiCandidateActionType::Relocate->value => 0.3,
     ];
 
     public function archetype(): AiArchetype
