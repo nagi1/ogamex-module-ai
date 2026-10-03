@@ -1,4 +1,4 @@
 PASS test:InboundAttackSituationTest 2s
-PASS test:FleetSaveBeforeBedSituationTest 4s
+PASS test:FleetSaveBeforeBedSituationTest 5s
 PASS? aspect:fleet_save 1s
 PROOF: PASS FLEET-003 (test:InboundAttackSituationTest test:FleetSaveBeforeBedSituationTest aspect:fleet_save?)
