@@ -8,6 +8,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\AiRuntimeSettings;
+use Illuminate\Support\Facades\Cache;
 use OGame\Models\User;
 use OGame\Services\PlayerGameStateService;
 
@@ -59,6 +60,12 @@ class RunAiSessionAction implements RunAiSession
         // reply has to fit inside.
         if (app(AiRuntimeSettings::class)->conversationEnabled()) {
             app(RunAiConversationCycleAction::class)->handle($profile->player_id, $this->clock->now());
+        }
+
+        // The host scheduler misses cron-minute events (HARNESS-003), so the alliance lane would never
+        // run; the first session each minute runs it, which is the cadence the schedule promises (ALLY-001).
+        if (Cache::add('ai:alliance-life:minute', true, 60)) {
+            app(AdvanceAiAllianceLifeAction::class)->handle();
         }
 
         // The decision is recorded first and the intent scheduled from what it recorded, so a
