@@ -171,6 +171,7 @@ Fast time (simulated clock, no waiting; always on a copy of the cohort database)
   sim-clone [db]                        only the clone (default ogamex-sim)
   clock-sweep <TestName> [hours...]     run one test file at several frozen hours of day (UTC; default 0 3 6 9 12 15 18 21)
                                         to expose a test that only passes at some time of day
+  coverage                              what no AI account uses: objects, missions, raids, alliances, hatred, colonies, moons
   prove <CODE> with PROVE_SIM_HOURS=N   simulate N hours first, judge the live steps (aspect/invariant) on the copy
 
 Environment:
@@ -517,6 +518,9 @@ case "$command_name" in
         ;;
     economy)
         in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/economy-explain.php'; foreach (explain_economy(${1:?usage: economy PLAYER_ID}) as \$line) { echo \$line, PHP_EOL; }"
+        ;;
+    coverage)
+        in_universe "${PROVE_UNIVERSE:-grand}" php artisan tinker --execute="require '/var/www/Modules/AI/scripts/coverage-audit.php';"
         ;;
     stuck)
         in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/live-stuck.php "${1:-120}" "${2:-3}"

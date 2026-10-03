@@ -177,6 +177,54 @@ def stuck_scenarios(actions):
         actions.append(f"raised {code}: {accounts} accounts repeat '{reason}'")
 
 
+COVERAGE_EVERY = 3600
+COVERAGE_STAMP = "/tmp/babysit-coverage"
+# What a gap is fixed in. The audit reads the catalogue, so a new object or mission shows up as a gap by itself;
+# only the file a writer should start from is named here.
+COVER_FILES = {
+    "object:Station": ("aspect:economy", f"{D}FacilityChain.php; {D}EconomyUpgrades.php"),
+    "object:Research": ("aspect:research", f"{D}EconomyUpgrades.php"),
+    "object:Ship": ("aspect:shipyard", f"{D}QueueableUnitPlanner.php; {D}DefenseCompositionPlanner.php"),
+    "object:Defense": ("aspect:shipyard", f"{D}QueueableUnitPlanner.php; {D}DefenseCompositionPlanner.php"),
+    "object:Building": ("aspect:economy", f"{D}EconomyUpgrades.php"),
+    "mission": ("aspect:raids", f"{D}RaidPlanner.php; {D}QueueableDefendPlanner.php"),
+    "aspect:raids": ("aspect:raids", f"{D}RaidPlanner.php"),
+    "aspect:moons": ("aspect:raids", f"{D}RaidPlanner.php; {D}WaveFarmPlanner.php"),
+    "aspect:alliances": ("aspect:alliance", "app/Actions/AdvanceAiAllianceLifeAction.php"),
+    "aspect:hatred": ("aspect:social", "app/Domain/Social/AllianceChoice.php"),
+    "aspect:friendship": ("aspect:social", "app/Domain/Social/AllianceChoice.php"),
+    "aspect:colonies": ("aspect:colonisation", f"{D}QueueableColonyPlanner.php"),
+}
+
+
+def coverage_audit(actions):
+    """Owner order 3 Oct 2026: every ship, building, research, defence and mission, and raids, defence, alliances,
+    hatred, friendship, colonies and moons, must be in use by some AI account. Hourly, run scripts/coverage-audit.php
+    on the cohort and raise one row per thing nobody uses."""
+    try:
+        if time.time() - os.path.getmtime(COVERAGE_STAMP) < COVERAGE_EVERY:
+            return
+    except OSError:
+        pass
+    open(COVERAGE_STAMP, "w").close()
+    out = subprocess.run(
+        ["bash", "scripts/ogamex", "coverage"], cwd=ROOT, capture_output=True, text=True, timeout=300,
+        env={**os.environ, "OGAMEX_RUNNER": "local-docker-dev"}).stdout
+    con = sqlite3.connect(DB)
+    for found in re.finditer(r"^GAP (object|mission|aspect) (\S+): (.+)$", out, re.M):
+        kind, name, detail = found.groups()
+        key = f"object:{name.split('/')[0]}" if kind == "object" else ("mission" if kind == "mission" else f"aspect:{name}")
+        proof, files = COVER_FILES.get(key, ("aspect:economy", f"{D}DecisionEngine.php"))
+        code = "COVER-" + re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-")[:40]
+        if con.execute("select 1 from tasks where code=?", (code,)).fetchone():
+            continue
+        sh("python3", "plan/tasks/task.py", "add", code, f"Nobody uses {name}: {detail}", "impl", "P1", "--file", files, "--proof", proof,
+           "--notes", f"Raised by the coverage audit (scripts/coverage-audit.php): {detail}. A human player uses every {kind} the game has. "
+                      "Read the object or mission from the host catalogue (Gate 1, never name it), make the planner that owns it choose it when a player "
+                      "would, and prove it with a situation test (scripts/cohort-scenario.php).")
+        actions.append(f"raised {code}: {detail}")
+
+
 USAGE = os.path.join(ROOT, "plan/research/ogame/model-usage.jsonl")
 BURN_CALLS = int(os.environ.get("BABYSIT_BURN_CALLS", "1000000"))  # owner 3 Oct 2026: writers run free; a stuck row is delegated, not cut off
 
@@ -450,6 +498,7 @@ def main():
     scratch_files(actions)
     slow_verification(actions)
     stuck_scenarios(actions)
+    coverage_audit(actions)
     burn_watchdog(actions)
     delegate_to_claude(actions)
     code_guard(actions)
