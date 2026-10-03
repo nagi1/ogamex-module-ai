@@ -237,6 +237,35 @@ class QueueableBuildingPlanner
     }
 
     /**
+     * Whether an order planned earlier can no longer be placed because the queue moved on since: the
+     * planet's queue filled, or the station's units went into production. The executor asks this for
+     * an order carrying its own binding, so a stale order is planned again from the live state
+     * instead of being sent to a host gate that refuses it (STUCK: "Maximum number of items already
+     * in queue" and shipyard_busy, repeated by the same accounts).
+     */
+    public function orderIsStale(int $playerId, int $planetId, int $buildingId): bool
+    {
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $planet = $player->planets->all()[$planetId] ?? null;
+
+        if ($planet === null) {
+            foreach ($player->planets->all() as $candidate) {
+                if ($candidate->getPlanetId() === $planetId) {
+                    $planet = $candidate;
+                    break;
+                }
+            }
+        }
+
+        if ($planet === null) {
+            return false;
+        }
+
+        return $this->buildingQueueService->retrieveQueue($planet)->isQueueFull()
+            || $player->isObjectUpgradeBlocked($buildingId);
+    }
+
+    /**
      * Which of the host's gates refuses this building here, or null when the planet can queue it.
      * The gates are asked in the order the building page asks them: planet type, free queue space,
      * met requirements, a balance it can pay and a field the building still fits in. Named, so a

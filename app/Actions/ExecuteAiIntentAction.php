@@ -146,6 +146,11 @@ class ExecuteAiIntentAction
     private function build(AiWorkItem $workItem, int $planetId): array
     {
         $buildingId = $workItem->payload[self::PAYLOAD_BUILDING_ID] ?? null;
+        // An order planned earlier binds a building to a planet; if the queue filled or the yard went
+        // busy since, the host refuses it and the account repeats the same refusal. Plan it again.
+        if (is_int($buildingId) && app(QueueableBuildingPlanner::class)->orderIsStale($workItem->player_id, $planetId, $buildingId)) {
+            $buildingId = null;
+        }
         $step = is_int($buildingId)
             ? app()->makeWith(QueueableBuilding::class, [
                 'planetId' => $planetId,
