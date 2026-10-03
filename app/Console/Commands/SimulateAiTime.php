@@ -117,8 +117,13 @@ class SimulateAiTime extends Command
         while ($now->lessThan($end)) {
             SimulatedTime::freezeAt($now);
 
-            $this->timed('fleet arrivals', fn () => $this->runFleetArrivals());
-            $ran = $this->timed('due work (all sessions and orders)', fn (): array => $this->drainDueWork($players));
+            // One commit per simulated instant instead of one per statement group: every session and order
+            // writes dozens of rows, and each commit is an fsync. Inner transactions become savepoints.
+            $ran = DB::transaction(function () use ($players): array {
+                $this->timed('fleet arrivals', fn () => $this->runFleetArrivals());
+
+                return $this->timed('due work (all sessions and orders)', fn (): array => $this->drainDueWork($players));
+            });
             foreach ($ran as $key => $count) {
                 $hour[$key] += $count;
                 $total[$key] += $count;

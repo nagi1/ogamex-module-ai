@@ -93,6 +93,16 @@ digest instead of hanging. `--external-cognition` restores the old behaviour. Ex
 Please rerun `sim --hours=6 --accounts=20` on a fresh SIM_DB and report the SIM, JUMPS and full PROFILE lines (do not grep them), then the 12 h, 100-account
 run with `--max-wall=300`. Any `Attempted request to` rows in the digest name a remaining HTTP caller: paste them.
 
+### Faster sim and tests (fast-time thread, 17:25 UTC) -- measure both
+- `ai:sim` commits once per simulated instant (the whole drain is one transaction, inner ones are savepoints) instead of per statement group: fewer fsyncs.
+  Watch for any new error in the digest that mentions a transaction, lock or "after commit"; if one shows, report it and run with the previous behaviour
+  by removing the `DB::transaction` wrapper in `handle()`.
+- `test-one`, `clock-sweep` and every `test:` proof step now run a test named by file as that file (`pest Modules/AI/tests/Feature/XTest.php`) instead of
+  `--testsuite=Modules --filter=X`, which loaded and filtered the whole suite. Please time `test-one ProcessAiWorkTest` before/after (`git stash`-free: compare
+  with `OGAMEX_RUNNER=local-docker-dev ... pest --testsuite=Modules --filter=ProcessAiWorkTest` by hand) and report both numbers.
+- Tests stay on MySQL lanes: the schema and the code use MySQL features, so an in-memory sqlite lane would not run them. Parallelism is already
+  `--parallel --processes=4` for suites; raise `PARALLEL_PROCESSES` if the machine has cores to spare (each worker clones the schema once and reuses it).
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.

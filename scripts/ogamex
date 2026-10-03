@@ -75,6 +75,19 @@ pest_runner() {
     printf 'timeout -k 5 %s ./vendor/bin/pest' "${TEST_TIMEOUT:-120}"
 }
 
+# A test named by file (ProcessAiWorkTest) runs as that file: pointing pest at one path skips discovering and
+# loading every test file in the Modules suite, which was most of a single-file run. A name that is not a file
+# (a test case title) still goes through --filter on the whole suite.
+pest_target() {
+    local name="$1" file
+    file="$(find "$MODULE_ROOT/tests" -type f -name "${name}.php" 2>/dev/null | head -n1)"
+    if [ -n "$file" ]; then
+        printf '%s' "Modules/AI/${file#"$MODULE_ROOT"/}"
+        return
+    fi
+    printf '%s' "--testsuite=Modules --filter=${name}"
+}
+
 # Clears locks left behind by an earlier killed run before starting a new one, so a stale
 # session is self-healing instead of a manual database rescue.
 reap_stale_test_sessions() {
@@ -360,14 +373,14 @@ prove_row() {
         rc=0
         : > "$out"
         case "$kind" in
-            test) with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$name" 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
+            test) with_test_lane run_core ./vendor/bin/pest $(pest_target "$name") 2>&1 | tee "$out" >&"$progress" || rc=1 ;;
             situation)
                 # A situation has a Situation-kit story that plays it in about a second on the test database;
                 # the live run waits for real workers and took 183 s. The kit story is the proof, the live
                 # run is the fallback for a situation no story covers yet.
                 story="$(printf '%s' "$name" | sed -E 's/(^|-)([a-z])/\U\2/g')SituationTest"
                 if [ -f "$MODULE_ROOT/tests/Feature/Situations/$story.php" ]; then
-                    with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="$story" 2>&1 | tee "$out" >&"$progress" || rc=1
+                    with_test_lane run_core ./vendor/bin/pest $(pest_target "$story") 2>&1 | tee "$out" >&"$progress" || rc=1
                 else
                     in_universe "${PROVE_UNIVERSE:-grand}" php Modules/AI/scripts/cohort-scenario.php run "$name" --confirm --cleanup 2>&1 | tee "$out" >&"$progress" || rc=1
                 fi
@@ -549,7 +562,7 @@ case "$command_name" in
         sweep_failed=()
         for sweep_hour in "${sweep_hours[@]}"; do
             sweep_at="$(printf '2026-10-07T%02d:00:00Z' "$sweep_hour")"
-            if with_test_lane run_core env OGAMEX_TEST_NOW="$sweep_at" ./vendor/bin/pest --testsuite=Modules --filter="$sweep_test" >/tmp/clock-sweep.out 2>&1; then
+            if with_test_lane run_core env OGAMEX_TEST_NOW="$sweep_at" ./vendor/bin/pest $(pest_target "$sweep_test") >/tmp/clock-sweep.out 2>&1; then
                 echo "PASS at $sweep_at"
             else
                 echo "FAIL at $sweep_at"
@@ -564,7 +577,7 @@ case "$command_name" in
         echo "CLOCK-SWEEP: PASS ${sweep_test} at every hour tried"
         ;;
     test-one)
-        with_test_lane run_core ./vendor/bin/pest --testsuite=Modules --filter="${1:?usage: test-one TestName}"
+        with_test_lane run_core ./vendor/bin/pest $(pest_target "${1:?usage: test-one TestName}")
         ;;
     reap)
         reap_stale_test_sessions
