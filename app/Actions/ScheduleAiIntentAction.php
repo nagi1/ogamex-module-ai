@@ -24,6 +24,8 @@ use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Domain\Decision\QueueableDefend;
 use Modules\AI\Domain\Decision\QueueableDefendPlanner;
+use Modules\AI\Domain\Decision\QueueableRelocation;
+use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableTrade;
 use Modules\AI\Domain\Decision\QueueableTradePlanner;
 use Modules\AI\Domain\Decision\QueueableTransfer;
@@ -124,6 +126,7 @@ class ScheduleAiIntentAction
         private QueueablePhalanxPlanner $queueablePhalanxPlanner,
         private QueueableDefendPlanner $queueableDefendPlanner,
         private QueueableTradePlanner $queueableTradePlanner,
+        private QueueableRelocationPlanner $queueableRelocationPlanner,
         private RaidPlanner $raidPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
         private AiClock $clock,
@@ -246,6 +249,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Phalanx => $this->schedulePhalanx($profile, $sessionWorkItem),
             AiCandidateActionType::Defend => $this->scheduleDefend($profile, $sessionWorkItem),
             AiCandidateActionType::Trade => $this->scheduleTrade($profile, $sessionWorkItem),
+            AiCandidateActionType::Relocate => $this->scheduleRelocation($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
 
@@ -569,6 +573,22 @@ class ScheduleAiIntentAction
      * A phalanx scan of one raid target: the moon and the target travel with the intent,
      * so the scan runs against what the session saw.
      */
+    private function scheduleRelocation(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableRelocationPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableRelocation) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Relocate, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            self::PAYLOAD_GALAXY => $plan->galaxy,
+            self::PAYLOAD_SYSTEM => $plan->system,
+            self::PAYLOAD_POSITION => $plan->position,
+            self::PAYLOAD_REASON => 'relocate:' . $plan->planetId,
+        ]);
+    }
+
     private function scheduleTrade(AiProfile $profile, AiWorkItem $sessionWorkItem): void
     {
         $plan = $this->queueableTradePlanner->plan($profile->player_id);

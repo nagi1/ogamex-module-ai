@@ -13,4 +13,5 @@ enum AiActionType: int
     case SetMinePercent = 7;
     case PhalanxScan = 8;
     case TradeResources = 9;
+    case RelocatePlanet = 10;
 }

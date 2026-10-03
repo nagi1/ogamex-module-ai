@@ -24,4 +24,5 @@ enum AiCandidateActionType: int
     case Phalanx = 15;
     case Defend = 16;
     case Trade = 17;
+    case Relocate = 18;
 }

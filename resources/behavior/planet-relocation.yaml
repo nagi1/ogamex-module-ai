@@ -1,0 +1,4 @@
+# Which slots a planet is relocated away from and to (LOOP-004). The host sells a relocation for dark matter
+# (planet_relocation_cost); the account only moves a planet it can pay for from stock it already holds.
+poor_slots: [1, 2, 3, 13, 14, 15]
+preferred_slots: [8, 7, 9, 6, 10]
