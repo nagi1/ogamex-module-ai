@@ -604,7 +604,24 @@ and pushed as `c694d0c`.
   (ARCH-INTEL step 7: `IntelBook` per-target counter written by `RecordAiRaidOutcomeAction` +
   `GalaxyMap` threat/opportunity from what the account has seen, read by the spy/colony/unit planners,
   with `resources/behavior/intel.yaml`; its red spec `MigrationIntelTest` passes).
-- **`ARCH-GOALS` is being written now** (the only row of the three still open).
+- **`ARCH-GOALS` landed too** (`c0731f7`, ledger `done`): `ai_goals` + `AiGoal` + `GoalBoard`
+  (`commit` idempotent, `active()` drops anything past `abandon_after`) + `resources/behavior/goals.yaml`,
+  read where the login picks its objective. **All three migration rows this session was asked for are now
+  delivered and proven.**
+- **Three tooling blockers found and fixed** (each one stopped whole classes of rows, not one row):
+  1. `77bdad1` — `strategy-pipeline.py::migrations_for` read every `app/Models/*.php` in a row's
+     `file_ref`, so a row that CREATES its model (`app/Models/AiGoal.php`) raised `FileNotFoundError`
+     out of `implement_row` and **killed the writer**; the loop kept verifying and never wrote again.
+  2. `4ee5ae6` — the shared test lane was built once and its ready-marker never aged, so a migration
+     added after the lane was built (`ai_intel`, `ai_goals`) was **never applied** and the slice's own
+     tests failed on the table its own migration creates. The marker is now keyed on the migrations on
+     disk (`migrate --force` is incremental). This is what had kept `ARCH-GOALS` at "attempted and
+     refused".
+  3. `639d7dc` — the simulator cloned the cohort database and never migrated it, so the first query
+     against a new table (`ai_intel`) aborted the run with `SIM: failed, no SIM_NOW printed`. `sim_run`
+     now migrates the copy before playing.
+  Also ran `php artisan migrate --force` on **grand**, which the live workers read: without it every
+  live raid would query a missing `ai_intel`.
 - **Module suite: 11 failed / 1544 passed** (`47 -> 19 -> 11`). The doctrine-label staleness cluster is
   gone. The 11 left: 2 are `ARCH-GOALS`' red spec; `GrowthStallReactionTest` x3 (`Situation::scoreHistory()`
   missing); `ConversationCycleTest`, `BattleObservationTest` x2, `AllyUnderAttackObservationTest`,
