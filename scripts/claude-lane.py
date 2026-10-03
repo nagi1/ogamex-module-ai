@@ -35,6 +35,9 @@ Read first, in this order: Modules/AI/AGENTS.md, then `python3 plan/tasks/task.p
 then .github/skills/ai-task-execute/SKILL.md and follow that workflow. The row is already claimed for you
 (assignee {assignee}); the harness writers will not touch its files.
 
+If the row's notes carry a WRITER-HANDOFF line, a DeepSeek writer spent its call budget on it: read the last failure
+there and the writer's work in plan/research/ogame/attempts/{code}.work.json, and decide the design it could not.
+
 Rules that bind this run:
 - Say which aspect, situation or invariant the row moves and what an observer would see the account do.
 - Fix the cause in code or in a YAML under resources/behavior/. No caps, quotas or forced outcomes, no

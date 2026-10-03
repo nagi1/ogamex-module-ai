@@ -2250,13 +2250,22 @@ def tool_edit(args, working, held):
     return f"edited {clean}:\n" + "\n".join(diff[:40]) + ("\n…" if len(diff) > 40 else "")
 
 
+def diagnostic_test(clean, content):
+    """A test that asserts equality with an empty string fails on purpose to print what it saw. That is a
+    probe, not a test (QUAL-003 wrote a dozen). The state is read with `bash scripts/ogamex account|why|economy`."""
+    if clean.startswith("tests/") and re.search(r"expect\(\$\w+\)->toBe\(''\)", content):
+        return ("a test that fails on purpose to print state is a probe. Read the account with "
+                "`bash scripts/ogamex why|economy|account PLAYER`, then write the assertion the behaviour needs.")
+    return None
+
+
 def tool_write(args, working, held):
     _, clean, why = tool_target(args.get("path"))
     if why or clean is None:
         return f"refused: {why or 'only module files can be written'}"
     if disk_text(clean) is not None:
         return f"refused: {clean} exists — change it with edit_file"
-    why = writable(clean, held) or duplicate_class(str(args.get("content", "")), clean)
+    why = writable(clean, held) or duplicate_class(str(args.get("content", "")), clean) or diagnostic_test(clean, str(args.get("content", "")))
     if why:
         return f"refused: {clean}: {why}"
     keep(working, clean, str(args.get("content", "")).rstrip() + "\n")
@@ -2307,10 +2316,39 @@ def call_line(name, args):
     return f"{name}({', '.join(f'{key}={value!r}' for key, value in shown.items())})"
 
 
+# A row that has cost this many model calls across all its attempts is not going to land by more of the
+# same: QUAL-003 spent 1,609 calls in one endless attempt (no failure counter ever moved) writing tests that
+# fail on purpose to print state. Past the budget the writer stops and the row goes to the strong lane with
+# what the writer learned; the lane (Claude Code) decides the design the one-file slice could not.
+ROW_CALL_BUDGET = 250
+
+
+def row_calls(code):
+    """Model calls this row has cost over the whole usage log."""
+    if not os.path.exists(MODEL_USAGE):
+        return 0
+    needle = f'"purpose": "implementing {code} '
+    with open(MODEL_USAGE, encoding="utf-8") as handle:
+        return sum(1 for line in handle if needle in line)
+
+
+def hand_to_lane(code, last_failure):
+    """Release the writer's claim and give the row to the claude lane, with the last failure as its brief."""
+    cli = os.path.join(MODULE, "plan/tasks/task.py")
+    subprocess.run([sys.executable, cli, "unstick", code], capture_output=True)
+    subprocess.run([sys.executable, cli, "claim", code, "claude-lane"], capture_output=True)
+    connection = sqlite3.connect(TASKS_DB)
+    connection.execute("update tasks set notes=coalesce(notes,'') || ? where code=?",
+                       (f" | WRITER-HANDOFF {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC: "
+                        f"{row_calls(code)} writer calls did not land it. Last failure: {last_failure[:900]}", code))
+    connection.commit()
+
+
 def write_slice(code, context, working, failure, dropped):
-    """Run the writer until the slice is delivered. It has no turn, time or check budget: a failed check
-    goes straight back to it with the failure, and the only exits are delivery, `give_up` (a specification
-    that cannot hold, which blocks the row for the owner), and a pause the provider or a peak window forces.
+    """Run the writer until the slice is delivered. A failed check goes straight back to it with the failure,
+    and the exits are delivery, `give_up` (a specification that cannot hold, which blocks the row for the
+    owner), `handoff` (the row's call budget is spent, so the lane takes it), and a pause the provider or a
+    peak window forces.
 
     Returns ("delivered", (written, proof after)), ("later", None) when nothing is counted (a held lane, a
     provider error, an unrunnable proof, a peak window) or ("gave_up", reason). The working copy is saved
@@ -2323,6 +2361,10 @@ def write_slice(code, context, working, failure, dropped):
 
     while True:
         step += 1
+        if step % 10 == 1 and row_calls(code) >= ROW_CALL_BUDGET:
+            print(f"  {code} has cost {ROW_CALL_BUDGET}+ calls; handing it to the claude lane")
+            save_work(code, working, last_failure)
+            return "handoff", last_failure
         if in_peak(datetime.datetime.now(datetime.timezone.utc)):
             # An attempt runs for as long as it takes; one started before a window must not bill inside it.
             print("  a peak window opened; the attempt parks with its working copy kept")
@@ -2819,6 +2861,9 @@ def implement(code, answer_file=None):
             print(f"  resuming the saved working copy: {', '.join(sorted(working))}")
         outcome, result = write_slice(code, context, working, failure or previous_failure(code), dropped)
         if outcome == "later":
+            return 0
+        if outcome == "handoff":
+            hand_to_lane(code, result)
             return 0
         if outcome == "gave_up":
             print(f"  {result.splitlines()[0][:200]}")
