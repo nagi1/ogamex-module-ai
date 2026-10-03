@@ -12,9 +12,6 @@ enum AiSkillBand: int
 
     private const BEHAVIOR_FILE = '/resources/behavior/skill-bands.yaml';
 
-    /** @var array<string, array<string, float>>|null */
-    private static ?array $rates = null;
-
     public function variationWeight(): float
     {
         return $this->rate('variation_weight');
@@ -47,8 +44,9 @@ enum AiSkillBand: int
 
     private function rate(string $key): float
     {
-        self::$rates ??= Yaml::parseFile(dirname(__DIR__, 2) . self::BEHAVIOR_FILE);
+        static $rates = null;
+        $rates ??= Yaml::parseFile(dirname(__DIR__, 2) . self::BEHAVIOR_FILE);
 
-        return (float) self::$rates[strtolower($this->name)][$key];
+        return (float) $rates[strtolower($this->name)][$key];
     }
 }
