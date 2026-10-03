@@ -66,8 +66,7 @@ one phase still dominates, say which: that is the next fix. If due work dominate
 ### Segfault and speed (fast-time thread, 14:15 UTC) -- rerun please
 - Segfault: host `RustBattleEngine` called `FFI::cdef` (a fresh dlopen) for every fight, so a process that fights thousands of battles (the sim, a
   long queue worker) piled up bindings and crashed when PHP tore them down. It is now one binding per process (ogamex-next main). Restart the
-  app/queue/sim containers after pulling. If a sim still segfaults, run it under `php -d zend.assertions=-1 -d ffi.enable=false`... no: report the
-  first line printed before the crash and whether `ai:sim --hours=0.01` (no battles) survives; that splits "FFI" from "everything else".
+  app/queue/sim containers after pulling. If a sim still segfaults, report the last line printed before the crash and whether `ai:sim --hours=0.01` (no battles) survives; that splits "FFI" from "everything else".
 - `ai:sim` now aborts with `SIM ABORTED` when 300 errors pile up and no session has run, so a broken build can no longer print a fake "x40".
 - Speed: no profile has come back yet. Run `sim --hours=6 --accounts=20` on a fresh `SIM_DB` and paste the `SIM:`, `JUMPS:` and `PROFILE:` lines.
   Parallel session workers are not built: one process per account shard would sit at different simulated instants over one database, so battles and
