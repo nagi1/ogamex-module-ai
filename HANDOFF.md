@@ -420,3 +420,160 @@ QUALITY FAIL LIFE_FIGHTS NAKED_BESIDE_WALLED AUTH_UPTIME; AUTHENTICITY AUTH_UPTI
 **For the cloud model, in order:** (1) find and stop the sim segfault; (2) fix `PAYLOAD_PLANET_ID`; (3) find what still loads TraderPolicy;
 (4) fix the DeterministicSessionLoopTest clock-sweep failure at UTC 0/9/18; (5) the simulator is x5, profile it before relying on it.
 Sims stay opt-in (`HARNESS_SIM_HOURS`, `HARNESS_READ_SIM_HOURS` default 0).
+
+## Results: architecture migration + verification (local agent, 2026-10-03 ~20:30 UTC)
+
+Pulled `ogamex-next` main (b5fb9527 tree) and module main (started at dc13bf7). Work driven by the
+DeepSeek harness (`scripts/strategy-pipeline.py`), no Claude lane. Commits pushed by this run:
+`2e9ab61` (migration rows + red specs), `f7a9757` (RaidDepthTest fixture), `7d2a3d6` (language gateway).
+
+### 1. Migration slices prepared for the harness (step 4 remainder, step 1, step 7)
+
+Three ledger rows, each with a `file_ref`, a north-star proof and a **failing Feature test** it must turn
+green (the harness's own "red first" needs a red step, and a repo test is the house red spec):
+
+| row | step | files | proof |
+| --- | --- | --- | --- |
+| `ARCH-PHASE` | 4 remainder (phase machine) + folds step 1 | `app/Domain/Login/GamePhaseMachine.php`, `RaidPlanner`, `ArchetypeDoctrine`, `ManagerDoctrine`, `managers.yaml`, `tests/Feature/MigrationPhaseMachineTest.php` | `test:MigrationPhaseMachineTest aspect:economy aspect:research` |
+| `ARCH-GOALS` | 4 remainder (goals) | `..._create_ai_goals_table.php`, `app/Models/AiGoal.php`, `app/Domain/Login/GoalBoard.php`, `ScheduleAiIntentAction`, `tests/Feature/MigrationGoalCommitmentTest.php` | `test:MigrationGoalCommitmentTest aspect:economy` |
+| `ARCH-INTEL` | 7 (galaxy map + per-target counters) | `app/Domain/Intel/IntelBook.php`, `app/Domain/Galaxy/GalaxyMap.php`, `..._create_ai_intel_table.php`, `RaidPlanner`, `tests/Feature/MigrationIntelTest.php` | `test:MigrationIntelTest situation:launch-activity-guard aspect:raids aspect:espionage` |
+
+**Step 1 (one snapshot per login) is NOT a row on purpose.** It is perf-only and moves no aspect, so the
+north-star gate refuses it and `proof_change` could never accept a delivery ("proof unchanged"). It is
+folded into `ARCH-PHASE`: the phase machine has to read host state anyway, and a shared snapshot is the
+natural way to do that once.
+
+`plan/tasks/tasks.db` + `seed.sql` regenerated with `dump_seed.py`. Backup: `plan/tasks/tasks.db.bak-1791058043`.
+
+### 2. Harness state
+
+`harness-live.sh` was restarted so it adopts the new P0 rows (the running loop held a pre-computed queue).
+It picked `ARCH-PHASE` first and is working it. **Two attempts rejected by its own verification**
+("unverified, tree restored (9 then 13 files); the writer keeps its copy"); it is resuming its working
+copy. `ARCH-GOALS` and `ARCH-INTEL` are queued behind it.
+
+**The rejection is the story, not the writer.** `verify_slice` runs the slice's own tests **plus every
+test file that names a class the slice touched** (`affected_tests`) with `--bail`. The migration steps
+2–6 left ~31 tests red (section 3), and they sit in the files `ARCH-PHASE` touches (building planner,
+energy, chain, capital fleet). So every attempt is refused for a failure it did not cause. **Clearing
+those red tests is what unblocks the harness.**
+
+### 3. Module suite: 47 failed, 1504 passed (7897 assertions), 61.6 s
+
+`./vendor/bin/pest --testsuite=Modules --parallel --processes=4` (no `--bail`). Ten of the 47 were fixed
+by this run; six are the new red specs; **31 remain**. Grouped by cause:
+
+**Fixed here (10 + the RaidDepthTest one below):**
+- `LaravelAiLanguageTest` ×4, `LaravelAiHttpFixtureTest` ×2, `AiLanguageConformanceCommandTest` ×2,
+  `CampaignConsultationGatewayTest` ×2 — real SDK bugs. laravel/ai 1.0's `TextUsage::$inputTokens` is the
+  **total** including the cache read, and it exposes `uncachedInputTokens()`; the module recorded the
+  total, so a cache hit was priced twice. `cacheReadInputTokens` is nullable and was handed to an `int`
+  parameter (TypeError). The campaign gateway still read the removed `promptTokens`/`completionTokens`.
+- `RaidDepthTest > a light-fighter swarm draws cruisers as the launch subset` — stale fixture: the swarm
+  was added to the **live** planet, but since step 2 the planner reads the **report**, so the target read
+  as empty. The report now carries the swarm (30/30 pass).
+
+**Remainder — step-4 fallout (doctrine now answers before the older passes), expectation staleness:**
+- `EnergyCapacityTest` ×3, `AiCapabilityPublicationTest` ×2, `ReserveFloorTest`, `ExecuteIntentTest`,
+  `ProcessAiWorkTest` (research) — the plan's `reason` is now `doctrine:opening:<object>` where the test
+  asserts `energy:<object>`/`role:...`. The chosen object is the same or doctrine-equivalent; the **label**
+  moved. `git log -S "doctrine:opening"` → `be85f62` (step 4).
+- `CapitalFleetTest` ×2 — `doctrine:fleet:recycler` where the test expects `role:capital:`.
+- `BuildingChainReachabilityTest` ×6 — `Undefined array key "metal_mine"`: `chainStepMachineName()` now
+  returns a fleet-template hull (no prerequisite entry) where it used to return a facility.
+- `WarFleetBuysHullSituationTest` ×2 — expects `battle_ship`; the doctrine template queues `small_cargo`
+  and the ranked decision is `Build 63.7 > QueueUnits 38.1`.
+- `ConversationCycleTest`, `BattleObservationTest` (also `MultipleRecordsFoundException`: 2 rows),
+  `AllyUnderAttackObservationTest` — trust/affinity now run `-1..1` (COVER-hatred), where the test asserts
+  the old `0.0` clamp (-0.1/-0.2/-0.05).
+
+**Remainder — unrelated to the migration (pre-existing):**
+- `GrowthStallReactionTest` ×3 — `Call to undefined method Situation::scoreHistory()`; the support method
+  the test calls has never existed.
+- `AiAdmissionLimitTest` ×1 — `AiStopCounter` row absent after `ai:run-due-work`.
+- `AiActivityMarkerTest` ×1 — a finished host queue not applied by the next session (`solar_plant` 0 ≠ 1).
+- `CoverageCompletionTest` ×1 — `RaidPlanner` returns null.
+- `LaunchActivityGuardSituationTest` ×1 — the raid flies but `DispatchFleet` refuses with
+  `target_active_at_dispatch`: this is the **same defect** as the P0 row `STUCK-DispatchFleet-target-active-at-dispa`.
+
+**Not touched here on purpose:** the Request reserves test adjustment ("I will adjust them; they encode the
+old one-errand spine"), and rewriting the `energy:`→`doctrine:` expectations would hide whether the
+doctrine opening should still lose to the energy interlock (Gate 3: prerequisites before the thing they
+unlock). That is a decision for the cloud thread, not a fixture edit.
+
+### 4. Two-hour simulated cohort — clean
+
+`SIM_DB=ogamex-sim-agent sim --hours=2 --accounts=20 --max-wall=1200`, real sidecars (fatima/cbrkit/agentos
+up), 20 accounts, no native cognition.
+
+```
+SIM: 2.0 h played in 749 s (x10), 144 session(s), 1108 other work item(s), 0 error(s)
+JUMPS: 1017 (average 7 simulated seconds per jump)
+PROFILE (real seconds per phase):
+   665.3 s 1017 call(s) 0.654 s/call due work (all sessions and orders)
+    31.6 s 1017 call(s) 0.031 s/call fleet arrivals
+    24.0 s    8 call(s) 2.999 s/call maintenance: ai:advance-alliance-life
+     5.9 s    8 call(s) 0.738 s/call maintenance: ai:record-score-samples
+     4.8 s    2 call(s) 2.378 s/call maintenance: ogamex:scheduler:generate-highscore-ranks
+     3.1 s    2 call(s) 1.536 s/call maintenance: ogamex:scheduler:generate-highscores
+PLAY: 15 of 15 aspects pass
+QUALITY: 116 violation(s) across 2 invariant(s) -> FAIL NAKED_BESIDE_WALLED AUTH_UPTIME
+AUTHENTICITY: FAIL AUTH_UPTIME; PASS AUTH_REPETITION AUTH_SAVE AUTH_CONTACT AUTH_GROWTH
+SIM_NOW: 2026-10-03T22:12:05+00:00
+```
+
+- **0 errors** — no segfault, no `TraderPolicy` include, no `PAYLOAD_PLANET_ID` constant error. The three
+  defects the 48 h sim hit on 19:xx are gone on this build.
+- **x10**, not the x150 target. `due work` is 89 % of the wall time (665 s of 749 s, 0.654 s/call over
+  1017 jumps): the session itself is the cost, exactly as the 17:25 note predicted. Speed now needs the
+  session to be cheaper or the jump count to fall, not more maintenance tuning.
+- **PLAY 15/15** in the simulated window (the live read still shows `recycle` failing). `LIFE_FIGHTS` and
+  `IDLE_QUEUES` no longer violate.
+- **NAKED_BESIDE_WALLED** on 16 accounts; player **117: 2 planets at zero defence while one holds 10,253
+  units** (worse than the live read's single planet). `SATURATED`: players 40 (2 queueable/3 lab busy),
+  48 (1 no free field/3 queueable), 53 (1 lab/3 queueable/1 shipyard) — every candidate refused on those
+  planets, which is the other half of NAKED_BESIDE_WALLED.
+
+### 5. Cloud steps 2, 3, 4, 5, 6 — checked in code
+
+- **2** `ReportedPlanet::of()` returns null when `ships`/`defense` is null, and `RaidPlanner::target()` is
+  the only reader; `DefenderFleet::fromPlanet`/`maximumLoot` run on the copy. ✅
+- **3** `runManagers()` runs after the errand (skipped only on `DoNothing`), fixed priority over
+  `FleetSlots::free()`; `LoginReservations::reset()` wraps `schedule()`. ✅
+- **4** `resources/doctrine/{miner,raider,turtle,fleeter,hybrid}.yaml` + amended Gate 1. ✅
+- **5** `AiWorkKind::RaidWave` (20) enqueued `continuation_minutes` after the probes; `ExecuteAiIntentAction::raidWave()`
+  reads messages with `espionage_report_id >= since-60`. ✅
+- **6** `AppraiseAiBattleReport implements ShouldQueue`, dispatched from `RecordObservedBattleReportAction`,
+  runs `AppraiseObservedBattleReportAction` in `handle` — off the login path. ✅
+
+### 6. The four risks
+
+1. **`ReportedPlanet` detached copy.** The host `PlanetService::__construct($planet)` does **not** write,
+   and `planetInitialized()` is only a null check, so nothing touches the DB through the copy. **New
+   finding:** `PlanetServiceFactory::makeFromModel()` registers the copy in `$instancesById[$planet->id]`,
+   **overwriting** the cached live instance for that planet id for the rest of the process — a later
+   `make(id)` for the same target returns the report copy. Not observed failing yet; worth a line in the
+   factory or a scoped factory for report copies.
+2. **`LoginReservations` singleton.** `ScheduleAiIntentAction::handle()` resets in a `finally`, and
+   `raidWave()` resets in its own `finally`, so no cross-login bleed. The sim ran 144 sessions with **0
+   errors** and no `Not enough units` in the digest.
+3. **`RaidWave` report window.** Not observable in the log (no per-work-item result printed); the sim's
+   0 errors only says no exception. Reading `RaidWave` outcomes still needs `AI_SIM_NOW` + `CACHE_STORE=file`
+   on the copy — not done here.
+4. **Tests asserting one work item per session.** `ProcessAiWorkTest` and `DeterministicSessionLoopTest`
+   assert on the **RunSession successor** specifically, so they are unaffected. `AiActivityMarkerTest`
+   already carries the W2.4 note about two planets; its remaining failure is the queue-apply one above.
+
+### 7. What is still open (for the cloud thread, in order)
+
+1. **Clear the 31 red tests** (section 3). Until they are green, `verify_slice` refuses every slice that
+   touches the building planner, the session, the raid planner or the capital fleet — which is every
+   remaining migration row. Decide first whether the doctrine opening should still yield to the energy
+   interlock; the rest are expectation updates.
+2. `ARCH-PHASE` / `ARCH-GOALS` / `ARCH-INTEL` are queued and will land once (1) is done.
+3. `NAKED_BESIDE_WALLED` is now the top invariant: the sim shows whole planets where every candidate is
+   refused (`SATURATED` players 40/48/53), so the fix is a candidate the planner can accept on a
+   saturated planet, not more defence maths.
+4. Sim speed: `due work` is the wall time. The 100-account/300 s target needs a cheaper session, not more
+   jump batching.
+
