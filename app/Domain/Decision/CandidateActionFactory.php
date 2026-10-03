@@ -47,6 +47,7 @@ class CandidateActionFactory
                 ...$this->eligibleTradeCandidates($perception),
                 ...$this->eligibleRelocationCandidates($perception),
                 ...$this->eligibleJumpGateCandidates($perception),
+                ...$this->eligibleMissileCandidates($perception),
                 ...$this->eligibleRecycleCandidates($perception),
                 ...$this->phalanxCandidate($perception)->candidates,
                 ...$raidGeneration->candidates,
@@ -256,6 +257,22 @@ class CandidateActionFactory
             'reason' => AiCandidateReason::EligibleJumpGate->value,
             'parameters' => [],
             'features' => $this->features(AiCandidateActionType::JumpGate, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> Missiles need no fleet slot: a silo with missiles and a fresh defended target in range. */
+    private function eligibleMissileCandidates(PerceptionSnapshot $perception): array
+    {
+        if (app(QueueableMissilePlanner::class)->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Missile,
+            'reason' => AiCandidateReason::EligibleMissile->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::Missile, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -472,6 +489,8 @@ class CandidateActionFactory
             AiCandidateActionType::Relocate => [0.6, 0.3, 0.0, 0.0],
             // A fleet standing at a threatened moon can leave at once: as pressing as a save.
             AiCandidateActionType::JumpGate => [1.0, 0.2, 0.0, 0.0],
+            // The planner found a wall in range and missiles in the silo: as pressing as a raid it softens.
+            AiCandidateActionType::Missile => [0.8, 0.2, 0.0, 0.0],
             // The planner has already proved this raid pays, so it is as pressing as a full store.
             AiCandidateActionType::Raid => [1.0, 0.1, $confidence, $travelCost],
             default => [$resourceNeed, 0.2, 0.0, 0.0],

@@ -276,6 +276,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Trade => $this->scheduleTrade($profile, $sessionWorkItem),
             AiCandidateActionType::Relocate => $this->scheduleRelocation($profile, $sessionWorkItem),
             AiCandidateActionType::JumpGate => $this->scheduleJumpGate($profile, $sessionWorkItem),
+            AiCandidateActionType::Missile => $this->scheduleMissile($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
         };
 
@@ -700,6 +701,24 @@ class ScheduleAiIntentAction
             self::PAYLOAD_SOURCE_PLANET_ID => $plan->sourceMoonId,
             self::PAYLOAD_TARGET_PLANET_ID => $plan->targetMoonId,
             self::PAYLOAD_REASON => 'jump_gate:' . $plan->sourceMoonId,
+        ]);
+    }
+
+    private function scheduleMissile(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = app(\Modules\AI\Domain\Decision\QueueableMissilePlanner::class)->plan($profile->player_id);
+        if (!$plan instanceof \Modules\AI\Domain\Decision\QueueableMissile) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Missile, [
+            self::PAYLOAD_SOURCE_PLANET_ID => $plan->originPlanetId,
+            self::PAYLOAD_TARGET_GALAXY => $plan->targetGalaxy,
+            self::PAYLOAD_TARGET_SYSTEM => $plan->targetSystem,
+            self::PAYLOAD_TARGET_POSITION => $plan->targetPosition,
+            self::PAYLOAD_TARGET_TYPE => $plan->targetType,
+            self::PAYLOAD_AMOUNT => $plan->missiles,
+            self::PAYLOAD_REASON => 'missile:' . $plan->targetGalaxy . ':' . $plan->targetSystem . ':' . $plan->targetPosition,
         ]);
     }
 
