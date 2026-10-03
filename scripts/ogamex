@@ -286,6 +286,11 @@ sim_run() {
     local target="${SIM_DB:-ogamex-sim}" out now
     local sim_args=("--hours=$hours" "$@")
     [ "${SIM_KEEP:-0}" = 1 ] || sim_clone "$target"
+    # A clone carries the SOURCE's schema, so a table a slice added since grand last migrated is missing
+    # from the copy (ARCH-INTEL's `ai_intel`, ARCH-GOALS' `ai_goals`): the sim then dies on the first
+    # query against it. Migrate the copy before playing; `migrate --force` is incremental, so a current
+    # copy pays nothing.
+    SIM_ACTIVE_DB="$target" in_universe "${PROVE_UNIVERSE:-grand}" php artisan migrate --force --no-interaction >&2 || true
     out="$(mktemp)"
     SIM_ACTIVE_DB="$target" in_universe "${PROVE_UNIVERSE:-grand}" php artisan ai:sim "${sim_args[@]}" 2>&1 | tee "$out" || true
     now="$(sed -n 's/^SIM_NOW: //p' "$out" | tail -n1)"
