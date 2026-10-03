@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Jobs\AppraiseAiBattleReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
@@ -97,7 +98,8 @@ class RecordObservedBattleReportAction
                 continue;
             }
 
-            app(AppraiseObservedBattleReportAction::class)->handle($observation->id);
+            // The appraisal asks the affect sidecar; it runs on the queue so no login waits on it (step 6).
+            AppraiseAiBattleReport::dispatch($observation->id);
 
             $recorded++;
         }
