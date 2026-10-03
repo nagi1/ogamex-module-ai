@@ -577,3 +577,26 @@ SIM_NOW: 2026-10-03T22:12:05+00:00
 4. Sim speed: `due work` is the wall time. The 100-account/300 s target needs a cheaper session, not more
    jump batching.
 
+### 8. Follow-up, ~20:31 UTC: `ARCH-PHASE` delivered and pushed
+
+The harness delivered `ARCH-PHASE` ("verified and wired: 15 file(s) kept", marker 20:31 UTC). Committed
+and pushed as `c694d0c`.
+
+- New `app/Domain/Login/GamePhaseMachine.php`, thresholds named in `resources/behavior/phase.yaml`
+  (settled planets / owned planets / the late technology+level) so a modded universe moves them with no
+  code edit (Gate 1). Wired into `ArchetypeDoctrine` (opening + research are phase-scoped),
+  `ManagerDoctrine`, `ScheduleAiIntentAction`, `ExecuteAiIntentAction` and `RaidPlanner::targetEligible`
+  (as `targetRung()`), so the private `RaidPlanner::phase()` is gone.
+- `MigrationPhaseMachineTest` (the red spec) now passes; `CoverageCompletionTest` and `EnergyCapacityTest`
+  (both previously red) pass too.
+- **Module suite 47 failed / 1504 passed -> 19 failed / 1532 passed** (same command, no `--bail`).
+  Remaining 19: 4 are the still-undelivered `ARCH-INTEL`/`ARCH-GOALS` red specs;
+  `GrowthStallReactionTest` x3 (missing `Situation::scoreHistory()`, pre-existing);
+  `CapitalFleetTest` x2 + `CapitalFleetSituationTest` (doctrine fleet template);
+  `ConversationCycleTest`, `BattleObservationTest` x2, `AllyUnderAttackObservationTest`,
+  `AiExploitationGuardTest` (trust/affinity now `-1..1`, the old `0.0` clamp asserted);
+  `AiAdmissionLimitTest`, `LaunchActivityGuardSituationTest`, `WarFleetBuysHullSituationTest`.
+- `ARCH-GOALS` has been attempted and refused (no marker); `ARCH-INTEL` is in progress (step 98+).
+- A fresh 1 h / 20-account sim on the tree **with** the phase machine was started at 20:36 UTC
+  (`SIM_DB=ogamex-sim-phase`, real sidecars up); its verdict is appended below when it lands.
+
