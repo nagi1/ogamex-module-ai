@@ -70,9 +70,9 @@ enum AiSkillBand: int
     public function raidSurvivalFloor(): float
     {
         return match ($this) {
-            self::Novice => 0.9,
-            self::Standard => 0.8,
-            self::Veteran => 0.7,
+            self::Novice => 0.8,
+            self::Standard => 0.7,
+            self::Veteran => 0.6,
         };
     }
 

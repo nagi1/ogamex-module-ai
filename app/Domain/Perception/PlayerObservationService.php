@@ -234,7 +234,7 @@ class PlayerObservationService
             ->whereNotNull('espionage_report_id')
             ->where('created_at', '>=', $cutoff)
             ->orderByDesc('id')
-            ->limit(10)
+            ->limit(20)
             ->get(['espionage_report_id', 'created_at']);
 
         if ($messages->isEmpty()) {

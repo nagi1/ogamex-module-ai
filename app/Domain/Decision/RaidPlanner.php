@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Modules\AI\Domain\Attack\DailyAttackBudget;
 use Modules\AI\Domain\Raid\RaidEstimate;
 use Modules\AI\Enums\AiExperienceCaseFamily;
@@ -86,6 +88,20 @@ class RaidPlanner
     ) {
     }
 
+    /**
+     * The reason this report was not turned into a raid. Counted per reason and logged, so a run that
+     * produces no raids shows which test is killing them instead of reading as a quiet planner (LIFE-001).
+     */
+    private function reject(string $reason, int $playerId, int $reportId): ?QueueableRaid
+    {
+        $key = 'ai:raid-rejected:' . $reason;
+        Cache::add($key, 0, 86_400);
+        Cache::increment($key);
+        Log::debug('ai.raid.rejected', ['reason' => $reason, 'player_id' => $playerId, 'report_id' => $reportId]);
+
+        return null;
+    }
+
     private function player(int $playerId): PlayerService
     {
         return $this->players[$playerId] ??= $this->playerServiceFactory->make($playerId, true);
@@ -95,22 +111,22 @@ class RaidPlanner
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
         if ($profile === null) {
-            return null;
+            return $this->reject('no_profile', $playerId, $reportId);
         }
 
         if (!User::query()->whereKey($playerId)->exists()) {
-            return null;
+            return $this->reject('no_user', $playerId, $reportId);
         }
 
         $report = EspionageReport::query()->find($reportId);
         if ($report === null) {
-            return null;
+            return $this->reject('no_report', $playerId, $reportId);
         }
 
         $player = $this->player($playerId);
         $origin = $this->origin($player);
         if ($origin === null) {
-            return null;
+            return $this->reject('no_origin', $playerId, $reportId);
         }
 
         // The fuel and loot quotes need the origin's owner context, which the
@@ -119,7 +135,7 @@ class RaidPlanner
 
         $target = $this->target($report);
         if ($target === null) {
-            return null;
+            return $this->reject('no_target', $playerId, $reportId);
         }
 
         // Target-class escalation (RV-011): the opening farms inactives only, a
@@ -128,45 +144,45 @@ class RaidPlanner
         // answer — the target's last activity and the report's ships — never a
         // module list.
         if (!$this->targetEligible($this->phase($player), $report)) {
-            return null;
+            return $this->reject('target_ineligible', $playerId, $reportId);
         }
 
         // A player does not raid someone the galaxy view marks as a newbie (under a fifth of their
         // points) unless that account has gone idle: the host's own isNewbie answer, WIK-045.
         if ($this->protectedNewbie($player, (int) $report->planet_user_id)) {
-            return null;
+            return $this->reject('newbie', $playerId, $reportId);
         }
 
         if (!$this->withinBashingLimit($playerId, $target->getPlanetId())) {
-            return null;
+            return $this->reject('bashing_limit', $playerId, $reportId);
         }
 
         if (!$this->withinCooldown($playerId, $target->getPlanetId())) {
-            return null;
+            return $this->reject('cooldown', $playerId, $reportId);
         }
 
         if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
-            return null;
+            return $this->reject('blacklisted', $playerId, $reportId);
         }
 
         // A phalanx scan that saw a fleet arriving at the target is a ninja warning: the
         // defender has ships on the way home or an ally in bound, so the raid is refused
         // rather than flown into it (RV-008).
         if ($this->phalanxRefuses($playerId, $target->getPlanetId())) {
-            return null;
+            return $this->reject('phalanx_refuses', $playerId, $reportId);
         }
 
         $estimate = $this->defencelessTarget($target)
             ? $this->defencelessEstimate($player, $origin, $target)
             : $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
         if ($estimate->samples === 0) {
-            return null;
+            return $this->reject('no_samples', $playerId, $reportId);
         }
 
         // A fleeter asks "will I survive?" before "does it profit?". Refuse when
         // the sampled fleet is wiped more than the skill band's survival floor of the time.
         if ($estimate->pWin < $profile->skill_band->raidSurvivalFloor()) {
-            return null;
+            return $this->reject('survival_floor', $playerId, $reportId);
         }
 
         // A fight's wreckage is profit only to an account that can pick it up: one that owns the
@@ -174,14 +190,14 @@ class RaidPlanner
         $debris = $this->canHarvest($origin, $target) ? $estimate->p20Debris : 0.0;
 
         if ($estimate->p20NetProfit + $debris <= 0.0) {
-            return null;
+            return $this->reject('unprofitable', $playerId, $reportId);
         }
 
         // The launch is not the stock (U6): the smallest counter-selected hulls whose single
         // simulation survives this target fly, not the whole garage.
         $launchUnits = $this->launchUnits($playerId, $player, $origin, $target, $profile);
         if ($launchUnits === null) {
-            return null;
+            return $this->reject('no_launch_units', $playerId, $reportId);
         }
 
         // The sampled profit is loot minus losses only. A raid also burns deuterium to fly there and
@@ -190,11 +206,11 @@ class RaidPlanner
         // stock it ran to hundreds of times the real trip and turned away 6 reports in 10.
         $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
         if ($fuel > floor($origin->deuterium()->get())) {
-            return null;
+            return $this->reject('not_enough_fuel', $playerId, $reportId);
         }
 
         if (!$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
-            return null;
+            return $this->reject('below_loot_tier', $playerId, $reportId);
         }
 
         return app()->makeWith(QueueableRaid::class, [
