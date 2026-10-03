@@ -25,7 +25,8 @@ class NativeAffectEngine implements AffectEngine
         }
 
         $vengeanceWeight = match ($stimulus->archetype) {
-            AiArchetype::Fleeter => 1,
+            AiArchetype::Fleeter, AiArchetype::Raider => 1,
+            AiArchetype::Hybrid => 0.6,
             AiArchetype::Turtle => 0.4,
             AiArchetype::Miner, AiArchetype::Trader, AiArchetype::Casual => 0.2,
         };

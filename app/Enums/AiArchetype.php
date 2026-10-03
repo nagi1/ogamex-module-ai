@@ -4,7 +4,8 @@ namespace Modules\AI\Enums;
 
 /**
  * The archetypes the mined profile names fold onto (per-repo residue audit, RP-004):
- * raider → Fleeter, defensive → Turtle, neutral → Casual; Miner and Trader carry no fold.
+ * raider → Raider, defensive → Turtle, neutral → Casual; Miner and Trader carry no fold. Trader and
+ * Casual are kept for stored profiles (never renumbered); new accounts grow as one of the other five.
  */
 enum AiArchetype: int
 {
@@ -13,4 +14,6 @@ enum AiArchetype: int
     case Fleeter = 3;
     case Trader = 4;
     case Casual = 5;
+    case Raider = 6;
+    case Hybrid = 7;
 }

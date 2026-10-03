@@ -242,7 +242,11 @@ class SeedAiTestUniverseAction
      */
     private function archetype(int $index): AiArchetype
     {
-        $cases = AiArchetype::cases();
+        // Trader and Casual only keep stored profiles valid; a new account grows as one of the other five.
+        $cases = array_values(array_filter(
+            AiArchetype::cases(),
+            static fn (AiArchetype $case): bool => $case !== AiArchetype::Trader && $case !== AiArchetype::Casual,
+        ));
 
         return $cases[($index - 1) % count($cases)];
     }

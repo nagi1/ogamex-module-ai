@@ -66,9 +66,9 @@ final class AiPersonaFactory
     private function activityDistribution(AiArchetype $archetype): array
     {
         return match ($archetype) {
-            AiArchetype::Miner => [AiActivityBand::Casual->value => 10, AiActivityBand::Regular->value => 55, AiActivityBand::Active->value => 30, AiActivityBand::Hardcore->value => 5],
+            AiArchetype::Miner, AiArchetype::Hybrid => [AiActivityBand::Casual->value => 10, AiActivityBand::Regular->value => 55, AiActivityBand::Active->value => 30, AiActivityBand::Hardcore->value => 5],
             AiArchetype::Turtle => [AiActivityBand::Casual->value => 10, AiActivityBand::Regular->value => 50, AiActivityBand::Active->value => 35, AiActivityBand::Hardcore->value => 5],
-            AiArchetype::Fleeter => [AiActivityBand::Casual->value => 5, AiActivityBand::Regular->value => 25, AiActivityBand::Active->value => 55, AiActivityBand::Hardcore->value => 15],
+            AiArchetype::Fleeter, AiArchetype::Raider => [AiActivityBand::Casual->value => 5, AiActivityBand::Regular->value => 25, AiActivityBand::Active->value => 55, AiActivityBand::Hardcore->value => 15],
             AiArchetype::Trader => [AiActivityBand::Casual->value => 10, AiActivityBand::Regular->value => 60, AiActivityBand::Active->value => 25, AiActivityBand::Hardcore->value => 5],
             AiArchetype::Casual => [AiActivityBand::Casual->value => 1],
         };
@@ -78,9 +78,9 @@ final class AiPersonaFactory
     private function defenseDistribution(AiArchetype $archetype, AiSkillBand $skill): array
     {
         $weights = match ($archetype) {
-            AiArchetype::Miner => [AiDefenseDoctrine::ProductionShell->value => 40, AiDefenseDoctrine::Minimalist->value => 20, AiDefenseDoctrine::BalancedMixed->value => 15, AiDefenseDoctrine::RocketPlasma->value => 10, AiDefenseDoctrine::Adaptive->value => 8, AiDefenseDoctrine::FodderHeavy->value => 5, AiDefenseDoctrine::Bunker->value => 2],
+            AiArchetype::Miner, AiArchetype::Hybrid => [AiDefenseDoctrine::ProductionShell->value => 40, AiDefenseDoctrine::Minimalist->value => 20, AiDefenseDoctrine::BalancedMixed->value => 15, AiDefenseDoctrine::RocketPlasma->value => 10, AiDefenseDoctrine::Adaptive->value => 8, AiDefenseDoctrine::FodderHeavy->value => 5, AiDefenseDoctrine::Bunker->value => 2],
             AiArchetype::Turtle => [AiDefenseDoctrine::Bunker->value => 30, AiDefenseDoctrine::RocketPlasma->value => 20, AiDefenseDoctrine::BalancedMixed->value => 20, AiDefenseDoctrine::HeavyMixed->value => 10, AiDefenseDoctrine::FodderHeavy->value => 10, AiDefenseDoctrine::Adaptive->value => 10],
-            AiArchetype::Fleeter => [AiDefenseDoctrine::Minimalist->value => 55, AiDefenseDoctrine::ProductionShell->value => 25, AiDefenseDoctrine::BalancedMixed->value => 10, AiDefenseDoctrine::Adaptive->value => 7, AiDefenseDoctrine::RocketPlasma->value => 3],
+            AiArchetype::Fleeter, AiArchetype::Raider => [AiDefenseDoctrine::Minimalist->value => 55, AiDefenseDoctrine::ProductionShell->value => 25, AiDefenseDoctrine::BalancedMixed->value => 10, AiDefenseDoctrine::Adaptive->value => 7, AiDefenseDoctrine::RocketPlasma->value => 3],
             AiArchetype::Trader => [AiDefenseDoctrine::Minimalist->value => 50, AiDefenseDoctrine::ProductionShell->value => 25, AiDefenseDoctrine::BalancedMixed->value => 15, AiDefenseDoctrine::Adaptive->value => 10],
             AiArchetype::Casual => [AiDefenseDoctrine::Minimalist->value => 60, AiDefenseDoctrine::ProductionShell->value => 20, AiDefenseDoctrine::BalancedMixed->value => 15, AiDefenseDoctrine::Adaptive->value => 5],
         };
@@ -133,9 +133,9 @@ final class AiPersonaFactory
     private function stockpileDistribution(AiArchetype $archetype): array
     {
         return match ($archetype) {
-            AiArchetype::Miner => [AiStockpileStrategy::ScheduledSpender->value => 50, AiStockpileStrategy::GoalSaver->value => 20, AiStockpileStrategy::ImmediateSpender->value => 15, AiStockpileStrategy::CarelessHoarder->value => 10, AiStockpileStrategy::BunkerBanker->value => 5],
+            AiArchetype::Miner, AiArchetype::Hybrid => [AiStockpileStrategy::ScheduledSpender->value => 50, AiStockpileStrategy::GoalSaver->value => 20, AiStockpileStrategy::ImmediateSpender->value => 15, AiStockpileStrategy::CarelessHoarder->value => 10, AiStockpileStrategy::BunkerBanker->value => 5],
             AiArchetype::Turtle => [AiStockpileStrategy::BunkerBanker->value => 40, AiStockpileStrategy::ScheduledSpender->value => 30, AiStockpileStrategy::GoalSaver->value => 15, AiStockpileStrategy::CarelessHoarder->value => 10, AiStockpileStrategy::ImmediateSpender->value => 5],
-            AiArchetype::Fleeter => [AiStockpileStrategy::FleetSaveBanker->value => 50, AiStockpileStrategy::ScheduledSpender->value => 20, AiStockpileStrategy::GoalSaver->value => 10, AiStockpileStrategy::ImmediateSpender->value => 10, AiStockpileStrategy::CarelessHoarder->value => 10],
+            AiArchetype::Fleeter, AiArchetype::Raider => [AiStockpileStrategy::FleetSaveBanker->value => 50, AiStockpileStrategy::ScheduledSpender->value => 20, AiStockpileStrategy::GoalSaver->value => 10, AiStockpileStrategy::ImmediateSpender->value => 10, AiStockpileStrategy::CarelessHoarder->value => 10],
             AiArchetype::Trader => [AiStockpileStrategy::ScheduledSpender->value => 40, AiStockpileStrategy::ImmediateSpender->value => 25, AiStockpileStrategy::GoalSaver->value => 20, AiStockpileStrategy::CarelessHoarder->value => 15],
             AiArchetype::Casual => [AiStockpileStrategy::ImmediateSpender->value => 40, AiStockpileStrategy::CarelessHoarder->value => 30, AiStockpileStrategy::ScheduledSpender->value => 20, AiStockpileStrategy::GoalSaver->value => 10],
         };
@@ -145,9 +145,9 @@ final class AiPersonaFactory
     private function economyDistribution(AiArchetype $archetype): array
     {
         return match ($archetype) {
-            AiArchetype::Miner => [AiEconomicRole::SelfSufficient->value => 60, AiEconomicRole::DeutSeller->value => 25, AiEconomicRole::AllianceSupplier->value => 15],
+            AiArchetype::Miner, AiArchetype::Hybrid => [AiEconomicRole::SelfSufficient->value => 60, AiEconomicRole::DeutSeller->value => 25, AiEconomicRole::AllianceSupplier->value => 15],
             AiArchetype::Turtle => [AiEconomicRole::SelfSufficient->value => 70, AiEconomicRole::DeutSeller->value => 20, AiEconomicRole::AllianceSupplier->value => 10],
-            AiArchetype::Fleeter => [AiEconomicRole::DeutBuyer->value => 50, AiEconomicRole::SelfSufficient->value => 35, AiEconomicRole::AllianceSupplier->value => 15],
+            AiArchetype::Fleeter, AiArchetype::Raider => [AiEconomicRole::DeutBuyer->value => 50, AiEconomicRole::SelfSufficient->value => 35, AiEconomicRole::AllianceSupplier->value => 15],
             AiArchetype::Trader => [AiEconomicRole::ActiveTrader->value => 50, AiEconomicRole::DeutSeller->value => 25, AiEconomicRole::DeutBuyer->value => 25],
             AiArchetype::Casual => [AiEconomicRole::SelfSufficient->value => 85, AiEconomicRole::DeutSeller->value => 15],
         };
@@ -157,9 +157,9 @@ final class AiPersonaFactory
     private function classDistribution(AiArchetype $archetype, AiSkillBand $skill): array
     {
         $weights = match ($archetype) {
-            AiArchetype::Miner => [CharacterClass::COLLECTOR->value => 60, CharacterClass::DISCOVERER->value => 30, CharacterClass::GENERAL->value => 10],
+            AiArchetype::Miner, AiArchetype::Hybrid => [CharacterClass::COLLECTOR->value => 60, CharacterClass::DISCOVERER->value => 30, CharacterClass::GENERAL->value => 10],
             AiArchetype::Turtle => [CharacterClass::COLLECTOR->value => 55, CharacterClass::DISCOVERER->value => 20, CharacterClass::GENERAL->value => 25],
-            AiArchetype::Fleeter => [CharacterClass::GENERAL->value => 70, CharacterClass::DISCOVERER->value => 20, CharacterClass::COLLECTOR->value => 10],
+            AiArchetype::Fleeter, AiArchetype::Raider => [CharacterClass::GENERAL->value => 70, CharacterClass::DISCOVERER->value => 20, CharacterClass::COLLECTOR->value => 10],
             AiArchetype::Trader => [CharacterClass::DISCOVERER->value => 70, CharacterClass::COLLECTOR->value => 20, CharacterClass::GENERAL->value => 10],
             AiArchetype::Casual => [CharacterClass::COLLECTOR->value => 60, CharacterClass::GENERAL->value => 25, CharacterClass::DISCOVERER->value => 15],
         };
