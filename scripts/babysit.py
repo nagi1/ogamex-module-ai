@@ -359,6 +359,10 @@ def run_claude_lane(actions):
     waiting = sqlite3.connect(DB).execute("select count(*) from tasks where assignee=? and status in ('todo','in_progress')", (LANE,)).fetchone()[0]
     if waiting == 0 or subprocess.run(["pgrep", "-f", r"^\S*python3? scripts/claude-lane\.py"], capture_output=True).returncode == 0:
         return
+    # One agent in the tree at a time: the lane starts when no DeepSeek writer is mid-row (the writers stop
+    # taking new rows while the lane has one, so this clears within one row).
+    if subprocess.run(["pgrep", "-f", r"^python3 -u scripts/strategy-pipeline\.py implement"], capture_output=True).returncode == 0:
+        return
     subprocess.Popen(["setsid", "nohup", sys.executable, "scripts/claude-lane.py"], cwd=ROOT,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     actions.append("started a claude lane run")

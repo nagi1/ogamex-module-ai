@@ -67,6 +67,12 @@ PY
 # `give_up`, or paused by a provider error or a peak window (exit 3). Rows another writer holds are skipped.
 writer() {
   while true; do
+    # One agent in the tree at a time: while the Claude lane is running on a row, no DeepSeek writer starts
+    # one (their edits and the lane's landed in the same files, FacilityChain and the planners).
+    # The lane has the floor while it has a row: it starts within a minute of one being handed over, so a
+    # writer that began a new row in between would be in the tree when the lane arrived.
+    while pgrep -f '^\S*python3? scripts/claude-lane\.py' >/dev/null \
+       || [ "$(python3 -c "import sqlite3;print(sqlite3.connect('plan/tasks/tasks.db').execute(\"select count(*) from tasks where assignee='claude-lane' and status in ('todo','in_progress')\").fetchone()[0])")" -gt 0 ]; do sleep 20; done
     started=$(date +%s)
     for code in $(ready_rows); do
       HARNESS_WORKER="impl-$1" python3 -u scripts/strategy-pipeline.py implement "$code"
