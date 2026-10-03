@@ -589,6 +589,8 @@ and pushed as `c694d0c`.
   (as `targetRung()`), so the private `RaidPlanner::phase()` is gone.
 - `MigrationPhaseMachineTest` (the red spec) now passes; `CoverageCompletionTest` and `EnergyCapacityTest`
   (both previously red) pass too.
+- The row's whole proof passed and the harness closed it: `PROOF: PASS ARCH-PHASE
+  (test:MigrationPhaseMachineTest aspect:economy aspect:research)` — the ledger row is `done` (`3ac619d`).
 - **Module suite 47 failed / 1504 passed -> 19 failed / 1532 passed** (same command, no `--bail`).
   Remaining 19: 4 are the still-undelivered `ARCH-INTEL`/`ARCH-GOALS` red specs;
   `GrowthStallReactionTest` x3 (missing `Situation::scoreHistory()`, pre-existing);
