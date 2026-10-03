@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Modules\AI\Actions\ConsultCampaignDecisionAction;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\DecisionTrace;
+use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
@@ -19,9 +20,12 @@ use Modules\AI\Models\AiSchedule;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
+use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\BuildingQueue;
 use OGame\Models\FleetMission;
 use OGame\Models\ResearchQueue;
+use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
 
 /**
@@ -45,6 +49,7 @@ class SessionDecisionService
         private NextDueTimeCalculator $nextDueTimeCalculator,
         private DecisionEngine $decisionEngine,
         private ConsultCampaignDecisionAction $consultCampaignDecision,
+        private QueueableBuildingPlanner $buildingPlanner,
         private AiClock $clock,
         private AccountStateResolver $accountStateResolver,
         private RandomSource $randomSource,
@@ -208,7 +213,94 @@ class SessionDecisionService
             $etas[] = (int) $inbound['time_arrival'];
         }
 
+        $affordable = $this->affordabilityEta($profile, $perception, $nowTimestamp);
+        if ($affordable !== null) {
+            $etas[] = $affordable;
+        }
+
         return $etas;
+    }
+
+    /**
+     * When the first planet that is short of its next economy step can pay for it.
+     *
+     * A player who cannot afford the upgrade they want yet does not wait for their next ordinary
+     * login: they come back when the resources have arrived, which at universe speed is a few
+     * minutes. Without it a login that could not pay for anything left every planet's build queue
+     * empty until the routine gap -- the account reads as an idle economy whether or not it is
+     * saving (ECON-001: `savingFor()` is the planner's own answer, so no affordability rule and no
+     * object is restated here).
+     */
+    private function affordabilityEta(AiProfile $profile, PerceptionSnapshot $perception, int $nowTimestamp): ?int
+    {
+        $player = app(PlayerServiceFactory::class)->make($profile->player_id, true);
+        $earliest = null;
+
+        foreach ($perception->planets as $observed) {
+            $planet = $this->ownedPlanet($player, (int) ($observed['id'] ?? 0));
+            if ($planet === null) {
+                continue;
+            }
+
+            // The planner reads live production to price its step, and the session's observation
+            // carries only balances: a stale income would put the arrival at the wrong instant.
+            $planet->updateResources(false);
+            $planet->updateResourceProductionStats(false);
+
+            $eta = $this->planetAffordabilityEta($planet, $profile, $nowTimestamp);
+            if ($eta !== null && ($earliest === null || $eta < $earliest)) {
+                $earliest = $eta;
+            }
+        }
+
+        return $earliest;
+    }
+
+    /**
+     * The instant this planet's next economy step becomes payable, or null when it is not saving for
+     * one, can already pay for it, or can never earn it.
+     */
+    private function planetAffordabilityEta(PlanetService $planet, AiProfile $profile, int $nowTimestamp): ?int
+    {
+        $needed = $this->buildingPlanner->savingFor($planet, $profile);
+        if ($needed === null) {
+            return null;
+        }
+
+        $held = $planet->getResources();
+        $hours = 0.0;
+
+        foreach ([
+            [$needed->metal->get(), $held->metal->get(), $planet->getMetalProductionPerHour()],
+            [$needed->crystal->get(), $held->crystal->get(), $planet->getCrystalProductionPerHour()],
+            [$needed->deuterium->get(), $held->deuterium->get(), $planet->getDeuteriumProductionPerHour()],
+        ] as [$cost, $stored, $perHour]) {
+            if ($cost <= $stored) {
+                continue;
+            }
+
+            // A resource this planet cannot make is never arriving: the account's next login would
+            // find the same shortfall, and a wake for it is a wake for nothing.
+            if ($perHour <= 0.0) {
+                return null;
+            }
+
+            $hours = max($hours, ($cost - $stored) / $perHour);
+        }
+
+        return $hours <= 0.0 ? null : $nowTimestamp + (int) ceil($hours * 3600.0);
+    }
+
+    /** The body the observation named, among the account's own. */
+    private function ownedPlanet(PlayerService $player, int $planetId): ?PlanetService
+    {
+        foreach ($player->planets->all() as $planet) {
+            if ($planet->getPlanetId() === $planetId) {
+                return $planet;
+            }
+        }
+
+        return null;
     }
 
     /**
