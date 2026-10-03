@@ -1,4 +1,4 @@
-PASS test:AllianceApplicationSituationTest 2s
-PASS test:AllianceLeaderSituationTest 1s
-FAIL aspect:alliance 1s — too early: the cohort has played under an hour on this change (not yet passing on 0.40h)
-PROOF: WAIT ALLY-001 (test:AllianceApplicationSituationTest test:AllianceLeaderSituationTest aspect:alliance) at aspect:alliance: too early: the cohort has played under an hour on this change (not yet passing on 0.40h)
+PASS test:AllianceApplicationSituationTest 1s
+PASS test:AllianceLeaderSituationTest 2s
+FAIL aspect:alliance 0s — too early: the cohort has played under an hour on this change (not yet passing on 0.76h)
+PROOF: WAIT ALLY-001 (test:AllianceApplicationSituationTest test:AllianceLeaderSituationTest aspect:alliance) at aspect:alliance: too early: the cohort has played under an hour on this change (not yet passing on 0.76h)
