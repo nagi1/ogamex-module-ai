@@ -41,9 +41,9 @@ class RecordAiRelationshipInteractionAction
         }
 
         $relationship->update([
-            'trust' => $this->boundedScore((float) $relationship->trust + $trustChange),
+            'trust' => $this->signedScore((float) $relationship->trust + $trustChange),
             'threat' => $this->boundedScore((float) $relationship->threat + $threatChange),
-            'affinity' => $this->boundedScore((float) $relationship->affinity + $affinityChange),
+            'affinity' => $this->signedScore((float) $relationship->affinity + $affinityChange),
             'respect' => $this->boundedScore((float) $relationship->respect + $respectChange),
             'social_importance' => $this->boundedScore((float) $relationship->social_importance + $socialImportanceChange),
             'last_interaction_at' => $observedAt,
@@ -52,6 +52,15 @@ class RecordAiRelationshipInteractionAction
         ]);
 
         return $relationship->refresh();
+    }
+
+    /**
+     * Trust and affinity run from hatred to friendship. Clamping them at zero made every grudge
+     * read as indifference, so no account could ever hold a relationship below zero (COVER-hatred).
+     */
+    private function signedScore(float $score): float
+    {
+        return min(1, max(-1, $score));
     }
 
     private function boundedScore(float $score): float
