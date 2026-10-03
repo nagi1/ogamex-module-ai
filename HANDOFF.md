@@ -622,6 +622,28 @@ and pushed as `c694d0c`.
      now migrates the copy before playing.
   Also ran `php artisan migrate --force` on **grand**, which the live workers read: without it every
   live raid would query a missing `ai_intel`.
+
+### 9. One regression found: `ECON-001`'s wake loops (row `PACE-001`, P0, for the owner)
+
+`sim --hours=1 --accounts=20` on the tree **with** ECON-001:
+
+```
+SIM: 1.0 h played in 189 s (x19), 2395 session(s), 253 other work item(s), 0 error(s)
+JUMPS: 197 (average 18 simulated seconds per jump)     <- ~12 sessions due on EVERY jump
+```
+
+The same 1 h sim before ECON-001 (20:36 UTC) ran **0.6 sessions/minute** at steady state; this is
+**~40/minute**. It is not a start-of-run backlog drain: a past backlog drains in one jump, and these are
+due in the future, spaced ~18 s apart, for the whole hour. `SessionDecisionService::planetAffordabilityEta()`
+returns `now + ceil(hours*3600)` whenever a planet is short of its next step, and at the cohort's 1000×
+production that shortfall is covered in **seconds** — so the successor login is booked for seconds later,
+finds the next step short again, and books another. On the live cohort it shows as the growing late
+backlog (`pulse`: "246 work item(s) more than a minute late").
+
+The row is filed rather than patched here on purpose: the fix needs a *cadence floor*, and
+`NextStepAffordableSituationTest` requires an early wake within 20 minutes for a drained account, so
+choosing the floor is a behaviour decision, not a mechanical edit. **Until it is fixed, ECON-001 should
+be considered harmful in a 1000× cohort.**
 - **Module suite: 7 failed / 1548 passed** (`47 -> 19 -> 11 -> 7`). The doctrine-label staleness cluster
   and the `ARCH-*` red specs are green. The 7 left are all **expectations pinned to behaviour that was
   deliberately changed or never implemented**, none from the migration:
