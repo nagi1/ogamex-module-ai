@@ -297,9 +297,10 @@ class ProcessAiWork implements ShouldQueue
 
             // A failed session is retried a minute on only while the account is awake: a retry in the
             // dark period would put the account on at an hour it sleeps (AUTH_UPTIME), so it takes the
-            // routine's next wake instead.
+            // routine's next wake instead. An accelerated cohort keeps the minute: a failure there would
+            // otherwise park the account for hours, and failures are rare enough not to fill the night.
             $profile = AiProfile::query()->where('player_id', $workItem->player_id)->first();
-            if ($profile !== null && !app(SessionPlanner::class)->isAwake($profile, $nextDueAt->toImmutable())) {
+            if ((int) config('ai.population.session_interval_seconds', 0) <= 0 && $profile !== null && !app(SessionPlanner::class)->isAwake($profile, $nextDueAt->toImmutable())) {
                 $nextDueAt = app(SessionPlanner::class)->plan($profile, now()->toImmutable(), $schedule->generation)->nextDueAt;
             }
 
