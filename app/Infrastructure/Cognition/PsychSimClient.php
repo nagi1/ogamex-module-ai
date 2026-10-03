@@ -34,7 +34,11 @@ class PsychSimClient
     {
         // The world is rebuilt from the temptation alone, so the same incentive always gets the same
         // stance: an answer already given is reused instead of another round trip.
-        $key = 'ai:psychsim:' . md5((string) config('ai.cognition.psychsim.base_url', '') . '|' . $temptation);
+        if (!(bool) config('ai.cognition.psychsim.cache', true)) {
+            return $this->ask($temptation);
+        }
+
+        $key = 'ai:psychsim:' . md5((string) config('ai.cognition.psychsim.base_url', '') . '|' . var_export($temptation, true));
         $known = Cache::get($key);
         if ($known === 'cooperate' || $known === 'defect') {
             return $known;

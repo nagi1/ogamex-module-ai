@@ -8,6 +8,7 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Support\FatimaScenarioTemplate;
 use Throwable;
 
 /**
@@ -27,7 +28,7 @@ class FatimaCognitionSession
     /** How long to wait between attempts while another appraisal holds the character. */
     private const RETRY_MICROSECONDS = 50_000;
 
-    public function __construct(private readonly FatimaClient $client)
+    public function __construct(private readonly FatimaClient $client, private readonly FatimaScenarioTemplate $template)
     {
     }
 
@@ -52,7 +53,12 @@ class FatimaCognitionSession
      */
     private function remembered(string $kind, array $request, Closure $compute): mixed
     {
-        $key = 'ai:fatima:' . $kind . ':' . md5(json_encode($request) ?: '');
+        if (!(bool) config('ai.cognition.fatima.cache', false)) {
+            return $compute();
+        }
+
+        // Everything the sidecar reads: the request, the scenario name and instance, and the fixtures it is sent.
+        $key = 'ai:fatima:' . $kind . ':' . md5(json_encode([$request, $this->scenario(), $this->instance(), md5($this->template->scenarioJson()), md5($this->template->assetsJson())]) ?: '');
         $known = Cache::get($key);
 
         if ($known !== null) {

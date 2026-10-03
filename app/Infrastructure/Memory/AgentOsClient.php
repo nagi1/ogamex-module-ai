@@ -33,6 +33,10 @@ class AgentOsClient
             return null;
         }
 
+        if (!(bool) config('ai.cognition.memory.agentos.cache', true)) {
+            return $this->ask($playerId, $query, $limit, $memories);
+        }
+
         // The driver keeps no store: its ranking is a function of the request alone, so the same
         // request is answered from here instead of another round trip. A failed call is not kept.
         $key = 'ai:agentos:' . md5((string) config('ai.cognition.memory.agentos.base_url', '') . '|' . json_encode([$playerId, $query, $limit, $memories]));

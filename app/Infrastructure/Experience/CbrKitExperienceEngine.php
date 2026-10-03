@@ -43,7 +43,7 @@ class CbrKitExperienceEngine implements ExperienceEngine, PrefetchesExperience
      */
     private array $similarityCache = [];
 
-    public function __construct(private readonly ExperienceEngine $fallback, private readonly CbrKitClient $client)
+    public function __construct(private readonly ExperienceEngine $fallback, private readonly CbrKitClient $client, private readonly RustCaseSimilarity $rust)
     {
     }
 
@@ -74,12 +74,27 @@ class CbrKitExperienceEngine implements ExperienceEngine, PrefetchesExperience
         }
 
         foreach ($groups as $group) {
-            $answers = $this->client->rankMany($group['casebase'], $group['queries']);
+            $answers = $this->rust->rank($group['casebase'], $group['queries'])
+                ?? $this->client->rankMany($group['casebase'], $group['queries']);
 
             foreach ($answers ?? [] as $key => $similarities) {
                 $this->similarityCache[$key] = $similarities;
             }
         }
+    }
+
+    /**
+     * One query's scores: the in-process Rust measure when the library has it, the sidecar otherwise.
+     *
+     * @param  array<int, array<string, int|float|string|null>>  $casebase
+     * @param  array<string, int|float|string|null>  $features
+     * @return array<int, float>|null
+     */
+    private function score(array $casebase, array $features): array|null
+    {
+        $local = $this->rust->rank($casebase, ['current' => $features]);
+
+        return $local === null ? $this->client->rank($casebase, $features) : $local['current'];
     }
 
     public function rankSimilarExperiences(ExperienceQuery $query): array
@@ -92,7 +107,7 @@ class CbrKitExperienceEngine implements ExperienceEngine, PrefetchesExperience
 
         $casebase = $this->casebase($cases);
         $key = md5(json_encode([$casebase, $query->features]) ?: '');
-        $similarities = $this->similarityCache[$key] ??= $this->client->rank($casebase, $query->features);
+        $similarities = $this->similarityCache[$key] ??= $this->score($casebase, $query->features);
 
         if ($similarities === null) {
             return $this->fallback->rankSimilarExperiences($query);

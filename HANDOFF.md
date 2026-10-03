@@ -126,14 +126,47 @@ lines and the full PROFILE of each.
 About 120 are WIK rows, annotated in an earlier sweep: roughly 60 are already covered by existing classes (each row's note names the class), about 40 are documentation-only with no numbers to build, and the missiles/moonshot ones were excluded by DISC-14. The rest are PIPE, hosted-AI (DEF-005, REV, JEV) or closed rows with a stale `deferred` label. They stay `deferred` only because `task.py` closes a row through its proof, and these have none.
 Request: for each deferred row whose note says it is covered by an existing class, run `python3 plan/tasks/task.py done <ROW>` (with the proof the note names if there is one, otherwise the closest passing test), so the count drops. Report any row whose note does not hold up instead of closing it. Leave PIPE, JEV, DEF-005 and REV-8/9 deferred.
 
-### Cloud thread: sidecar speed (the sim keeps the REAL sidecars; no native engines) -- measure please
-Hotspot found by reading the code: `EconomyUpgrades::rememberedBias` asked the CBRKit sidecar once per candidate building, per planet, and every call re-sent the whole casebase (up to 200 cases): ~27+ sequential HTTP calls per session.
-Pushed to module main (not run):
-1. `CbrKitExperienceEngine` remembers each (casebase, query) answer for its life: the same object on a second planet costs no call (2ed8f9d).
-2. Batching: `EconomyUpgrades::rankedProduction` now collects every object it will score and calls `PrefetchesExperience::prefetch` (new contract; CbrKit and Hybrid engines implement it), which sends ALL of them in ONE `/retrieve` request (`CbrKitClient::rankMany`, named queries). Per-object results are identical; if the batch fails nothing is stored and each object is asked on its own as before.
-Please: (a) pull, restart the queue worker/php-fpm, run `ogamex test-one` for any test touching CbrKit/Experience/EconomyUpgrades (`CbrKit`, `Experience`, `EconomyUpgrades`) and report failures; (b) measure per-sidecar latency and call counts per session for Fatima (8092), CBRKit (8091), AgentOS (8093) and PsychSim, before vs after this pull (same `sim --hours=6 --accounts=20`, real sidecars on, fresh SIM_DB), reporting the SIM speedup line and the PROFILE table; (c) say which sidecar is slowest per call now. 3. Fatima, PsychSim and AgentOS answers are now cached for an hour by request (cache key `ai:fatima:*`, `ai:psychsim:*`, `ai:agentos:*`; the drivers are pure functions of the request: Fatima reloads its scenario on every appraisal, PsychSim rebuilds its world from the temptation, AgentOS keeps no store). A failed answer is never cached. If a conformance run or a sim shows a stale answer, `php artisan cache:clear` and tell the cloud thread.
-Rust: nothing ported yet. Candidate if CBRKit is still the hotspot after the batching: the case similarity (mean of per-feature similarity) as a function in the host's Rust FFI library next to the battle engine, one binding per process. Report the PROFILE share of CBRKit first so it is only done if it pays.
-Next candidates if CBRKit is still dominant: a larger-batch across planets, HTTP keep-alive/connection reuse, and a lower connect timeout for a local sidecar.
+### Cloud thread: sidecar speed (HANDOUT FOR THE LOCAL AGENT). The sim keeps the REAL sidecars. Nothing may change a result.
+**Rule: an optimization ships ON only if it is proven to give the same decisions. Any difference per session = FAIL: switch that optimization off (kill switch below) and report to the cloud thread.**
+
+#### What changed (module main, ogamex-next main c1920df; none of it was run against the stack)
+| # | Change | Where | Why results cannot change | Kill switch (env) | Default |
+|---|---|---|---|---|---|
+| 1 | CBRKit answers remembered per (casebase, query) for the life of one engine; failures never kept | `CbrKitExperienceEngine::$similarityCache` | same inputs, same sidecar answer, same process | (none needed: in-process, keyed by full casebase content) | on |
+| 2 | All objects of an economy pass sent in ONE `/retrieve` (named queries); per-object fallback if the batch fails | `EconomyUpgrades::rankedProduction` -> `PrefetchesExperience::prefetch` -> `CbrKitClient::rankMany` | each query is scored on its own by the sidecar; the batch only saves round trips | `AI_EXPERIENCE_DECISION_WEIGHT=0` disables the whole lane (changes behaviour, only for A/B baselines); to disable only batching revert `prefetchExperience` call | on |
+| 3 | CBRKit similarity computed in-process by Rust (`rank_case_similarities` in `libbattle_engine_ffi.so`), sidecar used only if the lib/function is missing | host `rust/battle_engine_ffi/src/case_similarity.rs`, module `RustCaseSimilarity` | proven equal to `docker/cognition/cbrkit/retriever.py`: 60,000 random pairs, max diff 2.2e-16, 0 mismatches (cloud run, debug build) | `AI_EXPERIENCE_CBRKIT_RUST=false` | on |
+| 4 | PsychSim stance cached 1 h per temptation | `PsychSimClient::decide` | world is rebuilt from the temptation alone | `AI_COGNITION_PSYCHSIM_CACHE=false` | on |
+| 5 | AgentOS recall ranking cached 1 h per full request (scope, query, limit, memories) | `AgentOsClient::recall` | driver keeps no store; ranking is a function of the request | `AI_MEMORY_AGENTOS_CACHE=false` | on |
+| 6 | Fatima appraisal / social exchange cached 1 h per (request, scenario, instance, fixture hashes) | `FatimaCognitionSession::remembered` | needs proof that a reloaded scenario answers identically every time | `AI_COGNITION_FATIMA_CACHE=true` to enable | **OFF** until step C passes |
+Failed/null answers are never cached. After flipping any switch: `php artisan config:clear && php artisan cache:clear`, restart queue worker and php-fpm.
+
+#### Step A: build and prove the Rust function (do first)
+1. Pull both repos. In ogamex-next run `bash rust/compile.sh` (or the README's `cargo build --release -p battle_engine_ffi` and copy `rust/target/release/libbattle_engine_ffi.so` to `storage/rust-libs/`). Run `cargo test -p battle_engine_ffi` (7 case_similarity tests must pass).
+2. Equivalence against the sidecar's real Python measure: `python3 scripts/rust-similarity-check/gen.py && php scripts/rust-similarity-check/check.php storage/rust-libs/libbattle_engine_ffi.so` in the module. Must print `mismatches 0`. Paste the output in Results.
+3. Live equivalence with the real sidecar: pick 3 accounts with a non-empty building casebase; for each, POST one economy query to the running CBRKit container (`/retrieve`, same body the client builds) and compare to `RustCaseSimilarity::rank` on the same casebase (php artisan tinker). Max abs diff must be < 1e-9. Report.
+4. Confirm PHP FFI loads it: `php -r 'FFI::cdef("char* rank_case_similarities(const char* i);","storage/rust-libs/libbattle_engine_ffi.so"); echo "ok";'` inside the grand container. If the extension is not loaded in the worker container, Rust stays unavailable and the sidecar path is used: report which.
+
+#### Step B: unit and feature tests
+`ogamex test-one` for: HybridCognitionTest, FatimaCognitionTest, DriverPayloadLimitTest, DriverSwapAuthorityTest, and every test file matching CbrKit|Experience|EconomyUpgrades|PsychSim|AgentOs|MemorySelector. Report each failure with its first FAILED line. Tests that assert the number of HTTP calls to a sidecar may legitimately change (fewer calls); tell the cloud thread which and why, do not edit them yourself.
+
+#### Step C: A/B equivalence of decisions (the gate that decides what stays on)
+Build `scripts/sidecar-ab.sh` (you implement it; keep it out of the sim/prove blocks of scripts/ogamex). Same start state and seed for every run: clone the cohort once, then for each configuration use its own SIM_DB cloned from that snapshot and the same `--from`, `--hours=6 --accounts=20`, real sidecars on (NO native cognition).
+Configurations: **R0** baseline (AI_EXPERIENCE_CBRKIT_RUST=false, PSYCHSIM_CACHE=false, AGENTOS_CACHE=false, FATIMA_CACHE=false); **R1** = R0 + RUST=true; **R2** = R1 + PSYCHSIM_CACHE + AGENTOS_CACHE true; **R3** = R2 + FATIMA_CACHE=true. Also run R0 twice (R0a, R0b) to measure the sidecars' own run-to-run noise.
+Diff per session between runs, from `ai_decision_traces` (player_id, work_item_id/decision key, selected action, score components) and the actions each session queued (`ai_work_items`: kind, player_id, payload). A session is "different" if the selected action, its parameters or its score components differ at all (floats within 1e-9).
+Pass rule: R1 vs R0, R2 vs R0, R3 vs R0 must each equal R0a vs R0b (ideally 0 differing sessions). If R0a vs R0b already differs, say so: the sidecars are not deterministic and no cache is safe on that sidecar.
+Report a table: run, sessions, differing sessions vs R0, first 5 differences (player, decision key, field, before, after).
+Decision from the table: any config with differences -> turn its switch off and send me the first differences; if R3 is clean, set `AI_COGNITION_FATIMA_CACHE=true` in the grand/sim environment and tell me.
+
+#### Step D: speed (only after C is clean)
+Same sim as before (`sim --hours=6 --accounts=20`, fresh SIM_DB, real sidecars) for R0 and the final config: report the SIM speed line, JUMPS line, the PROFILE table and, per sidecar (Fatima 8092, CBRKit 8091, AgentOS 8093, PsychSim 8094), calls per session and mean latency (use the sidecar container logs or a global HTTP middleware counter). Name the slowest sidecar per call and the one with the most calls per session now.
+
+#### Hand back to the cloud thread (write under Results, then I act)
+1. Step A outputs (check.php line, cargo test result, live diff).
+2. Step B failures.
+3. Step C table and the switches you left on/off.
+4. Step D numbers and the next hotspot.
+5. Anything the sidecars returned that surprised you (errors, timeouts, non-determinism).
+I will fix what failed in code, push to main, and update this Request. Remaining ideas, only if Step D says they pay: HTTP keep-alive / connection reuse for the Fatima call sequence (4+ calls per appraisal), a single combined Fatima endpoint in the .NET sidecar, a lower connect timeout for local sidecars.
 
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
