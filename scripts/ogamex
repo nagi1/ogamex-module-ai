@@ -345,7 +345,7 @@ prove_row() {
         if [ "$kind" != test ] && [ "$sim_done" = 0 ] && [ "${sim_hours_wanted:-0}" -gt 0 ] 2>/dev/null; then
             sim_done=1
             echo "--- simulating ${sim_hours_wanted}h on a copy of the cohort" >&"$progress"
-            if sim_run "$sim_hours_wanted" >&"$progress"; then
+            if SIM_DB="${SIM_DB:-ogamex-sim-prove}" sim_run "$sim_hours_wanted" >&"$progress"; then
                 hours="$sim_hours_wanted"
                 age=$(( hours * 3600 ))
                 # Tells the harness this verdict already covers simulated hours, so a failing live step
