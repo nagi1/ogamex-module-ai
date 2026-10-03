@@ -454,7 +454,10 @@ test('future work stays pending and terminal receipts prevent a second action', 
 
 test('accelerated future sessions are claimable by the worker', function (): void {
     config(['ai.population.session_interval_seconds' => 5]);
-    aiWorkProfile($this->currentUserId);
+    $profile = aiWorkProfile($this->currentUserId);
+    // Acceleration shortens the waits, not the night, so the claim is only early inside the waking
+    // window: the test stands at the profile's local noon instead of whatever hour CI happens to run.
+    $this->travelTo(now()->setTimezone(\Modules\AI\Domain\Routine\RoutineProfile::fromAiProfile($profile)->timezone)->setTime(12, 0)->utc());
     $work = AiWorkItem::create([
         'player_id' => $this->currentUserId,
         'kind' => AiWorkKind::RunSession,

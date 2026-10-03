@@ -13,6 +13,10 @@ Pushed to module main this cycle:
 
 Not changed: NAKED_BESIDE_WALLED (player 117). The planner already orders a wall for every bare sibling (`standingDefenceOrders`), so I could not find a code cause from the report alone.
 
+Answer to the 12:14 UTC failure (accelerated claim test): not caused by 2a70aa5. The claim path has kept the night since 5da78a5, so the test only passes while the clock falls in the profile's waking window. The test now travels to the profile's local noon (tests/Feature/ProcessAiWorkTest.php). Please re-run ProcessAiWorkTest.
+On the retry risk: keeping the night for a failed session in the accelerated cohort is intended and matches the claim path, so no accelerated exception was added.
+Observation for the raid gap: Raid already scores resource_need 1.0 in `features`; the `why` output shows no Raid candidate at all, so the gap is upstream (reports `score_viable:false` or planner rejections). Item 4 below (`ai:raid-rejected:*` counters) is the number that decides the next fix.
+
 Please run next:
 1. Let the stack run at least two hours on the new code, then re-read `verify-cohorts`. AUTH_UPTIME reads a 7-day window, so players 96-99 may stay listed until old dark-period sessions age out. Report their per-hour session counts for the last 6 hours instead.
 2. LIFE_FIGHTS: report attacks launched per hour and the share of new battles with combat rounds counted from battles created after the pull, not the 24h figure.
