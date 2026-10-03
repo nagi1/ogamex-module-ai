@@ -8,6 +8,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
@@ -39,6 +40,7 @@ use Throwable;
     {--maintenance=900 : Simulated seconds between campaign, alliance and score-sample passes}
     {--highscore-every=3600 : Simulated seconds between the three highscore generators (each walks every player; the real schedule runs them every 300 s)}
     {--max-wall= : Stop after this many real seconds and keep the state, so a later run continues}
+    {--external-cognition : Keep the HTTP cognition/memory sidecars and the language provider (a session then waits on their 2-5 s timeouts)}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
     {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
     {--force-db : Allow a database whose name does not contain "sim"}')]
@@ -67,6 +69,21 @@ class SimulateAiTime extends Command
         }
 
         config(['queue.default' => 'sync']);
+        if (!$this->option('external-cognition')) {
+            // A session in hybrid mode calls the affect, experience and memory sidecars over HTTP (2 to 5 s
+            // connect/read timeouts each) and the conversation lane calls a paid language provider. Measured
+            // on grand: 181 sessions took 908 s, about 5 s each, nearly all of it waiting on those calls. The
+            // native engines are the floor the sidecars sit on, so the simulation plays on them alone, and any
+            // request that still escapes throws at once instead of waiting for a timeout (or spending money).
+            config([
+                'ai.cognition.mode' => 'native',
+                'ai.cognition.memory.driver' => 'native',
+                'ai.cognition.experience.driver' => 'native',
+                'ai.cognition.conversation.enabled' => false,
+                'ai.language.enabled' => false,
+            ]);
+            Http::preventStrayRequests();
+        }
         if (!$this->option('keep-accelerated')) {
             config(['ai.population.session_interval_seconds' => 0]);
         }

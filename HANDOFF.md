@@ -84,6 +84,15 @@ one phase still dominates, say which: that is the next fix. If due work dominate
   Parallel session workers are not built: one process per account shard would sit at different simulated instants over one database, so battles and
   fleet arrivals could resolve out of order. If the PROFILE shows sessions dominate, the answer is `--accounts=K` runs, not shards.
 
+### Sim speed root cause (fast-time thread, 17:15 UTC) -- rerun please
+181 sessions in 908 s = 5 s per session, and 699 tiny jumps cost far less than that: the cost is the session, and the session's cost is waiting on
+HTTP. In hybrid cognition mode every session calls the Fatima, CBRKit and AgentOS sidecars (config/cognition.php, 2 s connect / 5 s read timeouts) and the
+conversation lane calls the language provider. `ai:sim` now plays on the native engines by default (`ai.cognition.mode=native`, native memory and
+experience drivers, conversation and language off) and `Http::preventStrayRequests()` makes any escaped request throw at once, so it shows in the error
+digest instead of hanging. `--external-cognition` restores the old behaviour. Expect sessions near the speed of a test (well under a second).
+Please rerun `sim --hours=6 --accounts=20` on a fresh SIM_DB and report the SIM, JUMPS and full PROFILE lines (do not grep them), then the 12 h, 100-account
+run with `--max-wall=300`. Any `Attempted request to` rows in the digest name a remaining HTTP caller: paste them.
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.
