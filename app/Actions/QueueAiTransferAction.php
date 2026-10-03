@@ -7,6 +7,7 @@ use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Domain\Decision\QueueableTransferPlanner;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
+use Modules\AI\Support\AllyGiftGuard;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\TransportMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
@@ -33,6 +34,7 @@ class QueueAiTransferAction implements QueueAiTransfer
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
         private PlanetServiceFactory $planetServiceFactory,
+        private AllyGiftGuard $giftGuard,
     ) {
     }
 
@@ -41,7 +43,10 @@ class QueueAiTransferAction implements QueueAiTransfer
         if (!Planet::query()->whereKey($sourcePlanetId)->where('user_id', $playerId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
         }
-        if (!Planet::query()->whereKey($targetPlanetId)->where('user_id', $playerId)->exists()) {
+        // A target that is not the account's own is a gift, and only AllyGiftGuard decides whether
+        // one may leave: the guard re-reads the source stock below, once the shipment is final.
+        $gift = !Planet::query()->whereKey($targetPlanetId)->where('user_id', $playerId)->exists();
+        if ($gift && !Planet::query()->whereKey($targetPlanetId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
         }
 
@@ -56,14 +61,34 @@ class QueueAiTransferAction implements QueueAiTransfer
             }
 
             $source = $this->planetServiceFactory->makeForPlayer($player, $sourcePlanetId, false);
-            $target = $this->planetServiceFactory->makeForPlayer($player, $targetPlanetId, false);
+            $target = $gift
+                ? $this->planetServiceFactory->make($targetPlanetId, true)
+                : $this->planetServiceFactory->makeForPlayer($player, $targetPlanetId, false);
+            if ($target === null) {
+                return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
+            }
 
-            $shipment = $this->loadable($source, $metal, $crystal, $deuterium);
+            $shipment = $this->loadable($source, $metal, $crystal, $deuterium, $gift);
             if ($shipment === null) {
                 return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
 
             $shipment = $this->fittedToHold($player, $source, $shipment);
+            if ($gift) {
+                $refusal = $this->giftGuard->refusal(
+                    $playerId,
+                    $targetPlanetId,
+                    (int) $shipment->metal->get(),
+                    (int) $shipment->crystal->get(),
+                    (int) $shipment->deuterium->get(),
+                    $source->metal()->get(),
+                    $source->crystal()->get(),
+                    $source->deuterium()->get(),
+                );
+                if ($refusal !== null) {
+                    return AiActionResult::rejected($refusal);
+                }
+            }
             $fleet = $this->transportFleet($player, $source, $shipment);
             if ($fleet === null) {
                 return AiActionResult::rejected(AiQueueActionReason::NoTransportFleet);
@@ -103,7 +128,7 @@ class QueueAiTransferAction implements QueueAiTransfer
      * loads what is still on the pad, so each resource is clamped to the source's own stock, and a
      * remnant below the ordinary minimum is abandoned instead of flying a fleet for it.
      */
-    private function loadable(PlanetService $source, int $metal, int $crystal, int $deuterium): ?Resources
+    private function loadable(PlanetService $source, int $metal, int $crystal, int $deuterium, bool $gift = false): ?Resources
     {
         $held = [
             (int) floor($source->metal()->get()),
@@ -118,7 +143,8 @@ class QueueAiTransferAction implements QueueAiTransfer
 
         $shipment = new Resources(min($metal, $held[0]), min($crystal, $held[1]), min($deuterium, $held[2]));
 
-        if ($shipment->metal->get() + $shipment->crystal->get() < QueueableTransferPlanner::MINIMUM_SHIPMENT) {
+        // A gift is capped at a tenth of the stock, so the own-ferry floor does not apply to it.
+        if (!$gift && $shipment->metal->get() + $shipment->crystal->get() < QueueableTransferPlanner::MINIMUM_SHIPMENT) {
             return null;
         }
 
