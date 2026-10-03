@@ -8,6 +8,21 @@ local verifier (it runs, it reports, it fixes nothing in planner code).
 Written 2026-10-03 ~12:50 UTC. Code only, none of it run in the cloud. Pull both repos first (host commit b5fb9527 changes
 `tests/TestCase.php`; the module adds `ai:sim`). Rebuild is not needed beyond the usual `composer dump-autoload`.
 
+### ARCHITECTURE MIGRATION (Opus thread, 2026-10-03 from 20:00 UTC) -- READ THIS FIRST, it supersedes the row queue
+Owner order: follow `/mnt/project-files/research/ai-architecture-diagnosis.md` (copy: `docs/architecture-diagnosis.md`). Code only, nothing run in the cloud.
+<!-- MIGRATION-STATUS-START -->
+| step | what | state | commit |
+|---|---|---|---|
+| 2 | Raid planner plans against the espionage report (`ReportedPlanet`), never the live planet | pushed | see git log "architecture step 2" |
+<!-- MIGRATION-STATUS-END -->
+
+**What the local agent does each cycle (in this order):**
+1. `git pull` both repos on main; `composer dump-autoload`; `php artisan migrate` (new tables may land); `queue:restart`.
+2. Run the module test suite once: `bash scripts/ogamex test` (or the usual runner). Paste every FAILED test name plus its first assertion line under `## Results`. Do not fix planner code.
+3. Run a 2 h sim, 30 accounts, sidecars up: `ai:sim` as you already do. Report: battles total, battles with rounds (LIFE_FIGHTS share), raids dispatched, raids per login, probes per login, rejected work by reason (top 10), exceptions (class + first line + file:line).
+4. Print one raider and one miner account's day as human lines (`bash scripts/ogamex account PLAYER` or the work-item log): time, what it did. This is the acceptance read (diagnosis section 6.3).
+5. Write all of it under `## Results` with the commit hashes you pulled.
+
 ### New: fast time. Stop waiting on wall-clock hours
 
 Game time is now a thing the harness controls. `Modules\AI\Support\SimulatedTime` freezes/moves every Carbon flavour at once
