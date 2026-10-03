@@ -206,3 +206,12 @@ asks for one.
   read only by its own test (`IMPL-68`).
 - **Read them together.** A `Wired` verdict means "nothing is missing in code", not "this works in the
   universe"; the live ledger is the authority on the second and this table is the authority on the first.
+
+## Violent specialities: decision (DISC-14, decided 3 Oct 2026)
+
+| Behaviour | Decision | Why / trigger |
+|---|---|---|
+| Missile strikes (`MissileMission`) | **Out. Excluded.** | The host blocks them in PvE and `DestroyMechanicsUnconfirmedTest` pins them in normal play; an account that never raids defences has no use for them. No coverage reader should raise it again. |
+| Moon destruction (`MoonDestructionMission`) | **Out. Excluded.** | Same host restriction; RV-013 already deferred the moonshot. Reopen only with an owner decision to run a war-mode universe. |
+| ACS defend (`AcsDefendMission`) | **In. Delivered** by the allied-defence lane (LOOP-003, `QueueAiDefendAction`, `QueueableDefendPlanner`). | The `AllyUnderAttack` observation now has a production reader. |
+| ACS attack / union (`FleetUnionService`) | **Deferred.** Trigger: a cohort read in which two or more co-members hold idle combat fleets while a shared enemy has a visible raid target for more than a day. | Needs a union-forming executor and a joint-timing guard; not worth building before defence is read back live. |
