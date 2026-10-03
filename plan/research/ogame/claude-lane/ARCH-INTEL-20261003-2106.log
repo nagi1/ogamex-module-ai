@@ -1,0 +1,5 @@
+`IntelBook`, `GalaxyMap`, the `ai_intel` migration and `intel.yaml` were already committed in 36919ff, and I made no further changes. The aspect moved is raids, with espionage as the read side. An observer sees the account remember what each farm paid, because `RecordAiRaidOutcomeAction` now writes the counter after every raid.
+
+Proof: `test:MigrationIntelTest` passes (2/2), as do `aspect:raids` and `aspect:espionage`. `situation:launch-activity-guard` fails because `DispatchFleet` refuses with `target_active_at_dispatch`, which is outside the intel code. `task.py done` therefore left the row `delivered`. The sim also showed 14 of 15 aspects passing, with `recycle` failing.
+
+Left: someone needs to fix the `target_active_at_dispatch` gate in `DispatchFleet`, which also appears in the STUCK-DispatchFleet scorecards. Then re-run `task.py done ARCH-INTEL`. No other rows are freed by this one.

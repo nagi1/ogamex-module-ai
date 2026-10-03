@@ -16,3 +16,5 @@
 {"at": "2026-10-03T13:12:34Z", "code": "PERS-008", "verdict": "exit 0", "input": 36, "output": 5649, "cache_read": 970504, "cache_write": 44398, "usd": 0.4302898, "turns": 19, "seconds": 100}
 {"at": "2026-10-03T17:33:50Z", "code": "QUAL-010", "verdict": "exit 0", "input": 28, "output": 4783, "cache_read": 732342, "cache_write": 65905, "usd": 0.45997940000000004, "turns": 15, "seconds": 90}
 {"at": "2026-10-03T17:44:08Z", "code": "QUAL-010", "verdict": "exit 0", "input": 16, "output": 1660, "cache_read": 315942, "cache_write": 23476, "usd": 0.1757544, "turns": 9, "seconds": 48}
+{"at": "2026-10-03T21:05:34Z", "code": "ARCH-INTEL", "verdict": "exit 0", "input": 32, "output": 5542, "cache_read": 847848, "cache_write": 45582, "usd": 0.40939159999999997, "turns": 18, "seconds": 68}
+{"at": "2026-10-03T21:07:08Z", "code": "ARCH-INTEL", "verdict": "exit 0", "input": 8, "output": 917, "cache_read": 147270, "cache_write": 26127, "usd": 0.145158, "turns": 4, "seconds": 29}
