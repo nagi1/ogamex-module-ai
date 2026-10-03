@@ -209,6 +209,12 @@ class RaidPlanner
             return $this->reject('not_enough_fuel', $playerId, $reportId);
         }
 
+        // The dispatch also refuses a flight the fleet's own tanks cannot hold the outbound fuel for
+        // (STUCK-DispatchFleet "insufficient storage capacity"): a small subset on a far target.
+        if ((int) ($fuel / 2) > $this->fleet($launchUnits)->getTotalFuelCapacity($player)) {
+            return $this->reject('fuel_tank_short', $playerId, $reportId);
+        }
+
         if (!$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
             return $this->reject('below_loot_tier', $playerId, $reportId);
         }

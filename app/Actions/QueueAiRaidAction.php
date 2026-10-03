@@ -80,6 +80,11 @@ class QueueAiRaidAction implements QueueAiRaid
             if ($fuel > floor($origin->deuterium()->get())) {
                 return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
+            // The host refuses a flight the fleet's own tanks cannot hold the fuel for ("insufficient
+            // storage capacity"); a long route flown by a small subset is how a planned raid ends up here.
+            if ($fuel > $fleet->getTotalFuelCapacity($player)) {
+                return AiActionResult::rejected(AiQueueActionReason::FuelTankShort);
+            }
 
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
