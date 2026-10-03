@@ -1,1 +1,2 @@
-PROOF: PASS LIFE-001 (invariant:LIFE_FIGHTS)
+FAIL invariant:LIFE_FIGHTS 41s —  ! [LIFE_FIGHTS] 124 of 813 battles today had combat rounds (15%): the raids pillage empty planets instead of fighting
+PROOF: FAIL LIFE-001 (invariant:LIFE_FIGHTS) at invariant:LIFE_FIGHTS:  ! [LIFE_FIGHTS] 124 of 813 battles today had combat rounds (15%): the raids pillage empty planets instead of fighting
