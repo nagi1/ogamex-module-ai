@@ -281,7 +281,21 @@ LANE = "claude-lane"
 LANE_QUEUE = 3  # rows waiting for the strong lane at once; it works one run at a time
 
 
-def lane_reason(con, row, attempts):
+WRITER_CALL_LIMIT = 300  # a slice that takes a writer more calls than this needs a design decision, not more calls
+
+
+def writer_calls():
+    """Model calls per row over the whole usage log; an unfinished attempt has no failure counter, calls do."""
+    calls = {}
+    if os.path.exists(USAGE):
+        for line in open(USAGE):
+            found = re.search(r'"purpose": "implementing (\S+)', line)
+            if found:
+                calls[found[1]] = calls.get(found[1], 0) + 1
+    return calls
+
+
+def lane_reason(con, row, attempts, calls):
     """Why a row needs the strong lane, or "" when the DeepSeek writers should keep it.
 
     The lane is the CTO/plumber, not a second driver: it takes what a writer failed at, what other rows
@@ -292,6 +306,8 @@ def lane_reason(con, row, attempts):
         return "a writer failed it"
     if attempts.get(code, 0) >= 3:
         return f"{attempts[code]} writer attempts did not land it"
+    if calls.get(code, 0) >= WRITER_CALL_LIMIT:
+        return f"{calls[code]} writer calls and it is still open (one attempt that never ends has no failure count)"
     waiting = con.execute("select count(*) from dependencies d join tasks t on t.id=d.task_id "
                           "where d.depends_on=? and t.status not in ('done','deferred')", (row_id,)).fetchone()[0]
     if waiting:
@@ -319,12 +335,13 @@ def delegate_to_claude(actions):
         "select code, file_ref, coalesce(notes,''), id, priority from tasks where kind='impl' "
         "and status in ('todo','in_progress') and (assignee is null or assignee='' or assignee like 'harness%') "
         "and priority in ('P0','P1') and code not like 'WIK-%' and code not like 'STUCK-%' order by priority, updated_at").fetchall()
+    writer_calls_by_row = writer_calls()
     for code, file_ref, notes, row_id, priority in rows:
         if queued >= LANE_QUEUE:
             break
         if notes.count("CLAUDE-LANE") >= 2:
             continue
-        reason = lane_reason(con, (code, file_ref, notes, row_id), attempts)
+        reason = lane_reason(con, (code, file_ref, notes, row_id), attempts, writer_calls_by_row)
         if not reason:
             continue
         subprocess.run(["pkill", "-f", f"^python3 -u scripts/strategy-pipeline.py implement {code}"])
