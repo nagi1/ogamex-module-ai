@@ -1,0 +1,2 @@
+PASS aspect:work_failures 0s
+PROOF: PASS STUCK-DispatchFleet-no-transport-fleet (aspect:work_failures)

@@ -1,0 +1,2 @@
+PASS aspect:work_failures 0s
+PROOF: PASS STUCK-QueueUnits-queue-not-created (aspect:work_failures)

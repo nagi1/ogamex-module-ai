@@ -1,4 +1,4 @@
-PASS test:DebrisBesidePlanetSituationTest 2s
-PASS test:DebrisRecycleSituationTest 3s
-PASS aspect:recycle 2s
+PASS test:DebrisBesidePlanetSituationTest 1s
+PASS test:DebrisRecycleSituationTest 1s
+PASS aspect:recycle 4s
 PROOF: PASS FLEET-002 (test:DebrisBesidePlanetSituationTest test:DebrisRecycleSituationTest aspect:recycle)

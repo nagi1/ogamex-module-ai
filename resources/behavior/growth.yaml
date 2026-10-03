@@ -1,0 +1,15 @@
+# Growth feedback: what an account does when its own score stops moving.
+#
+# The hourly score sample is the only growth history the module keeps; the host holds current points
+# only. A score flat across the whole window below is the account not growing -- the step it was saving
+# for is not arriving -- and the reaction is the one a player has on noticing it: stop reserving the
+# pile for that step and spend what is held on the step the planet can afford now.
+#
+# The window is a bound on the reaction, not a target: an account that grows inside it is never
+# unblocked, and an account nobody has watched that long is left saving.
+
+stalled_growth:
+  # Consecutive hourly samples carrying the same general score. Six hours is most of a session day with
+  # nothing to show for it: long enough that a goal bought on schedule never trips it, short enough
+  # that a planet stuck behind an unreachable step is unblocked on the same day it stalled.
+  flat_hours: 6

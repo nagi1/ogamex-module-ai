@@ -1,0 +1,3 @@
+PASS aspect:economy 1s
+PASS aspect:work_failures 0s
+PROOF: PASS PERS-009 (aspect:economy aspect:work_failures)

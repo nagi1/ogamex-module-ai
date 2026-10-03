@@ -1,0 +1,2 @@
+PASS aspect:work_failures 0s
+PROOF: PASS STUCK-QueueBuilding-Maximum-number-of-item (aspect:work_failures)

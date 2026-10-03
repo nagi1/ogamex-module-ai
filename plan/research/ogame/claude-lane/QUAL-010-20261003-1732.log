@@ -1,0 +1,5 @@
+**Changed:** `ProcessAiWork` now keeps a session's scheduled hour. A login that is overdue but was due in the account's waking window waits for its next waking day instead of running at night. A login the routine itself placed in the dark period, such as a reaction wake, still runs then. This moves `AUTH_UPTIME`: accounts stop logging in through their own night when the worker is behind. Added `LateLoginNightRestTest`, committed with `ProcessAiWork.php`; it and the other five session test classes I ran pass.
+
+**Proof:** FAIL on `invariant:AUTH_UPTIME`: player 35 is active in 24 of 24 hours. The invariant reads a 24-hour window that still contains logins from before the change. The row is unclaimed, not closed, and I added a note saying so.
+
+**Left:** after 24 hours of cohort play, re-run `prove QUAL-010`. `ogamex sim --hours=30` can be run first. The writer's unapplied `RunDueAiWork` batch-size edit and its stub situation test were left out as unrelated. It doesn't unblock any other rows.

@@ -1,2 +1,2 @@
-PASS invariant:AUTH_UPTIME 14s
-PROOF: PASS QUAL-010 (invariant:AUTH_UPTIME)
+FAIL invariant:AUTH_UPTIME 20s —  ! [AUTH_UPTIME] player 35 is active in 24 of 24 hours of the day
+PROOF: FAIL QUAL-010 (invariant:AUTH_UPTIME) at invariant:AUTH_UPTIME:  ! [AUTH_UPTIME] player 35 is active in 24 of 24 hours of the day

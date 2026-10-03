@@ -14,3 +14,5 @@
 {"at": "2026-10-03T12:53:20Z", "code": "LIFE-001", "verdict": "exit 0", "input": 56, "output": 8727, "cache_read": 1880964, "cache_write": 61997, "usd": 0.7134577999999998, "turns": 29, "seconds": 853}
 {"at": "2026-10-03T13:10:42Z", "code": "PERS-006", "verdict": "exit 0", "input": 20, "output": 2818, "cache_read": 449216, "cache_write": 32855, "usd": 0.2514982, "turns": 11, "seconds": 52}
 {"at": "2026-10-03T13:12:34Z", "code": "PERS-008", "verdict": "exit 0", "input": 36, "output": 5649, "cache_read": 970504, "cache_write": 44398, "usd": 0.4302898, "turns": 19, "seconds": 100}
+{"at": "2026-10-03T17:33:50Z", "code": "QUAL-010", "verdict": "exit 0", "input": 28, "output": 4783, "cache_read": 732342, "cache_write": 65905, "usd": 0.45997940000000004, "turns": 15, "seconds": 90}
+{"at": "2026-10-03T17:44:08Z", "code": "QUAL-010", "verdict": "exit 0", "input": 16, "output": 1660, "cache_read": 315942, "cache_write": 23476, "usd": 0.1757544, "turns": 9, "seconds": 48}

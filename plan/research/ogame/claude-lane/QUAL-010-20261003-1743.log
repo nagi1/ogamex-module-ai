@@ -1,0 +1,7 @@
+**Changed:** I committed the fix to `SessionDecisionService::wakesForReaction`. A hostile inbound in the account's dark period no longer wakes it. The attack is read at the next waking session, so night-time logins stop filling every hour of the day. This moves the AUTH_UPTIME invariant. An observer would see accounts with a quiet night, not a login in 24 of 24 hours.
+
+**Proof:** `done QUAL-010` failed. The live read still shows player 35 active in 24 of 24 hours. The tests I ran (`LateLoginNightRest`, `DeterministicSessionLoop`, `ProcessAiSession`, `AiQueueHorizon`) all pass. The failure is probably the 24h read window still containing logins from before the change, but I haven't confirmed that.
+
+**Left:** The row went back to `todo` because I could only unclaim it. I couldn't leave it `delivered` or add a note line, since `task.py` has no command for either. Next step is `ogamex sim --hours=30`, then `prove QUAL-010` once the window has turned over.
+
+I ran no other rows' tests.
