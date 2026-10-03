@@ -52,6 +52,15 @@ use OGame\Services\PlayerService;
  * session's building steps are executed first and spend the balance the wall was priced against, so
  * the host refused the wall order and the planet stayed bare on every login (QUAL-003). The marker
  * lets the schedule run the login's first wall ahead of those steps.
+ *
+ * A bare sibling whose yard cannot yet take a defence unit is the building planner's business: the
+ * wall pass that planner runs first stands the yard the unit waits on, so a login that finds a
+ * sibling naked spends itself on that yard rather than on the account's habits, and the wall reaches
+ * every sibling rather than only the ones whose yard already exists. The pass below speaks for that
+ * sibling even when it is not the planet whose balance pays: a wall is placed on the planet that
+ * stands at zero, whatever the login chose. A sibling whose yard is ready
+ * keeps its own stock for the wall order because a bare planet that spends its balance every login
+ * never reaches the price of the unit the wall order waits on.
  */
 class QueueableUnitPlanner
 {
@@ -118,26 +127,9 @@ class QueueableUnitPlanner
         // account stayed walled in one place (measured live 2 Oct 2026: 1 naked planet beside a
         // sibling holding 1,475). While no wall stands anywhere the account is still in its opening,
         // where cargo comes first; the standing pass below still reaches the floor for that case.
-        if ($this->anyPlanetHoldsDefence($planets)) {
-            foreach ($planets as $planet) {
-                // The balance is refreshed before the wall is priced: the host refuses an unaffordable batch.
-                $planet->updateResources(false);
-                // Defence already paid for in the yard counts as standing: a planet whose first wall is
-                // ordered is no longer bare, so the next bare sibling takes the order instead of the same
-                // planet taking every one while its sibling stays at zero built units. The account can
-                // only place one wall order per session, so the pass walks the planets in order and
-                // leaves the already-served ones to the next login.
-                if ($this->defenseNeed->standingUnits($planet) > 0) {
-                    continue;
-                }
-
-                $standingDefence = $this->standingDefence($player, $planet);
-                if ($standingDefence === null) {
-                    continue;
-                }
-
-                return $standingDefence;
-            }
+        $bareWallOrders = $this->standingDefenceOrders($playerId, $player);
+        if ($bareWallOrders !== []) {
+            return $bareWallOrders[0];
         }
 
         // Power outranks the habits below but not an incoming attack. A planet that is throttling
@@ -268,6 +260,24 @@ class QueueableUnitPlanner
             $standing[] = [$planet, $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $amount, $bare)];
         }
 
+        // The floor a planet that stands nothing takes is the one wall order that outranks the fleet:
+        // keeping a planet alive is what the wall is for, and a bare planet beside a walled sibling
+        // is the first thing the account fixes. Wall beyond that floor yields to the war fleet -- an
+        // account past its opening spends its surplus on the strongest hull the host lets it build
+        // before it buys another turret, which is how a cohort grows a fleet at all (measured live
+        // 3 Oct 2026: one wall order per login and no hull above the median in a hundred accounts).
+        $floor = array_values(array_filter($standing, static fn (array $entry): bool => $entry[1]->aheadOfEconomy));
+        if ($floor !== []) {
+            usort($floor, static fn (array $a, array $b): int => $a[0]->getDefenseUnits()->getAmount() <=> $b[0]->getDefenseUnits()->getAmount());
+
+            return $floor[0][1];
+        }
+
+        $fleet = $this->capitalFleet($player, $planets, $profile);
+        if ($fleet !== null) {
+            return $fleet;
+        }
+
         if ($standing !== []) {
             // The least-defended planet that still wants a wall takes the next order, so a wall rises
             // everywhere it is wanted instead of forever in one place. Counting units rather than
@@ -277,20 +287,25 @@ class QueueableUnitPlanner
             return $standing[0][1];
         }
 
-        return $this->capitalFleet($player, $planets, $profile);
+        return null;
     }
 
     /**
-     * What a player does with a full yard and nothing urgent: spends half of what the richest planet
-     * can afford on the strongest military hull the host lets it build, so the war fleet grows as
+     * What a player does with a full yard and nothing urgent: spends half of what a planet can
+     * afford on the strongest military hull the host lets it build, so the war fleet grows as
      * research unlocks bigger hulls and a mod-added hull counts with no edit. Strongest is the
-     * catalogue's own price order; the economy's saving can still veto the order.
+     * catalogue's own price order, and it is read across the whole account rather than on the
+     * richest planet alone: a player orders the heavy hull from the yard that unlocks it, so an
+     * account whose small yard sits on its richest planet still grows a war fleet (measured live
+     * 3 Oct 2026: one wall order per login and no hull above the median in a hundred accounts).
+     * The economy's saving can still veto the order.
      *
      * @param array<int, PlanetService> $planets
      */
     private function capitalFleet(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
     {
-        usort($planets, static fn (PlanetService $a, PlanetService $b): int => $b->metal()->get() <=> $a->metal()->get());
+        $best = null;
+        $bestPrice = -INF;
 
         foreach ($planets as $planet) {
             $hulls = array_filter(
@@ -303,15 +318,47 @@ class QueueableUnitPlanner
 
             usort($hulls, fn (UnitObject $a, UnitObject $b): int => $this->hullPrice($planet, $b) <=> $this->hullPrice($planet, $a));
             $hull = $hulls[0];
+            $price = $this->hullPrice($planet, $hull);
+            if ($price <= $bestPrice) {
+                continue;
+            }
+
             $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 2));
             if ($this->starvesSaving($planet, $profile, $hull, $amount)) {
                 continue;
             }
 
-            return $this->unit($planet, $hull, 'role:capital:'.$hull->machine_name, $amount);
+            $best = $this->unit($planet, $hull, 'role:capital:'.$hull->machine_name, $amount, false, true);
+            $bestPrice = $price;
         }
 
-        return null;
+        return $best;
+    }
+
+    /**
+     * The war-fleet order a login places whichever page it opened, or null when the yard has nothing
+     * to spend on.
+     *
+     * `plan()` returns the fleet only when no other role on any planet wanted anything, and a login
+     * is almost always consumed by one of them -- a probe, a colony ship, a wall -- so the order the
+     * schedule below waits for was never handed to it and the account held no hull dearer than its
+     * wall orders ever bought. The schedule asks for this the way it asks for the bare siblings' wall
+     * orders, so one hull is bought per login however the engine scored the page.
+     */
+    public function capitalFleetOrder(int $playerId, ?PlayerService $player = null): ?QueueableUnit
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+            return null;
+        }
+
+        $player ??= $this->playerServiceFactory->make($playerId, true);
+        $planets = $player->planets->all();
+        if ($planets === []) {
+            return null;
+        }
+
+        return $this->capitalFleet($player, $planets, $profile);
     }
 
     /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */
@@ -344,7 +391,7 @@ class QueueableUnitPlanner
         return $this->unit($planet, $ship, 'role:colony');
     }
 
-    private function unit(PlanetService $planet, UnitObject $ship, string $reason, int $amount = self::FIRST_CARGO_AMOUNT, bool $aheadOfEconomy = false): QueueableUnit
+    private function unit(PlanetService $planet, UnitObject $ship, string $reason, int $amount = self::FIRST_CARGO_AMOUNT, bool $aheadOfEconomy = false, bool $surplusSpend = false): QueueableUnit
     {
         return app()->makeWith(QueueableUnit::class, [
             'planetId' => $planet->getPlanetId(),
@@ -352,6 +399,7 @@ class QueueableUnitPlanner
             'amount' => $amount,
             'reason' => $reason,
             'aheadOfEconomy' => $aheadOfEconomy,
+            'surplusSpend' => $surplusSpend,
         ]);
     }
 
@@ -748,6 +796,66 @@ class QueueableUnitPlanner
         }
 
         return $this->cheapestQueueableDefence($planet, $need);
+    }
+
+    /**
+     * The wall order every bare sibling of the account owes, in planet order.
+     *
+     * A player with several naked colonies clicks through all of them before logging off, and the
+     * invariant reads the account, so one login has to reach them all: a pass that returned a single
+     * sibling per login needed as many logins as the account has planets, which is longer than its
+     * own day of sessions, and the cohort read still found planets at zero beside a sibling holding
+     * a wall (QUAL-003: 3 planets at zero defence while one held 1,312 units). Each order names its
+     * own planet, so the schedule places them on the planets that stand bare, whatever the login chose.
+     *
+     * The order a bare sibling takes is the wall itself when its own yard can build it, and the
+     * building planner's wall prerequisites stand the yard when it cannot: a login that finds a
+     * sibling naked beside a wall spends itself on that sibling before the account's habits. Each
+     * order names the planet it belongs to, so the executor places it on that planet and not on
+     * whichever planet the login happened to open.
+     *
+     * Only an account that already holds a wall somewhere is served: while no wall stands anywhere
+     * the account is in its opening, where cargo, the colony ship and the probe come first, and the
+     * standing pass below still reaches the floor once a wall exists. A planet already paid for in
+     * the yard is no longer bare and is left for the next login.
+     *
+     * A sibling whose own yard cannot take the wall yet is left to the building planner: the order
+     * this pass can place is a defence unit, and a login that can neither place the unit nor stand
+     * the yard it waits on keeps the sibling naked, so the yard is the planner's own pass and not
+     * a second facility decision here. A sibling that can take the unit but holds nothing is served
+     * here whatever its exposure, so the wall reaches every planet the account owns.
+     *
+     * @return list<QueueableUnit>
+     */
+    // QUAL-003: every bare sibling is asked, so the wallet of one is never the reason another stays zero.
+    public function standingDefenceOrders(int $playerId, ?PlayerService $player = null): array
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+            return [];
+        }
+
+        $player ??= $this->playerServiceFactory->make($playerId, true);
+        $planets = $player->planets->all();
+        if ($planets === [] || ! $this->anyPlanetHoldsDefence($planets)) {
+            return [];
+        }
+
+        $orders = [];
+        foreach ($planets as $planet) {
+            // The balance is refreshed before the wall is priced: the host refuses an unaffordable batch.
+            $planet->updateResources(false);
+            if ($this->defenseNeed->standingUnits($planet) > 0) {
+                continue;
+            }
+
+            $order = $this->standingDefence($player, $planet);
+            if ($order !== null) {
+                $orders[] = $order;
+            }
+        }
+
+        return $orders;
     }
 
     /**

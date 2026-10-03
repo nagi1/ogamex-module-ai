@@ -44,6 +44,13 @@ class DefenseNeedEvaluator
 
     private const HOURS_PER_DAY = 24.0;
 
+    /**
+     * The value the wall must cover, or null when the planet already stands enough of it.
+     *
+     * The number a bare planet is given before exposure is weighed is the file's floor; the wall's own
+     * size stays the composition planner's business. Ships in orbit and the pile itself are part of
+     * the exposure, so a planet with nothing standing but something worth taking still wants a wall.
+     */
     public function evaluate(PlayerService $player, PlanetService $planet): ?DefenseNeed
     {
         $profile = AiProfile::query()->where('player_id', $player->getId())->first();
@@ -130,7 +137,12 @@ class DefenseNeedEvaluator
         return $planet->getDefenseUnits()->getAmount() + $this->pendingDefenseUnits($planet);
     }
 
-    /** Defence this planet has paid for and is waiting on, from the host's own unit queue. */
+    /**
+     * Defence this planet has paid for and is waiting on, from the host's own unit queue.
+     *
+     * The row is pending until the host credits the whole batch, so a planet with a wall in the
+     * yard reads as holding nothing until that batch lands.
+     */
     private function pendingDefenseUnits(PlanetService $planet): int
     {
         $defenceObjectIds = array_map(
@@ -152,6 +164,8 @@ class DefenseNeedEvaluator
     /**
      * The ceiling on one planet's wall from the behaviour file, or null when the file states none.
      * The number is policy, so it lives there and not here; a file without it caps nothing.
+     *
+     * Built and paid-for units count together: the host takes the price when the order is placed.
      */
     private function ceilingUnits(): ?int
     {
@@ -180,6 +194,10 @@ class DefenseNeedEvaluator
         return app()->makeWith(DefenseNeed::class, [
             'defenceValue' => (float) $value,
             'reason' => $reason,
+            'protectedValue' => (float) $value,
+            'currentDefenseValue' => 0.0,
+            'threatBand' => 'unwatched',
+            'intent' => 'hold',
         ]);
     }
 
@@ -197,14 +215,18 @@ class DefenseNeedEvaluator
 
     /**
      * Whether a visitor is already on the way: the host's own under-attack answer, so the module
-     * keeps no mission-type list.
+     * keeps no mission-type list. A planet whose pile would be carried off before the account looks
+     * again counts that pile into the exposure, because there is no time left to spend it.
      */
     private function inbound(PlayerService $player): bool
     {
         return app()->makeWith(FleetMissionService::class, ['player' => $player])->currentPlayerUnderAttack();
     }
 
-    /** Names what the account has recently seen, so a trace can show why the wall grew. */
+    /**
+     * Names what the account has recently seen, so a trace can show why the wall grew: a hostile
+     * inbound is contact already made, an account nobody has looked at yet is still unwatched.
+     */
     private function contact(bool $inbound): string
     {
         return $inbound ? 'inbound' : 'unwatched';

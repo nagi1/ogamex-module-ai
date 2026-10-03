@@ -14,6 +14,12 @@ namespace Modules\AI\Domain\Decision;
  * wall of a planet that stands bare beside a walled sibling. The session's building steps spend the
  * balance this order was priced against when they run first, so the host refuses the wall and the
  * planet stays naked (QUAL-003); the schedule runs a marked order before those steps instead.
+ *
+ * `surplusSpend` marks the war fleet's own order: the best hull a planet's yard can build, bought out
+ * of what the economy leaves. A login whose decision was about something else still keeps the yard
+ * busy, the way a player with a war chest buys ships on whichever page they opened, so the fleet grows
+ * without waiting for the sessions the engine happens to pick the shipyard (measured live 3 Oct 2026:
+ * a hundred accounts held 8,613 small cargo and eight hulls dearer than the median between them).
  */
 readonly class QueueableUnit
 {
@@ -23,6 +29,7 @@ readonly class QueueableUnit
         public int $amount,
         public string $reason,
         public bool $aheadOfEconomy = false,
+        public bool $surplusSpend = false,
     ) {
     }
 }
