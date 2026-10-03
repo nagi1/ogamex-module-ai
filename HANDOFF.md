@@ -126,6 +126,13 @@ lines and the full PROFILE of each.
 About 120 are WIK rows, annotated in an earlier sweep: roughly 60 are already covered by existing classes (each row's note names the class), about 40 are documentation-only with no numbers to build, and the missiles/moonshot ones were excluded by DISC-14. The rest are PIPE, hosted-AI (DEF-005, REV, JEV) or closed rows with a stale `deferred` label. They stay `deferred` only because `task.py` closes a row through its proof, and these have none.
 Request: for each deferred row whose note says it is covered by an existing class, run `python3 plan/tasks/task.py done <ROW>` (with the proof the note names if there is one, otherwise the closest passing test), so the count drops. Report any row whose note does not hold up instead of closing it. Leave PIPE, JEV, DEF-005 and REV-8/9 deferred.
 
+### Cloud thread: sidecar speed (the sim keeps the REAL sidecars; no native engines) -- measure please
+Hotspot found by reading the code: `EconomyUpgrades::rememberedBias` asked the CBRKit sidecar once per candidate building, per planet, and every call re-sent the whole casebase (up to 200 cases): ~27+ sequential HTTP calls per session.
+Pushed to module main (not run):
+1. `CbrKitExperienceEngine` remembers each (casebase, query) answer for its life: the same object on a second planet costs no call (2ed8f9d).
+2. Batching: `EconomyUpgrades::rankedProduction` now collects every object it will score and calls `PrefetchesExperience::prefetch` (new contract; CbrKit and Hybrid engines implement it), which sends ALL of them in ONE `/retrieve` request (`CbrKitClient::rankMany`, named queries). Per-object results are identical; if the batch fails nothing is stored and each object is asked on its own as before.
+Please: (a) pull, restart the queue worker/php-fpm, run `ogamex test-one` for any test touching CbrKit/Experience/EconomyUpgrades (`CbrKit`, `Experience`, `EconomyUpgrades`) and report failures; (b) measure per-sidecar latency and call counts per session for Fatima (8092), CBRKit (8091), AgentOS (8093) and PsychSim, before vs after this pull (same `sim --hours=6 --accounts=20`, real sidecars on, fresh SIM_DB), reporting the SIM speedup line and the PROFILE table; (c) say which sidecar is slowest per call now. Next candidates if CBRKit is still dominant: a larger-batch across planets, HTTP keep-alive/connection reuse, and a lower connect timeout for a local sidecar.
+
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
 Read `AGENTS.md` (three gates) first. The cohort is `local-docker-dev/docker-compose.grand.yml` (db ogamex-grand, 100 AI

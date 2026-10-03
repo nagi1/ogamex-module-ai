@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Contracts\ExperienceEngine;
+use Modules\AI\Contracts\PrefetchesExperience;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Domain\Experience\RankedExperience;
 use Modules\AI\Domain\Routine\RoutineProfile;
@@ -196,6 +197,7 @@ class EconomyUpgrades
     private function rankedProduction(PlanetService $planet, AiProfile $profile, float $horizon): array
     {
         $entries = [];
+        $gains = [];
 
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
             if (!BuildingQueueObject::accepts($object->machine_name)) {
@@ -203,10 +205,16 @@ class EconomyUpgrades
             }
 
             $gain = $this->productionGainOfNextLevel($planet, $object->machine_name);
-            if ($gain <= 0.0) {
-                continue;
+            if ($gain > 0.0) {
+                $gains[] = [$object, $gain];
             }
+        }
 
+        // Every object below asks the experience engine about its own history; one request for all of
+        // them replaces a round trip per object.
+        $this->prefetchExperience($profile, array_map(static fn (array $pair): int => (int) $pair[0]->id, $gains));
+
+        foreach ($gains as [$object, $gain]) {
             $entries[] = [
                 'hours' => $this->paybackHours($profile, (int) $object->id, ObjectService::getObjectPrice($object->machine_name, $planet), $gain),
                 'buildTime' => $planet->getBuildingConstructionTime($object->machine_name),
@@ -514,6 +522,28 @@ class EconomyUpgrades
      * worth correspondingly less than a settled one, and the whole term is capped so a remembered
      * outcome can never outvote the arithmetic.
      */
+    /** @param list<int> $objectIds */
+    private function prefetchExperience(AiProfile $profile, array $objectIds): void
+    {
+        if ($objectIds === [] || !$this->experience instanceof PrefetchesExperience || app(AiRuntimeSettings::class)->experienceDecisionWeight() === 0) {
+            return;
+        }
+
+        $this->experience->prefetch(array_map(fn (int $objectId): ExperienceQuery => $this->experienceQuery($profile, $objectId), $objectIds));
+    }
+
+    private function experienceQuery(AiProfile $profile, int $objectId): ExperienceQuery
+    {
+        return app()->makeWith(ExperienceQuery::class, [
+            'playerId' => $profile->player_id,
+            'family' => AiExperienceCaseFamily::BuildingUpgrade,
+            'featureVersion' => AiExperienceFeatureVersion::BuildingUpgradeV1->value,
+            'rulesetVersion' => AiExperienceRulesetVersion::HostBuildingCompletionV1->value,
+            'features' => [AiBuildingExperienceFeature::ObjectId->value => $objectId],
+            'limit' => self::MAXIMUM_CASES,
+        ]);
+    }
+
     private function rememberedBias(AiProfile $profile, int $objectId): float
     {
         $weight = app(AiRuntimeSettings::class)->experienceDecisionWeight();
@@ -522,16 +552,7 @@ class EconomyUpgrades
             return 0.0;
         }
 
-        $ranked = $this->experience->rankSimilarExperiences(
-            app()->makeWith(ExperienceQuery::class, [
-                'playerId' => $profile->player_id,
-                'family' => AiExperienceCaseFamily::BuildingUpgrade,
-                'featureVersion' => AiExperienceFeatureVersion::BuildingUpgradeV1->value,
-                'rulesetVersion' => AiExperienceRulesetVersion::HostBuildingCompletionV1->value,
-                'features' => [AiBuildingExperienceFeature::ObjectId->value => $objectId],
-                'limit' => self::MAXIMUM_CASES,
-            ]),
-        );
+        $ranked = $this->experience->rankSimilarExperiences($this->experienceQuery($profile, $objectId));
 
         $evidence = array_filter(array_map(
             static fn (RankedExperience $case): float => $case->similarity >= 1.0

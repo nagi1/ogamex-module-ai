@@ -3,6 +3,7 @@
 namespace Modules\AI\Infrastructure\Experience;
 
 use Modules\AI\Contracts\ExperienceEngine;
+use Modules\AI\Contracts\PrefetchesExperience;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Domain\Experience\RankedExperience;
 use Modules\AI\Enums\AiExperienceOutcome;
@@ -16,7 +17,7 @@ use Modules\AI\Models\AiExperienceCase;
  * swap from changing which evidence exists, and makes the substitution an
  * implementation change rather than a change of metric.
  */
-class CbrKitExperienceEngine implements ExperienceEngine
+class CbrKitExperienceEngine implements ExperienceEngine, PrefetchesExperience
 {
     /**
      * The eligible casebase, keyed by (owner, family, versions).
@@ -44,6 +45,41 @@ class CbrKitExperienceEngine implements ExperienceEngine
 
     public function __construct(private readonly ExperienceEngine $fallback, private readonly CbrKitClient $client)
     {
+    }
+
+    /**
+     * One request for every query a caller is about to ask, sharing the casebase they all score against.
+     * A query already answered is skipped, and a failed batch stores nothing, so each query is then asked
+     * on its own exactly as before.
+     */
+    public function prefetch(array $queries): void
+    {
+        $groups = [];
+
+        foreach ($queries as $query) {
+            $cases = $this->candidates($query);
+
+            if ($cases === []) {
+                continue;
+            }
+
+            $casebase = $this->casebase($cases);
+            $caseKey = md5(json_encode($casebase) ?: '');
+            $key = md5(json_encode([$casebase, $query->features]) ?: '');
+
+            if (!isset($this->similarityCache[$key])) {
+                $groups[$caseKey]['casebase'] = $casebase;
+                $groups[$caseKey]['queries'][$key] = $query->features;
+            }
+        }
+
+        foreach ($groups as $group) {
+            $answers = $this->client->rankMany($group['casebase'], $group['queries']);
+
+            foreach ($answers ?? [] as $key => $similarities) {
+                $this->similarityCache[$key] = $similarities;
+            }
+        }
     }
 
     public function rankSimilarExperiences(ExperienceQuery $query): array

@@ -3,6 +3,7 @@
 namespace Modules\AI\Infrastructure\Experience;
 
 use Modules\AI\Contracts\ExperienceEngine;
+use Modules\AI\Contracts\PrefetchesExperience;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Domain\Experience\RankedExperience;
 
@@ -16,12 +17,19 @@ use Modules\AI\Domain\Experience\RankedExperience;
  * degrades it returns the native list without a driver score, so the hybrid result is exactly
  * the native answer.
  */
-class HybridExperienceEngine implements ExperienceEngine
+class HybridExperienceEngine implements ExperienceEngine, PrefetchesExperience
 {
     public function __construct(
         private readonly ExperienceEngine $native,
         private readonly ExperienceEngine $driver,
     ) {
+    }
+
+    public function prefetch(array $queries): void
+    {
+        if ($this->driver instanceof PrefetchesExperience) {
+            $this->driver->prefetch($queries);
+        }
     }
 
     public function rankSimilarExperiences(ExperienceQuery $query): array

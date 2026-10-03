@@ -69,6 +69,52 @@ class CbrKitClient
     }
 
     /**
+     * Several queries against one casebase in one request: the sidecar scores each named query on its
+     * own, so every answer equals what a single `rank` call would have returned for it.
+     *
+     * @param  array<int, array<string, int|float|string|null>>  $casebase
+     * @param  array<string, array<string, int|float|string|null>>  $queries  keyed by a caller-chosen name
+     * @return array<string, array<int, float>>|null  similarities per query name, or null when any part is unusable
+     */
+    public function rankMany(array $casebase, array $queries): array|null
+    {
+        if ($queries === [] || !$this->circuit->allowsRequest()) {
+            return null;
+        }
+
+        try {
+            $response = $this->http
+                ->baseUrl(rtrim((string) config('ai.cognition.experience.cbrkit.base_url', 'http://host.docker.internal:8091'), '/'))
+                ->connectTimeout((int) config('ai.cognition.experience.cbrkit.connect_timeout_seconds', 2))
+                ->timeout((int) config('ai.cognition.experience.cbrkit.timeout_seconds', 5))
+                ->acceptJson()
+                ->post('/retrieve', ['casebase' => $casebase, 'queries' => $queries]);
+        } catch (Throwable) {
+            $this->circuit->recordFailure();
+
+            return null;
+        }
+
+        $payload = $response->successful() && $this->limit->withinLimit($response->body()) ? $response->json() : null;
+        $answers = [];
+
+        foreach (array_keys($queries) as $name) {
+            $scores = is_array($payload) ? ($payload['steps'][0]['queries'][$name]['similarities'] ?? null) : null;
+            $answers[$name] = is_array($scores) ? $this->similarities(['steps' => [['queries' => ['current' => ['similarities' => $scores]]]]], array_keys($casebase)) : null;
+
+            if ($answers[$name] === null) {
+                $this->circuit->recordFailure();
+
+                return null;
+            }
+        }
+
+        $this->circuit->recordSuccess();
+
+        return $answers;
+    }
+
+    /**
      * Requires a score for every case that was sent. A missing entry means the driver
      * dropped evidence the module owns, which is a contract deviation rather than a
      * low score.
