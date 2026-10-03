@@ -42,6 +42,7 @@ use Modules\AI\Domain\Decision\ThreatResponsePlanner;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Domain\Login\FleetSlots;
 use Modules\AI\Domain\Login\GamePhaseMachine;
+use Modules\AI\Domain\Login\GoalBoard;
 use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Domain\Login\ManagerDoctrine;
 use Modules\AI\Enums\AiCandidateActionType;
@@ -49,6 +50,7 @@ use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Models\AiGoal;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
@@ -150,6 +152,7 @@ class ScheduleAiIntentAction
         private ThreatResponsePlanner $threatResponsePlanner,
         private AccountStateResolver $accountStateResolver,
         private AiClock $clock,
+        private GoalBoard $goalBoard,
     ) {
     }
 
@@ -195,6 +198,40 @@ class ScheduleAiIntentAction
         }
     }
 
+    /**
+     * The account's own objective, written so that it outlives this login. A person works towards the
+     * same rung for days, while a login that re-decides from scratch has intentions no longer than one
+     * session, so the goal the account already holds is re-affirmed with what it owns today and only an
+     * account whose goal was met or given up takes up the objective afresh. The live goals are read
+     * before they are written: which rung the account is on is the board's answer, not a second opinion
+     * formed here (architecture step 4, hysteresis).
+     */
+    private function holdGoal(AiProfile $profile): void
+    {
+        $player = app(PlayerServiceFactory::class)->make($profile->player_id);
+        $rung = app(GamePhaseMachine::class)->rungPlanets();
+        $owned = $player->planets->planetCount();
+        $held = $this->goalBoard->active($profile->player_id);
+
+        if ($held === []) {
+            $this->goalBoard->commit($profile->player_id, $this->goalBoard->objective(), $rung, progress: $owned);
+
+            return;
+        }
+
+        // The intention is the earlier login's; this one only says how far along the account is with
+        // it, and the board abandons the goal the moment its target is reached or its window passes.
+        foreach ($held as $goal) {
+            $this->reaffirm($goal, $rung, $owned);
+        }
+    }
+
+    /** Re-affirm one goal the account already holds, against what it owns today. */
+    private function reaffirm(AiGoal $goal, int $rung, int $owned): void
+    {
+        $this->goalBoard->commit($goal->player_id, $goal->goal, $rung, progress: $owned);
+    }
+
     private function schedule(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace): void
     {
         // An account the host no longer has, or one with no planets, has nothing an intent could
@@ -204,6 +241,10 @@ class ScheduleAiIntentAction
         if (!$this->accountStateResolver->resolve($profile->player_id)->schedules()) {
             return;
         }
+
+        // The account's own objective lasts from this login to the next, so it is written where the
+        // login's objective is chosen rather than recomputed by each manager (architecture step 4).
+        $this->holdGoal($profile);
 
         // Every case is listed: adding a capability means deciding here where it is executed, and
         // a capability with no executor must not be published to begin with.

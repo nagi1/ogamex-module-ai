@@ -1,0 +1,13 @@
+# The account's own objective (architecture step 4): the rung a login takes up when the account holds
+# no goal, and how long a goal it cannot meet is held before it is given up.
+#
+# A goal is a free name for an intention, never a list of objects: `colonies` is "own the planets the
+# account's phase asks for", and how many those are is `phase.yaml`'s, so a modded universe moves the
+# rung and the goal together.
+#
+# objective             the goal an account with no live goal takes up
+# abandon_after_hours   how long a goal holds before it is abandoned (hysteresis): long enough to
+#                       survive the logins it takes to fund what the goal asks for, short enough that
+#                       a rung the universe will not let the account reach stops being re-decided
+objective: colonies
+abandon_after_hours: 48

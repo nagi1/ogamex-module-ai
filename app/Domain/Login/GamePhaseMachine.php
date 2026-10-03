@@ -50,7 +50,16 @@ class GamePhaseMachine
             return GamePhase::Late;
         }
 
-        return $player->planets->planetCount() >= $this->int('mid.owned_planets', 2) ? GamePhase::Mid : GamePhase::Early;
+        return $player->planets->planetCount() >= $this->rungPlanets() ? GamePhase::Mid : GamePhase::Early;
+    }
+
+    /**
+     * The planets RV-011's rung asks an account to own: what the account's own goal aims at, read from
+     * the same key as the rung itself so the goal and the rung cannot drift apart.
+     */
+    public function rungPlanets(): int
+    {
+        return $this->int('mid.owned_planets', 2);
     }
 
     /**
