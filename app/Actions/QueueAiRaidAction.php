@@ -57,9 +57,13 @@ class QueueAiRaidAction implements QueueAiRaid
 
             // Between planning and dispatch the target may have logged in. The
             // activity star is galaxy-visible, so flying into a just-touched
-            // target is a recall or a ninja, not a raid (RAID-010).
+            // target is a recall or a ninja, not a raid (RAID-010) -- unless the
+            // neighbour holds a wall: a fleet parked at home can be fleetsaved out
+            // of the way and loose resources spent, but a wall and the pile it
+            // covers stay where they are, so that haul is still there to take
+            // (LIFE_FIGHTS).
             $target = $this->planetServiceFactory->makeForCoordinate($targetCoordinate, false, PlanetType::from($targetType));
-            if ($target !== null && $this->activityIntelReader->activityAt($target)) {
+            if ($target !== null && $this->activityIntelReader->activityAt($target) && $target->getDefenseUnits()->units === []) {
                 return AiActionResult::rejected(AiQueueActionReason::TargetActiveAtDispatch);
             }
 

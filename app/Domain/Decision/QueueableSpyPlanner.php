@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Intel\IntelBook;
 use Modules\AI\Domain\Perception\ActivityIntelReader;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
@@ -56,6 +57,7 @@ class QueueableSpyPlanner
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
         private ActivityIntelReader $activityIntelReader,
+        private IntelBook $intelBook,
     ) {
     }
 
@@ -146,8 +148,8 @@ class QueueableSpyPlanner
      * host's own mission would refuse. A planet the account already knows, or
      * already has a probe travelling toward, is skipped too. Among what remains,
      * a just-touched target is skipped (INT-009) and the rest are ranked by
-     * known yield and closeness (INT-003): the closest known-rich neighbour, not
-     * the lowest id.
+     * known yield, what the target paid before and closeness (INT-003): the
+     * closest known-rich neighbour, not the lowest id.
      *
      * @param array<string, true> $skipCoordinates
      * @return array{0: PlanetService, 1: Planet}|null the origin and its target
@@ -179,6 +181,10 @@ class QueueableSpyPlanner
 
         $intel = $this->knownIntelByCoordinate($candidates);
         $knownYield = $intel['yield'];
+        // What the account remembers about these planets: the priority counter, read in one pass so a
+        // target that paid before is not priced once per candidate.
+        $priorities = $this->intelBook->priorities($player->getId());
+        $payoffWeight = $this->intelBook->priorityWeight();
         $fighter = $this->ownsWarFleet($idleOrigins);
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
         $scored = [];
@@ -208,7 +214,7 @@ class QueueableSpyPlanner
                 'inactive' => $owner?->isInactive() ?? false,
                 'quiet' => !$this->activityIntelReader->activityAt($target),
                 'defended' => $fighter && isset($intel['defended'][$coordinateKey]),
-                'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance,
+                'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance + $payoffWeight * ($priorities[$coordinateKey] ?? 0),
             ];
         }
 

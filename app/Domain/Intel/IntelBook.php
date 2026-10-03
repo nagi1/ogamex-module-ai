@@ -93,6 +93,16 @@ final class IntelBook
         return max(1, $this->int('target_priority.' . $name, 1));
     }
 
+    /**
+     * What one point of remembered priority is worth where the account ranks its next probe: the weight
+     * the counter carries into that score, so a host retunes how much a target's past moves the next
+     * look without a code change.
+     */
+    public function priorityWeight(): float
+    {
+        return $this->number('target_priority.priority_weight', 0.0);
+    }
+
     private function bounded(int $priority): int
     {
         return max($this->int('target_priority.floor', $priority), min($this->int('target_priority.ceiling', $priority), $priority));

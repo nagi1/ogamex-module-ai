@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Galaxy\GalaxyMap;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -40,6 +41,7 @@ class QueueableColonyPlanner
         private PlayerServiceFactory $playerServiceFactory,
         private PlanetServiceFactory $planetServiceFactory,
         private SettingsService $settings,
+        private GalaxyMap $galaxyMap,
     ) {
     }
 
@@ -129,12 +131,13 @@ class QueueableColonyPlanner
      *
      * An experienced player colonises the bigger slots, not the first empty one:
      * the host's own field range for each position is the planet's size, so the
-     * walk keeps the largest empty slot it sees and returns it. The per-account
-     * seed offsets the walk so two accounts do not claim the same slot, and it
-     * stays the tie-break: an equal-size slot later in the walk loses. The host
-     * answers reach (`canColonizePosition`) and emptiness (one read of the rows
-     * occupying the systems the walk visits); the field range is the host's
-     * `planetData`, never a position list.
+     * walk keeps the largest empty slot it sees and returns it. Among slots of
+     * equal size the system this account has seen least military in wins, and the
+     * per-account seed offsets the walk so two accounts do not claim the same
+     * slot: an equal-size slot in an equally quiet system later in the walk
+     * loses. The host answers reach (`canColonizePosition`) and emptiness (one
+     * read of the rows occupying the systems the walk visits); the field range is
+     * the host's `planetData`, never a position list.
      */
     private function emptySlot(PlayerService $player, int $seed): ?Coordinate
     {
@@ -148,7 +151,8 @@ class QueueableColonyPlanner
         $systemsPerGalaxy = min($systems, max(1, intdiv($maxScans, 12 * $galaxies)));
 
         $best = null;
-        $bestFields = -1.0;
+        $bestFields = -1;
+        $bestThreat = 0;
 
         for ($galaxyOffset = 0; $galaxyOffset < $galaxies; $galaxyOffset++) {
             $galaxy = 1 + (($seed + $galaxyOffset) % $galaxies);
@@ -171,7 +175,13 @@ class QueueableColonyPlanner
                 $occupied[$occupying->system . ':' . $occupying->planet] = true;
             }
 
+            // What the account has seen of this galaxy, read once: an experienced player does not settle the
+            // same size of planet next to a fleet it has already read (architecture step 7, 4.5).
+            $threats = $this->galaxyMap->threats($player->getId(), $galaxy);
+
             foreach ($systemsInWalk as $systemWithOffset) {
+                $threat = $threats[$systemWithOffset] ?? 0;
+
                 for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
                     if (!$player->canColonizePosition($position)) {
                         continue;
@@ -183,12 +193,18 @@ class QueueableColonyPlanner
 
                     // The size a planet at this position would get, from the host's
                     // own field range (mid positions report the widest range). The
-                    // largest empty slot seen so far wins; strict > keeps the
-                    // seeded walk order as the tie-break.
-                    $fields = $this->planetServiceFactory->planetData($position, false)['fields'][1];
-                    if ($fields > $bestFields) {
+                    // largest empty slot seen so far wins; among equal sizes the
+                    // quieter system wins, and an equal threat keeps the seeded
+                    // walk order as the tie-break.
+                    $fields = (int) $this->planetServiceFactory->planetData($position, false)['fields'][1];
+                    if ($fields < $bestFields) {
+                        continue;
+                    }
+
+                    if ($fields > $bestFields || $threat < $bestThreat) {
                         $best = new Coordinate($galaxy, $systemWithOffset, $position);
-                        $bestFields = (float) $fields;
+                        $bestFields = $fields;
+                        $bestThreat = $threat;
                     }
                 }
             }

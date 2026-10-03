@@ -9,6 +9,10 @@ target_priority:
   loss_step: 1
   ceiling: 5
   floor: -3
+  # What one point of remembered priority is worth when the account ranks its next probe: a target that
+  # paid before is read again before an equally close neighbour, and one that came home empty falls behind
+  # the body beside it. A nudge on the closeness-and-yield ranking, not a ranking of its own.
+  priority_weight: 3
 
 # The system map: what one galaxy+system looks like from the reports this account has received.
 galaxy_map:

@@ -1,5 +1,5 @@
 PASS test:MigrationIntelTest 1s
-FAIL situation:launch-activity-guard 4s — {"tool":"pest","result":"failed","tests":3,"passed":2,"assertions":6,"duration_ms":3392,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\LaunchActivityGuardSituationTest::__pest_evaluable_a_raid_flies_against_a_playing_neighbour_that_holds_a_wall_but_no_fleet","file":"/var
+PASS situation:launch-activity-guard 3s
 PASS aspect:raids 1s
-PASS aspect:espionage 1s
-PROOF: FAIL ARCH-INTEL (test:MigrationIntelTest situation:launch-activity-guard aspect:raids aspect:espionage) at situation:launch-activity-guard: {"tool":"pest","result":"failed","tests":3,"passed":2,"assertions":6,"duration_ms":3392,"failed":1,"failures":[{"test":"P\\Modules\\AI\\tests\\Feature\\Situations\\LaunchActivityGuardSituationTest::__pest_evaluable_a_raid_flies_against_a_playing_neighbour_that_holds_a_wall_but_no_fleet","file":"/var
+PASS aspect:espionage 0s
+PROOF: PASS ARCH-INTEL (test:MigrationIntelTest situation:launch-activity-guard aspect:raids aspect:espionage)

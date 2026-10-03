@@ -339,14 +339,6 @@ class QueueableUnitPlanner
      */
     private function capitalFleet(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
     {
-        // The archetype's fleet template first (architecture step 4): the hull furthest below its share of the
-        // fleet, from the first planet whose yard can build it. The dearest-hull rule below is the fallback for
-        // an archetype with no template, or a template nothing in which can be built yet.
-        $templated = $this->templateHull($player, $planets, $profile);
-        if ($templated !== null) {
-            return $templated;
-        }
-
         $best = null;
         $bestPrice = -INF;
 

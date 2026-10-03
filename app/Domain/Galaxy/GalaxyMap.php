@@ -55,12 +55,57 @@ final class GalaxyMap
     }
 
     /**
+     * Every system of one galaxy this account has seen military in, in map points, keyed by system number:
+     * a caller that walks the whole galaxy (a colony site search) reads the map once instead of paying an
+     * inbox read per system it visits.
+     *
+     * @return array<int, int>
+     */
+    public function threats(int $playerId, int $galaxy): array
+    {
+        $counted = [];
+        $values = [];
+
+        foreach ($this->reports($playerId, $galaxy) as $report) {
+            $position = $report->planet_system . ':' . $report->planet_position;
+            if (isset($counted[$position])) {
+                continue;
+            }
+
+            $counted[$position] = true;
+            $system = (int) $report->planet_system;
+            $values[$system] = ($values[$system] ?? 0.0) + $this->unitsValue($report->ships ?? []) + $this->unitsValue($report->defense ?? []);
+        }
+
+        $threats = [];
+        foreach ($values as $system => $value) {
+            $threats[$system] = $this->points($value);
+        }
+
+        return $threats;
+    }
+
+    /**
      * The reports this account has received on the system, newest per position: the map is the account's
      * last look at a body, not the sum of every probe it has ever sent.
      *
      * @return Collection<int, EspionageReport>
      */
     private function seen(int $playerId, int $galaxy, int $system): Collection
+    {
+        return $this->reports($playerId, $galaxy)
+            ->filter(static fn (EspionageReport $report): bool => (int) $report->planet_system === $system)
+            ->unique('planet_position')
+            ->values();
+    }
+
+    /**
+     * Every report this account still holds on one galaxy, newest first: what the account has seen of a
+     * neighbourhood, and the one read behind both the single-system and the whole-galaxy answer.
+     *
+     * @return Collection<int, EspionageReport>
+     */
+    private function reports(int $playerId, int $galaxy): Collection
     {
         $reportIds = Message::query()
             ->where('user_id', $playerId)
@@ -75,11 +120,8 @@ final class GalaxyMap
         return EspionageReport::query()
             ->whereIn('id', $reportIds)
             ->where('planet_galaxy', $galaxy)
-            ->where('planet_system', $system)
             ->orderByDesc('id')
-            ->get(['planet_position', 'resources', 'ships', 'defense'])
-            ->unique('planet_position')
-            ->values();
+            ->get(['planet_system', 'planet_position', 'resources', 'ships', 'defense']);
     }
 
     /** @param array<string, int>|null $units */
