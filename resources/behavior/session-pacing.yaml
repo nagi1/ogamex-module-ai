@@ -1,0 +1,17 @@
+# Why an account comes back between its routine logins (PACE-001). The routine's own waits are the
+# account's pace and belong to the persona; this is the other reason a login happens: a planet was short
+# of the step it is saving for, so the account returns when the pile is worth the trip.
+#
+# The floor exists because the arrival is arithmetic. Production at an accelerated universe speed covers
+# a mine's price in seconds, so an unfloored arrival books the successor login a second or two after this
+# one; that login finds the same shortfall, books another, and the account wakes twenty times an hour --
+# a machine, not a player. A player who will afford the mine in a moment does not open the game for it.
+#
+# The floor only ever delays this one wake. A build, a research, a fleet landing or a hostile inbound
+# brings the account back on its own, sooner, exactly as before.
+
+shortfall_wake:
+  # floor_minutes  the soonest an account comes back when the only reason is that its next step was not
+  #                 payable yet. Long enough that the pile is worth logging in for, short enough that a
+  #                 step the account really is saving for is bought on the same waking day.
+  floor_minutes: 15

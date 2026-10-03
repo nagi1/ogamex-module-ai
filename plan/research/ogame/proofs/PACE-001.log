@@ -1,0 +1,4 @@
+PASS test:NextStepAffordableSituationTest 2s
+FAIL invariant:AUTH_UPTIME 9s —  ! [AUTH_UPTIME] player 35 is active in 24 of 24 hours of the day
+PASS aspect:economy 1s
+PROOF: FAIL PACE-001 (test:NextStepAffordableSituationTest invariant:AUTH_UPTIME aspect:economy) at invariant:AUTH_UPTIME:  ! [AUTH_UPTIME] player 35 is active in 24 of 24 hours of the day

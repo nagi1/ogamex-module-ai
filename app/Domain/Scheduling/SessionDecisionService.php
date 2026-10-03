@@ -27,6 +27,7 @@ use OGame\Models\ResearchQueue;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Records a deterministic session decision and schedules exactly one future
@@ -38,10 +39,16 @@ class SessionDecisionService
 {
     private const TRACE_RETENTION_DAYS = 30;
 
+    /** Module root relative, so how long a shortfall is worth waiting for is loaded by name (Gate 1). */
+    private const PACING_POLICY = '/resources/behavior/session-pacing.yaml';
+
     /** SP3: the account arrives this many seconds after a material event, right-skewed toward short. */
     private const MATERIAL_EVENT_ARRIVAL_MIN_SECONDS = 30;
 
     private const MATERIAL_EVENT_ARRIVAL_MAX_SECONDS = 300;
+
+    /** @var array<string, mixed>|null */
+    private static ?array $policy = null;
 
     public function __construct(
         private PlayerPerceptionBuilder $playerPerceptionBuilder,
@@ -288,7 +295,36 @@ class SessionDecisionService
             $hours = max($hours, ($cost - $stored) / $perHour);
         }
 
-        return $hours <= 0.0 ? null : $nowTimestamp + (int) ceil($hours * 3600.0);
+        return $hours <= 0.0 ? null : $nowTimestamp + max((int) ceil($hours * 3600.0), $this->shortfallWakeFloorSeconds());
+    }
+
+    /**
+     * The soonest the account comes back when the only reason is a step it cannot pay for yet (PACE-001).
+     *
+     * The arrival itself is arithmetic, and at an accelerated universe speed it lands seconds after this
+     * login: the account wakes, is short again, and books another -- twenty logins an hour, none of them
+     * doing anything. A player who will afford the mine in a moment does not open the game for it, so the
+     * wait has a floor. It is read by name from the behaviour data, and it delays nothing else: every
+     * other reason to come back (a build, a research, a landing, an inbound) is its own earlier wake.
+     */
+    private function shortfallWakeFloorSeconds(): int
+    {
+        $minutes = $this->policy()['shortfall_wake']['floor_minutes'] ?? null;
+
+        return is_numeric($minutes) ? max(0, (int) round((float) $minutes * 60.0)) : 0;
+    }
+
+    /** @return array<string, mixed> */
+    private function policy(): array
+    {
+        if (self::$policy !== null) {
+            return self::$policy;
+        }
+
+        $path = dirname(__DIR__, 3) . self::PACING_POLICY;
+        $parsed = is_file($path) ? Yaml::parseFile($path) : [];
+
+        return self::$policy = is_array($parsed) ? $parsed : [];
     }
 
     /** The body the observation named, among the account's own. */
