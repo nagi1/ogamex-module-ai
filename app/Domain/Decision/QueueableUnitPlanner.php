@@ -80,6 +80,7 @@ class QueueableUnitPlanner
         private QueueableBuildingPlanner $buildingPlanner,
         private DefenseCompositionPlanner $defenseComposition,
         private DefenseNeedEvaluator $defenseNeed,
+        private StalledGrowthDetector $stalledGrowth,
     ) {}
 
     public function plan(int $playerId, ?PlayerService $player = null): ?QueueableUnit
@@ -939,6 +940,11 @@ class QueueableUnitPlanner
      */
     private function starvesSaving(PlanetService $planet, AiProfile $profile, UnitObject $unit, int $amount): bool
     {
+        // A flat score means the saving is not arriving: spend instead of waiting on it (IMPL-69).
+        if ($this->stalledGrowth->stalled($profile->player_id)) {
+            return false;
+        }
+
         $saving = $this->buildingPlanner->savingFor($planet, $profile);
         if ($saving === null) {
             return false;
