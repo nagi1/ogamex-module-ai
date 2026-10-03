@@ -12,6 +12,7 @@ use Modules\AI\Enums\GamePhase;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiPhalanxScan;
+use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -189,7 +190,11 @@ class RaidPlanner
         // host's harvest hull for this position (the recycler fleet a player builds for the field).
         $debris = $this->canHarvest($origin, $target) ? $estimate->p20Debris : 0.0;
 
-        if ($estimate->p20NetProfit + $debris <= 0.0) {
+        // A raider crashes a defended planet when the loot and the wreckage beat the usual loss and takes
+        // the bad tail now and then; only a farm must never lose. The share of the loot an account will
+        // risk on the tail is its archetype's taste (a fight is the point of a fleet: LIFE_FIGHTS).
+        $tolerance = $this->defencelessTarget($target) ? 0.0 : $this->lossTolerance($profile);
+        if ($estimate->p20NetProfit + $debris + $tolerance * $estimate->p20Loot <= 0.0) {
             return $this->reject('unprofitable', $playerId, $reportId);
         }
 
@@ -228,6 +233,20 @@ class RaidPlanner
             'missionType' => AttackMission::getTypeId(),
             'launchUnits' => $launchUnits,
         ]);
+    }
+
+    /**
+     * The share of the expected loot an account will put on the tail of a fight it can win: the fleet
+     * archetypes crash defended planets, the economic ones only farm.
+     */
+    private function lossTolerance(AiProfile $profile): float
+    {
+        return match ($profile->archetype) {
+            AiArchetype::Raider => 0.5,
+            AiArchetype::Hybrid => 0.3,
+            AiArchetype::Fleeter => 0.25,
+            default => 0.0,
+        };
     }
 
     private function canHarvest(PlanetService $origin, PlanetService $target): bool
