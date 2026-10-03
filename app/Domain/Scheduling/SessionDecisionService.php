@@ -119,18 +119,18 @@ class SessionDecisionService
     }
 
     /**
-     * A sleeping player is rarely pulled out of bed by an alert: most of the time the attack lands
-     * unanswered and is read at the next waking session. Roughly one dark-period inbound in ten wakes
-     * the account, chosen from the profile's seed and the minute so a retry decides the same way
-     * (AUTH_UPTIME: a reaction that always woke the account filled every hour of the day).
+     * Whether a hostile inbound brings the account back before its next ordinary session.
+     *
+     * A player at the keyboard answers an attack coming in; one who is asleep reads the report with the
+     * next morning's coffee. The look therefore only counts inside the account's own waking window: a
+     * session taken in the dark period is a login the account never makes, and the host counts the
+     * hours of the day an account is active (AUTH_UPTIME) -- the routine already spans most of them, so
+     * a single session in the night is the whole difference between a player and a machine. The attack
+     * is read at the next waking session instead.
      */
     private function wakesForReaction(AiProfile $profile, CarbonImmutable $wakeAt): bool
     {
-        if ($this->sessionPlanner->isAwake($profile, $wakeAt)) {
-            return true;
-        }
-
-        return crc32($profile->random_seed . ':' . intdiv($wakeAt->getTimestamp(), 3600)) % 10 === 0;
+        return $this->sessionPlanner->isAwake($profile, $wakeAt);
     }
 
     private function scheduleFor(AiProfile $profile, RoutineProfile $routine, CarbonImmutable $now): AiSchedule
