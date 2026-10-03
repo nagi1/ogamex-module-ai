@@ -63,6 +63,18 @@ a fleet is overdue); an item the worker refuses (night claim, admission) kept th
 Please rerun `sim --hours=6 --accounts=20` with its own SIM_DB and report: the SIM line (speedup), the JUMPS line and the whole PROFILE table. If
 one phase still dominates, say which: that is the next fix. If due work dominates, report sessions per real second; the cost is then the session itself.
 
+### OWNER ORDER (Nagi, 2026-10-03 ~17:00 UTC): the cloud agent owns the simulator and the ledger cleanup
+1. **Make `ai:sim` fast and reliable. This is yours, not the verifier's.** Rerun on the fixed build (segfault and TraderPolicy errors are gone after
+   container restarts): `sim --hours=6 --accounts=20`, fresh SIM_DB, 0 errors, 181 sessions, but only **x6**: 1.5 simulated hours in 908 s wall,
+   699 jumps averaging 7 simulated seconds each. The verifier's grep cut the per-phase `PROFILE:` lines, so profile it yourself and fix what dominates.
+   Target: a 12 h, 100-account proof inside the 300 s wall (x150), so simulated proofs can become the default again. Do the architectural
+   work (batched jumps, skipping idle gaps, fewer maintenance commands per jump, in-process sessions) without waiting for approval.
+2. **You may edit the ledger directly.** Nagi gives you permission to delete or mark done any `deferred` row that is not real work: all 120 `WIK-*`,
+   `PIPE-*`, `JEV-*`, `LOOP-*`, `DISC-14`, `DOC-8`, `CAMPAIGN-001`, and any row whose note says it is covered by an existing class. Edit `plan/tasks/tasks.db`
+   (back it up first) and regenerate `plan/tasks/seed.sql` with `dump_seed.py`. Keep only rows that are real unfinished work. The verifier's classifier
+   blocked it from doing this itself, so it did none of it.
+3. Ask Nagi (via this file) only for decisions the code cannot settle; take the rest.
+
 ### Segfault and speed (fast-time thread, 14:15 UTC) -- rerun please
 - Segfault: host `RustBattleEngine` called `FFI::cdef` (a fresh dlopen) for every fight, so a process that fights thousands of battles (the sim, a
   long queue worker) piled up bindings and crashed when PHP tore them down. It is now one binding per process (ogamex-next main). Restart the
