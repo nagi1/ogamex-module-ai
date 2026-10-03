@@ -656,6 +656,20 @@ the shape the row asked for — `resources/behavior/session-pacing.yaml` holds
 hostile inbound still brings the account back on its own schedule, sooner. `NextStepAffordableSituationTest`
 stays green (15 ≤ its 20-minute bound), and the row's `invariant:AUTH_UPTIME` step still reads red because
 that step measures the **live cohort**, which has not settled since the change.
+
+Measured on the fix, same cohort copy, once the inherited backlog has drained
+(`SIM_KEEP=1 ... sim --hours=1`):
+
+```
+SIM: 1.0 h played in 15 s (x243), 156 session(s), 0 other work item(s), 0 error(s)
+JUMPS: 12 (average 300 simulated seconds per jump)
+```
+
+**156 sessions/hour for 20 accounts = 7.8 per account per hour** (one every ~7.7 minutes), against
+3.6/account/hour before ECON-001 and **120/account/hour** in the storm, and the clock now advances in
+5-minute steps instead of 18-second ones. The first hour after the fix still reads high (3055 in the
+`22:00` bucket, 247 in `23:00`) because the clone carries the storm's own pre-scheduled sessions; that is
+the backlog draining, not the new code.
 - **Module suite: 7 failed / 1548 passed** (`47 -> 19 -> 11 -> 7`). The doctrine-label staleness cluster
   and the `ARCH-*` red specs are green. The 7 left are all **expectations pinned to behaviour that was
   deliberately changed or never implemented**, none from the migration:
