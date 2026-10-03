@@ -43,6 +43,9 @@ class QueueableBuildingPlanner
     /** The lab is one queue for the account, so its step has one slot beside the per-planet building steps. */
     private const LAB_STEP = 'lab';
 
+    /** The pass that stands the facilities a bare planet's wall waits on: it is a fix, not a choice. */
+    private const WALL_STEP = 'wall';
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private FacilityChain $facilityChain,
@@ -95,7 +98,8 @@ class QueueableBuildingPlanner
         $passes = $this->passes($profile);
 
         // What every planet is holding back, once per session: reading it walks the same candidate
-        // lists the passes do, so asking again inside each pass would repeat a planet's whole economy.
+        // lists the passes do, so asking again inside each pass would repeat a planet's whole economy,
+        // and a planet's hold is its own.
         // It is also what keeps this list honest: the cohort reads "buildable" from exactly these
         // steps, so a planet whose pile the goal reserves must not be offered here -- otherwise the
         // read-out says buildable while the account rightly saves, and the invariant flags a saver
@@ -106,13 +110,13 @@ class QueueableBuildingPlanner
         }
 
         $steps = [];
-        foreach ($passes as $candidates) {
+        foreach ($passes as $pass => $candidates) {
             foreach ($planets as $planet) {
                 if (count($steps) >= $limit) {
                     return array_values($steps);
                 }
 
-                $steps = $this->withStep($steps, $planet, $profile, $candidates, $goals[$planet->getPlanetId()]);
+                $steps = $this->withStep($steps, $planet, $profile, $candidates, $goals[$planet->getPlanetId()], $pass === self::WALL_STEP);
             }
         }
 
@@ -134,7 +138,9 @@ class QueueableBuildingPlanner
             // A planet holding no defence while a sibling already stands a wall is past the
             // account's opening with a sibling walled everywhere else: the facilities the wall
             // itself waits on come before the economy, so the planet is not left naked behind a
-            // stock it is busy spending (QUAL-003).
+            // stock it is busy spending (QUAL-003). The step is the same shape as a wall order: a
+            // saving the economy is holding back does not veto it, because a planet with no wall is
+            // the state the account is fixing, not a step it chooses between (QUAL-003).
             'wall' => fn (PlanetService $planet): array => $this->facilityChain->wallPending($planet),
             'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
             'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
@@ -155,7 +161,7 @@ class QueueableBuildingPlanner
      * @param callable(PlanetService): list<BuildCandidate> $pass
      * @return array<int|string, QueueableBuilding|QueueableResearch>
      */
-    private function withStep(array $steps, PlanetService $planet, AiProfile $profile, callable $pass, ?SavingsGoal $goal): array
+    private function withStep(array $steps, PlanetService $planet, AiProfile $profile, callable $pass, ?SavingsGoal $goal, bool $wall = false): array
     {
         $candidates = $pass($planet);
         $isResearch = static fn (BuildCandidate $candidate): bool => ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research;
@@ -171,7 +177,7 @@ class QueueableBuildingPlanner
                 continue;
             }
 
-            $step = $this->firstQueueable($planet, $profile, array_values(array_filter($candidates, static fn (BuildCandidate $candidate): bool => $isResearch($candidate) === $research)), $goal);
+            $step = $this->firstQueueable($planet, $profile, array_values(array_filter($candidates, static fn (BuildCandidate $candidate): bool => $isResearch($candidate) === $research)), $wall ? null : $goal);
             if ($step !== null) {
                 $steps[$key] = $step;
             }
@@ -246,6 +252,15 @@ class QueueableBuildingPlanner
         }
         if ($this->buildingQueueService->retrieveQueue($planet)->isQueueFull()) {
             return 'queue full';
+        }
+        // The host refuses an order for a station whose units are already in production, and the
+        // executor asks the same gate (`QueueAiBuildingAction`). Not asked here, the pass offers a
+        // step the executor then refuses: the planet spends its one step on a refusal, queues
+        // nothing, and still reads buildable to the planner -- idle while called buildable (live:
+        // player 44, 4 of 4 planets). Asking it here lets the planet fall through to its next
+        // candidate instead.
+        if ($planet->getPlayer()?->isObjectUpgradeBlocked($candidate->buildingId) === true) {
+            return 'shipyard busy';
         }
         if (!ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)) {
             return 'requirements';
@@ -327,6 +342,15 @@ class QueueableBuildingPlanner
      * A saving player holds the goal's price back and spends what is left over, so a cheaper upgrade
      * that would burn the reserved pile waits its turn. The goal's own purchase is the exception:
      * spending the reserve is what the reserve is for.
+     *
+     * The comparison is against the price alone, because the reserve already is the margin that must
+     * survive the purchase: the goal was named precisely because the planet cannot yet pay its price
+     * plus the same floor, so spendable = available - reserved is always below that floor and a price
+     * plus floor again can never fit inside it. Measured that way the branch never passes and a goal
+     * saver stops playing entirely -- frozen on every planet until the goal is reached, which is the
+     * strategy deciding *whether* the account spends rather than how (PERS-007). Every other spend
+     * still has to clear refusal()'s price-plus-reserve gate, so the floor is not lost, only not
+     * charged twice against the reserve that exists to carry it.
      */
     private function canSpendFor(PlanetService $planet, ?SavingsGoal $goal, BuildCandidate $candidate): bool
     {
@@ -334,14 +358,12 @@ class QueueableBuildingPlanner
             return true;
         }
 
-        $object = ObjectService::getObjectById($candidate->buildingId);
-        $hours = $object->type === GameObjectType::Research ? ReserveFloor::RESEARCH_HOURS : ReserveFloor::ECONOMY_HOURS;
-        $required = $this->withReserve($planet, ObjectService::getObjectPrice($object->machine_name, $planet), $hours);
+        $price = ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet);
         $spendable = $goal->spendable($planet->getResources());
 
-        return $spendable->metal->get() >= $required->metal->get()
-            && $spendable->crystal->get() >= $required->crystal->get()
-            && $spendable->deuterium->get() >= $required->deuterium->get();
+        return $spendable->metal->get() >= $price->metal->get()
+            && $spendable->crystal->get() >= $price->crystal->get()
+            && $spendable->deuterium->get() >= $price->deuterium->get();
     }
 
     /**

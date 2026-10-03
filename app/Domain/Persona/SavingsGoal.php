@@ -37,7 +37,13 @@ final readonly class SavingsGoal
         );
     }
 
-    /** What the account may still spend while saving: available - reserved, and never negative. */
+    /**
+     * What the account may still spend while saving: available - reserved, and never negative.
+     *
+     * The goal decides how a pile is spent, never whether the account plays: a planet whose
+     * spendable share still pays for a cheaper step takes it, and only a planet whose every step
+     * needs the reserve itself waits.
+     */
     public function spendable(Resources $available): Resources
     {
         $reserved = $this->reserved($available);
