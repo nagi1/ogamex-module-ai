@@ -190,6 +190,10 @@ class RaidPlanner
         // would "profit" (RAID-006, RAID-011). The fuel is the launch fleet's: priced from the whole
         // stock it ran to hundreds of times the real trip and turned away 6 reports in 10.
         $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
+        if ($fuel > floor($origin->deuterium()->get())) {
+            return null;
+        }
+
         if (!$this->clearsLootTier($estimate->p20Loot, $fuel, $target->getDefenseUnits()->units !== [])) {
             return null;
         }

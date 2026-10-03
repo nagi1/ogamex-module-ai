@@ -72,12 +72,21 @@ class QueueAiRaidAction implements QueueAiRaid
             }
 
             $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+            $fleet = $this->launchFleet($origin, $launchUnits);
+
+            // The host refuses a flight the origin cannot pay the fuel for; spending deuterium on
+            // mines or ferries between planning and dispatch is how a planned raid ends up here.
+            $fuel = (float) $fleetMissions->calculateConsumption($origin, $fleet, $targetCoordinate, 0, 10.0);
+            if ($fuel > floor($origin->deuterium()->get())) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
+
             $mission = $fleetMissions->createNewFromPlanet(
                 $origin,
                 $targetCoordinate,
                 PlanetType::from($targetType),
                 AttackMission::getTypeId(),
-                $this->launchFleet($origin, $launchUnits),
+                $fleet,
                 new Resources(),
                 10,
             );
