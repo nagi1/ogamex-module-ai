@@ -87,6 +87,8 @@ def main():
     log = os.path.join(LOG_DIR, f"{code}-{stamp}.log")
     command = [claude_binary(), "-p", PROMPT.format(code=code, assignee=ASSIGNEE),
                "--model", MODEL, "--dangerously-skip-permissions",
+               # One worker at a time: the run may not start sub-agents of its own either.
+               "--disallowedTools", "Agent",
                "--max-turns", MAX_TURNS, "--max-budget-usd", RUN_BUDGET_USD,
                "--output-format", "text"]
     started = time.time()
