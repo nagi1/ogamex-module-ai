@@ -11,6 +11,7 @@ use OGame\GameMissions\BattleEngine\Models\DefenderFleet;
 use OGame\GameMissions\BattleEngine\RustBattleEngine;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
+use OGame\Services\PlanetService;
 use OGame\Services\SettingsService;
 
 /**
@@ -45,9 +46,9 @@ class NativeRaidEstimator
     ) {
     }
 
-    public function estimate(int $playerId, int $originPlanetId, int $targetPlanetId, int $seed): RaidEstimate
+    public function estimate(int $playerId, int $originPlanetId, int|PlanetService $target, int $seed): RaidEstimate
     {
-        return $this->screen($playerId, $originPlanetId, $targetPlanetId, null, $seed, self::SCREEN_SAMPLES);
+        return $this->screen($playerId, $originPlanetId, $target, null, $seed, self::SCREEN_SAMPLES);
     }
 
     /**
@@ -56,16 +57,21 @@ class NativeRaidEstimator
      * sample count is the caller's ladder rung: one draw for a candidate screen, the wide pass for
      * the winner's confirmation.
      */
-    public function estimateFleet(int $playerId, int $originPlanetId, int $targetPlanetId, UnitCollection $fleet, int $seed, int $samples = 1): RaidEstimate
+    public function estimateFleet(int $playerId, int $originPlanetId, int|PlanetService $target, UnitCollection $fleet, int $seed, int $samples = 1): RaidEstimate
     {
-        return $this->screen($playerId, $originPlanetId, $targetPlanetId, $fleet, $seed, $samples);
+        return $this->screen($playerId, $originPlanetId, $target, $fleet, $seed, $samples);
     }
 
-    private function screen(int $playerId, int $originPlanetId, int $targetPlanetId, ?UnitCollection $fleet, int $seed, int $samples): RaidEstimate
+    /**
+     * The target is either the planet as the account's report saw it (the raid planner's case: a player
+     * simulates what the report says, never the live planet), or an id, which loads the host's planet for
+     * callers that judge their own bodies.
+     */
+    private function screen(int $playerId, int $originPlanetId, int|PlanetService $target, ?UnitCollection $fleet, int $seed, int $samples): RaidEstimate
     {
         $player = $this->playerServiceFactory->make($playerId, true);
         $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
-        $target = $this->planetServiceFactory->make($targetPlanetId, true);
+        $target = is_int($target) ? $this->planetServiceFactory->make($target, true) : $target;
 
         if ($target === null) {
             return app()->makeWith(RaidEstimate::class, [

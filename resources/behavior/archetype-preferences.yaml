@@ -22,6 +22,7 @@ miner:
   trade: 0.6
   relocate: 0.3
   jump_gate: 0.3
+  missile: 0.1
 
 turtle:
   raid: 0.08
@@ -32,6 +33,7 @@ turtle:
   trade: 0.4
   relocate: 0.3
   jump_gate: 0.6
+  missile: 0.1
 
 fleeter:
   fleet_save: 1.0
@@ -46,6 +48,7 @@ fleeter:
   trade: 0.3
   relocate: 0.3
   jump_gate: 0.4
+  missile: 0.5
 
 raider:
   raid: 1.0
@@ -60,6 +63,7 @@ raider:
   trade: 0.3
   relocate: 0.3
   jump_gate: 0.3
+  missile: 0.8
 
 hybrid:
   build: 0.8
@@ -74,6 +78,7 @@ hybrid:
   trade: 0.4
   relocate: 0.3
   jump_gate: 0.3
+  missile: 0.5
 
 trader:
   raid: 0.1
@@ -84,6 +89,7 @@ trader:
   trade: 1.0
   relocate: 0.4
   jump_gate: 0.2
+  missile: 0.1
 
 casual:
   build: 0.8
@@ -97,3 +103,4 @@ casual:
   trade: 0.3
   relocate: 0.3
   jump_gate: 0.3
+  missile: 0.2

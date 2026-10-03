@@ -64,6 +64,16 @@ use OGame\Services\PlayerService;
  */
 class QueueableUnitPlanner
 {
+    /** How many of the character class's own ship a planet keeps, and how many one order buys. */
+    private const CLASS_SHIP_STANDING = 5;
+
+    private const CLASS_SHIP_BATCH = 2;
+
+    /** The host's one interplanetary missile object, the name its own mission reads, and the few a silo keeps ready. */
+    private const MISSILE = 'interplanetary_missile';
+
+    private const MISSILE_STANDING = 5;
+
     private const CRYSTAL_WEIGHT = 1.5;
 
     private const DEUTERIUM_WEIGHT = 2.0;
@@ -199,6 +209,21 @@ class QueueableUnitPlanner
                 if ($this->queueable($planet, $probe)) {
                     return $this->unit($planet, $probe, 'role:probe');
                 }
+            }
+
+            // The class's own ship: the hull the host reserves for the account's character class (the
+            // collector's crawler, the general's reaper, the discoverer's pathfinder) is what a player
+            // of that class builds beside the first fleet. The host names it and gates it, a few at a time.
+            $classShip = $this->classShip($player, $planet);
+            if ($classShip !== null) {
+                return $classShip;
+            }
+
+            // Missiles: a silo, impulse drive for the range and a defended target in the reports are what a
+            // player who thins walls before a raid needs, a silo's worth at a time.
+            $missiles = $this->missileStock($player, $planet, $playerId);
+            if ($missiles !== null) {
+                return $missiles;
             }
 
             // Escort: a fresh report on a defended target and no warship of our own means the
@@ -675,6 +700,46 @@ class QueueableUnitPlanner
         }
 
         return false;
+    }
+
+    /**
+     * The class ship order, a handful at a time, while the planet owns fewer than the standing few and the
+     * yard can build it. Null when the account has no class, the host offers none, or it is not buildable here.
+     */
+    private function classShip(PlayerService $player, PlanetService $planet): ?QueueableUnit
+    {
+        $class = $player->getUser()->getCharacterClassEnum();
+        if ($class === null) {
+            return null;
+        }
+
+        $ship = ObjectService::getUnitObjectByMachineName(ObjectService::getObjectById($class->getClassShipId())->machine_name);
+        if ($planet->getObjectAmount($ship->machine_name) >= self::CLASS_SHIP_STANDING || ! $this->queueable($planet, $ship)) {
+            return null;
+        }
+
+        $amount = min(self::CLASS_SHIP_BATCH, $this->affordable($planet, $ship));
+
+        return $this->unit($planet, $ship, 'role:class:'.$ship->machine_name, $amount);
+    }
+
+    /**
+     * Interplanetary missiles up to the silo's standing few, when the account can fly them (the host's range
+     * is above zero) and the freshest reports show a wall worth thinning. The silo requirement and the
+     * price are the host's, asked through the same gates every unit order passes.
+     */
+    private function missileStock(PlayerService $player, PlanetService $planet, int $playerId): ?QueueableUnit
+    {
+        if ($player->getMissileRange() < 1 || ! $this->observedDefendedTarget($playerId)) {
+            return null;
+        }
+
+        $missile = ObjectService::getUnitObjectByMachineName(self::MISSILE);
+        if ($planet->getObjectAmount(self::MISSILE) >= self::MISSILE_STANDING || ! $this->queueable($planet, $missile)) {
+            return null;
+        }
+
+        return $this->unit($planet, $missile, 'role:missile', min(self::MISSILE_STANDING - $planet->getObjectAmount(self::MISSILE), $this->affordable($planet, $missile)));
     }
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool

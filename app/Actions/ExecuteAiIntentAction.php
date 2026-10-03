@@ -136,6 +136,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Trade => $this->trade($workItem, $planetId),
             AiWorkKind::Relocate => $this->relocate($workItem, $planetId),
             AiWorkKind::JumpGate => $this->jumpGate($workItem, $planetId),
+            AiWorkKind::Missile => $this->missile($workItem, $planetId),
             AiWorkKind::BuildFirstBuilding, AiWorkKind::RunSession => $this->build($workItem, $planetId),
         };
     }
@@ -542,6 +543,32 @@ class ExecuteAiIntentAction
             app(QueueAiJumpGate::class)->handle($workItem->player_id, $step->sourceMoonId, $step->targetMoonId),
             ['source_planet_id' => $step->sourceMoonId, 'target_planet_id' => $step->targetMoonId],
             $step->sourceMoonId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function missile(AiWorkItem $workItem, int $planetId): array
+    {
+        $payload = $workItem->payload;
+        $step = $this->fromPayload(\Modules\AI\Domain\Decision\QueueableMissile::class, [
+            'originPlanetId' => $payload[self::PAYLOAD_SOURCE_PLANET_ID] ?? null,
+            'targetGalaxy' => $payload['target_galaxy'] ?? null,
+            'targetSystem' => $payload['target_system'] ?? null,
+            'targetPosition' => $payload['target_position'] ?? null,
+            'targetType' => $payload['target_type'] ?? null,
+            'missiles' => $payload[self::PAYLOAD_AMOUNT] ?? null,
+        ]) ?? app(\Modules\AI\Domain\Decision\QueueableMissilePlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof \Modules\AI\Domain\Decision\QueueableMissile) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(\Modules\AI\Contracts\QueueAiMissile::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->missiles),
+            ['source_planet_id' => $step->originPlanetId, 'missiles' => $step->missiles],
+            $step->originPlanetId,
         ];
     }
 

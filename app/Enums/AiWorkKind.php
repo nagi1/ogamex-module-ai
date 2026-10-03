@@ -22,6 +22,7 @@ enum AiWorkKind: int
     case Trade = 16;
     case Relocate = 17;
     case JumpGate = 18;
+    case Missile = 19;
 
     public function actionType(): AiActionType
     {
@@ -29,7 +30,7 @@ enum AiWorkKind: int
             self::QueueResearch => AiActionType::QueueResearch,
             self::QueueUnits => AiActionType::QueueUnits,
             self::Colonize => AiActionType::CreateColony,
-            self::FleetSave, self::Spy, self::Raid, self::Expedition, self::Transfer, self::Recycle, self::Defend => AiActionType::DispatchFleet,
+            self::FleetSave, self::Spy, self::Raid, self::Expedition, self::Transfer, self::Recycle, self::Defend, self::Missile => AiActionType::DispatchFleet,
             self::Recall => AiActionType::RecallFleet,
             self::SetMinePercent => AiActionType::SetMinePercent,
             self::Phalanx => AiActionType::PhalanxScan,
