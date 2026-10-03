@@ -1,0 +1,20 @@
+# Per-skill-band human-behaviour rates (DEF-39). A band is retuned here, not in code.
+# variation_weight / selection_margin: how loosely the account picks among near-equal options.
+# evidence_reaction: how far the same evidence moves the account's mood.
+# idle_override_probability: the "opened the game, did nothing, closed it" rate (FS-018).
+# All three are unmeasured starting rates; the review loop's hourly sample is the way to tune them.
+novice:
+  variation_weight: 8.0
+  selection_margin: 10.0
+  evidence_reaction: 1.0
+  idle_override_probability: 0.05
+standard:
+  variation_weight: 4.0
+  selection_margin: 2.5
+  evidence_reaction: 0.5
+  idle_override_probability: 0.02
+veteran:
+  variation_weight: 1.0
+  selection_margin: 1.0
+  evidence_reaction: 0.2
+  idle_override_probability: 0.01
