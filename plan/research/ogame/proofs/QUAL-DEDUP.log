@@ -1,1 +1,2 @@
-PROOF: PASS QUAL-DEDUP (invariant:NAKED_BESIDE_WALLED)
+FAIL invariant:NAKED_BESIDE_WALLED 45s —  ! [NAKED_BESIDE_WALLED] player 43: 2 planet(s) at zero defence while one holds 2,670 units
+PROOF: FAIL QUAL-DEDUP (invariant:NAKED_BESIDE_WALLED) at invariant:NAKED_BESIDE_WALLED:  ! [NAKED_BESIDE_WALLED] player 43: 2 planet(s) at zero defence while one holds 2,670 units
