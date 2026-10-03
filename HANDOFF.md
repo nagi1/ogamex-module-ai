@@ -640,6 +640,10 @@ production that shortfall is covered in **seconds** — so the successor login i
 finds the next step short again, and books another. On the live cohort it shows as the growing late
 backlog (`pulse`: "246 work item(s) more than a minute late").
 
+The harm is measurable in the same run: **`PLAY: 13 of 15 aspects pass`** (`colonisation` and `social`
+now starve — the account is re-waking too often to settle a colony or hold an exchange) against 15/15 on
+the same sim before ECON-001, and `QUALITY` rises to 133 violations.
+
 The row is filed rather than patched here on purpose: the fix needs a *cadence floor*, and
 `NextStepAffordableSituationTest` requires an early wake within 20 minutes for a drained account, so
 choosing the floor is a behaviour decision, not a mechanical edit. **Until it is fixed, ECON-001 should
