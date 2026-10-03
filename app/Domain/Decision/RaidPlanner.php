@@ -161,18 +161,6 @@ class RaidPlanner
             return null;
         }
 
-        // The trip is priced from the origin fleet alone and the hold caps what
-        // any run can bring home, so the best possible haul is known before a
-        // single draw is taken. When even that ceiling cannot pay for the flight
-        // the 50-sample screen is pure cost: p20Loot never exceeds it, so no run
-        // the screen would have kept is turned away here (RAID-006, RAID-011).
-        $fuel = $this->roundTripFuel($player, $origin, $target);
-        $defended = $target->getDefenseUnits()->units !== [];
-        $ceilingLoot = $this->raidEstimator->metalEquivalent($this->maximumLoot($player, $origin, $target));
-        if (!$this->clearsLootTier($ceilingLoot, $fuel, $defended)) {
-            return null;
-        }
-
         $estimate = $this->defencelessTarget($target)
             ? $this->defencelessEstimate($player, $origin, $target)
             : $this->raidEstimator->estimate($playerId, $origin->getPlanetId(), $target->getPlanetId(), $profile->random_seed);
@@ -190,18 +178,19 @@ class RaidPlanner
             return null;
         }
 
-        // The sampled profit is loot minus losses only. A raid also burns
-        // deuterium to fly there and back, so a distant farm that spends more
-        // fuel than the tier allows is refused even when it would "profit"
-        // (RAID-006, RAID-011).
-        if (!$this->clearsLootTier($estimate->p20Loot, $fuel, $defended)) {
-            return null;
-        }
-
         // The launch is not the stock (U6): the smallest counter-selected hulls whose single
         // simulation survives this target fly, not the whole garage.
         $launchUnits = $this->launchUnits($playerId, $player, $origin, $target, $profile->random_seed);
         if ($launchUnits === null) {
+            return null;
+        }
+
+        // The sampled profit is loot minus losses only. A raid also burns deuterium to fly there and
+        // back, so a distant farm that spends more fuel than the tier allows is refused even when it
+        // would "profit" (RAID-006, RAID-011). The fuel is the launch fleet's: priced from the whole
+        // stock it ran to hundreds of times the real trip and turned away 6 reports in 10.
+        $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
+        if (!$this->clearsLootTier($estimate->p20Loot, $fuel, $target->getDefenseUnits()->units !== [])) {
             return null;
         }
 
@@ -483,9 +472,9 @@ class RaidPlanner
      * are left out: the host divides by the slowest speed, so a solar
      * satellite in the fleet is a division by zero, not a slower trip.
      */
-    private function roundTripFuel(PlayerService $player, PlanetService $origin, PlanetService $target): int
+    private function roundTripFuel(PlayerService $player, PlanetService $origin, PlanetService $target, UnitCollection $launch): int
     {
-        $fleet = MovableFleet::of($player, $origin->getShipUnits());
+        $fleet = MovableFleet::of($player, $launch);
         if ($fleet->units === []) {
             return 0;
         }
