@@ -45,6 +45,7 @@ class QueueableTransferPlanner
         private EconomyUpgrades $economyUpgrades,
         private EnergyCapacity $energyCapacity,
         private FacilityChain $facilityChain,
+        private DefenseNeedEvaluator $defenseNeed,
         private ReserveFloor $reserveFloor,
         private QueueAiTransferAction $transferAction,
     ) {
@@ -74,8 +75,9 @@ class QueueableTransferPlanner
         }
 
         foreach ($planets as $target) {
-            $need = $this->need($target, $profile, $playerId);
-            if ($need === null || !$this->worthShipping($need)) {
+            $wallNeed = $this->wallNeed($target, $planets, $playerId);
+            $need = $wallNeed ?? $this->need($target, $profile, $playerId);
+            if ($need === null || ($wallNeed === null && !$this->worthShipping($need))) {
                 continue;
             }
 
@@ -171,6 +173,43 @@ class QueueableTransferPlanner
             max(0.0, $source->crystal()->get() - $floor->crystal->get()),
             $keepDeuterium ? 0.0 : max(0.0, $source->deuterium()->get() - $floor->deuterium->get()),
         );
+    }
+
+    /**
+     * What a bare planet beside a walled sibling is short for the facility its wall waits on, or null.
+     *
+     * A player ships the missing few hundred deuterium to the colony that cannot raise its yard: the
+     * shipment floor protects the fleet's time, but a planet stuck below one cheap step stays naked
+     * for good without the ferry (measured live 3 Oct 2026: 22k metal, 116 deuterium, no robotics).
+     *
+     * @param array<PlanetService> $planets
+     */
+    private function wallNeed(PlanetService $target, array $planets, int $playerId): ?Resources
+    {
+        if ($this->defenseNeed->standingUnits($target) > 0) {
+            return null;
+        }
+
+        $siblingWalled = array_filter($planets, fn (PlanetService $planet): bool => $this->defenseNeed->standingUnits($planet) > 0);
+        if ($siblingWalled === []) {
+            return null;
+        }
+
+        // The first facility the planet cannot pay for is what keeps it bare; one it can pay for it builds itself.
+        $inFlight = $this->inFlightTo($target, $playerId);
+        foreach ($this->facilityChain->wallPending($target) as $step) {
+            $price = ObjectService::getObjectPrice(ObjectService::getObjectById($step->buildingId)->machine_name, $target);
+            $need = new Resources(
+                max(0.0, $price->metal->get() - $target->metal()->get() - $inFlight->metal->get()),
+                max(0.0, $price->crystal->get() - $target->crystal()->get() - $inFlight->crystal->get()),
+                max(0.0, $price->deuterium->get() - $target->deuterium()->get() - $inFlight->deuterium->get()),
+            );
+            if ($need->sum() > 0) {
+                return $need;
+            }
+        }
+
+        return null;
     }
 
     /**
