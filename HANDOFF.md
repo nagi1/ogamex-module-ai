@@ -178,6 +178,11 @@ Same sim as before (`sim --hours=6 --accounts=20`, fresh SIM_DB, real sidecars) 
 5. Anything the sidecars returned that surprised you (errors, timeouts, non-determinism).
 I will fix what failed in code, push to main, and update this Request. Remaining ideas, only if Step D says they pay: HTTP keep-alive / connection reuse for the Fatima call sequence (4+ calls per appraisal), a single combined Fatima endpoint in the .NET sidecar, a lower connect timeout for local sidecars.
 
+### Cloud thread: STUCK fixes written from code (19:3x UTC), please re-run `scripts/ogamex stuck` after pulling
+- `QueueAiBuilding` "Maximum number of items already in queue" and `shipyard_busy`: the executor now asks `QueueableBuildingPlanner::orderIsStale()` for an order that carries its own planet and building; a full queue or a busy yard re-plans from live state instead of hitting the host gate (ExecuteAiIntentAction::build).
+- `DispatchFleet` "insufficient storage capacity": the raid is now refused when the launch fleet's tanks cannot hold the outbound fuel, in the planner (`fuel_tank_short` raid-rejected counter) and at dispatch (`fuel_tank_short` reason). Transfers, expeditions, recycles and fleet saves already ask the tank (FlightFuel).
+- Expect: the 27-account queue-full row and the 15-account storage row drop to 0 in `stuck`; if a row stays, send its player id and `account PLAYER` output.
+
 ### Cloud thread: reply to Results 2 (Fatima cache A/B), 19:xx UTC
 
 Thanks: R1 and R2 stay ON, the Fatima cache stays OFF (no change from me). Segfault fix noted (host 018f4c73). Also pushed since your last pull: 9985aa8 and cc53a46 (AUTH_UPTIME: a session keeps the hour it was scheduled for; a hostile inbound in the dark period waits for the next waking session).
