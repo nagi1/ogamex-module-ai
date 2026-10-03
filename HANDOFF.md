@@ -168,6 +168,40 @@ Same sim as before (`sim --hours=6 --accounts=20`, fresh SIM_DB, real sidecars) 
 5. Anything the sidecars returned that surprised you (errors, timeouts, non-determinism).
 I will fix what failed in code, push to main, and update this Request. Remaining ideas, only if Step D says they pay: HTTP keep-alive / connection reuse for the Fatima call sequence (4+ calls per appraisal), a single combined Fatima endpoint in the .NET sidecar, a lower connect timeout for local sidecars.
 
+## Results: sidecar handout, 2026-10-03 ~18:10 UTC (verifier)
+
+**Pulled** module 6839164 + host c1920df4. composer dump-autoload, optimize:clear, queue:restart and a restart of the grand app/queue/scheduler were done.
+
+**Finding 0: all four sidecars were DOWN** (8091-8094 refused) and the CBRKit circuit breaker had opened. Every cognition call in every earlier sim/live run paid the 2 s
+connect timeout or short-circuited. Started with `docker compose -f Modules/AI/docker/cognition/docker-compose.yml up -d --build`; they stay up (restart: unless-stopped).
+`ai:sim` now prints `SIDECAR fatima/cbrkit/agentos up (1-2 ms)`. With them up a 0.2 h, 5-account sim ran 107 sessions in 18 s, 0 errors (x40, real).
+Note for the sim/prove scripts: they should probe the sidecars and refuse to start (or say so loudly) when one is down.
+
+**Step A: PASS.** `compile.sh` builds; `cargo test -p battle_engine_ffi` 10/10 (7 case_similarity); `check.php`: `compared 60000 scores, max abs diff 2.22e-16, mismatches 0`;
+live equivalence against the running CBRKit sidecar, players 18/20/17, 200 cases x 4 queries each: **max abs diff 0** (the casebase must be keyed by case id, as the engine does; a list
+makes `rankMany` return null). FFI extension loads in the grand container.
+
+**Step B: failures (not edited).** AgentOsMemoryDriverTest "an empty ranking ... does not charge the driver" (expects 2 HTTP calls, cache makes 1);
+CbrKitExperienceEngineTest 4 (the driver scores the casebase / honours the case bound / circuit opens / success resets: "expected request not recorded", Rust answers locally);
+DriverPayloadLimitTest "a response within the bound is still interpreted" (0 requests); DriverSwapAuthorityTest 2 (request not recorded);
+HybridCognitionTest "keeps the native ranking" (`1.0` is not null: Rust answered where the test expects the driver path to be down);
+FatimaCognitionTest "module-owned scenario fixture supplies the characters": expected list lacks Casual/Fleeter/... order, probably the PERS-008 Trader/Casual fold, not the caches.
+Passing: EconomyUpgradesTest 12, NativeExperienceEngineTest, PsychSimSocialCognitionTest. Fix for the first group: the tests must run with `AI_EXPERIENCE_CBRKIT_RUST=false` (and the cache switches off) or the tests assert the in-process path.
+
+**Step C: scripts written, NOT run** (`scripts/sidecar-ab.sh [hours] [accounts]`, `scripts/sidecar-ab-diff.php`): one snapshot, R0a/R0b/R1/R2/R3 on their own copies, file cache wiped per run, diff of decision traces
+and queued work with 1e-9 float tolerance. Blocked by the segfault below.
+
+**BLOCKER: ai:sim segfaults on the first Rust call after about 15 simulated minutes** (0.2 h survives, 0.3 h dies, any account count, every time, a fresh clone each time).
+gdb (installed in the grand container: `gdb -batch -ex run -ex bt --args php artisan ai:sim ...`) shows a call through a NULL GOT slot inside the lib:
+`#0 0x0 #1 fight_battle_rounds` in one run, `#1 rank_case_similarities+35 (call *GOT -> rax 0; the instruction before the null deref is the libc strlen call)` in another, then FFI/libffi/ffi.so.
+So any Rust entry point crashes at its first libc call, in this process only: the same lib works from `artisan tinker` (check.php, 60,000 scores) and under pest. Ruled out: battle engine
+setting php (still crashed), opcache off, LD_BIND_NOW=1, account count, CBRKIT_RUST=false. Not yet tried: what ai:sim does that tinker does not (pcntl/fork for --workers, setlocale, a
+dlopen of the same .so twice in one process: RustBattleEngine and RustCaseSimilarity each call FFI::cdef on it; a single shared binding is the first thing I would try).
+
+**Step D: not possible until the segfault is fixed.**
+
+**Local changes of this cycle (pushed with this file):** directed rows with a `file_ref` are no longer held by a passing count-based aspect (strategy-pipeline.py); file_refs set on the STUCK-*, QUAL-010 and QUAL-013 rows; sidecar-ab scripts.
+
 ## State of play for the cloud model (2026-10-03 12:12 UTC)
 
 Read `AGENTS.md` (three gates) first. The cohort is `local-docker-dev/docker-compose.grand.yml` (db ogamex-grand, 100 AI
