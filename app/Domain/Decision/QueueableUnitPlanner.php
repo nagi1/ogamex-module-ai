@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
@@ -13,7 +14,6 @@ use OGame\Models\Message;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
-use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -81,6 +81,7 @@ class QueueableUnitPlanner
         private DefenseCompositionPlanner $defenseComposition,
         private DefenseNeedEvaluator $defenseNeed,
         private StalledGrowthDetector $stalledGrowth,
+        private ThreatResponsePlanner $threatResponses,
     ) {}
 
     public function plan(int $playerId, ?PlayerService $player = null): ?QueueableUnit
@@ -100,8 +101,9 @@ class QueueableUnitPlanner
             return null;
         }
 
-        $underAttack = $this->underAttack($player);
-        $threatened = $underAttack ? $this->threatenedPlanetIds($player) : [];
+        // What this inbound asks the account for, per threatened body -- the wall among those
+        // responses, so a body no fleet is aimed at buys no reactive wall for one.
+        $threat = $this->threatResponses->plan($playerId, $player);
 
         // Whether the pass below has a planet to serve. A sibling that stands no wall while one
         // already does owns the account's wall effort: the pass serves it, and when it cannot be
@@ -140,7 +142,7 @@ class QueueableUnitPlanner
         // planner runs its storage pass before its routine. The building planner has already
         // refreshed every planet's balance earlier in this perception, so the shortfall read here
         // is the session's own.
-        if (! $underAttack) {
+        if (! $threat->underAttack) {
             foreach ($planets as $planet) {
                 $power = $this->powerFromYard($planet);
                 if ($power !== null) {
@@ -167,13 +169,18 @@ class QueueableUnitPlanner
                 }
             }
 
-            // Defence is reactive and time-sensitive: an inbound hostile makes it worth buying
-            // before anything else on this planet, and the host's own "under attack" is the
-            // trigger, so the module keeps no mission-type list.
-            if ($underAttack && $this->isThreatened($planet, $threatened)) {
-                $defense = $this->defenseComposition->plan($player, $planet, $need);
+            // Defence is reactive and time-sensitive: an inbound buys the wall of the body it is
+            // aimed at before anything else on that body. What says this body is answering with a
+            // wall is the threat planner -- either because of what the body stands to lose or
+            // because of a fleet the account keeps home behind it -- and the wall is sized to the
+            // need that planner hands back, so the reactive and the bait wall are one decision.
+            if ($threat->holds($planet->getPlanetId(), AiThreatResponse::ReinforceDefense)) {
+                $defense = $this->defenseComposition->plan($player, $planet, $this->threatResponses->reinforcementNeed($player, $planet, $need));
                 if ($defense !== null) {
-                    return $this->unit($planet, $defense->unit, 'role:defense:'.$defense->unit->machine_name, $defense->amount);
+                    // Marked ahead of the economy for the same reason a bare sibling's first wall
+                    // is: the login's building steps spend the balance this wall was priced against,
+                    // and an inbound leaves no second login to place it in.
+                    return $this->unit($planet, $defense->unit, 'role:defense:'.$defense->unit->machine_name, $defense->amount, true);
                 }
             }
 
@@ -668,43 +675,6 @@ class QueueableUnitPlanner
         }
 
         return false;
-    }
-
-    /**
-     * The planets a foreign, non-espionage mission is headed at, which is who the reactive wall is
-     * for: a player reinforces the planet the fleet is coming for, not the first one in the list.
-     * Whether the inbound is hostile stays the host's answer (`underAttack`); a probe is no threat.
-     *
-     * @return list<int>
-     */
-    private function threatenedPlanetIds(PlayerService $player): array
-    {
-        $missions = app()->makeWith(FleetMissionService::class, ['player' => $player])->getActiveFleetMissionsForCurrentPlayer();
-        $ids = [];
-
-        foreach ($missions as $mission) {
-            if ($mission->user_id !== $player->getId() && $mission->mission_type !== EspionageMission::getTypeId()) {
-                $ids[] = (int) $mission->planet_id_to;
-            }
-        }
-
-        return array_values(array_unique($ids));
-    }
-
-    /**
-     * An inbound the host calls hostile but whose destination cannot be read (a moon, a mission the
-     * account has no row for) threatens every planet, as the single flag did before.
-     *
-     * @param list<int> $threatened
-     */
-    private function isThreatened(PlanetService $planet, array $threatened): bool
-    {
-        return $threatened === [] || in_array($planet->getPlanetId(), $threatened, true);
-    }
-
-    private function underAttack(PlayerService $player): bool
-    {
-        return app()->makeWith(FleetMissionService::class, ['player' => $player])->currentPlayerUnderAttack();
     }
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool

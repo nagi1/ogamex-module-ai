@@ -1,0 +1,16 @@
+# What a hostile inbound produces, per threatened body.
+#
+# An experienced player does not answer an attack with one order. The account moves the fleet that is
+# worth the trip, holds the fleet the wall can cover, carries off the stock the raider would otherwise
+# take, and buys the wall that has to take the hit — several of them for the same attack, in one login.
+# `ThreatResponsePlanner` names the responses; each one is fulfilled by the planner that already owns
+# that order (fleet save, ferry, defence composition), so no unit, coordinate or amount is stated here.
+#
+# Only the numbers live in this file. What the account owns, what the host lets it build, and whether an
+# attack is happening at all come from the host services at planning time.
+
+# The wall a fleet kept at home has to stand behind to be bait, as a multiple of that fleet's own value
+# in metal. A raider who can crack the wall takes the fleet with it, so below this multiple the hold is
+# not an ambush: the account reinforces the wall instead of calling the hold a ninja. Above it the hold
+# stands and no further wall is bought for it.
+bait_ratio: 2.0

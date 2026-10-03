@@ -28,6 +28,16 @@ fit:
     neighbour: 1.0
     mismatch: -2.0
 
+  # A club that holds a player the account has recorded as an enemy is not one it stays in and not
+  # one it asks: sharing an alliance with someone who farmed you is not a fit, however well the
+  # club's language, pace and rank tier line up. The relationship the module records for one
+  # attack on the account itself lands on this line, and the softer read a club mate forms from
+  # hearing about that attack stays under it, so the member who was hit walks out and the others do
+  # not. It is also what keeps a settled cohort moving: with every member in a club that fits it no
+  # seat ever stops fitting, the leave half frees nobody, and the application lane this scoreboard
+  # measures creates nothing (ALLY-001).
+  enmity_threat: 0.25
+
 # What the account's rank against the population says it can reach: a weak account aims at a
 # catch-all, a strong one at a high points-per-member core, a mid one balances the two.
 tier:

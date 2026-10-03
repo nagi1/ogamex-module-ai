@@ -37,8 +37,12 @@ use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Domain\Decision\SaveFailurePolicy;
 use Modules\AI\Domain\Decision\ScoredCandidate;
+use Modules\AI\Domain\Decision\ThreatResponsePlan;
+use Modules\AI\Domain\Decision\ThreatResponsePlanner;
+use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiStopReason;
+use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
@@ -132,6 +136,8 @@ class ScheduleAiIntentAction
         private QueueableJumpGatePlanner $queueableJumpGatePlanner,
         private RaidPlanner $raidPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
+        private ThreatResponsePlanner $threatResponsePlanner,
+        private AccountStateResolver $accountStateResolver,
         private AiClock $clock,
     ) {
     }
@@ -161,6 +167,14 @@ class ScheduleAiIntentAction
 
     public function handle(AiProfile $profile, AiWorkItem $sessionWorkItem, DecisionTrace $trace): void
     {
+        // An account the host no longer has, or one with no planets, has nothing an intent could
+        // be spent on: the session records what it decided and stops scheduling (L2), so the
+        // planners are never asked to build for it. Asking them anyway built a host player for an
+        // account that does not exist, which the host refuses.
+        if (!$this->accountStateResolver->resolve($profile->player_id)->schedules()) {
+            return;
+        }
+
         // Every case is listed: adding a capability means deciding here where it is executed, and
         // a capability with no executor must not be published to begin with.
         $type = $trace->selected->candidate->type;
@@ -205,6 +219,14 @@ class ScheduleAiIntentAction
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now(), $order, ':wall:planet:' . $order->planetId);
         }
 
+        // An inbound is not one order. Whichever page the login opened, the account answers it with
+        // every response the threat planner named: the fleet that is worth the trip leaves and the
+        // stock the raider would otherwise carry off leaves on the hulls kept at home. Each response
+        // is placed by the planner that owns that order, and the wall among them is the unit plan
+        // above. Written here, ahead of the building steps, because those steps spend the stock the
+        // save and the ferry were priced against, and an inbound leaves no second login to place them.
+        $this->scheduleThreatResponses($profile, $sessionWorkItem, $type);
+
         // A player refills the build queues and the lab every login before turning to the shipyard or
         // the fleet; choosing a raid, a ship, nothing at all or answering an inbound fleet must not
         // leave a planet idle until the next session. The refill asks the planner, never the decision
@@ -244,7 +266,7 @@ class ScheduleAiIntentAction
             // leaving the planets idle until the next login.
             AiCandidateActionType::Transfer => $this->scheduleTransfer($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
             AiCandidateActionType::Recycle => $this->scheduleRecycle($profile, $sessionWorkItem),
-            AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS)),
+            AiCandidateActionType::FleetSave => $this->scheduleFleetSave($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), '', $this->isCalmSave($type, $trace) ? $trace->perception->upcomingAbsenceMinutes : null),
             AiCandidateActionType::Recall => $this->scheduleRecall($profile, $sessionWorkItem),
             AiCandidateActionType::Spy => $this->scheduleSpy($profile, $sessionWorkItem),
             AiCandidateActionType::Raid => $this->scheduleRaid($profile, $sessionWorkItem, $trace),
@@ -503,7 +525,7 @@ class ScheduleAiIntentAction
      * destination travel with the intent, so the save moves the fleet to the
      * planet the session saw rather than a re-decided one.
      */
-    private function scheduleFleetSave(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt): void
+    private function scheduleFleetSave(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt, string $keySuffix = '', ?int $absenceMinutes = null): void
     {
         $plan = $this->queueableFleetSavePlanner->plan($profile->player_id);
         if (!$plan instanceof QueueableFleetSave) {
@@ -511,8 +533,11 @@ class ScheduleAiIntentAction
         }
 
         // A save that is not taken now and then is what a person does; the loss is counted so the
-        // cohort read can see it (AUTH_SAVE).
-        if ($this->saveFailurePolicy->shouldSkip((int) $profile->random_seed, (int) $sessionWorkItem->id) !== null) {
+        // cohort read can see it (AUTH_SAVE). The draw belongs to the save occasion, not to the
+        // login: the calm save before a night is drawn against the absence the account is leaving
+        // for, so its own night save repeats the same judgement instead of flipping from one login
+        // to the next and vanishing at some hours of the day (FLEET-001).
+        if ($this->saveFailurePolicy->shouldSkip((int) $profile->random_seed, $absenceMinutes ?? (int) $sessionWorkItem->id) !== null) {
             app(RecordAiStopReasonAction::class)->handle(AiStopReason::SaveLost, ['player_id' => $profile->player_id]);
 
             return;
@@ -529,7 +554,62 @@ class ScheduleAiIntentAction
             self::PAYLOAD_JUMP_GATE_PLANET_ID => $plan->jumpGatePlanetId,
             self::PAYLOAD_SPEED => $plan->speed,
             self::PAYLOAD_REASON => 'fleetsave',
-        ], $dueAt);
+        ], $dueAt, $keySuffix);
+    }
+
+    /**
+     * One login's answer to an inbound, one order per response the threat planner named. The engine's
+     * own selection already owns the session's key, so a response the engine chose is not placed twice:
+     * the match arm writes that one under the objective's own key and this pass leaves it alone.
+     */
+    private function scheduleThreatResponses(AiProfile $profile, AiWorkItem $sessionWorkItem, AiCandidateActionType $type): void
+    {
+        $plan = $this->threatPlan($profile);
+        if (! $plan->underAttack) {
+            return;
+        }
+
+        if ($type !== AiCandidateActionType::FleetSave && $plan->holdsAnywhere(AiThreatResponse::EvacuateFleet)) {
+            $this->scheduleFleetSave($profile, $sessionWorkItem, $this->clock->now(), ':threat');
+        }
+
+        if ($type === AiCandidateActionType::Transfer) {
+            return;
+        }
+
+        foreach ($plan->planets(AiThreatResponse::EvacuateResources) as $planetId) {
+            $this->scheduleEvacuation($profile, $sessionWorkItem, $plan->evacuation($planetId));
+        }
+    }
+
+    /**
+     * What this login answers an inbound with, decided once for the one arm that reads it. The type is
+     * the planner's own plan, so the schedule and the planner cannot disagree about its shape.
+     */
+    private function threatPlan(AiProfile $profile): ThreatResponsePlan
+    {
+        return $this->threatResponsePlanner->plan($profile->player_id);
+    }
+
+    /**
+     * The ferry one body's evacuation response flies: the shipment the ferry planner priced travels
+     * with the intent, so the schedule and the dispatch name the same pile. Each body keeps a key of
+     * its own, so a retried session converges on the same set of ferries.
+     */
+    private function scheduleEvacuation(AiProfile $profile, AiWorkItem $sessionWorkItem, ?QueueableTransfer $plan): void
+    {
+        if (!$plan instanceof QueueableTransfer) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Transfer, [
+            self::PAYLOAD_SOURCE_PLANET_ID => $plan->sourcePlanetId,
+            self::PAYLOAD_TARGET_PLANET_ID => $plan->targetPlanetId,
+            self::PAYLOAD_METAL => $plan->metal,
+            self::PAYLOAD_CRYSTAL => $plan->crystal,
+            self::PAYLOAD_DEUTERIUM => $plan->deuterium,
+            self::PAYLOAD_REASON => 'threat:evacuate:' . $plan->sourcePlanetId,
+        ], $this->clock->now(), ':threat:planet:' . $plan->sourcePlanetId);
     }
 
     /**

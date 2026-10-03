@@ -1,0 +1,99 @@
+# Archetype preferences — how readily an account of this archetype takes each intent (PERS-008).
+#
+# The archetype says *how* an account expects to grow, never *whether* it grows: every growth
+# archetype carries a real preference for building and researching and differs in how hard it
+# presses each errand. Preference only shifts a candidate's score; `allows` stays the legality
+# boundary (PERS-010). The weights are unmeasured taste, not historical statistics, and the
+# review loop's hourly sample is how they are tuned — so they live here and nowhere else.
+#
+# A key is an `AiCandidateActionType` case in lower case. A key the enum does not hold is an
+# error rather than a silently ignored taste.
+#
+# `trader` and `casual` are migration-only: no new account is seeded as one, and no persisted
+# value is renumbered. A stored profile of either keeps the taste of the archetype its behaviour
+# migrated into — a trader grows like a miner with its active-trade role (economic_role), a
+# casual grows like a hybrid with its quiet pace in its activity band, not as a do-nothing weight.
+miner:
+  raid: 0.15
+  build: 1.0
+  research: 0.7
+  fleet_save: 0.9
+  defend: 0.5
+  trade: 0.6
+  relocate: 0.3
+  jump_gate: 0.3
+
+turtle:
+  raid: 0.08
+  queue_units: 1.0
+  build: 0.7
+  fleet_save: 0.6
+  defend: 0.8
+  trade: 0.4
+  relocate: 0.3
+  jump_gate: 0.6
+
+fleeter:
+  fleet_save: 1.0
+  recall: 0.9
+  raid: 0.9
+  spy: 0.8
+  queue_units: 0.6
+  build: 0.5
+  research: 0.45
+  colonize: 0.4
+  defend: 0.6
+  trade: 0.3
+  relocate: 0.3
+  jump_gate: 0.4
+
+raider:
+  raid: 1.0
+  spy: 0.9
+  fleet_save: 0.9
+  recycle: 0.7
+  queue_units: 0.6
+  build: 0.45
+  research: 0.4
+  colonize: 0.35
+  defend: 0.4
+  trade: 0.3
+  relocate: 0.3
+  jump_gate: 0.3
+
+hybrid:
+  build: 0.8
+  research: 0.6
+  raid: 0.55
+  spy: 0.5
+  recycle: 0.5
+  queue_units: 0.5
+  fleet_save: 0.8
+  colonize: 0.5
+  defend: 0.5
+  trade: 0.4
+  relocate: 0.3
+  jump_gate: 0.3
+
+trader:
+  raid: 0.1
+  build: 0.6
+  colonize: 0.4
+  fleet_save: 0.8
+  defend: 0.3
+  trade: 1.0
+  relocate: 0.4
+  jump_gate: 0.2
+
+casual:
+  build: 0.8
+  research: 0.6
+  raid: 0.55
+  spy: 0.5
+  recycle: 0.5
+  queue_units: 0.5
+  fleet_save: 0.8
+  defend: 0.5
+  trade: 0.3
+  relocate: 0.3
+  jump_gate: 0.3

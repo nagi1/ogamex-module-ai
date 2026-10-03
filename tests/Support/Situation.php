@@ -120,6 +120,20 @@ final class Situation
         return $this;
     }
 
+    /**
+     * Every planet the account owns spends down to nothing: an account with no stock to spend,
+     * where a planner that prices its step against the balance offers no step at all.
+     */
+    public function drained(): self
+    {
+        foreach (Planet::query()->where('user_id', $this->profile->player_id)->where('planet_type', 1)->pluck('id') as $planetId) {
+            $planet = app(PlanetServiceFactory::class)->make((int) $planetId, true);
+            $planet?->deductResources(new Resources((int) $planet->metal()->get(), (int) $planet->crystal()->get(), (int) $planet->deuterium()->get()));
+        }
+
+        return $this;
+    }
+
     public function level(string $machineName, int $level): self
     {
         $this->host('planetSetObjectLevel', $machineName, $level);

@@ -110,13 +110,19 @@ class AdvanceAiAllianceLifeAction
      */
     private function stillTheClubItWouldChoose(int $playerId, int $allianceId): bool
     {
+        // A club that has stopped fitting at all — shut, holding the cohort share, or holding a
+        // player the account has recorded as an enemy — is left whatever else the account's rank
+        // admits, so the club is asked its own fit before it is weighed against the other clubs.
+        if (! app(AllianceChoice::class)->currentClubFits($playerId)) {
+            return false;
+        }
+
         $choice = app(AllianceChoice::class)->choose($playerId);
 
         // Nothing would take the account today: no rank to be judged on, or nowhere that fits. Its
-        // seat then stands unless the club itself has stopped fitting — an account with nowhere to
-        // go does not walk out.
+        // seat then stands.
         if ($choice === null) {
-            return app(AllianceChoice::class)->currentClubFits($playerId);
+            return true;
         }
 
         return $choice->id === $allianceId;

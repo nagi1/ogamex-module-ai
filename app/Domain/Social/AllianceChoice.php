@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Social;
 
 use Modules\AI\Enums\AiToMStance;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\PsychSimTheoryOfMind;
 use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
@@ -44,6 +45,9 @@ class AllianceChoice
 
     /** @var list<int>|null */
     private array|null $aiManagers = null;
+
+    /** @var array<int, list<int>> the enemies each account has been asked about in this pass */
+    private array $enemies = [];
 
     public function choose(int $playerId): ?Alliance
     {
@@ -130,6 +134,13 @@ class AllianceChoice
             return false;
         }
 
+        // A club-mate the account has recorded as an enemy is the one seat a player walks out of
+        // without the club having changed: staying is sharing an alliance with someone who farmed
+        // them.
+        if ($this->holdsEnemy($playerId, $club)) {
+            return false;
+        }
+
         return $this->fits($this->accountFit($playerId), $this->clubFit($club), $policy['fit']);
     }
 
@@ -143,7 +154,7 @@ class AllianceChoice
                     ->where('user_id', $playerId)
                     ->where('status', AllianceApplication::STATUS_REJECTED))
                 ->get()
-                ->reject(fn (Alliance $alliance): bool => $this->readsFounderAsExploitative($playerId, $alliance) || $this->holdsCohortShare($alliance))
+                ->reject(fn (Alliance $alliance): bool => $this->readsFounderAsExploitative($playerId, $alliance) || $this->holdsCohortShare($alliance) || $this->holdsEnemy($playerId, $alliance))
                 ->all(),
         );
     }
@@ -181,6 +192,58 @@ class AllianceChoice
             ->count();
 
         return $members / $cohort >= $ceiling['share_ceiling'];
+    }
+
+    /**
+     * Whether this club already holds a player the account has recorded as an enemy. It reads the
+     * relationships the module itself keeps, so the enemy is whoever the host's battle reports
+     * marked, not a module-side list.
+     */
+    private function holdsEnemy(int $playerId, Alliance $alliance): bool
+    {
+        $enemies = $this->enemies($playerId);
+
+        if ($enemies === []) {
+            return false;
+        }
+
+        return User::query()->where('alliance_id', $alliance->id)->whereIn('id', $enemies)->exists()
+            || AllianceMember::query()->where('alliance_id', $alliance->id)->whereIn('user_id', $enemies)->exists();
+    }
+
+    /**
+     * The players this account has recorded as a threat past the fit file's enmity line, read once
+     * per account because every club in the pass asks for the same set.
+     *
+     * @return list<int>
+     */
+    private function enemies(int $playerId): array
+    {
+        if (array_key_exists($playerId, $this->enemies)) {
+            return $this->enemies[$playerId];
+        }
+
+        $threshold = $this->enmityThreshold();
+
+        if ($threshold === null) {
+            return $this->enemies[$playerId] = [];
+        }
+
+        return $this->enemies[$playerId] = AiRelationship::query()
+            ->where('player_id', $playerId)
+            ->where('threat', '>=', $threshold)
+            ->pluck('other_player_id')
+            ->map(static fn ($other): int => (int) $other)
+            ->values()
+            ->all();
+    }
+
+    /** The threat at which a counterparty is read as an enemy, or null when the file states none. */
+    private function enmityThreshold(): float|null
+    {
+        $fit = ($this->policy() ?? [])['fit'] ?? null;
+
+        return is_array($fit) && isset($fit['enmity_threat']) ? (float) $fit['enmity_threat'] : null;
     }
 
     /** @return list<int> the accounts the module drives: only their seats count toward the share. */

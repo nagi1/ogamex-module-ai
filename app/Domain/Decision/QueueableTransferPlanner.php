@@ -115,6 +115,68 @@ class QueueableTransferPlanner
         return $this->surplus($planets, $player) ?? $this->allyGift($planets, $player, $playerId);
     }
 
+    /**
+     * The ferry an inbound asks for: the pile a threatened body cannot keep leaves for a sibling the
+     * same attack is not aimed at (D6). A player whose planet is about to be hit loads the hulls he is
+     * keeping at home and moves what the raider would otherwise carry off; the fleet that is worth the
+     * trip is already leaving, and this is the stock it leaves behind.
+     *
+     * The shipment is the same above-floor sweep the surplus ferry flies, so the body keeps its own
+     * economy running while the pile goes, and the hold, the fuel and the target legality stay the
+     * dispatch adapter's questions: a pile bigger than the holds is loaded as far as the holds go.
+     *
+     * Null when there is nothing above the body's reserve, no sibling out of the attack's reach, or no
+     * hull on the body to carry it -- the account keeps what it cannot move.
+     *
+     * @param list<int> $threatenedPlanetIds the own bodies this attack is aimed at, none of which may receive
+     */
+    public function evacuationPlan(int $playerId, int $planetId, array $threatenedPlanetIds): ?QueueableTransfer
+    {
+        $player = $this->playerServiceFactory->make($playerId, true);
+        $planets = $player->planets->all();
+
+        $source = null;
+        foreach ($planets as $planet) {
+            if ($planet->getPlanetId() === $planetId) {
+                $source = $planet;
+            }
+        }
+
+        if ($source === null) {
+            return null;
+        }
+
+        $source->updateResources(false);
+        if (! $this->hasCargo($source, $player)) {
+            return null;
+        }
+
+        $shipment = $this->aboveFloor($source, $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS), false);
+        if (! $this->worthShipping($shipment)) {
+            return null;
+        }
+
+        foreach ($planets as $target) {
+            if ($target->getPlanetId() === $planetId || in_array($target->getPlanetId(), $threatenedPlanetIds, true)) {
+                continue;
+            }
+
+            if (! $this->canPayFuel($source, $target, $shipment, $player)) {
+                continue;
+            }
+
+            return app()->makeWith(QueueableTransfer::class, [
+                'sourcePlanetId' => $source->getPlanetId(),
+                'targetPlanetId' => $target->getPlanetId(),
+                'metal' => (int) round($shipment->metal->get()),
+                'crystal' => (int) round($shipment->crystal->get()),
+                'deuterium' => (int) round($shipment->deuterium->get()),
+            ]);
+        }
+
+        return null;
+    }
+
     /** How long after seeing an ally attacked a gift is still offered. */
     private const ALLY_GIFT_WINDOW_HOURS = 6;
 
@@ -182,13 +244,20 @@ class QueueableTransferPlanner
         return null;
     }
 
+    /**
+     * A ferry that has already loaded the hulls keeps them until it flies, so a second one would
+     * fail at dispatch with no transport fleet. Only an intent that names its shipment is on the
+     * pad: the re-plan arm runs while the account's own intent carries no payload to read, and
+     * counting that one would refuse every re-plan of the intent it is executing.
+     */
     private function transferWaiting(int $playerId): bool
     {
         return AiWorkItem::query()
             ->where('player_id', $playerId)
             ->where('kind', AiWorkKind::Transfer)
             ->whereIn('state', [AiWorkState::Pending, AiWorkState::Retry, AiWorkState::Leased])
-            ->exists();
+            ->get(['payload'])
+            ->contains(static fn (AiWorkItem $item): bool => isset($item->payload['source_planet_id']));
     }
 
     /**
