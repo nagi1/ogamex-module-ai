@@ -18,6 +18,8 @@ use OGame\Services\AllianceService;
  * membership and a pending application leave the account alone, and an alliance that already
  * rejected it is skipped by the choice, so the pass never spams the same alliance. An account
  * every alliance has refused founds its own club instead of staying alone forever (DEF-017).
+ * A club that holds the cohort share is left by its members one at a time, which is what keeps
+ * the apply half above fed on a cohort that was seated once.
  *
  * The lane is the cohort's only source of alliance applications: a pass that finds every account
  * already engaged creates none, so the leave half below keeps the lane moving at the rate the

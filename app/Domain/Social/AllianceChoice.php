@@ -30,10 +30,20 @@ class AllianceChoice
 {
     private const FIT_FILE = '/resources/behavior/alliance_fit.yaml';
 
+    private const RECRUITMENT_FILE = '/resources/behavior/alliance-recruitment.yaml';
+
     /** @var array<string, mixed>|null */
     private array|null $policy = null;
 
     private bool $policyRead = false;
+
+    /** @var array{share_ceiling: float, minimum_cohort: int}|null */
+    private array|null $recruitment = null;
+
+    private bool $recruitmentRead = false;
+
+    /** @var list<int>|null */
+    private array|null $aiManagers = null;
 
     public function choose(int $playerId): ?Alliance
     {
@@ -108,6 +118,18 @@ class AllianceChoice
             return true;
         }
 
+        // A club the host keeps shut takes no applications, so a seat in it is a dead end: the
+        // member belongs to nothing that can ever grow, which is the state where the whole
+        // cohort sits still and the lane the scorecard's alliance aspect measures asks nobody
+        // (ALLY-001). Seeded clubs are created shut, so this is the common live case.
+        if (! $club->is_open) {
+            return false;
+        }
+
+        if ($this->holdsCohortShare($club)) {
+            return false;
+        }
+
         return $this->fits($this->accountFit($playerId), $this->clubFit($club), $policy['fit']);
     }
 
@@ -121,9 +143,78 @@ class AllianceChoice
                     ->where('user_id', $playerId)
                     ->where('status', AllianceApplication::STATUS_REJECTED))
                 ->get()
-                ->reject(fn (Alliance $alliance): bool => $this->readsFounderAsExploitative($playerId, $alliance))
+                ->reject(fn (Alliance $alliance): bool => $this->readsFounderAsExploitative($playerId, $alliance) || $this->holdsCohortShare($alliance))
                 ->all(),
         );
+    }
+
+    /**
+     * Whether the club already holds the share of the AI accounts the invariant forbids. Such a club
+     * is no longer asked, and a member of it leaves it: the cohort spreads over clubs instead of
+     * sitting in the one the seeder filled, which is the state where the join half stops asking and
+     * the lane the scorecard's alliance aspect measures creates no application again (ALLY-001).
+     * Below minimum_cohort a share means nothing, so no club is read as holding it.
+     */
+    private function holdsCohortShare(Alliance $alliance): bool
+    {
+        $ceiling = $this->recruitment();
+
+        if ($ceiling === null) {
+            return false;
+        }
+
+        $managers = $this->aiManagers();
+        $cohort = count($managers);
+
+        if ($cohort < $ceiling['minimum_cohort']) {
+            return false;
+        }
+
+        // The share is read from both halves of a seat: the host's own membership pointer, which is
+        // what the cohort read that raises ALLIANCE_SHARE counts, and the membership row. A cohort
+        // seated through the pointer alone — as seeding left grand — counts zero on the row half, so
+        // a club holding most of the cohort read as empty, its members never became misfits, and the
+        // lane the scorecard's alliance aspect measures created no application (ALLY-001).
+        $members = User::query()->where('alliance_id', $alliance->id)->whereIn('id', $managers)->pluck('id')
+            ->merge(AllianceMember::query()->where('alliance_id', $alliance->id)->whereIn('user_id', $managers)->pluck('user_id'))
+            ->unique()
+            ->count();
+
+        return $members / $cohort >= $ceiling['share_ceiling'];
+    }
+
+    /** @return list<int> the accounts the module drives: only their seats count toward the share. */
+    private function aiManagers(): array
+    {
+        return $this->aiManagers ??= AiProfile::query()->where('enabled', true)->pluck('player_id')
+            ->map(static fn ($playerId): int => (int) $playerId)->all();
+    }
+
+    /**
+     * The ceiling read by name from resources/behavior, so the share the cohort invariant states is
+     * one number a tuning pass moves. A missing or unreadable file leaves the club fit rule alone in
+     * force rather than a default the source does not state.
+     *
+     * @return array{share_ceiling: float, minimum_cohort: int}|null
+     */
+    private function recruitment(): array|null
+    {
+        if ($this->recruitmentRead) {
+            return $this->recruitment;
+        }
+
+        $this->recruitmentRead = true;
+        $path = dirname(__DIR__, 3) . self::RECRUITMENT_FILE;
+        $parsed = is_file($path) ? Yaml::parseFile($path) : null;
+
+        if (!is_array($parsed) || !isset($parsed['share_ceiling'], $parsed['minimum_cohort'])) {
+            return $this->recruitment = null;
+        }
+
+        return $this->recruitment = [
+            'share_ceiling' => (float) $parsed['share_ceiling'],
+            'minimum_cohort' => (int) $parsed['minimum_cohort'],
+        ];
     }
 
     /**

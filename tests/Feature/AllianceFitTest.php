@@ -63,6 +63,14 @@ function allianceFitMember(int $allianceId, int $userId): void
     ]));
 }
 
+/** An account the module drives, seated nowhere and unranked: the rest of a cohort a club does not hold. */
+function allianceFitOtherAccounts(int $amount): void
+{
+    for ($account = 0; $account < $amount; $account++) {
+        allianceFitProfile(User::factory()->create(['lang' => 'en'])->id, AiActivityBand::Regular, AiArchetype::Casual);
+    }
+}
+
 /** An open club of $members members and $points standing, kept by a founder of $language and $band. */
 function allianceFitClub(string $tag, string $language, AiActivityBand|null $band, int $members = 1, int $points = 0): Alliance
 {
@@ -192,6 +200,9 @@ test('a member of a club that fits does not leave', function (): void {
     $near = allianceFitClub('NEAR', 'en', AiActivityBand::Active, 1, 40);
     allianceFitMember($near->id, $this->currentUserId);
     User::query()->whereKey($this->currentUserId)->update(['alliance_id' => $near->id]);
+
+    // The rest of the cohort plays elsewhere, so the club is a fit, not most of the neighbourhood.
+    allianceFitOtherAccounts(3);
 
     app(AdvanceAiAllianceLifeAction::class)->handle();
 

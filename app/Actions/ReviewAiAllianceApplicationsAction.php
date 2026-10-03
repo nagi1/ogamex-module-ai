@@ -14,6 +14,7 @@ use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
 use OGame\Models\AllianceMember;
 use OGame\Models\Highscore;
+use OGame\Models\User;
 use OGame\Services\AllianceService;
 
 /**
@@ -277,7 +278,13 @@ class ReviewAiAllianceApplicationsAction
     {
         $managers = AiProfile::query()->where('enabled', true)->pluck('player_id');
 
-        return AllianceMember::query()->where('alliance_id', $alliance->id)->whereIn('user_id', $managers)->count();
+        // Both halves of a seat count, as the applicant side reads them: a cohort seated through the
+        // host's pointer alone would read as an empty club here, and the leader would keep accepting
+        // into the club the invariant already flags (ALLY-001).
+        return User::query()->where('alliance_id', $alliance->id)->whereIn('id', $managers)->pluck('id')
+            ->merge(AllianceMember::query()->where('alliance_id', $alliance->id)->whereIn('user_id', $managers)->pluck('user_id'))
+            ->unique()
+            ->count();
     }
 
     /**

@@ -66,6 +66,21 @@ function staleClub(string $tag, string $language): Alliance
     return $club;
 }
 
+/** An account the module drives, seated nowhere and unranked: the rest of a cohort a club does not hold. */
+function staleInertProfiles(int $amount): void
+{
+    for ($account = 0; $account < $amount; $account++) {
+        AiProfile::create([
+            'player_id' => User::factory()->create(['lang' => 'en'])->id,
+            'archetype' => AiArchetype::Miner,
+            'skill_band' => AiSkillBand::Standard,
+            'activity_band' => AiActivityBand::Regular,
+            'random_seed' => 42,
+            'enabled' => true,
+        ]);
+    }
+}
+
 test('a member of a club that fits is kept, and applies nowhere', function (): void {
     $small = staleClub('SMLL', 'en');
     $fits = staleClub('FITS', 'en');
@@ -84,6 +99,9 @@ test('a member of a club that fits is kept, and applies nowhere', function (): v
 
     // One more account in the club: a club of two keeps its members.
     $cohort[] = staleCohort($small->id, 'en');
+
+    // The rest of the cohort plays elsewhere, so the club holds no share of it.
+    staleInertProfiles(3);
 
     app(AdvanceAiAllianceLifeAction::class)->handle();
 

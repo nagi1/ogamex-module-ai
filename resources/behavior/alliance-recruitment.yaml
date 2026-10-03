@@ -1,7 +1,13 @@
 # The alliance lane's recruitment ceiling: how much of the AI cohort one alliance may hold.
 #
 # ALLY-001: one alliance holding most of the cohort is the state the invariant forbids. The
-# leader's review refuses an ai-managed applicant whose acceptance would take the alliance to
-# the share or above it. Below minimum_cohort a share means nothing, so no ceiling applies.
-share_ceiling: 0.75
+# same ceiling stands on both sides of the lane. The leader's review refuses an ai-managed
+# applicant whose acceptance would take the alliance to the share or above it; the applicant
+# side never asks a club that already holds the share, and a member of such a club leaves it
+# one at a time and asks elsewhere, so the lane keeps producing applications on a cohort that
+# was seated once (ALLY-001). Below minimum_cohort a share means nothing, so no ceiling applies.
+#
+# source: ALLIANCE_SHARE, the share of the AI accounts the cohort read flags a single alliance for
+# holding. A ceiling above it leaves a club that the read calls a defect alone.
+share_ceiling: 0.6
 minimum_cohort: 2
