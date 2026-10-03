@@ -17,6 +17,7 @@ use Modules\AI\Enums\AiQueueName;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSchedule;
@@ -136,8 +137,14 @@ class ProcessAiWork implements ShouldQueue
 
     private function acceleratedSession(AiWorkItem $workItem): bool
     {
-        return $workItem->kind === AiWorkKind::RunSession
-            && (int) config('ai.population.session_interval_seconds', 0) > 0;
+        if ($workItem->kind !== AiWorkKind::RunSession || (int) config('ai.population.session_interval_seconds', 0) <= 0) {
+            return false;
+        }
+
+        // Acceleration shortens the waits, not the night: a dark-period session keeps its due time.
+        $profile = AiProfile::query()->where('player_id', $workItem->player_id)->first();
+
+        return $profile === null || app(SessionPlanner::class)->isAwake($profile, now()->toImmutable());
     }
 
     private function isClaimable(AiWorkItem $workItem): bool

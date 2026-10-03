@@ -87,6 +87,12 @@ class SessionDecisionService
 
         $nextDueAt = $this->nextDueTimeCalculator->fromSession($plan, $now);
 
+        // An accelerated universe still sleeps: a session that would land in the dark period waits
+        // for the routine's wake, or every account reads as round-the-clock (AUTH_UPTIME).
+        if (!$this->sessionPlanner->isAwake($profile, $nextDueAt)) {
+            $nextDueAt = $plan->nextDueAt;
+        }
+
         // V2: a hostile inbound schedules the reaction wake, so the account reacts inside the
         // window before impact instead of at its next ordinary session.
         if ($perception->reactionWakeAt !== null) {
