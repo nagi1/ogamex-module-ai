@@ -41,6 +41,7 @@ use Throwable;
     {--highscore-every=3600 : Simulated seconds between the three highscore generators (each walks every player; the real schedule runs them every 300 s)}
     {--max-wall= : Stop after this many real seconds and keep the state, so a later run continues}
     {--native-cognition : Opt-in only: skip the Fatima/CBRKit/AgentOS sidecars and the language lane and play on the native engines}
+    {--ffi-probe : Diagnose the Rust segfault: call the library with an empty fight after every phase of every jump and print which phase last survived}
     {--workers=1 : Fork this many processes per simulated instant, each running a share of the due sessions against the sidecars at the same time}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
     {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
@@ -101,6 +102,7 @@ class SimulateAiTime extends Command
 
         $this->info(sprintf('SIM: %s -> %s (%.1f h), %d account(s), database %s', $start->toIso8601String(), $end->toIso8601String(), $start->floatDiffInHours($end), count($players), $database));
 
+        $this->ffiProbe('before the first jump');
         $wallStart = microtime(true);
         $wallLimit = $this->option('max-wall') === null ? null : (float) $this->option('max-wall');
         $maintenanceEvery = max(60, (int) $this->option('maintenance'));
@@ -115,6 +117,7 @@ class SimulateAiTime extends Command
 
         while ($now->lessThan($end)) {
             SimulatedTime::freezeAt($now);
+            $this->ffiProbe('jump ' . $jumps . ' after the clock moved to ' . $now->toIso8601String());
 
             // One commit per simulated instant instead of one per statement group: every session and order
             // writes dozens of rows, and each commit is an fsync. Inner transactions become savepoints.
@@ -130,8 +133,11 @@ class SimulateAiTime extends Command
                 $total[$key] += $count;
             }
 
+            $this->ffiProbe('jump ' . $jumps . ' after due work');
+
             if ($now->greaterThanOrEqualTo($nextMaintenance)) {
                 $this->runMaintenance($now);
+                $this->ffiProbe('jump ' . $jumps . ' after maintenance');
                 $nextMaintenance = $now->addSeconds($maintenanceEvery);
             }
 
@@ -321,6 +327,28 @@ class SimulateAiTime extends Command
         }
 
         return $ran;
+    }
+
+    /**
+     * Calls the shared Rust binding with a trivial input (it only has to reach the library's first libc call) and
+     * prints the label to stderr unbuffered, so when the process dies the last line names the phase that broke it.
+     */
+    private function ffiProbe(string $label): void
+    {
+        if (!$this->option('ffi-probe')) {
+            return;
+        }
+
+        try {
+            $binding = \OGame\GameMissions\BattleEngine\RustBattleEngine::binding();
+            $pointer = $binding->fight_battle_rounds('{}');
+            if ($pointer !== null) {
+                $binding->free_battle_result($pointer);
+            }
+            fwrite(STDERR, "FFI-PROBE ok   {$label}\n");
+        } catch (Throwable $exception) {
+            fwrite(STDERR, "FFI-PROBE threw {$label}: " . $exception->getMessage() . "\n");
+        }
     }
 
     private function workerCount(): int

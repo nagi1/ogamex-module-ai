@@ -106,6 +106,16 @@ lines and the full PROFILE of each.
 - Tests stay on MySQL lanes: the schema and the code use MySQL features, so an in-memory sqlite lane would not run them. Parallelism is already
   `--parallel --processes=4` for suites; raise `PARALLEL_PROCESSES` if the machine has cores to spare (each worker clones the schema once and reuses it).
 
+### Segfault bisect (fast-time thread, 18:10 UTC) -- one run, read the last FFI-PROBE line
+The sim has no fork in it unless `--workers>1`, so the fork theory does not fit a `--workers=1` crash, and the sim's clock/transaction code never touches FFI
+memory (it only calls Carbon and the DB). A null GOT slot inside the lib with the same .so fine under tinker and pest says something in this process
+state differs, so bisect it in-process: `sim --hours=1 --accounts=5 --ffi-probe` (a fresh SIM_DB). It calls the shared binding with an empty fight before the
+first jump and after the clock move, the due work and the maintenance of every jump, printing `FFI-PROBE ok <phase>` to stderr unbuffered. The last
+`ok` line before the segfault names the phase after which the library breaks (a battle in due work, a specific maintenance command, the Http probe of the
+sidecars, ...). Paste the last 5 FFI-PROBE lines and the first line after them. If the very first probe (`before the first jump`) already crashes, the
+difference is in the process before the loop: then run `ai:sim --hours=0 --ffi-probe` and, separately, `php artisan tinker` calling `RustBattleEngine::binding()`
+after `config(['queue.default' => 'sync'])` and `Carbon::setTestNow(now())`, to find which of the sim's start-up steps does it.
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.
