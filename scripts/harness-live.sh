@@ -172,7 +172,7 @@ $(PROVE_UNIVERSE=$universe bash scripts/ogamex scorecard --hours=6 2>&1)"
       # first, which is the verdict `quality` reads; the live read stays below as the secondary line.
       # HARNESS_READ_SIM_HOURS=0 turns this off.
       if [ "${HARNESS_READ_SIM_HOURS:-6}" -gt 0 ]; then
-        sim_read=$(OGAMEX_RUNNER=local-docker-dev PROVE_UNIVERSE=$universe bash scripts/ogamex sim \
+        sim_read=$(SIM_DB=ogamex-sim-read OGAMEX_RUNNER=local-docker-dev PROVE_UNIVERSE=$universe bash scripts/ogamex sim \
           --hours="${HARNESS_READ_SIM_HOURS:-6}" --accounts="${HARNESS_READ_SIM_ACCOUNTS:-30}" --max-wall="${HARNESS_READ_SIM_WALL:-600}" 2>&1 || true)
         cohort_output="=== simulated read (${HARNESS_READ_SIM_HOURS:-6}h on a copy) ===
 $sim_read
