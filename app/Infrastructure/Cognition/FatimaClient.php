@@ -23,12 +23,23 @@ use Throwable;
  */
 class FatimaClient
 {
+    /** The sidecar this copy talks to; null is the configured default. */
+    private string|null $baseUrl = null;
+
     public function __construct(
         private readonly DriverCircuitBreaker $circuit,
         private readonly FatimaScenarioTemplate $template,
         private readonly Factory $http,
         private readonly DriverResponseLimit $limit,
     ) {
+    }
+
+    public function forServer(string $baseUrl): static
+    {
+        $copy = clone $this;
+        $copy->baseUrl = $baseUrl;
+
+        return $copy;
     }
 
     /**
@@ -225,7 +236,7 @@ class FatimaClient
     private function pending(): PendingRequest
     {
         return $this->http
-            ->baseUrl(rtrim((string) config('ai.cognition.fatima.base_url', 'http://host.docker.internal:8092'), '/'))
+            ->baseUrl(rtrim($this->baseUrl ?? (string) config('ai.cognition.fatima.base_url', 'http://host.docker.internal:8092'), '/'))
             ->connectTimeout((int) config('ai.cognition.fatima.connect_timeout_seconds', 2))
             ->timeout((int) config('ai.cognition.fatima.timeout_seconds', 5))
             ->acceptJson();

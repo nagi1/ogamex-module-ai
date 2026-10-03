@@ -46,6 +46,22 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # A second FAtiMA sidecar: each one answers a single request at a time, so personas are spread over both
+  # (AI_COGNITION_FATIMA_URLS=http://host.docker.internal:8092,http://host.docker.internal:8095).
+  fatima2:
+    build:
+      context: ./fatima
+    image: ogamex-ai-cognition-fatima:net8
+    ports:
+      - "${AI_FATIMA_BIND:-0.0.0.0}:${AI_FATIMA2_PORT:-8095}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-m", "3", "http://127.0.0.1:8000/scenarios"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
   # Ranked older-memory recall behind Modules\AI\Contracts\LongTermMemory. The driver keeps no
   # store of its own: every request carries the memories the module authorises for that recall.
   agentos:

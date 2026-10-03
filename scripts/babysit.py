@@ -64,6 +64,14 @@ def advance(actions):
 
 
 SLOW_LOG = os.path.join(ROOT, "plan/research/ogame/slow-steps.log")
+D = "app/Domain/Decision/"
+# The planner files behind a refused intent, so a writer can take a STUCK row without a person naming the file.
+STUCK_FILES = {
+    "QueueBuilding": f"{D}QueueableBuildingPlanner.php; {D}EconomyUpgrades.php",
+    "QueueUnits": f"{D}QueueableUnitPlanner.php",
+    "CreateColony": f"{D}QueueableColonyPlanner.php",
+    "DispatchFleet": f"{D}RaidPlanner.php; {D}QueueableTransferPlanner.php; {D}QueueableExpeditionPlanner.php; {D}MovableFleet.php",
+}
 OWNERS = {"invariant": "scripts/verify-cohorts.php", "aspect": "scripts/play-scorecard.php", "harness": "scripts/strategy-pipeline.py"}
 
 
@@ -162,7 +170,7 @@ def stuck_scenarios(actions):
         if con.execute("select 1 from tasks where code=? and status not in ('done')", (code,)).fetchone():
             continue
         sh("python3", "plan/tasks/task.py", "add", code, f"{accounts} accounts keep failing the same way: {reason}",
-           "impl", "P0", "--proof", "aspect:work_failures",
+           "impl", "P0", "--file", STUCK_FILES.get(reason.split(":")[0].strip(), f"{D}DecisionEngine.php"), "--proof", "aspect:work_failures",
            "--notes", f"Raised by the babysitter from `bash scripts/ogamex stuck`: {attempts} attempts in an hour, e.g. {sample} (player x repeats). "
                       "Find which planner offers it (bash scripts/ogamex account PLAYER), make the planner stop offering it or do the "
                       "step the host needs first (build the ship, load less, wait for the slot), and prove it with a situation test.")

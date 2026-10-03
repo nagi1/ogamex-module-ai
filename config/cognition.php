@@ -108,11 +108,9 @@ return [
     ],
 
     'fatima' => [
-        // Reuse an appraisal for an identical request (archetype, event, beliefs, scenario and fixture)
-        // instead of replaying it against the sidecar. OFF until the A/B check in HANDOFF.md shows the
-        // sidecar answers a reloaded scenario identically every time.
-        'cache' => filter_var(env('AI_COGNITION_FATIMA_CACHE', false), FILTER_VALIDATE_BOOLEAN),
         'base_url' => env('AI_COGNITION_FATIMA_URL', 'http://host.docker.internal:8092'),
+        // Comma-separated sidecars to spread the personas over (a persona keeps its server); empty means base_url alone.
+        'base_urls' => env('AI_COGNITION_FATIMA_URLS', ''),
         'connect_timeout_seconds' => (int) env('AI_COGNITION_FATIMA_CONNECT_TIMEOUT_SECONDS', 2),
         'timeout_seconds' => (int) env('AI_COGNITION_FATIMA_TIMEOUT_SECONDS', 5),
         // Serialises driver interactions, because the sidecar answers one request at a

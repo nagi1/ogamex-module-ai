@@ -38,40 +38,7 @@ class FatimaCognitionSession
      */
     public function appraise(AiArchetype $archetype, string $event, array $beliefs): array|null
     {
-        return $this->remembered('appraise', [$archetype->name, $event, $beliefs], fn (): array|null => $this->appraiseOnce($archetype, $event, $beliefs));
-    }
-
-    /**
-     * Every appraisal reloads the authored scenario first, so the answer is a function of the request
-     * alone. The same request is answered from the cache instead of four or more round trips, and a
-     * failed (null) answer is never kept.
-     *
-     * @template TResult
-     * @param  array<int, mixed>  $request
-     * @param  Closure(): (TResult|null)  $compute
-     * @return TResult|null
-     */
-    private function remembered(string $kind, array $request, Closure $compute): mixed
-    {
-        if (!(bool) config('ai.cognition.fatima.cache', false)) {
-            return $compute();
-        }
-
-        // Everything the sidecar reads: the request, the scenario name and instance, and the fixtures it is sent.
-        $key = 'ai:fatima:' . $kind . ':' . md5(json_encode([$request, $this->scenario(), $this->instance(), md5($this->template->scenarioJson()), md5($this->template->assetsJson())]) ?: '');
-        $known = Cache::get($key);
-
-        if ($known !== null) {
-            return $known;
-        }
-
-        $result = $compute();
-
-        if ($result !== null) {
-            Cache::put($key, $result, now()->addHour());
-        }
-
-        return $result;
+        return $this->appraiseOnce($archetype, $event, $beliefs);
     }
 
     /**
@@ -80,15 +47,18 @@ class FatimaCognitionSession
      */
     private function appraiseOnce(AiArchetype $archetype, string $event, array $beliefs): array|null
     {
-        return $this->sequential(function () use ($archetype, $event, $beliefs): array|null {
+        $server = $this->serverOf($archetype);
+
+        return $this->sequential($server, function () use ($archetype, $event, $beliefs, $server): array|null {
+            $client = $this->client->forServer($this->servers()[$server]);
             $scenario = $this->scenario();
             $character = $archetype->name;
 
-            $this->client->loadScenario($scenario);
-            $this->writeBeliefs($scenario, $character, $beliefs);
-            $this->client->perceive($scenario, $this->instance(), $character, $event);
+            $client->loadScenario($scenario);
+            $this->writeBeliefs($client, $scenario, $character, $beliefs);
+            $client->perceive($scenario, $this->instance(), $character, $event);
 
-            $state = $this->client->emotions($scenario, $this->instance(), $character);
+            $state = $client->emotions($scenario, $this->instance(), $character);
 
             if ($state === null) {
                 return null;
@@ -111,7 +81,7 @@ class FatimaCognitionSession
      */
     public function evaluateSocialExchanges(AiArchetype $archetype, string $counterparty, array $beliefs): array|null
     {
-        return $this->remembered('social', [$archetype->name, $counterparty, $beliefs], fn (): array|null => $this->evaluateSocialExchangesOnce($archetype, $counterparty, $beliefs));
+        return $this->evaluateSocialExchangesOnce($archetype, $counterparty, $beliefs);
     }
 
     /**
@@ -120,24 +90,27 @@ class FatimaCognitionSession
      */
     private function evaluateSocialExchangesOnce(AiArchetype $archetype, string $counterparty, array $beliefs): array|null
     {
-        return $this->sequential(function () use ($archetype, $counterparty, $beliefs): array|null {
+        $server = $this->serverOf($archetype);
+
+        return $this->sequential($server, function () use ($archetype, $counterparty, $beliefs, $server): array|null {
+            $client = $this->client->forServer($this->servers()[$server]);
             $scenario = $this->scenario();
             $character = $archetype->name;
 
-            $this->client->loadScenario($scenario);
-            $this->writeBeliefs($scenario, $character, $beliefs);
+            $client->loadScenario($scenario);
+            $this->writeBeliefs($client, $scenario, $character, $beliefs);
 
-            return $this->client->evaluateSocialExchanges($scenario, $this->instance(), $character, $counterparty);
+            return $client->evaluateSocialExchanges($scenario, $this->instance(), $character, $counterparty);
         });
     }
 
     /**
      * @param  array<string, string>  $beliefs
      */
-    private function writeBeliefs(string $scenario, string $character, array $beliefs): void
+    private function writeBeliefs(FatimaClient $client, string $scenario, string $character, array $beliefs): void
     {
         foreach ($beliefs as $name => $value) {
-            $this->client->setBelief($scenario, $this->instance(), $character, $name, $value);
+            $client->setBelief($scenario, $this->instance(), $character, $name, $value);
         }
     }
 
@@ -149,10 +122,10 @@ class FatimaCognitionSession
      * @param  Closure(): (TResult|null)  $operation
      * @return TResult|null
      */
-    private function sequential(Closure $operation): mixed
+    private function sequential(int $server, Closure $operation): mixed
     {
         try {
-            return $this->underLock($operation);
+            return $this->underLock($server, $operation);
         } catch (Throwable $exception) {
             // Contention or an unusable lock store degrades to the native implementation
             // rather than risking interleaved state on a shared character.
@@ -169,9 +142,10 @@ class FatimaCognitionSession
      * @param  Closure(): (TResult|null)  $operation
      * @return TResult|null
      */
-    private function underLock(Closure $operation): mixed
+    private function underLock(int $server, Closure $operation): mixed
     {
-        $lock = Cache::lock('ai:cognition:fatima', $this->lockSeconds());
+        // One lock per server: each sidecar answers one request at a time, and two of them can work in parallel.
+        $lock = Cache::lock('ai:cognition:fatima:' . $server, $this->lockSeconds());
 
         if (!$this->acquireWithin($lock)) {
             throw new LockTimeoutException();
@@ -206,6 +180,24 @@ class FatimaCognitionSession
         }
 
         return true;
+    }
+
+    /**
+     * The sidecars the cohort is spread over. A persona always lands on the same one, so its character
+     * state never moves between servers.
+     *
+     * @return list<string>
+     */
+    private function servers(): array
+    {
+        $urls = array_values(array_filter(array_map('trim', explode(',', (string) config('ai.cognition.fatima.base_urls', '')))));
+
+        return $urls === [] ? [(string) config('ai.cognition.fatima.base_url')] : $urls;
+    }
+
+    private function serverOf(AiArchetype $archetype): int
+    {
+        return $archetype->value % count($this->servers());
     }
 
     private function scenario(): string
