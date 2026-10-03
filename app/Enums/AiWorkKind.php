@@ -19,6 +19,7 @@ enum AiWorkKind: int
     case SetMinePercent = 13;
     case Phalanx = 14;
     case Defend = 15;
+    case Trade = 16;
 
     public function actionType(): AiActionType
     {
@@ -30,6 +31,7 @@ enum AiWorkKind: int
             self::Recall => AiActionType::RecallFleet,
             self::SetMinePercent => AiActionType::SetMinePercent,
             self::Phalanx => AiActionType::PhalanxScan,
+            self::Trade => AiActionType::TradeResources,
             self::BuildFirstBuilding, self::RunSession => AiActionType::QueueBuilding,
         };
     }
