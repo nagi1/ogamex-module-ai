@@ -12,6 +12,7 @@ use Modules\AI\Enums\GamePhase;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiPhalanxScan;
+use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Domain\Raid\ReportedPlanet;
 use Modules\AI\Enums\AiArchetype;
@@ -64,9 +65,6 @@ class RaidPlanner
 
     /** RAID-011: loot-to-fuel ratio a raid must clear before it flies (metal-equivalent loot : deuterium). */
     private const LOOT_TIER_FARM = 3.0;
-
-    /** RV-011: astrophysics 23 is the researched late-game marker where mine ROI falls below fleet returns. */
-    private const LATE_PHASE_ASTROPHYSICS = 23;
 
     private const LOOT_TIER_DEFENDED = 2.0;
 
@@ -142,11 +140,11 @@ class RaidPlanner
         }
 
         // Target-class escalation (RV-011): the opening farms inactives only, a
-        // colonised account also raids active players, and only an
-        // astrophysics-23 account crashes fleets. The class is the host's own
-        // answer — the target's last activity and the report's ships — never a
-        // module list.
-        if (!$this->targetEligible($this->phase($player), $report)) {
+        // colonised account also raids active players, and an account past its
+        // mines can crash fleets. The rung is the phase machine's answer — it
+        // reads the planets the account owns and the research it has done —
+        // never a list of targets kept here.
+        if (!$this->targetEligible(app(GamePhaseMachine::class)->targetRung($player), $report)) {
             return $this->reject('target_ineligible', $playerId, $reportId);
         }
 
@@ -562,27 +560,10 @@ class RaidPlanner
     }
 
     /**
-     * The account's game phase, from host reads only (RV-011): one planet is the
-     * opening, a colony moves it mid, and astrophysics 23 makes it late.
-     */
-    private function phase(PlayerService $player): GamePhase
-    {
-        if ($player->getResearchLevel('astrophysics') >= self::LATE_PHASE_ASTROPHYSICS) {
-            return GamePhase::Late;
-        }
-
-        if ($player->planets->planetCount() >= 2) {
-            return GamePhase::Mid;
-        }
-
-        return GamePhase::Early;
-    }
-
-    /**
      * Which targets an account may raid: inactives from the first day, every other player once the
-     * account has a colony, since an experienced player fights whoever the simulation says is worth it.
-     * Whether a fight is worth it is the Rust screen's answer below (win odds and net profit after
-     * losses), never a milestone the account must reach first.
+     * account has settled a planet of its own, since an experienced player fights whoever the
+     * simulation says is worth it. Whether a fight is worth it is the Rust screen's answer below (win
+     * odds and net profit after losses), never a milestone the account must reach first.
      */
     private function targetEligible(GamePhase $phase, EspionageReport $report): bool
     {

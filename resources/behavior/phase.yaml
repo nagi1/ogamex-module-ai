@@ -1,0 +1,19 @@
+# The account's game phase and RV-011's target rung (architecture step 4), from host reads only: what
+# marks each is named here, never in the class that reads it, so a modded universe or a modded technology
+# moves them without an edit.
+#
+# settled_planets   planets the account owns *beyond* the ones the universe registers for a new account
+#                   (`registration_planet_amount`, the host's own setting): the account's phase. The
+#                   opening is an account that still lives on the planets it was given; the first planet
+#                   it settles itself moves it to mid.
+# owned_planets     planets the account owns, for RV-011's target ladder, whose opening is a single
+#                   planet: a second planet is what lets it answer a neighbour who is at the keyboard.
+# late.technology   the researched technology whose level means the account has outgrown its mines and
+#                   its fleets are worth more than another mine (RV-011)
+# late.level        that level
+mid:
+  settled_planets: 1
+  owned_planets: 2
+late:
+  technology: astrophysics
+  level: 23

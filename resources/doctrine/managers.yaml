@@ -14,6 +14,11 @@
 #   recycle              whether a debris field is harvested every login
 #   missiles             whether missiles are fired at a reported wall every login
 #   continuation_minutes minutes after the login's probes before it reads the reports and raids (0 = off)
+#
+# The optional `phases` block scales these numbers per phase (architecture step 4): the number above is the
+# base and the phase's value multiplies it. An opening account has not settled a planet of its own yet, so
+# there is little worth probing around it and no fleet for a wave; a settled account runs its archetype's
+# full batch. A phase or key not named multiplies by one, so the archetype's own numbers stay the fallback.
 
 default:
   probes_per_login: 3
@@ -25,6 +30,10 @@ default:
   recycle: true
   missiles: false
   continuation_minutes: 3
+  phases:
+    early:
+      probes_per_login: 0.5
+      raid_waves: 0.5
 
 miner:
   probes_per_login: 2

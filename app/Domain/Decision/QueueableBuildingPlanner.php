@@ -151,15 +151,19 @@ class QueueableBuildingPlanner
             ],
             'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
             'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
-            // A planet sitting on six times the price of a facility it does not own buys it before another
-            // mine: the nano factory, terraformer and the rest are what a human with a pile builds (COVER-*).
-            'ambition' => fn (PlanetService $planet): array => $this->economyUpgrades->ambitions($planet),
             'routine' => fn (PlanetService $planet): array => [
                 ...$this->energyCapacity->pending($planet),
                 ...$this->facilityChain->pending($planet),
                 ...$this->economyUpgrades->storageForPrice($planet, $profile),
                 ...$this->economyUpgrades->production($planet, $profile),
             ],
+            // A planet sitting on six times the price of a facility it does not own buys it -- but only
+            // once nothing urgent is left, which is what that pass says it is for: the capacity the host
+            // throttles the planet without, the prerequisites the rest of the game is gated behind and the
+            // mine that repays first all outrank a facility bought for its own sake (COVER-*). Placed
+            // ahead of them it bought a robotics factory on a planet that could not yet cover its mines
+            // (measured: AiCapabilityPublicationTest, EnergyCapacityTest).
+            'ambition' => fn (PlanetService $planet): array => $this->economyUpgrades->ambitions($planet),
         ];
     }
 

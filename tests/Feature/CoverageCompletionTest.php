@@ -249,6 +249,19 @@ function completionTrace(int $playerId, int $planetId, AiCandidateActionType $ty
 
 function completionReport(int $playerId, int $galaxy, int $system, int $position, int $planetType): int
 {
+    // The report is what the scan saw: a planet standing at these coordinates puts its units in the
+    // report, so a fixture that plants a defended target plants a defended report. The planner reads the
+    // report rather than the live planet (step 2), and a report whose unit lists are empty is a scan of
+    // an empty planet -- which is a farm, not the wall the case under test means to plant.
+    $live = Planet::query()
+        ->where('galaxy', $galaxy)
+        ->where('system', $system)
+        ->where('planet', $position)
+        ->where('planet_type', $planetType)
+        ->where('destroyed', 0)
+        ->first();
+    $seen = $live === null ? null : app(OGame\Factories\PlanetServiceFactory::class)->makeFromModel($live);
+
     $report = new EspionageReport();
     $report->planet_galaxy = $galaxy;
     $report->planet_system = $system;
@@ -259,8 +272,8 @@ function completionReport(int $playerId, int $galaxy, int $system, int $position
     $report->debris = [];
     $report->buildings = [];
     $report->research = [];
-    $report->ships = [];
-    $report->defense = [];
+    $report->ships = $seen?->getShipUnits()->toArray() ?? [];
+    $report->defense = $seen?->getDefenseUnits()->toArray() ?? [];
     $report->player_info = ['player_name' => 'Target', 'player_status' => 'inactive'];
     $report->save();
 

@@ -41,6 +41,7 @@ use Modules\AI\Domain\Decision\ThreatResponsePlan;
 use Modules\AI\Domain\Decision\ThreatResponsePlanner;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
 use Modules\AI\Domain\Login\FleetSlots;
+use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Domain\Login\ManagerDoctrine;
 use Modules\AI\Enums\AiCandidateActionType;
@@ -51,6 +52,7 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\Planet;
 use OGame\Models\UnitQueue;
 
@@ -353,10 +355,13 @@ class ScheduleAiIntentAction
 
         $doctrine = app(ManagerDoctrine::class);
         $archetype = $profile->archetype;
-        $slots = app(FleetSlots::class)->free($profile->player_id) - $doctrine->int($archetype, 'keep_slots_free');
+        // The account's phase once per login: the numbers below are the archetype's, scaled by how far the
+        // account has come (architecture step 4).
+        $phase = app(GamePhaseMachine::class)->of(app(PlayerServiceFactory::class)->make($profile->player_id));
+        $slots = app(FleetSlots::class)->free($profile->player_id) - $doctrine->int($archetype, 'keep_slots_free', $phase);
 
         // Military: raid waves on every report the planner approves, the selected one already placed.
-        $waves = $doctrine->int($archetype, 'raid_waves') - ($type === AiCandidateActionType::Raid ? 1 : 0);
+        $waves = $doctrine->int($archetype, 'raid_waves', $phase) - ($type === AiCandidateActionType::Raid ? 1 : 0);
         $selectedReport = (int) ($trace->selected->candidate->parameters['report_id'] ?? 0);
         foreach ($trace->candidates as $scored) {
             if ($waves <= 0 || $slots <= 0) {
@@ -379,7 +384,7 @@ class ScheduleAiIntentAction
         }
 
         // Intel: a batch of probes, each to a different target (the spy planner skips targets already promised).
-        $probes = $doctrine->int($archetype, 'probes_per_login') - ($type === AiCandidateActionType::Spy ? 1 : 0);
+        $probes = $doctrine->int($archetype, 'probes_per_login', $phase) - ($type === AiCandidateActionType::Spy ? 1 : 0);
         $probed = 0;
         for ($i = 0; $i < $probes && $slots > 0; $i++) {
             if (!$this->asManager(':spy:' . $i, fn () => $this->scheduleSpy($profile, $sessionWorkItem))) {
@@ -410,7 +415,7 @@ class ScheduleAiIntentAction
 
         // Continuation (architecture step 5): the probes just sent come back in a minute or two, and a player
         // reads them and raids inside the same login instead of waiting for the next one.
-        $minutes = $doctrine->int($archetype, 'continuation_minutes');
+        $minutes = $doctrine->int($archetype, 'continuation_minutes', $phase);
         if ($probed > 0 && $minutes > 0) {
             $this->asManager(':wave', fn () => $this->enqueue($profile, $sessionWorkItem, AiWorkKind::RaidWave, [
                 self::PAYLOAD_PLANET_ID => (int) (Planet::query()->where('user_id', $profile->player_id)->orderBy('id')->value('id') ?? 0),

@@ -49,6 +49,7 @@ use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Domain\Login\FleetSlots;
+use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Domain\Login\ManagerDoctrine;
 use Modules\AI\Enums\AiQueueActionReason;
@@ -57,6 +58,7 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiActionResult;
+use OGame\Factories\PlayerServiceFactory;
 
 /**
  * Performs a scheduled intent against the host's own queues and fleet paths.
@@ -577,9 +579,10 @@ class ExecuteAiIntentAction
             ->pluck('espionage_report_id');
 
         $doctrine = app(ManagerDoctrine::class);
+        $phase = app(GamePhaseMachine::class)->of(app(PlayerServiceFactory::class)->make($workItem->player_id));
         $limit = min(
-            $doctrine->int($profile->archetype, 'raid_waves'),
-            app(FleetSlots::class)->free($workItem->player_id) - $doctrine->int($profile->archetype, 'keep_slots_free'),
+            $doctrine->int($profile->archetype, 'raid_waves', $phase),
+            app(FleetSlots::class)->free($workItem->player_id) - $doctrine->int($profile->archetype, 'keep_slots_free', $phase),
         );
         $claims = app(LoginReservations::class);
         $claims->reset();

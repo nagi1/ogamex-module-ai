@@ -3,7 +3,9 @@
 namespace Modules\AI\Domain\Doctrine;
 
 use Modules\AI\Domain\Decision\BuildCandidate;
+use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\GamePhase;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -18,6 +20,10 @@ use Throwable;
  * The files name objects, as data (Gate 1 as amended 3 Oct 2026). This class names none: an entry the host
  * does not have is skipped, and when a list is done or a template holds nothing the host can build, the
  * caller's generic rule decides, so a modded object stays reachable.
+ *
+ * Which list the account follows is its phase (`phases: <phase>: <key>`, architecture step 4), and the
+ * flat list is the fallback every other phase reads: a file without a phase block behaves exactly as
+ * before, and a guide can send an opening account down a different path from a settled one.
  */
 class ArchetypeDoctrine
 {
@@ -34,7 +40,7 @@ class ArchetypeDoctrine
      */
     public function openingStep(AiArchetype $archetype, PlanetService $planet): array
     {
-        foreach ($this->steps($archetype, 'opening') as [$machineName, $level]) {
+        foreach ($this->steps($archetype, 'opening', $this->phase($planet->getPlayer())) as [$machineName, $level]) {
             $object = $this->object($machineName);
             if ($object === null || $object->type === GameObjectType::Research) {
                 continue;
@@ -60,7 +66,10 @@ class ArchetypeDoctrine
      */
     public function researchStep(AiArchetype $archetype, PlayerService $player): array
     {
-        foreach ([...$this->steps($archetype, 'opening'), ...$this->steps($archetype, 'research_path')] as [$machineName, $level]) {
+        $phase = $this->phase($player);
+        $rows = [...$this->steps($archetype, 'opening', $phase), ...$this->steps($archetype, 'research_path', $phase)];
+
+        foreach ($rows as [$machineName, $level]) {
             $object = $this->object($machineName);
             if ($object === null || $object->type !== GameObjectType::Research) {
                 continue;
@@ -109,10 +118,34 @@ class ArchetypeDoctrine
         return $best;
     }
 
-    /** @return list<array{0: string, 1: int}> */
-    private function steps(AiArchetype $archetype, string $key): array
+    /**
+     * The account's game phase, which decides which list a guide's file gives it (architecture step 4).
+     * No player (a detached planet read) leaves the phase unknown, and an unknown phase follows the flat
+     * list, so nothing that reads the doctrine can be broken by a missing owner.
+     */
+    private function phase(?PlayerService $player): ?GamePhase
     {
-        $rows = $this->file($archetype)[$key] ?? [];
+        return $player === null ? null : app(GamePhaseMachine::class)->of($player);
+    }
+
+    /**
+     * The ordered rows of one list, as data: the phase's own list when the file writes one, else the flat
+     * list every phase shares.
+     *
+     * @return list<array{0: string, 1: int}>
+     */
+    private function steps(AiArchetype $archetype, string $key, ?GamePhase $phase = null): array
+    {
+        $file = $this->file($archetype);
+        $rows = $file[$key] ?? [];
+
+        if ($phase !== null) {
+            $phases = $file['phases'] ?? null;
+            $phaseRow = is_array($phases) ? ($phases[$phase->value] ?? null) : null;
+            $phaseRows = is_array($phaseRow) ? ($phaseRow[$key] ?? null) : null;
+            $rows = is_array($phaseRows) ? $phaseRows : $rows;
+        }
+
         $steps = [];
 
         foreach (is_array($rows) ? $rows : [] as $row) {

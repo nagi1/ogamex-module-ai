@@ -30,6 +30,16 @@ research_path:
   - [armor_technology, 3]
   - [plasma_technology, 2]
   - [hyperspace_drive, 2]
+
+# A phase may write its own lists (`phases: <phase>: <key>`); the flat lists above stay the fallback
+# every phase the file does not name. The opening writes none: an account that has settled no planet of
+# its own is opened by the module's own order -- the capacity the host throttles it without, then the
+# facilities its first ambitions wait on, then the mine that repays fastest -- and the ordered lists
+# above take over on the planets of a settled account, which is where a guide does a player's work.
+phases:
+  early:
+    opening: []
+    research_path: []
 fleet_template:
   light_fighter: 30
   small_cargo: 15
