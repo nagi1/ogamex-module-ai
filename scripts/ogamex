@@ -339,12 +339,18 @@ prove_row() {
         [ "$kind" = test ] || [ "$tests_failed" = 0 ] || break
         # PROVE_SIM_HOURS=N: before the first live step, play N simulated hours on a copy of the cohort and
         # judge every live step on that copy over exactly those hours. No waiting for wall-clock play.
-        if [ "$kind" != test ] && [ "$sim_done" = 0 ] && [ "${PROVE_SIM_HOURS:-0}" -gt 0 ] 2>/dev/null; then
+        # Default 12 h under the local-docker-dev runner (the harness); PROVE_SIM_HOURS=0 judges the live cohort.
+        sim_hours_wanted="${PROVE_SIM_HOURS-}"
+        [ -n "$sim_hours_wanted" ] || [ "${OGAMEX_RUNNER:-host}" != local-docker-dev ] || sim_hours_wanted="${HARNESS_SIM_HOURS:-12}"
+        if [ "$kind" != test ] && [ "$sim_done" = 0 ] && [ "${sim_hours_wanted:-0}" -gt 0 ] 2>/dev/null; then
             sim_done=1
-            echo "--- simulating ${PROVE_SIM_HOURS}h on a copy of the cohort" >&"$progress"
-            if sim_run "$PROVE_SIM_HOURS" >&"$progress"; then
-                hours="$PROVE_SIM_HOURS"
+            echo "--- simulating ${sim_hours_wanted}h on a copy of the cohort" >&"$progress"
+            if sim_run "$sim_hours_wanted" >&"$progress"; then
+                hours="$sim_hours_wanted"
                 age=$(( hours * 3600 ))
+                # Tells the harness this verdict already covers simulated hours, so a failing live step
+                # needs no wall-clock settle before the writer gets the row back.
+                date +%s > "$MODULE_ROOT/plan/research/ogame/proofs/$code.sim"
             else
                 echo "SIM: failed, the live steps below judge the live cohort" >&"$progress"
             fi

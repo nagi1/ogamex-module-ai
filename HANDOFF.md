@@ -43,6 +43,14 @@ Please run, in this order, and report what each prints:
   copy, read them with `AI_SIM_NOW` set to the printed SIM_NOW and `CACHE_STORE=file`).
 - If `ai:sim` throws on first use, fix the cause in `app/Console/Commands/SimulateAiTime.php` (it is new and unrun) and say what you changed.
 
+### Harness fixes from the 12:22 output (fast-time thread)
+- `prove` now simulates by default under the harness runner (12 h, `HARNESS_SIM_HOURS` to change, `PROVE_SIM_HOURS=0` for the old live
+  read). LIFE-001 / ALLY-001 / PERS-006 failed only on "0 events in the cohort's last hours"; the live steps now judge simulated play.
+  A simulated proof skips the 45 min settle (`proofs/CODE.sim`). If `ai:sim` fails, `prove` falls back to the live cohort and says so.
+- The quality read reported NAKED_BESIDE_WALLED as tracked by ALLY-001 one pass and PERS-004 the next: the dedupe matched any row that
+  mentioned the name in its notes. It now prefers the row whose gap_ref, then title, carries the name.
+- Please check on the first cycle: a `prove LIFE-001` log shows `--- simulating 12h` and a `SIM:` line; report the speedup.
+
 ### Still open from the 12:05 request (answer them through `sim`, not by waiting)
 - AUTH_UPTIME: per-hour session counts for players 96-99 over the simulated window.
 - LIFE_FIGHTS: attacks per hour and combat-rounds share of battles created in the simulated window.

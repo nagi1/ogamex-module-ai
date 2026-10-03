@@ -519,7 +519,11 @@ def reopen(code):
     # had, and QUAL-003 went round that loop for 1,600 calls. Tests go back at once; live failures settle first.
     marker = os.path.join(IMPLEMENTED, f"{code}.md")
     live_only = all("test:" not in line for line in failing)
-    if live_only and os.path.exists(marker) and time.time() - os.path.getmtime(marker) < LIVE_SETTLE_SECONDS:
+    # A proof that played simulated hours (scripts/ogamex prove writes proofs/CODE.sim) already judged the
+    # change over real play-time, so there is nothing to wait for.
+    simulated = os.path.exists(os.path.join(MODULE, "plan/research/ogame/proofs", f"{code}.sim")) and (
+        not os.path.exists(marker) or os.path.getmtime(os.path.join(MODULE, "plan/research/ogame/proofs", f"{code}.sim")) >= os.path.getmtime(marker))
+    if live_only and not simulated and os.path.exists(marker) and time.time() - os.path.getmtime(marker) < LIVE_SETTLE_SECONDS:
         print(f"{code}: its live proof fails, but the cohort has had under {LIVE_SETTLE_SECONDS // 60} min on this change; stays delivered")
         return 0
     connection = sqlite3.connect(TASKS_DB, timeout=30)
@@ -1726,16 +1730,21 @@ def quality_task_codes(names):
 
     connection = sqlite3.connect(TASKS_DB)
     rows = connection.execute(
-        "select code, status, coalesce(gap_ref, '') || ' ' || coalesce(title, '') || ' ' || coalesce(notes, '') "
-        "from tasks order by status = 'done', id"
+        "select code, status, gap_ref, title, notes from tasks order by status = 'done', id"
     ).fetchall()
     connection.close()
 
+    # The row's own gap_ref or title answers for a name before a row that merely mentions it in its notes:
+    # ALLY-001's notes name NAKED_BESIDE_WALLED, so the read reported that invariant as tracked by ALLY-001
+    # one pass and by PERS-004 the next.
+    fields = {code: (gap or "", title or "", notes or "") for code, _, gap, title, notes in rows}
     found = {}
     for name in names:
-        for code, state, haystack in rows:
-            if re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", haystack):
-                found[name] = (code, state)
+        pattern = re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")
+        for field in (0, 1, 2):
+            hits = [(code, state) for code, state, *_ in rows if pattern.search(fields[code][field])]
+            if hits:
+                found[name] = hits[0]
                 break
 
     return found
