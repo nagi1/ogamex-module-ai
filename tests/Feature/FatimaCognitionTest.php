@@ -326,13 +326,29 @@ test('the driver is skipped while its circuit is open and retried once it clears
     expect(Http::recorded())->not->toHaveCount(0);
 });
 
+test('personas are spread over the configured sidecars and each keeps its own', function (): void {
+    $this->fakeFatimaDriver();
+    config(['ai.cognition.fatima.base_urls' => 'http://fatima-a:8000,http://fatima-b:8000']);
+
+    app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Turtle, 0.4, 0.0, 0.0));
+    app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Miner, 0.4, 0.0, 0.0));
+    app(AffectEngine::class)->appraiseObservedEvent(fatimaStimulus(AiArchetype::Turtle, 0.4, 0.0, 0.0));
+
+    $hosts = Http::recorded()->map(fn (array $pair): string => parse_url($pair[0]->url(), PHP_URL_HOST))->unique()->sort()->values()->all();
+    $turtleHosts = Http::recorded()->filter(fn (array $pair): bool => str_contains($pair[0]->url(), '/characters/Turtle/'))
+        ->map(fn (array $pair): string => parse_url($pair[0]->url(), PHP_URL_HOST))->unique()->values()->all();
+
+    expect($hosts)->toBe(['fatima-a', 'fatima-b'])
+        ->and($turtleHosts)->toBe(['fatima-a']);
+});
+
 test('a contested session lock degrades to the native appraisal', function (): void {
     Log::spy();
     $this->fakeFatimaDriver();
 
     // Another appraisal holds the character, so this one cannot run within its own
     // timeout and must not risk interleaving state on a shared character.
-    $held = Cache::lock('ai:cognition:fatima', 30);
+    $held = Cache::lock('ai:cognition:fatima:0', 30);
     $held->acquire();
     config(['ai.cognition.fatima.lock_seconds' => 1]);
 
