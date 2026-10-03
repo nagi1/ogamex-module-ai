@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
@@ -338,6 +339,14 @@ class QueueableUnitPlanner
      */
     private function capitalFleet(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
     {
+        // The archetype's fleet template first (architecture step 4): the hull furthest below its share of the
+        // fleet, from the first planet whose yard can build it. The dearest-hull rule below is the fallback for
+        // an archetype with no template, or a template nothing in which can be built yet.
+        $templated = $this->templateHull($player, $planets, $profile);
+        if ($templated !== null) {
+            return $templated;
+        }
+
         $best = null;
         $bestPrice = -INF;
 
@@ -396,6 +405,73 @@ class QueueableUnitPlanner
     }
 
     /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */
+    private function templateDefence(PlanetService $planet): ?UnitObject
+    {
+        $profile = AiProfile::query()->where('player_id', $planet->getPlayer()?->getId() ?? 0)->first();
+        if ($profile === null) {
+            return null;
+        }
+
+        $owned = [];
+        foreach ($planet->getDefenseUnits()->units as $entry) {
+            $owned[$entry->unitObject->machine_name] = $entry->amount;
+        }
+
+        $name = app(ArchetypeDoctrine::class)->nextTemplateUnit(
+            $profile->archetype,
+            'defence_template',
+            $owned,
+            fn (string $machineName): bool => $this->unitNamed($machineName) !== null && $this->requirementsMet($planet, $this->unitNamed($machineName)) && $this->affordable($planet, $this->unitNamed($machineName)) >= self::FIRST_CARGO_AMOUNT,
+        );
+
+        return $name === null ? null : $this->unitNamed($name);
+    }
+
+    /** The host's unit of that name, or null when a doctrine names something that is not a unit here. */
+    private function unitNamed(string $machineName): ?UnitObject
+    {
+        try {
+            return ObjectService::getUnitObjectByMachineName($machineName);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param array<int, PlanetService> $planets
+     */
+    private function templateHull(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
+    {
+        $owned = [];
+        foreach ($planets as $planet) {
+            foreach ($planet->getShipUnits()->units as $entry) {
+                $owned[$entry->unitObject->machine_name] = ($owned[$entry->unitObject->machine_name] ?? 0) + $entry->amount;
+            }
+        }
+
+        foreach ($planets as $planet) {
+            $name = app(ArchetypeDoctrine::class)->nextTemplateUnit(
+                $profile->archetype,
+                'fleet_template',
+                $owned,
+                fn (string $machineName): bool => $this->unitNamed($machineName) !== null && $this->queueable($planet, $this->unitNamed($machineName)),
+            );
+            if ($name === null) {
+                continue;
+            }
+
+            $hull = ObjectService::getUnitObjectByMachineName($name);
+            $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 2));
+            if ($this->starvesSaving($planet, $profile, $hull, $amount)) {
+                continue;
+            }
+
+            return $this->unit($planet, $hull, 'doctrine:fleet:'.$name, $amount, false, true);
+        }
+
+        return null;
+    }
+
     private function canAttack(PlayerService $player, UnitObject $hull): bool
     {
         return $hull->properties->attack->calculate($player)->totalValue > 1;
@@ -949,6 +1025,17 @@ class QueueableUnitPlanner
 
             $best = $unit;
             $bestPrice = $price;
+        }
+
+        // A planet that already stands a wall grows it along the archetype's defence template (architecture
+        // step 4): the defence furthest below its share. A bare planet keeps the cheapest unit, which is the
+        // fastest first wall.
+        if ($best !== null && ! $this->holdsNoDefence($planet)) {
+            $templated = $this->templateDefence($planet);
+            if ($templated !== null) {
+                $best = $templated;
+                $bestPrice = max(1.0, $this->metalEquivalent(ObjectService::getObjectRawPrice($best->machine_name)));
+            }
         }
 
         if ($best === null) {

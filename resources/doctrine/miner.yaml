@@ -1,0 +1,49 @@
+# Miner: mines first, storage before it overflows, astrophysics for colonies, a small cargo fleet.
+opening:
+  - [metal_mine, 1]
+  - [metal_mine, 2]
+  - [solar_plant, 1]
+  - [crystal_mine, 1]
+  - [metal_mine, 3]
+  - [solar_plant, 2]
+  - [crystal_mine, 2]
+  - [metal_mine, 4]
+  - [solar_plant, 3]
+  - [deuterium_synthesizer, 1]
+  - [crystal_mine, 3]
+  - [metal_mine, 5]
+  - [solar_plant, 4]
+  - [robot_factory, 1]
+  - [robot_factory, 2]
+  - [research_lab, 1]
+  - [shipyard, 1]
+  - [shipyard, 2]
+  - [energy_technology, 1]
+  - [combustion_drive, 1]
+  - [combustion_drive, 2]
+  - [deuterium_synthesizer, 2]
+  - [crystal_mine, 4]
+  - [metal_mine, 6]
+research_path:
+  - [energy_technology, 1]
+  - [combustion_drive, 2]
+  - [espionage_technology, 2]
+  - [impulse_drive, 1]
+  - [astrophysics, 1]
+  - [computer_technology, 2]
+  - [astrophysics, 3]
+  - [plasma_technology, 1]
+  - [astrophysics, 5]
+  - [plasma_technology, 4]
+  - [astrophysics, 7]
+  - [plasma_technology, 8]
+fleet_template:
+  large_cargo: 50
+  small_cargo: 20
+  recycler: 15
+  light_fighter: 15
+defence_template:
+  rocket_launcher: 50
+  light_laser: 30
+  heavy_laser: 10
+  gauss_cannon: 10

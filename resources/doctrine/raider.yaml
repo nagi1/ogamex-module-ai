@@ -1,0 +1,48 @@
+# Raider: an early shipyard and combustion drives, espionage 4 to read farms, a light-fighter swarm with
+# cargo, then cruisers against light fighters and battleships for crash attacks.
+opening:
+  - [metal_mine, 1]
+  - [metal_mine, 2]
+  - [solar_plant, 1]
+  - [crystal_mine, 1]
+  - [metal_mine, 3]
+  - [solar_plant, 2]
+  - [crystal_mine, 2]
+  - [robot_factory, 1]
+  - [shipyard, 1]
+  - [deuterium_synthesizer, 1]
+  - [research_lab, 1]
+  - [shipyard, 2]
+  - [robot_factory, 2]
+  - [metal_mine, 4]
+  - [solar_plant, 3]
+  - [crystal_mine, 3]
+  - [deuterium_synthesizer, 2]
+  - [shipyard, 4]
+research_path:
+  - [energy_technology, 1]
+  - [combustion_drive, 2]
+  - [espionage_technology, 2]
+  - [combustion_drive, 4]
+  - [espionage_technology, 4]
+  - [computer_technology, 3]
+  - [impulse_drive, 3]
+  - [weapon_technology, 3]
+  - [shielding_technology, 2]
+  - [armor_technology, 3]
+  - [computer_technology, 6]
+  - [impulse_drive, 5]
+  - [hyperspace_technology, 3]
+  - [hyperspace_drive, 4]
+  - [weapon_technology, 8]
+  - [astrophysics, 3]
+fleet_template:
+  light_fighter: 40
+  small_cargo: 20
+  large_cargo: 10
+  cruiser: 15
+  battle_ship: 10
+  recycler: 5
+defence_template:
+  rocket_launcher: 60
+  light_laser: 40

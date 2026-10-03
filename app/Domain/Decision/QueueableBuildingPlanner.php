@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Domain\Persona\SavingsGoal;
 use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Models\AiProfile;
@@ -142,6 +143,12 @@ class QueueableBuildingPlanner
             // saving the economy is holding back does not veto it, because a planet with no wall is
             // the state the account is fixing, not a step it chooses between (QUAL-003).
             'wall' => fn (PlanetService $planet): array => $this->facilityChain->wallPending($planet),
+            // The archetype's written opening and research path (architecture step 4): the build list a guide
+            // gives, in order, before the payback rules below take over. An object the host lacks is skipped.
+            'doctrine' => fn (PlanetService $planet): array => [
+                ...app(ArchetypeDoctrine::class)->openingStep($profile->archetype, $planet),
+                ...($planet->getPlayer() !== null ? app(ArchetypeDoctrine::class)->researchStep($profile->archetype, $planet->getPlayer()) : []),
+            ],
             'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
             'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
             // A planet sitting on six times the price of a facility it does not own buys it before another

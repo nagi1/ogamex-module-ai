@@ -1,0 +1,44 @@
+# Fleeter: the fleet is the bank; saves every night, heavy hulls and drives, a moon for the fleet.
+opening:
+  - [metal_mine, 1]
+  - [metal_mine, 2]
+  - [solar_plant, 1]
+  - [crystal_mine, 1]
+  - [metal_mine, 3]
+  - [solar_plant, 2]
+  - [crystal_mine, 2]
+  - [robot_factory, 1]
+  - [deuterium_synthesizer, 1]
+  - [shipyard, 1]
+  - [research_lab, 1]
+  - [robot_factory, 2]
+  - [shipyard, 2]
+  - [metal_mine, 4]
+  - [crystal_mine, 3]
+  - [deuterium_synthesizer, 3]
+  - [shipyard, 4]
+research_path:
+  - [energy_technology, 1]
+  - [combustion_drive, 3]
+  - [espionage_technology, 3]
+  - [computer_technology, 4]
+  - [impulse_drive, 4]
+  - [weapon_technology, 4]
+  - [shielding_technology, 3]
+  - [armor_technology, 4]
+  - [hyperspace_technology, 4]
+  - [hyperspace_drive, 4]
+  - [astrophysics, 3]
+  - [weapon_technology, 10]
+  - [graviton_technology, 1]
+fleet_template:
+  light_fighter: 15
+  cruiser: 20
+  battle_ship: 20
+  battlecruiser: 15
+  large_cargo: 15
+  recycler: 10
+  bomber: 5
+defence_template:
+  rocket_launcher: 60
+  light_laser: 40

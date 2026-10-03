@@ -7,6 +7,11 @@ happens when a plan is audited against itself instead of against the game.
 
 ## Gate 1 — no static, hardcoded AI
 
+> **Amended 3 Oct 2026 by the owner** (architecture diagnosis, section 6): doctrine data under
+> `resources/doctrine/` may name objects (opening build orders, research paths, fleet and defence
+> templates). Code names nothing; an object the host lacks is skipped; every manager keeps its derived
+> rule as the fallback for objects no doctrine names. The rest of this section still applies to code.
+
 The host is a platform, not a fixed game. Mods, modules and future extensions add buildings, ships,
 defence, technologies and premium officers. The AI must keep working — and keep being able to act — when
 it meets an object it has never seen before.

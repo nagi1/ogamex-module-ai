@@ -1,0 +1,44 @@
+# Turtle: a broad economy behind a deep wall, shields up early, missiles for anyone who comes close.
+opening:
+  - [metal_mine, 1]
+  - [metal_mine, 2]
+  - [solar_plant, 1]
+  - [crystal_mine, 1]
+  - [metal_mine, 3]
+  - [solar_plant, 2]
+  - [crystal_mine, 2]
+  - [robot_factory, 1]
+  - [shipyard, 1]
+  - [metal_mine, 4]
+  - [solar_plant, 3]
+  - [crystal_mine, 3]
+  - [robot_factory, 2]
+  - [research_lab, 1]
+  - [shipyard, 2]
+  - [deuterium_synthesizer, 2]
+  - [metal_store, 2]
+  - [crystal_store, 1]
+research_path:
+  - [energy_technology, 2]
+  - [laser_technology, 3]
+  - [shielding_technology, 2]
+  - [armor_technology, 3]
+  - [weapon_technology, 3]
+  - [ion_technology, 4]
+  - [combustion_drive, 2]
+  - [impulse_drive, 1]
+  - [astrophysics, 3]
+  - [energy_technology, 6]
+  - [hyperspace_technology, 3]
+  - [plasma_technology, 7]
+fleet_template:
+  large_cargo: 50
+  recycler: 30
+  light_fighter: 20
+defence_template:
+  rocket_launcher: 35
+  light_laser: 25
+  heavy_laser: 15
+  gauss_cannon: 10
+  ion_cannon: 10
+  plasma_turret: 5

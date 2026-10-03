@@ -1,0 +1,43 @@
+# Hybrid: a miner's economy with a raiding wing, colonies early, a balanced fleet.
+opening:
+  - [metal_mine, 1]
+  - [metal_mine, 2]
+  - [solar_plant, 1]
+  - [crystal_mine, 1]
+  - [metal_mine, 3]
+  - [solar_plant, 2]
+  - [crystal_mine, 2]
+  - [metal_mine, 4]
+  - [robot_factory, 1]
+  - [shipyard, 1]
+  - [solar_plant, 3]
+  - [deuterium_synthesizer, 1]
+  - [research_lab, 1]
+  - [crystal_mine, 3]
+  - [robot_factory, 2]
+  - [shipyard, 2]
+  - [deuterium_synthesizer, 2]
+research_path:
+  - [energy_technology, 1]
+  - [combustion_drive, 2]
+  - [espionage_technology, 2]
+  - [impulse_drive, 1]
+  - [astrophysics, 1]
+  - [computer_technology, 3]
+  - [weapon_technology, 2]
+  - [astrophysics, 3]
+  - [shielding_technology, 2]
+  - [armor_technology, 3]
+  - [plasma_technology, 2]
+  - [hyperspace_drive, 2]
+fleet_template:
+  light_fighter: 30
+  small_cargo: 15
+  large_cargo: 20
+  cruiser: 15
+  recycler: 10
+  heavy_fighter: 10
+defence_template:
+  rocket_launcher: 50
+  light_laser: 30
+  heavy_laser: 20

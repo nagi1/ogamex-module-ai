@@ -45,6 +45,11 @@ preferences. The full statement, including what each gate forbids and how a revi
   module code or config. Adding an object to the host must make it usable by the existing module code
   with no module edit. Module policy may express *taste* over host data; it must never be the reason a
   capability is reachable or unreachable.
+  **Amended 3 Oct 2026 (owner, architecture diagnosis section 6):** doctrine *data* under
+  `resources/doctrine/` may name buildings, ships, defences and research (opening build orders, research
+  paths, fleet and defence templates), the way RTS AIs ship build lists. Code still names nothing, an
+  object a doctrine file does not know (or the host does not have) is skipped, and every manager keeps
+  its generic derived rule as the fallback, so a modded object stays reachable with no edit.
 - **Gate 2 — relatively simple, never over-engineered.** Take the smallest mechanism that closes the
   gap: one class, one loop, one sort key. No abstraction with a single implementation, no config for a
   value that never varies, no optimisation without a measurement, no layer that only forwards, and no
