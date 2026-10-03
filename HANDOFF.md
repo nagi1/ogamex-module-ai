@@ -155,6 +155,28 @@ Until it is faster, lower `HARNESS_SIM_HOURS` and `HARNESS_READ_SIM_HOURS`, or t
 - QUAL-DEDUP: proof was failing on NAKED_BESIDE_WALLED player 80 (planet at zero defence beside a wall of 2,330 units); proof changed as above.
 - Crashes: none in the queue worker, scheduler or app logs. The only exception seen was the sim table error above.
 
-### Still to report (next push)
-`sim --hours=24 --accounts=20` summary and speedup line, per-hour sessions for players 96-99, attacks per hour, LIFE_FIGHTS share, player 117
-NAKED_BESIDE_WALLED rows, `ai:raid-rejected:*` counters, the full `sim --hours=48`, and the `prove LIFE-001` log with "simulating 12h" and a SIM: line.
+### FINAL addendum, 2026-10-03 16:50 local (supersedes the interim "Still to report")
+Pull: module main with local commits through ead6e2c (PERS-008); all cloud commits merged.
+
+**48h sim (`sim --hours=48 --max-wall=1200`, SIM_DB=ogamex-sim-verify): INVALID, do not read the scorecard from it.**
+- It played 13.3 simulated hours in 1201 s ("x40") with **0 sessions and 50,969 errors**: 50,859 were
+  `include(.../Policies/TraderPolicy.php): Failed to open stream` (commit ead6e2c deleted that class; nothing in source, config,
+  vendor/composer or bootstrap/cache names it any more, and no ai_* column in the sim copy contains the string, so something loaded it
+  from a stale source: suspect a PHP-FPM/CLI opcache or a pre-deletion autoload in the process that started the run) and 110 were
+  `Undefined constant ExecuteAiIntentAction::PAYLOAD_PLANET_ID` (still unfixed; it also hits the live cohort). The "x40" is errors failing fast; the honest speedup is still about x5.
+  Errors fell to 0 by sim 00:00 because the due backlog was exhausted, not because anything recovered.
+- The scorecard it printed (15 of 15 PASS) is the clone's 48h window of **pre-existing** history, not new play. Ignore it.
+- The run ended with `Segmentation fault (core dumped)` after the table. Every later sim (`sim --hours=1`, and the prove below) now segfaults
+  before the first jump: `SIM: failed, no SIM_NOW printed`. Cause not found; first suspect is the PHP process after the container's code changed under it (restart the app container and re-run `composer dump-autoload`), second is the Rust battle-engine FFI.
+- Live invariants after the 48h run (cohort verification at the end of that run): NAKED_BESIDE_WALLED players 40, 46, 80, 117; AUTH_UPTIME for players 35 onward (active 24 of 24 hours).
+
+**`PROVE_SIM_HOURS=12 PROVE_SIM_WALL=300 prove LIFE-001`:** exit 1. The log shows `--- simulating 12h on a copy of the cohort`, then
+`SIM: ... (12.0 h)`, `Segmentation fault`, `SIM: failed, no SIM_NOW printed`, `the live steps below judge the live cohort`. Live verdict:
+QUALITY FAIL LIFE_FIGHTS NAKED_BESIDE_WALLED AUTH_UPTIME; AUTHENTICITY AUTH_UPTIME FAIL, AUTH_REPETITION / AUTH_SAVE / AUTH_CONTACT / AUTH_GROWTH PASS.
+
+**Not obtainable** (the valid sim never ran): per-hour sessions of players 96-99, attacks per hour, LIFE_FIGHTS share inside a sim window,
+`ai:raid-rejected:*` counters. Player 117 still has one planet at zero defence beside one holding 3,078 units.
+
+**For the cloud model, in order:** (1) find and stop the sim segfault; (2) fix `PAYLOAD_PLANET_ID`; (3) find what still loads TraderPolicy;
+(4) fix the DeterministicSessionLoopTest clock-sweep failure at UTC 0/9/18; (5) the simulator is x5, profile it before relying on it.
+Sims stay opt-in (`HARNESS_SIM_HOURS`, `HARNESS_READ_SIM_HOURS` default 0).
