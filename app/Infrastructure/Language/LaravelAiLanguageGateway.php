@@ -66,8 +66,8 @@ class LaravelAiLanguageGateway implements LanguageGateway
             'text' => trim($text),
             'interpretation' => $interpretation,
             'proposals' => $proposals,
-            'inputTokens' => $response->usage->promptTokens,
-            'outputTokens' => $response->usage->completionTokens,
+            'inputTokens' => self::inputTokens($response->usage),
+            'outputTokens' => self::outputTokens($response->usage),
             'cachedInputTokens' => $response->usage->cacheReadInputTokens,
             'providerRequestId' => $response->invocationId,
             'provider' => $response->meta->provider,
@@ -160,8 +160,8 @@ class LaravelAiLanguageGateway implements LanguageGateway
             'text' => null,
             'interpretation' => null,
             'proposals' => [],
-            'inputTokens' => $response?->usage->promptTokens ?? 0,
-            'outputTokens' => $response?->usage->completionTokens ?? 0,
+            'inputTokens' => $response === null ? 0 : self::inputTokens($response->usage),
+            'outputTokens' => $response === null ? 0 : self::outputTokens($response->usage),
             'cachedInputTokens' => $response?->usage->cacheReadInputTokens ?? 0,
             'providerRequestId' => $response?->invocationId,
             'provider' => $response?->meta->provider ?? $attribution['provider'],
@@ -202,5 +202,17 @@ class LaravelAiLanguageGateway implements LanguageGateway
     private function attribution(LanguageRequest $request): array
     {
         return $request->ladder->primary() ?? ['provider' => '', 'model' => ''];
+    }
+
+    /** laravel/ai 1.0 renamed promptTokens to inputTokens; read whichever the installed SDK carries (IMPL-65). */
+    private static function inputTokens(object $usage): int
+    {
+        return (int) ($usage->inputTokens ?? $usage->promptTokens ?? 0);
+    }
+
+    /** laravel/ai 1.0 renamed completionTokens to outputTokens. */
+    private static function outputTokens(object $usage): int
+    {
+        return (int) ($usage->outputTokens ?? $usage->completionTokens ?? 0);
     }
 }
