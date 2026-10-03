@@ -622,10 +622,19 @@ and pushed as `c694d0c`.
      now migrates the copy before playing.
   Also ran `php artisan migrate --force` on **grand**, which the live workers read: without it every
   live raid would query a missing `ai_intel`.
-- **Module suite: 11 failed / 1544 passed** (`47 -> 19 -> 11`). The doctrine-label staleness cluster is
-  gone. The 11 left: 2 are `ARCH-GOALS`' red spec; `GrowthStallReactionTest` x3 (`Situation::scoreHistory()`
-  missing); `ConversationCycleTest`, `BattleObservationTest` x2, `AllyUnderAttackObservationTest`,
-  `AiExploitationGuardTest` (trust/affinity now `-1..1`, the old `0.0` clamp asserted); `AiAdmissionLimitTest`.
+- **Module suite: 7 failed / 1548 passed** (`47 -> 19 -> 11 -> 7`). The doctrine-label staleness cluster
+  and the `ARCH-*` red specs are green. The 7 left are all **expectations pinned to behaviour that was
+  deliberately changed or never implemented**, none from the migration:
+  - `AllyUnderAttackObservationTest`, `BattleObservationTest` x2, `AiExploitationGuardTest`,
+    `ConversationCycleTest` — trust/affinity now run `-1..1` (COVER-hatred: "no grudge could exist"),
+    where the tests assert the old `0.0` clamp. The code produces `-0.05`, `-0.2`, `-0.1`; the
+    expectation needs pinning to those, and that is a judgement (is the value right?) rather than a
+    mechanical edit.
+  - `GrowthStallReactionTest` x1 — `Situation::scoreHistory()` added this session turned 3 of its 4
+    stories from errors into passes; the remaining one (flat history must spend the pile) still reads
+    as not-stalled, so either the helper's `sampled_at` shape or the sampler's own hourly row is in the
+    way. Needs the IMPL-69 semantics read properly.
+  - `AiAdmissionLimitTest` x1 — an `AiStopCounter` row is not written after `ai:run-due-work`.
 - **Harness bug fixed and pushed (`77bdad1`)**: `strategy-pipeline.py::migrations_for` read every
   `app/Models/*.php` in the row's `file_ref`, so a row that CREATES its model (`ARCH-GOALS` /
   `app/Models/AiGoal.php`) raised `FileNotFoundError` out of `implement_row` and **killed the writer** —
