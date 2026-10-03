@@ -17,6 +17,7 @@ use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\GameMissionFactory;
 use OGame\Factories\PlanetServiceFactory;
@@ -99,6 +100,34 @@ final class Situation
     public function goalSaver(): self
     {
         $this->profile->update(['stockpile_strategy' => AiStockpileStrategy::GoalSaver]);
+
+        return $this;
+    }
+
+    /**
+     * The account's own hourly score history, oldest first: one `AiScoreSample` an hour, the last one at
+     * the login the session runs in. This is the only growth history the module keeps, so a story about a
+     * flat score (IMPL-69) has to plant it here.
+     *
+     * @param list<int> $scores general score per hour
+     */
+    public function scoreHistory(array $scores): self
+    {
+        $hours = count($scores);
+
+        foreach (array_values($scores) as $index => $general) {
+            AiScoreSample::create([
+                'player_id' => $this->profile->player_id,
+                'sampled_at' => Date::now()->subHours($hours - $index),
+                'general' => $general,
+                'economy' => $general,
+                'research' => 0,
+                'military_built' => 0,
+                'military_destroyed' => 0,
+                'military_lost' => 0,
+                'general_rank' => null,
+            ]);
+        }
 
         return $this;
     }

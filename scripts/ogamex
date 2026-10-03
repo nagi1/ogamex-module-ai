@@ -248,8 +248,14 @@ with_test_lane() {
 
 # A lane database is created and migrated the first time its lane runs.
 prepare_lane_database() {
-    [ -e "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE" ] && return
-    prepare_coverage_database_for "$AI_DB_OVERRIDE" && : > "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE"
+    # The lane is built once and reused, but a slice may ADD a migration (ARCH-GOALS: ai_goals), and a
+    # marker that never ages left the new table out of the lane: the slice's own tests failed on a table
+    # its own migration creates, so no row that adds a migration could ever verify. `migrate --force` is
+    # incremental, so the marker is keyed on the migrations on disk and only a changed set pays for it.
+    local stamp
+    stamp="$(ls "$MODULE_ROOT/database/migrations" 2>/dev/null | md5sum | cut -c1-12)"
+    [ -e "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE-$stamp" ] && return
+    prepare_coverage_database_for "$AI_DB_OVERRIDE" && : > "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE-$stamp"
 }
 
 # The cohorts are their own stacks (grand, pve); the dev stack holds no AI population, so a
