@@ -6,35 +6,35 @@
             "name": "neither-built-nor-queued",
             "built": {},
             "queued": {},
-            "requested": ["SmallShieldDome", "SmallShieldDome", "LargeShieldDome", "LargeShieldDome"],
-            "expected": ["SmallShieldDome", "LargeShieldDome"]
+            "requested": ["small_shield_dome", "small_shield_dome", "large_shield_dome", "large_shield_dome"],
+            "expected": ["small_shield_dome", "large_shield_dome"]
         },
         {
             "name": "both-dome-types-already-built",
-            "built": {"SmallShieldDome": 1, "LargeShieldDome": 1},
+            "built": {"small_shield_dome": 1, "large_shield_dome": 1},
             "queued": {},
-            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "requested": ["small_shield_dome", "large_shield_dome"],
             "expected": []
         },
         {
             "name": "large-dome-already-in-the-build-queue",
             "built": {},
-            "queued": {"LargeShieldDome": 1},
-            "requested": ["SmallShieldDome", "LargeShieldDome"],
-            "expected": ["SmallShieldDome"]
+            "queued": {"large_shield_dome": 1},
+            "requested": ["small_shield_dome", "large_shield_dome"],
+            "expected": ["small_shield_dome"]
         },
         {
             "name": "small-dome-queued-and-large-dome-built",
-            "built": {"LargeShieldDome": 1},
-            "queued": {"SmallShieldDome": 1},
-            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "built": {"large_shield_dome": 1},
+            "queued": {"small_shield_dome": 1},
+            "requested": ["small_shield_dome", "large_shield_dome"],
             "expected": []
         },
         {
             "name": "past-the-single-instance-limit",
-            "built": {"SmallShieldDome": 3, "LargeShieldDome": 2},
+            "built": {"small_shield_dome": 3, "large_shield_dome": 2},
             "queued": {},
-            "requested": ["SmallShieldDome", "LargeShieldDome"],
+            "requested": ["small_shield_dome", "large_shield_dome"],
             "expected": []
         },
         {
