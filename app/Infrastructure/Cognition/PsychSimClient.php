@@ -3,6 +3,7 @@
 namespace Modules\AI\Infrastructure\Cognition;
 
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
 use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\DriverResponseLimit;
 use Throwable;
@@ -30,6 +31,25 @@ class PsychSimClient
      * @return 'cooperate'|'defect'|null
      */
     public function decide(float $temptation): string|null
+    {
+        // The world is rebuilt from the temptation alone, so the same incentive always gets the same
+        // stance: an answer already given is reused instead of another round trip.
+        $key = 'ai:psychsim:' . md5((string) config('ai.cognition.psychsim.base_url', '') . '|' . $temptation);
+        $known = Cache::get($key);
+        if ($known === 'cooperate' || $known === 'defect') {
+            return $known;
+        }
+
+        $decision = $this->ask($temptation);
+
+        if ($decision !== null) {
+            Cache::put($key, $decision, now()->addHour());
+        }
+
+        return $decision;
+    }
+
+    private function ask(float $temptation): string|null
     {
         if (!$this->circuit->allowsRequest()) {
             return null;

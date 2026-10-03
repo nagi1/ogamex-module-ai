@@ -37,6 +37,43 @@ class FatimaCognitionSession
      */
     public function appraise(AiArchetype $archetype, string $event, array $beliefs): array|null
     {
+        return $this->remembered('appraise', [$archetype->name, $event, $beliefs], fn (): array|null => $this->appraiseOnce($archetype, $event, $beliefs));
+    }
+
+    /**
+     * Every appraisal reloads the authored scenario first, so the answer is a function of the request
+     * alone. The same request is answered from the cache instead of four or more round trips, and a
+     * failed (null) answer is never kept.
+     *
+     * @template TResult
+     * @param  array<int, mixed>  $request
+     * @param  Closure(): (TResult|null)  $compute
+     * @return TResult|null
+     */
+    private function remembered(string $kind, array $request, Closure $compute): mixed
+    {
+        $key = 'ai:fatima:' . $kind . ':' . md5(json_encode($request) ?: '');
+        $known = Cache::get($key);
+
+        if ($known !== null) {
+            return $known;
+        }
+
+        $result = $compute();
+
+        if ($result !== null) {
+            Cache::put($key, $result, now()->addHour());
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array<string, string>  $beliefs
+     * @return array{mood: float, emotions: list<FatimaEmotion>}|null
+     */
+    private function appraiseOnce(AiArchetype $archetype, string $event, array $beliefs): array|null
+    {
         return $this->sequential(function () use ($archetype, $event, $beliefs): array|null {
             $scenario = $this->scenario();
             $character = $archetype->name;
@@ -67,6 +104,15 @@ class FatimaCognitionSession
      * @return list<array{name: string, step: string, volitions: array<string, float>}>|null
      */
     public function evaluateSocialExchanges(AiArchetype $archetype, string $counterparty, array $beliefs): array|null
+    {
+        return $this->remembered('social', [$archetype->name, $counterparty, $beliefs], fn (): array|null => $this->evaluateSocialExchangesOnce($archetype, $counterparty, $beliefs));
+    }
+
+    /**
+     * @param  array<string, string>  $beliefs
+     * @return list<array{name: string, step: string, volitions: array<string, float>}>|null
+     */
+    private function evaluateSocialExchangesOnce(AiArchetype $archetype, string $counterparty, array $beliefs): array|null
     {
         return $this->sequential(function () use ($archetype, $counterparty, $beliefs): array|null {
             $scenario = $this->scenario();

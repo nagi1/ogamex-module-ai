@@ -3,6 +3,7 @@
 namespace Modules\AI\Infrastructure\Memory;
 
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\Cache;
 use Modules\AI\Support\DriverCircuitBreaker;
 use Modules\AI\Support\DriverResponseLimit;
 use Throwable;
@@ -32,6 +33,29 @@ class AgentOsClient
             return null;
         }
 
+        // The driver keeps no store: its ranking is a function of the request alone, so the same
+        // request is answered from here instead of another round trip. A failed call is not kept.
+        $key = 'ai:agentos:' . md5((string) config('ai.cognition.memory.agentos.base_url', '') . '|' . json_encode([$playerId, $query, $limit, $memories]));
+        $known = Cache::get($key);
+        if (is_array($known)) {
+            return $known;
+        }
+
+        $ranking = $this->ask($playerId, $query, $limit, $memories);
+
+        if ($ranking !== null) {
+            Cache::put($key, $ranking, now()->addHour());
+        }
+
+        return $ranking;
+    }
+
+    /**
+     * @param  list<array{id:int,text:string,tags:list<string>}>  $memories
+     * @return list<int>|null
+     */
+    private function ask(int $playerId, string $query, int $limit, array $memories): array|null
+    {
         if (!$this->circuit->allowsRequest()) {
             return null;
         }
