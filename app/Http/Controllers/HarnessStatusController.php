@@ -750,7 +750,7 @@ class HarnessStatusController
             }
 
             $decoded = json_decode((string) file_get_contents($file), true);
-            if (!is_array($decoded) || !$this->alive((int) ($decoded['pid'] ?? 0))) {
+            if (!is_array($decoded)) {
                 continue;
             }
 
@@ -1068,10 +1068,8 @@ class HarnessStatusController
      *
      * @return array<string, mixed>
      */
-    private function alive(int $pid): bool
-    {
-        return $pid > 0 && is_dir('/proc/'.$pid);
-    }
+    /** The loop republishes its status at least every few minutes; silence this long is a stopped harness. */
+    private const STOPPED_SECONDS = 600;
 
     private function harnessState(): array
     {
@@ -1087,7 +1085,7 @@ class HarnessStatusController
             $heartbeat = (int) (time() - (int) filemtime($status));
             // The file outlives the process that wrote it, so a stopped harness kept showing its last
             // phase ("implementing LIFE-001") as if it were running.
-            $stopped = is_array($decoded) && !$this->alive((int) ($decoded['pid'] ?? 0));
+            $stopped = is_array($decoded) && $heartbeat > self::STOPPED_SECONDS;
             if ($stopped) {
                 $detail = 'last: '.$phase.' '.$detail;
                 $phase = 'stopped';
