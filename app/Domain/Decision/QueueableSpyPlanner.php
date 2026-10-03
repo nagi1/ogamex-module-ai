@@ -19,6 +19,7 @@ use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
 use OGame\Services\FleetMissionService;
 use OGame\Services\PlanetService;
+use OGame\Services\ObjectService;
 use OGame\Services\PlayerService;
 
 /**
@@ -176,7 +177,9 @@ class QueueableSpyPlanner
             ->take(self::MAX_CANDIDATES)
             ->values();
 
-        $knownYield = $this->knownYieldByCoordinate($candidates);
+        $intel = $this->knownIntelByCoordinate($candidates);
+        $knownYield = $intel['yield'];
+        $fighter = $this->ownsWarFleet($idleOrigins);
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
         $scored = [];
 
@@ -204,6 +207,7 @@ class QueueableSpyPlanner
                 'origin' => $origin,
                 'inactive' => $owner?->isInactive() ?? false,
                 'quiet' => !$this->activityIntelReader->activityAt($target),
+                'defended' => $fighter && isset($intel['defended'][$coordinateKey]),
                 'score' => ($knownYield[$coordinateKey] ?? 0.0) - $distance,
             ];
         }
@@ -216,9 +220,34 @@ class QueueableSpyPlanner
         // has read every quiet body still scouts the active ones, since an account that acts every few
         // minutes is the only kind that fights back and leaves debris. Among equals the closest known-rich
         // body wins (INT-003).
-        usort($scored, static fn (array $left, array $right): int => [$right['inactive'], $right['quiet'], $right['score']] <=> [$left['inactive'], $left['quiet'], $left['score']]);
+        // An account that owns a war fleet reads the bodies known to fight back first: an administrator
+        // sees raids that pillage empty planets as a dead universe (LIFE_FIGHTS), and a fleet is built
+        // to be flown at something that shoots.
+        usort($scored, static fn (array $left, array $right): int => [$right['defended'], $right['inactive'], $right['quiet'], $right['score']] <=> [$left['defended'], $left['inactive'], $left['quiet'], $left['score']]);
 
         return [$scored[0]['origin'], $scored[0]['planet']];
+    }
+
+    /**
+     * Whether any scouting base stands a military hull, by the host's own military catalogue.
+     *
+     * @param list<PlanetService> $origins
+     */
+    private function ownsWarFleet(array $origins): bool
+    {
+        $military = array_map(static fn ($ship): string => $ship->machine_name, ObjectService::getMilitaryShipObjects());
+
+        foreach ($origins as $origin) {
+            foreach ($origin->getShipUnits()->units as $entry) {
+                // A probe is in the military catalogue but carries no real weapon: a war fleet shoots.
+                $player = $origin->getPlayer();
+                if ($player !== null && in_array($entry->unitObject->machine_name, $military, true) && $entry->unitObject->properties->attack->calculate($player)->totalValue > 1) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -289,14 +318,17 @@ class QueueableSpyPlanner
      * recent report of any age. A never-probed planet scores zero here and is
      * ranked by closeness alone.
      *
+     * Also says which of them the last report found defended (ships or defence standing), since the
+     * scout that owns a war fleet reads the bodies that fight before the empty farms.
+     *
      * @param iterable<int, Planet> $candidates
-     * @return array<string, float>
+     * @return array{yield: array<string, float>, defended: array<string, true>}
      */
-    private function knownYieldByCoordinate(iterable $candidates): array
+    private function knownIntelByCoordinate(iterable $candidates): array
     {
         $planets = is_array($candidates) ? $candidates : iterator_to_array($candidates);
         if ($planets === []) {
-            return [];
+            return ['yield' => [], 'defended' => []];
         }
 
         // One pass over the candidate coordinates instead of one report read per
@@ -313,9 +345,10 @@ class QueueableSpyPlanner
                 }
             })
             ->orderByDesc('id')
-            ->get(['id', 'planet_galaxy', 'planet_system', 'planet_position', 'resources']);
+            ->get(['id', 'planet_galaxy', 'planet_system', 'planet_position', 'resources', 'ships', 'defense']);
 
         $yield = [];
+        $defended = [];
         foreach ($reports as $report) {
             $key = "{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}";
             if (isset($yield[$key])) {
@@ -323,9 +356,12 @@ class QueueableSpyPlanner
             }
 
             $yield[$key] = $this->yieldFromResources($report->resources ?? []);
+            if ($this->isDefended($report->ships, $report->defense)) {
+                $defended[$key] = true;
+            }
         }
 
-        return $yield;
+        return ['yield' => $yield, 'defended' => $defended];
     }
 
     /**
