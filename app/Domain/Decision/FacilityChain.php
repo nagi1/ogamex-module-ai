@@ -360,6 +360,12 @@ class FacilityChain
             }
 
             foreach ($this->producersOf($resource, $planet) as $object) {
+                // A producer that already stands and still yields nothing is not what is missing: its power is
+                // (measured live 4 Oct 2026: a colony with no plant raised its synthesizer to level 9 on 0 income).
+                if ($this->currentLevel($planet, $object->machine_name) > 0) {
+                    continue;
+                }
+
                 $producers[$object->machine_name] = $object;
             }
         }
