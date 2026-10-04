@@ -1,0 +1,22 @@
+# The fields a planet keeps free for the stations only a planet can hold.
+#
+# A planet's fields are finite and the host refuses every field-consuming building once they are used
+# up -- including the object that adds fields and the facility it waits on, each of which needs a field
+# of its own. A planet that spends its last fields on mine levels can therefore never hold anything
+# behind them: the nanite factory, the terraformer that adds fields, the laboratory deep enough for the
+# technology the largest hull waits on. That is the state a cohort settles into when the economy is told
+# only what a step pays back, because a mine always pays and a field is not in the price (measured live
+# 5 Oct 2026: the host refusing "Not enough fields on this planet. Upgrade your Terraformer or use a
+# planet field item to get more fields" while no account owned a nanite factory, a terraformer, a jump
+# gate, the energy-priced technology or the hull behind it).
+#
+# A player does not pave the last fields with mines: the fields the station project still needs are kept
+# for it, and it takes them the moment the mines have outgrown their stations.
+#
+# station_reserve_fields   the floor, in fields, a planet keeps for the station project. How many the
+#                          station project actually still needs is read from the host's own station
+#                          catalogue and requirement graph (`FacilityChain::stationFieldBudget`), so a
+#                          deeper project keeps more; this is the minimum, and it is the pair the range
+#                          cannot do without: a field for the facility and a field for what it unlocks.
+
+station_reserve_fields: 2

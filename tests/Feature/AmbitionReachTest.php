@@ -144,8 +144,10 @@ test('a collector keeps ordering crawlers up to what its mines can use, and stop
     expect($classShip()[1])->toBeNull();
 });
 
-// A silo holds ten slots a level and a missile takes two: the stock a planet keeps follows the silo it built.
-test('the interplanetary missiles a planet keeps follow its silo, never fewer than the standing few', function (): void {
+// MISSILES-001: a silo holds ten slots a level and a missile takes two, so the stock a planet keeps is
+// the silo's own interplanetary capacity — five a level, per resources/behavior/def-ipm.yaml — with no
+// floor of its own: without a silo there is no stock, and a deeper silo stores proportionally more.
+test('the interplanetary missiles a planet keeps are what its silo stores', function (): void {
     ambitionProfile($this->currentUserId);
     $standing = function () {
         $planet = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
@@ -154,13 +156,17 @@ test('the interplanetary missiles a planet keeps follow its silo, never fewer th
             ->invoke(app(Modules\AI\Domain\Decision\QueueableUnitPlanner::class), $planet);
     };
 
-    expect($standing())->toBe(5);
+    expect($standing())->toBe(0);
 
-    $this->planetSetObjectLevel('missile_silo', 8);
+    $this->planetSetObjectLevel('missile_silo', 4);
 
     expect($standing())->toBe(20);
 
+    $this->planetSetObjectLevel('missile_silo', 8);
+
+    expect($standing())->toBe(40);
+
     $this->planetSetObjectLevel('missile_silo', 12);
 
-    expect($standing())->toBe(30);
+    expect($standing())->toBe(60);
 });

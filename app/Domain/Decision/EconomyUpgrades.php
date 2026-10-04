@@ -6,6 +6,7 @@ use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\PrefetchesExperience;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Domain\Experience\RankedExperience;
+use Modules\AI\Domain\Research\ResearchCostRule;
 use Modules\AI\Domain\Routine\RoutineProfile;
 use Modules\AI\Enums\AiBuildingExperienceFeature;
 use Modules\AI\Enums\AiExperienceCaseFamily;
@@ -14,6 +15,7 @@ use Modules\AI\Enums\AiExperienceRulesetVersion;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiRuntimeSettings;
 use OGame\GameObjects\Models\Abstracts\GameObject;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Resource;
 use OGame\Models\Resources;
 use OGame\Services\BuildingQueueService;
@@ -270,11 +272,44 @@ class EconomyUpgrades
 
         return array_values(array_filter(
             [...ObjectService::getStationObjects(), ...ObjectService::getResearchObjects()],
-            static fn (GameObject $object): bool => !in_array($object->machine_name, $production, true)
-                && $planet->getObjectLevel($object->machine_name) < self::AMBITION_LEVELS
+            fn (GameObject $object): bool => !in_array($object->machine_name, $production, true)
+                && $this->currentLevel($planet, $object) < $this->ambitionCeiling($object)
                 && ObjectService::objectValidPlanetType($object->machine_name, $planet)
                 && ObjectService::objectRequirementsMet($object->machine_name, $planet),
         ));
+    }
+
+    /**
+     * How far this account already is with one ambition.
+     *
+     * The host keeps a technology's level on the player and a building's on the planet, so asking the
+     * planet for a technology answers zero every time -- which left every technology looking untaken,
+     * the energy-priced one among them. The gap that technology's price measures is what the capacity
+     * rule reads, so a mature planet demanded its energy on every login, spent its one build slot on
+     * another plant, and the station the plan had lined up behind that slot never got its turn.
+     */
+    private function currentLevel(PlanetService $planet, GameObject $object): int
+    {
+        if ($object->type !== GameObjectType::Research) {
+            return $planet->getObjectLevel($object->machine_name);
+        }
+
+        return $planet->getPlayer()?->getResearchLevel($object->machine_name) ?? 0;
+    }
+
+    /**
+     * The level past which the object is no longer bought for its own sake: the few levels of the
+     * catalogue rule, and for a technology the price rule names a ceiling (its own level is the only
+     * useful one) that ceiling instead, so the account stops buying a technology the game has no use
+     * for another level of.
+     */
+    private function ambitionCeiling(GameObject $object): int
+    {
+        $useful = $object->type === GameObjectType::Research
+            ? app(ResearchCostRule::class)->maximumUsefulLevel($object->machine_name)
+            : null;
+
+        return $useful === null ? self::AMBITION_LEVELS : min(self::AMBITION_LEVELS, $useful);
     }
 
     /**
