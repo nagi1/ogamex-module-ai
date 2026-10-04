@@ -77,6 +77,13 @@ class QueueableUnitPlanner
 
     private const MISSILE_STANDING = 5;
 
+    /** The silo whose capacity bounds missiles (the host gives it ten slots a level), and the share of those slots kept as interplanetary missiles. */
+    private const MISSILE_SILO = 'missile_silo';
+
+    private const MISSILE_SILO_SLOTS_PER_LEVEL = 10;
+
+    private const MISSILE_SILO_SHARE = 0.5;
+
     private const CRYSTAL_WEIGHT = 1.5;
 
     private const DEUTERIUM_WEIGHT = 2.0;
@@ -669,7 +676,7 @@ class QueueableUnitPlanner
      */
     public function repeatsYardOrder(QueueableUnit $order): bool
     {
-        $standing = ['role:energy:', 'role:defense:', 'role:class:'];
+        $standing = ['role:energy:', 'role:defense:', 'role:class:', 'role:missile'];
         if (array_filter($standing, static fn (string $role): bool => str_starts_with($order->reason, $role)) === []) {
             return false;
         }
@@ -854,11 +861,24 @@ class QueueableUnitPlanner
         }
 
         $missile = ObjectService::getUnitObjectByMachineName(self::MISSILE);
-        if ($planet->getObjectAmount(self::MISSILE) >= self::MISSILE_STANDING || ! $this->queueable($planet, $missile)) {
+        $standing = $this->missileStanding($planet);
+        $owned = $planet->getObjectAmount(self::MISSILE) + $this->inYard($planet, $missile);
+        if ($owned >= $standing || ! $this->queueable($planet, $missile)) {
             return null;
         }
 
-        return $this->unit($planet, $missile, 'role:missile', min(self::MISSILE_STANDING - $planet->getObjectAmount(self::MISSILE), $this->affordable($planet, $missile)));
+        return $this->unit($planet, $missile, 'role:missile', min($standing - $owned, $this->affordable($planet, $missile)));
+    }
+
+    /**
+     * How many interplanetary missiles a planet keeps: half the silo's slots, each missile taking two, and never
+     * fewer than the standing few. A player fills the silo they built; the other half stays for the interceptors.
+     */
+    private function missileStanding(PlanetService $planet): int
+    {
+        $slots = $planet->getObjectLevel(self::MISSILE_SILO) * self::MISSILE_SILO_SLOTS_PER_LEVEL * self::MISSILE_SILO_SHARE;
+
+        return max(self::MISSILE_STANDING, (int) floor($slots / 2));
     }
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool

@@ -143,3 +143,24 @@ test('a collector keeps ordering crawlers up to what its mines can use, and stop
 
     expect($classShip()[1])->toBeNull();
 });
+
+// A silo holds ten slots a level and a missile takes two: the stock a planet keeps follows the silo it built.
+test('the interplanetary missiles a planet keeps follow its silo, never fewer than the standing few', function (): void {
+    ambitionProfile($this->currentUserId);
+    $standing = function () {
+        $planet = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+
+        return (new ReflectionMethod(Modules\AI\Domain\Decision\QueueableUnitPlanner::class, 'missileStanding'))
+            ->invoke(app(Modules\AI\Domain\Decision\QueueableUnitPlanner::class), $planet);
+    };
+
+    expect($standing())->toBe(5);
+
+    $this->planetSetObjectLevel('missile_silo', 8);
+
+    expect($standing())->toBe(20);
+
+    $this->planetSetObjectLevel('missile_silo', 12);
+
+    expect($standing())->toBe(30);
+});
