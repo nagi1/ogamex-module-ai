@@ -354,6 +354,9 @@ test('a research intent without a payload decides again', function (): void {
     foreach (aiResearchChainFacilities() as $machineName => $level) {
         $this->planetSetObjectLevel($machineName, $level);
     }
+    // One level short of the laboratory the energy-priced technology waits on, which would send the planet to raise
+    // its plant first: a building step this test is not about.
+    $this->planetSetObjectLevel('research_lab', 11);
 
     $work = AiWorkItem::create([
         'player_id' => $this->currentUserId,

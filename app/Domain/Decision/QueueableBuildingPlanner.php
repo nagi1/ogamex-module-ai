@@ -366,6 +366,12 @@ class QueueableBuildingPlanner
             return null;
         }
 
+        // A score that has not moved for the window is a goal that is not arriving: the account stops reserving the
+        // pile for it and spends what it holds (IMPL-69), the same release the reserve floor makes.
+        if (app(StalledGrowthDetector::class)->stalled($profile->player_id)) {
+            return null;
+        }
+
         $candidate = $this->savingCandidate($planet, $profile);
         if ($candidate === null) {
             return null;

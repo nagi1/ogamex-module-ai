@@ -482,7 +482,10 @@ test('a late event never rewinds the affect state', function (): void {
     app(RecordObservedBattleReportAction::class)
         ->handle(battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0)->id);
 
-    $state = AiAffectState::query()->where('player_id', $defender->id)->sole();
+    // A second attack from the same side is a different feeling from the first (the appraisal reads the history),
+    // and each emotion keeps its own running state, so the one the newer event set is the one that must not rewind.
+    $emotion = AiEmotionalEpisode::query()->where('player_id', $defender->id)->where('occurred_at', $newer->created_at)->sole()->emotion;
+    $state = AiAffectState::query()->where('player_id', $defender->id)->where('emotion', $emotion)->sole();
 
     expect(CarbonImmutable::instance($state->updated_for)->timestamp)->toBe($newer->created_at->timestamp);
 });
