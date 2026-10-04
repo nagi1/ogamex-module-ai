@@ -1,0 +1,23 @@
+[project]
+name = "ogrl"
+version = "0.1.0"
+description = "Training side of the OGameX AI economy policy (plan/rl): behaviour cloning, evaluation, ONNX export, policy server."
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "torch>=2.8",
+    "onnx>=1.16",
+    "onnxruntime>=1.20",
+]
+
+[project.scripts]
+ogrl-train-bc = "ogrl.train_bc:main"
+ogrl-serve = "ogrl.serve:main"
+ogrl-evaluate = "ogrl.evaluate:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ogrl"]

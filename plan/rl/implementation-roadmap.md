@@ -23,7 +23,7 @@ Gates are defined in [benchmark-plan.md](benchmark-plan.md#5-gates).
 | Benchmark | per-phase session profile (`bench/sessionprof.php`). |
 | Fallback | Each change is independent; drop any that changes the digest. |
 
-## Phase 2: choice-point seam + dataset (no learning yet)
+## Phase 2: choice-point seam + dataset (no learning yet) — DONE 4 Oct 2026
 
 | | |
 | --- | --- |
@@ -33,7 +33,7 @@ Gates are defined in [benchmark-plan.md](benchmark-plan.md#5-gates).
 | Benchmark | Overhead of encoding < 5% of session time. |
 | Fallback | Seam behind a config switch, off by default in production. |
 
-## Phase 3: behaviour cloning
+## Phase 3: behaviour cloning — code done (`rl/`), run on the training machine (HANDOUT-local-agent.md)
 
 | | |
 | --- | --- |

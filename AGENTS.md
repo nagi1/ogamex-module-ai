@@ -33,6 +33,12 @@ play moving, the work is making the existing engine play, not adding to it.
   those locks, tests queue on one lane through `scripts/ogamex`, and commits name their files
   (`git add <files>`; never `-A`, `stash`, `reset`, `clean` or a force-push).
 
+## Learned economy policy (plan/rl)
+
+Work on training data, the choice seam (`app/Domain/Choice`), `rl/` (Python) or the `ai:sim` RL options follows
+`.github/skills/ogame-rl-training/SKILL.md`. Its rules (host stays the referee, no object identity as a feature,
+seeded runs, teacher path untouched) are binding in addition to the gates below.
+
 ## The three gates — non-negotiable
 
 Every AI slice is checked against these before it is accepted. They are design constraints, not

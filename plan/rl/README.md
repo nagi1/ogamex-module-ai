@@ -18,7 +18,10 @@ Numbers marked as measured come from [benchmark-plan.md](benchmark-plan.md); scr
 | [evaluation-plan.md](evaluation-plan.md) | Twin-universe tournament, seed counts, validity checks |
 | [risks.md](risks.md) | Failure modes, mitigations, determinism checklist |
 | [implementation-roadmap.md](implementation-roadmap.md) | Phases, success criteria, fallbacks, stop conditions, what not to build |
-| [next-steps.md](next-steps.md) | **Start here after Phase 0**: what changed, the Xeon runbook, where language-model classification fits, the best move |
+| [next-steps.md](next-steps.md) | **Start here**: status of every phase, what depends on the owner, results log |
+| [HANDOUT-local-agent.md](HANDOUT-local-agent.md) | The prompt for the agent on the training machine (setup → data → BC → closed loop) |
+| `../../.github/skills/ogame-rl-training/` | The skill: how to run, measure, fix and improve the model |
+| `../../rl/` | The Python package (training, serving, evaluation) |
 
 ## Recommended architecture
 

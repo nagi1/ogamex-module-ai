@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Modules\AI\Domain\Choice\SocketChoicePolicy;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
@@ -195,6 +196,10 @@ class SimulateAiTime extends Command
         file_put_contents($stateFile, $stoppedAt->toIso8601String());
 
         $this->saveSqlite();
+        // A server that never answers reads exactly like a policy that agrees with the planner: say which it was.
+        if (config('ai.rl.policy') === 'socket') {
+            $this->line('RL: ' . SocketChoicePolicy::fallbacks() . ' choice(s) fell back to the planner (server down, slow or illegal answer)');
+        }
         $this->reportErrors();
         $this->line(sprintf('JUMPS: %d (average %.0f simulated seconds per jump)', $jumps, $start->diffInSeconds($stoppedAt) / max(1, $jumps)));
         $this->reportProfile();
