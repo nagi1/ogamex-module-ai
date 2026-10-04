@@ -469,7 +469,10 @@ class FacilityChain
     {
         $defence = app(DefenseNeedEvaluator::class);
 
-        if ($defence->standingUnits($planet) > 0) {
+        // A moon without defence is ordinary: its few fields go to the lunar base and the phalanx first,
+        // and a wall prerequisite there spent them on a factory and a yard instead (measured live 4 Oct
+        // 2026: 12 moons, not one lunar base, robotics and yards on the moons).
+        if ($planet->getPlanetType() === PlanetType::Moon || $defence->standingUnits($planet) > 0) {
             return false;
         }
 
@@ -527,7 +530,15 @@ class FacilityChain
      */
     private function ambitions(PlanetService $planet): array
     {
-        $objects = [...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()];
+        // Stations are goals too: nothing else ever raises the robotics factory past what the mines need,
+        // so the nano factory and the terraformer behind it stayed out of reach for every account
+        // (measured live 4 Oct 2026: robotics factory 7 at most in 120 accounts, the nano factory needs 10).
+        // A station this planet's type cannot hold (a moon's lunar base on a planet) is no goal here.
+        $stations = array_filter(
+            ObjectService::getStationObjects(),
+            static fn (GameObject $station): bool => ObjectService::objectValidPlanetType($station->machine_name, $planet),
+        );
+        $objects = [...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects(), ...$stations];
         $player = $planet->getPlayer();
         $fleetless = $player !== null && $this->ownsNoMovableShip($player);
 

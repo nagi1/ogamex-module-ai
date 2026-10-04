@@ -13,6 +13,7 @@ use Modules\AI\Enums\AiExperienceFeatureVersion;
 use Modules\AI\Enums\AiExperienceRulesetVersion;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiRuntimeSettings;
+use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\Models\Resource;
 use OGame\Models\Resources;
 use OGame\Services\BuildingQueueService;
@@ -212,26 +213,10 @@ class EconomyUpgrades
     public function ambitions(PlanetService $planet): array
     {
         $entries = [];
-        $production = array_map(static fn ($object): string => $object->machine_name, ObjectService::getGameObjectsWithProduction());
 
-        foreach ([...ObjectService::getStationObjects(), ...ObjectService::getResearchObjects()] as $object) {
-            if (in_array($object->machine_name, $production, true)) {
-                continue;
-            }
-            if ($planet->getObjectLevel($object->machine_name) >= self::AMBITION_LEVELS) {
-                continue;
-            }
-            if (!ObjectService::objectValidPlanetType($object->machine_name, $planet) || !ObjectService::objectRequirementsMet($object->machine_name, $planet)) {
-                continue;
-            }
-
+        foreach ($this->ambitionObjects($planet) as $object) {
             $price = ObjectService::getObjectPrice($object->machine_name, $planet);
-            $vault = new Resources(
-                $price->metal->get() * self::AMBITION_VAULT,
-                $price->crystal->get() * self::AMBITION_VAULT,
-                $price->deuterium->get() * self::AMBITION_VAULT,
-            );
-            if ($price->sum() <= 0.0 || !$planet->hasResources($vault)) {
+            if ($price->sum() <= 0.0 || !$planet->hasResources($this->vault($price))) {
                 continue;
             }
 
@@ -247,6 +232,63 @@ class EconomyUpgrades
         usort($entries, static fn (array $left, array $right): int => $left['total'] <=> $right['total']);
 
         return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $entries);
+    }
+
+    /**
+     * The energy a planet that could otherwise buy an ambition still lacks for its price, the nearest
+     * such gap, or zero. A player raises the plant for the technology that costs energy (the graviton
+     * technology wants 300,000) the way they raise it for a mine, so the capacity rule reads this: with
+     * nothing asking for it the planet only ever built the energy its next mine drew, and no account
+     * ever held enough for the technology the deathstar waits on.
+     */
+    public function energyGap(PlanetService $planet): float
+    {
+        $gap = 0.0;
+
+        foreach ($this->ambitionObjects($planet) as $object) {
+            $price = ObjectService::getObjectPrice($object->machine_name, $planet);
+            $missing = $price->energy->get() - (float) $planet->energy()->get();
+            if ($missing <= 0.0 || !$planet->hasResources($this->vault(new Resources($price->metal->get(), $price->crystal->get(), $price->deuterium->get())))) {
+                continue;
+            }
+
+            $gap = $gap === 0.0 ? $missing : min($gap, $missing);
+        }
+
+        return $gap;
+    }
+
+    /**
+     * The stations and technologies this planet could take for their own sake: not a production object, short of
+     * the ambition levels, valid for the planet's type and with the host's requirements met.
+     *
+     * @return list<GameObject>
+     */
+    private function ambitionObjects(PlanetService $planet): array
+    {
+        $production = array_map(static fn ($object): string => $object->machine_name, ObjectService::getGameObjectsWithProduction());
+
+        return array_values(array_filter(
+            [...ObjectService::getStationObjects(), ...ObjectService::getResearchObjects()],
+            static fn (GameObject $object): bool => !in_array($object->machine_name, $production, true)
+                && $planet->getObjectLevel($object->machine_name) < self::AMBITION_LEVELS
+                && ObjectService::objectValidPlanetType($object->machine_name, $planet)
+                && ObjectService::objectRequirementsMet($object->machine_name, $planet),
+        ));
+    }
+
+    /**
+     * What the planet keeps first for an ambition: six times the mined price, and the energy price as it stands. Energy is
+     * a capacity the host compares with the balance, not a stock to keep six times over.
+     */
+    private function vault(Resources $price): Resources
+    {
+        return new Resources(
+            $price->metal->get() * self::AMBITION_VAULT,
+            $price->crystal->get() * self::AMBITION_VAULT,
+            $price->deuterium->get() * self::AMBITION_VAULT,
+            $price->energy->get(),
+        );
     }
 
     /** @return list<BuildCandidate> the production upgrades whose payback lies inside the horizon */

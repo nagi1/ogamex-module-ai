@@ -7,6 +7,7 @@ use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\GamePhase;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Enums\PlanetType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -40,6 +41,12 @@ class ArchetypeDoctrine
      */
     public function openingStep(AiArchetype $archetype, PlanetService $planet): array
     {
+        // The opening is a planet's: a moon has a handful of fields and starts with the lunar base, which
+        // the facility chain places (measured live 4 Oct 2026: moons built a shipyard first and never a lunar base).
+        if ($planet->getPlanetType() === PlanetType::Moon) {
+            return [];
+        }
+
         foreach ($this->steps($archetype, 'opening', $this->phase($planet->getPlayer())) as [$machineName, $level]) {
             $object = $this->object($machineName);
             if ($object === null || $object->type === GameObjectType::Research) {

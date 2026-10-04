@@ -82,7 +82,7 @@ class EnergyCapacity
             }
         }
 
-        return max(0.0, $deficit);
+        return max(0.0, $deficit, app(EconomyUpgrades::class)->energyGap($planet));
     }
 
     /**

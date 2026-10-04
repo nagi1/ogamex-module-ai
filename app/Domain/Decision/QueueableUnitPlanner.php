@@ -15,6 +15,7 @@ use OGame\Models\Message;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
+use OGame\Models\Enums\PlanetType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -875,7 +876,8 @@ class QueueableUnitPlanner
                 continue;
             }
 
-            $bare = true;
+            // A moon without defence is ordinary (the invariant leaves it out too): it is not a bare sibling.
+            $bare = $bare || $planet->getPlanetType() !== PlanetType::Moon;
         }
 
         return $walled && $bare;
@@ -982,7 +984,7 @@ class QueueableUnitPlanner
         foreach ($planets as $planet) {
             // The balance is refreshed before the wall is priced: the host refuses an unaffordable batch.
             $planet->updateResources(false);
-            if ($this->defenseNeed->standingUnits($planet) > 0) {
+            if ($planet->getPlanetType() === PlanetType::Moon || $this->defenseNeed->standingUnits($planet) > 0) {
                 continue;
             }
 
