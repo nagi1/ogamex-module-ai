@@ -1,0 +1,81 @@
+the delivered change passed its tests but its live proof failed:
+PASS test:NextStepAffordableSituationTest 2s
+FAIL invariant:AUTH_UPTIME 15s —  ! [AUTH_UPTIME] player 35 is active in 24 of 24 hours of the day
+PASS aspect:economy 1s
+PROOF: FAIL PACE-001 (test:NextStepAffordableSituationTest invariant:AUTH_UPTIME aspect:economy) at invariant:AUTH_UPTIME:  ! [AUTH_UPTIME] player 35 is active in 24 of 24 hours of the day
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 390 sessions on 36 accounts
+  backlog: 144 work item(s) more than a minute late, oldest 217 min — live verdicts read worker lag
+  sessions chose: QueueUnits 34%, Raid 21%, Recycle 17%, Colonize 6%, Defend 6%, Build 5%, ThrottleMine 3%, DoNothing 3%, Spy 3%, Transfer 2%, Recall 1%, FleetSave 1%, Research 0%
+  host orders: buildings 874, research 249, units 373
+  missions launched: Recycle 164, Transport 133, Espionage 100, Colonisation 7, Deployment 15, Expedition 14, Attack 16, AcsDefend 8, Missile 1
+  work (kind: state count):
+    Recycle: Completed 194, Retry 17, Pending 15
+    QueueUnits: Completed 303, Retry 7, Pending 17
+    Spy: Completed 138, Retry 10, Pending 12
+    QueueResearch: Completed 296, Retry 7, Pending 17
+    RaidWave: Completed 20, Retry 1, Pending 2
+    Transfer: Completed 136, Retry 7, Pending 7, Leased 1
+    Defend: Completed 22, Retry 2
+    BuildFirstBuilding: Completed 887, Retry 15, Pending 53
+    SetMinePercent: Completed 14
+    RunSession: Completed 390, Pending 35, Retry 1
+    Missile: Completed 2
+    Raid: Completed 107, Retry 9, Pending 4
+    Expedition: Completed 37, Retry 3, Pending 4
+    Colonize: Completed 35, Pending 2
+    FleetSave: Completed 34, Retry 1
+    Recall: Completed 2
+  refused: 
+    79 × DispatchFleet: target_active_at_dispatch
+    75 × DispatchFleet: source_short_at_dispatch
+    20 × DispatchFleet: no_disposable_fleet
+    17 × QueueUnits: nothing_queueable
+    15 × CreateColony: source_short_at_dispatch
+    12 × DispatchFleet: This mission is not possible.
+    11 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    10 × DispatchFleet: Maximum number of fleets reached.
+    6 × QueueUnits: queue_not_created
+    5 × QueueBuilding: nothing_queueable
+    5 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: reaper
+    4 × QueueResearch: already_researching
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: research, queue_units, spy
+  NOT published: build, colonize, throttle_mine
+
+  player_id                    35
+  observed_at                  1791070948
+  account_state                "active"
+  recovery_factor              0.9658
+  fleet_slots_free             11
+  colonize_eligible            true
+  target_reports               9 item(s): [{"report_id":1692,"observed_at":1791060539,"expires_at":1791146939,"confidence":0.06928819444444445,"travel_cost":0.06302777777777778,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":1591,"obser
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      6 planet(s)
+
+  decision: Recycle
+    Research      77.0  resource_need=30, safety=10, recovery=19.3, archetype_preference=17.5, seeded_variation=0.2
+    Recycle       64.6  resource_need=30, safety=15, recovery=19.3, seeded_variation=0.3
+    Transfer      61.1  resource_need=27, safety=15, recovery=19.3, seeded_variation=-0.2
+    Raid          59.3  resource_need=30, safety=5, travel_cost=-0.4, recovery=19.3, archetype_preference=3.8, seeded_variation=-0.3, affect=1.9
+    Raid          59.2  resource_need=30, safety=5, travel_cost=-0.4, recovery=19.3, archetype_preference=3.8, seeded_variation=-0.3, affect=1.9
+    QueueUnits    59.0  resource_need=30, safety=10, recovery=19.3, seeded_variation=-0.4
+    Spy           58.9  resource_need=30, safety=10, recovery=19.3, seeded_variation=-0.4
+    Expedition    58.1  resource_need=9, safety=30, recovery=19.3, seeded_variation=-0.2
+    DoNothing     23.9  safety=5, recovery=19.3, seeded_variation=-0.4
+  turned down by the candidate factory: 
+    report:1692: raid_not_viable
+    report:1591: raid_not_viable
+    report:1446: raid_not_viable
+    report:1303: raid_not_viable
+    report:1153: raid_not_viable
+    report:1148: raid_not_viable
+    report:1143: raid_not_viable

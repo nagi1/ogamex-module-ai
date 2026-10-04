@@ -1,2 +1,3 @@
-PASS test:MigrationGoalCommitmentTest 2s
+PASS test:MigrationGoalCommitmentTest 1s
+PASS aspect:economy 0s
 PROOF: PASS ARCH-GOALS (test:MigrationGoalCommitmentTest aspect:economy)

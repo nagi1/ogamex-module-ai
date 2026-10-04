@@ -1,3 +1,4 @@
-North star: accounts nobody can tell from experienced humans. Scorecard 15/15 aspects pass; last 60 min: ADVANCING.
+North star: accounts nobody can tell from experienced humans. Scorecard 15/15 aspects pass; last 60 min: STALLED.
 Time is yours: never wait for the cohort to play. `bash scripts/ogamex sim --hours=N [--accounts=K]` plays N simulated hours on a copy of the cohort in minutes and prints the scorecard and invariants; `prove CODE` already simulates 12 h before its live steps; `bash scripts/ogamex clock-sweep TestName` runs a test at every hour of the day to catch a time-of-day dependence. A live step failing on 'too early' or zero events means run sim, not wait.
 Rules: deliver the code change first, then check once; never write probe tests or re-run a proof to learn what the code does; a row that fails the same check twice is read, not re-run; one agent in the tree at a time.
+The last hour landed no code. Stop reading; make an edit in the first few calls of your row.
