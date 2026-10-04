@@ -456,9 +456,12 @@ def steer(actions, verdict, failing, loops, passing, total):
         lines.append(f"- STOP circling {code} (reopened {n}x: {why}). More proof runs will not fix it; change the code that "
                      "owns the decision, or block the row naming the cause.")
     lines += ["Time is yours: never wait for the cohort to play. `bash scripts/ogamex sim --hours=N [--accounts=K]` plays N simulated "
-              "hours on a copy of the cohort in minutes and prints the scorecard and invariants; `prove CODE` already simulates "
-              "12 h before its live steps; `bash scripts/ogamex clock-sweep TestName` runs a test at every hour of the day to "
+              "hours on a copy of the cohort in minutes and prints the scorecard and invariants; `prove CODE` simulates "
+              "2 h on 30 accounts (about 7 min) before its live steps, PROVE_SIM_HOURS=N for more; `bash scripts/ogamex clock-sweep TestName` runs a test at every hour of the day to "
               "catch a time-of-day dependence. A live step failing on 'too early' or zero events means run sim, not wait."]
+    lines += ["Verify fastest first: `test-one Name` (seconds), `stories` (5 s, the Situation kit), `situation NAME`, then "
+              "`economy PLAYER` / `why PLAYER` to read one account's gate instead of querying tables, then `sim`. "
+              "A windowed invariant (six hours, seven days) is judged by the sim, never by waiting for the window."]
     lines += ["Rules: deliver the code change first, then check once; never write probe tests or re-run a proof to learn what "
               "the code does; a row that fails the same check twice is read, not re-run; one agent in the tree at a time."]
     if verdict == "STALLED":
