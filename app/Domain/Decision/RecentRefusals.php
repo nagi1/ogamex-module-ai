@@ -54,6 +54,35 @@ class RecentRefusals
     }
 
     /**
+     * Whether the account already holds an answer for a dispatch from this body to this target: the body
+     * or the coordinates is one the window blames.
+     *
+     * A planner reads this memory before it decides, but an intent is a decision already made and the
+     * worker may run it hours later, so a refusal raised in between is one no planner could have read.
+     * Asking the gate again for that body or target is the same question the account was already
+     * answered, and the one receipt is the whole memory it needs.
+     */
+    public function cools(int $playerId, int $planetId, int $galaxy, int $system, int $position): bool
+    {
+        foreach ($this->recent($playerId) as $receipt) {
+            $decision = $receipt->result['decision'] ?? [];
+
+            if ($galaxy > 0
+                && (int) ($decision['target_galaxy'] ?? 0) === $galaxy
+                && (int) ($decision['target_system'] ?? 0) === $system
+                && (int) ($decision['target_position'] ?? 0) === $position) {
+                return true;
+            }
+
+            if ($planetId > 0 && ! $this->targetSide($receipt) && (int) ($receipt->result['planet_id'] ?? 0) === $planetId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Whether the window holds a refusal of one of this account's own dispatch orders — the lane whose
      * budget belongs to the account rather than to a body or a target.
      *

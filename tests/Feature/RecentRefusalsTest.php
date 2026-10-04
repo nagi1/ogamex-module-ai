@@ -53,3 +53,14 @@ test('an origin the gate found short is remembered by planet and reason', functi
         ->and($refusals->origin($this->currentUserId, 8, 'source_short_at_dispatch'))->toBeFalse()
         ->and($refusals->origin($this->currentUserId, 7, 'no_disposable_fleet'))->toBeFalse();
 });
+
+// A queued decision runs hours after it was written, so the worker asks the memory once more before it asks the gate.
+test('an intent naming a refused target or a refused origin is answered by the memory, a target-side refusal never blames the origin', function (): void {
+    refuseDispatch($this->currentUserId, ['reason' => 'target_active_at_dispatch', 'planet_id' => 7, 'decision' => ['target_galaxy' => 1, 'target_system' => 22, 'target_position' => 4]]);
+    refuseDispatch($this->currentUserId, ['reason' => 'source_short_at_dispatch', 'planet_id' => 9, 'decision' => []]);
+    $refusals = app(RecentRefusals::class);
+
+    expect($refusals->cools($this->currentUserId, 8, 1, 22, 4))->toBeTrue()
+        ->and($refusals->cools($this->currentUserId, 9, 1, 30, 1))->toBeTrue()
+        ->and($refusals->cools($this->currentUserId, 7, 1, 30, 1))->toBeFalse();
+});
