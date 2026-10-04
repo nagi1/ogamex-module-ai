@@ -166,6 +166,106 @@ class FacilityChain
     }
 
     /**
+     * The stations the host's catalogue offers this planet and the account does not hold, with the
+     * facilities and technologies each of them waits on.
+     *
+     * The chain serves the one ambition it has in hand, and on an account that owns a ship that is its
+     * next war hull; the station the account could already hold is skipped as "producible" and nobody
+     * else ever asks for the facilities only a station wants, so the deepest stations stayed unowned
+     * however long the account played (measured live 5 Oct 2026: no nano factory anywhere in the cohort,
+     * and the robotics factory it waits on held at level two because nothing but the nano factory names
+     * a level ten robotics factory). A station is a goal in its own right, so it gets a list of its own,
+     * the way a moon's stations and a naked planet's wall already do.
+     *
+     * Only the level that first holds a station is asked for, so the list empties as soon as the account
+     * holds every station its own catalogue offers and the economy gets the build slot back. Nothing is
+     * named: the goals are the host's station catalogue filtered to the types this planet can hold and
+     * the steps are the host's own recursive requirement graph, so a station a mod adds is climbed to
+     * with no edit here.
+     *
+     * @return list<BuildCandidate>
+     */
+    public function stationPending(PlanetService $planet): array
+    {
+        // A moon has a handful of fields and its own two stations, and which of them the account is owed
+        // is the moon block's answer (RV-008/RV-009), so the planet's stations stay off a moon.
+        if ($planet->getPlanetType() === PlanetType::Moon) {
+            return [];
+        }
+
+        $ordered = [];
+        $producers = [];
+
+        foreach (ObjectService::getStationObjects() as $station) {
+            if ($planet->getObjectLevel($station->machine_name) > 0
+                || !ObjectService::objectValidPlanetType($station->machine_name, $planet)) {
+                continue;
+            }
+
+            $this->addRequirement($planet, $station->machine_name, 1, $ordered, $producers, 'station');
+
+            foreach (ObjectService::getRecursiveRequirements($station->machine_name) as $machineName => $level) {
+                $this->addRequirement($planet, $machineName, $level, $ordered, $producers);
+            }
+        }
+
+        $this->sortOrdered($ordered, $planet);
+
+        return $this->withProducers($ordered, $producers, $planet);
+    }
+
+    /**
+     * The fields this planet still owes the station project, levels included: what it must keep free for
+     * the stations only a planet can hold.
+     *
+     * A planet's fields are finite and the host refuses every field-consuming building once they are used
+     * up -- the object that adds fields included, and the facility that gates it needs a field of its own.
+     * A planet whose last fields went to mine levels can therefore never hold what is behind them, which
+     * is how a whole cohort comes to own no nanite factory anywhere (measured live 5 Oct 2026: the host
+     * refusing "Not enough fields on this planet. Upgrade your Terraformer" while no account owned one).
+     * A player keeps those fields for exactly that reason, so the count of them is one answer in one
+     * place. Nothing is named: the goals are the host's station catalogue, the levels are the host's own
+     * recursive requirement graph, and a technology among them is skipped because the host builds it in
+     * the lab, not on a field.
+     *
+     * Zero when the planet owes the station project nothing -- every station it can hold stands -- and on
+     * a moon, whose own two stations the moon block already decides (RV-008/RV-009).
+     */
+    public function stationFieldBudget(PlanetService $planet): int
+    {
+        if ($planet->getPlanetType() === PlanetType::Moon) {
+            return 0;
+        }
+
+        $needed = [];
+
+        foreach (ObjectService::getStationObjects() as $station) {
+            if (!ObjectService::objectValidPlanetType($station->machine_name, $planet)) {
+                continue;
+            }
+
+            $needed[$station->machine_name] = max($needed[$station->machine_name] ?? 0, 1);
+
+            foreach (ObjectService::getRecursiveRequirements($station->machine_name) as $machineName => $level) {
+                $needed[$machineName] = max($needed[$machineName] ?? 0, $level);
+            }
+        }
+
+        $budget = 0;
+
+        foreach ($needed as $machineName => $level) {
+            $object = ObjectService::getObjectByMachineName($machineName);
+            if (!$object->consumesPlanetField || $object->type === GameObjectType::Research) {
+                continue;
+            }
+
+            $budget += max(0, $level - $this->currentLevel($planet, $machineName));
+        }
+
+        return $budget;
+    }
+
+    /**
      * The chain's stated order: unmet host prerequisites first, then facilities before research
      * (an ordinary player stands the factory before chasing the technology or yard it enables), then
      * by the level asked for and the price of the step.
@@ -360,6 +460,12 @@ class FacilityChain
             }
 
             foreach ($this->producersOf($resource, $planet) as $object) {
+                // A producer that already stands and still yields nothing is not what is missing: its power is
+                // (measured live 4 Oct 2026: a colony with no plant raised its synthesizer to level 9 on 0 income).
+                if ($this->currentLevel($planet, $object->machine_name) > 0) {
+                    continue;
+                }
+
                 $producers[$object->machine_name] = $object;
             }
         }

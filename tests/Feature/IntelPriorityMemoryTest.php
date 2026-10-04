@@ -56,7 +56,7 @@ test('a target that paid raises the account priority and one that came home empt
 });
 
 test('the scout reads again the equal neighbour that paid, and drops it once it comes home empty', function (): void {
-    Situation::of($this)->ships('espionage_probe', 1);
+    Situation::of($this)->resources(0, 0, 100_000)->ships('espionage_probe', 1);
     $home = $this->planetService->getPlanetCoordinates();
     $left = intelPlaceFreighter($this->createForeignPlanet(), $home->galaxy, $home->system - 1);
     $right = intelPlaceFreighter($this->createForeignPlanet(), $home->galaxy, $home->system + 1);

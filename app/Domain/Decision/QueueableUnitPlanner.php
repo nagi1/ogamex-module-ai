@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Defense\AntiBallisticMissile;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Models\AiProfile;
@@ -16,6 +17,7 @@ use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\UnitQueue;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -71,10 +73,11 @@ class QueueableUnitPlanner
 
     private const CLASS_SHIP_BATCH = 2;
 
-    /** The host's one interplanetary missile object, the name its own mission reads, and the few a silo keeps ready. */
+    /** The host's one interplanetary missile object, the name its own mission reads. */
     private const MISSILE = 'interplanetary_missile';
 
-    private const MISSILE_STANDING = 5;
+    /** The silo whose own interplanetary capacity is the stock the planet keeps. */
+    private const MISSILE_SILO = 'missile_silo';
 
     private const CRYSTAL_WEIGHT = 1.5;
 
@@ -649,12 +652,35 @@ class QueueableUnitPlanner
         $perUnit = (float) $planet->getObjectProduction($producer->machine_name, 1, true)->energy->get();
         $affordable = ObjectService::getObjectMaxBuildAmount($producer->machine_name, $planet, true);
 
-        return $this->unit(
-            $planet,
-            $producer,
-            'role:energy:'.$producer->machine_name,
-            min((int) ceil($shortfall / $perUnit), $affordable)
-        );
+        // The units already in the yard are power the planet has paid for: a login that prices the same
+        // shortfall again orders it twice, and the cohort read 22,959 satellites in a day on planets holding
+        // ten times the power they drew (4,087 on one planet, 142,285 energy against 14,858 used).
+        $needed = (int) ceil($shortfall / $perUnit) - $this->inYard($planet, $producer);
+        if ($needed < self::FIRST_CARGO_AMOUNT) {
+            return null;
+        }
+
+        return $this->unit($planet, $producer, 'role:energy:'.$producer->machine_name, min($needed, $affordable));
+    }
+
+    /**
+     * Whether this order only repeats one already waiting in the yard: power and wall are standing needs, so a
+     * planet that has paid for the unit and not yet received it asks for nothing more of it. Sessions that
+     * overlap each plan the same need before the first order is placed, and the executor asks this before it
+     * spends (measured live 4 Oct 2026: three wall batches on one planet in a minute, 22,959 satellites in a day).
+     */
+    public function repeatsYardOrder(QueueableUnit $order): bool
+    {
+        $standing = ['role:energy:', 'role:defense:', 'role:class:', 'role:missile'];
+        if (array_filter($standing, static fn (string $role): bool => str_starts_with($order->reason, $role)) === []) {
+            return false;
+        }
+
+        return UnitQueue::query()
+            ->where('planet_id', $order->planetId)
+            ->where('object_id', $order->unitId)
+            ->where('processed', 0)
+            ->exists();
     }
 
     /**
@@ -783,17 +809,43 @@ class QueueableUnitPlanner
         }
 
         $ship = ObjectService::getUnitObjectByMachineName(ObjectService::getObjectById($class->getClassShipId())->machine_name);
-        if ($planet->getObjectAmount($ship->machine_name) >= self::CLASS_SHIP_STANDING || ! $this->queueable($planet, $ship)) {
+        $standing = $this->classShipStanding($planet, $ship);
+        $owned = $planet->getObjectAmount($ship->machine_name) + $this->inYard($planet, $ship);
+        if ($owned >= $standing || ! $this->queueable($planet, $ship)) {
             return null;
         }
 
-        $amount = min(self::CLASS_SHIP_BATCH, $this->affordable($planet, $ship));
+        // A ship the host bounds (the crawler) is ordered up to the number it says the mines can use, half
+        // of what the planet can pay for at a time; the others stay a handful (an expedition or recycling hull).
+        $amount = $standing === self::CLASS_SHIP_STANDING
+            ? min(self::CLASS_SHIP_BATCH, $this->affordable($planet, $ship))
+            : min($standing - $owned, max(self::CLASS_SHIP_BATCH, intdiv($this->affordable($planet, $ship), 2)));
 
         return $this->unit($planet, $ship, 'role:class:'.$ship->machine_name, $amount);
     }
 
     /**
-     * Interplanetary missiles up to the silo's standing few, when the account can fly them (the host's range
+     * How many of the class ship the planet keeps: a handful, or for a ship that raises production the number
+     * the host says the planet's mines can use (the crawler stops paying beyond eight per mine level; measured
+     * live 4 Oct 2026: 57 crawlers in the cohort against hundreds the mines could use).
+     */
+    private function classShipStanding(PlanetService $planet, UnitObject $ship): int
+    {
+        return max(self::CLASS_SHIP_STANDING, $planet->getUsableUnitCap($ship->machine_name) ?? 0);
+    }
+
+    /** The units of this kind the planet has paid for and not yet received. */
+    private function inYard(PlanetService $planet, UnitObject $unit): int
+    {
+        return (int) UnitQueue::query()
+            ->where('planet_id', $planet->getPlanetId())
+            ->where('object_id', $unit->id)
+            ->where('processed', 0)
+            ->sum('object_amount');
+    }
+
+    /**
+     * Interplanetary missiles up to what the silo stores, when the account can fly them (the host's range
      * is above zero) and the freshest reports show a wall worth thinning. The silo requirement and the
      * price are the host's, asked through the same gates every unit order passes.
      */
@@ -804,11 +856,67 @@ class QueueableUnitPlanner
         }
 
         $missile = ObjectService::getUnitObjectByMachineName(self::MISSILE);
-        if ($planet->getObjectAmount(self::MISSILE) >= self::MISSILE_STANDING || ! $this->queueable($planet, $missile)) {
+        $standing = $this->missileStanding($planet);
+        $owned = $planet->getObjectAmount(self::MISSILE) + $this->inYard($planet, $missile);
+        if ($owned >= $standing || ! $this->queueable($planet, $missile)) {
             return null;
         }
 
-        return $this->unit($planet, $missile, 'role:missile', min(self::MISSILE_STANDING - $planet->getObjectAmount(self::MISSILE), $this->affordable($planet, $missile)));
+        // The host takes the whole price when the order is placed and caps the silo at the slots that
+        // are still free, so the order is what this planet can pay for now -- the stock itself is the
+        // silo's, and a planet that cannot fill it fills what it can.
+        $amount = min($standing - $owned, $this->affordable($planet, $missile));
+        if ($amount < self::FIRST_CARGO_AMOUNT) {
+            return null;
+        }
+
+        return $this->unit($planet, $missile, 'role:missile', $amount);
+    }
+
+    /**
+     * The silo's missile stock as a login's own order, or null when every planet already stands what its
+     * silo stores.
+     *
+     * `plan()` reaches the missile role only when no earlier role on any planet wanted anything, and a
+     * login is almost always consumed by one of them -- the class ship above all, whose standing target
+     * the mines keep raising -- so the yard was never handed the order and an account that had built a
+     * silo never filled it (measured live 4 Oct 2026: 7 of 120 accounts held an interplanetary missile).
+     * The schedule asks for this the way it asks for the war fleet's hull, so a login stocks the silo
+     * however the engine scored the page.
+     */
+    public function missileStockOrder(int $playerId, ?PlayerService $player = null): ?QueueableUnit
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+            return null;
+        }
+
+        $player ??= $this->playerServiceFactory->make($playerId, true);
+
+        foreach ($player->planets->all() as $planet) {
+            // Priced against what the login's own planet list holds, the same refresh the role loop
+            // gives every planet before it is asked for an order.
+            $planet->updateResources(false);
+
+            $order = $this->missileStock($player, $planet, $playerId);
+            if ($order !== null) {
+                return $order;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * How many interplanetary missiles a planet keeps: the silo's own interplanetary capacity, the
+     * number `resources/behavior/def-ipm.yaml` states one silo level stores. The host caps the same
+     * silo at ten slots a level and each missile takes two, so that number is what a filled silo
+     * holds; nothing here keeps a floor of its own, because a silo the host will not accept a missile
+     * into is one the order below never reaches.
+     */
+    private function missileStanding(PlanetService $planet): int
+    {
+        return AntiBallisticMissile::policy()->ipmCapacity($planet->getObjectLevel(self::MISSILE_SILO));
     }
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool

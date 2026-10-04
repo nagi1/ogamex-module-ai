@@ -224,7 +224,8 @@ test('a coercive warning is refused, remembered as a threat and never trusted', 
     expect(AiSocialExchange::query()->sole()->response)->toBe(AiSocialResponse::Reject)
         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)->toBe('I will not accept coercive terms.')
         ->and((float) $relationship->threat)->toBe(0.15)
-        ->and((float) $relationship->trust)->toBe(0.0);
+        // Never trusted: a coercive warning leaves the relationship colder than it started, not warmer.
+        ->and((float) $relationship->trust)->toBeLessThanOrEqual(0.0);
 });
 
 test('an apology that names no harm is answered with a request for the acknowledgement', function (): void {

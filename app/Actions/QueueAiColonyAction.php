@@ -28,6 +28,9 @@ use OGame\Services\PlayerGameStateService;
  */
 class QueueAiColonyAction implements QueueAiColony
 {
+    /** The speed the planner quotes the flight at: one number for the decision and the dispatch. */
+    public const COLONY_SPEED = 10.0;
+
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
         private PlanetServiceFactory $planetServiceFactory,
@@ -57,7 +60,7 @@ class QueueAiColonyAction implements QueueAiColony
             $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
             $units->addUnit($colonyShip, 1);
 
-            if (!app(FlightFuel::class)->affordable($player, $planet, $units, new Coordinate($galaxy, $system, $position), 10)) {
+            if (!app(FlightFuel::class)->affordable($player, $planet, $units, new Coordinate($galaxy, $system, $position), self::COLONY_SPEED)) {
                 return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
 
@@ -69,7 +72,7 @@ class QueueAiColonyAction implements QueueAiColony
                 ColonisationMission::getTypeId(),
                 $units,
                 new Resources(),
-                10,
+                self::COLONY_SPEED,
             );
 
             return AiActionResult::queued($mission->id);

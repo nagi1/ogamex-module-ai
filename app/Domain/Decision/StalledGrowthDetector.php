@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Models\AiScoreSample;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Whether an account's public score has stopped moving (IMPL-69).
@@ -14,18 +15,27 @@ use Modules\AI\Models\AiScoreSample;
  */
 class StalledGrowthDetector
 {
-    /** Samples read, one per hour, so also the number of flat hours that counts as stalled. */
-    private const FLAT_HOURS = 6;
+    /** Samples read, one per hour, so also the number of flat hours that counts as stalled: the behaviour file's bound. */
+    private const BEHAVIOR_FILE = '/resources/behavior/growth.yaml';
+
+    /** @var array<int, bool> */
+    private array $stalled = [];
 
     public function stalled(int $playerId): bool
     {
+        return $this->stalled[$playerId] ??= $this->flatForTheWindow($playerId);
+    }
+
+    private function flatForTheWindow(int $playerId): bool
+    {
+        $window = (int) Yaml::parseFile(dirname(__DIR__, 3) . self::BEHAVIOR_FILE)['stalled_growth']['flat_hours'];
         $scores = AiScoreSample::query()
             ->where('player_id', $playerId)
             ->orderByDesc('sampled_at')
-            ->limit(self::FLAT_HOURS)
+            ->limit($window)
             ->pluck('general');
 
-        if ($scores->count() < self::FLAT_HOURS) {
+        if ($scores->count() < $window) {
             return false;
         }
 

@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 
@@ -34,6 +35,16 @@ class EnergyCapacity
             return [];
         }
 
+        return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $this->capacityByPrice($planet));
+    }
+
+    /**
+     * Every building the host reports as adding power at its next level and the queue accepts, cheapest first.
+     *
+     * @return list<array{price: float, candidate: BuildCandidate}>
+     */
+    private function capacityByPrice(PlanetService $planet): array
+    {
         $candidates = [];
 
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
@@ -56,7 +67,26 @@ class EnergyCapacity
 
         usort($candidates, static fn (array $left, array $right): int => $left['price'] <=> $right['price']);
 
-        return array_map(static fn (array $entry): BuildCandidate => $entry['candidate'], $candidates);
+        return $candidates;
+    }
+
+    /**
+     * The energy an ambition priced in energy still lacks, once the planet can pay for raising the plant six
+     * times over: the technology costs nothing else, so its own price cannot say whether the planet is rich
+     * enough to chase it, and a colony with an empty vault is not.
+     */
+    private function ambitionGap(PlanetService $planet): float
+    {
+        $gap = app(EconomyUpgrades::class)->energyGap($planet);
+        $cheapest = $this->capacityByPrice($planet)[0]['candidate'] ?? null;
+        if ($gap <= 0.0 || $cheapest === null) {
+            return 0.0;
+        }
+
+        $price = ObjectService::getObjectPrice(ObjectService::getObjectById($cheapest->buildingId)->machine_name, $planet);
+        $vault = new Resources($price->metal->get() * 6, $price->crystal->get() * 6, $price->deuterium->get() * 6);
+
+        return $planet->hasResources($vault) ? $gap : 0.0;
     }
 
     /**
@@ -82,7 +112,7 @@ class EnergyCapacity
             }
         }
 
-        return max(0.0, $deficit, app(EconomyUpgrades::class)->energyGap($planet));
+        return max(0.0, $deficit, $this->ambitionGap($planet));
     }
 
     /**

@@ -364,13 +364,13 @@ prove_row() {
         [ "$kind" = test ] || [ "$tests_failed" = 0 ] || break
         # PROVE_SIM_HOURS=N: before the first live step, play N simulated hours on a copy of the cohort and
         # judge every live step on that copy over exactly those hours. No waiting for wall-clock play.
-        # Opt-in (HARNESS_SIM_HOURS=N or PROVE_SIM_HOURS=N): measured at x5 on 3 Oct 2026, so 12 h took hours of wall time and blocked the only writer; off until the simulator is fast.
+        # Two hours on 30 accounts by default (measured 4 Oct 2026: about 7 minutes wall, against 45+ minutes of waiting for the live window); HARNESS_SIM_HOURS=0 turns it off, PROVE_SIM_HOURS=N overrides.
         sim_hours_wanted="${PROVE_SIM_HOURS-}"
-        [ -n "$sim_hours_wanted" ] || [ "${OGAMEX_RUNNER:-host}" != local-docker-dev ] || sim_hours_wanted="${HARNESS_SIM_HOURS:-0}"
+        [ -n "$sim_hours_wanted" ] || [ "${OGAMEX_RUNNER:-host}" != local-docker-dev ] || sim_hours_wanted="${HARNESS_SIM_HOURS:-2}"
         if [ "$kind" != test ] && [ "$sim_done" = 0 ] && [ "${sim_hours_wanted:-0}" -gt 0 ] 2>/dev/null; then
             sim_done=1
             echo "--- simulating ${sim_hours_wanted}h on a copy of the cohort" >&"$progress"
-            if SIM_DB="${SIM_DB:-ogamex-sim-prove}" sim_run "$sim_hours_wanted" --max-wall="${PROVE_SIM_WALL:-900}" >&"$progress"; then
+            if SIM_DB="${SIM_DB:-ogamex-sim-prove}" sim_run "$sim_hours_wanted" --accounts="${PROVE_SIM_ACCOUNTS:-30}" --max-wall="${PROVE_SIM_WALL:-480}" >&"$progress"; then
                 hours="$sim_hours_wanted"
                 age=$(( hours * 3600 ))
                 # Tells the harness this verdict already covers simulated hours, so a failing live step

@@ -442,7 +442,7 @@ function chainHostPrerequisites(): array
         ];
     };
 
-    foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects()] as $object) {
+    foreach ([...ObjectService::getResearchObjects(), ...ObjectService::getUnitObjects(), ...ObjectService::getStationObjects()] as $object) {
         foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {
             $merge($machineName, $level);
         }

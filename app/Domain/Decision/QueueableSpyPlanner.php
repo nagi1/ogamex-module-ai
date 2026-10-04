@@ -8,8 +8,10 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\GameMissions\EspionageMission;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
@@ -74,10 +76,13 @@ class QueueableSpyPlanner
 
         $player ??= $this->playerServiceFactory->make($playerId, true);
 
+        $refusals = app(RecentRefusals::class);
         $skip = $this->freshIntelCoordinates($playerId)
             + $this->inFlightCoordinates($playerId)
-            + $this->openSpyIntentCoordinates($playerId);
-        $selection = $this->target($player, $skip);
+            + $this->openSpyIntentCoordinates($playerId)
+            // A probe the gate just refused is not a mission, so nothing else remembers the target.
+            + $refusals->refusedTargets($playerId);
+        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId));
         if ($selection === null) {
             return null;
         }
@@ -152,11 +157,15 @@ class QueueableSpyPlanner
      * closest known-rich neighbour, not the lowest id.
      *
      * @param array<string, true> $skipCoordinates
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      * @return array{0: PlanetService, 1: Planet}|null the origin and its target
      */
-    private function target(PlayerService $player, array $skipCoordinates): ?array
+    private function target(PlayerService $player, array $skipCoordinates, array $refusedOrigins): ?array
     {
-        $idleOrigins = $this->idleProbePlanets($player);
+        $idleOrigins = array_values(array_filter(
+            $this->idleProbePlanets($player),
+            static fn (PlanetService $planet): bool => ! isset($refusedOrigins[$planet->getPlanetId()]),
+        ));
         if ($idleOrigins === []) {
             return null;
         }
@@ -206,7 +215,10 @@ class QueueableSpyPlanner
             if ($owner?->isAdmin() === true) {
                 continue;
             }
-            $origin = $this->closestOrigin($idleOrigins, $planet, $fleetMissions);
+            $origin = $this->closestOrigin($player, $idleOrigins, $planet, $fleetMissions);
+            if ($origin === null) {
+                continue;
+            }
             $distance = $fleetMissions->calculateFleetMissionDistance($origin, new Coordinate((int) $planet->galaxy, (int) $planet->system, (int) $planet->planet));
             $scored[] = [
                 'planet' => $planet,
@@ -257,20 +269,27 @@ class QueueableSpyPlanner
     }
 
     /**
-     * The own planet with an idle probe closest to the target, not the first in
-     * collection order: a probe is fuel and time, so the nearest base sends it.
+     * The own planet with an idle probe closest to the target that can pay the flight, not the first in
+     * collection order: a probe is fuel and time, so the nearest base that has the deuterium sends it.
+     * No such base means the target is not scouted now, as a player with an empty tank does not queue it.
      *
      * @param list<PlanetService> $origins
      */
-    private function closestOrigin(array $origins, Planet $target, FleetMissionService $fleetMissions): PlanetService
+    private function closestOrigin(PlayerService $player, array $origins, Planet $target, FleetMissionService $fleetMissions): PlanetService|null
     {
         $coordinate = new Coordinate((int) $target->galaxy, (int) $target->system, (int) $target->planet);
-        $best = $origins[0];
-        $bestDistance = $fleetMissions->calculateFleetMissionDistance($best, $coordinate);
+        $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
+        $best = null;
+        $bestDistance = null;
 
         foreach ($origins as $origin) {
+            $units = new UnitCollection();
+            $units->addUnit($probe, $this->probeCount($target));
+            if (!app(FlightFuel::class)->affordable($player, $origin, $units, $coordinate, 10)) {
+                continue;
+            }
             $distance = $fleetMissions->calculateFleetMissionDistance($origin, $coordinate);
-            if ($distance < $bestDistance) {
+            if ($bestDistance === null || $distance < $bestDistance) {
                 $best = $origin;
                 $bestDistance = $distance;
             }

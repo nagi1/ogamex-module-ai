@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Exception;
 use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
+use Modules\AI\Domain\Decision\RecentRefusals;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -31,10 +32,10 @@ use OGame\Services\PlayerService;
 class QueueAiExpeditionAction implements QueueAiExpedition
 {
     /** The cheapest speed the host accepts (10%), the classic expedition cruise. */
-    private const EXPEDITION_SPEED = 1.0;
+    public const EXPEDITION_SPEED = 1.0;
 
     /** The shortest expedition, the classic hourly cadence. */
-    private const EXPEDITION_HOLDING_HOURS = 1;
+    public const EXPEDITION_HOLDING_HOURS = 1;
 
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
@@ -56,6 +57,24 @@ class QueueAiExpeditionAction implements QueueAiExpedition
             }
             if ($player->isInVacationMode()) {
                 return AiActionResult::rejected(AiQueueActionReason::VacationMode);
+            }
+
+            // A decision taken before the gate refused the account's own dispatch orders is not a second
+            // offer: the planner already reads that refusal as the account's lane and stops planning, and
+            // a decision it made earlier still sits queued here. Answering from the same memory the planner
+            // reads means the host is never asked a question the account has already been answered — which
+            // is what kept one body writing the host's own sentence five times in six hours.
+            if (app(RecentRefusals::class)->accountLane($playerId)) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
+            }
+
+            // The host refuses a dispatch when the account is already out of expedition slots ("You are
+            // conducting too many expeditions at the same time"), and the slot is the account's, shared by
+            // every body: a decision that was legal when the login made it stops being legal once another
+            // fleet takes the slot, which is what the decision-to-dispatch lag does to this lane. The
+            // host's own question is asked here, where the count is live, so the game never has to refuse.
+            if ($player->getExpeditionSlotsInUse() >= $player->getExpeditionSlotsMax()) {
+                return AiActionResult::rejected(AiQueueActionReason::SourceShortAtDispatch);
             }
 
             $origin = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);

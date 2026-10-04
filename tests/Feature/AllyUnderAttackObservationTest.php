@@ -114,7 +114,7 @@ test('an ally under attack marks the attacker and warms the ally', function (): 
     $toDefender = AiRelationship::query()->where('player_id', $ally->id)->where('other_player_id', $defender->id)->sole();
 
     expect((float) $toAttacker->threat)->toBe(0.20)
-        ->and((float) $toAttacker->trust)->toBe(0.0)
+        ->and((float) $toAttacker->trust)->toBe(-0.05)
         ->and((float) $toDefender->affinity)->toBe(0.10)
         ->and((float) $toDefender->social_importance)->toBe(0.05);
 });

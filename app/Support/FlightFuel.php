@@ -18,9 +18,19 @@ class FlightFuel
 {
     public function affordable(PlayerService $player, PlanetService $origin, UnitCollection $fleet, Coordinate $target, float $speedPercent, int $holdingHours = 0): bool
     {
-        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
-        $fuel = (float) $fleetMissions->calculateConsumption($origin, $fleet, $target, $holdingHours, $speedPercent);
+        $fuel = $this->quote($player, $origin, $fleet, $target, $speedPercent, $holdingHours);
 
         return $fuel <= floor($origin->deuterium()->get()) && $fuel <= $fleet->getTotalFuelCapacity($player);
+    }
+
+    /**
+     * The host's own deuterium figure for one flight: the single quote every dispatching planner asks
+     * before it offers a plan, so the planner's answer and the gate's answer are the same number.
+     */
+    public function quote(PlayerService $player, PlanetService $origin, UnitCollection $fleet, Coordinate $target, float $speedPercent, int $holdingHours = 0): float
+    {
+        $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
+
+        return (float) $fleetMissions->calculateConsumption($origin, $fleet, $target, $holdingHours, $speedPercent);
     }
 }

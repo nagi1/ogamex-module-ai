@@ -5,6 +5,7 @@ use Modules\AI\Domain\Decision\QueueableColonyPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
+use OGame\Models\Resources;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -37,6 +38,8 @@ test('an account holding a colony ship plans a colony on a colonisable slot', fu
     colonisationScanProfile($this->currentUserId);
     $this->playerSetResearchLevel('astrophysics', 4);
     $this->planetAddUnit('colony_ship', 1);
+    // The ship has to be fuelled for the slot to be claimed: the planner asks the host's own quote.
+    $this->planetAddResources(new Resources(0, 0, 100_000, 0));
 
     $plan = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
 
@@ -51,6 +54,7 @@ test('the scan offsets with the account seed so two accounts do not claim one sl
     $profile = colonisationScanProfile($this->currentUserId);
     $this->playerSetResearchLevel('astrophysics', 4);
     $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddResources(new Resources(0, 0, 100_000, 0));
 
     $first = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
 

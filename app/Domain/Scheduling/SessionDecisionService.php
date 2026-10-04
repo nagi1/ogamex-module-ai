@@ -269,33 +269,11 @@ class SessionDecisionService
      */
     private function planetAffordabilityEta(PlanetService $planet, AiProfile $profile, int $nowTimestamp): ?int
     {
-        $needed = $this->buildingPlanner->savingFor($planet, $profile);
-        if ($needed === null) {
-            return null;
-        }
+        // The arrival is the planner's own answer, so the wait and the purchase cannot disagree: the
+        // account is awake for the step the queue would take.
+        $eta = $this->buildingPlanner->savingEta($planet, $profile, CarbonImmutable::createFromTimestamp($nowTimestamp));
 
-        $held = $planet->getResources();
-        $hours = 0.0;
-
-        foreach ([
-            [$needed->metal->get(), $held->metal->get(), $planet->getMetalProductionPerHour()],
-            [$needed->crystal->get(), $held->crystal->get(), $planet->getCrystalProductionPerHour()],
-            [$needed->deuterium->get(), $held->deuterium->get(), $planet->getDeuteriumProductionPerHour()],
-        ] as [$cost, $stored, $perHour]) {
-            if ($cost <= $stored) {
-                continue;
-            }
-
-            // A resource this planet cannot make is never arriving: the account's next login would
-            // find the same shortfall, and a wake for it is a wake for nothing.
-            if ($perHour <= 0.0) {
-                return null;
-            }
-
-            $hours = max($hours, ($cost - $stored) / $perHour);
-        }
-
-        return $hours <= 0.0 ? null : $nowTimestamp + max((int) ceil($hours * 3600.0), $this->shortfallWakeFloorSeconds());
+        return $eta === null ? null : max($eta->getTimestamp(), $nowTimestamp + $this->shortfallWakeFloorSeconds());
     }
 
     /**

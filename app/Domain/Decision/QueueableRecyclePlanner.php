@@ -6,8 +6,10 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\RecycleMission;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\DebrisField;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
@@ -53,7 +55,13 @@ class QueueableRecyclePlanner
 
         $player = $this->playerServiceFactory->make($playerId, true);
 
-        $covered = $this->coveredCoordinates($playerId) + $this->openRecycleIntentCoordinates($playerId);
+        $refusals = app(RecentRefusals::class);
+        // A field or a body the gate just refused is not a mission, so nothing else remembers it: the
+        // harvest that was refused (the field was gone, the hull was short) is not offered again.
+        $covered = $this->coveredCoordinates($playerId)
+            + $this->openRecycleIntentCoordinates($playerId)
+            + $refusals->refusedTargets($playerId);
+        $refusedOrigins = $refusals->refusedOrigins($playerId);
 
         // ponytail: scan the 20 largest fields and take the closest worth having; a
         // distance cap on the scan is the upgrade path once accounts spread fleets
@@ -79,15 +87,17 @@ class QueueableRecyclePlanner
             }
 
             $shipName = RecycleMission::getHarvesterMachineNameForPosition((int) $field->planet);
-            $origin = $this->origin($player, $shipName) ?? $this->builderOrigin($player, $shipName);
+            $origin = $this->origin($player, $shipName, $refusedOrigins) ?? $this->builderOrigin($player, $shipName, $refusedOrigins);
             if ($origin === null) {
                 continue;
             }
 
-            $distance = $fleetMissions->calculateFleetMissionDistance(
-                $origin,
-                new Coordinate((int) $field->galaxy, (int) $field->system, (int) $field->planet),
-            );
+            $coordinate = new Coordinate((int) $field->galaxy, (int) $field->system, (int) $field->planet);
+            if (!$this->canPayFlight($player, $origin, $shipName, $mass, $coordinate)) {
+                continue;
+            }
+
+            $distance = $fleetMissions->calculateFleetMissionDistance($origin, $coordinate);
 
             if ($best === null || $distance < $best['distance']) {
                 $best = ['field' => $field, 'origin' => $origin, 'distance' => $distance, 'mass' => $mass];
@@ -110,13 +120,34 @@ class QueueableRecyclePlanner
     }
 
     /**
+     * Whether the origin can pay the harvest run with the hulls it would send, quoted the way the dispatch
+     * quotes it. A body with no hull yet is the builder case: the hull is queued first, nothing flies now.
+     */
+    private function canPayFlight(PlayerService $player, PlanetService $origin, string $shipName, float $mass, Coordinate $coordinate): bool
+    {
+        $available = $origin->getShipUnits()->getAmountByMachineName($shipName);
+        if ($available <= 0) {
+            return true;
+        }
+
+        $ship = ObjectService::getShipObjectByMachineName($shipName);
+        $capacity = max(1, $ship->properties->capacity->calculate($player)->totalValue);
+        $fleet = new UnitCollection();
+        $fleet->addUnit($ship, max(1, min($available, (int) ceil($mass / $capacity))));
+
+        return app(FlightFuel::class)->affordable($player, $origin, $fleet, $coordinate, 10.0);
+    }
+
+    /**
      * The first own body carrying the harvest hull. ponytail: first-body, not
      * closest-to-field; the closest-body scan is the upgrade path.
+     *
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function origin(PlayerService $player, string $shipName): ?PlanetService
+    private function origin(PlayerService $player, string $shipName, array $refusedOrigins): ?PlanetService
     {
         foreach ($player->planets->all() as $planet) {
-            if ($planet->getShipUnits()->getAmountByMachineName($shipName) > 0) {
+            if (! isset($refusedOrigins[$planet->getPlanetId()]) && $planet->getShipUnits()->getAmountByMachineName($shipName) > 0) {
                 return $planet;
             }
         }
@@ -128,11 +159,13 @@ class QueueableRecyclePlanner
      * The own body that can build the harvest hull when none carries it yet: the
      * executor queues the hull before the field can be collected, so a field with no
      * hull on hand is still a harvest the account can take.
+     *
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function builderOrigin(PlayerService $player, string $shipName): ?PlanetService
+    private function builderOrigin(PlayerService $player, string $shipName, array $refusedOrigins): ?PlanetService
     {
         foreach ($player->planets->all() as $planet) {
-            if (ObjectService::objectRequirementsMet($shipName, $planet)) {
+            if (! isset($refusedOrigins[$planet->getPlanetId()]) && ObjectService::objectRequirementsMet($shipName, $planet)) {
                 return $planet;
             }
         }

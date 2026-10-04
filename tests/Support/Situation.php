@@ -7,21 +7,28 @@ use Illuminate\Support\Facades\DB;
 use LogicException;
 use Modules\AI\Actions\AdvanceAiAllianceLifeAction;
 use Modules\AI\Actions\AdvanceAiCampaignStateAction;
+use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Domain\Decision\QueueableExpedition;
+use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
 use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiActionReceipt;
+use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiObservationSource;
 use OGame\Factories\GameMissionFactory;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Models\Alliance;
+use OGame\Models\BattleReport;
 use OGame\Models\BuildingQueue;
 use OGame\Models\ChatMessage;
 use OGame\Models\DebrisField;
@@ -59,6 +66,9 @@ final class Situation
     private ?PlanetService $neighbour = null;
 
     private ?PlanetService $stranger = null;
+
+    /** @var array<string, int>|null the expedition the account's planner offered, kept across the calls */
+    private ?array $expeditionDecision = null;
 
     private ?Alliance $alliance = null;
 
@@ -171,6 +181,19 @@ final class Situation
     }
 
     /**
+     * The planet's own field cap set so exactly $fields of them are still free: a planet that has built
+     * itself down to its last fields, which is where the objects only a field can hold stop fitting.
+     */
+    public function fieldsLeft(int $fields): self
+    {
+        $planet = $this->host('planetService');
+        Planet::query()->whereKey($planet->getPlanetId())->update(['field_max' => $planet->getBuildingCount() + $fields]);
+        $planet->reloadPlanet();
+
+        return $this;
+    }
+
+    /**
      * The same object level on every planet the account owns: a build state the whole account shares,
      * for a story where a rule applies to each planet rather than to the logged-in one. The account's
      * planets refresh independent of the session's own current planet, so planting on the current one
@@ -197,6 +220,19 @@ final class Situation
     public function ships(string $machineName, int $amount): self
     {
         $this->host('planetAddUnit', $machineName, $amount);
+
+        return $this;
+    }
+
+    /**
+     * The same ships on every planet the account owns: a fleet errand has more than one body to leave
+     * from, so a story can tell "the refused body is skipped" from "the whole lane waits".
+     */
+    public function shipsEveryPlanet(string $machineName, int $amount): self
+    {
+        foreach (Planet::query()->where('user_id', $this->profile->player_id)->where('planet_type', 1)->pluck('id') as $planetId) {
+            app(PlanetServiceFactory::class)->make((int) $planetId, true)?->addUnit($machineName, $amount);
+        }
 
         return $this;
     }
@@ -236,6 +272,47 @@ final class Situation
         $mission->save();
 
         return $this;
+    }
+
+    /**
+     * An expedition already decided but not yet dispatched: the account's own planner answer, planted as the
+     * decision the login made while the account's slot was free. The session's executor is the only thing
+     * that flies or refuses it, so a story can tell "the decision was legal when it was made" from "the
+     * dispatch was legal when it ran" — a delayed login carrying a stale decision into a lane that filled.
+     *
+     * Called twice it plants two decisions of the same shape, as two delayed logins would: the planner is
+     * asked once, because after the first plant the intent it wrote holds the slot the second is about.
+     */
+    public function decidedExpedition(): self
+    {
+        $this->expeditionDecision ??= $this->plannedExpedition();
+
+        AiWorkItem::create([
+            'player_id' => $this->profile->player_id,
+            'kind' => AiWorkKind::Expedition,
+            'state' => AiWorkState::Pending,
+            'due_at' => now(),
+            'idempotency_key' => 'situation-expedition:' . $this->profile->player_id . ':' . uniqid(),
+            'payload' => $this->expeditionDecision,
+        ]);
+
+        return $this;
+    }
+
+    /** @return array<string, int> the payload of the expedition the account's planner offers right now */
+    private function plannedExpedition(): array
+    {
+        $plan = app(QueueableExpeditionPlanner::class)->plan($this->profile->player_id);
+        if (!$plan instanceof QueueableExpedition) {
+            throw new LogicException('decidedExpedition() plants a decision the planner offers: give the account astrophysics, a cargo hull and deuterium first.');
+        }
+
+        return [
+            'planet_id' => $plan->planetId,
+            'galaxy' => $plan->galaxy,
+            'system' => $plan->system,
+            'position' => $plan->position,
+        ];
     }
 
     /**
@@ -318,6 +395,31 @@ final class Situation
     }
 
     /**
+     * A dispatch the gate refused a moment ago, as the memory the planners read before offering a target
+     * or an origin again (RecentRefusals). $planetId is the body the refusal blamed, the coordinates are
+     * the target it named; a refusal that named only the origin leaves the coordinates at zero, as a
+     * short tank or a missing hull does, and $minutesAgo ages it past the window a planner still reads.
+     */
+    public function refusedDispatch(?int $planetId = null, int $galaxy = 0, int $system = 0, int $position = 0, string $reason = 'source_short_at_dispatch', int $minutesAgo = 0): self
+    {
+        app(AiActionReceipt::class)->forceFill([
+            'player_id' => $this->profile->player_id,
+            'idempotency_key' => 'situation-refusal:' . uniqid(),
+            'action_type' => AiActionType::DispatchFleet,
+            'state' => AiReceiptState::Rejected,
+            'result' => [
+                'reason' => $reason,
+                'planet_id' => (int) ($planetId ?? 0),
+                'decision' => $galaxy > 0 ? ['target_galaxy' => $galaxy, 'target_system' => $system, 'target_position' => $position] : [],
+            ],
+            'created_at' => now()->subMinutes($minutesAgo),
+            'updated_at' => now(),
+        ])->save();
+
+        return $this;
+    }
+
+    /**
      * The account leads an alliance and another player applied $minutesAgo minutes ago: the leader's
      * decision is due. Read the outcome with expectApplicationDecided().
      */
@@ -327,6 +429,42 @@ final class Situation
         $applicant = $this->stranger()->getPlayer()->getId();
         $application = app(AllianceService::class)->applyToAlliance($applicant, $this->alliance->id, 'Active player looking for a home.');
         $application->forceFill(['created_at' => now()->subMinutes($minutesAgo), 'updated_at' => now()->subMinutes($minutesAgo)])->save();
+
+        return $this;
+    }
+
+    /**
+     * An alliance the account shares, one of whose other members was just raided: the help the account
+     * can send a part of its fleet to. The ally joins through the host's own application flow, the raid
+     * is the host's battle report, and the fact reaches the account as the observation the production
+     * reader writes for a co-member, so the defend lane sees exactly what it sees live.
+     */
+    public function allyUnderAttack(): self
+    {
+        $alliance = app(AllianceService::class)->createAlliance($this->profile->player_id, 'U' . $this->profile->player_id % 10_000, 'Under ' . $this->profile->player_id);
+        $allyId = $this->stranger()->getPlayer()->getId();
+        $application = app(AllianceService::class)->applyToAlliance($allyId, $alliance->id);
+        app(AllianceService::class)->acceptApplication($application->id, $this->profile->player_id);
+
+        $attackerId = $this->host('createForeignPlanet')->getPlayer()->getId();
+        $report = BattleReport::withoutEvents(fn () => BattleReport::unguarded(fn (): BattleReport => BattleReport::create([
+            'planet_galaxy' => 1,
+            'planet_system' => 1,
+            'planet_position' => 1,
+            'planet_user_id' => $allyId,
+            'attacker' => ['player_id' => $attackerId, 'resource_loss' => 100.0],
+            'defender' => ['player_id' => $allyId, 'resource_loss' => 400.0],
+        ])));
+
+        AiObservation::create([
+            'player_id' => $this->profile->player_id,
+            'source_type' => AiObservationSource::BattleReport,
+            'source_id' => $report->id,
+            'kind' => AiObservationKind::AllyUnderAttack,
+            'subject_player_id' => $attackerId,
+            'source_time' => now(),
+            'observed_at' => now(),
+        ]);
 
         return $this;
     }

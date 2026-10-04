@@ -2,7 +2,6 @@
 
 namespace Modules\AI\Domain\Decision;
 
-use Modules\AI\Models\AiScoreSample;
 use OGame\Models\Resources;
 use OGame\Services\PlanetService;
 
@@ -29,12 +28,6 @@ class ReserveFloor
     /** How many hours of production may refill the floor for a research spend (SP5). */
     public const RESEARCH_HOURS = 6.0;
 
-    /** Hourly score samples with no gain at all before the account stops saving and spends (IMPL-69). */
-    private const STALLED_SAMPLES = 6;
-
-    /** @var array<int, bool> */
-    private array $stalled = [];
-
     /**
      * The floor that must survive a purchase, per resource, at this planet.
      *
@@ -52,7 +45,7 @@ class ReserveFloor
 
         // An account whose public score has not moved for hours is saving for nothing: the reserve is
         // released so the queue spends what is held, which is what a player does on noticing a stall.
-        if ($this->scoreStalled((int) $planet->getPlayer()?->getId())) {
+        if (app(StalledGrowthDetector::class)->stalled((int) $planet->getPlayer()?->getId())) {
             return new Resources(0.0, 0.0, 0.0);
         }
 
@@ -66,22 +59,5 @@ class ReserveFloor
     private function perResource(float $held, float $productionPerHour, float $savingHours): float
     {
         return max(0.0, $held * self::BUFFER - $productionPerHour * $savingHours);
-    }
-
-    private function scoreStalled(int $playerId): bool
-    {
-        if ($playerId <= 0) {
-            return false;
-        }
-
-        return $this->stalled[$playerId] ??= $this->stalledOnSamples($playerId);
-    }
-
-    private function stalledOnSamples(int $playerId): bool
-    {
-        $scores = AiScoreSample::query()->where('player_id', $playerId)->orderByDesc('sampled_at')
-            ->limit(self::STALLED_SAMPLES)->pluck('general');
-
-        return $scores->count() === self::STALLED_SAMPLES && $scores->max() === $scores->min();
     }
 }

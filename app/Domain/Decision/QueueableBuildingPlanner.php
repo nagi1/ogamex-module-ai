@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Domain\Persona\SavingsGoal;
 use Modules\AI\Enums\AiStockpileStrategy;
@@ -15,6 +16,7 @@ use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\ResearchQueueService;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Answers one question about the account's own economy: is there a building or a technology it can
@@ -49,6 +51,12 @@ class QueueableBuildingPlanner
 
     /** Candidates kept per choice; with the wait option the policy sees at most 32 rows. */
     private const CHOICE_CANDIDATES = 31;
+
+    /** The behaviour file that says how many fields a planet keeps for the stations only it can hold. */
+    private const FIELD_BEHAVIOR_FILE = '/resources/behavior/planet-fields.yaml';
+
+    /** The reserve floor, read once per process (`resources/behavior/planet-fields.yaml`). */
+    private static ?int $fieldReserve = null;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -256,14 +264,52 @@ class QueueableBuildingPlanner
                 ...app(ArchetypeDoctrine::class)->openingStep($profile->archetype, $planet),
                 ...($planet->getPlayer() !== null ? app(ArchetypeDoctrine::class)->researchStep($profile->archetype, $planet->getPlayer()) : []),
             ],
-            'storage' => fn (PlanetService $planet): array => $this->economyUpgrades->storage($planet, $profile),
-            'surplus' => fn (PlanetService $planet): array => $this->economyUpgrades->spendSurplus($planet, $profile),
-            'routine' => fn (PlanetService $planet): array => [
-                ...$this->energyCapacity->pending($planet),
-                ...$this->facilityChain->pending($planet),
-                ...$this->economyUpgrades->storageForPrice($planet, $profile),
-                ...$this->economyUpgrades->production($planet, $profile),
-            ],
+            'storage' => fn (PlanetService $planet): array => $this->withFieldReserve($planet, $profile, $this->economyUpgrades->storage($planet, $profile)),
+            'surplus' => function (PlanetService $planet) use ($profile): array {
+                $spend = $this->economyUpgrades->spendSurplus($planet, $profile);
+                if ($spend === [] || ! $this->minesOutgrownStations($planet, $this->economyUpgrades->production($planet, $profile))) {
+                    return $this->withFieldReserve($planet, $profile, $spend);
+                }
+
+                // The pile is spent on the station project this planet has outgrown before another
+                // mine level is bought: the station is the purchase the account has decided on, and
+                // the dearest thing a settled planet buys is the station it waits on. The mine below
+                // is still the step whenever the station cannot be paid for yet, so the surplus is
+                // never left to overflow. The capacity the host throttles the planet without comes
+                // first, exactly as it does in the routine pass, so a short planet still buys power.
+                return [
+                    ...$this->withFieldsFor($planet, $this->energyCapacity->pending($planet), $this->fieldReserve($planet)),
+                    ...$this->facilityChain->stationPending($planet),
+                    ...$this->withFieldReserve($planet, $profile, $spend),
+                ];
+            },
+            'routine' => function (PlanetService $planet) use ($profile): array {
+                // The mine that repays today is an immediate need, so it also gates the station project
+                // below: a planet whose mines still repay is not settled, and it keeps mining.
+                $paying = $this->economyUpgrades->production($planet, $profile);
+                $stations = $this->minesOutgrownStations($planet, $paying);
+                // A planet down to the fields the station project still needs keeps them for it (COVER-
+                // OBJECTS-001): the host refuses every field-consuming building once a planet's fields
+                // are used up, the object that adds fields included, so the last fields decide whether
+                // the account can ever hold what is behind them. Only the economy's own steps are held
+                // back this way; the facilities it is keeping them for are not.
+                $reserve = $stations ? $this->fieldReserve($planet) : 0;
+
+                return [
+                    ...$this->withFieldsFor($planet, $this->energyCapacity->pending($planet), $reserve),
+                    // A station the host's catalogue offers and this planet does not hold is a goal with a
+                    // list of its own (FacilityChain::stationPending). The chain's one ambition is its next
+                    // war hull, and the station the account could already hold is skipped as "producible",
+                    // so the facilities only a station waits on were never asked for and the deepest
+                    // stations stayed unowned (COVER-OBJECTS-001). It comes after the capacity the host
+                    // throttles the planet without, and before the war hull, which is a goal on every
+                    // login of every account that owns a ship and would otherwise never give it a turn.
+                    ...($stations ? $this->facilityChain->stationPending($planet) : []),
+                    ...$this->facilityChain->pending($planet),
+                    ...$this->withFieldsFor($planet, $this->economyUpgrades->storageForPrice($planet, $profile), $reserve),
+                    ...$this->withFieldsFor($planet, $paying, $reserve),
+                ];
+            },
             // A planet sitting on six times the price of a facility it does not own buys it -- but only
             // once nothing urgent is left, which is what that pass says it is for: the capacity the host
             // throttles the planet without, the prerequisites the rest of the game is gated behind and the
@@ -272,6 +318,88 @@ class QueueableBuildingPlanner
             // (measured: AiCapabilityPublicationTest, EnergyCapacityTest).
             'ambition' => fn (PlanetService $planet): array => $this->economyUpgrades->ambitions($planet),
         ];
+    }
+
+    /**
+     * The fields this planet keeps for the station project, levels included: at least the pair the range
+     * cannot do without, and as many as its own unmet prerequisites still ask for.
+     *
+     * The count is the host's, not this module's: every station the catalogue offers the planet, and
+     * every level of the graph its prerequisites reach, is a field the planet will have to find. Reading
+     * it is what keeps the reserve honest -- a planet that owes the range five fields keeps five, so a
+     * prerequisite level cannot eat the field the station behind it was kept for (COVER-OBJECTS-001).
+     * The floor is behaviour data (`resources/behavior/planet-fields.yaml`), not arithmetic.
+     */
+    private function fieldReserve(PlanetService $planet): int
+    {
+        return max($this->stationReserveFields(), $this->facilityChain->stationFieldBudget($planet));
+    }
+
+    /** The floor a planet keeps for the station project, from the behaviour file. */
+    private function stationReserveFields(): int
+    {
+        if (self::$fieldReserve === null) {
+            $file = Yaml::parseFile(dirname(__DIR__, 3) . self::FIELD_BEHAVIOR_FILE);
+            self::$fieldReserve = (int) (is_array($file) ? ($file['station_reserve_fields'] ?? 0) : 0);
+        }
+
+        return self::$fieldReserve;
+    }
+
+    /**
+     * The economy's own steps with the fields the station project is owed taken out of them.
+     *
+     * @param list<BuildCandidate> $candidates
+     * @return list<BuildCandidate>
+     */
+    private function withFieldReserve(PlanetService $planet, AiProfile $profile, array $candidates): array
+    {
+        if ($candidates === []) {
+            return [];
+        }
+
+        $reserve = $this->minesOutgrownStations($planet, $this->economyUpgrades->production($planet, $profile))
+            ? $this->fieldReserve($planet)
+            : 0;
+
+        return $this->withFieldsFor($planet, $candidates, $reserve);
+    }
+
+    /**
+     * Drop the steps that would spend one of the fields this planet is keeping for the station project.
+     *
+     * A planet owns a finite number of fields and the host refuses every field-consuming building once
+     * they are used up, so the account that spends the last of them on another mine level never reaches
+     * the object that adds fields -- however much it mines. A player keeps them for the station range
+     * for exactly that reason. Only the economy's steps are answered this way: the facilities (the
+     * station project, the chain, the wall) are what the fields are being kept for and are never
+     * withheld, and a technology is built in the lab rather than on a field, so it is never dropped.
+     *
+     * @param list<BuildCandidate> $candidates
+     * @return list<BuildCandidate>
+     */
+    private function withFieldsFor(PlanetService $planet, array $candidates, int $reserve): array
+    {
+        if ($reserve <= 0 || $this->freeFields($planet) > $reserve) {
+            return $candidates;
+        }
+
+        return array_values(array_filter($candidates, fn (BuildCandidate $candidate): bool => !$this->consumesAField($candidate)));
+    }
+
+    /** The fields this planet has left to build on: the host's own cap less the host's own count. */
+    private function freeFields(PlanetService $planet): int
+    {
+        return $planet->getPlanetFieldMax() - $planet->getBuildingCount();
+    }
+
+    /** Whether this step would occupy a planet field, which only a building or a station does. */
+    private function consumesAField(BuildCandidate $candidate): bool
+    {
+        $object = ObjectService::getObjectById($candidate->buildingId);
+
+        return ($object->type === GameObjectType::Building || $object->type === GameObjectType::Station)
+            && $object->consumesPlanetField;
     }
 
     /**
@@ -321,25 +449,20 @@ class QueueableBuildingPlanner
 
             // Which queue takes a step is the host's object type, not this module's opinion: the
             // chain hands over prerequisites, and a technology among them is research.
-            if (ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) {
-                $research = $this->queueableResearch($planet, $candidate);
-                if ($research === null) {
+            $step = $this->step($planet, $candidate);
+            if ($step instanceof QueueableResearch) {
+                if ($this->queueableResearch($planet, $candidate) === null) {
                     continue;
                 }
 
-                return $research;
+                return $step;
             }
 
-            $planetId = $planet->getPlanetId();
             if (!$this->canQueue($planet, $candidate)) {
                 continue;
             }
 
-            return app()->makeWith(QueueableBuilding::class, [
-                'planetId' => $planetId,
-                'buildingId' => $candidate->buildingId,
-                'reason' => $candidate->reason,
-            ]);
+            return $step;
         }
 
         return null;
@@ -384,6 +507,120 @@ class QueueableBuildingPlanner
 
         return $this->buildingQueueService->retrieveQueue($planet)->isQueueFull()
             || $player->isObjectUpgradeBlocked($buildingId);
+    }
+
+    /**
+     * Whether the station project has its turn, or the mines keep the planet's one build slot.
+     *
+     * Two answers say the mines have outgrown the stations. The first is the price: when the cheapest
+     * upgrade that still repays is a dearer purchase than the cheapest station the catalogue offers it,
+     * the station is the small step, and a player whose mines have reached that scale takes it. The
+     * comparison is between the planet's own prices, so a fast universe does not age the account into
+     * it: measured live 5 Oct 2026 on the 1000x cohort, where a mine that repays in an hour always cost
+     * more than the station behind it and the station project waited on a mine level the cohort never
+     * reached -- no account in it owned one.
+     *
+     * The second is the level, because a station behind a graph the planet has not climbed yet is not a
+     * purchase a mine level is being weighed against: the nanite factory waits on a level-ten robotics
+     * factory, so until that climb happens the cheapest station on offer is one the planet cannot build
+     * while its price still holds a deep planet's every mine in front of it (measured live 5 Oct 2026:
+     * the robotics factory held at level two and no nanite factory anywhere in the cohort). A planet
+     * whose mines have all passed the level that graph names is past the opening, where a mine level is
+     * the small purchase, and takes the station however cheap its mines still are.
+     *
+     * @param list<BuildCandidate> $paying the production upgrades that still repay
+     */
+    private function minesOutgrownStations(PlanetService $planet, array $paying): bool
+    {
+        if ($paying === []) {
+            return true;
+        }
+
+        if ($this->minesPastTheOpening($planet, $paying)) {
+            return true;
+        }
+
+        $station = $this->cheapestStationPrice($planet);
+        if ($station === null) {
+            return false;
+        }
+
+        foreach ($paying as $candidate) {
+            if ($this->candidatePrice($planet, $candidate) < $station) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** The price of the cheapest station this planet does not hold and can build, or null when it holds every one. */
+    private function cheapestStationPrice(PlanetService $planet): ?float
+    {
+        $cheapest = null;
+
+        foreach (ObjectService::getStationObjects() as $station) {
+            if ($planet->getObjectLevel($station->machine_name) > 0
+                || !ObjectService::objectValidPlanetType($station->machine_name, $planet)) {
+                continue;
+            }
+
+            $price = $this->candidatePrice($planet, null, $station->machine_name);
+            $cheapest = $cheapest === null ? $price : min($cheapest, $price);
+        }
+
+        return $cheapest;
+    }
+
+    /**
+     * Whether every upgrade the planet is still weighing has passed the level the station project's own
+     * requirement graph names.
+     *
+     * The level is the host's, read from the recursive requirements of the stations this planet does not
+     * hold, so a station a mod adds (or deepens) moves it and nothing here names an object. A planet whose
+     * mines are all at least that deep is past the opening the level was read from: the mine in front of
+     * it is no longer the cheap purchase a young planet makes, and the station the graph leads to is the
+     * step that moves the economy -- the nanite factory halves every build after it.
+     *
+     * @param list<BuildCandidate> $paying the production upgrades that still repay
+     */
+    private function minesPastTheOpening(PlanetService $planet, array $paying): bool
+    {
+        $deepest = null;
+
+        foreach (ObjectService::getStationObjects() as $station) {
+            if ($planet->getObjectLevel($station->machine_name) > 0
+                || !ObjectService::objectValidPlanetType($station->machine_name, $planet)) {
+                continue;
+            }
+
+            foreach (ObjectService::getRecursiveRequirements($station->machine_name) as $level) {
+                $deepest = $deepest === null ? $level : max($deepest, $level);
+            }
+        }
+
+        if ($deepest === null) {
+            return false;
+        }
+
+        foreach ($paying as $candidate) {
+            $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+            if ($planet->getObjectLevel($machineName) < $deepest) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** What the host charges this planet for one step, by its candidate or by its machine name. */
+    private function candidatePrice(PlanetService $planet, ?BuildCandidate $candidate, string $machineName = ''): float
+    {
+        if ($candidate instanceof BuildCandidate) {
+            $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+        }
+
+        return ObjectService::getObjectPrice($machineName, $planet)->sum();
     }
 
     /**
@@ -435,11 +672,86 @@ class QueueableBuildingPlanner
     public function savingFor(PlanetService $planet, AiProfile $profile): ?Resources
     {
         $candidate = $this->savingCandidate($planet, $profile);
+
+        return $candidate === null ? null : $this->priceWithReserve($planet, $candidate);
+    }
+
+    /**
+     * The instant this planet's next step becomes payable, or null when it waits for none: it can
+     * already pay, or the resource it is short of is one its own mines do not make.
+     *
+     * Affordability here is the planner's own word -- the price plus the floor the purchase must
+     * leave behind -- so a caller that waits for this answer waits for exactly the purchase the
+     * queue would take, and the arithmetic lives in one place instead of once per caller.
+     */
+    public function savingEta(PlanetService $planet, AiProfile $profile, CarbonImmutable $now): ?CarbonImmutable
+    {
+        $candidate = $this->savingCandidate($planet, $profile);
+
+        return $candidate === null ? null : $this->payableAt($planet, $this->priceWithReserve($planet, $candidate), $now);
+    }
+
+    /**
+     * The step this planet is short of, with the instant it becomes payable, or null when it is
+     * waiting for none. A login books it: a queue it cannot fill yet is then filled the moment the
+     * resources arrive, instead of standing empty until the account's next login (ECON-001 -- the
+     * read-out finds such a planet buildable while the login that passed it ordered nothing).
+     *
+     * @return array{0: QueueableBuilding|QueueableResearch, 1: CarbonImmutable}|null
+     */
+    public function savingBooking(PlanetService $planet, AiProfile $profile, CarbonImmutable $now): ?array
+    {
+        $candidate = $this->savingCandidate($planet, $profile);
         if ($candidate === null) {
             return null;
         }
 
-        return $this->withReserve($planet, ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet), ReserveFloor::ECONOMY_HOURS);
+        $dueAt = $this->payableAt($planet, $this->priceWithReserve($planet, $candidate), $now);
+
+        return $dueAt === null ? null : [$this->step($planet, $candidate), $dueAt];
+    }
+
+    /** The price of one candidate plus the floor that must survive buying it. */
+    private function priceWithReserve(PlanetService $planet, BuildCandidate $candidate): Resources
+    {
+        $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+
+        return $this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS);
+    }
+
+    /** When this planet holds what the purchase needs, or null when its own income never brings it there. */
+    private function payableAt(PlanetService $planet, Resources $needed, CarbonImmutable $now): ?CarbonImmutable
+    {
+        $held = $planet->getResources();
+        $hours = 0.0;
+
+        foreach ([
+            [$needed->metal->get(), $held->metal->get(), $planet->getMetalProductionPerHour()],
+            [$needed->crystal->get(), $held->crystal->get(), $planet->getCrystalProductionPerHour()],
+            [$needed->deuterium->get(), $held->deuterium->get(), $planet->getDeuteriumProductionPerHour()],
+        ] as [$cost, $stored, $perHour]) {
+            if ($cost <= $stored) {
+                continue;
+            }
+
+            if ($perHour <= 0.0) {
+                return null;
+            }
+
+            $hours = max($hours, ($cost - $stored) / $perHour);
+        }
+
+        return $hours <= 0.0 ? null : $now->addSeconds((int) ceil($hours * 3600.0));
+    }
+
+    /** The order a candidate turns into, on the queue the host's own object type says it belongs to. */
+    private function step(PlanetService $planet, BuildCandidate $candidate): QueueableBuilding|QueueableResearch
+    {
+        $fields = ['planetId' => $planet->getPlanetId(), 'reason' => $candidate->reason];
+
+        return ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research
+            ? app()->makeWith(QueueableResearch::class, [...$fields, 'researchId' => $candidate->buildingId])
+            : app()->makeWith(QueueableBuilding::class, [...$fields, 'buildingId' => $candidate->buildingId]);
     }
 
     /** The first step in the planner's own order this planet cannot yet pay for, or null when it can pay for all of them. */
@@ -470,6 +782,12 @@ class QueueableBuildingPlanner
         // The profile's own cast is the gate: a strategy the module does not manage leaves the
         // balance alone, so nothing is held back and the account spends as before.
         if ($profile->stockpile_strategy !== AiStockpileStrategy::GoalSaver) {
+            return null;
+        }
+
+        // A score that has not moved for the window is a goal that is not arriving: the account stops reserving the
+        // pile for it and spends what it holds (IMPL-69), the same release the reserve floor makes.
+        if (app(StalledGrowthDetector::class)->stalled($profile->player_id)) {
             return null;
         }
 

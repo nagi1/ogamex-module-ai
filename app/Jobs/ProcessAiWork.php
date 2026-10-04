@@ -11,7 +11,9 @@ use Illuminate\Support\Str;
 use Modules\AI\Actions\ExecuteAiIntentAction;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
 use Modules\AI\Contracts\RunAiSession;
+use Modules\AI\Domain\Decision\RecentRefusals;
 use Modules\AI\Enums\AiActionReceiptResultKey;
+use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiQueueName;
 use Modules\AI\Enums\AiReceiptState;
@@ -219,6 +221,16 @@ class ProcessAiWork implements ShouldQueue
             return;
         }
 
+        // A decision is written before it flies and the worker may run it hours later, so a refusal the
+        // gate raised in between is one no planner could have read. The account does not ask again what it
+        // was already told: an intent naming a refused body or target is dropped, and the refusal stays
+        // the one receipt instead of one per queued decision (DISPATCH_REFUSALS).
+        if ($this->repeatsRefusal($workItem)) {
+            $this->completeLease($workItem, $leaseToken);
+
+            return;
+        }
+
         $receipt = AiActionReceipt::query()->firstOrCreate(
             ['idempotency_key' => $workItem->idempotency_key],
             [
@@ -273,6 +285,29 @@ class ProcessAiWork implements ShouldQueue
     private function ownedPlanetIdFor(AiWorkItem $workItem): int
     {
         return (int) ($workItem->payload[self::PAYLOAD_PLANET_ID] ?? Planet::query()->where('user_id', $workItem->player_id)->value('id'));
+    }
+
+    /**
+     * Whether this intent would repeat an answer the account already holds: the body its payload names as
+     * the origin, or the coordinates it names as the target, is one the gate refused inside the cooling.
+     */
+    private function repeatsRefusal(AiWorkItem $workItem): bool
+    {
+        // A raid wave schedules raids; it flies nothing itself, so the body its payload carries is only the
+        // account's first planet rather than an origin.
+        if ($workItem->kind->actionType() !== AiActionType::DispatchFleet || $workItem->kind === AiWorkKind::RaidWave) {
+            return false;
+        }
+
+        $payload = $workItem->payload ?? [];
+
+        return app(RecentRefusals::class)->cools(
+            $workItem->player_id,
+            (int) ($payload[self::PAYLOAD_PLANET_ID] ?? $payload['source_planet_id'] ?? 0),
+            (int) ($payload['target_galaxy'] ?? 0),
+            (int) ($payload['target_system'] ?? 0),
+            (int) ($payload['target_position'] ?? 0),
+        );
     }
 
     private function completeLease(AiWorkItem $workItem, string $leaseToken): void

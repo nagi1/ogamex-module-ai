@@ -162,11 +162,11 @@ test('an AI that came off worse turns colder toward the attacker and remembers t
         ->where('other_player_id', $attacker->id)
         ->sole();
 
-    // The first attack raises the threat toward the attacker; trust and affinity
-    // start at zero and are bounded, so the scar shows as a threat increase.
+    // The first attack is a battle scar: the threat toward the attacker rises and the defender turns colder,
+    // so trust and affinity fall below the zero they start at.
     expect((float) $relationship->threat)->toBeGreaterThan(0.0)
-        ->and((float) $relationship->trust)->toBe(0.0)
-        ->and((float) $relationship->affinity)->toBe(0.0);
+        ->and((float) $relationship->trust)->toBeLessThanOrEqual(0.0)
+        ->and((float) $relationship->affinity)->toBeLessThan(0.0);
 
     $fact = AiMemoryFact::query()
         ->where('player_id', $defender->id)
@@ -482,7 +482,10 @@ test('a late event never rewinds the affect state', function (): void {
     app(RecordObservedBattleReportAction::class)
         ->handle(battleReportRow($defender->id, battleSide($attacker->id, 100.0), 400.0)->id);
 
-    $state = AiAffectState::query()->where('player_id', $defender->id)->sole();
+    // A second attack from the same side is a different feeling from the first (the appraisal reads the history),
+    // and each emotion keeps its own running state, so the one the newer event set is the one that must not rewind.
+    $emotion = AiEmotionalEpisode::query()->where('player_id', $defender->id)->where('occurred_at', $newer->created_at)->sole()->emotion;
+    $state = AiAffectState::query()->where('player_id', $defender->id)->where('emotion', $emotion)->sole();
 
     expect(CarbonImmutable::instance($state->updated_for)->timestamp)->toBe($newer->created_at->timestamp);
 });

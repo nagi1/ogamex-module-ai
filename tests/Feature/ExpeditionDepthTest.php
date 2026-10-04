@@ -36,6 +36,7 @@ test('the expedition planner plans nothing without astrophysics or a ship', func
     expect(app(QueueableExpeditionPlanner::class)->plan($this->currentUserId))->toBeNull();
 
     $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddResources(new Resources(0, 0, 100_000));
     expect(app(QueueableExpeditionPlanner::class)->plan($this->currentUserId))->toBeNull();
 
     $this->playerSetResearchLevel('astrophysics', 1);
@@ -81,7 +82,10 @@ test('the expedition planner rotates to the least-used own system', function ():
         'planet' => 15,
         'time_last_update' => now()->subHour()->getTimestamp(),
     ]);
-    app(OGame\Factories\PlanetServiceFactory::class)->make($far->id, true)->addUnit('small_cargo', 1);
+    $farBody = app(OGame\Factories\PlanetServiceFactory::class)->make($far->id, true);
+    $farBody->addUnit('small_cargo', 1);
+    $farBody->addResources(new Resources(0, 0, 100_000));
+    $this->planetAddResources(new Resources(0, 0, 100_000));
 
     // One recent expedition already left the home system.
     $home = $this->planetService->getPlanetCoordinates();
@@ -194,3 +198,12 @@ function expeditionTrace(int $playerId, AiCandidateActionType $type): DecisionTr
         'inputHash' => 'expedition-fixture',
     ]);
 }
+
+// A player with an empty tank does not send the expedition out: the gate would refuse it (source_short_at_dispatch).
+test('the expedition planner offers no origin that cannot fuel even the cargo hull', function (): void {
+    expeditionProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 1);
+    $this->planetAddUnit('small_cargo', 1);
+
+    expect(app(QueueableExpeditionPlanner::class)->plan($this->currentUserId))->toBeNull();
+});

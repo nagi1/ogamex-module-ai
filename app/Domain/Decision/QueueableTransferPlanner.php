@@ -85,6 +85,10 @@ class QueueableTransferPlanner
             return null;
         }
 
+        // A source the gate just refused is not a source this login offers again: a refused dispatch is
+        // not a mission, so nothing else recorded the empty tank or the missing hull.
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($playerId);
+
         foreach ($planets as $planet) {
             $planet->updateResources(false);
             $planet->updateResourceProductionStats(false);
@@ -98,7 +102,7 @@ class QueueableTransferPlanner
                 continue;
             }
 
-            $source = $this->source($planets, $target, $need, $player);
+            $source = $this->source($planets, $target, $need, $player, $refusedOrigins);
             if ($source === null) {
                 continue;
             }
@@ -112,7 +116,7 @@ class QueueableTransferPlanner
             ]);
         }
 
-        return $this->surplus($planets, $player) ?? $this->allyGift($planets, $player, $playerId);
+        return $this->surplus($planets, $player, $refusedOrigins) ?? $this->allyGift($planets, $player, $playerId, $refusedOrigins);
     }
 
     /**
@@ -134,6 +138,12 @@ class QueueableTransferPlanner
     {
         $player = $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
+
+        // A body the gate just refused a dispatch from cannot launch, so the pile stays where it is and
+        // offering the move again only repeats the refusal.
+        if (isset(app(RecentRefusals::class)->refusedOrigins($playerId)[$planetId])) {
+            return null;
+        }
 
         $source = null;
         foreach ($planets as $planet) {
@@ -186,8 +196,9 @@ class QueueableTransferPlanner
      * passes the exact shipment, so the planner never offers what the adapter would refuse.
      *
      * @param array<PlanetService> $planets
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function allyGift(array $planets, PlayerService $player, int $playerId): ?QueueableTransfer
+    private function allyGift(array $planets, PlayerService $player, int $playerId, array $refusedOrigins): ?QueueableTransfer
     {
         $reports = AiObservation::query()
             ->where('player_id', $playerId)
@@ -204,6 +215,10 @@ class QueueableTransferPlanner
             }
 
             foreach ($planets as $source) {
+                if (isset($refusedOrigins[$source->getPlanetId()])) {
+                    continue;
+                }
+
                 $floor = $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS);
                 $share = AllyGiftGuard::MAX_STOCK_SHARE;
                 $gift = new Resources(
@@ -267,8 +282,9 @@ class QueueableTransferPlanner
      * three resources.
      *
      * @param array<PlanetService> $planets
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function surplus(array $planets, PlayerService $player): ?QueueableTransfer
+    private function surplus(array $planets, PlayerService $player, array $refusedOrigins): ?QueueableTransfer
     {
         $drop = $this->dropBody($planets);
         if ($drop === null) {
@@ -276,7 +292,7 @@ class QueueableTransferPlanner
         }
 
         foreach ($planets as $source) {
-            if ($source->getPlanetId() === $drop->getPlanetId() || !$this->nearCap($source)) {
+            if ($source->getPlanetId() === $drop->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || !$this->nearCap($source)) {
                 continue;
             }
 
@@ -444,11 +460,12 @@ class QueueableTransferPlanner
      * The first other body that can spare the shipment and still keep its own reserve.
      *
      * @param array<PlanetService> $planets
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function source(array $planets, PlanetService $target, Resources $need, PlayerService $player): ?PlanetService
+    private function source(array $planets, PlanetService $target, Resources $need, PlayerService $player, array $refusedOrigins): ?PlanetService
     {
         foreach ($planets as $source) {
-            if ($source->getPlanetId() === $target->getPlanetId()) {
+            if ($source->getPlanetId() === $target->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()])) {
                 continue;
             }
 

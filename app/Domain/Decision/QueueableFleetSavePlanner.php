@@ -127,7 +127,16 @@ class QueueableFleetSavePlanner
      */
     private function saveFor(PlayerService $player, array $planets, AiArchetype $archetype, float $aggression = 0.5, ?int $absenceMinutes = null, array $preferredPlanetIds = []): ?QueueableFleetSave
     {
-        $origin = $this->origin($planets, $preferredPlanetIds);
+        // A body the gate just refused a save from is not the body this login flies from: a refused
+        // dispatch is not a mission, so the missing hull or the short tank is only remembered here, and
+        // offering the same body again is how one account repeated one refusal (DISPATCH_REFUSALS).
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($player->getId());
+        $candidates = array_values(array_filter(
+            $planets,
+            static fn (PlanetService $planet): bool => ! isset($refusedOrigins[$planet->getPlanetId()]),
+        ));
+
+        $origin = $this->origin($candidates, $preferredPlanetIds);
         if ($origin === null || $this->fleetValue($origin) < $this->exposureBand($archetype, $aggression)) {
             return null;
         }
