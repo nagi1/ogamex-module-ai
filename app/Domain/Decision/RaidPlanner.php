@@ -10,8 +10,11 @@ use Modules\AI\Enums\AiExperienceCaseFamily;
 use Modules\AI\Enums\AiRaidExperienceFeature;
 use Modules\AI\Enums\GamePhase;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiPhalanxScan;
+use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Domain\Raid\ReportedPlanet;
@@ -172,6 +175,14 @@ class RaidPlanner
         // A target the dispatch gate just refused (online, staging) is left alone for a while, like a player told so.
         if (app(RecentRefusals::class)->target($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
             return $this->reject('refused_at_dispatch', $playerId, $reportId);
+        }
+
+        // A raid already waiting to fly holds its target: the probe volley on a rich body writes one
+        // report per probe, so one login holds several reports of one coordinate and every one of them
+        // passes the tests above until the first dispatch is refused. One decision is one fleet
+        // (measured 4 Oct 2026: seven refusals of one target in six hours).
+        if ($this->targetAlreadyOffered($playerId, $report)) {
+            return $this->reject('target_already_offered', $playerId, $reportId);
         }
 
         if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
@@ -559,6 +570,25 @@ class RaidPlanner
         $tier = $defended ? self::LOOT_TIER_DEFENDED : self::LOOT_TIER_FARM;
 
         return $loot / max(1, $fuel) >= $tier;
+    }
+
+    /**
+     * Whether a raid this account decided but has not yet flown is already aimed at these coordinates.
+     *
+     * A refused dispatch is not a mission, so the host's own mission rows cannot see a raid that is
+     * still waiting: the intent is the only trace of the fleet already on its way to that target, and
+     * the cooling a refusal buys only starts once the first of a batch has been refused.
+     */
+    private function targetAlreadyOffered(int $playerId, EspionageReport $report): bool
+    {
+        return AiWorkItem::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiWorkKind::Raid)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Leased, AiWorkState::Retry])
+            ->get(['payload'])
+            ->contains(static fn (AiWorkItem $item): bool => (int) ($item->payload['target_galaxy'] ?? 0) === (int) $report->planet_galaxy
+                && (int) ($item->payload['target_system'] ?? 0) === (int) $report->planet_system
+                && (int) ($item->payload['target_position'] ?? 0) === (int) $report->planet_position);
     }
 
     /**

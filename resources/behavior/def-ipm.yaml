@@ -10,6 +10,10 @@ abm_per_missile_silo_level: 10
 ipm_per_missile_silo_level: 5
 ipm_to_abm_capacity_ratio: 1:2
 
+# Interplanetary missiles are stocked to the silo, not to a fixed handful: a planet keeps
+# ipm_per_missile_silo_level missiles for every silo level it has built (the host caps the same
+# silo at ten slots a level and one missile takes two), and orders what it can pay for up to that.
+
 # Cost of one anti-ballistic missile.
 abm_cost_metal: 8000
 abm_cost_crystal: 0

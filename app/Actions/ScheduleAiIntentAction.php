@@ -321,6 +321,15 @@ class ScheduleAiIntentAction
             ? $this->fillQueues($profile, $sessionWorkItem, $this->economyKey($type))
             : 0;
 
+        // The queues the fill above could not answer for are booked, not left empty: a planet that
+        // cannot pay for its next step yet is one the login still orders for, carried out the instant
+        // the resources arrive (ECON-001). Written after the economy steps, which are priced against
+        // the balance first and put their own planets on the account's books; a login that decided
+        // nothing orders nothing, which is the quiet moment the humaniser keeps.
+        if ($type !== AiCandidateActionType::DoNothing) {
+            $this->bookSavingSteps($profile, $sessionWorkItem, $this->economyKey($type));
+        }
+
         match ($type) {
             // Build and Research are filled by the pass above under the session's own key, so the
             // refill and the session's objective are one work item.
@@ -375,6 +384,20 @@ class ScheduleAiIntentAction
             && ! ($type === AiCandidateActionType::QueueUnits && $units === $capital)
             && $type !== AiCandidateActionType::DoNothing) {
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $capital, ':capital');
+        }
+
+        // The silo's missile stock, on a login that chose something else: the plan above reaches the yard
+        // only when the engine happened to pick the shipyard, and the roles in front of the missile on each
+        // planet keep re-firing -- the class ship above all, whose standing target the mines keep raising --
+        // so the silo an account had built was never filled (measured live 4 Oct 2026: 7 of 120 accounts
+        // held an interplanetary missile). It waits for the building steps, which spend the balance first,
+        // and it is skipped when the shipyard arm above already wrote this same order. A second login
+        // orders nothing: what the silo is short of counts the missiles already in the yard.
+        $missileStock = $this->queueableUnitPlanner->missileStockOrder($profile->player_id);
+        if ($missileStock !== null
+            && $type !== AiCandidateActionType::DoNothing
+            && ! ($type === AiCandidateActionType::QueueUnits && $units instanceof QueueableUnit && str_starts_with($units->reason, 'role:missile'))) {
+            $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $missileStock, ':missile-stock');
         }
 
         $this->runManagers($profile, $sessionWorkItem, $trace, $type, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS));
@@ -589,6 +612,61 @@ class ScheduleAiIntentAction
         }
 
         return count($steps);
+    }
+
+    /**
+     * A login fills every free build queue, including the planets it cannot pay for yet: the step such
+     * a planet is saving for is booked for the instant it becomes payable, so the queue is filled when
+     * the resources arrive instead of standing empty until the account's next login (ECON-001 -- the
+     * cohort read-out finds such a planet buildable while the login that passed it ordered nothing,
+     * because at universe speed a step unpayable at one login is payable minutes later). The instant
+     * is the planner's own, so no price and no income rule is restated here.
+     *
+     * A planet the account already holds an unplaced order for is skipped, so one login leaves one
+     * order per planet and a second login in the same window does not stack a second job on it.
+     */
+    private function bookSavingSteps(AiProfile $profile, AiWorkItem $sessionWorkItem, string $keyPrefix): void
+    {
+        $player = app(PlayerServiceFactory::class)->make($profile->player_id, true);
+        $booked = $this->bookedPlanets($profile->player_id);
+
+        foreach ($player->planets->all() as $planet) {
+            if (in_array($planet->getPlanetId(), $booked, true)) {
+                continue;
+            }
+
+            // The planner prices its step from the live balance and income, like the pacing wake does:
+            // a stale income would book the order for the wrong instant.
+            $planet->updateResources(false);
+            $planet->updateResourceProductionStats(false);
+
+            $booking = $this->queueableBuildingPlanner->savingBooking($planet, $profile, $this->clock->now());
+            if ($booking === null) {
+                continue;
+            }
+
+            [$step, $dueAt] = $booking;
+            [$kind, $payload] = $step instanceof QueueableResearch
+                ? [AiWorkKind::QueueResearch, [self::PAYLOAD_RESEARCH_ID => $step->researchId]]
+                : [AiWorkKind::BuildFirstBuilding, [self::PAYLOAD_BUILDING_ID => $step->buildingId]];
+
+            $this->enqueue($profile, $sessionWorkItem, $kind, [
+                self::PAYLOAD_PLANET_ID => $step->planetId,
+                ...$payload,
+                self::PAYLOAD_REASON => $step->reason,
+            ], $dueAt, $keyPrefix . ':saved:' . $step->planetId);
+        }
+    }
+
+    /** @return list<int> the planets the account already holds an unplaced economy order for, this login's included. */
+    private function bookedPlanets(int $playerId): array
+    {
+        return AiWorkItem::query()->where('player_id', $playerId)
+            ->whereIn('kind', [AiWorkKind::BuildFirstBuilding->value, AiWorkKind::QueueResearch->value])
+            ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value, AiWorkState::Leased->value])
+            ->get()
+            ->map(static fn (AiWorkItem $item): int => (int) ($item->payload['planet_id'] ?? 0))
+            ->all();
     }
 
     /**

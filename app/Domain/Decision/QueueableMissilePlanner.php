@@ -12,7 +12,9 @@ use OGame\Services\PlayerService;
 /**
  * Interplanetary missiles are how a player thins a wall before the fleet arrives, so a planet that holds
  * missiles and has a fresh report on a defended target inside the missile range fires them. The range,
- * the missile count and the target's standing defence are the host's; the planner only asks.
+ * the missile count and the target's standing defence are the host's; the planner only asks. A volley the
+ * dispatch gate refused a moment ago is waited out, the way every other dispatch lane waits: the refusal
+ * is not a mission, so this read is the only thing that remembers it.
  */
 class QueueableMissilePlanner
 {
@@ -44,6 +46,14 @@ class QueueableMissilePlanner
             return null;
         }
 
+        // A refused volley is not a mission, so nothing else remembers it: the body the gate just
+        // refused to fire from, and the target it blamed, are not offered again inside the cooling.
+        // Without this the same planet fired at the same wall on every login and the host refused the
+        // same dispatch again (the DISPATCH_REFUSALS repeat).
+        $refusals = app(RecentRefusals::class);
+        $refusedOrigins = $refusals->refusedOrigins($playerId);
+        $refusedTargets = $refusals->refusedTargets($playerId);
+
         $reportIds = Message::query()
             ->where('user_id', $playerId)
             ->whereNotNull('espionage_report_id')
@@ -56,6 +66,10 @@ class QueueableMissilePlanner
         $reports = EspionageReport::query()->whereIn('id', $reportIds)->orderByDesc('id')->get();
 
         foreach ($player->planets->all() as $planet) {
+            if (isset($refusedOrigins[$planet->getPlanetId()])) {
+                continue;
+            }
+
             $missiles = $planet->getObjectAmount(self::MISSILE);
             if ($missiles < 1) {
                 continue;
@@ -66,6 +80,10 @@ class QueueableMissilePlanner
             $bestWall = 0;
 
             foreach ($reports as $report) {
+                if (isset($refusedTargets["{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}"])) {
+                    continue;
+                }
+
                 if ((int) $report->planet_galaxy !== $origin->galaxy
                     || abs((int) $report->planet_system - $origin->system) > $range
                     || (int) $report->planet_user_id === $playerId) {

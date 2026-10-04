@@ -2,16 +2,21 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Actions\QueueAiColonyAction;
 use Modules\AI\Domain\Galaxy\GalaxyMap;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameConstants\UniverseConstants;
 use OGame\GameMissions\ColonisationMission;
+use OGame\GameObjects\Models\UnitObject;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
+use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
@@ -65,13 +70,15 @@ class QueueableColonyPlanner
             return null;
         }
 
-        $origin = $this->originPlanet($player->planets->all());
-        if ($origin === null) {
+        // The slot is claimed first, then the body that flies there: the flight's deuterium is the
+        // host's own quote for that route, so the origin cannot be chosen before the destination.
+        $target = $this->emptySlot($player, $profile->random_seed);
+        if ($target === null) {
             return null;
         }
 
-        $target = $this->emptySlot($player, $profile->random_seed);
-        if ($target === null) {
+        $origin = $this->originPlanet($player, $target, app(RecentRefusals::class)->refusedOrigins($playerId));
+        if ($origin === null) {
             return null;
         }
 
@@ -85,28 +92,50 @@ class QueueableColonyPlanner
     }
 
     /**
-     * The planet a colony leaves from: the one holding a colony ship, else the account's first.
+     * The planet a colony leaves from: one that can pay the host's own fuel quote for the flight it is
+     * offered for, preferring a body that already holds the colony ship.
      *
      * Waiting for the ship before committing to a free slot is what left the cohort never
      * colonising: the slot is claimed by deciding to settle it, and the ship a shipyard builds
      * for that decision belongs to the same decision rather than to its precondition. The host
      * still owns the ship's machine name and the reach of the walk.
      *
-     * @param array<int, PlanetService> $planets
+     * A body the gate just refused a colony ship from is no origin: the account founds the next colony
+     * from a body that can launch, instead of repeating a refusal the gate already recorded.
+     *
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function originPlanet(array $planets): ?PlanetService
+    private function originPlanet(PlayerService $player, Coordinate $target, array $refusedOrigins): ?PlanetService
     {
-        $ship = ColonisationMission::getRequiredShipMachineNames()[0];
+        $ship = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
 
-        foreach ($planets as $planet) {
-            if ($planet->getShipUnits()->getAmountByMachineName($ship) > 0) {
+        foreach ($player->planets->all() as $planet) {
+            if (! isset($refusedOrigins[$planet->getPlanetId()])
+                && $planet->getShipUnits()->getAmountByMachineName($ship->machine_name) > 0
+                && $this->canPayFlight($player, $planet, $ship, $target)) {
                 return $planet;
             }
         }
 
-        $first = array_key_first($planets);
+        foreach ($player->planets->all() as $planet) {
+            if (! isset($refusedOrigins[$planet->getPlanetId()]) && $this->canPayFlight($player, $planet, $ship, $target)) {
+                return $planet;
+            }
+        }
 
-        return $first === null ? null : $planets[$first];
+        return null;
+    }
+
+    /**
+     * The host's own quote for the colony ship's flight, asked before the slot is offered: a plan the
+     * gate would refuse for its fuel is no colony, and it is the same quote the gate asks.
+     */
+    private function canPayFlight(PlayerService $player, PlanetService $origin, UnitObject $ship, Coordinate $target): bool
+    {
+        $units = new UnitCollection();
+        $units->addUnit($ship, 1);
+
+        return app(FlightFuel::class)->affordable($player, $origin, $units, $target, QueueAiColonyAction::COLONY_SPEED);
     }
 
     /**

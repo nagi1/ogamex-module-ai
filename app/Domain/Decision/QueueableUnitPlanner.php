@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Defense\AntiBallisticMissile;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Models\AiProfile;
@@ -72,17 +73,11 @@ class QueueableUnitPlanner
 
     private const CLASS_SHIP_BATCH = 2;
 
-    /** The host's one interplanetary missile object, the name its own mission reads, and the few a silo keeps ready. */
+    /** The host's one interplanetary missile object, the name its own mission reads. */
     private const MISSILE = 'interplanetary_missile';
 
-    private const MISSILE_STANDING = 5;
-
-    /** The silo whose capacity bounds missiles (the host gives it ten slots a level), and the share of those slots kept as interplanetary missiles. */
+    /** The silo whose own interplanetary capacity is the stock the planet keeps. */
     private const MISSILE_SILO = 'missile_silo';
-
-    private const MISSILE_SILO_SLOTS_PER_LEVEL = 10;
-
-    private const MISSILE_SILO_SHARE = 0.5;
 
     private const CRYSTAL_WEIGHT = 1.5;
 
@@ -850,7 +845,7 @@ class QueueableUnitPlanner
     }
 
     /**
-     * Interplanetary missiles up to the silo's standing few, when the account can fly them (the host's range
+     * Interplanetary missiles up to what the silo stores, when the account can fly them (the host's range
      * is above zero) and the freshest reports show a wall worth thinning. The silo requirement and the
      * price are the host's, asked through the same gates every unit order passes.
      */
@@ -867,18 +862,61 @@ class QueueableUnitPlanner
             return null;
         }
 
-        return $this->unit($planet, $missile, 'role:missile', min($standing - $owned, $this->affordable($planet, $missile)));
+        // The host takes the whole price when the order is placed and caps the silo at the slots that
+        // are still free, so the order is what this planet can pay for now -- the stock itself is the
+        // silo's, and a planet that cannot fill it fills what it can.
+        $amount = min($standing - $owned, $this->affordable($planet, $missile));
+        if ($amount < self::FIRST_CARGO_AMOUNT) {
+            return null;
+        }
+
+        return $this->unit($planet, $missile, 'role:missile', $amount);
     }
 
     /**
-     * How many interplanetary missiles a planet keeps: half the silo's slots, each missile taking two, and never
-     * fewer than the standing few. A player fills the silo they built; the other half stays for the interceptors.
+     * The silo's missile stock as a login's own order, or null when every planet already stands what its
+     * silo stores.
+     *
+     * `plan()` reaches the missile role only when no earlier role on any planet wanted anything, and a
+     * login is almost always consumed by one of them -- the class ship above all, whose standing target
+     * the mines keep raising -- so the yard was never handed the order and an account that had built a
+     * silo never filled it (measured live 4 Oct 2026: 7 of 120 accounts held an interplanetary missile).
+     * The schedule asks for this the way it asks for the war fleet's hull, so a login stocks the silo
+     * however the engine scored the page.
+     */
+    public function missileStockOrder(int $playerId, ?PlayerService $player = null): ?QueueableUnit
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+            return null;
+        }
+
+        $player ??= $this->playerServiceFactory->make($playerId, true);
+
+        foreach ($player->planets->all() as $planet) {
+            // Priced against what the login's own planet list holds, the same refresh the role loop
+            // gives every planet before it is asked for an order.
+            $planet->updateResources(false);
+
+            $order = $this->missileStock($player, $planet, $playerId);
+            if ($order !== null) {
+                return $order;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * How many interplanetary missiles a planet keeps: the silo's own interplanetary capacity, the
+     * number `resources/behavior/def-ipm.yaml` states one silo level stores. The host caps the same
+     * silo at ten slots a level and each missile takes two, so that number is what a filled silo
+     * holds; nothing here keeps a floor of its own, because a silo the host will not accept a missile
+     * into is one the order below never reaches.
      */
     private function missileStanding(PlanetService $planet): int
     {
-        $slots = $planet->getObjectLevel(self::MISSILE_SILO) * self::MISSILE_SILO_SLOTS_PER_LEVEL * self::MISSILE_SILO_SHARE;
-
-        return max(self::MISSILE_STANDING, (int) floor($slots / 2));
+        return AntiBallisticMissile::policy()->ipmCapacity($planet->getObjectLevel(self::MISSILE_SILO));
     }
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool

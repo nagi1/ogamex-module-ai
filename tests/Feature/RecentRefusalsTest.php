@@ -32,9 +32,17 @@ test('a target the gate just refused is remembered for a while, only for that ac
 });
 
 test('a refusal is forgotten once the window passes', function (): void {
-    refuseDispatch($this->currentUserId, ['reason' => 'target_active_at_dispatch', 'planet_id' => 7, 'decision' => ['target_galaxy' => 1, 'target_system' => 22, 'target_position' => 4]], '3 hours');
+    refuseDispatch($this->currentUserId, ['reason' => 'target_active_at_dispatch', 'planet_id' => 7, 'decision' => ['target_galaxy' => 1, 'target_system' => 22, 'target_position' => 4]], '10 hours');
 
     expect(app(RecentRefusals::class)->target($this->currentUserId, 1, 22, 4))->toBeFalse();
+});
+
+// DISPATCH_REFUSALS counts a repeat of the same account+target+reason inside six hours, so the cooling
+// has to outlast that span: a refusal four hours old still says the target is not to be offered again.
+test('a refusal inside the cooling the invariant measures is still remembered', function (): void {
+    refuseDispatch($this->currentUserId, ['reason' => 'target_active_at_dispatch', 'planet_id' => 7, 'decision' => ['target_galaxy' => 1, 'target_system' => 22, 'target_position' => 4]], '4 hours');
+
+    expect(app(RecentRefusals::class)->target($this->currentUserId, 1, 22, 4))->toBeTrue();
 });
 
 test('an origin the gate found short is remembered by planet and reason', function (): void {

@@ -1,0 +1,11 @@
+# What the host or the module's own dispatch gate refused, and how long that refusal cools what it blamed.
+#
+# A dispatch the gate refuses is not a mission, so nothing a planner read recorded it and the same
+# target -- or the same body the fleet would have left from -- was offered again on the next login
+# (measured 4 Oct 2026: 112 repeats of the same account+target+reason in six hours, one target 21 times).
+#
+# The cooling is the one a launched mission already buys its target: inside it the account tries
+# something else instead of the dispatch it was just told is impossible. It is stated in the span the
+# cohort's DISPATCH_REFUSALS invariant counts, because a cooling shorter than that span lets the same
+# refusal be repeated inside the window the invariant measures, which is exactly the defect.
+cooling_minutes: 360

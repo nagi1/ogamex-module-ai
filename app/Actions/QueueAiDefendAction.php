@@ -14,6 +14,7 @@ use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
 
 /**
@@ -23,9 +24,10 @@ use OGame\Services\PlayerGameStateService;
  */
 class QueueAiDefendAction implements QueueAiDefend
 {
-    private const SPEED = 10.0;
+    /** The flight the planner quotes before it offers the same fleet: one speed, one holding time. */
+    public const SPEED = 10.0;
 
-    private const HOLDING_HOURS = 1;
+    public const HOLDING_HOURS = 1;
 
     public function __construct(
         private PlayerGameStateService $playerGameStateService,
@@ -54,14 +56,7 @@ class QueueAiDefendAction implements QueueAiDefend
                 return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
             }
 
-            $owned = $source->getShipUnits()->toArray();
-            $fleet = new UnitCollection();
-            foreach (ObjectService::getMilitaryShipObjects() as $ship) {
-                $send = intdiv($owned[$ship->machine_name] ?? 0, 2);
-                if ($send > 0) {
-                    $fleet->addUnit($ship, $send);
-                }
-            }
+            $fleet = $this->heldFleet($source);
             if ($fleet->units === []) {
                 return AiActionResult::rejected(AiQueueActionReason::NoDisposableFleet);
             }
@@ -86,5 +81,23 @@ class QueueAiDefendAction implements QueueAiDefend
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * The hulls a defence sends: half of every combat ship the body holds, so half stays home. The
+     * planner quotes this exact fleet, so what it promises is what the gate dispatches.
+     */
+    public function heldFleet(PlanetService $source): UnitCollection
+    {
+        $owned = $source->getShipUnits()->toArray();
+        $fleet = new UnitCollection();
+        foreach (ObjectService::getMilitaryShipObjects() as $ship) {
+            $send = intdiv($owned[$ship->machine_name] ?? 0, 2);
+            if ($send > 0) {
+                $fleet->addUnit($ship, $send);
+            }
+        }
+
+        return $fleet;
     }
 }

@@ -76,10 +76,13 @@ class QueueableSpyPlanner
 
         $player ??= $this->playerServiceFactory->make($playerId, true);
 
+        $refusals = app(RecentRefusals::class);
         $skip = $this->freshIntelCoordinates($playerId)
             + $this->inFlightCoordinates($playerId)
-            + $this->openSpyIntentCoordinates($playerId);
-        $selection = $this->target($player, $skip);
+            + $this->openSpyIntentCoordinates($playerId)
+            // A probe the gate just refused is not a mission, so nothing else remembers the target.
+            + $refusals->refusedTargets($playerId);
+        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId));
         if ($selection === null) {
             return null;
         }
@@ -154,11 +157,15 @@ class QueueableSpyPlanner
      * closest known-rich neighbour, not the lowest id.
      *
      * @param array<string, true> $skipCoordinates
+     * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      * @return array{0: PlanetService, 1: Planet}|null the origin and its target
      */
-    private function target(PlayerService $player, array $skipCoordinates): ?array
+    private function target(PlayerService $player, array $skipCoordinates, array $refusedOrigins): ?array
     {
-        $idleOrigins = $this->idleProbePlanets($player);
+        $idleOrigins = array_values(array_filter(
+            $this->idleProbePlanets($player),
+            static fn (PlanetService $planet): bool => ! isset($refusedOrigins[$planet->getPlanetId()]),
+        ));
         if ($idleOrigins === []) {
             return null;
         }

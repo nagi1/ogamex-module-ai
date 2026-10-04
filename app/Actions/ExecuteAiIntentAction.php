@@ -650,7 +650,15 @@ class ExecuteAiIntentAction
 
         return [
             app(\Modules\AI\Contracts\QueueAiMissile::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->missiles),
-            ['source_planet_id' => $step->originPlanetId, 'missiles' => $step->missiles],
+            [
+                'source_planet_id' => $step->originPlanetId,
+                'missiles' => $step->missiles,
+                // The target the volley was aimed at travels in the trace, as every other dispatch
+                // lane's does: a refusal that names only the silo cannot be read as a cooled target.
+                self::PAYLOAD_TARGET_GALAXY => $step->targetGalaxy,
+                self::PAYLOAD_TARGET_SYSTEM => $step->targetSystem,
+                self::PAYLOAD_TARGET_POSITION => $step->targetPosition,
+            ],
             $step->originPlanetId,
         ];
     }

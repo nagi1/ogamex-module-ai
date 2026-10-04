@@ -5,8 +5,11 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Actions\QueueAiExpeditionAction;
 use Modules\AI\Support\FlightFuel;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
@@ -67,6 +70,14 @@ class QueueableExpeditionPlanner
             return null;
         }
 
+        // The expedition budget is the account's, not a body's: a refusal the gate just gave the account's
+        // own dispatch orders is answered by waiting for a slot to come home, never by trying the next
+        // planet for the same answer (measured 4 Oct 2026: one body refused for this five times in six
+        // hours). The slot count below cannot see that memory — a refused dispatch is not a mission.
+        if (app(RecentRefusals::class)->accountLane($playerId)) {
+            return null;
+        }
+
         $player = $this->playerServiceFactory->make($playerId, true);
 
         // The host requires Astrophysics before any expedition, and refuses a
@@ -74,7 +85,14 @@ class QueueableExpeditionPlanner
         if ($player->getResearchLevel('astrophysics') <= 0) {
             return null;
         }
-        if ($player->getExpeditionSlotsInUse() >= $player->getExpeditionSlotsMax()) {
+
+        // An expedition intent decided a moment ago has not flown yet, so the host's in-flight count
+        // cannot see it: a second login plans a second fleet for the slot the first one is about to take
+        // and the gate refuses it (measured live 4 Oct 2026: player 42 refused for this five times in six
+        // hours). A slot an open intent already holds is committed, as the spy planner nets off its open
+        // probes; a body that cannot dispatch now is not the account's last expedition ever.
+        $committed = $player->getExpeditionSlotsInUse() + $this->openExpeditionIntents($playerId);
+        if ($committed >= $player->getExpeditionSlotsMax()) {
             return null;
         }
 
@@ -91,6 +109,20 @@ class QueueableExpeditionPlanner
             'system' => (int) $coordinates->system,
             'position' => self::EXPEDITION_POSITION,
         ]);
+    }
+
+    /**
+     * Expedition intents already decided but not yet dispatched: the fleet a later login would offer
+     * against the same slot. A refused dispatch is not a mission, so the host's own slot count cannot
+     * see them, and each one takes a slot until it either flies or fails.
+     */
+    private function openExpeditionIntents(int $playerId): int
+    {
+        return AiWorkItem::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiWorkKind::Expedition)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Leased, AiWorkState::Retry])
+            ->count();
     }
 
     /**
@@ -190,13 +222,20 @@ class QueueableExpeditionPlanner
      * The own body whose system has sent the fewest recent expeditions, so the
      * account spreads expeditions across its systems instead of hammering one
      * (EXP-003). The rotation falls out of the count; no hard threshold is named.
+     * A body the gate just refused an expedition from is skipped: a refused dispatch is not a mission,
+     * so the empty tank or the missing cargo hull is only remembered here.
      */
     private function origin(PlayerService $player): ?PlanetService
     {
         $recent = $this->recentExpeditionsBySystem($player->getId());
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($player->getId());
 
         $best = null;
         foreach ($player->planets->all() as $planet) {
+            if (isset($refusedOrigins[$planet->getPlanetId()])) {
+                continue;
+            }
+
             $cargo = $this->disposableShip($player, $planet);
             if ($cargo === null) {
                 continue;

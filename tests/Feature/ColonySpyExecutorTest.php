@@ -35,6 +35,7 @@ test('the colony planner picks an empty slot for an account with a colony ship',
     colonyProfile($this->currentUserId);
     $this->playerSetResearchLevel('astrophysics', 4);
     $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     $plan = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
 
@@ -91,6 +92,7 @@ test('the colony planner prefers the larger empty slot', function (): void {
     colonyProfile($this->currentUserId);
     $this->playerSetResearchLevel('astrophysics', 4);
     $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     app(SettingsService::class)->set('number_of_systems', 1);
     app(SettingsService::class)->set('number_of_galaxies', 1);
 
