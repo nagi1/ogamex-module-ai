@@ -1,6 +1,6 @@
 PASS test:InactiveNeighbourSituationTest 1s
-PASS test:InactiveNeighbourSessionSituationTest 3s
-PASS test:RaidFromReportSituationTest 1s
-PASS? aspect:raids 1s
-PASS? aspect:espionage 0s
+PASS test:InactiveNeighbourSessionSituationTest 2s
+PASS test:RaidFromReportSituationTest 3s
+PASS? aspect:raids 3s
+PASS? aspect:espionage 2s
 PROOF: PASS ATK-001 (test:InactiveNeighbourSituationTest test:InactiveNeighbourSessionSituationTest test:RaidFromReportSituationTest aspect:raids? aspect:espionage?)

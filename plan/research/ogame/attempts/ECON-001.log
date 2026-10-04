@@ -1,23 +1,82 @@
-tests (ExecuteIntentTest, AiCapabilityPublicationTest, EveryPlanetBuildsSituationTest, EveryPlanetBuildsSessionSituationTest, BothQueuesSituationTest, TransferDepthTest, RecallDepthTest, ExpeditionDepthTest, CoverageCompletionTest): Tests:    1 failed, 43 passed, 6 pending (133 assertions)
+the delivered change passed its tests but its live proof failed:
+PASS test:ExecuteIntentTest 5s
+PASS test:AiCapabilityPublicationTest 8s
+PASS test:EveryPlanetBuildsSituationTest 1s
+PASS test:EveryPlanetBuildsSessionSituationTest 3s
+PASS test:BothQueuesSituationTest 2s
+PASS situation:every-planet-builds 1s
+FAIL invariant:IDLE_QUEUES 39s —  ! [IDLE_QUEUES] player 106 played this hour with 4 of 7 planets buildable and idle
+PASS aspect:economy 2s
+PROOF: FAIL ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest test:EveryPlanetBuildsSituationTest test:EveryPlanetBuildsSessionSituationTest test:BothQueuesSituationTest situation:every-planet-builds invariant:IDLE_QUEUES aspect:economy) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 106 played this hour with 4 of 7 planets buildable and idle
 
-FAILED  Modules\AI\tests\Feature\ExecuteIntentTest > a session that chose…   
-  Failed asserting that true is identical to false.
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 177 sessions on 86 accounts
+  backlog: 349 work item(s) more than a minute late, oldest 570 min — live verdicts read worker lag
+  sessions chose: Recycle 32%, Raid 23%, QueueUnits 16%, Defend 16%, DoNothing 5%, Build 2%, Spy 2%, Transfer 1%, Colonize 1%, Research 1%, ThrottleMine 1%
+  host orders: buildings 403, research 93, units 332
+  missions launched: Expedition 54, Espionage 139, Recycle 98, Transport 91, Attack 33, Missile 9, Colonisation 5, AcsDefend 13, Deployment 12
+  work (kind: state count):
+    RunSession: Completed 177, Pending 89
+    Recycle: Completed 136, Retry 1, Pending 34
+    BuildFirstBuilding: Completed 470, Retry 22, Pending 129
+    Colonize: Completed 10, Pending 1
+    QueueUnits: Completed 153, Retry 6, Pending 37
+    Transfer: Completed 98, Retry 7, Pending 33
+    Spy: Completed 165, Retry 14, Pending 26
+    QueueResearch: Completed 114, Retry 2, Pending 34
+    Raid: Completed 80, Retry 7, Pending 24
+    Expedition: Completed 66, Retry 6, Pending 25
+    Missile: Completed 11, Pending 2, Retry 1
+    Defend: Completed 22, Retry 2, Pending 5
+    RaidWave: Completed 16, Retry 2, Pending 1
+    FleetSave: Completed 13, Retry 1, Pending 3
+    SetMinePercent: Completed 1
+  refused: 
+    48 × DispatchFleet: source_short_at_dispatch
+    34 × DispatchFleet: target_active_at_dispatch
+    26 × DispatchFleet: no_disposable_fleet
+    14 × QueueUnits: nothing_queueable
+    14 × DispatchFleet: This mission is not possible.
+    4 × DispatchFleet: no_transport_fleet
+    3 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    3 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: recycler, destroyer
+    3 × QueueBuilding: shipyard_busy
+    2 × DispatchFleet: nothing_queueable
+    1 × QueueResearch: already_researching
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: bomber, recycler, destroyer, battle_ship, large_cargo, small_cargo, battlecruiser
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
 
-  at Modules/AI/tests/Feature/ExecuteIntentTest.php:176
-    172▕     app(ScheduleAiIntentAction::class)->handle($profile, $session, intentTrace($this->currentUserId, $this->currentPlanetId, $selected, [], [AiCandidateActionType::Build]));
-    173▕ 
-    174▕     $economy = AiWorkItem::query()->where('idempotency_key', 'intent:session:' . $session->id . ':economy')->first();
-    175▕ 
-  ➜ 176▕     expect($economy !== null)->toBe($refills)
-    177▕         ->and($economy?->kind)->toBe($refills ? AiWorkKind::BuildFirstBuilding : null);
-    178▕ })->with([
-    179▕     'a spy errand leaves the stock free' => [AiCandidateActionType::Spy, true],
-    180▕     'a transfer moves the stock' => [AiCandidateActionType::Transfer, false],
+  published: build, queue_units, throttle_mine
+  NOT published: research, colonize, spy
 
-  1   Modules/AI/tests/Feature/ExecuteIntentTest.php:176
+  player_id                    35
+  observed_at                  1791105305
+  account_state                "active"
+  recovery_factor              0.9828
+  fleet_slots_free             9
+  colonize_eligible            true
+  target_reports               8 item(s): [{"report_id":3030,"observed_at":1791099373,"expires_at":1791185773,"confidence":0.1470138888888889,"travel_cost":0.01711111111111111,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":2965,"observ
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      6 planet(s)
 
-
-  Tests:    1 failed, 43 passed, 6 pending (133 assertions)
-  Duration: 3.04s
-
-[1A  Parallel: 4 processes
+  decision: Recycle
+    Build         84.6  resource_need=30, safety=10, recovery=19.7, archetype_preference=25, seeded_variation=-0
+    Recycle       64.5  resource_need=30, safety=15, recovery=19.7, seeded_variation=-0.2
+    ThrottleMine  59.9  resource_need=30, safety=10, recovery=19.7, seeded_variation=0.3
+    QueueUnits    59.4  resource_need=30, safety=10, recovery=19.7, seeded_variation=-0.2
+    DoNothing     24.7  safety=5, recovery=19.7, seeded_variation=0
+  turned down by the candidate factory: 
+    report:3030: raid_not_viable
+    report:2965: raid_not_viable
+    report:2910: raid_not_viable
+    report:1692: raid_not_viable
+    report:1591: raid_not_viable
+    report:1446: raid_not_viable
+    report:1303: raid_not_viable
+    report:1216: raid_not_viable

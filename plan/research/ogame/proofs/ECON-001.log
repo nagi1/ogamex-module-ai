@@ -1,9 +1,9 @@
-PASS test:ExecuteIntentTest 6s
-PASS test:AiCapabilityPublicationTest 7s
-PASS test:EveryPlanetBuildsSituationTest 4s
-PASS test:EveryPlanetBuildsSessionSituationTest 2s
-PASS test:BothQueuesSituationTest 1s
+PASS test:ExecuteIntentTest 5s
+PASS test:AiCapabilityPublicationTest 8s
+PASS test:EveryPlanetBuildsSituationTest 1s
+PASS test:EveryPlanetBuildsSessionSituationTest 3s
+PASS test:BothQueuesSituationTest 2s
 PASS situation:every-planet-builds 1s
-PASS invariant:IDLE_QUEUES 10s
-PASS aspect:economy 1s
-PROOF: PASS ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest test:EveryPlanetBuildsSituationTest test:EveryPlanetBuildsSessionSituationTest test:BothQueuesSituationTest situation:every-planet-builds invariant:IDLE_QUEUES aspect:economy)
+FAIL invariant:IDLE_QUEUES 39s —  ! [IDLE_QUEUES] player 106 played this hour with 4 of 7 planets buildable and idle
+PASS aspect:economy 2s
+PROOF: FAIL ECON-001 (test:ExecuteIntentTest test:AiCapabilityPublicationTest test:EveryPlanetBuildsSituationTest test:EveryPlanetBuildsSessionSituationTest test:BothQueuesSituationTest situation:every-planet-builds invariant:IDLE_QUEUES aspect:economy) at invariant:IDLE_QUEUES:  ! [IDLE_QUEUES] player 106 played this hour with 4 of 7 planets buildable and idle
