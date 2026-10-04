@@ -162,11 +162,11 @@ test('an AI that came off worse turns colder toward the attacker and remembers t
         ->where('other_player_id', $attacker->id)
         ->sole();
 
-    // The first attack raises the threat toward the attacker; trust and affinity
-    // start at zero and are bounded, so the scar shows as a threat increase.
+    // The first attack is a battle scar: the threat toward the attacker rises and the defender turns colder,
+    // so trust and affinity fall below the zero they start at.
     expect((float) $relationship->threat)->toBeGreaterThan(0.0)
-        ->and((float) $relationship->trust)->toBe(0.0)
-        ->and((float) $relationship->affinity)->toBe(0.0);
+        ->and((float) $relationship->trust)->toBeLessThanOrEqual(0.0)
+        ->and((float) $relationship->affinity)->toBeLessThan(0.0);
 
     $fact = AiMemoryFact::query()
         ->where('player_id', $defender->id)

@@ -222,7 +222,7 @@ class ExecuteAiIntentAction
             ])
             : app(QueueableUnitPlanner::class)->plan($workItem->player_id);
 
-        if (!$step instanceof QueueableUnit) {
+        if (!$step instanceof QueueableUnit || app(QueueableUnitPlanner::class)->repeatsYardOrder($step)) {
             return [null, [], 0];
         }
 

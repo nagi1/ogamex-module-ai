@@ -86,3 +86,60 @@ test('a technology priced in energy makes the planet raise its capacity until it
         ->and(app(EconomyUpgrades::class)->energyGap($planet))->toBeGreaterThan(0.0)
         ->and(app(EnergyCapacity::class)->shortfall($planet))->toBeGreaterThan(0.0);
 });
+
+// A standing need (power, wall) paid for in the yard is not asked for again: overlapping sessions each plan the
+// same need before the first order lands, which is how one planet came to hold ten times the power it draws.
+test('an order for power or wall that is already in the yard is a repeat, and an ordinary order is not', function (): void {
+    ambitionProfile($this->currentUserId);
+    $planetId = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0]->getPlanetId();
+    $satellite = ObjectService::getUnitObjectByMachineName('solar_satellite');
+    $cruiser = ObjectService::getUnitObjectByMachineName('cruiser');
+    $planner = app(Modules\AI\Domain\Decision\QueueableUnitPlanner::class);
+
+    $order = fn ($unit, string $reason) => new Modules\AI\Domain\Decision\QueueableUnit($planetId, $unit->id, 5, $reason);
+    expect($planner->repeatsYardOrder($order($satellite, 'role:energy:solar_satellite')))->toBeFalse();
+
+    (new OGame\Models\UnitQueue())->forceFill([
+        'planet_id' => $planetId, 'object_id' => $satellite->id, 'object_amount' => 5, 'time_duration' => 10,
+        'time_start' => time(), 'time_end' => time() + 10, 'time_progress' => 0, 'object_amount_progress' => 0,
+        'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'processed' => 0,
+    ])->save();
+
+    expect($planner->repeatsYardOrder($order($satellite, 'role:energy:solar_satellite')))->toBeTrue()
+        ->and($planner->repeatsYardOrder($order($satellite, 'role:capital:solar_satellite')))->toBeFalse()
+        ->and($planner->repeatsYardOrder($order($cruiser, 'role:energy:cruiser')))->toBeFalse();
+});
+
+// The collector's crawler stops paying where the host says the mines cannot use more: a handful a planet left
+// every account far below it (57 crawlers in a cohort whose mines could use hundreds).
+test('a collector keeps ordering crawlers up to what its mines can use, and stops there', function (): void {
+    ambitionProfile($this->currentUserId);
+    OGame\Models\User::query()->whereKey($this->currentUserId)->update(['character_class' => OGame\Enums\CharacterClass::COLLECTOR->value]);
+    $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 900_000_000, 'crystal' => 900_000_000, 'deuterium' => 900_000_000]));
+    foreach (['shipyard' => 12, 'robot_factory' => 2, 'metal_mine' => 20, 'crystal_mine' => 20, 'deuterium_synthesizer' => 20, 'solar_plant' => 40] as $machineName => $level) {
+        $this->planetSetObjectLevel($machineName, $level);
+    }
+    foreach (ObjectService::getResearchObjects() as $research) {
+        $this->playerSetResearchLevel($research->machine_name, 12);
+    }
+
+    // The class-ship role is one of a dozen the planner ranks; it is asked alone here, as the unit planner asks it.
+    $classShip = function () {
+        $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+        $planet = array_values($player->planets->all())[0];
+        $method = new ReflectionMethod(Modules\AI\Domain\Decision\QueueableUnitPlanner::class, 'classShip');
+
+        return [$planet, $method->invoke(app(Modules\AI\Domain\Decision\QueueableUnitPlanner::class), $player, $planet)];
+    };
+
+    [$planet, $plan] = $classShip();
+    $usable = $planet->getUsableUnitCap('crawler');
+
+    expect($usable)->toBe(480)
+        ->and($plan?->reason)->toBe('role:class:crawler')
+        ->and($plan->amount)->toBeGreaterThan(5)->and($plan->amount)->toBeLessThanOrEqual($usable);
+
+    $this->planetAddUnit('crawler', $usable);
+
+    expect($classShip()[1])->toBeNull();
+});

@@ -482,10 +482,26 @@ if ($military->count() >= 3) {
     }
 }
 
+//   COVER_OBJECTS  an object of the host's catalogue (building, station, technology, ship, defence) that no AI account
+//                  holds: a player uses everything the game has, so an object nobody owns is a planner that never
+//                  reaches it. Read from the catalogue, so an object a mod adds is audited with no edit here
+$coverObjects = [];
+foreach (ObjectService::getObjects() as $object) {
+    $isResearch = (is_object($object->type) ? $object->type->name : (string) $object->type) === 'Research';
+    $table = $isResearch ? 'users_tech' : 'planets';
+    if (! Schema::hasColumn($table, $object->machine_name)) {
+        continue;
+    }
+    if (DB::table($table)->whereIn('user_id', $playerIds)->where($object->machine_name, '>', 0)->doesntExist()) {
+        $coverObjects[] = sprintf('no AI account holds %s', $object->machine_name);
+    }
+}
+
 $invariants = [
     'LIFE_CAPITAL' => $lifeCapital,
     'LIFE_FIGHTS' => $lifeFights,
     'LIFE_MOONS' => $lifeMoons,
+    'COVER_OBJECTS' => $coverObjects,
     'NAKED_BESIDE_WALLED' => $nakedBesideWalled,
     'WALL_CEILING' => $overCeiling,
     'ALLIANCE_SHARE' => $allianceShare,

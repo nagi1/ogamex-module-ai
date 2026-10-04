@@ -45,6 +45,9 @@ test('a research selection schedules and executes a technology', function (): vo
     $this->planetAddResources(intentPlenty());
     intentFacilities();
     $this->planetSetObjectLevel('solar_plant', 20);
+    // One level short of the laboratory the energy-priced technology waits on: at that level the planet would
+    // raise its plant for it first, which is the building step this test is not about.
+    $this->planetSetObjectLevel('research_lab', 11);
     // Enough warehouse that the funded balance is not "about to overflow", so the
     // plan's next step is the technology the facilities unlock, not a store.
     $this->planetSetObjectLevel('metal_store', 10);

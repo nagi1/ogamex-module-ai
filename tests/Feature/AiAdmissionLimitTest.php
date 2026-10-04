@@ -139,7 +139,9 @@ test('one dispatch pass stops at its batch size and records the throttle', funct
     admissionWorkItem($this->currentUserId, AiWorkKind::RunSession, 'batch-second')
         ->update(['due_at' => CarbonImmutable::parse(ADMISSION_NOW)->addMinute()]);
 
-    $this->artisan('ai:run-due-work')->assertExitCode(0);
+    // The command asks for the batch size unless told otherwise, so the throttle is only recorded for a caller
+    // that asks for more than the cap allows.
+    $this->artisan('ai:run-due-work', ['--limit' => 100])->assertExitCode(0);
 
     Bus::assertDispatched(ProcessAiWork::class, static fn (ProcessAiWork $job): bool => $job->workItemId === $first->id);
     Bus::assertDispatchedTimes(ProcessAiWork::class, 1);

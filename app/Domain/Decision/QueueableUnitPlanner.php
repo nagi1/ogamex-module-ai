@@ -16,6 +16,7 @@ use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\UnitQueue;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -649,12 +650,35 @@ class QueueableUnitPlanner
         $perUnit = (float) $planet->getObjectProduction($producer->machine_name, 1, true)->energy->get();
         $affordable = ObjectService::getObjectMaxBuildAmount($producer->machine_name, $planet, true);
 
-        return $this->unit(
-            $planet,
-            $producer,
-            'role:energy:'.$producer->machine_name,
-            min((int) ceil($shortfall / $perUnit), $affordable)
-        );
+        // The units already in the yard are power the planet has paid for: a login that prices the same
+        // shortfall again orders it twice, and the cohort read 22,959 satellites in a day on planets holding
+        // ten times the power they drew (4,087 on one planet, 142,285 energy against 14,858 used).
+        $needed = (int) ceil($shortfall / $perUnit) - $this->inYard($planet, $producer);
+        if ($needed < self::FIRST_CARGO_AMOUNT) {
+            return null;
+        }
+
+        return $this->unit($planet, $producer, 'role:energy:'.$producer->machine_name, min($needed, $affordable));
+    }
+
+    /**
+     * Whether this order only repeats one already waiting in the yard: power and wall are standing needs, so a
+     * planet that has paid for the unit and not yet received it asks for nothing more of it. Sessions that
+     * overlap each plan the same need before the first order is placed, and the executor asks this before it
+     * spends (measured live 4 Oct 2026: three wall batches on one planet in a minute, 22,959 satellites in a day).
+     */
+    public function repeatsYardOrder(QueueableUnit $order): bool
+    {
+        $standing = ['role:energy:', 'role:defense:', 'role:class:'];
+        if (array_filter($standing, static fn (string $role): bool => str_starts_with($order->reason, $role)) === []) {
+            return false;
+        }
+
+        return UnitQueue::query()
+            ->where('planet_id', $order->planetId)
+            ->where('object_id', $order->unitId)
+            ->where('processed', 0)
+            ->exists();
     }
 
     /**
@@ -783,13 +807,39 @@ class QueueableUnitPlanner
         }
 
         $ship = ObjectService::getUnitObjectByMachineName(ObjectService::getObjectById($class->getClassShipId())->machine_name);
-        if ($planet->getObjectAmount($ship->machine_name) >= self::CLASS_SHIP_STANDING || ! $this->queueable($planet, $ship)) {
+        $standing = $this->classShipStanding($planet, $ship);
+        $owned = $planet->getObjectAmount($ship->machine_name) + $this->inYard($planet, $ship);
+        if ($owned >= $standing || ! $this->queueable($planet, $ship)) {
             return null;
         }
 
-        $amount = min(self::CLASS_SHIP_BATCH, $this->affordable($planet, $ship));
+        // A ship the host bounds (the crawler) is ordered up to the number it says the mines can use, half
+        // of what the planet can pay for at a time; the others stay a handful (an expedition or recycling hull).
+        $amount = $standing === self::CLASS_SHIP_STANDING
+            ? min(self::CLASS_SHIP_BATCH, $this->affordable($planet, $ship))
+            : min($standing - $owned, max(self::CLASS_SHIP_BATCH, intdiv($this->affordable($planet, $ship), 2)));
 
         return $this->unit($planet, $ship, 'role:class:'.$ship->machine_name, $amount);
+    }
+
+    /**
+     * How many of the class ship the planet keeps: a handful, or for a ship that raises production the number
+     * the host says the planet's mines can use (the crawler stops paying beyond eight per mine level; measured
+     * live 4 Oct 2026: 57 crawlers in the cohort against hundreds the mines could use).
+     */
+    private function classShipStanding(PlanetService $planet, UnitObject $ship): int
+    {
+        return max(self::CLASS_SHIP_STANDING, $planet->getUsableUnitCap($ship->machine_name) ?? 0);
+    }
+
+    /** The units of this kind the planet has paid for and not yet received. */
+    private function inYard(PlanetService $planet, UnitObject $unit): int
+    {
+        return (int) UnitQueue::query()
+            ->where('planet_id', $planet->getPlanetId())
+            ->where('object_id', $unit->id)
+            ->where('processed', 0)
+            ->sum('object_amount');
     }
 
     /**

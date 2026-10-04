@@ -216,6 +216,9 @@ test('it publishes the research capability and queues the technology the plan ap
     // capability that follows it is the technology the chain wants. A warehouse that could hold the
     // funded balance is set too, so the storage guard does not preempt that technology.
     $this->planetSetObjectLevel('solar_plant', 20);
+    // One level short of the laboratory the energy-priced technology waits on, which would first send the planet
+    // to raise its plant: a building step this test is not about.
+    $this->planetSetObjectLevel('research_lab', 11);
     $this->planetSetObjectLevel('metal_store', 10);
     $this->planetSetObjectLevel('crystal_store', 10);
     $this->planetSetObjectLevel('deuterium_store', 10);
