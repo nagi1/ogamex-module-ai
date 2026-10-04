@@ -115,10 +115,10 @@ that could be extracted without moving rules.
 
 ### Answer to "can we avoid MySQL entirely?"
 
-**Probably yes, for training.** One universe per PHP process, in-memory SQLite, the real host and module
-code. That is the cheapest large win measured so far and it keeps OGameX authoritative. It is not proven for
-battles, expeditions and wreck fields yet; the gate is a parity run on a battle-heavy state (see
-[benchmark-plan.md](benchmark-plan.md#gates)).
+**Yes, for training.** One universe per PHP process, in-memory SQLite, the real host and module code:
+`php artisan ai:sim --in-memory --seed=N` (the source database is only read; `--save-sqlite=path` writes a
+snapshot). Parity with MySQL is proven on a battle-heavy state (gate G1). The MySQL-only SQL listed above was
+made portable in Phase 0.
 
 What it does **not** fix: after SQLite, 85% of the time is PHP (perception 57 ms, planners 25–30 ms each and
 called up to three times, alliance life 90–210 ms). See section 5.
@@ -151,8 +151,13 @@ Raid planning adds 50 Rust battle simulations per candidate report (`NativeRaidE
 | Sim event ordering | Yes | `orderBy('due_at')`, arrivals by `time_arrival, time_arrival_ms, id`. |
 
 Measured: two runs from the same snapshot produced identical statement counts (131,707), sessions and orders,
-and MySQL vs SQLite produced identical states over 12 h without battles. **Determinism holds for the economy
-today and fails as soon as an unseeded mechanic fires.** The host needs one seam: a seedable
+and MySQL vs SQLite produced identical states over 12 h without battles. **Before Phase 0, determinism held for
+the economy and failed as soon as an unseeded mechanic fired.**
+
+**Phase 0 (4 Oct 2026) added the seam**: the host binds `Random\Randomizer` in the container
+(`AppServiceProvider`), every game draw listed above goes through it, and a live battle draws its seed from it.
+`ai:sim --seed=N` binds a seeded `Xoshiro256StarStar` engine. Result from a battle-heavy day-10 state: two seeded
+runs are identical on MySQL, identical in memory, and identical across the two (gate G1 passed). The host needs one seam: a seedable
 `Random\Randomizer` (PHP 8.2+) resolved from the container and used instead of `random_int`/`rand` in game
 code, plus a per-mission battle seed. That change is generic (replays, tests) and so passes the module's
 "host change only when independently useful" rule.

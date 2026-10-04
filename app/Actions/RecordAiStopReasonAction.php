@@ -31,11 +31,13 @@ class RecordAiStopReasonAction
     public function handle(AiStopReason $reason, array $context): AiStopCounter
     {
         $now = $this->clock->now();
+        // The day is bound as the instant the date cast writes, so the lookup finds the row on any
+        // driver: MySQL's DATE column normalises a bare date string, SQLite stores the cast's text as is.
         $counter = AiStopCounter::query()->firstOrCreate(
             [
                 'reason' => $reason->value,
                 'scope' => self::SCOPE_UNIVERSE,
-                'observed_on' => $now->toDateString(),
+                'observed_on' => $now->startOfDay(),
             ],
             [
                 'occurrences' => 0,

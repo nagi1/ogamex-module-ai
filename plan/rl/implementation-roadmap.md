@@ -3,7 +3,7 @@
 Each phase leaves the game playable and the deterministic AI unchanged for accounts not on the learned path.
 Gates are defined in [benchmark-plan.md](benchmark-plan.md#5-gates).
 
-## Phase 0: environment hygiene (host + module, small)
+## Phase 0: environment hygiene (host + module, small) — DONE 4 Oct 2026, see [next-steps.md](next-steps.md)
 
 | | |
 | --- | --- |

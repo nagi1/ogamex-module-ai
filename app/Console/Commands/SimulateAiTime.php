@@ -9,11 +9,14 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\SimulatedTime;
+use Random\Engine\Xoshiro256StarStar;
+use Random\Randomizer;
 use Throwable;
 
 /**
@@ -45,7 +48,10 @@ use Throwable;
     {--workers=1 : Fork this many processes per simulated instant, each running a share of the due sessions against the sidecars at the same time}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
     {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
-    {--force-db : Allow a database whose name does not contain "sim"}')]
+    {--force-db : Allow a database whose name does not contain "sim"}
+    {--in-memory : Copy the database into SQLite :memory: and play there; the source is only read, so any database may be the source}
+    {--seed= : Seed the game\'s randomness (battles, expeditions, espionage, planet creation) so the same seed plays the same game}
+    {--save-sqlite= : After the run, write the in-memory state to this SQLite file (a snapshot to start later runs from)}')]
 class SimulateAiTime extends Command
 {
     private const PASSES_PER_INSTANT = 40;
@@ -62,9 +68,16 @@ class SimulateAiTime extends Command
 
     public function handle(): int
     {
+        $this->seedRandomness();
+
+        if ($this->option('in-memory')) {
+            $copied = $this->moveIntoMemory();
+            $this->info(sprintf('SIM: copied %d row(s) into SQLite :memory:; the source database is not written', $copied));
+        }
+
         $database = (string) DB::connection()->getDatabaseName();
 
-        if (!str_contains(strtolower($database), 'sim') && !$this->option('force-db')) {
+        if (!str_contains(strtolower($database), 'sim') && !$this->option('force-db') && !$this->option('in-memory')) {
             $this->error("Refusing to move [{$database}] into the future: the name must contain \"sim\" (or pass --force-db).");
 
             return self::FAILURE;
@@ -176,6 +189,7 @@ class SimulateAiTime extends Command
         @mkdir(dirname($stateFile), 0775, true);
         file_put_contents($stateFile, $stoppedAt->toIso8601String());
 
+        $this->saveSqlite();
         $this->reportErrors();
         $this->line(sprintf('JUMPS: %d (average %.0f simulated seconds per jump)', $jumps, $start->diffInSeconds($stoppedAt) / max(1, $jumps)));
         $this->reportProfile();
@@ -197,6 +211,62 @@ class SimulateAiTime extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * One seeded engine behind the host's Randomizer makes every game draw replayable; the sessions'
+     * own choices are already hash-seeded per account, so a seed fixes the whole run.
+     */
+    private function seedRandomness(): void
+    {
+        if ($this->option('seed') === null) {
+            return;
+        }
+
+        $seed = (int) $this->option('seed');
+        app()->instance(Randomizer::class, new Randomizer(new Xoshiro256StarStar($seed)));
+        mt_srand($seed);
+    }
+
+    /**
+     * The whole database copied into an in-process SQLite :memory: connection, which becomes the default.
+     * A statement there costs microseconds instead of a server round trip, and the copy is the only
+     * thing the run writes to.
+     */
+    private function moveIntoMemory(): int
+    {
+        $source = DB::getDefaultConnection();
+        config(['database.connections.ai_sim_memory' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false]]);
+        config(['database.default' => 'ai_sim_memory']);
+        DB::setDefaultConnection('ai_sim_memory');
+        Artisan::call('migrate', ['--force' => true, '--database' => 'ai_sim_memory']);
+
+        $copied = 0;
+        foreach (array_column(Schema::connection($source)->getTables(), 'name') as $table) {
+            if ($table === 'migrations' || !Schema::connection('ai_sim_memory')->hasTable($table)) {
+                continue;
+            }
+
+            DB::table($table)->delete();
+            DB::connection($source)->table($table)->orderByRaw('1')->chunk(2000, function ($rows) use ($table, &$copied): void {
+                DB::table($table)->insert(array_map(static fn (object $row): array => (array) $row, $rows->all()));
+                $copied += count($rows);
+            });
+        }
+
+        return $copied;
+    }
+
+    private function saveSqlite(): void
+    {
+        $path = $this->option('save-sqlite');
+        if ($path === null || DB::connection()->getDriverName() !== 'sqlite') {
+            return;
+        }
+
+        @unlink((string) $path);
+        DB::statement('VACUUM INTO ?', [(string) $path]);
+        $this->line('SIM: state saved to ' . $path);
     }
 
     /** @template T @param callable(): T $work @return T */
@@ -355,7 +425,8 @@ class SimulateAiTime extends Command
     {
         $workers = max(1, (int) $this->option('workers'));
 
-        if ($workers > 1 && !function_exists('pcntl_fork')) {
+        // A forked child writes to its own copy of an in-memory database, and those writes are lost.
+        if ($workers > 1 && (!function_exists('pcntl_fork') || $this->option('in-memory'))) {
             return 1;
         }
 

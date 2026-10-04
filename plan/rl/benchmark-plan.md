@@ -29,7 +29,7 @@
 | **B6b** in-memory SQLite, same code | 24 h fresh; 12 h from identical day-3 and day-10 states | Early: ×1,485 (vs ×735), DB 15% of wall. Day 3→3.5: 68 s vs 121 s (**1.8×**). Day 10→10.5: 130 s vs 163–168 s (**1.3×**). |
 | **B6b parity** | identical copied state, 12 h | Day 3: **identical** end state (all planets' levels, ships, defence, resources, research, queues, decision histogram). Day 10 (battles, expeditions): MySQL vs MySQL already differ (23 state lines), SQLite vs MySQL differ 12 lines: the game is not deterministic once unseeded RNG fires, so parity cannot be proven there until the RNG seam exists. |
 | **B7** Rust components | economy toy, battle FFI, FFI/PyO3/socket overheads | See [rust-performance-research.md](rust-performance-research.md): pure math 4.8× (bit-exact) to 12.5× over PHP JIT, but < 2% of a session. Battle 0.05–1.4 ms per raid-sized fight. FFI 54 ns, PyO3 47 ns, socket 88 µs. |
-| Parallel scaling | 1 vs 4 concurrent in-memory universes | 30.8 s vs 32.8 s wall: **linear**. |
+| Parallel scaling | 1 vs 4 concurrent in-memory universes | Early game: 30.8 s vs 32.8 s wall. Mid-game (`bench/xeon-benchmark.sh`): 4.6 vs 17.7 work items/s. **Linear.** |
 
 ### Per-session profile (MySQL, day 3, 20 accounts, per login)
 
@@ -78,7 +78,7 @@ Thresholds are derived from the measurements above and the sample budgets in
 
 | Gate | Condition | Decision |
 | --- | --- | --- |
-| **G1 SQLite for combat episodes** | After the host RNG seam lands: 3 seeds × 24 h from a battle-heavy snapshot give identical digests on MySQL and SQLite. | Pass: train on SQLite. Fail: keep SQLite for economy-only curricula, find and fix the dialect difference (the parity tool names the first diverging line). |
+| **G1 SQLite for combat episodes** | After the host RNG seam lands: a battle-heavy snapshot gives identical digests on MySQL and SQLite under the same seed. | **PASSED 4 Oct 2026** (Phase 0): from the day-10 state, `--seed=42`, 12 h with 11 battles, 5 attacks and 11 expeditions: MySQL run A = MySQL run B, in-memory A = in-memory B, and MySQL = in-memory on every planet, research level, battle/espionage/debris/wreck count, mission and decision (`bench/digest.php`). Train on SQLite. |
 | **G2 Array repositories (Option B-full)** | Only if, after B-lite, DB time is > 30% of wall time. Measured now: 15%. | Do not build. |
 | **G3 Rust simulator (Architecture 5)** | Only if, **after** the cheap PHP fixes, 16 workers on the 6254 produce fewer than *(sample budget of the next experiment) ÷ (72 h)* learner decisions/s. With E2's budget of 5×10⁶ decisions that is ≈ 20 decisions/s. Mid-game measured now (days 4–10): 1.8 sessions/s per process on MySQL, ≈ 2.4 on SQLite, × ≈ 2.8 economy choice points per session (1.8 planets + the lab) ≈ **6–7 decisions/s per process if every account is a learner**, ≈ 100/s for 16 processes, ≈ 25/s if only a quarter of the accounts learn. Projected pass, narrowly for the mixed population; the cheap PHP fixes are the margin. | G3 pass (PHP fast enough): no Rust. G3 fail by > 10× on the experiment that matters: start Architecture 5 for the economy only, with the differential tooling first. |
 | **G4 Any single function to Rust/FFI** | Only if a profile shows it takes > 10% of session wall time **and** it is pure (no Eloquent inside). | None qualifies today (largest pure function < 2%). |

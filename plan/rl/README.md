@@ -18,6 +18,7 @@ Numbers marked as measured come from [benchmark-plan.md](benchmark-plan.md); scr
 | [evaluation-plan.md](evaluation-plan.md) | Twin-universe tournament, seed counts, validity checks |
 | [risks.md](risks.md) | Failure modes, mitigations, determinism checklist |
 | [implementation-roadmap.md](implementation-roadmap.md) | Phases, success criteria, fallbacks, stop conditions, what not to build |
+| [next-steps.md](next-steps.md) | **Start here after Phase 0**: what changed, the Xeon runbook, where language-model classification fits, the best move |
 
 ## Recommended architecture
 
@@ -133,7 +134,8 @@ choice points, 6 learners per universe, 5×10⁶ decisions).
    for candidate generation; the deterministic AI for every non-learned choice.
 10. **Disable in training:** sidecars, language lane, conversation cycle, alliance life, campaign
     consultation; affect and experience weights set to 0 (and the same on the learned path in production).
-11. **Avoid MySQL?** Probably yes: SQLite `:memory:` with identical economy results; combat parity pending G1.
+11. **Avoid MySQL?** Yes: `ai:sim --in-memory --seed=N` plays a copy in SQLite `:memory:`; identical to MySQL
+    on a battle-heavy state under the same seed (gate G1 passed in Phase 0).
 12. **If not:** the whole DB moves to memory with SQLite; replacing Eloquent with arrays is not needed (G2).
 13. **Where Rust helps:** not in formulas (< 2%). Only a full simulator could give large gains (estimated
     10³× per event) and only if G3 fails.

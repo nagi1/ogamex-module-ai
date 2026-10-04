@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | **Simulator diverges from OGameX** | Low with Architecture 1 (same code); **high** with any re-implementation (toy port diverged on float association) | Train on the real code; parity tool (`bench/parity.php`) for every env change; Architecture 5 rules if Rust ever comes. |
 | **SQLite dialect differences** | Medium | One found in an hour (`RecordAiStopReasonAction` date lookup); known MySQL-only SQL in `CoordinateDistanceCalculator:159` and `WreckFieldService:129,:1012`. Gate G1 parity on battle-heavy states before trusting SQLite for combat. |
-| **Non-determinism** (live battles, expeditions, espionage detection, planet creation) | Certain today | Host seam: container-resolved `Random\Randomizer` seeded per universe + per-mission battle seed. Until then, report the A-vs-A noise floor. |
+| **Non-determinism** (live battles, expeditions, espionage detection, planet creation) | Fixed in Phase 0 for game code | Container `Random\Randomizer` + battle seed drawn from it; `ai:sim --seed`. Any new `random_int`/`rand` in game code reopens it: review for it. |
 | Wall-clock leaks into virtual time | Present (`NOW()` in `CoordinateDistanceCalculator`, non-array cache TTLs) | Bind PHP time in SQL; array cache in training. |
 | **Report copy leaks through `PlanetServiceFactory` instance cache** | Present (HANDOFF section 6.1) | Scope report copies; required before long-lived training workers. |
 | **Training decisions depend on state production uses differently** (affect weight 10, experience weight 20 on by default) | Certain unless handled | Same settings on the learned path in production; or make them features. |

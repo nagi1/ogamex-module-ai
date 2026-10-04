@@ -3,6 +3,9 @@
     "description": "Foundation for persistent, believable AI players in OGameX.",
     "type": "library",
     "license": "MIT",
+    "require": {
+        "symfony/yaml": "^8.1"
+    },
     "autoload": {
         "psr-4": {
             "Modules\\AI\\": "app/"

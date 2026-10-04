@@ -71,7 +71,7 @@ class SummarizeAiOperabilityAction
     private function stopReasons(string $day): array
     {
         return AiStopCounter::query()
-            ->where('observed_on', $day)
+            ->whereDate('observed_on', $day)
             ->orderByDesc('occurrences')
             ->get()
             ->map(static fn (AiStopCounter $counter): array => [
