@@ -211,6 +211,18 @@ $cohort_output"
       # here only skipped the proof stage, and nothing could be proven while the canary stayed red.
     fi
 
+    # The cohort's workers keep classes in memory, so any commit since they started is not what plays: a
+    # colony beside a walled planet sat without its yard for 14 hours on code a later commit had fixed
+    # (measured live 4 Oct 2026). Whoever committed -- the writer, the strong lane or an owner -- the workers
+    # follow the checked-out code; horizon:terminate is what Horizon's supervisor restarts them from.
+    head=$(git log -1 --format=%H -- app resources config database)
+    if [ "$head" != "$(cat /tmp/harness-last-head 2>/dev/null)" ]; then
+      echo "$head" > /tmp/harness-last-head
+      for universe in ${HARNESS_UNIVERSES:-grand}; do
+        (cd "$COMPOSE_DIR" && docker compose -f "docker-compose.$universe.yml" exec -T ogamex-queue-worker php artisan horizon:terminate) || true
+      done
+    fi
+
     # Proof stage: a row the writer delivered closes only when its proof passes on the cohorts
     # (`task.py done` runs `scripts/ogamex prove`). The cohort workers keep classes in memory, so
     # they are restarted onto the code on disk first, or the proof would read the old behaviour.
