@@ -44,6 +44,7 @@ test('the recycle planner plans nothing when the account has no harvest hull', f
 test('the recycle planner skips a field below the minimum mass', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 4, 'metal' => 100, 'crystal' => 100, 'deuterium' => 0]);
 
     expect(app(QueueableRecyclePlanner::class)->plan($this->currentUserId))->toBeNull();
@@ -52,6 +53,7 @@ test('the recycle planner skips a field below the minimum mass', function (): vo
 test('the recycle planner returns the field worth harvesting', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 5, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);
 
     $plan = app(QueueableRecyclePlanner::class)->plan($this->currentUserId);
@@ -69,6 +71,7 @@ test('the recycle planner returns the field worth harvesting', function (): void
 test('the recycle planner skips a field already being harvested', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 6, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);
     recycleHarvestMission($this->currentUserId, 1, 2, 6);
 
@@ -79,6 +82,7 @@ test('the recycle action launches the host harvest mission', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetAddUnit('recycler', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 7, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);
 
     $result = app(QueueAiRecycle::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 2, 7, PlanetType::DebrisField->value);
@@ -90,6 +94,7 @@ test('the recycle action launches the host harvest mission', function (): void {
 test('the recycle action refuses a body it does not own', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     $foreign = $this->createForeignPlanet();
 
     $result = app(QueueAiRecycle::class)->handle($this->currentUserId, $foreign->getPlanetId(), 1, 2, 3, PlanetType::DebrisField->value);
@@ -103,6 +108,7 @@ test('the recycle action refuses a body it does not own', function (): void {
 test('a recyclable field is offered as a recycle candidate', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 8, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);
 
     $now = CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC');
@@ -147,3 +153,12 @@ function recycleHarvestMission(int $playerId, int $galaxy, int $system, int $pos
     $mission->canceled = 0;
     $mission->save();
 }
+
+// A player with an empty tank does not send the harvester out: the gate would refuse it (source_short_at_dispatch).
+test('the recycle planner offers no field when the harvester cannot be fuelled', function (): void {
+    recycleProfile($this->currentUserId);
+    $this->planetAddUnit('recycler', 1);
+    DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 5, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);
+
+    expect(app(QueueableRecyclePlanner::class)->plan($this->currentUserId))->toBeNull();
+});

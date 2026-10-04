@@ -131,6 +131,7 @@ test('the fleetsave planner prefers the origin own same-coordinate moon', functi
 test('a single-planet account fleetsaves to a debris field', function (): void {
     saveDepthProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 3);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     Planet::query()->where('user_id', $this->currentUserId)->where('id', '<>', $this->currentPlanetId)->update(['destroyed' => 1]);
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 8, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);
@@ -151,6 +152,7 @@ test('the fleetsave action dispatches a harvest-save as a recycle mission', func
     saveDepthProfile($this->currentUserId);
     $this->planetAddResources(new Resources(100_000, 100_000, 100_000));
     $this->planetAddUnit('recycler', 3);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     Planet::query()->where('user_id', $this->currentUserId)->where('id', '<>', $this->currentPlanetId)->update(['destroyed' => 1]);
     DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 8, 'metal' => 20_000, 'crystal' => 20_000, 'deuterium' => 0]);

@@ -3,6 +3,8 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Actions\QueueAiExpeditionAction;
+use Modules\AI\Support\FlightFuel;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
@@ -10,6 +12,8 @@ use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameMissions\ExpeditionMission;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\FleetMission;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
@@ -193,11 +197,20 @@ class QueueableExpeditionPlanner
 
         $best = null;
         foreach ($player->planets->all() as $planet) {
-            if ($this->disposableShip($player, $planet) === null) {
+            $cargo = $this->disposableShip($player, $planet);
+            if ($cargo === null) {
                 continue;
             }
 
             $coordinates = $planet->getPlanetCoordinates();
+            // The dispatch falls back to the cargo hull alone, so a body that cannot fuel even that is no origin.
+            $lone = new UnitCollection();
+            $lone->addUnit($cargo, 1);
+            $destination = new Coordinate((int) $coordinates->galaxy, (int) $coordinates->system, self::EXPEDITION_POSITION);
+            if (!app(FlightFuel::class)->affordable($player, $planet, $lone, $destination, QueueAiExpeditionAction::EXPEDITION_SPEED, QueueAiExpeditionAction::EXPEDITION_HOLDING_HOURS)) {
+                continue;
+            }
+
             $count = $recent["{$coordinates->galaxy}:{$coordinates->system}"] ?? 0;
 
             if ($best === null || $count < $best['count']) {

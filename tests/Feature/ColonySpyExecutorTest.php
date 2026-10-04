@@ -140,6 +140,7 @@ test('the colony action launches the host colonisation mission', function (): vo
 test('the spy planner picks a legal foreign target', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     $foreign = $this->createForeignPlanet();
     spyQuiet($foreign);
 
@@ -153,6 +154,7 @@ test('the spy planner picks a legal foreign target', function (): void {
 test('the spy planner skips a target it already holds fresh intel on', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     $probed = $this->createForeignPlanet();
     $unprobed = $this->createForeignPlanet();
@@ -175,6 +177,7 @@ test('the spy planner skips a target it already holds fresh intel on', function 
 test('the spy planner skips a target it already has a probe in flight toward', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     $inFlight = $this->createForeignPlanet();
     $open = $this->createForeignPlanet();
@@ -197,6 +200,7 @@ test('the spy planner skips a target it already has a probe in flight toward', f
 test('the spy planner skips a target it already has a queued intent toward', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     $queued = $this->createForeignPlanet();
     $open = $this->createForeignPlanet();
@@ -221,6 +225,7 @@ test('the spy planner plans nothing without a probe or a legal target', function
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
 
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
 
     $profile->update(['enabled' => false]);
@@ -231,6 +236,7 @@ test('the spy action launches the host espionage mission', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     $foreign = $this->createForeignPlanet();
     spyQuiet($foreign);
 
@@ -247,6 +253,7 @@ test('the spy action sends the requested probe volley', function (): void {
     colonyProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
     $this->planetAddUnit('espionage_probe', 5);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     $foreign = $this->createForeignPlanet();
     spyQuiet($foreign);
 

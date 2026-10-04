@@ -75,9 +75,18 @@ foreach (['building_queues' => 'buildings', 'research_queues' => 'research', 'un
 
 $sessions = DB::table('ai_work_items')->whereIn('player_id', $players)->where('kind', AiWorkKind::RunSession->value)
     ->where('state', AiWorkState::Completed->value)->where('updated_at', '>=', $since);
-$late = DB::table('ai_work_items')->whereIn('player_id', $players)
-    ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value])->where('due_at', '<', $now->subMinute());
-$oldest = (clone $late)->min('due_at');
+// A session left over from the waking window waits for its account's next waking day on purpose (AUTH_UPTIME),
+// so it is not the workers' lag; only what a worker could run now counts as late.
+$planner = app(Modules\AI\Domain\Routine\SessionPlanner::class);
+$profiles = AiProfile::query()->whereIn('player_id', $players)->get()->keyBy('player_id');
+$lateRows = DB::table('ai_work_items')->whereIn('player_id', $players)
+    ->whereIn('state', [AiWorkState::Pending->value, AiWorkState::Retry->value])->where('due_at', '<', $now->subMinute())
+    ->get(['kind', 'player_id', 'due_at'])
+    ->reject(fn ($row): bool => (int) $row->kind === AiWorkKind::RunSession->value
+        && ($profile = $profiles->get($row->player_id)) !== null
+        && ! $planner->isAwake($profile, $now)
+        && $planner->isAwake($profile, CarbonImmutable::parse($row->due_at)));
+$oldest = $lateRows->min('due_at');
 
 $pulse = [
     'at' => $now->toIso8601String(),
@@ -90,7 +99,7 @@ $pulse = [
     'refusals' => array_slice($refusals, 0, 12, true),
     'missions' => $missions,
     'orders' => $orders,
-    'backlog' => ['late' => (clone $late)->count(), 'oldest_late_seconds' => $oldest === null ? 0 : $now->getTimestamp() - CarbonImmutable::parse($oldest)->getTimestamp()],
+    'backlog' => ['late' => $lateRows->count(), 'oldest_late_seconds' => $oldest === null ? 0 : $now->getTimestamp() - CarbonImmutable::parse($oldest)->getTimestamp()],
 ];
 
 if ($json) {

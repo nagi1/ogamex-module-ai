@@ -31,10 +31,10 @@ use OGame\Services\PlayerService;
 class QueueAiExpeditionAction implements QueueAiExpedition
 {
     /** The cheapest speed the host accepts (10%), the classic expedition cruise. */
-    private const EXPEDITION_SPEED = 1.0;
+    public const EXPEDITION_SPEED = 1.0;
 
     /** The shortest expedition, the classic hourly cadence. */
-    private const EXPEDITION_HOLDING_HOURS = 1;
+    public const EXPEDITION_HOLDING_HOURS = 1;
 
     public function __construct(
         private PlayerGameStateService $playerGameStateService,

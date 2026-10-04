@@ -89,6 +89,7 @@ test('the cargo ranking passes over ships with a worse payback', function (): vo
 test('the spy planner plans nothing for a missing account', function (): void {
     completionProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
 
     $orphaned = $this->currentUserId + 2_000_000;
     completionProfile($orphaned);
@@ -98,6 +99,7 @@ test('the spy planner plans nothing for a missing account', function (): void {
 test('the spy planner skips a vacationing target', function (): void {
     completionProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
     $foreign = $this->createForeignPlanet();
     $owner = $foreign->getPlayer();
     expect($owner)->not->toBeNull();

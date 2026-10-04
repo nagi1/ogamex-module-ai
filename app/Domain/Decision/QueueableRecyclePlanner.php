@@ -6,8 +6,10 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\RecycleMission;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\DebrisField;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
@@ -84,10 +86,12 @@ class QueueableRecyclePlanner
                 continue;
             }
 
-            $distance = $fleetMissions->calculateFleetMissionDistance(
-                $origin,
-                new Coordinate((int) $field->galaxy, (int) $field->system, (int) $field->planet),
-            );
+            $coordinate = new Coordinate((int) $field->galaxy, (int) $field->system, (int) $field->planet);
+            if (!$this->canPayFlight($player, $origin, $shipName, $mass, $coordinate)) {
+                continue;
+            }
+
+            $distance = $fleetMissions->calculateFleetMissionDistance($origin, $coordinate);
 
             if ($best === null || $distance < $best['distance']) {
                 $best = ['field' => $field, 'origin' => $origin, 'distance' => $distance, 'mass' => $mass];
@@ -107,6 +111,25 @@ class QueueableRecyclePlanner
             'missionType' => RecycleMission::getTypeId(),
             'mass' => $best['mass'],
         ]);
+    }
+
+    /**
+     * Whether the origin can pay the harvest run with the hulls it would send, quoted the way the dispatch
+     * quotes it. A body with no hull yet is the builder case: the hull is queued first, nothing flies now.
+     */
+    private function canPayFlight(PlayerService $player, PlanetService $origin, string $shipName, float $mass, Coordinate $coordinate): bool
+    {
+        $available = $origin->getShipUnits()->getAmountByMachineName($shipName);
+        if ($available <= 0) {
+            return true;
+        }
+
+        $ship = ObjectService::getShipObjectByMachineName($shipName);
+        $capacity = max(1, $ship->properties->capacity->calculate($player)->totalValue);
+        $fleet = new UnitCollection();
+        $fleet->addUnit($ship, max(1, min($available, (int) ceil($mass / $capacity))));
+
+        return app(FlightFuel::class)->affordable($player, $origin, $fleet, $coordinate, 10.0);
     }
 
     /**
