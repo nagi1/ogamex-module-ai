@@ -1,0 +1,47 @@
+<?php
+
+use Modules\AI\Domain\Decision\RecentRefusals;
+use Modules\AI\Enums\AiActionType;
+use Modules\AI\Enums\AiReceiptState;
+use Modules\AI\Models\AiActionReceipt;
+use Tests\IsolatedAccountTestCase;
+
+uses(IsolatedAccountTestCase::class);
+
+function refuseDispatch(int $playerId, array $result, string $minutesAgo = '0 minutes'): void
+{
+    app(AiActionReceipt::class)->forceFill([
+        'player_id' => $playerId,
+        'idempotency_key' => 'test:' . uniqid(),
+        'action_type' => AiActionType::DispatchFleet,
+        'state' => AiReceiptState::Rejected,
+        'result' => $result,
+        'created_at' => now()->modify('-' . $minutesAgo),
+        'updated_at' => now(),
+    ])->save();
+}
+
+// A refused dispatch is not a mission, so the planners never saw it and offered the same target again (21 times in six hours).
+test('a target the gate just refused is remembered for a while, only for that account and that target', function (): void {
+    refuseDispatch($this->currentUserId, ['reason' => 'target_active_at_dispatch', 'planet_id' => 7, 'decision' => ['target_galaxy' => 1, 'target_system' => 22, 'target_position' => 4]]);
+    $refusals = app(RecentRefusals::class);
+
+    expect($refusals->target($this->currentUserId, 1, 22, 4))->toBeTrue()
+        ->and($refusals->target($this->currentUserId, 1, 22, 5))->toBeFalse()
+        ->and($refusals->target($this->currentUserId + 1, 1, 22, 4))->toBeFalse();
+});
+
+test('a refusal is forgotten once the window passes', function (): void {
+    refuseDispatch($this->currentUserId, ['reason' => 'target_active_at_dispatch', 'planet_id' => 7, 'decision' => ['target_galaxy' => 1, 'target_system' => 22, 'target_position' => 4]], '3 hours');
+
+    expect(app(RecentRefusals::class)->target($this->currentUserId, 1, 22, 4))->toBeFalse();
+});
+
+test('an origin the gate found short is remembered by planet and reason', function (): void {
+    refuseDispatch($this->currentUserId, ['reason' => 'source_short_at_dispatch', 'planet_id' => 7, 'decision' => []]);
+    $refusals = app(RecentRefusals::class);
+
+    expect($refusals->origin($this->currentUserId, 7, 'source_short_at_dispatch'))->toBeTrue()
+        ->and($refusals->origin($this->currentUserId, 8, 'source_short_at_dispatch'))->toBeFalse()
+        ->and($refusals->origin($this->currentUserId, 7, 'no_disposable_fleet'))->toBeFalse();
+});

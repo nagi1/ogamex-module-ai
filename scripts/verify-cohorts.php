@@ -497,11 +497,31 @@ foreach (ObjectService::getObjects() as $object) {
     }
 }
 
+// DISPATCH_REFUSALS: the gate refusing a dispatch is fine once; an account offering the same refused target (or
+//                  origin and reason) again inside six hours is a planner that never learnt from the refusal. Counted
+//                  on repeats, not on reasons, so patching one reason cannot satisfy it.
+$dispatchRefusals = [];
+$refusedSeen = [];
+foreach (Modules\AI\Models\AiActionReceipt::query()->whereIn('player_id', $playerIds)->where('action_type', 4)->where('state', 3)
+    ->where('created_at', '>', now()->subHours(6))->get() as $receipt) {
+    $decision = $receipt->result['decision'] ?? [];
+    $where = isset($decision['target_galaxy'])
+        ? 'target '.$decision['target_galaxy'].':'.($decision['target_system'] ?? '').':'.($decision['target_position'] ?? '')
+        : 'planet '.($receipt->result['planet_id'] ?? '?');
+    $refusedSeen[$receipt->player_id.' '.$where.' '.($receipt->result['reason'] ?? '?')][] = $receipt->created_at;
+}
+foreach ($refusedSeen as $key => $times) {
+    if (count($times) > 2) {
+        $dispatchRefusals[] = sprintf('player %s refused %d times in six hours', $key, count($times));
+    }
+}
+
 $invariants = [
     'LIFE_CAPITAL' => $lifeCapital,
     'LIFE_FIGHTS' => $lifeFights,
     'LIFE_MOONS' => $lifeMoons,
     'COVER_OBJECTS' => $coverObjects,
+    'DISPATCH_REFUSALS' => $dispatchRefusals,
     'NAKED_BESIDE_WALLED' => $nakedBesideWalled,
     'WALL_CEILING' => $overCeiling,
     'ALLIANCE_SHARE' => $allianceShare,

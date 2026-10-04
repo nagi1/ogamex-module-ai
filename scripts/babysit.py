@@ -169,6 +169,14 @@ def stuck_scenarios(actions):
         code = "STUCK-" + re.sub(r"[^A-Za-z0-9]+", "-", reason).strip("-")[:36]
         if con.execute("select 1 from tasks where code=? and status not in ('done')", (code,)).fetchone():
             continue
+        # A symptom that returns after its row was closed was patched, not cured: a second row for the same
+        # reason is the circle. The recurrence is recorded for the reviewer and the root row stays the work.
+        if con.execute("select 1 from tasks where code=? and status='done'", (code,)).fetchone():
+            actions.append(f"{code} recurs after it was closed ({accounts} accounts, '{reason}'): root cause row, not another patch")
+            continue
+        # Every refused dispatch is the one root (a refusal no planner remembers), measured by DISPATCH_REFUSALS.
+        if reason.startswith("DispatchFleet"):
+            continue
         sh("python3", "plan/tasks/task.py", "add", code, f"{accounts} accounts keep failing the same way: {reason}",
            "impl", "P0", "--file", STUCK_FILES.get(reason.split(":")[0].strip(), f"{D}DecisionEngine.php"), "--proof", "aspect:work_failures",
            "--notes", f"Raised by the babysitter from `bash scripts/ogamex stuck`: {attempts} attempts in an hour, e.g. {sample} (player x repeats). "

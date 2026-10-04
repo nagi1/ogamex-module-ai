@@ -128,6 +128,13 @@ class RaidPlanner
             return $this->reject('no_origin', $playerId, $reportId);
         }
 
+        // An origin the gate just found short of fuel or of a fleet is not offered again until the window passes.
+        foreach (['source_short_at_dispatch', 'no_disposable_fleet'] as $refusal) {
+            if (app(RecentRefusals::class)->origin($playerId, $origin->getPlanetId(), $refusal)) {
+                return $this->reject('origin_refused_at_dispatch', $playerId, $reportId);
+            }
+        }
+
         // The fuel and loot quotes need the origin's owner context, which the
         // planets collection does not carry by itself.
         $origin = $this->planetServiceFactory->makeForPlayer($player, $origin->getPlanetId(), false);
@@ -160,6 +167,11 @@ class RaidPlanner
 
         if (!$this->withinCooldown($playerId, $target->getPlanetId())) {
             return $this->reject('cooldown', $playerId, $reportId);
+        }
+
+        // A target the dispatch gate just refused (online, staging) is left alone for a while, like a player told so.
+        if (app(RecentRefusals::class)->target($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
+            return $this->reject('refused_at_dispatch', $playerId, $reportId);
         }
 
         if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
