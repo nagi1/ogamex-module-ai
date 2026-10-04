@@ -1,0 +1,2 @@
+PASS harness:self-check 1s
+PROOF: PASS FAST-invariant-COVER-OBJECTS (harness:self-check)

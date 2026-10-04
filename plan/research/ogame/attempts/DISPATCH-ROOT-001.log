@@ -1,0 +1,77 @@
+the delivered change passed its tests but its live proof failed:
+FAIL invariant:DISPATCH_REFUSALS 35s —  ! [DISPATCH_REFUSALS] player 45 planet 157 source_short_at_dispatch refused 4 times in six hours
+PROOF: FAIL DISPATCH-ROOT-001 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 45 planet 157 source_short_at_dispatch refused 4 times in six hours
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 74 sessions on 67 accounts
+  backlog: 477 work item(s) more than a minute late, oldest 108 min — live verdicts read worker lag
+  sessions chose: QueueUnits 45%, Recycle 12%, Defend 11%, Transfer 8%, Spy 8%, ThrottleMine 7%, Build 3%, Colonize 1%, Trade 1%, DoNothing 1%, Raid 1%, Expedition 1%
+  host orders: buildings 296, research 58, units 106
+  missions launched: Espionage 39, Expedition 23, Recycle 23, Attack 4, Transport 37, AcsDefend 6, Missile 2
+  work (kind: state count):
+    QueueResearch: Completed 75, Retry 6, Pending 50
+    BuildFirstBuilding: Completed 315, Retry 23, Pending 166
+    RunSession: Completed 74, Pending 67
+    Transfer: Completed 37, Retry 7, Pending 22
+    QueueUnits: Completed 79, Retry 6, Pending 51
+    Spy: Completed 40, Retry 6, Pending 24
+    Recycle: Completed 33, Retry 3, Pending 4
+    Defend: Completed 6, Pending 2, Retry 1
+    Colonize: Completed 6, Pending 1
+    Expedition: Completed 23, Pending 9
+    Raid: Completed 9, Pending 3
+    SetMinePercent: Completed 6, Pending 2
+    Missile: Completed 2, Pending 1
+    Trade: Completed 1
+    RaidWave: Completed 1, Pending 2
+  refused: 
+    10 × DispatchFleet: no_disposable_fleet
+    6 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    5 × QueueUnits: nothing_queueable
+    4 × DispatchFleet: target_active_at_dispatch
+    3 × QueueBuilding: shipyard_busy
+    1 × QueueBuilding: nothing_queueable
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: recycler, battle_ship
+    1 × DispatchFleet: This mission is not possible.
+    1 × QueueUnits: queue_not_created
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build, queue_units, throttle_mine
+  NOT published: research, colonize, spy
+
+  player_id                    35
+  observed_at                  1791118004
+  account_state                "active"
+  recovery_factor              0.9897
+  fleet_slots_free             11
+  colonize_eligible            true
+  target_reports               12 item(s): [{"report_id":3874,"observed_at":1791114420,"expires_at":1791200820,"confidence":0.18776041666666665,"travel_cost":0.09469444444444444,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":3841,"obser
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      7 planet(s)
+
+  decision: Recycle
+    Build         85.2  resource_need=30, safety=10, recovery=19.8, archetype_preference=25, seeded_variation=0.4
+    Recycle       65.3  resource_need=30, safety=15, recovery=19.8, seeded_variation=0.5
+    QueueUnits    60.1  resource_need=30, safety=10, recovery=19.8, seeded_variation=0.3
+    ThrottleMine  60.1  resource_need=30, safety=10, recovery=19.8, seeded_variation=0.3
+    Expedition    58.9  resource_need=9, safety=30, recovery=19.8, seeded_variation=0.1
+    DoNothing     24.7  safety=5, recovery=19.8, seeded_variation=-0.1
+  turned down by the candidate factory: 
+    report:3874: raid_not_viable
+    report:3841: raid_not_viable
+    report:3786: raid_not_viable
+    report:3728: raid_not_viable
+    report:3635: raid_not_viable
+    report:3030: raid_not_viable
+    report:2965: raid_not_viable
+    report:2910: raid_not_viable
+    report:1692: raid_not_viable
+    report:1591: raid_not_viable
+    report:1446: raid_not_viable
+    report:1303: raid_not_viable

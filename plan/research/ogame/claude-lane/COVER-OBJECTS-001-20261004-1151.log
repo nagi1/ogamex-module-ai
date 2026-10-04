@@ -1,0 +1,9 @@
+I made no code change on COVER-OBJECTS-001, and the proof still fails. The station-goal design was already committed (`1e352de`): `FacilityChain::stationPending` and `stationFieldBudget`, wired into `QueueableBuildingPlanner`. `StationAfterOpeningTest` and `StationOutgrownMinesTest` pass.
+
+`task.py done` failed on `invariant:COVER_OBJECTS`: "no AI account holds nano_factory". The cohort the live check reads is rich but idle:
+- `economy 60` shows planets holding millions of resources, marked IDLE while they still have queueable steps.
+- `why 60` scored Build at 87.6 but decided DoNothing.
+
+That points at session or worker lag (the earlier pulse showed 412 late work items) rather than a planner gap, though I didn't confirm it. I didn't run `sim --hours=4` or `situation` on a nano-factory account to check the station path end to end.
+
+I released the claim with no note on the row. Next, run `bash scripts/ogamex sim --hours=4` (or plant a nano-factory-ready account in a Situation) to see whether `stationPending` yields a station step. If it does, investigate why Build loses to DoNothing. The rows this would free are the other COVER-* objects, since they depend on the same station and field path.

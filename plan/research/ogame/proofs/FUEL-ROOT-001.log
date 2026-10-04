@@ -1,2 +1,2 @@
-FAIL invariant:DISPATCH_REFUSALS 32s —  ! [DISPATCH_REFUSALS] player 42 planet 154 You are conducting too many expeditions at the same time. refused 5 times in six hours
-PROOF: FAIL FUEL-ROOT-001 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 42 planet 154 You are conducting too many expeditions at the same time. refused 5 times in six hours
+FAIL invariant:DISPATCH_REFUSALS 41s —  ! [DISPATCH_REFUSALS] player 105 planet 217 no_disposable_fleet refused 6 times in six hours
+PROOF: FAIL FUEL-ROOT-001 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 105 planet 217 no_disposable_fleet refused 6 times in six hours

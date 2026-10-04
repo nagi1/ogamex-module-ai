@@ -79,25 +79,26 @@ def main(argv: list[str] | None = None) -> None:
     print(f"parameters: {parameter_count(model):,} on {args.device}")
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
-    tensors = [torch.as_tensor(x) for x in (train.state, train.cands, train.mask, train.teacher)]
+    # The training set fits in GPU memory: batches are sliced on the device instead of copied from the host.
+    tensors = [torch.as_tensor(x, device=args.device) for x in (train.state, train.cands, train.mask, train.teacher)]
     history, best, best_key = [], None, -1.0
     for epoch in range(1, args.epochs + 1):
         model.train()
         started, losses = time.time(), []
-        perm = torch.randperm(len(train))
+        perm = torch.randperm(len(train), device=args.device)
         for i in range(0, len(train), args.batch):
             idx = perm[i:i + args.batch]
-            s, c, m, y = (t[idx].to(args.device) for t in tensors)
+            s, c, m, y = (t[idx] for t in tensors)
             logits, _ = model(s, c, m)
             loss = F.cross_entropy(logits, y)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-            losses.append(loss.item())
+            losses.append(loss.detach())
 
         v = summarise(predict(model, val, args.device), val.mask, val.teacher, val.meta, val.cands, ds.schema.candidate)
-        row = {"epoch": epoch, "loss": float(np.mean(losses)), "val_top1": v["top1"], "val_mrr": v["mrr"],
+        row = {"epoch": epoch, "loss": float(torch.stack(losses).mean()), "val_top1": v["top1"], "val_mrr": v["mrr"],
                "val_top1_3plus": v.get("top1_3plus_legal"), "seconds": round(time.time() - started, 1)}
         history.append(row)
         print(json.dumps(row))

@@ -5,6 +5,8 @@
 #   PHP=php bash Modules/AI/rl/scripts/closed_loop.sh <model.onnx> <out-dir> <first-seed> <universes> <days> <parallel> [learner-share]
 #   PHP=php bash Modules/AI/rl/scripts/closed_loop.sh runs/bc/model.onnx storage/rl/eval 1001 30 30 16 0.25
 set -euo pipefail
+# Parallel sims must not share the app's cache, queue or broadcaster (locks and budgets leak, runs diverge).
+export BROADCAST_CONNECTION=log CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync
 PHP=${PHP:-php}; PY=${PY:-python3}
 MODEL=${1:?model.onnx}; OUT=${2:?out dir}; FIRST=${3:-1001}; N=${4:-30}; DAYS=${5:-30}; PAR=${6:-8}; SHARE=${7:-0.25}
 AT=2026-10-05T00:00:00Z; SOCK=/tmp/ogrl-$$.sock

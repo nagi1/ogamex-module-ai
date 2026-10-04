@@ -18,3 +18,10 @@
 {"at": "2026-10-03T17:44:08Z", "code": "QUAL-010", "verdict": "exit 0", "input": 16, "output": 1660, "cache_read": 315942, "cache_write": 23476, "usd": 0.1757544, "turns": 9, "seconds": 48}
 {"at": "2026-10-03T21:05:34Z", "code": "ARCH-INTEL", "verdict": "exit 0", "input": 32, "output": 5542, "cache_read": 847848, "cache_write": 45582, "usd": 0.40939159999999997, "turns": 18, "seconds": 68}
 {"at": "2026-10-03T21:07:08Z", "code": "ARCH-INTEL", "verdict": "exit 0", "input": 8, "output": 917, "cache_read": 147270, "cache_write": 26127, "usd": 0.145158, "turns": 4, "seconds": 29}
+{"at": "2026-10-04T11:47:48Z", "code": "COVER-OBJECTS-001", "verdict": "exit 0", "input": 22, "output": 2327, "cache_read": 462418, "cache_write": 50504, "usd": 0.3199676, "turns": 11, "seconds": 77}
+{"at": "2026-10-04T11:53:25Z", "code": "COVER-OBJECTS-001", "verdict": "exit 0", "input": 32, "output": 3374, "cache_read": 832691, "cache_write": 42130, "usd": 0.3710262, "turns": 16, "seconds": 95}
+{"at": "2026-10-04T12:23:35Z", "code": "FUEL-ROOT-001", "verdict": "exit 0", "input": 22, "output": 2868, "cache_read": 643542, "cache_write": 8808, "usd": 0.4564256000000001, "turns": 11, "seconds": 738}
+{"at": "2026-10-04T12:46:05Z", "code": "FUEL-ROOT-001", "verdict": "exit 0", "input": 20, "output": 2843, "cache_read": 455456, "cache_write": 34185, "usd": 0.2584362, "turns": 10, "seconds": 85}
+{"at": "2026-10-04T13:03:34Z", "code": "MISSILES-001", "verdict": "exit 0", "input": 14, "output": 1856, "cache_read": 300179, "cache_write": 29583, "usd": 0.19907080000000002, "turns": 8, "seconds": 1006}
+{"at": "2026-10-04T13:17:47Z", "code": "DISPATCH-ROOT-001", "verdict": "exit 0", "input": 40, "output": 6745, "cache_read": 1122632, "cache_write": 48661, "usd": 0.4888354, "turns": 20, "seconds": 369}
+{"at": "2026-10-04T13:19:53Z", "code": "DISPATCH-ROOT-001", "verdict": "exit 0", "input": 34, "output": 4070, "cache_read": 834061, "cache_write": 36854, "usd": 0.3571162000000001, "turns": 17, "seconds": 110}

@@ -1,0 +1,76 @@
+the delivered change passed its tests but its live proof failed:
+FAIL invariant:DISPATCH_REFUSALS 63s —  ! [DISPATCH_REFUSALS] player 87 target 1:274:8 target_active_at_dispatch refused 5 times in six hours
+PROOF: FAIL FUEL-ROOT-001 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 87 target 1:274:8 target_active_at_dispatch refused 5 times in six hours
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 76 sessions on 61 accounts
+  backlog: 439 work item(s) more than a minute late, oldest 87 min — live verdicts read worker lag
+  sessions chose: Recycle 34%, QueueUnits 30%, Defend 8%, Build 7%, ThrottleMine 5%, Transfer 4%, Spy 4%, Raid 4%, Research 4%
+  host orders: buildings 262, research 55, units 127
+  missions launched: Recycle 28, Espionage 25, AcsDefend 3, Expedition 19, Attack 4, Transport 42, Missile 6, Deployment 1
+  work (kind: state count):
+    QueueResearch: Completed 62, Retry 3, Pending 56
+    RunSession: Completed 76, Pending 63
+    Transfer: Completed 42, Retry 6, Pending 23
+    FleetSave: Completed 1
+    Spy: Completed 29, Retry 3, Pending 25
+    BuildFirstBuilding: Completed 258, Retry 19, Pending 190
+    Colonize: Completed 3, Pending 1
+    Recycle: Completed 44, Retry 2, Pending 30
+    Expedition: Completed 20, Retry 3, Pending 15
+    QueueUnits: Completed 63, Retry 7, Pending 41
+    Defend: Completed 5, Retry 1, Pending 3
+    RaidWave: Completed 4, Retry 1, Pending 2
+    Raid: Completed 5, Pending 2, Retry 1
+    Missile: Completed 6, Pending 2
+    SetMinePercent: Completed 3, Pending 1
+  refused: 
+    4 × DispatchFleet: This mission is not possible.
+    4 × DispatchFleet: no_disposable_fleet
+    3 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    2 × QueueUnits: nothing_queueable
+    1 × DispatchFleet: You can only send ACS Defend missions to buddies or alliance members!
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: recycler, battlecruiser
+    1 × QueueBuilding: Not enough fields on this planet. Upgrade your Terraformer or use a planet field item to get more fields.
+    1 × QueueBuilding: shipyard_busy
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build, queue_units, throttle_mine
+  NOT published: research, colonize, spy
+
+  player_id                    35
+  observed_at                  1791115196
+  account_state                "active"
+  recovery_factor              0.9978
+  fleet_slots_free             11
+  colonize_eligible            true
+  target_reports               12 item(s): [{"report_id":3874,"observed_at":1791114420,"expires_at":1791200820,"confidence":0.23651041666666667,"travel_cost":0.09469444444444444,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":3841,"obser
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      7 planet(s)
+
+  decision: Recycle
+    Build         85.0  resource_need=30, safety=10, recovery=20, archetype_preference=25, seeded_variation=0.1
+    Recycle       65.4  resource_need=30, safety=15, recovery=20, seeded_variation=0.5
+    QueueUnits    59.9  resource_need=30, safety=10, recovery=20, seeded_variation=-0.1
+    ThrottleMine  59.6  resource_need=30, safety=10, recovery=20, seeded_variation=-0.4
+    Expedition    58.5  resource_need=9, safety=30, recovery=20, seeded_variation=-0.5
+    DoNothing     25.1  safety=5, recovery=20, seeded_variation=0.2
+  turned down by the candidate factory: 
+    report:3874: raid_not_viable
+    report:3841: raid_not_viable
+    report:3786: raid_not_viable
+    report:3728: raid_not_viable
+    report:3635: raid_not_viable
+    report:3030: raid_not_viable
+    report:2965: raid_not_viable
+    report:2910: raid_not_viable
+    report:1692: raid_not_viable
+    report:1591: raid_not_viable
+    report:1446: raid_not_viable
+    report:1303: raid_not_viable

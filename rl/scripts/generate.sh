@@ -7,6 +7,8 @@
 #
 # policy: teacher (pure imitation data) or epsilon (teacher + random legal choices, recorded as such).
 set -euo pipefail
+# Parallel sims must not share the app's cache, queue or broadcaster (locks and budgets leak, runs diverge).
+export BROADCAST_CONNECTION=log CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync
 PHP=${PHP:-php}
 OUT=${1:?output directory}; N=${2:-16}; DAYS=${3:-30}; PAR=${4:-8}; POLICY=${5:-teacher}; EPS=${6:-0.1}; ACCOUNTS=${7:-24}
 AT=2026-10-05T00:00:00Z

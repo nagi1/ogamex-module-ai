@@ -1,0 +1,77 @@
+the delivered change passed its tests but its live proof failed:
+FAIL invariant:DISPATCH_REFUSALS 22s —  ! [DISPATCH_REFUSALS] player 105 planet 347 source_short_at_dispatch refused 3 times in six hours
+PROOF: FAIL DISPATCH-ROOT-002 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 105 planet 347 source_short_at_dispatch refused 3 times in six hours
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 85 sessions on 76 accounts
+  backlog: 401 work item(s) more than a minute late, oldest 119 min — live verdicts read worker lag
+  sessions chose: QueueUnits 38%, Recycle 25%, Defend 8%, ThrottleMine 7%, Spy 6%, Build 5%, DoNothing 4%, Transfer 4%, Raid 2%, Colonize 1%, Trade 1%
+  host orders: buildings 281, research 62, units 93
+  missions launched: Transport 33, Recycle 28, Espionage 36, Expedition 26, Attack 3, AcsDefend 3, Missile 2
+  work (kind: state count):
+    BuildFirstBuilding: Completed 293, Retry 20, Pending 194
+    QueueResearch: Completed 74, Retry 1, Pending 60
+    RunSession: Completed 85, Pending 77
+    Transfer: Completed 33, Retry 8, Pending 25
+    Expedition: Completed 26, Pending 12
+    QueueUnits: Completed 63, Retry 4, Pending 54
+    Spy: Completed 36, Retry 4, Pending 23
+    Recycle: Completed 45, Retry 3, Pending 14
+    Missile: Completed 2, Pending 1
+    RaidWave: Completed 3, Pending 1
+    Raid: Completed 6, Retry 1, Pending 5
+    Defend: Completed 3, Pending 6
+    Colonize: Completed 3, Pending 3
+    SetMinePercent: Completed 4, Pending 3
+    Trade: Pending 1
+  refused: 
+    15 × DispatchFleet: no_disposable_fleet
+    5 × QueueUnits: nothing_queueable
+    3 × QueueBuilding: shipyard_busy
+    3 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    2 × QueueBuilding: nothing_queueable
+    2 × QueueBuilding: Not enough fields on this planet. Upgrade your Terraformer or use a planet field item to get more fields.
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: bomber, reaper, recycler, colony_ship, large_cargo, battlecruiser
+    1 × DispatchFleet: target_active_at_dispatch
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: recycler, battle_ship
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build, queue_units, throttle_mine
+  NOT published: research, colonize, spy
+
+  player_id                    35
+  observed_at                  1791117326
+  account_state                "active"
+  recovery_factor              0.9916
+  fleet_slots_free             11
+  colonize_eligible            true
+  target_reports               12 item(s): [{"report_id":3874,"observed_at":1791114420,"expires_at":1791200820,"confidence":0.19953125,"travel_cost":0.09469444444444444,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":3841,"observed_at":1
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      7 planet(s)
+
+  decision: Transfer
+    Build         85.1  resource_need=30, safety=10, recovery=19.8, archetype_preference=25, seeded_variation=0.3
+    Transfer      61.9  resource_need=27, safety=15, recovery=19.8, seeded_variation=0.1
+    QueueUnits    60.0  resource_need=30, safety=10, recovery=19.8, seeded_variation=0.1
+    ThrottleMine  59.9  resource_need=30, safety=10, recovery=19.8, seeded_variation=0
+    Expedition    59.0  resource_need=9, safety=30, recovery=19.8, seeded_variation=0.1
+    DoNothing     24.6  safety=5, recovery=19.8, seeded_variation=-0.2
+  turned down by the candidate factory: 
+    report:3874: raid_not_viable
+    report:3841: raid_not_viable
+    report:3786: raid_not_viable
+    report:3728: raid_not_viable
+    report:3635: raid_not_viable
+    report:3030: raid_not_viable
+    report:2965: raid_not_viable
+    report:2910: raid_not_viable
+    report:1692: raid_not_viable
+    report:1591: raid_not_viable
+    report:1446: raid_not_viable
+    report:1303: raid_not_viable

@@ -1,2 +1,2 @@
-FAIL invariant:COVER_OBJECTS 37s —  ! [COVER_OBJECTS] no AI account holds nano_factory
+FAIL invariant:COVER_OBJECTS 72s —  ! [COVER_OBJECTS] no AI account holds nano_factory
 PROOF: FAIL COVER-OBJECTS-001 (invariant:COVER_OBJECTS) at invariant:COVER_OBJECTS:  ! [COVER_OBJECTS] no AI account holds nano_factory

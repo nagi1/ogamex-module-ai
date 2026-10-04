@@ -1,0 +1,76 @@
+the delivered change passed its tests but its live proof failed:
+FAIL invariant:COVER_OBJECTS 39s —  ! [COVER_OBJECTS] no AI account holds nano_factory
+PROOF: FAIL COVER-OBJECTS-001 (invariant:COVER_OBJECTS) at invariant:COVER_OBJECTS:  ! [COVER_OBJECTS] no AI account holds nano_factory
+
+LIVE EVIDENCE
+--- ogamex pulse 30 (live, now):
+PULSE last 30 min, 100 accounts: 72 sessions on 65 accounts
+  backlog: 412 work item(s) more than a minute late, oldest 72 min — live verdicts read worker lag
+  sessions chose: Recycle 36%, QueueUnits 31%, Build 8%, Spy 6%, Defend 4%, ThrottleMine 4%, DoNothing 3%, Raid 3%, Transfer 3%, Colonize 1%, Research 1%
+  host orders: buildings 298, research 59, units 144
+  missions launched: Espionage 37, Recycle 30, Attack 4, Transport 36, Expedition 25, Deployment 2, Missile 6, AcsDefend 3
+  work (kind: state count):
+    RunSession: Completed 72, Pending 67
+    QueueResearch: Completed 64, Retry 10, Pending 41
+    BuildFirstBuilding: Completed 302, Retry 32, Pending 132
+    Transfer: Completed 36, Retry 5, Pending 21
+    Spy: Completed 42, Retry 1, Pending 18
+    Expedition: Completed 26, Pending 9
+    FleetSave: Completed 2
+    Colonize: Completed 5
+    QueueUnits: Completed 79, Retry 4, Pending 32
+    Recycle: Completed 42, Retry 2, Pending 22
+    Raid: Completed 5, Pending 3
+    SetMinePercent: Completed 5
+    Defend: Completed 5, Pending 1
+    Missile: Completed 6, Pending 4, Retry 1
+    RaidWave: Completed 3, Retry 1, Pending 1
+  refused: 
+    6 × QueueUnits: nothing_queueable
+    5 × DispatchFleet: This mission is not possible.
+    5 × CreateColony: Not enough units on the planet to send the fleet. Units required: colony_ship
+    4 × QueueBuilding: Not enough fields on this planet. Upgrade your Terraformer or use a planet field item to get more fields.
+    3 × DispatchFleet: no_disposable_fleet
+    1 × QueueBuilding: nothing_queueable
+    1 × DispatchFleet: You can only send ACS Defend missions to buddies or alliance members!
+    1 × DispatchFleet: Not enough units on the planet to send the fleet. Units required: recycler, battlecruiser
+--- ogamex why subject (live, now):
+WHY 35 (Miner): what the next session will see
+
+  published: build, queue_units, spy, throttle_mine
+  NOT published: research, colonize
+
+  player_id                    35
+  observed_at                  1791114307
+  account_state                "active"
+  recovery_factor              0.9568
+  fleet_slots_free             11
+  colonize_eligible            true
+  target_reports               11 item(s): [{"report_id":3841,"observed_at":1791112967,"expires_at":1791199367,"confidence":0.4534375,"travel_cost":0.07252777777777777,"activity":true,"attack_permitted":true,"score_viable":true,"defenceless":false},{"report_id":3786,"observed_at":17
+  fleetsave_eligible           false
+  fleetsave_skip_reason        null
+  inbound_fleets               0 item(s)
+  reaction_wake_at             null
+  recall_eligible              false
+  planets                      7 planet(s)
+
+  decision: Recycle
+    Build         84.1  resource_need=30, safety=10, recovery=19.1, archetype_preference=25, seeded_variation=-0.1
+    Recycle       64.6  resource_need=30, safety=15, recovery=19.1, seeded_variation=0.4
+    QueueUnits    59.5  resource_need=30, safety=10, recovery=19.1, seeded_variation=0.3
+    ThrottleMine  59.2  resource_need=30, safety=10, recovery=19.1, seeded_variation=0.1
+    Spy           58.7  resource_need=30, safety=10, recovery=19.1, seeded_variation=-0.4
+    Expedition    58.1  resource_need=9, safety=30, recovery=19.1, seeded_variation=-0.1
+    DoNothing     23.8  safety=5, recovery=19.1, seeded_variation=-0.4
+  turned down by the candidate factory: 
+    report:3841: raid_not_viable
+    report:3786: raid_not_viable
+    report:3728: raid_not_viable
+    report:3635: raid_not_viable
+    report:3030: raid_not_viable
+    report:2965: raid_not_viable
+    report:2910: raid_not_viable
+    report:1692: raid_not_viable
+    report:1591: raid_not_viable
+    report:1446: raid_not_viable
+    report:1303: raid_not_viable

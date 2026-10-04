@@ -1,1 +1,2 @@
-PROOF: PASS DISPATCH-ROOT-001 (invariant:DISPATCH_REFUSALS)
+FAIL invariant:DISPATCH_REFUSALS 22s —  ! [DISPATCH_REFUSALS] player 40 planet 262 source_short_at_dispatch refused 3 times in six hours
+PROOF: FAIL DISPATCH-ROOT-001 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 40 planet 262 source_short_at_dispatch refused 3 times in six hours

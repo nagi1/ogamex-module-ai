@@ -1,0 +1,7 @@
+The background `done` run will notify me when it finishes, so I'm stopping here until then.
+
+**What changed:** no new code. The earlier commits (`ebee169`, `98fccdb`) already cool refused origins and targets in the planners and in the worker. The five `source_short_at_dispatch` receipts for player 45 / planet 157 are transfers from 08:38–09:16, which is before those commits landed (about 11:47 UTC). There are no refusals after the fix. This row moves the fuel-short and no-fleet refusal repeats in the DISPATCH_REFUSALS invariant. It frees the STUCK-DispatchFleet rows.
+
+**Proof verdict:** `DispatchRefusalCoolingTest` (3) and `RecentRefusalsTest` (5) pass. The live `invariant:DISPATCH_REFUSALS` step is still running in the background as part of `task.py done`. Those pre-fix receipts leave the six-hour window around 15:16 UTC, so it fails until then. I did not read its result.
+
+**What's left:** if `done` is refused on that stale window, leave the row `delivered`. After 15:16 UTC, re-run `prove DISPATCH-ROOT-001`, or `sim --hours=6`, and read the DISPATCH_REFUSALS line. I have not added a note to the row yet.

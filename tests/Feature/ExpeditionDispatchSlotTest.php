@@ -47,8 +47,8 @@ test('a decided expedition flies when the account holds a free slot', function (
 });
 
 // A decision the session made before the gate refused the account's own dispatch orders still sits
-// queued: the executor answers it from the same account-lane memory the planner reads, so the host's
-// own sentence is written once at most instead of once per queued decision.
+// queued: the account answers it from the same memory the planner reads, so the host's own sentence is
+// written once at most instead of once per queued decision.
 test('a decided expedition is answered by the account own lane, not by the host', function (): void {
     $situation = Situation::of($this)
         ->research('astrophysics', 4)
@@ -63,8 +63,9 @@ test('a decided expedition is answered by the account own lane, not by the host'
     $refused = $situation->refused();
 
     expect($situation->missions())->toBe([])
-        ->and(implode(' | ', $refused))->toContain('source_short_at_dispatch')
-        // The planted refusal is the only receipt carrying the host's own sentence: the queued decision
-        // was answered by the account's memory, not by asking the host a second time.
+        // The queued decision is dropped from that memory, so the account asks the host nothing: the
+        // planted sentence is the only refusal on record and the only one carrying it.
+        ->and(implode(' | ', $refused))->toContain('too many expeditions')
+        ->and(array_filter($refused, static fn (string $line): bool => str_contains($line, 'source_short_at_dispatch')))->toBe([])
         ->and(count(array_filter($refused, static fn (string $line): bool => str_contains($line, 'too many expeditions'))))->toBe(1);
 });

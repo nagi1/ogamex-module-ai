@@ -1,0 +1,5 @@
+**What changed:** I wrote no new code. The cooling of refused targets and origins was already in `RecentRefusals`, the planners and the worker (`92de72d`, `ebee169`, `98fccdb`). This row moves the DISPATCH_REFUSALS invariant and should free the STUCK-DispatchFleet rows. Its observable effect is that an account stops re-offering a target or origin the gate just refused.
+
+**Proof verdict:** `task.py done` failed on `invariant:DISPATCH_REFUSALS` (player 42, target 1:22:4, `target_active_at_dispatch`, 13 times). Each of those 13 refusals is dated 06:58–09:06 UTC, before the fixes landed at about 12:11 UTC. I found no refusal of that kind after 09:06. The invariant counts everything in the last six hours, so the failure comes from refusals that predate the fix.
+
+**What's left:** The row is unclaimed (`task.py` has no note command) and still not done. The 09:06 refusal leaves the six-hour window around 15:06 UTC. After that, run `bash scripts/ogamex prove DISPATCH-ROOT-001` or `sim --hours=6` and read the DISPATCH_REFUSALS line. If it still reports repeats dated after 12:11 UTC, the cause is a real planner leak and needs a fresh look.

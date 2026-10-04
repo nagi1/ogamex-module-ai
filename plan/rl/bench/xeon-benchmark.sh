@@ -7,6 +7,8 @@
 #
 # Prints, per concurrency level, the wall time and the sessions + orders per second summed over universes.
 set -euo pipefail
+# Parallel sims must not share the app's cache, queue or broadcaster (locks and budgets leak, runs diverge).
+export BROADCAST_CONNECTION=log CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync
 PHP=${PHP:-php}
 HOURS=${1:-6}
 FROM=${2:?start instant, e.g. the SIM_NOW of the source database}

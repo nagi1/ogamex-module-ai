@@ -1,2 +1,3 @@
-FAIL invariant:COVER_OBJECTS 25s —  ! [COVER_OBJECTS] no AI account holds nano_factory
-PROOF: FAIL MISSILES-001 (invariant:COVER_OBJECTS) at invariant:COVER_OBJECTS:  ! [COVER_OBJECTS] no AI account holds nano_factory
+PASS test:MissileSiloStockTest 4s
+PASS aspect:raids 1s
+PROOF: PASS MISSILES-001 (test:MissileSiloStockTest aspect:raids)
