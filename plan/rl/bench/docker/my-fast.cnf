@@ -1,0 +1,7 @@
+[mysqld]
+innodb_buffer_pool_size = 1G
+innodb_flush_log_at_trx_commit = 0
+innodb_doublewrite = 0
+sync_binlog = 0
+skip-log-bin
+max_connections = 200

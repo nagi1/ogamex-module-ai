@@ -1,0 +1,30 @@
+<?php
+// One process: in-memory SQLite, migrate, seed 20 AI accounts at speed 8, run ai:sim with a query counter.
+putenv('DB_CONNECTION=sqlite'); putenv('DB_DATABASE=:memory:'); $_ENV['DB_CONNECTION']='sqlite'; $_ENV['DB_DATABASE']=':memory:'; $_SERVER['DB_CONNECTION']='sqlite'; $_SERVER['DB_DATABASE']=':memory:';
+require __DIR__.'/../vendor/autoload.php';
+$app = require __DIR__.'/../bootstrap/app.php';
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+use Illuminate\Support\Facades\{Artisan, DB};
+$o = new Symfony\Component\Console\Output\BufferedOutput();
+$t = microtime(true);
+Artisan::call('migrate', ['--force' => true], $o);
+printf("driver=%s database=%s migrate %.1f s\n", DB::connection()->getDriverName(), DB::connection()->getDatabaseName(), microtime(true)-$t);
+app(OGame\Actions\Fortify\CreateNewUser::class)->create(['email'=>'human@example.test','password'=>'Secretpass123!']);
+$s = app(OGame\Services\SettingsService::class);
+foreach (['economy_speed'=>8,'research_speed'=>8,'fleet_speed'=>8,'fleet_speed_war'=>8,'fleet_speed_peaceful'=>8,'fleet_speed_holding'=>8] as $k=>$v) $s->set($k,$v);
+Artisan::call('ai:seed-test-universe', ['--players'=>20,'--confirm'=>true], $o);
+echo "seeded profiles: ", Modules\AI\Models\AiProfile::count(), "\n";
+$q = 0; $dbms = 0.0; $byTable = [];
+$slow = []; DB::listen(function ($e) use (&$q, &$dbms, &$byTable, &$slow) { $q++; $dbms += $e->time; $k2 = substr(preg_replace('/\d+/', 'N', $e->sql), 0, 230); $slow[$k2][0] = ($slow[$k2][0] ?? 0) + $e->time; $slow[$k2][1] = ($slow[$k2][1] ?? 0) + 1;
+  if (preg_match('/^\s*(select|insert|update|delete)\b.*?\b(?:from|into|update)\s+["`]?(\w+)/is', $e->sql, $m)) { $k = strtolower($m[1]).' '.$m[2]; $byTable[$k] = ($byTable[$k] ?? 0) + 1; } });
+$out = new Symfony\Component\Console\Output\BufferedOutput();
+$t = microtime(true);
+Artisan::call('ai:sim', json_decode($argv[1] ?? '{}', true) + ['--force-db' => true], $out);
+$wall = microtime(true) - $t;
+echo $out->fetch();
+arsort($byTable);
+printf("QUERIES: %d total, %.1f s DB time (%.0f%% of %.1f s wall), peak mem %.0f MB\n", $q, $dbms/1000, $dbms/10/$wall, $wall, memory_get_peak_usage(true)/1e6);
+foreach (array_slice($byTable, 0, 12, true) as $k => $n) printf("  %7d %s\n", $n, $k);
+uasort($slow, fn($a,$b)=>$b[0]<=>$a[0]); echo "TOP STATEMENTS BY TOTAL TIME:\n"; foreach (array_slice($slow,0,8,true) as $k=>[$ms,$n]) printf("  %8.1f s %7d calls %7.2f ms/call  %s\n", $ms/1000, $n, $ms/$n, $k);
+echo "planets: ", DB::table('planets')->count(), "  building_queues: ", DB::table('building_queues')->count(), "  research_queues: ", DB::table('research_queues')->count(), "  unit_queues: ", DB::table('unit_queues')->count(), "  fleet_missions: ", DB::table('fleet_missions')->count(), "  ai_decision_traces: ", DB::table('ai_decision_traces')->count(), "\n";
+echo "sum of building levels (metal/crystal/deut/solar mines): ", DB::table('planets')->selectRaw('sum(metal_mine)+sum(crystal_mine)+sum(deuterium_synthesizer)+sum(solar_plant) s')->value('s'), "\n";

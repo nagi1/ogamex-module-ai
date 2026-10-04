@@ -1,0 +1,6 @@
+[build-system]
+requires = ["maturin>=1.0"]
+build-backend = "maturin"
+[project]
+name = "ogsim"
+version = "0.1.0"
