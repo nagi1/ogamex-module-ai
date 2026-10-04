@@ -47,6 +47,9 @@ class QueueableBuildingPlanner
     /** The pass that stands the facilities a bare planet's wall waits on: it is a fix, not a choice. */
     private const WALL_STEP = 'wall';
 
+    /** Candidates kept per choice; with the wait option the policy sees at most 32 rows. */
+    private const CHOICE_CANDIDATES = 31;
+
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
         private FacilityChain $facilityChain,
@@ -122,6 +125,110 @@ class QueueableBuildingPlanner
         }
 
         return array_values($steps);
+    }
+
+    /**
+     * Every candidate the passes offer for each free queue, in pass order, with what the host and the
+     * planner's own taste say about it: the material a choice policy ranks, and the step the planner
+     * chose as the answer to imitate. Read only when a choice policy or the choice recorder is on, so
+     * the plan itself never pays for it.
+     *
+     * @param list<QueueableBuilding|QueueableResearch> $chosen what steps() returned for this player
+     * @return list<array{planet: PlanetService, research: bool, candidates: list<array{candidate: BuildCandidate, pass: string, legal: bool, teacherOk: bool, spendable: bool}>, teacher: ?int}>
+     */
+    public function choiceSets(int $playerId, array $chosen, PlayerService $player): array
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        if ($profile === null) {
+            return [];
+        }
+
+        $passes = $this->passes($profile);
+        $buildingFor = [];
+        $research = null;
+        foreach ($chosen as $step) {
+            if ($step instanceof QueueableResearch) {
+                $research = $step;
+                continue;
+            }
+            $buildingFor[$step->planetId] = $step->buildingId;
+        }
+
+        $sets = [];
+        $lab = null;
+        foreach ($player->planets->all() as $planet) {
+            $goal = $this->savingsGoal($planet, $profile);
+            $offered = $this->offered($planet, $passes);
+
+            if (!$this->buildingQueueService->retrieveQueue($planet)->isQueueFull()) {
+                $sets[] = $this->choiceSet($planet, false, $offered, $goal, $buildingFor[$planet->getPlanetId()] ?? null);
+            }
+
+            if ($lab !== null || $this->researchQueueService->retrieveQueue($planet)->isQueueFull()) {
+                continue;
+            }
+
+            // The lab is account-wide; the planet that answers is the one the planner used, else the
+            // first one that can research anything at all.
+            $set = $this->choiceSet($planet, true, $offered, $goal, $research?->planetId === $planet->getPlanetId() ? $research->researchId : null);
+            $lab = $research?->planetId === $planet->getPlanetId() || in_array(true, array_column($set['candidates'], 'legal'), true) ? $set : null;
+        }
+
+        return $lab === null ? $sets : [...$sets, $lab];
+    }
+
+    /**
+     * Each object once, in the order the passes offer it, tagged with the first pass that offered it.
+     *
+     * @param array<string, callable(PlanetService): list<BuildCandidate>> $passes
+     * @return list<array{candidate: BuildCandidate, pass: string}>
+     */
+    private function offered(PlanetService $planet, array $passes): array
+    {
+        $seen = [];
+        $offered = [];
+        foreach ($passes as $name => $pass) {
+            foreach ($pass($planet) as $candidate) {
+                if (isset($seen[$candidate->buildingId])) {
+                    continue;
+                }
+                $seen[$candidate->buildingId] = true;
+                $offered[] = ['candidate' => $candidate, 'pass' => $name];
+            }
+        }
+
+        return $offered;
+    }
+
+    /**
+     * @param list<array{candidate: BuildCandidate, pass: string}> $offered
+     * @return array{planet: PlanetService, research: bool, candidates: list<array{candidate: BuildCandidate, pass: string, legal: bool, teacherOk: bool, spendable: bool}>, teacher: ?int}
+     */
+    private function choiceSet(PlanetService $planet, bool $research, array $offered, ?SavingsGoal $goal, ?int $teacherObjectId): array
+    {
+        $rows = [];
+        $teacher = null;
+        foreach ($offered as ['candidate' => $candidate, 'pass' => $pass]) {
+            if ((ObjectService::getObjectById($candidate->buildingId)->type === GameObjectType::Research) !== $research) {
+                continue;
+            }
+            // A bounded list; the planner's own answer always stays in it.
+            if (count($rows) >= self::CHOICE_CANDIDATES && $candidate->buildingId !== $teacherObjectId) {
+                continue;
+            }
+
+            $rows[] = [
+                'candidate' => $candidate,
+                'pass' => $pass,
+                // What the host would accept now, without the planner's reserve: a policy may spend into it.
+                'legal' => $research ? $this->queueableResearch($planet, $candidate, null) !== null : $this->refusal($planet, $candidate, null) === null,
+                'teacherOk' => $research ? $this->queueableResearch($planet, $candidate) !== null : $this->refusal($planet, $candidate) === null,
+                'spendable' => $this->canSpendFor($planet, $pass === self::WALL_STEP ? null : $goal, $candidate),
+            ];
+            $teacher = $candidate->buildingId === $teacherObjectId ? count($rows) - 1 : $teacher;
+        }
+
+        return ['planet' => $planet, 'research' => $research, 'candidates' => $rows, 'teacher' => $teacher];
     }
 
     /**
@@ -285,7 +392,7 @@ class QueueableBuildingPlanner
      * met requirements, a balance it can pay and a field the building still fits in. Named, so a
      * planet that never builds says why instead of reading as idle.
      */
-    public function refusal(PlanetService $planet, BuildCandidate $candidate): ?string
+    public function refusal(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::ECONOMY_HOURS): ?string
     {
         $object = ObjectService::getObjectById($candidate->buildingId);
         $machineName = $object->machine_name;
@@ -308,7 +415,7 @@ class QueueableBuildingPlanner
         if (!ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)) {
             return 'requirements';
         }
-        if (!$planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::ECONOMY_HOURS))) {
+        if (!$planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), $reserveHours))) {
             return 'price plus reserve';
         }
         // `BuildingQueueService::start()` refuses a field-consuming building once the planet's fields
@@ -416,7 +523,7 @@ class QueueableBuildingPlanner
      * planet, so the planet that answers is the planet whose laboratory carries it. Nothing here
      * names a technology: the price, the requirement graph and the queue are all the host's.
      */
-    private function queueableResearch(PlanetService $planet, BuildCandidate $candidate): ?QueueableResearch
+    private function queueableResearch(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::RESEARCH_HOURS): ?QueueableResearch
     {
         $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
 
@@ -429,7 +536,7 @@ class QueueableBuildingPlanner
 
         $queueable = !$this->researchQueueService->retrieveQueue($planet)->isQueueFull()
             && ObjectService::objectRequirementsMetWithQueue($machineName, ($planet->getPlayer()?->getResearchLevel($machineName) ?? 0) + 1, $planet)
-            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), ReserveFloor::RESEARCH_HOURS));
+            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), $reserveHours));
 
         if (!$queueable) {
             return null;
@@ -449,8 +556,13 @@ class QueueableBuildingPlanner
      * resource, so a purchase that costs no deuterium is not blocked by a deuterium reserve (SP5 --
      * saving for a drive must not freeze surplus metal and crystal).
      */
-    private function withReserve(PlanetService $planet, Resources $price, float $savingHours): Resources
+    private function withReserve(PlanetService $planet, Resources $price, ?float $savingHours): Resources
     {
+        // No saving horizon is the host's own question: can the planet pay the price at all.
+        if ($savingHours === null) {
+            return $price;
+        }
+
         $floor = $this->reserveFloor->floor($planet, $savingHours);
 
         return new Resources(

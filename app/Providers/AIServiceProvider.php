@@ -44,6 +44,7 @@ use Modules\AI\Console\Commands\SimulateAiTime;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\CampaignConsultationGateway;
+use Modules\AI\Contracts\ChoicePolicy;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\LanguageGateway;
@@ -68,6 +69,9 @@ use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Contracts\QueueAiUnits;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
+use Modules\AI\Domain\Choice\EpsilonChoicePolicy;
+use Modules\AI\Domain\Choice\SocketChoicePolicy;
+use Modules\AI\Domain\Choice\TeacherChoicePolicy;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
@@ -292,6 +296,12 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->bind(QueueAiMinePercent::class, QueueAiMinePercentAction::class);
         $this->app->bind(AiClock::class, SystemAiClock::class);
         $this->app->bind(RandomSource::class, SeededRandomSource::class);
+        // Who answers an economy choice (plan/rl): the planner itself unless a run asks otherwise.
+        $this->app->bind(ChoicePolicy::class, fn (): ChoicePolicy => match (config('ai.rl.policy', 'teacher')) {
+            'epsilon' => app(EpsilonChoicePolicy::class),
+            'socket' => app(SocketChoicePolicy::class),
+            default => app(TeacherChoicePolicy::class),
+        });
         $this->app->tag([
             MinerPolicy::class,
             TurtlePolicy::class,

@@ -575,7 +575,8 @@ class ScheduleAiIntentAction
      */
     private function fillQueues(AiProfile $profile, AiWorkItem $sessionWorkItem, string $keyPrefix): int
     {
-        $steps = $this->queueableBuildingPlanner->steps($profile->player_id);
+        // The planner's steps, or a choice policy's answer to the same candidates (plan/rl; off by default).
+        $steps = app(DecideAiEconomyStepsAction::class)->handle($profile->player_id, 'work:' . $sessionWorkItem->id);
         foreach ($steps as $index => $step) {
             [$kind, $payload] = $step instanceof QueueableResearch
                 ? [AiWorkKind::QueueResearch, [self::PAYLOAD_RESEARCH_ID => $step->researchId]]

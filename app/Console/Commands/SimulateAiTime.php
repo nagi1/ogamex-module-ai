@@ -51,7 +51,12 @@ use Throwable;
     {--force-db : Allow a database whose name does not contain "sim"}
     {--in-memory : Copy the database into SQLite :memory: and play there; the source is only read, so any database may be the source}
     {--seed= : Seed the game\'s randomness (battles, expeditions, espionage, planet creation) so the same seed plays the same game}
-    {--save-sqlite= : After the run, write the in-memory state to this SQLite file (a snapshot to start later runs from)}')]
+    {--save-sqlite= : After the run, write the in-memory state to this SQLite file (a snapshot to start later runs from)}
+    {--choice-policy= : Who answers economy choices: teacher, epsilon or socket (plan/rl)}
+    {--choice-epsilon= : Exploration share for the epsilon policy}
+    {--choice-socket= : Unix socket of the policy server for the socket policy}
+    {--learner-share= : Share of accounts the policy decides for (the rest keep the planner)}
+    {--record-choices= : Append every economy choice point to this JSON Lines file ("{pid}" = process id)}')]
 class SimulateAiTime extends Command
 {
     private const PASSES_PER_INSTANT = 40;
@@ -68,7 +73,7 @@ class SimulateAiTime extends Command
 
     public function handle(): int
     {
-        $this->seedRandomness();
+        $this->configureRun();
 
         if ($this->option('in-memory')) {
             $copied = $this->moveIntoMemory();
@@ -217,13 +222,20 @@ class SimulateAiTime extends Command
      * One seeded engine behind the host's Randomizer makes every game draw replayable; the sessions'
      * own choices are already hash-seeded per account, so a seed fixes the whole run.
      */
-    private function seedRandomness(): void
+    private function configureRun(): void
     {
+        foreach (['choice-policy' => 'policy', 'choice-epsilon' => 'epsilon', 'choice-socket' => 'socket', 'learner-share' => 'learner_share', 'record-choices' => 'record'] as $option => $key) {
+            if ($this->option($option) !== null) {
+                config(['ai.rl.' . $key => in_array($key, ['epsilon', 'learner_share'], true) ? (float) $this->option($option) : $this->option($option)]);
+            }
+        }
+
         if ($this->option('seed') === null) {
             return;
         }
 
         $seed = (int) $this->option('seed');
+        config(['ai.rl.seed' => $seed]);
         app()->instance(Randomizer::class, new Randomizer(new Xoshiro256StarStar($seed)));
         mt_srand($seed);
     }
@@ -239,6 +251,10 @@ class SimulateAiTime extends Command
         config(['database.connections.ai_sim_memory' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false]]);
         config(['database.default' => 'ai_sim_memory']);
         DB::setDefaultConnection('ai_sim_memory');
+        // Services that cached rows of the source connection start again from the copy.
+        foreach ([\OGame\Services\SettingsService::class, \OGame\Factories\PlayerServiceFactory::class, \OGame\Factories\PlanetServiceFactory::class] as $cached) {
+            app()->forgetInstance($cached);
+        }
         Artisan::call('migrate', ['--force' => true, '--database' => 'ai_sim_memory']);
 
         $copied = 0;
