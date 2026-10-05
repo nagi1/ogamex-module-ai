@@ -270,6 +270,19 @@ def cmd_done(con, code):
     print("done", code)
 
 
+def cmd_waive(con, code, reason):
+    """Close a row WITHOUT its proof, on the owner's say-so. The note says WAIVED, never PROVEN, so a ledger read can still tell
+    delivered-and-judged from delivered-and-trusted; the evidence comes later from a large run that reads the row's invariant."""
+    row = con.execute("SELECT assignee FROM tasks WHERE code=?", (code,)).fetchone()
+    if row is None:
+        sys.exit(f"no task {code}")
+    release_locks(code, row[0] or "")
+    con.execute("UPDATE tasks SET status='done', assignee=NULL, notes=coalesce(notes,'') || ?, updated_at=datetime('now') WHERE code=?",
+                (f" | WAIVED {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC (owner, proof skipped): {reason}", code))
+    con.commit()
+    print("waived", code)
+
+
 def cmd_defer(con, code, reason):
     """Freeze a row: nothing takes it until someone with the owner's say-so reopens it."""
     cur = con.execute("UPDATE tasks SET status='deferred', assignee=NULL, "
@@ -414,6 +427,7 @@ def main():
     for name in ("unclaim", "done", "unblock", "show", "unstick"):
         sub.add_parser(name).add_argument("code")
     bp = sub.add_parser("block"); bp.add_argument("code"); bp.add_argument("note")
+    wp = sub.add_parser("waive"); wp.add_argument("code"); wp.add_argument("reason")
     dp = sub.add_parser("defer"); dp.add_argument("code"); dp.add_argument("reason")
     sub.add_parser("deps").add_argument("code")
     sub.add_parser("depends-on").add_argument("code")
@@ -447,6 +461,8 @@ def main():
             cmd_claim(con, a.code, a.assignee)
         elif cmd == "unclaim":
             cmd_unclaim(con, a.code)
+        elif cmd == "waive":
+            cmd_waive(con, a.code, a.reason)
         elif cmd == "done":
             cmd_done(con, a.code)
         elif cmd == "block":
