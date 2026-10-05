@@ -383,7 +383,10 @@ $authUptime = [];
 $sessions = DB::table('ai_work_items')->whereIn('player_id', $playerIds)->where('kind', AiWorkKind::RunSession->value)
     ->where('state', AiWorkState::Completed->value)->where('updated_at', '>=', $week)
     ->selectRaw('player_id, count(distinct hour(updated_at)) as hours')->groupBy('player_id')->get();
-foreach ($sessions as $row) {
+// An accelerated cohort logs in every few seconds by design, so every hour of the day is active; the signature only
+// describes a routine that was left to run.
+$accelerated = (int) config('ai.population.session_interval_seconds', 0) > 0;
+foreach ($accelerated ? [] : $sessions as $row) {
     if ((int) $row->hours >= $AUTH_UPTIME_HOURS) {
         $authUptime[] = sprintf('player %d is active in %d of 24 hours of the day', $row->player_id, $row->hours);
     }

@@ -109,6 +109,7 @@ def main(argv: list[str] | None = None) -> None:
 
     model.load_state_dict(torch.load(out / "model.pt", map_location=args.device)["state_dict"])
     export_onnx(model, out / "model.onnx", ds.state.shape[1], ds.cands.shape[2])
+    model.to(args.device)  # the exporter moves the model to the CPU in place
     (out / "schema.json").write_text(json.dumps(ds.schema.to_json(), indent=2))
     train_summary = summarise(predict(model, train, args.device), train.mask, train.teacher, train.meta, train.cands, ds.schema.candidate)
     (out / "metrics.json").write_text(json.dumps({"history": history, "validation": best, "train": train_summary,

@@ -207,6 +207,30 @@ test('a build whose price exceeds storage is preceded by the store that raises i
         ->and($candidates[0]->reason)->toBe('storage:' . ObjectService::getObjectById($ids['metal'])->machine_name);
 });
 
+/**
+ * Past the mines that repay, a full store is dumped into a technology; once every technology costs more than the store
+ * holds, the store grows for it, or the planet idles on full stores forever.
+ */
+test('a technology whose price outgrew a full store is preceded by the store that raises it', function (): void {
+    $profile = economyProfile($this->currentUserId);
+
+    economyDeepPlanet($this->planetService);
+    foreach (economyStorageIds($this->planetService) as $objectId) {
+        $this->planetService->setObjectLevel($objectId, 3, false);
+    }
+    foreach (ObjectService::getResearchObjects() as $research) {
+        $this->playerSetResearchLevel($research->machine_name, 20);
+    }
+    economyRefresh($this->planetService);
+    $this->planetAddResources(new Resources(50_000_000, 50_000_000, 50_000_000));
+    economyRefresh($this->planetService);
+
+    expect(app(EconomyUpgrades::class)->production($this->planetService, $profile))->toBe([])
+        ->and(app(EconomyUpgrades::class)->researchDump($this->planetService))->not->toBeEmpty()
+        ->and(array_map(static fn (BuildCandidate $candidate): string => explode(':', $candidate->reason)[0], app(EconomyUpgrades::class)->storageForPrice($this->planetService, $profile)))
+        ->not->toBeEmpty()->each->toBe('storage');
+});
+
 /** With a warehouse that already fits the next build, there is nothing to prepend. */
 test('a build whose price fits storage needs no storage prepend', function (): void {
     $profile = economyProfile($this->currentUserId);

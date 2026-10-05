@@ -218,7 +218,7 @@ class EconomyUpgrades
 
         foreach ($this->ambitionObjects($planet) as $object) {
             $price = ObjectService::getObjectPrice($object->machine_name, $planet);
-            if ($price->sum() <= 0.0 || !$planet->hasResources($this->vault($price))) {
+            if ($price->sum() <= 0.0 || !$planet->hasResources($this->vault($planet, $price))) {
                 continue;
             }
 
@@ -250,7 +250,7 @@ class EconomyUpgrades
         foreach ($this->ambitionObjects($planet) as $object) {
             $price = ObjectService::getObjectPrice($object->machine_name, $planet);
             $missing = $price->energy->get() - (float) $planet->energy()->get();
-            if ($missing <= 0.0 || !$planet->hasResources($this->vault(new Resources($price->metal->get(), $price->crystal->get(), $price->deuterium->get())))) {
+            if ($missing <= 0.0 || !$planet->hasResources($this->vault($planet, new Resources($price->metal->get(), $price->crystal->get(), $price->deuterium->get())))) {
                 continue;
             }
 
@@ -314,14 +314,16 @@ class EconomyUpgrades
 
     /**
      * What the planet keeps first for an ambition: six times the mined price, and the energy price as it stands. Energy is
-     * a capacity the host compares with the balance, not a stock to keep six times over.
+     * a capacity the host compares with the balance, not a stock to keep six times over. A full store is the most a planet
+     * can ever keep, so six times a price above a sixth of the store asks for the store itself: past that, a planet whose
+     * prices outgrew six times its store waited on a vault it could never hold and idled with full stores.
      */
-    private function vault(Resources $price): Resources
+    private function vault(PlanetService $planet, Resources $price): Resources
     {
         return new Resources(
-            $price->metal->get() * self::AMBITION_VAULT,
-            $price->crystal->get() * self::AMBITION_VAULT,
-            $price->deuterium->get() * self::AMBITION_VAULT,
+            min($price->metal->get() * self::AMBITION_VAULT, max($price->metal->get(), $planet->metalStorage()->get())),
+            min($price->crystal->get() * self::AMBITION_VAULT, max($price->crystal->get(), $planet->crystalStorage()->get())),
+            min($price->deuterium->get() * self::AMBITION_VAULT, max($price->deuterium->get(), $planet->deuteriumStorage()->get())),
             $price->energy->get(),
         );
     }
@@ -451,7 +453,9 @@ class EconomyUpgrades
      */
     public function storageForPrice(PlanetService $planet, AiProfile $profile): array
     {
-        $next = $this->production($planet, $profile)[0] ?? null;
+        // Past the mines that repay, the next purchase is the technology a full store is dumped into; when its price
+        // outgrew the store it could never be paid and the planet idled on full stores, so the store grows for it too.
+        $next = $this->production($planet, $profile)[0] ?? $this->researchDump($planet)[0] ?? null;
         if ($next === null) {
             return [];
         }

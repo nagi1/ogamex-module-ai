@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\AI\Http\Controllers\AIController;
 use Modules\AI\Http\Controllers\CampaignController;
 use Modules\AI\Http\Controllers\HarnessStatusController;
+use Modules\AI\Http\Controllers\RlTrainingStatusController;
 
 // The harness page watches the build-time pipeline, not the game, so it sits outside the player auth
 // gate and is refused outright unless the app is local.
@@ -14,6 +15,9 @@ Route::prefix('ai-harness')->name('ai.harness.')->group(function (): void {
     Route::get('/log', [HarnessStatusController::class, 'log'])->name('log');
     // The whole ledger, read-only: the overview counts rows, this lets a person read them.
     Route::get('/tasks', [HarnessStatusController::class, 'tasks'])->name('tasks');
+    // The learned-economy-policy run (data, training, closed loop), read from the collector's status file.
+    Route::get('/rl', [RlTrainingStatusController::class, 'index'])->name('rl');
+    Route::get('/rl/poll', [RlTrainingStatusController::class, 'poll'])->name('rl.poll');
 });
 
 Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admin'])

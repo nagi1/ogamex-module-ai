@@ -16,6 +16,7 @@ use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\SimulatedTime;
+use OGame\Services\SettingsService;
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
 use Throwable;
@@ -48,6 +49,7 @@ use Throwable;
     {--ffi-probe : Diagnose the Rust segfault: call the library with an empty fight after every phase of every jump and print which phase last survived}
     {--workers=1 : Fork this many processes per simulated instant, each running a share of the due sessions against the sidecars at the same time}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
+    {--full-play : Data generation only: accounts never sleep, log in every ai.population.session_interval_seconds (600 when unset) and queue up to 50 actions per session, so a short run reaches the late game}
     {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
     {--force-db : Allow a database whose name does not contain "sim"}
     {--in-memory : Copy the database into SQLite :memory: and play there; the source is only read, so any database may be the source}
@@ -63,6 +65,12 @@ class SimulateAiTime extends Command
     private const PASSES_PER_INSTANT = 40;
 
     private const BATCH = 500;
+
+    private const FULL_PLAY_INTERVAL_SECONDS = 600;
+
+    private const FULL_PLAY_ACTION_CAP = 50;
+
+    private const FULL_PLAY_MIN_INTERVAL_SECONDS = 60;
 
     /** @var array<string, int> */
     private array $errors = [];
@@ -103,8 +111,11 @@ class SimulateAiTime extends Command
         if (!$this->option('native-cognition')) {
             $this->probeSidecars();
         }
-        if (!$this->option('keep-accelerated')) {
+        if (!$this->option('keep-accelerated') && !$this->option('full-play')) {
             config(['ai.population.session_interval_seconds' => 0]);
+        }
+        if ($this->option('full-play')) {
+            $this->playWithoutLimits();
         }
 
         SimulatedTime::release();
@@ -227,6 +238,32 @@ class SimulateAiTime extends Command
      * One seeded engine behind the host's Randomizer makes every game draw replayable; the sessions'
      * own choices are already hash-seeded per account, so a seed fixes the whole run.
      */
+    /**
+     * Config only, never a database write: a run from a real cohort source must leave that source untouched. A
+     * session cap stored in the copied settings table still wins over the config value.
+     */
+    private function playWithoutLimits(): void
+    {
+        $interval = (int) config('ai.population.session_interval_seconds', 0);
+
+        config([
+            'ai.population.sleepless' => true,
+            'ai.population.session_interval_seconds' => $interval > 0 ? $interval : $this->fullPlayInterval(),
+            'ai.population.session_action_cap' => self::FULL_PLAY_ACTION_CAP,
+        ]);
+    }
+
+    /**
+     * A player logs in again when the build finishes, so the gap shrinks with the game speed: at speed 1000 a build is over in
+     * seconds and a fixed 600 s gap left accounts one step per login, stuck in the early game.
+     */
+    private function fullPlayInterval(): int
+    {
+        $speed = max(1, app(SettingsService::class)->economySpeed());
+
+        return max(self::FULL_PLAY_MIN_INTERVAL_SECONDS, min(self::FULL_PLAY_INTERVAL_SECONDS, intdiv(self::FULL_PLAY_INTERVAL_SECONDS * 8, $speed)));
+    }
+
     private function configureRun(): void
     {
         foreach (['choice-policy' => 'policy', 'choice-epsilon' => 'epsilon', 'choice-socket' => 'socket', 'learner-share' => 'learner_share', 'record-choices' => 'record'] as $option => $key) {

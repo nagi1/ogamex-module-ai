@@ -80,8 +80,12 @@ check() {
         printf '[canary] FAIL the accounts broke or were mostly refused: %s rejected vs %s accepted, %s failed\n' "$rejected" "$accepted" "$failed"
         return 1
     fi
-    if [ "${completed:-0}" -lt 1 ] || [ "${orders:-0}" -lt 1 ]; then
-        printf '[canary] FAIL nothing happened: no session completed and no order reached a queue\n'
+    # A grown account waits on its queues for longer than the window (two accounts at accelerated speed built everything the
+    # planet could hold), so an order already running counts as the account having played.
+    local running
+    running=$(( $(q "SELECT COUNT(*) FROM \`$DB\`.building_queues WHERE processed = 0") + $(q "SELECT COUNT(*) FROM \`$DB\`.research_queues WHERE processed = 0") ))
+    if [ "${completed:-0}" -lt 1 ] || [ $(( ${orders:-0} + running )) -lt 1 ]; then
+        printf '[canary] FAIL nothing happened: no session completed and no order reached a queue or is running\n'
         return 1
     fi
 

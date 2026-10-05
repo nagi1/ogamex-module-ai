@@ -9,15 +9,21 @@ set -euo pipefail
 export BROADCAST_CONNECTION=log CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync
 PHP=${PHP:-php}; PY=${PY:-python3}
 MODEL=${1:?model.onnx}; OUT=${2:?out dir}; FIRST=${3:-1001}; N=${4:-30}; DAYS=${5:-30}; PAR=${6:-8}; SHARE=${7:-0.25}
-AT=2026-10-05T00:00:00Z; SOCK=/tmp/ogrl-$$.sock
+AT=2026-10-05T00:00:00Z; ACCOUNTS=${ACCOUNTS:-24}
 mkdir -p "$OUT/teacher" "$OUT/policy" "$OUT/universes"
-$PY -m ogrl.serve --model "$MODEL" --socket "$SOCK" > "$OUT/serve.log" 2>&1 &
-SERVER=$!; trap 'kill $SERVER 2>/dev/null; rm -f $SOCK' EXIT
-sleep 3
+# SOCK set: the model server already runs elsewhere (host venv) and the sims run in the container, where the shared
+# bind mount shows the socket under a different path; EVALUATE=0 leaves the comparison to the host, which has the venv.
+if [ -z "${SOCK:-}" ]; then
+  SOCK=/tmp/ogrl-$$.sock
+  $PY -m ogrl.serve --model "$MODEL" --socket "$SOCK" > "$OUT/serve.log" 2>&1 &
+  SERVER=$!; trap 'kill $SERVER 2>/dev/null; rm -f $SOCK' EXIT
+  sleep 3
+fi
 
 run_pair() {
-  local i=$1 universe="$OUT/universes/universe-$i.sqlite"
-  [ -f "$universe" ] || $PHP artisan ai:rl-universe "$universe" --accounts=24 --seed="$i" --at="$AT" > /dev/null 2>&1
+  local i=$1
+  local universe="$OUT/universes/universe-$i.sqlite"
+  [ -f "$universe" ] || $PHP artisan ai:rl-universe "$universe" --accounts="$ACCOUNTS" --seed="$i" --at="$AT" > /dev/null 2>&1
   for side in teacher policy; do
     local policy=teacher; [ "$side" = policy ] && policy=socket
     DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$universe")" $PHP -d memory_limit=4G artisan ai:sim --in-memory --native-cognition \
@@ -26,6 +32,6 @@ run_pair() {
   done
   echo "pair $i done"
 }
-export -f run_pair; export PHP OUT DAYS SHARE AT SOCK
+export -f run_pair; export PHP OUT DAYS SHARE AT SOCK ACCOUNTS
 seq "$FIRST" $((FIRST + N - 1)) | xargs -P "$PAR" -I{} bash -c 'run_pair {}'
-$PY -m ogrl.evaluate --a "$OUT/teacher/*.jsonl" --b "$OUT/policy/*.jsonl" | tee "$OUT/report.json"
+[ "${EVALUATE:-1}" = 0 ] || $PY -m ogrl.evaluate --a "$OUT/teacher/*.jsonl" --b "$OUT/policy/*.jsonl" | tee "$OUT/report.json"

@@ -32,6 +32,16 @@ def summarise(logits: np.ndarray, mask: np.ndarray, label: np.ndarray, meta: dic
         out["top1_3plus_legal"] = float(top1[many].mean())
         out["mrr_3plus_legal"] = float(rr[many].mean())
 
+    # The planner's pick is nearly always the first legal non-wait row, so plain accuracy can be reached by copying
+    # list order. The rows where the teacher is not that row are the ones that show whether the game was learned.
+    first = np.argmax(mask[:, 1:], axis=1) + 1
+    hard = many & (label != first)
+    out["baseline_first_legal_3plus"] = float((label[many] == first[many]).mean()) if many.any() else None
+    out["hard_rows_share"] = float(hard.sum() / max(many.sum(), 1))
+    if hard.any():
+        out["top1_hard_rows"] = float(top1[hard].mean())
+        out["baseline_random_hard_rows"] = float((1.0 / np.maximum(n_legal[hard], 1)).mean())
+
     # Regret-like: how much worse the chosen row's payback is than the teacher's (0 when equivalent).
     if cands is not None and cand_names and "payback_hours" in cand_names:
         p = cand_names.index("payback_hours")

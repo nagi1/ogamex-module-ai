@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Actions\SeedAiTestUniverseAction;
+use Modules\AI\Actions\StageAiAccountAction;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\SimulatedTime;
 use OGame\Actions\Fortify\CreateNewUser;
@@ -30,6 +31,7 @@ use Random\Randomizer;
     {path : The SQLite file to create (overwritten)}
     {--accounts=24 : AI accounts to register}
     {--speed=8 : Economy, research and fleet speed}
+    {--stage-budget=0 : Resource budget each account has already spent on buildings and research (0 = a fresh account)}
     {--seed=1 : Seed for planet placement, persona seeds and every other draw}
     {--at=2026-10-05T00:00:00Z : The instant the universe is created at; start ai:sim --from here}')]
 class CreateAiRlUniverse extends Command
@@ -68,6 +70,11 @@ class CreateAiRlUniverse extends Command
         // universe's accounts take the same decisions; the universe seed makes them its own.
         foreach (AiProfile::query()->get() as $profile) {
             $profile->update(['random_seed' => (int) sprintf('%u', crc32('rl-universe:' . $seed . ':' . $profile->player_id))]);
+        }
+
+        $budget = (float) $this->option('stage-budget');
+        foreach ($budget > 0 ? $accounts : [] as $account) {
+            app(StageAiAccountAction::class)->handle($account['player_id'], $budget);
         }
 
         $this->info(sprintf('RL-UNIVERSE: %s, seed %d, %d AI account(s), speed %d, at %s', $path, $seed, count($accounts), $speed, $this->option('at')));

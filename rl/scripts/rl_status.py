@@ -10,7 +10,9 @@ Standard library only, so it runs under any python3 on the host.
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
+import math
 import os
 import re
 import time
@@ -248,14 +250,47 @@ def steps(gen: dict, train: dict, loop: dict, gate_rows: list[dict], fixed: dict
     return [{"n": i, "name": names[i], "state": state[i], "summary": summary[i]} for i in range(8)]
 
 
-def eta(history: list, remaining_days: float, now: float, elapsed_days: float, since: float) -> int | None:
-    recent = [h for h in history if now - h[0] <= 1800]
-    if len(recent) >= 2 and recent[-1][1] > recent[0][1]:
-        rate = (recent[-1][1] - recent[0][1]) / (recent[-1][0] - recent[0][0])
-        return int(remaining_days / rate)
-    if elapsed_days > 0:
-        return int(remaining_days / (elapsed_days / max(now - since, 1)))
-    return None
+def eta(state: dict, gen: dict, now: float, since: float) -> int | None:
+    """Wall seconds until every planned universe is done.
+
+    A simulated day gets dearer as accounts grow, so time to reach day d is fitted as c*d^p from the samples of
+    every running universe (log-log least squares), then the queued universes are scheduled onto the workers as they free up.
+    """
+    running = [u for u in gen["universes"] if not u["done"]]
+    if not running:
+        return None
+    seen = state.setdefault("first_seen", {})
+    last = state.setdefault("last_day", {})
+    samples = state.setdefault("day_samples", [])
+    for u in running:
+        if u["day"] < last.get(str(u["n"]), 0) - 0.05:   # the universe restarted from scratch (crash, relaunch): its old samples are void
+            seen[str(u["n"])] = now
+            samples.clear()
+        last[str(u["n"])] = u["day"]
+        # A universe first seen already well along started with the run; one seen at day 0 starts now.
+        start = seen.setdefault(str(u["n"]), since if u["day"] > 1 else now)
+        if u["day"] >= 0.5:
+            samples.append([now - start, u["day"]])
+    state["day_samples"] = samples = samples[-1500:]
+    pts = [(math.log(t), math.log(d)) for t, d in samples if t > 30 and d >= 0.5]
+    if len(pts) < 20:
+        return None
+    mx, my = sum(x for x, _ in pts) / len(pts), sum(y for _, y in pts) / len(pts)
+    var = sum((x - mx) ** 2 for x, _ in pts)
+    if var < 1e-6:
+        return None
+    slope = sum((x - mx) * (y - my) for x, y in pts) / var       # d ~ t^slope, so t ~ d^(1/slope)
+    power = min(max(1 / slope, 1.0), 3.0) if slope > 0 else 2.0
+    # c from the pooled mean: log t = power * log d + c
+    c = sum(x - power * y for x, y in pts) / len(pts)
+    plan = gen["plan_days"]
+    full = math.exp(c + power * math.log(plan))
+    free_at = sorted(max(full - (now - seen[str(u["n"])]), 0) if u["day"] < plan else 0 for u in running)
+    queued = max(gen["target"] - len(gen["universes"]), 0)
+    for _ in range(queued):
+        soonest = heapq.heappop(free_at) if free_at else 0
+        heapq.heappush(free_at, soonest + full)
+    return int(max(free_at)) if free_at else None
 
 
 def update_events(prev: dict, now: float, steps_now: list[dict], alarm_now: list[dict], gen: dict) -> list[dict]:
@@ -310,7 +345,7 @@ def collect(state: dict) -> dict:
     state["progress"] = history[-400:]
     remaining = total_days - done_days
     running = step_rows[4]["state"] == "running"
-    eta_s = eta(state["progress"], remaining, now, done_days, since) if running and remaining > 0 else None
+    eta_s = eta(state, gen, now, since) if running and remaining > 0 else None
 
     series = state.setdefault("series", [])
     series.append([int(now), mach["load"], mach["gpu"].get("util", 0), mach["mem_used_mb"], mach["gpu"].get("mem_used", 0)])

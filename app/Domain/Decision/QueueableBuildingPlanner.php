@@ -9,6 +9,7 @@ use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\BuildingQueueService;
@@ -267,6 +268,11 @@ class QueueableBuildingPlanner
             'storage' => fn (PlanetService $planet): array => $this->withFieldReserve($planet, $profile, $this->economyUpgrades->storage($planet, $profile)),
             'surplus' => function (PlanetService $planet) use ($profile): array {
                 $spend = $this->economyUpgrades->spendSurplus($planet, $profile);
+                // The last fields go to what adds fields before a full store spends them on another mine level.
+                $fields = $spend === [] ? [] : $this->fieldCapacity($planet);
+                if ($fields !== []) {
+                    return [...$fields, ...$this->withFieldsFor($planet, $spend, $this->fieldReserve($planet))];
+                }
                 if ($spend === [] || ! $this->minesOutgrownStations($planet, $this->economyUpgrades->production($planet, $profile))) {
                     return $this->withFieldReserve($planet, $profile, $spend);
                 }
@@ -296,6 +302,7 @@ class QueueableBuildingPlanner
                 $reserve = $stations ? $this->fieldReserve($planet) : 0;
 
                 return [
+                    ...$this->fieldCapacity($planet),
                     ...$this->withFieldsFor($planet, $this->energyCapacity->pending($planet), $reserve),
                     // A station the host's catalogue offers and this planet does not hold is a goal with a
                     // list of its own (FacilityChain::stationPending). The chain's one ambition is its next
@@ -385,6 +392,46 @@ class QueueableBuildingPlanner
         }
 
         return array_values(array_filter($candidates, fn (BuildCandidate $candidate): bool => !$this->consumesAField($candidate)));
+    }
+
+    /**
+     * The next level of whatever adds fields, once the planet is down to the fields it keeps: the station project only
+     * asks for the first level of each station, so a planet that filled its fields after that stopped building for good.
+     * Which object adds fields is the host's own field formula asked with one more level, never a name.
+     *
+     * @return list<BuildCandidate>
+     */
+    private function fieldCapacity(PlanetService $planet): array
+    {
+        // A moon's fields are the moon block's answer (RV-008/RV-009), as its stations are.
+        if ($planet->getPlanetType() === PlanetType::Moon || $this->freeFields($planet) > $this->fieldReserve($planet)) {
+            return [];
+        }
+
+        $candidates = [];
+        foreach ([...ObjectService::getBuildingObjects(), ...ObjectService::getStationObjects()] as $object) {
+            $level = $planet->getObjectLevel($object->machine_name);
+            if (!ObjectService::objectValidPlanetType($object->machine_name, $planet)
+                || !ObjectService::objectRequirementsMet($object->machine_name, $planet)
+                || !$this->addsFields($planet, $object->id, $level)) {
+                continue;
+            }
+
+            $candidates[] = app()->makeWith(BuildCandidate::class, ['buildingId' => $object->id, 'reason' => 'fields:' . $object->machine_name]);
+        }
+
+        return $candidates;
+    }
+
+    /** Whether one more level of this object raises the planet's field cap; the level is put back before returning. */
+    private function addsFields(PlanetService $planet, int $objectId, int $level): bool
+    {
+        $before = $planet->getPlanetFieldMax();
+        $planet->setObjectLevel($objectId, $level + 1, false);
+        $after = $planet->getPlanetFieldMax();
+        $planet->setObjectLevel($objectId, $level, false);
+
+        return $after > $before;
     }
 
     /** The fields this planet has left to build on: the host's own cap less the host's own count. */

@@ -105,6 +105,11 @@ class SessionPlanner
      */
     public function isAwake(AiProfile $profile, CarbonImmutable $instant): bool
     {
+        // Only `ai:sim --full-play` sets this: data generation that must not wait out the night.
+        if (config('ai.population.sleepless', false)) {
+            return true;
+        }
+
         $local = $instant->setTimezone(RoutineProfile::fromAiProfile($profile)->timezone);
         [$wake, $bed] = $this->dayWindow($profile, $local->startOfDay());
 
