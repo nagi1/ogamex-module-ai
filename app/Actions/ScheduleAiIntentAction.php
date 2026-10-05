@@ -3,14 +3,19 @@
 namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
+use Closure;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableColony;
 use Modules\AI\Domain\Decision\QueueableColonyPlanner;
+use Modules\AI\Domain\Decision\QueueableDefend;
+use Modules\AI\Domain\Decision\QueueableDefendPlanner;
 use Modules\AI\Domain\Decision\QueueableExpedition;
 use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
+use Modules\AI\Domain\Decision\QueueableJumpGate;
+use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
 use Modules\AI\Domain\Decision\QueueableMinePercent;
 use Modules\AI\Domain\Decision\QueueableMinePercentPlanner;
 use Modules\AI\Domain\Decision\QueueablePhalanx;
@@ -19,15 +24,11 @@ use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecall;
 use Modules\AI\Domain\Decision\QueueableRecycle;
 use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
+use Modules\AI\Domain\Decision\QueueableRelocation;
+use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
 use Modules\AI\Domain\Decision\QueueableSpy;
 use Modules\AI\Domain\Decision\QueueableSpyPlanner;
-use Modules\AI\Domain\Decision\QueueableDefend;
-use Modules\AI\Domain\Decision\QueueableDefendPlanner;
-use Modules\AI\Domain\Decision\QueueableJumpGate;
-use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
-use Modules\AI\Domain\Decision\QueueableRelocation;
-use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableTrade;
 use Modules\AI\Domain\Decision\QueueableTradePlanner;
 use Modules\AI\Domain\Decision\QueueableTransfer;
@@ -36,7 +37,6 @@ use Modules\AI\Domain\Decision\QueueableUnit;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\RaidPlanner;
 use Modules\AI\Domain\Decision\SaveFailurePolicy;
-use Modules\AI\Domain\Decision\ScoredCandidate;
 use Modules\AI\Domain\Decision\ThreatResponsePlan;
 use Modules\AI\Domain\Decision\ThreatResponsePlanner;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
@@ -262,7 +262,8 @@ class ScheduleAiIntentAction
         // The wall's own facility may be refused by the economy in the same login (the planet is saving
         // for its next mine), so the unit plan is asked before the building steps for every chosen
         // action: a bare planet's wall is the one order whose placement decides whether it happens.
-        $units = $this->queueableUnitPlanner->plan($profile->player_id);
+        // The login's yard order: the planner's own, or a choice policy's answer over the same yard (plan/rl; off by default).
+        $units = app(DecideAiYardOrderAction::class)->handle($profile->player_id, 'work:' . $sessionWorkItem->id);
         $unitsFirst = $units instanceof QueueableUnit && $units->aheadOfEconomy;
 
         // The marked wall is written before the building steps, because work falls due in the order
@@ -380,8 +381,8 @@ class ScheduleAiIntentAction
         // half an hour against 1,057 buildings). The wall orders above are untouched: keeping a
         // planet alive is what the yard is for.
         if ($capital !== null
-            && ! $this->shipyardsBusy($profile->player_id)
-            && ! ($type === AiCandidateActionType::QueueUnits && $units === $capital)
+            && !$this->shipyardsBusy($profile->player_id)
+            && !($type === AiCandidateActionType::QueueUnits && $units === $capital)
             && $type !== AiCandidateActionType::DoNothing) {
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $capital, ':capital');
         }
@@ -396,7 +397,7 @@ class ScheduleAiIntentAction
         $missileStock = $this->queueableUnitPlanner->missileStockOrder($profile->player_id);
         if ($missileStock !== null
             && $type !== AiCandidateActionType::DoNothing
-            && ! ($type === AiCandidateActionType::QueueUnits && $units instanceof QueueableUnit && str_starts_with($units->reason, 'role:missile'))) {
+            && !($type === AiCandidateActionType::QueueUnits && $units instanceof QueueableUnit && str_starts_with($units->reason, 'role:missile'))) {
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $missileStock, ':missile-stock');
         }
 
@@ -490,7 +491,7 @@ class ScheduleAiIntentAction
     }
 
     /** Runs one manager's schedule call under its own key; true when it wrote an order. */
-    private function asManager(string $suffix, \Closure $schedule): bool
+    private function asManager(string $suffix, Closure $schedule): bool
     {
         $this->managerSuffix = $suffix;
         $this->enqueued = false;
@@ -845,7 +846,7 @@ class ScheduleAiIntentAction
     private function scheduleThreatResponses(AiProfile $profile, AiWorkItem $sessionWorkItem, AiCandidateActionType $type): void
     {
         $plan = $this->threatPlan($profile);
-        if (! $plan->underAttack) {
+        if (!$plan->underAttack) {
             return;
         }
 

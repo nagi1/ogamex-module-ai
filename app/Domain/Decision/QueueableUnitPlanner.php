@@ -11,16 +11,17 @@ use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitEntry;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Resources;
+use OGame\Models\UnitQueue;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
-use OGame\Models\Enums\PlanetType;
-use OGame\Models\UnitQueue;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
+use Throwable;
 
 /**
  * Answers whether this account can legally queue a unit right now, and which one.
@@ -97,7 +98,8 @@ class QueueableUnitPlanner
         private DefenseNeedEvaluator $defenseNeed,
         private StalledGrowthDetector $stalledGrowth,
         private ThreatResponsePlanner $threatResponses,
-    ) {}
+    ) {
+    }
 
     public function plan(int $playerId, ?PlayerService $player = null): ?QueueableUnit
     {
@@ -106,7 +108,7 @@ class QueueableUnitPlanner
             return null;
         }
 
-        if (! User::query()->whereKey($playerId)->exists()) {
+        if (!User::query()->whereKey($playerId)->exists()) {
             return null;
         }
 
@@ -157,7 +159,7 @@ class QueueableUnitPlanner
         // planner runs its storage pass before its routine. The building planner has already
         // refreshed every planet's balance earlier in this perception, so the shortfall read here
         // is the session's own.
-        if (! $threat->underAttack) {
+        if (!$threat->underAttack) {
             foreach ($planets as $planet) {
                 $power = $this->powerFromYard($planet);
                 if ($power !== null) {
@@ -201,7 +203,7 @@ class QueueableUnitPlanner
 
             // Expansion: a colony ship once a fleet exists, the account has room, and none is
             // already owned. One colony ship is the second planet every later fleet move needs.
-            if (! $this->ownsColonyShip($planet) && $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
+            if (!$this->ownsColonyShip($planet) && $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
                 $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $colonyShip)) {
                     return $this->unit($planet, $colonyShip, 'role:colony');
@@ -209,7 +211,7 @@ class QueueableUnitPlanner
             }
 
             // Scouting: a probe once a fleet exists, so the account can start seeing neighbours.
-            if (! $this->ownsProbe($planet)) {
+            if (!$this->ownsProbe($planet)) {
                 $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $probe)) {
                     return $this->unit($planet, $probe, 'role:probe');
@@ -292,7 +294,7 @@ class QueueableUnitPlanner
             // refusal, and spending the login's one wall order on it is what left a poor planet bare
             // while the account believed it had walled it.
             $amount = min($defense->amount, $this->affordable($planet, $defense->unit));
-            if ($amount < self::FIRST_CARGO_AMOUNT || (! $bare && $this->starvesSaving($planet, $profile, $defense->unit, $amount))) {
+            if ($amount < self::FIRST_CARGO_AMOUNT || (!$bare && $this->starvesSaving($planet, $profile, $defense->unit, $amount))) {
                 continue;
             }
 
@@ -387,7 +389,7 @@ class QueueableUnitPlanner
     public function capitalFleetOrder(int $playerId, ?PlayerService $player = null): ?QueueableUnit
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
-        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+        if ($profile === null || !User::query()->whereKey($playerId)->exists()) {
             return null;
         }
 
@@ -428,7 +430,7 @@ class QueueableUnitPlanner
     {
         try {
             return ObjectService::getUnitObjectByMachineName($machineName);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -490,7 +492,7 @@ class QueueableUnitPlanner
             ->first(fn (PlanetService $candidate): bool => $candidate->getPlanetId() === $planetId);
         $ship = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
 
-        if ($planet === null || $this->ownsColonyShip($planet) || ! $this->queueable($planet, $ship)) {
+        if ($planet === null || $this->ownsColonyShip($planet) || !$this->queueable($planet, $ship)) {
             return null;
         }
 
@@ -600,7 +602,7 @@ class QueueableUnitPlanner
                 continue;
             }
 
-            if (! $this->queueable($planet, $unit)) {
+            if (!$this->queueable($planet, $unit)) {
                 continue;
             }
 
@@ -664,6 +666,64 @@ class QueueableUnitPlanner
     }
 
     /**
+     * Every unit the planet's yard could take, with the amount an order of it would be and what the host says
+     * about it: the material a choice policy ranks for a yard decision (plan/rl). Read only when a choice policy or
+     * the recorder is on, so planning never pays for it. The amount is half of what the planet can pay for (the war
+     * fleet's own rule); the planner's own order keeps the amount it chose.
+     *
+     * @return list<array{unit: UnitObject, amount: int, legal: bool, teacherOk: bool}>
+     */
+    public function yardCandidates(PlanetService $planet, ?QueueableUnit $teacher): array
+    {
+        $rows = [];
+        foreach (ObjectService::getUnitObjects() as $unit) {
+            if (!$this->requirementsMet($planet, $unit)) {
+                continue;
+            }
+
+            $affordable = $this->affordable($planet, $unit);
+            $isTeacher = $teacher !== null && $teacher->planetId === $planet->getPlanetId() && $teacher->unitId === $unit->id;
+            $rows[] = [
+                'unit' => $unit,
+                'amount' => $isTeacher ? $teacher->amount : max(self::FIRST_CARGO_AMOUNT, intdiv($affordable, 2)),
+                'legal' => $affordable >= self::FIRST_CARGO_AMOUNT,
+                'teacherOk' => $this->queueable($planet, $unit),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * What a yard decision is read against: the planet's fleet and wall, the account's, and the situations the roles
+     * above answer. Every value is the host's count or one of this planner's own gates, never a named object.
+     *
+     * @return array<string, float>
+     */
+    public function yardState(PlayerService $player, PlanetService $planet): array
+    {
+        $ships = 0;
+        $defence = 0;
+        foreach ($player->planets->all() as $own) {
+            $ships += $own->getShipUnits()->getAmount();
+            $defence += $own->getDefenseUnits()->getAmount();
+        }
+
+        return [
+            'planet_ships' => $planet->getShipUnits()->getAmount(),
+            'planet_defence' => $planet->getDefenseUnits()->getAmount(),
+            'acct_ships' => $ships,
+            'acct_defence' => $defence,
+            'owns_colony_ship' => $this->ownsColonyShip($planet) ? 1.0 : 0.0,
+            'owns_probe' => $this->ownsProbe($planet) ? 1.0 : 0.0,
+            'planet_room' => $player->planets->planetCount() < $player->getMaxPlanetAmount() ? 1.0 : 0.0,
+            'under_attack' => $this->threatResponses->plan($player->getId(), $player)->underAttack ? 1.0 : 0.0,
+            'defended_target_seen' => $this->observedDefendedTarget($player->getId()) ? 1.0 : 0.0,
+            'planet_bare' => $this->holdsNoDefence($planet) ? 1.0 : 0.0,
+        ];
+    }
+
+    /**
      * Whether this order only repeats one already waiting in the yard: power and wall are standing needs, so a
      * planet that has paid for the unit and not yet received it asks for nothing more of it. Sessions that
      * overlap each plan the same need before the first order is placed, and the executor asks this before it
@@ -713,11 +773,11 @@ class QueueableUnitPlanner
         $bestRatio = 0.0;
 
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
-            if (! $object instanceof UnitObject) {
+            if (!$object instanceof UnitObject) {
                 continue;
             }
 
-            if (! $this->queueable($planet, $object)) {
+            if (!$this->queueable($planet, $object)) {
                 continue;
             }
 
@@ -811,7 +871,7 @@ class QueueableUnitPlanner
         $ship = ObjectService::getUnitObjectByMachineName(ObjectService::getObjectById($class->getClassShipId())->machine_name);
         $standing = $this->classShipStanding($planet, $ship);
         $owned = $planet->getObjectAmount($ship->machine_name) + $this->inYard($planet, $ship);
-        if ($owned >= $standing || ! $this->queueable($planet, $ship)) {
+        if ($owned >= $standing || !$this->queueable($planet, $ship)) {
             return null;
         }
 
@@ -851,14 +911,14 @@ class QueueableUnitPlanner
      */
     private function missileStock(PlayerService $player, PlanetService $planet, int $playerId): ?QueueableUnit
     {
-        if ($player->getMissileRange() < 1 || ! $this->observedDefendedTarget($playerId)) {
+        if ($player->getMissileRange() < 1 || !$this->observedDefendedTarget($playerId)) {
             return null;
         }
 
         $missile = ObjectService::getUnitObjectByMachineName(self::MISSILE);
         $standing = $this->missileStanding($planet);
         $owned = $planet->getObjectAmount(self::MISSILE) + $this->inYard($planet, $missile);
-        if ($owned >= $standing || ! $this->queueable($planet, $missile)) {
+        if ($owned >= $standing || !$this->queueable($planet, $missile)) {
             return null;
         }
 
@@ -887,7 +947,7 @@ class QueueableUnitPlanner
     public function missileStockOrder(int $playerId, ?PlayerService $player = null): ?QueueableUnit
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
-        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+        if ($profile === null || !User::query()->whereKey($playerId)->exists()) {
             return null;
         }
 
@@ -921,7 +981,7 @@ class QueueableUnitPlanner
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool
     {
-        if (! $this->requirementsMet($planet, $unit)) {
+        if (!$this->requirementsMet($planet, $unit)) {
             return false;
         }
 
@@ -1078,13 +1138,13 @@ class QueueableUnitPlanner
     public function standingDefenceOrders(int $playerId, ?PlayerService $player = null): array
     {
         $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
-        if ($profile === null || ! User::query()->whereKey($playerId)->exists()) {
+        if ($profile === null || !User::query()->whereKey($playerId)->exists()) {
             return [];
         }
 
         $player ??= $this->playerServiceFactory->make($playerId, true);
         $planets = $player->planets->all();
-        if ($planets === [] || ! $this->anyPlanetHoldsDefence($planets)) {
+        if ($planets === [] || !$this->anyPlanetHoldsDefence($planets)) {
             return [];
         }
 
@@ -1116,7 +1176,7 @@ class QueueableUnitPlanner
         $bestPrice = INF;
 
         foreach (ObjectService::getDefenseObjects() as $unit) {
-            if (! $unit instanceof UnitObject || ! $this->requirementsMet($planet, $unit)) {
+            if (!$unit instanceof UnitObject || !$this->requirementsMet($planet, $unit)) {
                 continue;
             }
 
@@ -1132,7 +1192,7 @@ class QueueableUnitPlanner
         // A planet that already stands a wall grows it along the archetype's defence template (architecture
         // step 4): the defence furthest below its share. A bare planet keeps the cheapest unit, which is the
         // fastest first wall.
-        if ($best !== null && ! $this->holdsNoDefence($planet)) {
+        if ($best !== null && !$this->holdsNoDefence($planet)) {
             $templated = $this->templateDefence($planet);
             if ($templated !== null) {
                 $best = $templated;

@@ -75,7 +75,7 @@ class DecideAiEconomyStepsAction
      */
     private function replace(array $steps, ChoicePoint $point, int $chosen): array
     {
-        $kept = array_values(array_filter($steps, static fn (QueueableBuilding|QueueableResearch $step): bool => $point->research
+        $kept = array_values(array_filter($steps, static fn (QueueableBuilding|QueueableResearch $step): bool => $point->isResearch()
             ? !$step instanceof QueueableResearch
             : !($step instanceof QueueableBuilding && $step->planetId === $point->planetId)));
 
@@ -86,7 +86,7 @@ class DecideAiEconomyStepsAction
 
         $reason = 'policy:' . $candidate->pass . ':' . $candidate->reason;
 
-        return [...$kept, $point->research
+        return [...$kept, $point->isResearch()
             ? app()->makeWith(QueueableResearch::class, ['planetId' => $point->planetId, 'researchId' => $candidate->objectId, 'reason' => $reason])
             : app()->makeWith(QueueableBuilding::class, ['planetId' => $point->planetId, 'buildingId' => $candidate->objectId, 'reason' => $reason])];
     }

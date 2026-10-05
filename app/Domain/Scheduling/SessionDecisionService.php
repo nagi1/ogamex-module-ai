@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Scheduling;
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\ConsultCampaignDecisionAction;
+use Modules\AI\Actions\DecideAiErrandAction;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
@@ -80,7 +81,8 @@ class SessionDecisionService
 
         $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
         $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;
-        $trace = $this->decisionEngine->decide($profile, $perception, $decisionKey);
+        // The login's errand: the engine's selection, or a choice policy's answer over the same ranked actions (plan/rl; off by default).
+        $trace = app(DecideAiErrandAction::class)->handle($profile, $perception, $this->decisionEngine->decide($profile, $perception, $decisionKey), $decisionKey);
 
         // A material campaign event (a new phase, a held stronghold) consults once here and may
         // nudge the ranking before the final selection; off by default, so an ordinary session

@@ -35,6 +35,14 @@ def read(path: Path) -> str:
         return ""
 
 
+def parse_epoch(text: str, default: float) -> float:
+    """gen.start is a note someone else writes; a bad one must not take the collector (and the page) down."""
+    try:
+        return float(text.strip())
+    except ValueError:
+        return default
+
+
 def load_json(path: Path, default):
     try:
         return json.loads(path.read_text())
@@ -145,7 +153,9 @@ def machine() -> dict:
 
 
 def training() -> dict:
-    folder = RL / "bc-model"
+    # The newest bc-*/train.log is the run being shown: a retrain in a new folder takes over the page by itself.
+    folders = sorted(RL.glob("bc-*/train.log"), key=lambda f: f.stat().st_mtime)
+    folder = folders[-1].parent if folders else RL / "bc-model"
     log = read(folder / "train.log")
     epochs = []
     for line in log.splitlines():
@@ -185,10 +195,12 @@ def closed_loop(counter: Counter) -> dict:
 
 def alarms(gen: dict, mach: dict, train: dict, loop: dict) -> list[dict]:
     found = []
+    run_started = parse_epoch(read(RL / "run.started"), 0)
     for u in gen["universes"]:
         if u["errors"] > 0:
             found.append({"where": f"universe {u['n']}", "what": f"{u['errors']} sim error(s)", "detail": "; ".join(u["kinds"])})
-        if not u["done"] and u["idle"] is not None and u["idle"] > 900 and not (RL / ".paused").exists():
+        # A queued universe keeps the log of an earlier attempt; only a sim this run started and that went silent is stalled.
+        if not u["done"] and u["idle"] is not None and time.time() - u["idle"] >= run_started and u["idle"] is not None and u["idle"] > 900 and not (RL / ".paused").exists():
             found.append({"where": f"universe {u['n']}", "what": f"stalled {u['idle'] // 60} min", "detail": ""})
     for pair in loop["pairs"]:
         for side, p in pair.items():
@@ -339,7 +351,7 @@ def collect(state: dict) -> dict:
     done_days = sum(u["days"] if u["done"] else u["day"] for u in gen["universes"])
     queued = max(gen["target"] - len(gen["universes"]), 0)
     total_days = sum(u["days"] for u in gen["universes"]) + queued * gen["plan_days"]
-    since = float(read(RL / "gen.start").strip() or now)
+    since = parse_epoch(read(RL / "gen.start"), now)
     history = state.setdefault("progress", [])
     history.append([now, done_days])
     state["progress"] = history[-400:]
@@ -354,7 +366,14 @@ def collect(state: dict) -> dict:
     state["flow"] = flow
     current = next((s for s in step_rows if s["state"] == "running"), None)
     overall = "paused" if (RL / ".paused").exists() else "alarm" if alarm_rows else "done" if all(s["state"] == "done" for s in step_rows) else "running" if current else "idle"
-    return {"at": int(now), "overall": overall, "current": current, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
+    plain = {
+        4: ("Playing simulated game worlds and recording every decision the rule-based player makes.", "Check the data, then train the model."),
+        5: ("Teaching the model to copy the rule-based player's decisions, on the graphics card.", "Test the model by letting it play whole games."),
+        6: ("Replaying the same worlds twice, once with the rule-based player and once with the model deciding everything, to see if the model plays as well.", "Compare the results, then run a correction round where the model plays and the rule-based player fixes its mistakes."),
+        7: ("Writing the results down and saving them.", "Done, or another correction round."),
+    }
+    now_text, next_text = plain.get(current["n"], ("Waiting for the next step to start.", "")) if current else ("Nothing is running right now.", "Waiting for the next step to be started.")
+    return {"at": int(now), "overall": overall, "current": current, "plain": {"now": now_text, "next": next_text}, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
             "generation": {**gen, "done_days": round(done_days, 1), "total_days": total_days, "eta_seconds": eta_s,
                            "elapsed": int(now - since) if running or done_days else None,
                            "wall_started": int(since)},

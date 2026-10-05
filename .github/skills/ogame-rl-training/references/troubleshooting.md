@@ -19,3 +19,4 @@
 | Model always waits / never waits | class imbalance on row 0 or `eta_hours` scale | compare `wait_rate_*`; add wait-weighted loss or more epsilon data |
 | ONNX export fails | exporter change in a new PyTorch | `export.py` tries the classic then the dynamo exporter; pin the PyTorch version that works and note it |
 | GPU idle, training slow | data loading on CPU dominates | the dataset fits in memory; raise `--batch`; the MLP is tiny, CPU training is fine too |
+| Machine froze or restarted mid-run | `bash Modules/AI/rl/scripts/resume.sh` from the OGameX root: restarts the container, collector and `storage/rl/plan.sh`; finished universes are kept, cut-off ones restart. Never start `generate.sh` by hand beside a live run: it deletes the live run's recordings. |

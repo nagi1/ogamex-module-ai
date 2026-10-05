@@ -2,7 +2,7 @@
 
     python -m ogrl.serve --model runs/bc-model/model.onnx --socket /tmp/ogrl.sock
 
-Request: {"key", "player", "research", "state": [S], "cands": [[C] x K], "legal": [K]}
+Request: {"key", "player", "kind", "state": [S], "cands": [[C] x K], "legal": [K]}
 Answer:  {"index": i}  (always a legal row; argmax by default, or a seeded sample with --temperature)
 The PHP side falls back to the planner when the server is down, slow or answers an illegal row.
 """

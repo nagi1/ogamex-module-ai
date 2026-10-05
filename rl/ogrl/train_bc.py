@@ -50,6 +50,27 @@ def predict(model: CandidateScorer, ds: datalib.Dataset, device: str, batch: int
     return np.concatenate(out)
 
 
+def cell_weights(data: datalib.Dataset, balance: float) -> np.ndarray:
+    """Rare (kind, phase) cells -- a late-game yard choice among thousands of early mine choices -- count for more.
+    The usual remedy for imbalanced imitation data; the exponent is a tuning knob, 0 turns it off."""
+    cells = np.char.add(np.asarray(data.meta["kind"]).astype(str), np.char.add("/", np.asarray(data.meta["phase"]).astype(str)))
+    names, inverse, counts = np.unique(cells, return_inverse=True, return_counts=True)
+    share = counts / counts.sum()
+    per_cell = np.clip(share ** -balance, 0, None)
+    per_cell = per_cell / (per_cell[inverse] * 1.0).mean() if balance else np.ones_like(per_cell)
+    return np.clip(per_cell[inverse], 0.25, 4.0).astype(np.float32)
+
+
+def macro_key(v: dict) -> float:
+    """The checkpoint is the one best on average over the choice kinds, so a kind with few rows is not drowned by the
+    kind with most; a set with one kind reduces to that kind's top-1 on 3+ legal rows."""
+    by_kind = v.get("top1_by_kind") or {}
+    if len(by_kind) > 1:
+        return float(np.mean([k["top1"] for k in by_kind.values()]))
+
+    return v.get("top1_3plus_legal", v["top1"])
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", nargs="+", required=True, help="glob(s) of recorded JSON Lines")
@@ -61,6 +82,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--validation", type=float, default=0.2)
     ap.add_argument("--min-legal", type=int, default=2)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--balance", type=float, default=0.5,
+                    help="row weight = (cell share)^-balance over (kind, phase) cells, clipped to [0.25, 4]; 0 = plain imitation")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args(argv)
 
@@ -80,7 +103,8 @@ def main(argv: list[str] | None = None) -> None:
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     # The training set fits in GPU memory: batches are sliced on the device instead of copied from the host.
-    tensors = [torch.as_tensor(x, device=args.device) for x in (train.state, train.cands, train.mask, train.teacher)]
+    weights = cell_weights(train, args.balance)
+    tensors = [torch.as_tensor(x, device=args.device) for x in (train.state, train.cands, train.mask, train.teacher, weights)]
     history, best, best_key = [], None, -1.0
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -88,9 +112,9 @@ def main(argv: list[str] | None = None) -> None:
         perm = torch.randperm(len(train), device=args.device)
         for i in range(0, len(train), args.batch):
             idx = perm[i:i + args.batch]
-            s, c, m, y = (t[idx] for t in tensors)
+            s, c, m, y, w = (t[idx] for t in tensors)
             logits, _ = model(s, c, m)
-            loss = F.cross_entropy(logits, y)
+            loss = (F.cross_entropy(logits, y, reduction="none") * w).sum() / w.sum()
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -102,7 +126,7 @@ def main(argv: list[str] | None = None) -> None:
                "val_top1_3plus": v.get("top1_3plus_legal"), "seconds": round(time.time() - started, 1)}
         history.append(row)
         print(json.dumps(row))
-        key = v.get("top1_3plus_legal", v["top1"])
+        key = macro_key(v)
         if key > best_key:
             best_key, best = key, v
             torch.save({"state_dict": model.state_dict(), "schema": ds.schema.to_json(), "width": args.width}, out / "model.pt")

@@ -22,7 +22,7 @@ class SocketChoicePolicy implements ChoicePolicy
         $answer = $this->ask([
             'key' => $point->key,
             'player' => $point->playerId,
-            'research' => $point->research,
+            'kind' => $point->kind,
             'state' => $point->state,
             'cands' => array_map(static fn (ChoiceCandidate $candidate): array => $candidate->features, $point->candidates),
             'legal' => array_map(static fn (ChoiceCandidate $candidate): bool => $candidate->legal, $point->candidates),
@@ -86,12 +86,12 @@ class SocketChoicePolicy implements ChoicePolicy
 
         $path = config('ai.rl.socket');
         if (!is_string($path) || $path === '') {
-            return null;
+            return;
         }
 
         $connection = @stream_socket_client('unix://' . $path, $errno, $error, 1.0);
         if ($connection === false) {
-            return null;
+            return;
         }
 
         $timeout = max(1, (int) config('ai.rl.socket_timeout_ms', 2000));

@@ -273,7 +273,7 @@ class QueueableBuildingPlanner
                 if ($fields !== []) {
                     return [...$fields, ...$this->withFieldsFor($planet, $spend, $this->fieldReserve($planet))];
                 }
-                if ($spend === [] || ! $this->minesOutgrownStations($planet, $this->economyUpgrades->production($planet, $profile))) {
+                if ($spend === [] || !$this->minesOutgrownStations($planet, $this->economyUpgrades->production($planet, $profile))) {
                     return $this->withFieldReserve($planet, $profile, $spend);
                 }
 

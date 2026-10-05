@@ -91,10 +91,11 @@
     <span class="title">ML training</span>
     <span class="pill" id="overall"><span class="dot"></span><span id="overallText">connecting…</span></span>
     <span id="now" class="sub"></span>
+    <div id="plain" class="sub"></div>
     <span class="when"><a href="{{ route('ai.harness.index') }}">build harness</a> · <span id="at">—</span></span>
 </header>
 
-<div id="stale" class="banner warn" hidden><b>Status collector is not running</b><div>Start it: <code>python3 Modules/AI/rl/scripts/rl_status.py</code></div></div>
+<div id="stale" class="banner warn" hidden></div>
 <div id="alarms"></div>
 <div class="steps" id="steps"></div>
 
@@ -163,9 +164,10 @@
         $('overall').className = 'pill ' + o;
         $('overallText').textContent = o === 'paused' ? 'paused' : o === 'alarm' ? 'ALARM' : o === 'done' ? 'complete' : o === 'running' ? 'running' : 'idle';
         const g = d.generation, eta = g.eta_seconds;
+        $('plain').innerHTML = d.plain ? '<b>Right now:</b> ' + esc(d.plain.now) + (d.plain.next ? ' <b>Next:</b> ' + esc(d.plain.next) : '') : '';
         $('now').textContent = cur ? `Step ${cur.n}: ${cur.name}` + (cur.n === 4 && eta ? ` · ETA ${dur(eta)}` : '') : '';
-        $('at').textContent = 'updated ' + dur(d.age) + ' ago';
-        $('stale').hidden = d.age <= d.stale_after;
+        seen = { at: Date.now(), age: d.age, staleAfter: d.stale_after };
+        paint();
         $('alarms').innerHTML = d.alarms.map(a => `<div class="banner"><b>${esc(a.where)}: ${esc(a.what)}</b><div>${esc(a.detail)}</div></div>`).join('');
     }
 
@@ -279,16 +281,33 @@
     }
 
     function render(d) {
-        if (d.missing) { $('overallText').textContent = 'no status yet'; $('stale').hidden = false; return; }
+        if (d.missing) { $('overallText').textContent = 'no status yet'; seen = { at: Date.now(), age: 999, staleAfter: 30 }; paint(); return; }
         renderHeader(d); renderSteps(d); renderGates(d); renderGeneration(d); renderValidation(d); renderTraining(d); renderLoop(d); renderMachine(d);
         $('feed').innerHTML = d.events.slice(0, 40).map(e => `<li><span class="t">${esc(e.t)}</span><span class="${e.kind}">${esc(e.text)}</span></li>`).join('');
     }
 
-    async function tick() {
-        try { render(await (await fetch(url, { cache: 'no-store' })).json()); }
-        catch (e) { $('overallText').textContent = 'page cannot reach the app'; }
+    // What the page last heard, kept apart from what the run is doing: a poll that fails (reboot, sleeping tab, app
+    // restart) must read as "lost contact", never as the old numbers still being live.
+    let seen = null;
+    function paint() {
+        if (!seen) return;
+        const lost = (Date.now() - seen.at) / 1000, age = seen.age + lost;
+        $('at').textContent = 'updated ' + dur(age) + ' ago';
+        const banner = $('stale');
+        banner.hidden = age <= Math.max(seen.staleAfter, 15);
+        banner.innerHTML = lost > 10
+            ? '<b>Lost contact with the app</b><div>Showing the last data from ' + dur(age) + ' ago; retrying every 3 s.</div>'
+            : '<b>Status collector is not running</b><div>Start it: <code>bash Modules/AI/rl/scripts/resume.sh</code></div>';
     }
-    tick(); setInterval(tick, 3000);
+    async function tick() {
+        try {
+            const r = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) throw new Error(r.status);
+            render(await r.json());
+        } catch (e) { paint(); }
+    }
+    tick(); setInterval(tick, 3000); setInterval(paint, 1000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 </script>
 </body>
 </html>

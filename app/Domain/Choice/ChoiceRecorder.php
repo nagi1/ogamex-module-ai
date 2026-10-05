@@ -41,7 +41,7 @@ class ChoiceRecorder
             'player' => $point->playerId,
             'planet' => $point->planetId,
             'archetype' => $profile->archetype->name,
-            'kind' => $point->research ? 'research' : 'building',
+            'kind' => $point->kind,
             'state' => $point->state,
             'cands' => array_map(static fn (ChoiceCandidate $candidate): array => $candidate->features, $point->candidates),
             'legal' => array_map(static fn (ChoiceCandidate $candidate): bool => $candidate->legal, $point->candidates),
@@ -66,7 +66,7 @@ class ChoiceRecorder
     {
         $path = $this->path();
         if ($path === null) {
-            return null;
+            return;
         }
 
         if (self::$file !== null && self::$path === $path) {
@@ -76,7 +76,7 @@ class ChoiceRecorder
         @mkdir(dirname($path), 0775, true);
         $file = fopen($path, 'ab');
         if ($file === false) {
-            return null;
+            return;
         }
 
         file_put_contents($path . '.schema.json', json_encode([

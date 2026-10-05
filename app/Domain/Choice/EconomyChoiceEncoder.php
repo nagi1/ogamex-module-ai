@@ -26,7 +26,7 @@ use OGame\Services\SettingsService;
  */
 class EconomyChoiceEncoder
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     /** The planner's pass names, in its order (QueueableBuildingPlanner::passes). */
     private const PASSES = ['wall', 'doctrine', 'storage', 'surplus', 'routine', 'ambition'];
@@ -57,7 +57,8 @@ class EconomyChoiceEncoder
             'pl_metal', 'pl_crystal', 'pl_deuterium', 'pl_metal_fill', 'pl_crystal_fill', 'pl_deuterium_fill',
             'pl_metal_ph', 'pl_crystal_ph', 'pl_deuterium_ph', 'pl_energy_max', 'pl_energy_used', 'pl_factor',
             'pl_temperature', 'pl_fields_used', 'pl_fields_max', 'pl_is_moon', 'pl_position', 'pl_queue_length',
-            'kind_research',
+            'kind_research', 'kind_yard', 'kind_errand',
+            ...YardChoiceEncoder::STATE,
         ];
     }
 
@@ -70,6 +71,8 @@ class EconomyChoiceEncoder
             'order', 'legal', 'teacher_ok', 'spendable',
             'cost_metal', 'cost_crystal', 'cost_deuterium', 'cost_hours', 'cost_vs_stock', 'build_hours',
             'level', 'gain_ph', 'payback_hours', 'energy_delta', 'storage_gain', 'unlocks', 'eta_hours',
+            ...YardChoiceEncoder::CANDIDATE,
+            ...ErrandChoiceEncoder::candidateNames(),
         ];
     }
 
@@ -156,7 +159,7 @@ class EconomyChoiceEncoder
         return app()->makeWith(ChoicePoint::class, [
             'playerId' => $playerId,
             'planetId' => $planet->getPlanetId(),
-            'research' => $set['research'],
+            'kind' => $set['research'] ? ChoicePoint::RESEARCH : ChoicePoint::BUILDING,
             'state' => [...$account, ...$this->planetState($planet, $set['research'])],
             'candidates' => [
                 app()->makeWith(ChoiceCandidate::class, ['objectId' => null, 'pass' => null, 'reason' => 'wait', 'legal' => true, 'features' => $wait]),
@@ -167,8 +170,8 @@ class EconomyChoiceEncoder
         ]);
     }
 
-    /** @return list<float> */
-    private function planetState(PlanetService $planet, bool $research): array
+    /** @return list<float> the planet's own state for a building or research choice; a yard choice appends its own */
+    public function planetState(PlanetService $planet, bool $research): array
     {
         $held = $planet->getResources();
         $fill = static fn (float $amount, float $capacity): float => $capacity > 0 ? min(1.0, $amount / $capacity) : 0.0;
@@ -194,6 +197,9 @@ class EconomyChoiceEncoder
             $planet->getPlanetCoordinates()->position / 15,
             count($this->buildingQueue->retrieveQueueItems($planet)) / 5,
             $research ? 1.0 : 0.0,
+            0.0,
+            0.0,
+            ...array_fill(0, count(YardChoiceEncoder::STATE), 0.0),
         ];
     }
 
@@ -236,6 +242,7 @@ class EconomyChoiceEncoder
             log1p($research ? 0.0 : $this->storageGain($planet, $machineName, $level)),
             ($this->unlocks()[$machineName] ?? 0) / 10,
             log1p($eta),
+            ...array_fill(0, count(YardChoiceEncoder::CANDIDATE) + count(ErrandChoiceEncoder::candidateNames()), 0.0),
         ], $eta];
     }
 
@@ -274,7 +281,7 @@ class EconomyChoiceEncoder
     }
 
     /** Hours until the planet's own production covers the price; 0 when it already can. */
-    private function etaHours(PlanetService $planet, Resources $price): float
+    public function etaHours(PlanetService $planet, Resources $price): float
     {
         $held = $planet->getResources();
         $hours = 0.0;
@@ -293,7 +300,7 @@ class EconomyChoiceEncoder
     }
 
     /** @return array<string, int> */
-    private function unlocks(): array
+    public function unlocks(): array
     {
         if (self::$unlocks !== null) {
             return self::$unlocks;
@@ -309,7 +316,7 @@ class EconomyChoiceEncoder
         return self::$unlocks = $counts;
     }
 
-    private function signedLog(float $value): float
+    public function signedLog(float $value): float
     {
         return $value < 0 ? -log1p(-$value) : log1p($value);
     }

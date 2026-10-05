@@ -56,6 +56,7 @@ def validate(pattern: str, epsilon: float) -> dict:
         n = re.sub(r"\D", "", Path(path).stem)
         schema_file = Path(path + ".schema.json")
         schemas.add(schema_file.read_text() if schema_file.exists() else "missing")
+        version = json.loads(schema_file.read_text()).get("version") if schema_file.exists() else None
         if not cand_ix and schema_file.exists():
             cand_ix = {n: i for i, n in enumerate(json.loads(schema_file.read_text()).get('candidate', []))}
         rows = ok = 0
@@ -73,7 +74,7 @@ def validate(pattern: str, epsilon: float) -> dict:
             if len(state) != state_dim or len(width) != 1 or not (len(cands) == len(legal) == len(d["objects"])):
                 problems["row shape differs from the schema"] += 1
                 continue
-            if d.get("v") != 1:
+            if d.get("v") != version:
                 problems["feature version differs"] += 1
             if not finite(state) or not all(finite(c) for c in cands):
                 problems["non-finite feature"] += 1
@@ -163,7 +164,8 @@ def validate(pattern: str, epsilon: float) -> dict:
         sizes = sorted(v["ok"] for v in per_file.values())
         median = sizes[len(sizes) // 2] if sizes else 0
         for n, v in per_file.items():
-            if median and (v["ok"] < 0.35 * median or v["ok"] > 2.5 * median):
+            # Late-game universes legitimately record several times more than early ones in the same time; only a runaway is 10x.
+            if median and (v["ok"] < 0.35 * median or v["ok"] > 10 * median):
                 warnings.append({"check": f"universe {n} has {v['ok']} rows against a median {median}", "count": v["ok"]})
     names = json.loads(Path(files[0] + '.schema.json').read_text()).get('state', []) if files and Path(files[0] + '.schema.json').exists() else []
     # New accounts never become Trader or Casual (CreateAiRlUniverse::archetype), so those two stay constant by design.
