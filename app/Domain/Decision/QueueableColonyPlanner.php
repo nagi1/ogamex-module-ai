@@ -4,7 +4,10 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Actions\QueueAiColonyAction;
 use Modules\AI\Domain\Galaxy\GalaxyMap;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
@@ -13,6 +16,7 @@ use OGame\GameMissions\ColonisationMission;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\FleetMission;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
@@ -66,13 +70,16 @@ class QueueableColonyPlanner
         // An account at its planet cap cannot found another colony: the host cancels the
         // mission at arrival, so planning one is pure waste of a colony ship and a fleet slot.
         // The cap is the host's own astrophysics answer, never a module constant.
-        if ($player->planets->planetCount() >= $player->getMaxPlanetAmount()) {
+        // A colony ship already flying, or an intent about to send one, takes a planet of the cap before it lands: the
+        // host's planet count cannot see it, so counting only planets sent a second ship to a slot the first one filled.
+        $claimed = $this->claimedSlots($playerId);
+        if ($player->planets->planetCount() + $claimed['own'] >= $player->getMaxPlanetAmount()) {
             return null;
         }
 
         // The slot is claimed first, then the body that flies there: the flight's deuterium is the
         // host's own quote for that route, so the origin cannot be chosen before the destination.
-        $target = $this->emptySlot($player, $profile->random_seed);
+        $target = $this->emptySlot($player, $profile->random_seed, $claimed['slots']);
         if ($target === null) {
             return null;
         }
@@ -110,7 +117,7 @@ class QueueableColonyPlanner
         $ship = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
 
         foreach ($player->planets->all() as $planet) {
-            if (! isset($refusedOrigins[$planet->getPlanetId()])
+            if (!isset($refusedOrigins[$planet->getPlanetId()])
                 && $planet->getShipUnits()->getAmountByMachineName($ship->machine_name) > 0
                 && $this->canPayFlight($player, $planet, $ship, $target)) {
                 return $planet;
@@ -118,7 +125,7 @@ class QueueableColonyPlanner
         }
 
         foreach ($player->planets->all() as $planet) {
-            if (! isset($refusedOrigins[$planet->getPlanetId()]) && $this->canPayFlight($player, $planet, $ship, $target)) {
+            if (!isset($refusedOrigins[$planet->getPlanetId()]) && $this->canPayFlight($player, $planet, $ship, $target)) {
                 return $planet;
             }
         }
@@ -136,6 +143,38 @@ class QueueableColonyPlanner
         $units->addUnit($ship, 1);
 
         return app(FlightFuel::class)->affordable($player, $origin, $units, $target, QueueAiColonyAction::COLONY_SPEED);
+    }
+
+    /**
+     * The slots a colony ship is already flying to or an intent is about to send one to, anyone's (two accounts must not
+     * settle the same slot either), and how many of them are this account's own.
+     *
+     * @return array{slots: array<string, true>, own: int}
+     */
+    private function claimedSlots(int $playerId): array
+    {
+        $slots = [];
+        $own = 0;
+
+        foreach (FleetMission::query()
+            ->where('mission_type', ColonisationMission::getTypeId())
+            ->where('processed', 0)
+            ->where('canceled', 0)
+            ->whereNull('parent_id')
+            ->get(['user_id', 'galaxy_to', 'system_to', 'position_to']) as $flying) {
+            $slots[$flying->galaxy_to . ':' . $flying->system_to . ':' . $flying->position_to] = true;
+            $own += $flying->user_id === $playerId ? 1 : 0;
+        }
+
+        foreach (AiWorkItem::query()
+            ->where('kind', AiWorkKind::Colonize)
+            ->whereIn('state', [AiWorkState::Pending, AiWorkState::Leased, AiWorkState::Retry])
+            ->get(['player_id', 'payload']) as $waiting) {
+            $slots[($waiting->payload['galaxy'] ?? 0) . ':' . ($waiting->payload['system'] ?? 0) . ':' . ($waiting->payload['position'] ?? 0)] = true;
+            $own += $waiting->player_id === $playerId ? 1 : 0;
+        }
+
+        return ['slots' => $slots, 'own' => $own];
     }
 
     /**
@@ -168,7 +207,10 @@ class QueueableColonyPlanner
      * read of the rows occupying the systems the walk visits); the field range is
      * the host's `planetData`, never a position list.
      */
-    private function emptySlot(PlayerService $player, int $seed): ?Coordinate
+    /**
+     * @param array<string, true> $claimed
+     */
+    private function emptySlot(PlayerService $player, int $seed, array $claimed): ?Coordinate
     {
         $maxScans = $this->maxCoordinateChecks();
         $galaxies = max(1, $this->settings->numberOfGalaxies());
@@ -216,7 +258,7 @@ class QueueableColonyPlanner
                         continue;
                     }
 
-                    if (isset($occupied[$systemWithOffset . ':' . $position])) {
+                    if (isset($occupied[$systemWithOffset . ':' . $position]) || isset($claimed[$galaxy . ':' . $systemWithOffset . ':' . $position])) {
                         continue;
                     }
 

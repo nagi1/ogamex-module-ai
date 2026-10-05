@@ -33,6 +33,25 @@ play moving, the work is making the existing engine play, not adding to it.
   those locks, tests queue on one lane through `scripts/ogamex`, and commits name their files
   (`git add <files>`; never `-A`, `stash`, `reset`, `clean` or a force-push).
 
+## Owner direction — 6 October 2026 (adds to the Direction above; where it differs, this wins)
+
+The north star is one trained player that plays like a good professional human across the whole game, early, mid
+and late, and knows all of it: every object, ship, defence and technology, every mission (raid, spy, recycle, expedition,
+colonise, transport, deploy, missile, moon destruction), moons and the jump gate, battles and fleet saves, strategy,
+and the social side: alliances, diplomacy, trade, conversation.
+
+- **Strategy source.** The strategies are the ones written down in the OGame wiki (ogame.fandom.com, all pages),
+  reached through the `WIK-*` corpus and its rows. A wiki strategy is YAML under `resources/behavior/` or
+  `resources/doctrine/` that an existing planner reads, never a new class (the behaviour-before-sources rule stays).
+  The `WIK-*` rows that name an `aspect:` are unfrozen for this; the rest stay frozen.
+- **Late game is first-class.** Late-game technique (astrophysics reach, nano and terraformer chains, moons, phalanx
+  and jump-gate play, deathstar-class fleets, debris and recycling, fleet saves under attack) and the social aspects
+  (alliance life, applications, aid, threats, chat) are judged by the same rule: what an observer sees the account do.
+- **Training follows the same star.** The model decides builds, research, yard orders (ships and defence) and the login
+  errand; a new choice kind is added behind the same seam (`app/Domain/Choice`), teacher-neutral, and each retrain is
+  followed by a closed-loop test and a long start-to-late-game run that reads which objects, missions, moons, battles
+  and alliances the account actually reached.
+
 ## Learned economy policy (plan/rl)
 
 Work on training data, the choice seam (`app/Domain/Choice`), `rl/` (Python) or the `ai:sim` RL options follows
