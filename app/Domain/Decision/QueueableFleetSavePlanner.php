@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Domain\Persona\PersonaTaste;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\RandomSource;
 use OGame\Factories\PlayerServiceFactory;
@@ -130,10 +131,10 @@ class QueueableFleetSavePlanner
         // A body the gate just refused a save from is not the body this login flies from: a refused
         // dispatch is not a mission, so the missing hull or the short tank is only remembered here, and
         // offering the same body again is how one account repeated one refusal (DISPATCH_REFUSALS).
-        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($player->getId());
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($player->getId(), AiWorkKind::FleetSave);
         $candidates = array_values(array_filter(
             $planets,
-            static fn (PlanetService $planet): bool => ! isset($refusedOrigins[$planet->getPlanetId()]),
+            static fn (PlanetService $planet): bool => !isset($refusedOrigins[$planet->getPlanetId()]),
         ));
 
         $origin = $this->origin($candidates, $preferredPlanetIds);

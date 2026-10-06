@@ -61,3 +61,31 @@ test('the same refusal cools off after the hours a launched mission would have c
         ->session()
         ->expectWork(AiWorkKind::Recycle);
 });
+
+// A refusal blames the body for the lane that was told no: a planet with no ship for an expedition still sends its recyclers.
+// 39 such refusals in 18 hours dropped 240 of 266 raid intents because the body was cooled for every kind of dispatch.
+test('a body refused for an expedition still sends its recyclers', function (): void {
+    DebrisField::query()->delete();
+    FleetMission::query()->delete();
+
+    Situation::of($this)
+        ->resources(1_000_000, 1_000_000, 1_000_000)
+        ->ships('recycler', 2)
+        ->debris(40_000, 20_000)
+        ->refusedDispatch($this->currentPlanetId, reason: 'no_disposable_fleet', minutesAgo: 240, lane: AiWorkKind::Expedition)
+        ->session()
+        ->expectWork(AiWorkKind::Recycle);
+});
+
+test('a body refused for recycling does not send its recyclers again', function (): void {
+    DebrisField::query()->delete();
+    FleetMission::query()->delete();
+
+    Situation::of($this)
+        ->resources(1_000_000, 1_000_000, 1_000_000)
+        ->ships('recycler', 2)
+        ->debris(40_000, 20_000)
+        ->refusedDispatch($this->currentPlanetId, reason: 'no_disposable_fleet', minutesAgo: 240, lane: AiWorkKind::Recycle)
+        ->session()
+        ->expectNoWork(AiWorkKind::Recycle);
+});

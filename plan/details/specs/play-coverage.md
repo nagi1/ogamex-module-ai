@@ -96,3 +96,35 @@ measures it); the live read is the scorecard (`bash scripts/ogamex scorecard`).
 | Trade on the market | none | **no step plays it**: `TraderPolicy` and `AiEconomicRole::ActiveTrader` exist with no action behind them | `LOOP-002` |
 | Defend an ally's planet or fly a joint attack | none | **no step plays it**: no hold or ACS mission is planned | `LOOP-003` |
 | Abandon or relocate a poor planet | none | **no step plays it** | `LOOP-004` |
+
+## A player's day, step by step (LOOP-001, measured 6 October 2026)
+
+Measured on one 18-hour, 12-account run (staged mid-game accounts, sleepless, seed 77): the saved database's work items, decision
+traces, missions, messages and social tables. The universe has no human, so everything social is AI to AI. Re-read it from
+the 20-day runs in `storage/rl/long/` before closing any row below.
+
+| Step of the day | Owner (planner or action) | Measured in 18 h | State |
+| --- | --- | --- | --- |
+| Read events and messages | `PlayerObservationService`, `ObserveCommittedFleetMessage` | 1,823 observations | plays |
+| Queue buildings, research | `QueueableBuildingPlanner`, `QueueableResearch` | 98 build decisions, 1,871 building work items | plays |
+| Set the mine mix | `QueueableMinePercentPlanner` | 14 work items | plays |
+| Buy ships and defence | `QueueableUnitPlanner` | 905 yard decisions | plays |
+| Spy on neighbours | `QueueableSpyPlanner` | 362 espionage missions from 10 accounts | plays |
+| Move resources between own planets | `QueueableTransferPlanner` | 208 transports | plays |
+| Expeditions | `QueueableExpeditionPlanner` | 60 missions | plays |
+| Recycle debris | `QueueableRecyclePlanner` | 34 missions | plays |
+| Defend an ally | `QueueableDefendPlanner` | 39 ACS-defend missions | plays |
+| Missiles | `QueueableMissilePlanner` | 30 missions | plays |
+| Colonise | `QueueableColonyPlanner` | 251 decisions; one account sent 55 ships and 46 failed on arrival | played badly: fixed in 57615da (a flying ship claims its slot and a planet of the cap) |
+| Raid | `RaidPlanner`, `WaveFarmPlanner` | 162 decisions, 266 work items, **4 attack missions flown** | mostly refused: the gap that decides battles, moons and fleet saves |
+| Fleet save | `QueueableFleetSavePlanner` | 4 work items | follows from the missing raids (little to flee from) |
+| Phalanx scan | `QueueablePhalanxPlanner` | 22 decisions, 0 scans, 1 moon in the universe | decided, never executed: no moon to scan from |
+| Moon, lunar base, jump gate | `FacilityChain`, `QueueableJumpGatePlanner` | 1 moon, 0 jumps | moons only come from battles and debris, so it waits on raids |
+| Relocate, recall | `QueueableRelocationPlanner`, `QueueableRecall` | 2 decisions, 0 recalls | dormant |
+| Marketplace trade | `QueueableTradePlanner` | 20 decisions, 2 work items | thin |
+| Alliance: found, apply, join | `AdvanceAiAllianceLifeAction` | 9 alliances for 12 members, 14 applications | fragments: accounts found one-member clubs instead of joining a full one |
+| Alliance: leave, kick | same, `leaveOneMisfit`, `kickOneEnemy` | not triggered | built, not seen live |
+| Talk: chat, buddy, exchange, commitment | `InitiateAiSocialContactAction` and the exchange actions | 13 chat messages, 0 exchanges, 0 buddy requests, 0 commitments | dormant: observation-triggered, and nothing arrives |
+
+The gaps worth a row each, by what they cost the north star: raids refused (no battles, moons, debris or fleet saves follow),
+alliance fragmentation, phalanx with no moon, social initiation. Each is a planner fix that reads the host, never a new class.

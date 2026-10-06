@@ -8,4 +8,5 @@ enum AiActionReceiptResultKey: string
     case Reason = 'reason';
     case Decision = 'decision';
     case PlanetId = 'planet_id';
+    case Lane = 'lane';
 }

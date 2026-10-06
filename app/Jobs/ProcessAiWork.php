@@ -12,6 +12,7 @@ use Modules\AI\Actions\ExecuteAiIntentAction;
 use Modules\AI\Actions\ResolveAiAdmissionAction;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Decision\RecentRefusals;
+use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Enums\AiActionReceiptResultKey;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
@@ -19,7 +20,6 @@ use Modules\AI\Enums\AiQueueName;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
-use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSchedule;
@@ -277,6 +277,7 @@ class ProcessAiWork implements ShouldQueue
                 AiActionReceiptResultKey::Reason->value => $result->reason,
                 AiActionReceiptResultKey::Decision->value => $decision,
                 AiActionReceiptResultKey::PlanetId->value => $actedPlanetId,
+                AiActionReceiptResultKey::Lane->value => $workItem->kind->value,
             ],
         ]);
         $this->completeLease($workItem, $leaseToken);
@@ -303,6 +304,7 @@ class ProcessAiWork implements ShouldQueue
 
         return app(RecentRefusals::class)->cools(
             $workItem->player_id,
+            $workItem->kind,
             (int) ($payload[self::PAYLOAD_PLANET_ID] ?? $payload['source_planet_id'] ?? 0),
             (int) ($payload['target_galaxy'] ?? 0),
             (int) ($payload['target_system'] ?? 0),

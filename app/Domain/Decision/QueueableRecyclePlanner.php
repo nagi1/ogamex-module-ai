@@ -61,7 +61,7 @@ class QueueableRecyclePlanner
         $covered = $this->coveredCoordinates($playerId)
             + $this->openRecycleIntentCoordinates($playerId)
             + $refusals->refusedTargets($playerId);
-        $refusedOrigins = $refusals->refusedOrigins($playerId);
+        $refusedOrigins = $refusals->refusedOrigins($playerId, AiWorkKind::Recycle);
 
         // ponytail: scan the 20 largest fields and take the closest worth having; a
         // distance cap on the scan is the upgrade path once accounts spread fleets
@@ -147,7 +147,7 @@ class QueueableRecyclePlanner
     private function origin(PlayerService $player, string $shipName, array $refusedOrigins): ?PlanetService
     {
         foreach ($player->planets->all() as $planet) {
-            if (! isset($refusedOrigins[$planet->getPlanetId()]) && $planet->getShipUnits()->getAmountByMachineName($shipName) > 0) {
+            if (!isset($refusedOrigins[$planet->getPlanetId()]) && $planet->getShipUnits()->getAmountByMachineName($shipName) > 0) {
                 return $planet;
             }
         }
@@ -165,7 +165,7 @@ class QueueableRecyclePlanner
     private function builderOrigin(PlayerService $player, string $shipName, array $refusedOrigins): ?PlanetService
     {
         foreach ($player->planets->all() as $planet) {
-            if (! isset($refusedOrigins[$planet->getPlanetId()]) && ObjectService::objectRequirementsMet($shipName, $planet)) {
+            if (!isset($refusedOrigins[$planet->getPlanetId()]) && ObjectService::objectRequirementsMet($shipName, $planet)) {
                 return $planet;
             }
         }

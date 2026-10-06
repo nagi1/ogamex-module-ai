@@ -11,18 +11,18 @@ use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
-use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\GameMissions\EspionageMission;
+use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
-use OGame\Models\Enums\PlanetType;
 use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
 use OGame\Services\FleetMissionService;
-use OGame\Services\PlanetService;
 use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 
 /**
@@ -82,7 +82,7 @@ class QueueableSpyPlanner
             + $this->openSpyIntentCoordinates($playerId)
             // A probe the gate just refused is not a mission, so nothing else remembers the target.
             + $refusals->refusedTargets($playerId);
-        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId));
+        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId, AiWorkKind::Spy));
         if ($selection === null) {
             return null;
         }
@@ -164,7 +164,7 @@ class QueueableSpyPlanner
     {
         $idleOrigins = array_values(array_filter(
             $this->idleProbePlanets($player),
-            static fn (PlanetService $planet): bool => ! isset($refusedOrigins[$planet->getPlanetId()]),
+            static fn (PlanetService $planet): bool => !isset($refusedOrigins[$planet->getPlanetId()]),
         ));
         if ($idleOrigins === []) {
             return null;

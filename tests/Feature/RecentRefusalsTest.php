@@ -3,6 +3,7 @@
 use Modules\AI\Domain\Decision\RecentRefusals;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiReceiptState;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Models\AiActionReceipt;
 use Tests\IsolatedAccountTestCase;
 
@@ -60,7 +61,19 @@ test('an intent naming a refused target or a refused origin is answered by the m
     refuseDispatch($this->currentUserId, ['reason' => 'source_short_at_dispatch', 'planet_id' => 9, 'decision' => []]);
     $refusals = app(RecentRefusals::class);
 
-    expect($refusals->cools($this->currentUserId, 8, 1, 22, 4))->toBeTrue()
-        ->and($refusals->cools($this->currentUserId, 9, 1, 30, 1))->toBeTrue()
-        ->and($refusals->cools($this->currentUserId, 7, 1, 30, 1))->toBeFalse();
+    expect($refusals->cools($this->currentUserId, AiWorkKind::Raid, 8, 1, 22, 4))->toBeTrue()
+        ->and($refusals->cools($this->currentUserId, AiWorkKind::Raid, 9, 1, 30, 1))->toBeTrue()
+        ->and($refusals->cools($this->currentUserId, AiWorkKind::Raid, 7, 1, 30, 1))->toBeFalse();
+});
+
+// The lane a refusal was raised in is the lane it cools: a body short of an expedition ship still raids and spies.
+test('a refusal raised for one lane cools the body for that lane only; an older receipt with no lane blames them all', function (): void {
+    refuseDispatch($this->currentUserId, ['reason' => 'no_disposable_fleet', 'planet_id' => 9, 'lane' => AiWorkKind::Expedition->value, 'decision' => []]);
+    refuseDispatch($this->currentUserId, ['reason' => 'source_short_at_dispatch', 'planet_id' => 7, 'decision' => []]);
+    $refusals = app(RecentRefusals::class);
+
+    expect($refusals->cools($this->currentUserId, AiWorkKind::Expedition, 9, 1, 30, 1))->toBeTrue()
+        ->and($refusals->cools($this->currentUserId, AiWorkKind::Raid, 9, 1, 30, 1))->toBeFalse()
+        ->and($refusals->refusedOrigins($this->currentUserId, AiWorkKind::Spy))->not->toHaveKey(9)
+        ->and($refusals->refusedOrigins($this->currentUserId, AiWorkKind::Spy))->toHaveKey(7);
 });

@@ -134,7 +134,8 @@ def generation(counter: Counter, previous: dict) -> dict:
                 info.update(done=True, days=info["day"], errors=info["errors"], partial=True)
             universes.append({"n": n, "points": lines, "multi": multi, **info})
     target, days = parse_target()
-    return {"universes": universes, "target": target, "plan_days": days}
+    # gen.cmd is a note someone writes; universes that exist are the truth, so a later batch can never read as "124 of 76".
+    return {"universes": universes, "target": max(target, len(universes)), "plan_days": days}
 
 
 def parse_target() -> tuple[int, int]:
@@ -153,10 +154,12 @@ def machine() -> dict:
 
 
 def training() -> dict:
-    # The newest bc-*/train.log is the run being shown: a retrain in a new folder takes over the page by itself.
-    folders = sorted(RL.glob("bc-*/train.log"), key=lambda f: f.stat().st_mtime)
-    folder = folders[-1].parent if folders else RL / "bc-model"
-    log = read(folder / "train.log")
+    # The newest training log is the run being shown, whether it sits in the run's folder (bc-v2/train.log) or beside it while
+    # the trainer is still going (bc-v3.log): a retrain takes over the page by itself.
+    logs = [(f.stat().st_mtime, f.parent, f) for f in RL.glob("bc-*/train.log")] + [(f.stat().st_mtime, RL / f.stem, f) for f in RL.glob("bc-*.log")]
+    logs.sort(key=lambda row: row[0])
+    folder = logs[-1][1] if logs else RL / "bc-model"
+    log = read(logs[-1][2]) if logs else ""
     epochs = []
     for line in log.splitlines():
         if line.startswith("{") and '"epoch"' in line:
@@ -165,7 +168,8 @@ def training() -> dict:
             except ValueError:
                 pass
     metrics = load_json(folder / "metrics.json", {})
-    info = {"epochs": epochs, "total": metrics.get("args", {}).get("epochs") or parse_epochs(), "metrics": None,
+    info = {"epochs": epochs, "total": metrics.get("args", {}).get("epochs") or running_epochs() or parse_epochs(), "metrics": None,
+            "run": folder.name, "idle": round(time.time() - logs[-1][0]) if logs else None,
             "header": [ln for ln in log.splitlines() if ln.startswith(("choices:", "parameters:"))]}
     if metrics:
         v = metrics.get("validation", {})
@@ -176,13 +180,24 @@ def training() -> dict:
     return info
 
 
+def running_epochs() -> int | None:
+    """The epoch count a trainer running right now was started with (it is a host process, so /proc shows it)."""
+    for cmd in Path("/proc").glob("[0-9]*/cmdline"):
+        match = re.search(r"ogrl\.train_bc\x00.*?--epochs\x00(\d+)", read(cmd))
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def parse_epochs() -> int:
     m = re.search(r"--epochs (\d+)", read(RL / "train.cmd"))
     return int(m.group(1)) if m else 30
 
 
 def closed_loop(counter: Counter) -> dict:
-    out = RL / "eval"
+    # The newest evaluation folder (eval, eval3, ...) is the one shown.
+    evals = sorted((d for d in RL.glob("eval*") if d.is_dir() and (d / "policy").exists()), key=lambda d: max([f.stat().st_mtime for f in d.glob("*/sim-*.log")] or [0]))
+    out = evals[-1] if evals else RL / "eval"
     pairs = {}
     for side in ("teacher", "policy"):
         for log in (out / side).glob("sim-*.log") if (out / side).exists() else []:
@@ -191,6 +206,39 @@ def closed_loop(counter: Counter) -> dict:
     report = load_json(out / "report.json", None)
     return {"pairs": [{"n": n, **p} for n, p in sorted(pairs.items())], "report": report,
             "target": int(read(RL / "eval.cmd").split()[0] or 30) if (RL / "eval.cmd").exists() else 30}
+
+
+FRESH = 900
+
+
+def long_runs() -> list[dict]:
+    """Long start-to-late-game runs under storage/rl/long: a run is running while its log is still being written."""
+    runs = []
+    for log in sorted((RL / "long").glob("sim-*.log")):
+        info = sim_progress(log)
+        info["n"] = int(re.sub(r"\D", "", log.stem))
+        info["running"] = not info["done"] and info["idle"] is not None and info["idle"] < 1800
+        runs.append(info)
+    return runs
+
+
+def activities(gen: dict, train: dict, loop: dict, longs: list[dict]) -> list[dict]:
+    """What is being worked on right now, read from which logs are still being written (nothing here is a fixed list of steps)."""
+    rows = []
+    active = [u for u in gen["universes"] if not u["done"] and u["idle"] is not None and u["idle"] < FRESH]
+    if active:
+        finished = sum(1 for u in gen["universes"] if u["done"])
+        rows.append({"what": "Making practice games", "detail": f"{len(active)} game worlds are being played at once; {finished} of {gen['target']} are finished"})
+    if train["epochs"] and not train["metrics"] and (train.get("idle") or 0) < FRESH:
+        rows.append({"what": "Teaching the model", "detail": f"run {train['run']}: round {len(train['epochs'])} of {train['total']}, now right {train['epochs'][-1].get('val_top1_3plus') or train['epochs'][-1]['val_top1']:.0%} of the time on the hard choices"})
+    live = [p for p in loop["pairs"] if not (p.get("teacher", {}).get("done") and p.get("policy", {}).get("done")) and min(p.get(s, {}).get("idle") or 99999 for s in ("teacher", "policy")) < FRESH]
+    if live:
+        finished = sum(1 for p in loop["pairs"] if p.get("teacher", {}).get("done") and p.get("policy", {}).get("done"))
+        rows.append({"what": "Testing the model in whole games", "detail": f"{len(live)} test worlds are being played; {finished} of {loop['target']} pairs are finished"})
+    for run in longs:
+        if run["running"]:
+            rows.append({"what": "Playing one long game start to finish", "detail": f"world {run['n']}: day {run['day']:.1f} of {run['days']:.0f}"})
+    return rows
 
 
 def alarms(gen: dict, mach: dict, train: dict, loop: dict) -> list[dict]:
@@ -372,8 +420,13 @@ def collect(state: dict) -> dict:
         6: ("Replaying the same worlds twice, once with the rule-based player and once with the model deciding everything, to see if the model plays as well.", "Compare the results, then run a correction round where the model plays and the rule-based player fixes its mistakes."),
         7: ("Writing the results down and saving them.", "Done, or another correction round."),
     }
+    longs = long_runs()
+    live = activities(gen, train, loop, longs)
     now_text, next_text = plain.get(current["n"], ("Waiting for the next step to start.", "")) if current else ("Nothing is running right now.", "Waiting for the next step to be started.")
-    return {"at": int(now), "overall": overall, "current": current, "plain": {"now": now_text, "next": next_text}, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
+    if live:
+        now_text = " ".join(f"{a['what']}: {a['detail']}." for a in live)
+    return {"at": int(now), "overall": "running" if live and overall == "idle" else overall, "current": current, "plain": {"now": now_text, "next": next_text}, "activities": live,
+            "long_runs": longs, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
             "generation": {**gen, "done_days": round(done_days, 1), "total_days": total_days, "eta_seconds": eta_s,
                            "elapsed": int(now - since) if running or done_days else None,
                            "wall_started": int(since)},

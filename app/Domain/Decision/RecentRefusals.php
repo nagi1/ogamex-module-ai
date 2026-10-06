@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiReceiptState;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Models\AiActionReceipt;
 use Symfony\Component\Yaml\Yaml;
 
@@ -62,7 +63,7 @@ class RecentRefusals
      * Asking the gate again for that body or target is the same question the account was already
      * answered, and the one receipt is the whole memory it needs.
      */
-    public function cools(int $playerId, int $planetId, int $galaxy, int $system, int $position): bool
+    public function cools(int $playerId, AiWorkKind $lane, int $planetId, int $galaxy, int $system, int $position): bool
     {
         foreach ($this->recent($playerId) as $receipt) {
             $decision = $receipt->result['decision'] ?? [];
@@ -74,7 +75,7 @@ class RecentRefusals
                 return true;
             }
 
-            if ($planetId > 0 && ! $this->targetSide($receipt) && (int) ($receipt->result['planet_id'] ?? 0) === $planetId) {
+            if ($planetId > 0 && !$this->targetSide($receipt) && $this->inLane($receipt, $lane) && (int) ($receipt->result['planet_id'] ?? 0) === $planetId) {
                 return true;
             }
         }
@@ -130,13 +131,16 @@ class RecentRefusals
      * planet to send the fleet. Units required: colony_ship"), and each one says the dispatch from this
      * body did not happen. Only the target-side reasons are excluded.
      *
+     * Only the refusals of the lane asking count: a body that had no ship for an expedition still spies, raids and ferries,
+     * as it does for a player who was told one thing about one order.
+     *
      * @return array<int, true>
      */
-    public function refusedOrigins(int $playerId): array
+    public function refusedOrigins(int $playerId, ?AiWorkKind $lane = null): array
     {
         $origins = [];
 
-        foreach ($this->recent($playerId)->reject($this->targetSide(...)) as $receipt) {
+        foreach ($this->recent($playerId)->reject($this->targetSide(...))->filter(fn (AiActionReceipt $receipt): bool => $lane === null || $this->inLane($receipt, $lane)) as $receipt) {
             $planetId = $receipt->result['planet_id'] ?? null;
 
             if ($planetId !== null) {
@@ -145,6 +149,14 @@ class RecentRefusals
         }
 
         return $origins;
+    }
+
+    /** A refusal from before receipts named their lane blames every lane, as it always did. */
+    private function inLane(AiActionReceipt $receipt, AiWorkKind $lane): bool
+    {
+        $named = $receipt->result['lane'] ?? null;
+
+        return $named === null || $named === $lane->value;
     }
 
     /** A refusal about the target is no fault of the body the fleet would leave from. */

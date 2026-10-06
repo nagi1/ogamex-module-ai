@@ -84,7 +84,7 @@ class QueueableColonyPlanner
             return null;
         }
 
-        $origin = $this->originPlanet($player, $target, app(RecentRefusals::class)->refusedOrigins($playerId));
+        $origin = $this->originPlanet($player, $target, app(RecentRefusals::class)->refusedOrigins($playerId, AiWorkKind::Colonize));
         if ($origin === null) {
             return null;
         }

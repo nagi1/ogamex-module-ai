@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\EspionageReport;
@@ -51,7 +52,7 @@ class QueueableMissilePlanner
         // Without this the same planet fired at the same wall on every login and the host refused the
         // same dispatch again (the DISPATCH_REFUSALS repeat).
         $refusals = app(RecentRefusals::class);
-        $refusedOrigins = $refusals->refusedOrigins($playerId);
+        $refusedOrigins = $refusals->refusedOrigins($playerId, AiWorkKind::Missile);
         $refusedTargets = $refusals->refusedTargets($playerId);
 
         $reportIds = Message::query()

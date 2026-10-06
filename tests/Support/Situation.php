@@ -7,24 +7,24 @@ use Illuminate\Support\Facades\DB;
 use LogicException;
 use Modules\AI\Actions\AdvanceAiAllianceLifeAction;
 use Modules\AI\Actions\AdvanceAiCampaignStateAction;
+use Modules\AI\Domain\Decision\QueueableExpedition;
+use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
+use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
-use Modules\AI\Domain\Decision\QueueableExpedition;
-use Modules\AI\Domain\Decision\QueueableExpeditionPlanner;
-use Modules\AI\Domain\Routine\SessionPlanner;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiActionReceipt;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiScoreSample;
 use Modules\AI\Models\AiWorkItem;
-use Modules\AI\Enums\AiObservationKind;
-use Modules\AI\Enums\AiObservationSource;
 use OGame\Factories\GameMissionFactory;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Models\Alliance;
@@ -400,7 +400,7 @@ final class Situation
      * the target it named; a refusal that named only the origin leaves the coordinates at zero, as a
      * short tank or a missing hull does, and $minutesAgo ages it past the window a planner still reads.
      */
-    public function refusedDispatch(?int $planetId = null, int $galaxy = 0, int $system = 0, int $position = 0, string $reason = 'source_short_at_dispatch', int $minutesAgo = 0): self
+    public function refusedDispatch(?int $planetId = null, int $galaxy = 0, int $system = 0, int $position = 0, string $reason = 'source_short_at_dispatch', int $minutesAgo = 0, ?AiWorkKind $lane = null): self
     {
         app(AiActionReceipt::class)->forceFill([
             'player_id' => $this->profile->player_id,
@@ -410,6 +410,7 @@ final class Situation
             'result' => [
                 'reason' => $reason,
                 'planet_id' => (int) ($planetId ?? 0),
+                'lane' => $lane?->value,
                 'decision' => $galaxy > 0 ? ['target_galaxy' => $galaxy, 'target_system' => $system, 'target_position' => $position] : [],
             ],
             'created_at' => now()->subMinutes($minutesAgo),

@@ -4,16 +4,17 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Actions\QueueAiDefendAction;
 use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\AcsDefendMission;
 use OGame\Models\BattleReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet;
 use OGame\Models\User;
-use OGame\GameMissions\AcsDefendMission;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 
@@ -62,7 +63,7 @@ class QueueableDefendPlanner
         $player = $this->playerServiceFactory->make($playerId, true);
         // A body the gate just refused a dispatch from is no source this login offers again: a refused
         // dispatch is not a mission, so the empty tank it blamed is only remembered here.
-        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($playerId);
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($playerId, AiWorkKind::Defend);
 
         foreach ($reportIds as $reportId) {
             $allyId = BattleReport::query()->whereKey($reportId)->value('planet_user_id');

@@ -2,22 +2,22 @@
 
 namespace Modules\AI\Domain\Decision;
 
-use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Actions\QueueAiExpeditionAction;
-use Modules\AI\Support\FlightFuel;
+use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameMissions\ExpeditionMission;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitCollection;
-use OGame\Models\Planet\Coordinate;
 use OGame\Models\FleetMission;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -228,7 +228,7 @@ class QueueableExpeditionPlanner
     private function origin(PlayerService $player): ?PlanetService
     {
         $recent = $this->recentExpeditionsBySystem($player->getId());
-        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($player->getId());
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($player->getId(), AiWorkKind::Expedition);
 
         $best = null;
         foreach ($player->planets->all() as $planet) {

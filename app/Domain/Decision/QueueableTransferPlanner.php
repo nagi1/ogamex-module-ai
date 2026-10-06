@@ -13,8 +13,8 @@ use Modules\AI\Support\AllyGiftGuard;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\TransportMission;
-use OGame\Models\Enums\PlanetType;
 use OGame\Models\BattleReport;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
@@ -87,7 +87,7 @@ class QueueableTransferPlanner
 
         // A source the gate just refused is not a source this login offers again: a refused dispatch is
         // not a mission, so nothing else recorded the empty tank or the missing hull.
-        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($playerId);
+        $refusedOrigins = app(RecentRefusals::class)->refusedOrigins($playerId, AiWorkKind::Transfer);
 
         foreach ($planets as $planet) {
             $planet->updateResources(false);
@@ -141,7 +141,7 @@ class QueueableTransferPlanner
 
         // A body the gate just refused a dispatch from cannot launch, so the pile stays where it is and
         // offering the move again only repeats the refusal.
-        if (isset(app(RecentRefusals::class)->refusedOrigins($playerId)[$planetId])) {
+        if (isset(app(RecentRefusals::class)->refusedOrigins($playerId, AiWorkKind::Transfer)[$planetId])) {
             return null;
         }
 
@@ -157,12 +157,12 @@ class QueueableTransferPlanner
         }
 
         $source->updateResources(false);
-        if (! $this->hasCargo($source, $player)) {
+        if (!$this->hasCargo($source, $player)) {
             return null;
         }
 
         $shipment = $this->aboveFloor($source, $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS), false);
-        if (! $this->worthShipping($shipment)) {
+        if (!$this->worthShipping($shipment)) {
             return null;
         }
 
@@ -171,7 +171,7 @@ class QueueableTransferPlanner
                 continue;
             }
 
-            if (! $this->canPayFuel($source, $target, $shipment, $player)) {
+            if (!$this->canPayFuel($source, $target, $shipment, $player)) {
                 continue;
             }
 
