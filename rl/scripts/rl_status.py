@@ -231,6 +231,8 @@ def activities(gen: dict, train: dict, loop: dict, longs: list[dict]) -> list[di
         rows.append({"what": "Making practice games", "detail": f"{len(active)} game worlds are being played at once; {finished} of {gen['target']} are finished"})
     if train["epochs"] and not train["metrics"] and (train.get("idle") or 0) < FRESH:
         rows.append({"what": "Teaching the model", "detail": f"run {train['run']}: round {len(train['epochs'])} of {train['total']}, now right {train['epochs'][-1].get('val_top1_3plus') or train['epochs'][-1]['val_top1']:.0%} of the time on the hard choices"})
+    if running_epochs() and not (train["epochs"] and (train.get("idle") or 0) < FRESH):
+        rows.append({"what": "Teaching the model", "detail": "loading the recorded games into the trainer; the first round starts in a few minutes"})
     live = [p for p in loop["pairs"] if not (p.get("teacher", {}).get("done") and p.get("policy", {}).get("done")) and min(p.get(s, {}).get("idle") or 99999 for s in ("teacher", "policy")) < FRESH]
     if live:
         finished = sum(1 for p in loop["pairs"] if p.get("teacher", {}).get("done") and p.get("policy", {}).get("done"))
