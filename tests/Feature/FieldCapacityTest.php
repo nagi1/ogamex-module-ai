@@ -46,14 +46,18 @@ test('a planet down to its last fields builds the next level of what adds fields
         }
     }
     // The rest of the fields go to buildings a few levels at a time, until one is left.
-    foreach (ObjectService::getBuildingObjects() as $building) {
-        $free = $this->planetService->getPlanetFieldMax() - $this->planetService->getBuildingCount();
-        if ($building->consumesPlanetField && $free > 1) {
-            $this->planetSetObjectLevel($building->machine_name, $this->planetService->getObjectLevel($building->machine_name) + min(20, $free - 1));
+    // Buildings that add fields grow the free count as they fill, so one pass can stop early: repeat until one is left.
+    while ($this->planetService->getPlanetFieldMax() - $this->planetService->getBuildingCount() > 1) {
+        foreach (ObjectService::getBuildingObjects() as $building) {
+            $free = $this->planetService->getPlanetFieldMax() - $this->planetService->getBuildingCount();
+            if ($building->consumesPlanetField && $free > 1) {
+                $this->planetSetObjectLevel($building->machine_name, $this->planetService->getObjectLevel($building->machine_name) + min(20, $free - 1));
+            }
         }
     }
     expect($this->planetService->getPlanetFieldMax() - $this->planetService->getBuildingCount())->toBe(1);
-    $this->planetAddResources(new Resources(1e9, 1e9, 1e9));
+    // The terraformer is priced in energy as well, which a stocked planet holds as stored energy in this fixture.
+    $this->planetAddResources(new Resources(1e9, 1e9, 1e9, 1e6));
 
     $buildings = array_values(array_filter(
         app(QueueableBuildingPlanner::class)->steps($this->currentUserId),
