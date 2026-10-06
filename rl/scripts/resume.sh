@@ -9,7 +9,7 @@ ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 RL="$ROOT/storage/rl"
 APP=ogamex-local-docker-dev-ogamex-app-1
 cd "$ROOT/local-docker-dev" && docker compose up -d --no-deps ogamex-app >/dev/null 2>&1
-docker update --cpus=17 ogamex-local-docker-dev-ogamex-app-1 >/dev/null 2>&1  # hard cap: 17 of the 24 CPUs WSL has = 71%, leaving room for host-side training under the 80% limit
+docker update --cpus=14 --memory=18g --memory-swap=18g ogamex-local-docker-dev-ogamex-app-1 >/dev/null 2>&1  # owner 7 Oct: ~60% of WSL CPUs; the 32 GB WSL freezes came from memory fragmentation (.wslconfig), so memory is capped too
 cd "$ROOT"
 
 pgrep -f "[r]l_status.py" >/dev/null || { setsid nohup bash "$RL/collector.sh" > "$RL/collector.log" 2>&1 < /dev/null & echo "collector started"; }
