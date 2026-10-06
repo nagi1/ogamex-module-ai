@@ -217,6 +217,12 @@ def long_runs() -> list[dict]:
     for log in sorted((RL / "long").glob("sim-*.log")):
         info = sim_progress(log)
         info["n"] = int(re.sub(r"\D", "", log.stem))
+        # A long run is saved in chunks and each chunk logs its own "played" line: it is finished when the final snapshot exists.
+        info["done"] = (RL / "long" / f"u{info['n']}.out.sqlite").exists()
+        info["days"] = 20.0
+        dates = [m for m in map(DATE.match, read(log).splitlines()) if m]
+        last = dates[-1] if dates else None
+        info["day"] = 20.0 if info["done"] else round((datetime.fromisoformat(f"{last.group(1)}T{last.group(2)}:00:00+00:00") - START).total_seconds() / 86400, 2) if last else 0.0
         info["running"] = not info["done"] and info["idle"] is not None and info["idle"] < 1800
         runs.append(info)
     return runs
