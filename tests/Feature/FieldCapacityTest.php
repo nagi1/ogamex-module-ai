@@ -56,8 +56,9 @@ test('a planet down to its last fields builds the next level of what adds fields
         }
     }
     expect($this->planetService->getPlanetFieldMax() - $this->planetService->getBuildingCount())->toBe(1);
-    // The terraformer is priced in energy as well, which a stocked planet holds as stored energy in this fixture.
-    $this->planetAddResources(new Resources(1e9, 1e9, 1e9, 1e6));
+    // The terraformer is priced in energy, which a planet with no fields to spare makes from satellites.
+    $this->planetAddUnit('solar_satellite', 2000);
+    $this->planetAddResources(new Resources(1e9, 1e9, 1e9));
 
     $buildings = array_values(array_filter(
         app(QueueableBuildingPlanner::class)->steps($this->currentUserId),
