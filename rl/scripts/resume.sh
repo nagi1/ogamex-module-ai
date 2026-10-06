@@ -14,6 +14,14 @@ cd "$ROOT"
 
 pgrep -f "[r]l_status.py" >/dev/null || { setsid nohup bash "$RL/collector.sh" > "$RL/collector.log" 2>&1 < /dev/null & echo "collector started"; }
 
+# A policy sim needs its model server, which dies with a reboot: start every server whose model exists and whose socket is gone.
+VENV="$ROOT/.venv-rl/bin/python"
+for model in "$RL"/bc-v*/model.onnx; do
+  tag=$(basename "$(dirname "$model")"); sock="$RL/ogrl${tag#bc-v}.sock"; [ "$tag" = bc-v3 ] && sock="$RL/ogrl.sock"  # plan.sh names v3 ogrl.sock, later models ogrl<N>.sock
+  pgrep -f "[o]grl.serve --model $model" >/dev/null && continue
+  rm -f "$sock"; (cd "$ROOT/Modules/AI/rl" && setsid nohup "$VENV" -u -m ogrl.serve --model "$model" --socket "$sock" > "$RL/serve-$tag.log" 2>&1 < /dev/null &)
+done
+
 # A recording cut mid-write ends in half a line; keep the whole lines, the way the trainer expects them.
 for f in "$RL"/bc*/choices-*.jsonl; do
   [ -f "$f" ] && ! grep -q '^SIM: .* played' "${f/choices-/sim-}" 2>/dev/null && continue
