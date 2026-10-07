@@ -174,3 +174,25 @@ test('a war-fleet batch is no longer than the yard finishes in a couple of hours
     $perUnit = $this->planetService->getUnitConstructionTime(ObjectService::getUnitObjectById($plan->unitId)->machine_name);
     expect($plan->amount * $perUnit)->toBeLessThanOrEqual(max(2 * 3600, $perUnit));
 });
+
+test('a capital hull already paid for in the yard is not ordered again before its escort', function (): void {
+    capitalProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 8);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->playerSetResearchLevel('impulse_drive', 6);
+    $this->playerSetResearchLevel('weapon_technology', 6);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+    $this->playerSetResearchLevel('armor_technology', 6);
+    $this->planetAddUnit('large_cargo', 5);
+
+    $first = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+    OGame\Models\UnitQueue::query()->forceCreate([
+        'planet_id' => $first->planetId, 'object_id' => $first->unitId, 'object_amount' => $first->amount,
+        'time_duration' => 3600, 'time_start' => now()->timestamp, 'time_end' => now()->addHour()->timestamp,
+        'time_progress' => 0, 'object_amount_progress' => 0, 'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'processed' => 0,
+    ]);
+
+    expect(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId)?->unitId)->not->toBe($first->unitId);
+});

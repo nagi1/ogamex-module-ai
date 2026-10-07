@@ -433,19 +433,32 @@ class QueueableUnitPlanner
             return null;
         }
 
-        $military = array_map(static fn (UnitObject $hull): string => $hull->machine_name, ObjectService::getMilitaryShipObjects());
+        $military = array_map(static fn (UnitObject $hull): int => $hull->id, ObjectService::getMilitaryShipObjects());
         $escort = 0;
         $core = 0;
+        // Hulls paid for in a yard count as the fleet's own: a deathstar takes hours to build, and counting only finished
+        // ones ordered another every login while no escort was ever ordered (9316: 13 deathstar orders, no bomber).
+        $planetIds = array_map(static fn (PlanetService $planet): int => $planet->getPlanetId(), $planets);
+        $owned = UnitQueue::query()->whereIn('planet_id', $planetIds)->where('processed', 0)
+            ->selectRaw('object_id, sum(object_amount) as amount')->groupBy('object_id')->pluck('amount', 'object_id')->map(static fn ($amount): int => (int) $amount)->all();
         foreach ($planets as $planet) {
             foreach ($planet->getShipUnits()->units as $entry) {
-                $name = $entry->unitObject->machine_name;
-                $isCore = $entry->unitObject->id === $capital->unitId;
-                $core += $isCore ? $entry->amount : 0;
-                $escort += !$isCore && in_array($name, $military, true) ? $entry->amount : 0;
+                $owned[$entry->unitObject->id] = ($owned[$entry->unitObject->id] ?? 0) + $entry->amount;
             }
         }
+        foreach ($owned as $objectId => $amount) {
+            $isCore = $objectId === $capital->unitId;
+            $core += $isCore ? $amount : 0;
+            $escort += !$isCore && in_array($objectId, $military, true) ? $amount : 0;
+        }
 
-        return $escort < 20 * $core ? ($this->templateHull($player, $planets, $profile) ?? $capital) : $capital;
+        $ownedByName = [];
+        foreach ($owned as $objectId => $amount) {
+            $name = in_array($objectId, $military, true) ? ObjectService::getUnitObjectById($objectId)->machine_name : null;
+            $ownedByName += $name === null ? [] : [$name => $amount];
+        }
+
+        return $escort < 20 * $core ? ($this->templateHull($planets, $profile, $ownedByName) ?? $capital) : $capital;
     }
 
     /**
@@ -494,16 +507,10 @@ class QueueableUnitPlanner
 
     /**
      * @param array<int, PlanetService> $planets
+     * @param array<string, int> $owned hulls built or paid for in a yard, by machine name
      */
-    private function templateHull(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
+    private function templateHull(array $planets, AiProfile $profile, array $owned): ?QueueableUnit
     {
-        $owned = [];
-        foreach ($planets as $planet) {
-            foreach ($planet->getShipUnits()->units as $entry) {
-                $owned[$entry->unitObject->machine_name] = ($owned[$entry->unitObject->machine_name] ?? 0) + $entry->amount;
-            }
-        }
-
         foreach ($planets as $planet) {
             $name = app(ArchetypeDoctrine::class)->nextTemplateUnit(
                 $profile->archetype,
