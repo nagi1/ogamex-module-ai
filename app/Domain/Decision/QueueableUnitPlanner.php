@@ -96,6 +96,9 @@ class QueueableUnitPlanner
 
     private const SAVING_HORIZON_HOURS = 24;
 
+    /** The yard time one war-fleet batch may take: the yard runs its queue in order, so a longer batch starves the probes behind it. */
+    private const FLEET_BATCH_SECONDS = 2 * 3600;
+
     private const PROBE_STOCK = 15;
 
     public function __construct(
@@ -375,7 +378,7 @@ class QueueableUnitPlanner
                 continue;
             }
 
-            $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 2));
+            $amount = $this->yardBatch($planet, $hull, intdiv($this->affordable($planet, $hull), 2));
             if ($this->starvesSaving($planet, $profile, $hull, $amount)) {
                 continue;
             }
@@ -445,6 +448,17 @@ class QueueableUnitPlanner
         return $escort < 20 * $core ? ($this->templateHull($player, $planets, $profile) ?? $capital) : $capital;
     }
 
+    /**
+     * At most what the yard finishes in a couple of hours: one order of 37 deathstars held a home yard for the whole
+     * run, and the probes and colony ship queued behind it never came (9315: no report, no raid).
+     */
+    private function yardBatch(PlanetService $planet, UnitObject $hull, int $amount): int
+    {
+        $perUnit = max(1, $planet->getUnitConstructionTime($hull->machine_name));
+
+        return max(self::FIRST_CARGO_AMOUNT, min($amount, intdiv(self::FLEET_BATCH_SECONDS, $perUnit)));
+    }
+
     /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */
     private function templateDefence(PlanetService $planet): ?UnitObject
     {
@@ -504,7 +518,7 @@ class QueueableUnitPlanner
             $hull = ObjectService::getUnitObjectByMachineName($name);
             // An eighth of what the planet can pay, not half: one half-of-everything batch of a single hull
             // occupied the yard for the whole run and the template's other hulls were never ordered.
-            $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 8));
+            $amount = $this->yardBatch($planet, $hull, intdiv($this->affordable($planet, $hull), 8));
             if ($this->starvesSaving($planet, $profile, $hull, $amount)) {
                 continue;
             }

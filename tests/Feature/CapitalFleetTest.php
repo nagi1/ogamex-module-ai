@@ -155,3 +155,22 @@ function capitalDearestHullPrice(PlanetService $planet): float
 
     return $dearest;
 }
+
+test('a war-fleet batch is no longer than the yard finishes in a couple of hours', function (): void {
+    capitalProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 8);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->playerSetResearchLevel('impulse_drive', 6);
+    $this->playerSetResearchLevel('weapon_technology', 6);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+    $this->playerSetResearchLevel('armor_technology', 6);
+    $this->planetAddUnit('large_cargo', 5);
+
+    $plan = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+    expect($plan)->toBeInstanceOf(QueueableUnit::class);
+
+    $perUnit = $this->planetService->getUnitConstructionTime(ObjectService::getUnitObjectById($plan->unitId)->machine_name);
+    expect($plan->amount * $perUnit)->toBeLessThanOrEqual(max(2 * 3600, $perUnit));
+});
