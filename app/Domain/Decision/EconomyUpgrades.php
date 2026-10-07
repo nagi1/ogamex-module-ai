@@ -62,6 +62,8 @@ class EconomyUpgrades
 
     private const DEUTERIUM_WEIGHT = 2.0;
 
+    private const MAXIMUM_SCARCITY = 4.0;
+
     /**
      * How long a level may take to repay itself.
      *
@@ -615,15 +617,39 @@ class EconomyUpgrades
         // The host scales a building's reported output by the planet's current energy factor, so a
         // planet running a deficit reports nothing for the mine it would fix. Asking both levels at
         // 100% is what makes the comparison a property of the building rather than of today's energy.
-        return $this->metalEquivalent($planet->getObjectProduction($machineName, $level + 1, true))
-            - $this->metalEquivalent($planet->getObjectProduction($machineName, $level, true));
+        $weights = $this->scarcityWeights($planet);
+
+        return $this->metalEquivalent($planet->getObjectProduction($machineName, $level + 1, true), $weights)
+            - $this->metalEquivalent($planet->getObjectProduction($machineName, $level, true), $weights);
     }
 
-    private function metalEquivalent(Resources $resources): float
+    /**
+     * What a player does when one resource runs dry while another piles up: mine the short one. A resource
+     * held far below the planet's other stock counts up to four times as much in a mine's gain, so the
+     * deuterium synthesizer outranks a twenty-second metal level on a planet with idle crystal and no fuel
+     * (measured 7 Oct 2026: synthesizers at level 2 beside metal mines at 21 and 300,000 idle crystal).
+     *
+     * @return array{metal: float, crystal: float, deuterium: float}
+     */
+    private function scarcityWeights(PlanetService $planet): array
     {
-        return $resources->metal->get()
-            + self::CRYSTAL_WEIGHT * $resources->crystal->get()
-            + self::DEUTERIUM_WEIGHT * $resources->deuterium->get();
+        $held = $planet->getResources();
+        $stock = [
+            'metal' => $held->metal->get(),
+            'crystal' => self::CRYSTAL_WEIGHT * $held->crystal->get(),
+            'deuterium' => self::DEUTERIUM_WEIGHT * $held->deuterium->get(),
+        ];
+        $mean = array_sum($stock) / 3.0;
+
+        return array_map(static fn (float $value): float => min(self::MAXIMUM_SCARCITY, max(1.0, $mean / max($value, 1.0))), $stock);
+    }
+
+    /** @param array{metal: float, crystal: float, deuterium: float}|null $scarcity */
+    private function metalEquivalent(Resources $resources, array|null $scarcity = null): float
+    {
+        return ($scarcity['metal'] ?? 1.0) * $resources->metal->get()
+            + ($scarcity['crystal'] ?? 1.0) * self::CRYSTAL_WEIGHT * $resources->crystal->get()
+            + ($scarcity['deuterium'] ?? 1.0) * self::DEUTERIUM_WEIGHT * $resources->deuterium->get();
     }
 
     /** @param list<int> $levels */
