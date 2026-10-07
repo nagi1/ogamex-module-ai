@@ -56,6 +56,18 @@ test('it queues a colony ship once a fleet and room exist', function (): void {
         ->and($plan->reason)->toBe('role:colony');
 });
 
+test('it builds one colony ship at a time however many slots are free', function (): void {
+    unitProfile($this->currentUserId);
+    $this->planetAddResources(unitPlenty());
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->playerSetResearchLevel('impulse_drive', 3);
+    $this->playerSetResearchLevel('astrophysics', 9);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('colony_ship', 1);
+
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->not->toBe('role:colony');
+});
+
 test('it queues a probe once a fleet exists and expansion is underway', function (): void {
     unitProfile($this->currentUserId);
     $this->planetAddResources(unitPlenty());

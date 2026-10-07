@@ -625,7 +625,10 @@ class QueueableUnitPlanner
         return $planet->getShipUnits()->getAmountByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]) > 0;
     }
 
-    /** Whether the account has a free planet slot that no colony ship (owned, in a yard or already flying) is yet meant for. */
+    /**
+     * Whether the account has a free planet slot and no colony ship owned, in a yard or flying: one ship, one colony,
+     * then the next. A ship per free slot stacked ten orders behind the deathstars and none was ever built (9311).
+     */
     private function wantsColonyShip(PlayerService $player): bool
     {
         $machineName = ColonisationMission::getRequiredShipMachineNames()[0];
@@ -642,7 +645,7 @@ class QueueableUnitPlanner
             $onHand += $planet->getShipUnits()->getAmountByMachineName($machineName) + $this->inYard($planet, $ship);
         }
 
-        return $onHand < $player->getMaxPlanetAmount() - $player->planets->planetCount();
+        return $onHand === 0 && $player->getMaxPlanetAmount() > $player->planets->planetCount();
     }
 
     /** One probe in the opening, a volley's worth on every planet once the account raids active players. */
