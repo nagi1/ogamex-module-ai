@@ -13,6 +13,7 @@ use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
+use OGame\Models\FleetMission;
 use OGame\Models\Message;
 use OGame\Models\Resources;
 use OGame\Models\UnitQueue;
@@ -201,9 +202,9 @@ class QueueableUnitPlanner
                 }
             }
 
-            // Expansion: a colony ship once a fleet exists, the account has room, and none is
-            // already owned. One colony ship is the second planet every later fleet move needs.
-            if (!$this->ownsColonyShip($planet) && $player->planets->planetCount() < $player->getMaxPlanetAmount()) {
+            // Expansion: a colony ship once a fleet exists and the account has more free slots than ships on hand,
+            // counted across every planet, the yard and the air: one ship per planet each filled the cap many times over.
+            if ($this->wantsColonyShip($player)) {
                 $colonyShip = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
                 if ($this->queueable($planet, $colonyShip)) {
                     return $this->unit($planet, $colonyShip, 'role:colony');
@@ -492,7 +493,7 @@ class QueueableUnitPlanner
             ->first(fn (PlanetService $candidate): bool => $candidate->getPlanetId() === $planetId);
         $ship = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
 
-        if ($planet === null || $this->ownsColonyShip($planet) || !$this->queueable($planet, $ship)) {
+        if ($planet === null || !$this->wantsColonyShip($this->playerServiceFactory->make($playerId, true)) || !$this->queueable($planet, $ship)) {
             return null;
         }
 
@@ -578,6 +579,26 @@ class QueueableUnitPlanner
     private function ownsColonyShip(PlanetService $planet): bool
     {
         return $planet->getShipUnits()->getAmountByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]) > 0;
+    }
+
+    /** Whether the account has a free planet slot that no colony ship (owned, in a yard or already flying) is yet meant for. */
+    private function wantsColonyShip(PlayerService $player): bool
+    {
+        $machineName = ColonisationMission::getRequiredShipMachineNames()[0];
+        $ship = ObjectService::getUnitObjectByMachineName($machineName);
+        $onHand = FleetMission::query()
+            ->where('user_id', $player->getId())
+            ->where('mission_type', ColonisationMission::getTypeId())
+            ->where('processed', 0)
+            ->where('canceled', 0)
+            ->whereNull('parent_id')
+            ->count();
+
+        foreach ($player->planets->all() as $planet) {
+            $onHand += $planet->getShipUnits()->getAmountByMachineName($machineName) + $this->inYard($planet, $ship);
+        }
+
+        return $onHand < $player->getMaxPlanetAmount() - $player->planets->planetCount();
     }
 
     private function ownsProbe(PlanetService $planet): bool
