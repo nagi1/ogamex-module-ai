@@ -61,5 +61,7 @@ test('a moon a few hundred short of its lunar base is ferried the difference', f
 
     expect($plan)->toBeInstanceOf(QueueableTransfer::class)
         ->and($plan?->targetPlanetId)->toBe($moon->getPlanetId())
-        ->and($plan?->metal + $plan?->crystal)->toBeLessThan(QueueableTransferPlanner::MINIMUM_SHIPMENT);
+        ->and($plan?->metal + $plan?->crystal)->toBeLessThan(QueueableTransferPlanner::MINIMUM_SHIPMENT)
+        // The planner keeps a tenth of a balance after a purchase and a moon cannot refill it, so the price alone is not enough.
+        ->and(19_600 + $plan?->metal)->toBeGreaterThanOrEqual(20_000 / 0.9 - 1);
 });
