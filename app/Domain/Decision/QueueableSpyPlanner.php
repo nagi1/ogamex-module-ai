@@ -283,10 +283,17 @@ class QueueableSpyPlanner
         $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
         $best = null;
         $bestDistance = null;
+        $needed = $this->probeCount($target);
+
+        // A base that holds the whole volley flies it; a nearer one with a single probe sends one probe, which
+        // the host redacts, and the target is never seen (measured 8 Oct 2026: 579 of 591 volleys were one probe
+        // while the homeworlds held 9 to 29). Only when no base holds the volley does the nearest one go short.
+        $full = array_values(array_filter($origins, static fn (PlanetService $origin): bool => $origin->getObjectAmount($probe->machine_name) >= $needed));
+        $origins = $full === [] ? $origins : $full;
 
         foreach ($origins as $origin) {
             $units = new UnitCollection();
-            $units->addUnit($probe, $this->probeCount($target));
+            $units->addUnit($probe, $needed);
             if (!app(FlightFuel::class)->affordable($player, $origin, $units, $coordinate, 10)) {
                 continue;
             }

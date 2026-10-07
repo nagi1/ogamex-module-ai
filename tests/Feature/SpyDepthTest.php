@@ -295,3 +295,32 @@ test('the spy planner offers no probe from a planet that cannot pay the flight',
 
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeInstanceOf(QueueableSpy::class);
 });
+
+test('a volley flies from the base that holds it, not from a nearer one holding a single probe', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddUnit('espionage_probe', 1);
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+    $reportId = spyDepthRedactedReport(
+        $this->currentUserId,
+        $target->getPlanetCoordinates()->galaxy,
+        $target->getPlanetCoordinates()->system,
+        $target->getPlanetCoordinates()->position,
+        ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0],
+    );
+    Message::query()->where('espionage_report_id', $reportId)->update(['created_at' => now()->subHours(30)]);
+
+    $far = app(OGame\Factories\PlanetServiceFactory::class)->createAdditionalPlanetForPlayer(
+        app(PlayerServiceFactory::class)->make($this->currentUserId, true),
+        new OGame\Models\Planet\Coordinate(($target->getPlanetCoordinates()->galaxy % 9) + 1, 400, 8),
+    );
+    $far->addUnit('espionage_probe', 10);
+    $far->addResources(new OGame\Models\Resources(0, 0, 1_000_000, 0));
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->planetId)->toBe($far->getPlanetId());
+});
