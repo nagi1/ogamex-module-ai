@@ -417,8 +417,10 @@ class QueueableUnitPlanner
     private function warFleet(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
     {
         $capital = $this->capitalFleet($player, $planets, $profile);
+        // No capital hull yet means the account is still building its economy: an escort with nothing to
+        // escort only took the mines' resources (measured 7 Oct 2026: fighters beside mines at level 14 not 20).
         if ($capital === null) {
-            return $this->templateHull($player, $planets, $profile);
+            return null;
         }
 
         $military = array_map(static fn (UnitObject $hull): string => $hull->machine_name, ObjectService::getMilitaryShipObjects());
