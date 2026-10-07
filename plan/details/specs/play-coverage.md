@@ -128,3 +128,10 @@ the 20-day runs in `storage/rl/long/` before closing any row below.
 
 The gaps worth a row each, by what they cost the north star: raids refused (no battles, moons, debris or fleet saves follow),
 alliance fragmentation, phalanx with no moon, social initiation. Each is a planner fix that reads the host, never a new class.
+
+## Late-game fast loop, 7 Oct 2026 (test 9008: 24 h, budget 2e11, 6 accounts, teacher)
+
+- All six staged moons now build lunar_base and sensor_phalanx (moon field kept for the station, ferry covers the reserve and rounding).
+- Missions seen: espionage 686, transport 323, expedition 120, colonise 72, deploy 51, recycle 34, hold 22, attack 20, missile 12.
+- Still missing: jump_gate (staging gives one moon per account, so a gate pair is impossible; test artefact), cruiser, battle_ship, bomber, battlecruiser, large_shield_dome, anti_ballistic_missile.
+- Next: find why the yard never picks the mid warships and the dome/missiles, then one full run and retrain.
