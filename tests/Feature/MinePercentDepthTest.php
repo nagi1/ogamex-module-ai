@@ -56,3 +56,16 @@ test('a surplus restores a throttled mine to full', function (): void {
         ->and($plan->percentage)->toBe(10)
         ->and($plan->reason)->toStartWith('restore:');
 });
+
+// A mine at 0% reads as producing nothing, so it would vanish from the planner's list and never be
+// restored; the throttle stops one step above it, however deep the deficit.
+test('a deep deficit never throttles a mine to zero', function (): void {
+    minePercentProfile($this->currentUserId);
+    $this->planetSetObjectLevel('metal_mine', 40);
+    $this->planetSetObjectLevel('crystal_mine', 40);
+
+    $plan = app(QueueableMinePercentPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableMinePercent::class)
+        ->and($plan->percentage)->toBeGreaterThanOrEqual(1);
+});

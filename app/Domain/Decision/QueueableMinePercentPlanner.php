@@ -93,7 +93,7 @@ class QueueableMinePercentPlanner
         }
 
         $current = $planet->getBuildingPercent($worst['machine_name']);
-        $lowered = max(0, (int) floor($current - self::FULL_PERCENT * $deficit / $worst['draw']));
+        $lowered = max(1, (int) floor($current - self::FULL_PERCENT * $deficit / $worst['draw']));
 
         if ($lowered >= $current) {
             return null;
@@ -141,9 +141,20 @@ class QueueableMinePercentPlanner
                 continue;
             }
 
+            // The host scales a mine's figures by its percentage setting even when asked for 100%, so a
+            // consumer is read back to its full-scale draw and output. A mine is never lowered to zero:
+            // at 0% it reads as producing nothing, vanishes from this list and is never restored, and
+            // the economy sees a gain of zero from building more of it (measured 7 Oct 2026: synthesizers
+            // stuck at 0% for 72 simulated hours in seven of eight fresh accounts).
+            $setting = $planet->getBuildingPercent($object->machine_name);
+            if ($setting <= 0) {
+                continue;
+            }
+
             $production = $planet->getObjectProduction($object->machine_name, $level, true);
-            $draw = -(float) $production->energy->get();
-            $output = (float) ($production->metal->get() + $production->crystal->get() + $production->deuterium->get());
+            $scale = self::FULL_PERCENT / $setting;
+            $draw = -(float) $production->energy->get() * $scale;
+            $output = (float) ($production->metal->get() + $production->crystal->get() + $production->deuterium->get()) * $scale;
 
             if ($draw <= 0.0 || $output <= 0.0) {
                 continue;
