@@ -19,12 +19,17 @@ import threading
 import numpy as np
 import onnxruntime as ort
 
+ort.preload_dlls()   # the CUDA libraries ship as pip packages next to torch
+
 
 class Policy:
     def __init__(self, model: str, temperature: float, seed: int):
         options = ort.SessionOptions()
         options.intra_op_num_threads = 1
-        self.session = ort.InferenceSession(model, options, providers=["CPUExecutionProvider"])
+        # The GPU only: no CPU provider is listed, so a missing or broken CUDA stops the server instead of quietly serving from the CPU.
+        self.session = ort.InferenceSession(model, options, providers=["CUDAExecutionProvider"])
+        if self.session.get_providers()[0] != "CUDAExecutionProvider":
+            raise RuntimeError("the model did not load on the GPU: " + str(self.session.get_providers()))
         self.temperature = temperature
         self.seed = seed
         self.lock = threading.Lock()
