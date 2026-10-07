@@ -245,7 +245,7 @@ class QueueableUnitPlanner
 
             // Cargo sizing: once the opening fleet exists, grow the cargo to the
             // raid payload the freshest report promises, not a fixed one (FLE-010).
-            $cargoPlan = $this->cargoForPayload($player, $planet, $playerId);
+            $cargoPlan = $this->cargoForPayload($player, $planet, $playerId, $profile);
             if ($cargoPlan !== null) {
                 return $cargoPlan;
             }
@@ -516,7 +516,7 @@ class QueueableUnitPlanner
      * exists: expected loot (the host's class loot fraction of the largest
      * visible pile) plus a 20% buffer, minus what the fleet already carries.
      */
-    private function cargoForPayload(PlayerService $player, PlanetService $planet, int $playerId): ?QueueableUnit
+    private function cargoForPayload(PlayerService $player, PlanetService $planet, int $playerId, AiProfile $profile): ?QueueableUnit
     {
         $cargo = $this->bestCargo($player, $planet);
         if ($cargo === null) {
@@ -535,7 +535,9 @@ class QueueableUnitPlanner
         $owned = (int) floor($planet->getShipUnits()->getTotalCargoCapacity($player) / $capacity);
         $missing = min($needed - $owned, ObjectService::getObjectMaxBuildAmount($cargo->machine_name, $planet, true));
 
-        if ($missing <= 0) {
+        // A player mines while short: a loot-sized cargo batch is thousands of large cargos, and paid from the crystal a
+        // facility is saving for it kept the nanite factory out of every account for twenty days (measured on a long run).
+        if ($missing <= 0 || $this->starvesSaving($planet, $profile, $cargo, $missing)) {
             return null;
         }
 

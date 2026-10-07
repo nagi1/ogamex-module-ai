@@ -113,6 +113,27 @@ test('a report whose defence is null does not break unit planning', function ():
         ->and($plan->reason)->toBe('role:cargo:payload');
 });
 
+test('a planet saving crystal for an economy step does not spend it on a raid cargo batch', function (): void {
+    compositionProfile($this->currentUserId);
+    // Mines whose next level costs far more crystal than the planet holds make the economy a saver.
+    foreach (['metal_mine' => 24, 'crystal_mine' => 24, 'deuterium_synthesizer' => 20, 'solar_plant' => 30] as $machineName => $level) {
+        $this->planetSetObjectLevel($machineName, $level);
+    }
+    $this->planetService->updateResourceProductionStats();
+    $this->planetService->updateResourceStorageStats();
+    $this->planetAddResources(new Resources(1_000_000_000, 3_000, 1_000_000_000));
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->playerSetResearchLevel('combustion_drive', 2);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddUnit('espionage_probe', 1);
+    compositionRichReport($this->currentUserId);
+
+    $plan = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+
+    expect($plan?->reason)->not->toBe('role:cargo:payload');
+});
+
 function compositionProfile(int $playerId, AiArchetype $archetype = AiArchetype::Miner): AiProfile
 {
     return AiProfile::create([
