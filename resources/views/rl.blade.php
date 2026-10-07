@@ -84,64 +84,90 @@
         ul.feed .t { color: var(--faint); } .feed .good { color: var(--good); } .feed .bad { color: var(--bad); } .feed .info { color: var(--text); }
         table { width: 100%; border-collapse: collapse; } td, th { padding: 4px 6px; border-bottom: 1px solid var(--line-2); text-align: left; }
         th { color: var(--faint); font-size: 11px; font-weight: 600; } td.num { text-align: right; }
+            .hero { border-color: #2b3f5c; margin-bottom: 14px; }
+        .job { margin-bottom: 14px; } .job:last-of-type { margin-bottom: 8px; }
+        .job .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+        .job .top b { font-size: 15px; } .job .pc { font-size: 22px; font-weight: 700; color: var(--info); }
+        .job .bar { height: 12px; margin: 5px 0; }
+        .job .meta { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+        .job .meta b { color: var(--text); }
+        .cols.two { margin-bottom: 14px; }
+        .step .bar { height: 5px; margin: 4px 0; }
+        details.more { margin-top: 4px; } details.more > summary { cursor: pointer; color: var(--muted); padding: 8px 2px; font-size: 12px; }
+        details.more[open] > summary { margin-bottom: 8px; }
+        td.good { color: var(--good); } td.bad { color: var(--bad); }
     </style>
 </head>
 <body>
 <header>
     <span class="title">ML training</span>
     <span class="pill" id="overall"><span class="dot"></span><span id="overallText">connecting…</span></span>
-    <span id="now" class="sub"></span>
-    <div id="plain" class="sub"></div>
     <span class="when"><a href="{{ route('ai.harness.index') }}">build harness</a> · <span id="at">—</span></span>
 </header>
 
 <div id="stale" class="banner warn" hidden></div>
 <div id="alarms"></div>
-<section class="panel" id="workPanel"><h2>Working now <small>every running job with its progress and time left</small></h2><div id="work"></div></section>
+
+<section class="panel hero">
+    <h2>Working now <small id="allEta"></small></h2>
+    <div id="work"></div>
+    <div id="plain" class="sub"></div>
+</section>
+
 <div class="steps" id="steps"></div>
 
-<div class="stack">
-    <section class="panel"><h2>Gates <small>pass/fail against the thresholds in the skill</small></h2><div class="gates" id="gates"></div></section>
-
-    <div class="cols">
-        <section class="panel" id="genPanel" hidden>
-            <h2>Data generation <small>32 universes × 30 days, 24 accounts, epsilon 0.1</small></h2>
-            <div class="kpis" id="genKpis"></div>
-            <div class="tiles" id="tiles"></div>
-        </section>
-        <section class="panel" id="validPanel" hidden>
-            <h2>Data validation <small>blocking checks must pass before the GPU trains</small></h2>
-            <div class="kpis" id="validKpis"></div>
-            <ul class="feed" id="validList" style="max-height:none"></ul>
-            <div id="strategy"></div>
-        </section>
-        <section class="panel" id="trainPanel" hidden>
-            <h2>GPU training <small>behaviour cloning</small></h2>
-            <div class="kpis" id="trainKpis"></div>
-            <svg class="chart" id="trainChart" viewBox="0 0 400 170" preserveAspectRatio="none"></svg>
-            <div class="legend"><span><i style="background:var(--info)"></i>val top-1 (3+ legal)</span><span><i style="background:var(--work)"></i>val MRR</span><span><i style="background:var(--warn)"></i>loss</span><span><i style="background:var(--text);opacity:.5"></i>gate</span></div>
-            <div id="trainFinal"></div>
-        </section>
-        <section class="panel" id="latePanel" hidden>
-            <h2>Late-game tests <small>accounts start near the end game; what they reach in a few hours</small></h2>
-            <div id="lateBody"></div>
-        </section>
-        <section class="panel" id="loopPanel" hidden>
-            <h2>Closed loop <small>model vs planner, twin universes</small></h2>
-            <div class="kpis" id="loopKpis"></div>
-            <div class="tiles" id="loopTiles"></div>
-            <div id="loopReport"></div>
-        </section>
-        <section class="panel">
-            <h2>Machine</h2>
-            <div id="machine"></div>
-        </section>
-        <section class="panel">
-            <h2>Events</h2>
-            <ul class="feed" id="feed"></ul>
-        </section>
-    </div>
+<div class="cols two">
+    <section class="panel">
+        <h2>Latest late-game result <small>what the newest finished test reached</small></h2>
+        <div id="lateBody"></div>
+    </section>
+    <section class="panel">
+        <h2>How long things take <small>from the run history, storage/rl/runs.sqlite</small></h2>
+        <div id="timing"></div>
+    </section>
 </div>
+
+<div class="cols two">
+    <section class="panel"><h2>Machine</h2><div id="machine"></div></section>
+    <section class="panel"><h2>Events</h2><ul class="feed" id="feed"></ul></section>
+</div>
+
+<details class="more">
+    <summary>Full detail: gates, data, training, tests</summary>
+    <div class="stack">
+        <section class="panel"><h2>Gates <small>pass/fail against the thresholds in the skill</small></h2><div class="gates" id="gates"></div></section>
+        <div class="cols">
+            <section class="panel" id="genPanel" hidden>
+                <h2>Data generation</h2>
+                <div class="kpis" id="genKpis"></div>
+                <div class="tiles" id="tiles"></div>
+            </section>
+            <section class="panel" id="validPanel" hidden>
+                <h2>Data validation <small>blocking checks must pass before the GPU trains</small></h2>
+                <div class="kpis" id="validKpis"></div>
+                <ul class="feed" id="validList" style="max-height:none"></ul>
+                <div id="strategy"></div>
+            </section>
+            <section class="panel" id="trainPanel" hidden>
+                <h2>GPU training <small>behaviour cloning</small></h2>
+                <div class="kpis" id="trainKpis"></div>
+                <svg class="chart" id="trainChart" viewBox="0 0 400 170" preserveAspectRatio="none"></svg>
+                <div class="legend"><span><i style="background:var(--info)"></i>val top-1 (3+ legal)</span><span><i style="background:var(--work)"></i>val MRR</span><span><i style="background:var(--warn)"></i>loss</span><span><i style="background:var(--text);opacity:.5"></i>gate</span></div>
+                <div id="trainFinal"></div>
+            </section>
+            <section class="panel" id="latePanel" hidden>
+                <h2>All late-game tests</h2>
+                <div id="lateAll"></div>
+            </section>
+            <section class="panel" id="loopPanel" hidden>
+                <h2>Closed loop <small>model vs planner, twin universes</small></h2>
+                <div class="kpis" id="loopKpis"></div>
+                <div class="tiles" id="loopTiles"></div>
+                <div id="loopReport"></div>
+            </section>
+        </div>
+    </div>
+</details>
 
 <script>
     const url = @json(route('ai.harness.rl.poll'));
@@ -168,9 +194,7 @@
         const o = d.overall, cur = d.current;
         $('overall').className = 'pill ' + o;
         $('overallText').textContent = o === 'paused' ? 'paused' : o === 'alarm' ? 'ALARM' : o === 'done' ? 'complete' : o === 'running' ? 'running' : 'idle';
-        const g = d.generation, eta = g.eta_seconds;
-        $('plain').innerHTML = d.plain ? '<b>Right now:</b> ' + esc(d.plain.now) + (d.plain.next ? ' <b>Next:</b> ' + esc(d.plain.next) : '') : '';
-        $('now').textContent = cur ? `Step ${cur.n}: ${cur.name}` + (cur.n === 4 && eta ? ` · ETA ${dur(eta)}` : '') : '';
+        $('plain').innerHTML = d.plain && d.plain.next ? '<b>Next:</b> ' + esc(d.plain.next) : '';
         seen = { at: Date.now(), age: d.age, staleAfter: d.stale_after };
         paint();
         $('alarms').innerHTML = d.alarms.map(a => `<div class="banner"><b>${esc(a.where)}: ${esc(a.what)}</b><div>${esc(a.detail)}</div></div>`).join('');
@@ -184,8 +208,13 @@
             return `<div class="step ${cls}"><div class="n">${esc(s.state.toUpperCase())}</div><div class="nm">${esc(s.name)}</div>${prog}<div class="sm">${esc(s.summary)}</div></div>`;
         }).join('');
         const a = d.activities || [];
-        $('work').innerHTML = a.length ? a.map(x => `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(x.what)}</b><span class="sub">${x.pct}%${x.eta_s != null ? ' · about ' + dur(x.eta_s) + ' left' : ' · time left not known yet'}${x.elapsed != null ? ' · running ' + dur(x.elapsed) : ''}</span></div>${bar(x.pct)}<div class="sub">${esc(x.detail)}</div></div>`).join('')
-            : '<div class="sub">Nothing is running right now.</div>';
+        const clock = sec => new Date(Date.now() + sec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const etas = a.map(x => x.eta_s).filter(x => x != null);
+        $('allEta').textContent = etas.length ? 'everything running finishes by about ' + clock(Math.max(...etas)) : '';
+        $('work').innerHTML = a.length ? a.map(x => `<div class="job"><div class="top"><b>${esc(x.what)}</b><span class="pc">${Math.round(x.pct)}%</span></div>${bar(x.pct)}`
+            + `<div class="meta"><span>${esc(x.detail)}</span></div><div class="meta"><span>time left <b>${x.eta_s != null ? dur(x.eta_s) : 'working it out'}</b></span>`
+            + (x.eta_s != null ? `<span>done about <b>${clock(x.eta_s)}</b></span>` : '') + (x.elapsed != null ? `<span>running for <b>${dur(x.elapsed)}</b></span>` : '') + '</div></div>').join('')
+            : '<div class="sub">Nothing is running right now. The next step starts on its own from the scheduled check, or when a result calls for one.</div>';
     }
 
     function renderGates(d) {
@@ -204,10 +233,23 @@
     function renderLate(d) {
         const runs = d.late_runs || [];
         $('latePanel').hidden = runs.length === 0;
-        $('lateBody').innerHTML = runs.map(r => `<div style="margin-bottom:10px"><b>Test ${esc(r.seed)}</b> · ${r.finished ? 'finished' : r.running ? `running, ${r.hours} of ${r.total_hours} h` : 'stopped'}`
+        const one = r => `<div style="margin-bottom:10px"><b>Test ${esc(r.seed)}</b> · ${r.finished ? 'finished' : r.running ? `running, ${r.hours} of ${r.total_hours} h` : 'stopped'}`
             + (r.missions ? `<div class="sub">Missions: ${esc(r.missions)}</div>` : '')
             + (r.finished ? `<div class="sub">${r.missing.length ? 'Never reached: ' + esc(r.missing.join(', ')) : 'Every late-game object was reached'}</div>` : '')
-            + (r.raid_reasons.length ? `<div class="sub">Why raids were refused: ${esc(r.raid_reasons.join(' | '))}</div>` : '') + '</div>').join('');
+            + (r.raid_reasons.length ? `<div class="sub">Why raids were refused: ${esc(r.raid_reasons.join(' | '))}</div>` : '') + '</div>';
+        $('lateAll').innerHTML = runs.map(one).join('');
+        const done = runs.find(r => r.finished);
+        $('lateBody').innerHTML = done ? one(done) : '<div class="sub">No late-game test has finished yet.</div>';
+    }
+
+    function renderTiming(d) {
+        const h = d.history || { kinds: [], recent: [] };
+        const when = t => new Date(t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        $('timing').innerHTML = h.kinds.length ? '<table><tr><th>Kind</th><th>Runs</th><th>Typical</th><th>Longest</th><th>Speed</th></tr>'
+            + h.kinds.map(k => `<tr><td>${esc(k.name)}</td><td class="num">${k.runs}</td><td class="num">${dur(k.median_s)}</td><td class="num">${dur(k.max_s)}</td><td class="num">${k.speed ? '×' + k.speed : ''}</td></tr>`).join('')
+            + '</table><div class="sub" style="margin-top:6px">Speed = simulated time per real time. Last runs:</div><table>'
+            + h.recent.slice(0, 6).map(r => `<tr><td>${esc(r.label)}</td><td class="num">${dur(r.wall_s)}</td><td class="num">${esc(when(r.finished_at))}</td><td class="num ${r.errors ? 'bad' : ''}">${r.errors ? r.errors + ' errors' : ''}</td></tr>`).join('') + '</table>'
+            : '<div class="sub">No finished runs recorded yet.</div>';
     }
 
     function renderGeneration(d) {
@@ -304,7 +346,7 @@
 
     function render(d) {
         if (d.missing) { $('overallText').textContent = 'no status yet'; seen = { at: Date.now(), age: 999, staleAfter: 30 }; paint(); return; }
-        renderHeader(d); renderSteps(d); renderGates(d); renderGeneration(d); renderValidation(d); renderTraining(d); renderLoop(d); renderLate(d); renderMachine(d);
+        renderHeader(d); renderSteps(d); renderGates(d); renderGeneration(d); renderValidation(d); renderTraining(d); renderLoop(d); renderLate(d); renderTiming(d); renderMachine(d);
         $('feed').innerHTML = d.events.slice(0, 40).map(e => `<li><span class="t">${esc(e.t)}</span><span class="${e.kind}">${esc(e.text)}</span></li>`).join('');
     }
 
