@@ -452,6 +452,8 @@ def collect(state: dict) -> dict:
     lates = late_runs()
     live = activities(gen, train, loop, longs, lates)
     now_text, next_text = plain.get(current["n"], ("Waiting for the next step to start.", "")) if current else ("Nothing is running right now.", "Waiting for the next step to be started.")
+    if any(l["running"] for l in lates):
+        next_text = "Read what the late-game accounts reached, fix whatever is missing (warship variety, defence, social), repeat; one full run and retraining only once this loop is clean."
     if live:
         now_text = " ".join(f"{a['what']}: {a['detail']}." for a in live)
     return {"at": int(now), "overall": "running" if live and overall == "idle" else overall, "current": current, "plain": {"now": now_text, "next": next_text}, "activities": live,

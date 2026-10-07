@@ -315,7 +315,7 @@ class QueueableUnitPlanner
             return $floor[0][1];
         }
 
-        $fleet = $this->capitalFleet($player, $planets, $profile);
+        $fleet = $this->warFleet($player, $planets, $profile);
         if ($fleet !== null) {
             return $fleet;
         }
@@ -400,7 +400,37 @@ class QueueableUnitPlanner
             return null;
         }
 
-        return $this->capitalFleet($player, $planets, $profile);
+        return $this->warFleet($player, $planets, $profile);
+    }
+
+    /**
+     * A fleet is a heavy core with a mixed escort around it: the doctrine's template hull while the
+     * escort is thinner than twenty to each capital hull, the priciest hull otherwise. Before this the
+     * template was never read and a 24 h late-game run held deathstars and no cruiser, battleship,
+     * battlecruiser or bomber.
+     *
+     * @param array<int, PlanetService> $planets
+     */
+    private function warFleet(PlayerService $player, array $planets, AiProfile $profile): ?QueueableUnit
+    {
+        $capital = $this->capitalFleet($player, $planets, $profile);
+        if ($capital === null) {
+            return $this->templateHull($player, $planets, $profile);
+        }
+
+        $military = array_map(static fn (UnitObject $hull): string => $hull->machine_name, ObjectService::getMilitaryShipObjects());
+        $escort = 0;
+        $core = 0;
+        foreach ($planets as $planet) {
+            foreach ($planet->getShipUnits()->units as $entry) {
+                $name = $entry->unitObject->machine_name;
+                $isCore = $entry->unitObject->id === $capital->unitId;
+                $core += $isCore ? $entry->amount : 0;
+                $escort += !$isCore && in_array($name, $military, true) ? $entry->amount : 0;
+            }
+        }
+
+        return $escort < 20 * max(1, $core) ? ($this->templateHull($player, $planets, $profile) ?? $capital) : $capital;
     }
 
     /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */
