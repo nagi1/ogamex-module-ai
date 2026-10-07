@@ -98,7 +98,10 @@ class QueueableTransferPlanner
         foreach ($planets as $target) {
             $wallNeed = $this->wallNeed($target, $planets, $playerId);
             $need = $wallNeed ?? $this->need($target, $profile, $playerId);
-            if ($need === null || ($wallNeed === null && !$this->worthShipping($need))) {
+            // A moon makes nothing, so the last few hundred it is short for a station never arrives on its own:
+            // it is shipped however small (a 98%-stocked moon sat unbuilt behind the 50,000 floor in a late-game test).
+            $finishesMoonStep = $target->getPlanetType() === PlanetType::Moon && $need !== null && $need->sum() > 0;
+            if ($need === null || ($wallNeed === null && !$finishesMoonStep && !$this->worthShipping($need))) {
                 continue;
             }
 
