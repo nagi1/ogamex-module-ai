@@ -40,6 +40,8 @@ research_path:
 phases:
   early:
     opening: []
+# The late hulls and defences (shares of the late fleet and wall the wiki describes) stay in the same list: one the account
+# cannot build yet is skipped, so they only start to count once their requirements are met.
 fleet_template:
   light_fighter: 15
   cruiser: 20
@@ -48,6 +50,13 @@ fleet_template:
   large_cargo: 15
   recycler: 10
   bomber: 5
+  destroyer: 10
+  deathstar: 2
 defence_template:
   rocket_launcher: 60
   light_laser: 40
+  gauss_cannon: 5
+  plasma_turret: 5
+  small_shield_dome: 1
+  large_shield_dome: 1
+  anti_ballistic_missile: 5
