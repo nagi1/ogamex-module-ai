@@ -13,6 +13,7 @@ use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
+use Carbon\CarbonImmutable;
 use OGame\Models\FleetMission;
 use OGame\Models\Message;
 use OGame\Models\Resources;
@@ -90,6 +91,8 @@ class QueueableUnitPlanner
 
     /** The same 24 h staleness window the observation publishes target reports with. */
     private const INTEL_TTL_HOURS = 24;
+
+    private const SAVING_HORIZON_HOURS = 24;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -1286,6 +1289,14 @@ class QueueableUnitPlanner
 
         $saving = $this->buildingPlanner->savingFor($planet, $profile);
         if ($saving === null) {
+            return false;
+        }
+
+        // A player does not hold the whole yard for a goal more than a day of production away: spending
+        // cannot delay it by more than the wait it already has. (Measured 7 Oct 2026: capitals saving for a
+        // step 100x their stock bought no battleship, bomber or battlecruiser in a 12 h late-game test.)
+        $payable = $this->buildingPlanner->savingEta($planet, $profile, CarbonImmutable::now());
+        if ($payable !== null && $payable->greaterThan(CarbonImmutable::now()->addHours(self::SAVING_HORIZON_HOURS))) {
             return false;
         }
 
