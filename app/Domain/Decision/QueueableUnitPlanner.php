@@ -490,7 +490,9 @@ class QueueableUnitPlanner
             }
 
             $hull = ObjectService::getUnitObjectByMachineName($name);
-            $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 2));
+            // An eighth of what the planet can pay, not half: one half-of-everything batch of a single hull
+            // occupied the yard for the whole run and the template's other hulls were never ordered.
+            $amount = max(self::FIRST_CARGO_AMOUNT, intdiv($this->affordable($planet, $hull), 8));
             if ($this->starvesSaving($planet, $profile, $hull, $amount)) {
                 continue;
             }

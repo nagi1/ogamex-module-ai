@@ -19,6 +19,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import runs_db
+
 ROOT = Path(__file__).resolve().parents[4]
 RL = ROOT / "storage" / "rl"
 DATE = re.compile(r"^\s+(\d{4}-\d{2}-\d{2}) (\d{2}):\d{2}\s+sessions\s+\d+\s+other\s+\d+\s+errors\s+(\d+)")
@@ -511,7 +513,14 @@ def collect(state: dict) -> dict:
         next_text = "Read what the late-game accounts reached, fix whatever is missing (warship variety, defence, social), repeat; one full run and retraining only once this loop is clean."
     if live:
         now_text = " ".join(f"{a['what']}: {a['detail']}." for a in live)
-    return {"at": int(now), "overall": "running" if live and overall == "idle" else overall, "current": current, "plain": {"now": now_text, "next": next_text}, "activities": live,
+    if now - state.get("runs_synced", 0) > 60:
+        try:
+            runs_db.sync(live, now)
+            state["runs_synced"] = now
+            state["history"] = runs_db.stats()
+        except Exception as error:   # the history is a report, never a reason for the live page to stop
+            state["history"] = {"kinds": [], "recent": [], "error": str(error)}
+    return {"at": int(now), "history": state.get("history", {"kinds": [], "recent": []}), "overall": "running" if live and overall == "idle" else overall, "current": current, "plain": {"now": now_text, "next": next_text}, "activities": live,
             "long_runs": longs, "late_runs": lates, "steps": step_rows, "phases": phases(step_rows, lates, longs, live), "gates": gate_rows, "alarms": alarm_rows,
             "generation": {**gen, "done_days": round(done_days, 1), "total_days": total_days, "eta_seconds": eta_s,
                            "elapsed": int(now - since) if running or done_days else None,
