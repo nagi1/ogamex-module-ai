@@ -53,6 +53,10 @@ foreach ($ids as $pid) {
     $yard = $units->plan($pid, $player);
     echo '   yard next: ' . ($yard === null ? 'nothing' : $yard->reason . ' x' . $yard->amount) . "\n";
 
+    $capital = $units->capitalFleetOrder($pid, $player);
+    $busy = $capital === null ? 0 : OGame\Models\UnitQueue::query()->where('planet_id', $capital->planetId)->where('processed', 0)->count();
+    echo '   capital order: ' . ($capital === null ? 'nothing' : ObjectService::getUnitObjectById($capital->unitId)->machine_name . ' x' . $capital->amount . " on planet {$capital->planetId} (yard holds {$busy} order(s))") . "\n";
+
     // Every warship and defence the host has: buildable here, and if so what holds it back.
     $blocked = [];
     foreach ([...ObjectService::getMilitaryShipObjects(), ...ObjectService::getDefenseObjects()] as $unit) {

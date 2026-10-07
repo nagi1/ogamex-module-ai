@@ -187,7 +187,7 @@ class QueueableUnitPlanner
             // one hull that can carry. A planet that owns nothing but cannot queue one yet still
             // falls through -- defence is reactive and standing, and waiting for a hull is what
             // left a fleetless account with no wall of its own.
-            if ($this->ownsNoShip($planet)) {
+            if ($this->ownsNoShip($player)) {
                 $cargo = $this->bestCargo($player, $planet);
                 if ($cargo !== null) {
                     return $this->unit($planet, $cargo, 'role:cargo:'.$cargo->machine_name);
@@ -615,9 +615,24 @@ class QueueableUnitPlanner
         return $loot * app(CharacterClassService::class)->getInactiveLootPercentage($player->getUser());
     }
 
-    private function ownsNoShip(PlanetService $planet): bool
+    /**
+     * The account's opening: no ship on any body, in any yard or in the air. A home whose fleet was out or on the moon
+     * read as shipless and ordered one more cargo every login (9312: 63 single large cargo orders in one yard).
+     */
+    private function ownsNoShip(PlayerService $player): bool
     {
-        return $planet->getShipUnits()->units === [];
+        $planetIds = [];
+        foreach ($player->planets->all() as $body) {
+            if ($body->getShipUnits()->units !== []) {
+                return false;
+            }
+            $planetIds[] = $body->getPlanetId();
+        }
+
+        $ships = array_map(static fn (UnitObject $ship): int => $ship->id, ObjectService::getShipObjects());
+
+        return !UnitQueue::query()->whereIn('planet_id', $planetIds)->whereIn('object_id', $ships)->where('processed', 0)->exists()
+            && !FleetMission::query()->where('user_id', $player->getId())->where('processed', 0)->exists();
     }
 
     private function ownsColonyShip(PlanetService $planet): bool

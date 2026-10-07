@@ -56,6 +56,19 @@ test('it queues a colony ship once a fleet and room exist', function (): void {
         ->and($plan->reason)->toBe('role:colony');
 });
 
+test('a home whose fleet is out orders no opening cargo', function (): void {
+    unitProfile($this->currentUserId);
+    $this->planetAddResources(unitPlenty());
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->playerSetResearchLevel('impulse_drive', 3);
+    $outbound = unitInboundHostileFleet($this->currentPlanetId);
+    $outbound->user_id = $this->currentUserId;
+    $outbound->planet_id_from = $this->currentPlanetId;
+    $outbound->save();
+
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->not->toStartWith('role:cargo');
+});
+
 test('it builds one colony ship at a time however many slots are free', function (): void {
     unitProfile($this->currentUserId);
     $this->planetAddResources(unitPlenty());
