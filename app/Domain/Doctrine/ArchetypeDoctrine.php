@@ -115,7 +115,10 @@ class ArchetypeDoctrine
                 continue;
             }
 
-            $gap = ((float) $share / $weight) - (($owned[$machineName] ?? 0) / $total);
+            // One of each before more of any: a unit the account owns none of comes first, so a small share (a shield
+            // dome, a deathstar) is not starved behind the large ones forever (measured 8 Oct 2026: no dome in any
+            // late-game test while every one could build it).
+            $gap = ((float) $share / $weight) - (($owned[$machineName] ?? 0) / $total) + (($owned[$machineName] ?? 0) === 0 ? 1.0 : 0.0);
             if ($gap > $bestGap) {
                 $best = (string) $machineName;
                 $bestGap = $gap;
