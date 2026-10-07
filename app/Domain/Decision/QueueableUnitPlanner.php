@@ -415,7 +415,7 @@ class QueueableUnitPlanner
 
     /**
      * A fleet is a heavy core with a mixed escort around it: the doctrine's template hull while the
-     * escort is thinner than twenty to each capital hull, the priciest hull otherwise. Before this the
+     * escort is thinner than twenty to each capital hull, the priciest hull otherwise (the first capital hull comes first). Before this the
      * template was never read and a 24 h late-game run held deathstars and no cruiser, battleship,
      * battlecruiser or bomber.
      *
@@ -442,7 +442,7 @@ class QueueableUnitPlanner
             }
         }
 
-        return $escort < 20 * max(1, $core) ? ($this->templateHull($player, $planets, $profile) ?? $capital) : $capital;
+        return $escort < 20 * $core ? ($this->templateHull($player, $planets, $profile) ?? $capital) : $capital;
     }
 
     /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */

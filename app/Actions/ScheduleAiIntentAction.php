@@ -381,7 +381,7 @@ class ScheduleAiIntentAction
         // half an hour against 1,057 buildings). The wall orders above are untouched: keeping a
         // planet alive is what the yard is for.
         if ($capital !== null
-            && !$this->shipyardsBusy($profile->player_id)
+            && !$this->shipyardBusy($capital->planetId)
             && !($type === AiCandidateActionType::QueueUnits && $units === $capital)
             && $type !== AiCandidateActionType::DoNothing) {
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $capital, ':capital');
@@ -540,7 +540,7 @@ class ScheduleAiIntentAction
      */
     private function scheduleShipyard(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt, ?QueueableUnit $plan): void
     {
-        if ($plan instanceof QueueableUnit && $plan->surplusSpend && $this->shipyardsBusy($profile->player_id)) {
+        if ($plan instanceof QueueableUnit && $plan->surplusSpend && $this->shipyardBusy($plan->planetId)) {
             return;
         }
 
@@ -548,11 +548,14 @@ class ScheduleAiIntentAction
     }
 
     /** Whether any of the player's yards holds an order the host has not finished building yet. */
-    private function shipyardsBusy(int $playerId): bool
+    /**
+     * Whether the yard the hull would be ordered at still holds unfinished work. Asked per planet: asked of the whole
+     * account, a probe or a wall batch on any of fifteen planets held the war fleet back for whole days (measured
+     * 8 Oct 2026: four hull orders in twelve late-game hours).
+     */
+    private function shipyardBusy(int $planetId): bool
     {
-        $planets = Planet::query()->where('user_id', $playerId)->pluck('id');
-
-        return UnitQueue::query()->whereIn('planet_id', $planets)->where('processed', 0)->exists();
+        return UnitQueue::query()->where('planet_id', $planetId)->where('processed', 0)->exists();
     }
 
     private function isCalmSave(AiCandidateActionType $type, DecisionTrace $trace): bool
