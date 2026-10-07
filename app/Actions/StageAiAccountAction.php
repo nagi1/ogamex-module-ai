@@ -5,6 +5,8 @@ namespace Modules\AI\Actions;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Planet;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -44,9 +46,31 @@ class StageAiAccountAction
 
         if ($lateGame) {
             app(PlanetServiceFactory::class)->createMoonForPlanet($planet, 2_000_000, 20, 15);
+            $this->colonyWithMoon($player, $planet);
         }
 
         return $steps;
+    }
+
+    /**
+     * A late-game account holds a second moon on a colony beside its home, so the jump gate (which joins two moons)
+     * is reachable at all; one moon alone left it missing in every late-game test. The first free slot of the home
+     * system takes the colony, and a full system leaves the account with its one moon.
+     */
+    private function colonyWithMoon(PlayerService $player, PlanetService $home): void
+    {
+        $coordinates = $home->getPlanetCoordinates();
+        foreach (range(1, 15) as $position) {
+            $taken = Planet::query()->where('galaxy', $coordinates->galaxy)->where('system', $coordinates->system)->where('planet', $position)->exists();
+            if ($taken) {
+                continue;
+            }
+
+            $colony = app(PlanetServiceFactory::class)->createAdditionalPlanetForPlayer($player, new Coordinate($coordinates->galaxy, $coordinates->system, $position));
+            app(PlanetServiceFactory::class)->createMoonForPlanet($colony, 2_000_000, 20, 15);
+
+            return;
+        }
     }
 
     /**
