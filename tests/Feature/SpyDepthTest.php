@@ -152,6 +152,31 @@ test('the spy planner escalates probes for a redacted report on a rich target', 
         ->and($plan->probeCount)->toBe(5);
 });
 
+test('the spy planner doubles the volley after each redacted report in a row', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 20);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+
+    foreach ([1, 2] as $volley) {
+        $reportId = spyDepthRedactedReport(
+            $this->currentUserId,
+            $target->getPlanetCoordinates()->galaxy,
+            $target->getPlanetCoordinates()->system,
+            $target->getPlanetCoordinates()->position,
+            ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0],
+        );
+        Message::query()->where('espionage_report_id', $reportId)->update(['created_at' => now()->subHours(30)]);
+    }
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->probeCount)->toBe(10);
+});
+
 test('the spy planner does not escalate a redacted report on an empty target', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 5);

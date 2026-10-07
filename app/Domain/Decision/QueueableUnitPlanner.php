@@ -5,6 +5,8 @@ namespace Modules\AI\Domain\Decision;
 use Modules\AI\Domain\Defense\AntiBallisticMissile;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Enums\AiThreatResponse;
+use Modules\AI\Domain\Login\GamePhaseMachine;
+use Modules\AI\Enums\GamePhase;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
@@ -93,6 +95,8 @@ class QueueableUnitPlanner
     private const INTEL_TTL_HOURS = 24;
 
     private const SAVING_HORIZON_HOURS = 24;
+
+    private const PROBE_STOCK = 15;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -214,12 +218,15 @@ class QueueableUnitPlanner
                 }
             }
 
-            // Scouting: a probe once a fleet exists, so the account can start seeing neighbours.
-            if (!$this->ownsProbe($planet)) {
-                $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
-                if ($this->queueable($planet, $probe)) {
-                    return $this->unit($planet, $probe, 'role:probe');
-                }
+            // Scouting: a probe once a fleet exists, so the account can start seeing neighbours; past the
+            // opening a stack of them, since the host hides a defended planet's fleet and defence from a
+            // volley smaller than three probes plus the square of the espionage gap. One probe per planet
+            // read every active target as redacted and no raid had a target (measured 8 Oct 2026: 974
+            // `no_target` refusals in a 24 h late-game run).
+            $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
+            $probeShort = $this->probeStock($player) - $planet->getObjectAmount($probe->machine_name) - $this->inYard($planet, $probe);
+            if ($probeShort > 0 && $this->queueable($planet, $probe)) {
+                return $this->unit($planet, $probe, 'role:probe', $probeShort);
             }
 
             // The class's own ship: the hull the host reserves for the account's character class (the
@@ -636,6 +643,12 @@ class QueueableUnitPlanner
         }
 
         return $onHand < $player->getMaxPlanetAmount() - $player->planets->planetCount();
+    }
+
+    /** One probe in the opening, a volley's worth on every planet once the account raids active players. */
+    private function probeStock(PlayerService $player): int
+    {
+        return app(GamePhaseMachine::class)->of($player) === GamePhase::Early ? self::FIRST_CARGO_AMOUNT : self::PROBE_STOCK;
     }
 
     private function ownsProbe(PlanetService $planet): bool

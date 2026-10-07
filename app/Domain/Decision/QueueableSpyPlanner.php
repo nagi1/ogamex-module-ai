@@ -52,6 +52,8 @@ class QueueableSpyPlanner
     /** A partial report on a valuable target gets this many probes; the host redacts ships below two and defence below three probes, so one probe re-reads the same redacted report. */
     private const ESCALATED_PROBES = 5;
 
+    private const MAXIMUM_DOUBLINGS = 3;
+
     /** Metal-equivalent loot that makes a redacted report worth a probe volley. */
     private const RICH_YIELD = 10_000.0;
 
@@ -326,7 +328,20 @@ class QueueableSpyPlanner
             return 1;
         }
 
-        return self::ESCALATED_PROBES;
+        // Each redacted report in a row doubles the volley: the host hides a defended planet from fewer than
+        // three probes plus the square of the espionage gap, which the account cannot read, so it sends more
+        // until the report comes back whole, the way a player does (capped by the probes the planet holds).
+        $redacted = EspionageReport::query()
+            ->where('planet_galaxy', $target->galaxy)
+            ->where('planet_system', $target->system)
+            ->where('planet_position', $target->planet)
+            ->orderByDesc('id')
+            ->limit(self::MAXIMUM_DOUBLINGS + 1)
+            ->get(['ships', 'defense'])
+            ->takeWhile(fn (EspionageReport $seen): bool => $this->activityIntelReader->completenessFactor($seen->ships, $seen->defense) < 1.0)
+            ->count();
+
+        return self::ESCALATED_PROBES * 2 ** max(0, $redacted - 1);
     }
 
     /**
