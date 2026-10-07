@@ -228,7 +228,24 @@ def long_runs() -> list[dict]:
     return runs
 
 
-def activities(gen: dict, train: dict, loop: dict, longs: list[dict]) -> list[dict]:
+def late_runs() -> list[dict]:
+    """The fast late-game tests under storage/rl/late/<seed>: staged accounts played a few hours, then what they reached."""
+    runs = []
+    for folder in sorted((RL / "late").glob("[0-9]*"), key=lambda d: d.stat().st_mtime, reverse=True)[:6]:
+        log, reach = folder / "sim.log", folder / "reach.txt"
+        info = sim_progress(log) if log.exists() else {"day": 0.0, "days": 0.0, "idle": None, "errors": 0}
+        text = read(reach) if reach.exists() else ""
+        missions = re.search(r"^missions: (.*)$", text, re.M)
+        missing = re.search(r"^MISSING: (.*)$", text, re.M)
+        reasons = read(folder / "raid-reasons.txt").strip().splitlines() if (folder / "raid-reasons.txt").exists() else []
+        runs.append({"seed": folder.name, "finished": bool(text), "running": not text and info["idle"] is not None and info["idle"] < 900,
+                     "hours": round(info["day"] * 24, 1), "total_hours": round(info["days"] * 24, 1), "errors": info["errors"],
+                     "missions": missions.group(1) if missions else None, "missing": missing.group(1).split() if missing else [],
+                     "raid_reasons": [r.strip() for r in reasons[:5]]})
+    return runs
+
+
+def activities(gen: dict, train: dict, loop: dict, longs: list[dict], lates: list[dict]) -> list[dict]:
     """What is being worked on right now, read from which logs are still being written (nothing here is a fixed list of steps)."""
     rows = []
     active = [u for u in gen["universes"] if not u["done"] and u["idle"] is not None and u["idle"] < FRESH]
@@ -243,6 +260,9 @@ def activities(gen: dict, train: dict, loop: dict, longs: list[dict]) -> list[di
     if live:
         finished = sum(1 for p in loop["pairs"] if p.get("teacher", {}).get("done") and p.get("policy", {}).get("done"))
         rows.append({"what": "Testing the model in whole games", "detail": f"{len(live)} test worlds are being played; {finished} of {loop['target']} pairs are finished"})
+    for run in lates:
+        if run["running"]:
+            rows.append({"what": "Testing late-game play", "detail": f"test {run['seed']}: {run['hours']:.0f} of {run['total_hours']:.0f} hours played"})
     for run in longs:
         if run["running"]:
             rows.append({"what": "Playing one long game start to finish", "detail": f"world {run['n']}: day {run['day']:.1f} of {run['days']:.0f}"})
@@ -429,12 +449,13 @@ def collect(state: dict) -> dict:
         7: ("Writing the results down and saving them.", "Done, or another correction round."),
     }
     longs = long_runs()
-    live = activities(gen, train, loop, longs)
+    lates = late_runs()
+    live = activities(gen, train, loop, longs, lates)
     now_text, next_text = plain.get(current["n"], ("Waiting for the next step to start.", "")) if current else ("Nothing is running right now.", "Waiting for the next step to be started.")
     if live:
         now_text = " ".join(f"{a['what']}: {a['detail']}." for a in live)
     return {"at": int(now), "overall": "running" if live and overall == "idle" else overall, "current": current, "plain": {"now": now_text, "next": next_text}, "activities": live,
-            "long_runs": longs, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
+            "long_runs": longs, "late_runs": lates, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
             "generation": {**gen, "done_days": round(done_days, 1), "total_days": total_days, "eta_seconds": eta_s,
                            "elapsed": int(now - since) if running or done_days else None,
                            "wall_started": int(since)},

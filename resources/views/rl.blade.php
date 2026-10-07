@@ -121,6 +121,10 @@
             <div class="legend"><span><i style="background:var(--info)"></i>val top-1 (3+ legal)</span><span><i style="background:var(--work)"></i>val MRR</span><span><i style="background:var(--warn)"></i>loss</span><span><i style="background:var(--text);opacity:.5"></i>gate</span></div>
             <div id="trainFinal"></div>
         </section>
+        <section class="panel" id="latePanel" hidden>
+            <h2>Late-game tests <small>accounts start near the end game; what they reach in a few hours</small></h2>
+            <div id="lateBody"></div>
+        </section>
         <section class="panel" id="loopPanel" hidden>
             <h2>Closed loop <small>model vs planner, twin universes</small></h2>
             <div class="kpis" id="loopKpis"></div>
@@ -186,6 +190,15 @@
                 + (g.name.includes('closed') ? '' : `<div class="bar gate ${tone}" style="--need:${isCount ? 100 : g.need * 100}%"><i style="width:${fill}%"></i></div>`)
                 + `<div class="ex">${esc(g.what)}${g.extra ? ' · ' + esc(g.extra) : ''}</div></div>`;
         }).join('');
+    }
+
+    function renderLate(d) {
+        const runs = d.late_runs || [];
+        $('latePanel').hidden = runs.length === 0;
+        $('lateBody').innerHTML = runs.map(r => `<div style="margin-bottom:10px"><b>Test ${esc(r.seed)}</b> · ${r.finished ? 'finished' : r.running ? `running, ${r.hours} of ${r.total_hours} h` : 'stopped'}`
+            + (r.missions ? `<div class="sub">Missions: ${esc(r.missions)}</div>` : '')
+            + (r.finished ? `<div class="sub">${r.missing.length ? 'Never reached: ' + esc(r.missing.join(', ')) : 'Every late-game object was reached'}</div>` : '')
+            + (r.raid_reasons.length ? `<div class="sub">Why raids were refused: ${esc(r.raid_reasons.join(' | '))}</div>` : '') + '</div>').join('');
     }
 
     function renderGeneration(d) {
@@ -282,7 +295,7 @@
 
     function render(d) {
         if (d.missing) { $('overallText').textContent = 'no status yet'; seen = { at: Date.now(), age: 999, staleAfter: 30 }; paint(); return; }
-        renderHeader(d); renderSteps(d); renderGates(d); renderGeneration(d); renderValidation(d); renderTraining(d); renderLoop(d); renderMachine(d);
+        renderHeader(d); renderSteps(d); renderGates(d); renderGeneration(d); renderValidation(d); renderTraining(d); renderLoop(d); renderLate(d); renderMachine(d);
         $('feed').innerHTML = d.events.slice(0, 40).map(e => `<li><span class="t">${esc(e.t)}</span><span class="${e.kind}">${esc(e.text)}</span></li>`).join('');
     }
 
