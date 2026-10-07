@@ -259,7 +259,7 @@ class QueueableUnitPlanner
 
             // Cargo sizing: once the opening fleet exists, grow the cargo to the
             // raid payload the freshest report promises, not a fixed one (FLE-010).
-            $cargoPlan = $this->cargoForPayload($player, $planet, $playerId, $profile);
+            $cargoPlan = $this->cargoForPayload($player, $planet, $playerId, $profile) ?? $this->cargoForHoldings($player, $planet, $profile);
             if ($cargoPlan !== null) {
                 return $cargoPlan;
             }
@@ -601,6 +601,28 @@ class QueueableUnitPlanner
         }
 
         return $this->unit($planet, $cargo, 'role:cargo:payload', $missing);
+    }
+
+    /**
+     * Past the opening a planet keeps holds for what it stores, so the night's fleet save and a ferry to a moon can take the
+     * stock along: a home holding 19M with every hull lost never stocked its moon for the jump gate (9313).
+     */
+    private function cargoForHoldings(PlayerService $player, PlanetService $planet, AiProfile $profile): ?QueueableUnit
+    {
+        $cargo = $this->bestCargo($player, $planet);
+        if ($cargo === null || app(GamePhaseMachine::class)->of($player) === GamePhase::Early) {
+            return null;
+        }
+
+        $capacity = $cargo->properties->capacity->calculate($player)->totalValue;
+        $held = $planet->metal()->get() + $planet->crystal()->get() + $planet->deuterium()->get();
+        $holds = $planet->getShipUnits()->getTotalCargoCapacity($player) + $this->inYard($planet, $cargo) * $capacity;
+        $missing = $this->yardBatch($planet, $cargo, (int) ceil(($held - $holds) / $capacity));
+        if ($held <= $holds || $this->affordable($planet, $cargo) < $missing || $this->starvesSaving($planet, $profile, $cargo, $missing)) {
+            return null;
+        }
+
+        return $this->unit($planet, $cargo, 'role:cargo:holdings', $missing);
     }
 
     /**

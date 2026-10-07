@@ -69,6 +69,29 @@ test('a home whose fleet is out orders no opening cargo', function (): void {
     expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->not->toStartWith('role:cargo');
 });
 
+test('past the opening a planet keeps holds for what it stores', function (): void {
+    unitProfile($this->currentUserId);
+    $this->planetAddResources(new OGame\Models\Resources(5_000_000, 3_000_000, 2_000_000));
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->planetSetObjectLevel('metal_mine', 20);
+    $this->planetSetObjectLevel('crystal_mine', 18);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->playerSetResearchLevel('impulse_drive', 6);
+    $this->playerSetResearchLevel('espionage_technology', 4);
+    $this->playerSetResearchLevel('astrophysics', 4);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddUnit('espionage_probe', 15);
+    $this->planetAddUnit('rocket_launcher', 20_000);
+    // A settled colony is what takes the account past the opening; it stands a wall of its own and holds nothing.
+    $player = app(OGame\Factories\PlayerServiceFactory::class)->make($this->currentUserId, true);
+    $colony = app(OGame\Factories\PlanetServiceFactory::class)->createAdditionalPlanetForPlayer($player, $this->getNearbyEmptyCoordinate());
+    $colony->addUnit('rocket_launcher', 20_000);
+    $colony->deductResources($colony->getResources());
+
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->toBe('role:cargo:holdings');
+});
+
 test('it builds one colony ship at a time however many slots are free', function (): void {
     unitProfile($this->currentUserId);
     $this->planetAddResources(unitPlenty());

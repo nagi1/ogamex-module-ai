@@ -109,7 +109,7 @@ test('the dearest hull comes from the yard that unlocks it, not from the richest
     $colony->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 10, true);
     capitalStandingUnits($colony);
 
-    $plan = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+    $plan = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
 
     expect($plan)->toBeInstanceOf(QueueableUnit::class)
         ->and($plan->reason)->toStartWith('role:capital:')
