@@ -3,9 +3,11 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Domain\Intel\IntelBook;
+use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Perception\ActivityIntelReader;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Enums\GamePhase;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\FlightFuel;
@@ -97,7 +99,7 @@ class QueueableSpyPlanner
             'targetPosition' => (int) $target->planet,
             'targetType' => (int) $target->planet_type,
             'missionType' => EspionageMission::getTypeId(),
-            'probeCount' => $this->probeCount($target),
+            'probeCount' => $this->probeCount($target, $player),
         ]);
     }
 
@@ -283,7 +285,7 @@ class QueueableSpyPlanner
         $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
         $best = null;
         $bestDistance = null;
-        $needed = $this->probeCount($target);
+        $needed = $this->probeCount($target, $player);
 
         // A base that holds the whole volley flies it; a nearer one with a single probe sends one probe, which
         // the host redacts, and the target is never seen (measured 8 Oct 2026: 579 of 591 volleys were one probe
@@ -314,7 +316,18 @@ class QueueableSpyPlanner
      * how the account keeps re-reading the same redacted report forever. An
      * empty redaction stays at one: the probes are not worth it.
      */
-    private function probeCount(Planet $target): int
+    private function probeCount(Planet $target, PlayerService $player): int
+    {
+        // Past the opening every target may hold a fleet or a wall, so no volley is smaller than the one that reads
+        // them: a single probe came back redacted from almost every first visit (measured 8 Oct 2026: 448 of 481
+        // late-game volleys were one probe, 231 of 252 reports redacted).
+        $floor = app(GamePhaseMachine::class)->of($player) === GamePhase::Early ? 1 : self::ESCALATED_PROBES;
+
+        return max($floor, $this->reportVolley($target));
+    }
+
+    /** The volley the target's last report asks for, before the account's own floor. */
+    private function reportVolley(Planet $target): int
     {
         $report = EspionageReport::query()
             ->where('planet_galaxy', $target->galaxy)

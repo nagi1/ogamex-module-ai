@@ -324,3 +324,22 @@ test('a volley flies from the base that holds it, not from a nearer one holding 
     expect($plan)->toBeInstanceOf(QueueableSpy::class)
         ->and($plan->planetId)->toBe($far->getPlanetId());
 });
+
+test('past the opening a first visit flies a volley, not a single probe', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 10);
+    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $home = $this->planetService->getPlanetCoordinates();
+    app(OGame\Factories\PlanetServiceFactory::class)->createAdditionalPlanetForPlayer(
+        app(PlayerServiceFactory::class)->make($this->currentUserId, true),
+        new OGame\Models\Planet\Coordinate($home->galaxy, $home->system, $home->position === 15 ? 14 : 15),
+    );
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->probeCount)->toBe(5);
+});
