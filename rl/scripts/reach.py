@@ -12,6 +12,7 @@ BUILD = "nano_factory terraformer lunar_base sensor_phalanx jump_gate space_dock
 SHIPS = "battle_ship battlecruiser bomber destroyer deathstar reaper pathfinder recycler colony_ship large_cargo cruiser".split()
 DEF = "plasma_turret gauss_cannon ion_cannon large_shield_dome anti_ballistic_missile interplanetary_missile".split()
 TECH = "plasma_technology hyperspace_technology hyperspace_drive astrophysics intergalactic_research_network graviton_technology computer_technology ion_technology".split()
+IDS = {"light_fighter": 204, "heavy_fighter": 205, "cruiser": 206, "battle_ship": 207, "colony_ship": 208, "recycler": 209, "bomber": 211, "destroyer": 213, "deathstar": 214, "battlecruiser": 215, "reaper": 218, "pathfinder": 219, "large_cargo": 203, "rocket_launcher": 401, "light_laser": 402, "heavy_laser": 403, "gauss_cannon": 404, "ion_cannon": 405, "plasma_turret": 406, "small_shield_dome": 407, "large_shield_dome": 408, "anti_ballistic_missile": 502, "interplanetary_missile": 503}
 MISSION = {1: "attack", 2: "acs_attack", 3: "transport", 4: "deploy", 5: "hold", 6: "espionage", 7: "colonise", 8: "recycle", 9: "moon_destroy", 10: "missile", 15: "expedition"}
 
 
@@ -19,7 +20,10 @@ def summary(path):
     c = sqlite3.connect(path)
     out = {}
     for col in BUILD + SHIPS + DEF:
-        out[col] = c.execute(f"select coalesce(max({col}),0), coalesce(sum({col}),0) from planets").fetchone()
+        peak, total = c.execute(f"select coalesce(max({col}),0), coalesce(sum({col}),0) from planets").fetchone()
+        # A unit paid for and still in the yard counts: the yard is slower than the money in a short test.
+        queued = c.execute("select coalesce(sum(object_amount),0) from unit_queues where processed=0 and object_id=?", (IDS.get(col, -1),)).fetchone()[0]
+        out[col] = (peak, total + queued)
     for col in TECH:
         out[col] = c.execute(f"select coalesce(max({col}),0), count(case when {col}>0 then 1 end) from users_tech").fetchone()
     out["moons"] = (c.execute("select count(*) from planets where planet_type=3").fetchone()[0], 0)
