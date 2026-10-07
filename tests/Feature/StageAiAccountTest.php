@@ -54,3 +54,13 @@ test('a larger budget reaches deeper into the catalogue', function (): void {
 
     expect($levels[1])->toBeGreaterThan($levels[0]);
 });
+
+test('a late-game staged account owns a moon on its first planet and a mid-game one does not', function (float $budget, int $moons): void {
+    app(StageAiAccountAction::class)->handle($this->currentUserId, $budget);
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+
+    expect(collect($player->planets->all())->filter(static fn ($planet): bool => $planet->getPlanetType() === OGame\Models\Enums\PlanetType::Moon)->count())->toBe($moons);
+})->with([
+    'mid game' => [5e7, 0],
+    'late game' => [2e11, 1],
+]);

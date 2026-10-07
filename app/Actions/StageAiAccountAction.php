@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Resources;
@@ -19,8 +20,12 @@ class StageAiAccountAction
     /** Share of the planet's fields kept for the objects that add fields, as a player keeps the last ones for them. */
     private const STATION_FIELD_SHARE = 0.1;
 
+    /** A budget this large is a late-game account, and a late-game account owns a moon by then (battle debris made it). */
+    private const MOON_BUDGET = 1e10;
+
     public function handle(int $playerId, float $budget): int
     {
+        $lateGame = $budget >= self::MOON_BUDGET;
         $player = app(PlayerServiceFactory::class)->make($playerId, true);
         $planet = $player->planets->first();
         $steps = 0;
@@ -36,6 +41,10 @@ class StageAiAccountAction
         $planet->updateResourceStorageStats(false);
         $planet->addResources(new Resources($planet->metalStorage()->get(), $planet->crystalStorage()->get(), $planet->deuteriumStorage()->get()), false);
         $planet->save();
+
+        if ($lateGame) {
+            app(PlanetServiceFactory::class)->createMoonForPlanet($planet, 2_000_000, 20, 15);
+        }
 
         return $steps;
     }
