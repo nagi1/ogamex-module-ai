@@ -407,8 +407,9 @@ class QueueableTransferPlanner
         $inFlight = $this->inFlightTo($target, $playerId);
         // The planner keeps a tenth of the balance a body holds after a purchase and only production refills it: a moon
         // makes nothing, so it can pay for a step only when it holds the price over nine tenths (a moon stocked to exactly
-        // the lunar base's price waited on the reserve it could never build for the whole of a late-game test).
-        $gross = $target->getPlanetType() === PlanetType::Moon ? 1.0 / (1.0 - ReserveFloor::BUFFER) : 1.0;
+        // the lunar base's price waited on the reserve it could never build for the whole of a late-game test). The thousandth over covers the
+        // shipment being rounded to whole units, which left a moon a fraction short of the reserve.
+        $gross = $target->getPlanetType() === PlanetType::Moon ? 1.001 / (1.0 - ReserveFloor::BUFFER) : 1.0;
 
         return new Resources(
             max(0.0, $price->metal->get() * $gross - $target->metal()->get() - $inFlight->metal->get()),
