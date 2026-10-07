@@ -70,6 +70,27 @@ test('a moon is not a naked sibling: its own station comes before a wall prerequ
         ->and(array_map(fn ($step) => $step->reason, $passes['routine']($moonView))[0] ?? '')->toContain('moon-station');
 });
 
+// A new moon has one field and only a lunar base opens more, so anything else built there (the war hull's yard, a
+// laboratory, an ambition for its own sake) took it in every late-game test and the moon never got a base or a phalanx.
+test('nothing but a moon station is a building candidate on a moon', function (): void {
+    ambitionProfile($this->currentUserId);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->addResources(app()->makeWith(Resources::class, ['metal' => 5_000_000, 'crystal' => 5_000_000, 'deuterium' => 5_000_000]));
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = [];
+    foreach (['routine', 'ambition'] as $pass) {
+        foreach (app(QueueableBuildingPlanner::class)->passes($profile)[$pass]($moonView) as $step) {
+            $reasons[] = $step->reason;
+        }
+    }
+
+    expect($reasons)->not->toBeEmpty()
+        ->and(array_filter($reasons, fn (string $reason): bool => !str_contains($reason, 'moon-station')))->toBe([]);
+});
+
 test('a technology priced in energy makes the planet raise its capacity until it can pay', function (): void {
     ambitionProfile($this->currentUserId);
     $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 900_000_000, 'crystal' => 900_000_000, 'deuterium' => 900_000_000]));

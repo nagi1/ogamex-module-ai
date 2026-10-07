@@ -17,6 +17,7 @@ use Modules\AI\Support\AiRuntimeSettings;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Resource;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\Resources;
 use OGame\Services\BuildingQueueService;
 use OGame\Services\ObjectService;
@@ -214,6 +215,12 @@ class EconomyUpgrades
      */
     public function ambitions(PlanetService $planet): array
     {
+        // A moon's fields are the moon block's (a lunar base first, then a phalanx or a gate): an ambition bought for its
+        // own sake there took the moon's only field before the lunar base could be paid for.
+        if ($planet->getPlanetType() === PlanetType::Moon) {
+            return [];
+        }
+
         $entries = [];
 
         foreach ($this->ambitionObjects($planet) as $object) {

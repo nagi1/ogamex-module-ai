@@ -133,8 +133,13 @@ class FacilityChain
         // A prerequisite requested at several levels appears once per level, so the account climbs
         // to the next one it is missing.
         $this->sortOrdered($ordered, $planet);
+        $steps = $this->withProducers($ordered, $producers, $planet);
 
-        return $this->withProducers($ordered, $producers, $planet);
+        // A moon has one field to start with and only a lunar base opens more: the war hull's yard, a laboratory or a wall's
+        // prerequisites built there took that field in every late-game test, and the moon never got its base or phalanx.
+        return $planet->getPlanetType() === PlanetType::Moon
+            ? array_values(array_filter($steps, static fn (BuildCandidate $step): bool => str_starts_with($step->reason, 'moon-station')))
+            : $steps;
     }
 
     /**
@@ -554,7 +559,7 @@ class FacilityChain
      */
     private function wallPrerequisites(PlanetService $planet): array
     {
-        if (! $this->nakedBesideWalled($planet)) {
+        if (!$this->nakedBesideWalled($planet)) {
             return [];
         }
 
@@ -661,11 +666,11 @@ class FacilityChain
             $objects,
             fn (GameObject $left, GameObject $right): int => [
                 $left->machine_name !== $warHull,
-                $fleetless && ! $this->isFlyingHull($left, $player),
+                $fleetless && !$this->isFlyingHull($left, $player),
                 $left->price->resources->sum(),
             ] <=> [
                 $right->machine_name !== $warHull,
-                $fleetless && ! $this->isFlyingHull($right, $player),
+                $fleetless && !$this->isFlyingHull($right, $player),
                 $right->price->resources->sum(),
             ],
         );
