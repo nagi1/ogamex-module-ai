@@ -233,7 +233,12 @@ def long_runs() -> list[dict]:
 def late_runs() -> list[dict]:
     """The fast late-game tests under storage/rl/late/<seed>: staged accounts played a few hours, then what they reached."""
     runs = []
-    for folder in sorted((RL / "late").glob("[0-9]*"), key=lambda d: d.stat().st_mtime, reverse=True)[:6]:
+    # Newest by the log being written (a folder's own mtime does not move while its sim runs), so a long run is never pushed off the list.
+    def written(folder: Path) -> float:
+        log = folder / "sim.log"
+        return log.stat().st_mtime if log.exists() else folder.stat().st_mtime
+
+    for folder in sorted((RL / "late").glob("[0-9]*"), key=written, reverse=True)[:8]:
         log, reach = folder / "sim.log", folder / "reach.txt"
         info = sim_progress(log) if log.exists() else {"day": 0.0, "days": 0.0, "idle": None, "errors": 0}
         text = read(reach) if reach.exists() else ""
