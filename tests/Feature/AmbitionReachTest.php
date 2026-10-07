@@ -91,6 +91,21 @@ test('nothing but a moon station is a building candidate on a moon', function ()
         ->and(array_filter($reasons, fn (string $reason): bool => !str_contains($reason, 'moon-station')))->toBe([]);
 });
 
+test('a moon whose fields are all used raises its field ceiling next', function (): void {
+    ambitionProfile($this->currentUserId);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 1, true);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('sensor_phalanx')->id, $moon->getPlanetFieldMax() - 1, true);
+    expect($moon->getBuildingCount())->toBe($moon->getPlanetFieldMax());
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+
+    expect($reasons)->toContain('moon-station:lunar_base');
+});
+
 test('a technology priced in energy makes the planet raise its capacity until it can pay', function (): void {
     ambitionProfile($this->currentUserId);
     $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 900_000_000, 'crystal' => 900_000_000, 'deuterium' => 900_000_000]));

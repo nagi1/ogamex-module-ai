@@ -213,11 +213,10 @@ test('the chain empties once the host graph is satisfied', function (): void {
 
     $plan = app(QueueableBuildingPlanner::class)->plan($this->currentUserId);
 
+    // Once the graph stands, the next step is the archetype's own research path or the economy -- never another
+    // prerequisite. Capacity for a technology priced in energy (the graviton technology) is an economy step too.
     expect($plan)->not->toBeNull()
-        ->and(chainStepId($plan))->toBeIn(chainEconomyTargetIds())
-        // Capacity for a technology priced in energy (the graviton technology) is an economy step too: the
-        // account has stood every prerequisite and now raises the plant the technology waits on.
-        ->and($plan?->reason)->toMatch('/^(economy|storage|energy):/');
+        ->and($plan?->reason)->toMatch('/^(economy|storage|energy|doctrine:research):/');
 });
 
 // A chain step the host refuses used to cost the account its whole build capability. A player who
@@ -411,15 +410,6 @@ function chainPlanet(int $playerId, int $planetId): PlanetService
     $player = app(PlayerGameStateService::class)->advance($playerId, $planetId);
 
     return app(PlanetServiceFactory::class)->makeForPlayer($player, $planetId, false);
-}
-
-/** @return list<int> the ids the economy ranking can offer: everything the host produces or stores */
-function chainEconomyTargetIds(): array
-{
-    return array_map(
-        static fn (GameObject $object): int => (int) $object->id,
-        [...ObjectService::getGameObjectsWithProduction(), ...ObjectService::getBuildingObjectsWithStorage()],
-    );
 }
 
 /**

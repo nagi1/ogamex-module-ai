@@ -263,7 +263,8 @@ class QueueableBuildingPlanner
             // gives, in order, before the payback rules below take over. An object the host lacks is skipped.
             'doctrine' => fn (PlanetService $planet): array => [
                 ...app(ArchetypeDoctrine::class)->openingStep($profile->archetype, $planet),
-                ...($planet->getPlayer() !== null ? app(ArchetypeDoctrine::class)->researchStep($profile->archetype, $planet->getPlayer()) : []),
+                // A moon has no laboratory, so the research path is offered on the planets only.
+                ...($planet->getPlayer() !== null && $planet->getPlanetType() !== PlanetType::Moon ? app(ArchetypeDoctrine::class)->researchStep($profile->archetype, $planet->getPlayer()) : []),
             ],
             'storage' => fn (PlanetService $planet): array => $this->withFieldReserve($planet, $profile, $this->economyUpgrades->storage($planet, $profile)),
             'surplus' => function (PlanetService $planet) use ($profile): array {

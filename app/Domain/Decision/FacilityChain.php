@@ -118,6 +118,14 @@ class FacilityChain
                     $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'moon-station');
                 }
             }
+
+            // A full moon raises its own field ceiling before the next station: the object that adds fields is
+            // asked of the host's field formula, never named (measured 8 Oct 2026: gates refused "no free field"
+            // on moons whose phalanx had taken the last one).
+            $raiser = $planet->getBuildingCount() >= $planet->getPlanetFieldMax() ? $this->fieldRaiser($planet) : null;
+            if ($raiser !== null) {
+                $this->addRequirement($planet, $raiser, $planet->getObjectLevel($raiser) + 1, $ordered, $producers, 'moon-station');
+            }
         }
 
         // A planet that holds no defence at all while a sibling already stands a wall wants the
@@ -217,6 +225,27 @@ class FacilityChain
         $this->sortOrdered($ordered, $planet);
 
         return $this->withProducers($ordered, $producers, $planet);
+    }
+
+    /** The station whose next level adds fields to this body, by the host's own field formula; null when none does. */
+    private function fieldRaiser(PlanetService $planet): ?string
+    {
+        foreach (ObjectService::getStationObjects() as $station) {
+            if (!ObjectService::objectValidPlanetType($station->machine_name, $planet)) {
+                continue;
+            }
+
+            $level = $planet->getObjectLevel($station->machine_name);
+            $before = $planet->getPlanetFieldMax();
+            $planet->setObjectLevel($station->id, $level + 1, false);
+            $after = $planet->getPlanetFieldMax();
+            $planet->setObjectLevel($station->id, $level, false);
+            if ($after > $before) {
+                return $station->machine_name;
+            }
+        }
+
+        return null;
     }
 
     /**
