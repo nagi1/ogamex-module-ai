@@ -97,6 +97,7 @@
 
 <div id="stale" class="banner warn" hidden></div>
 <div id="alarms"></div>
+<section class="panel" id="workPanel"><h2>Working now <small>every running job with its progress and time left</small></h2><div id="work"></div></section>
 <div class="steps" id="steps"></div>
 
 <div class="stack">
@@ -176,7 +177,15 @@
     }
 
     function renderSteps(d) {
-        $('steps').innerHTML = d.steps.map(s => `<div class="step ${s.state}"><div class="n">STEP ${s.n} · ${s.state}</div><div class="nm">${esc(s.name)}</div><div class="sm">${esc(s.summary)}</div></div>`).join('');
+        const ph = d.phases || [];
+        $('steps').innerHTML = ph.map(s => {
+            const cls = s.state === 'running' ? 'running' : s.state === 'done' ? 'done' : s.state === 'needs work' ? 'failed' : 'pending';
+            const prog = s.state === 'running' ? bar(s.pct) + `<div class="sm">${s.pct}%${s.eta_s != null ? ' · about ' + dur(s.eta_s) + ' left' : ''}</div>` : '';
+            return `<div class="step ${cls}"><div class="n">${esc(s.state.toUpperCase())}</div><div class="nm">${esc(s.name)}</div>${prog}<div class="sm">${esc(s.summary)}</div></div>`;
+        }).join('');
+        const a = d.activities || [];
+        $('work').innerHTML = a.length ? a.map(x => `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(x.what)}</b><span class="sub">${x.pct}%${x.eta_s != null ? ' · about ' + dur(x.eta_s) + ' left' : ' · time left not known yet'}${x.elapsed != null ? ' · running ' + dur(x.elapsed) : ''}</span></div>${bar(x.pct)}<div class="sub">${esc(x.detail)}</div></div>`).join('')
+            : '<div class="sub">Nothing is running right now.</div>';
     }
 
     function renderGates(d) {

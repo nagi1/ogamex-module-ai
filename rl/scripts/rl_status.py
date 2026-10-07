@@ -245,27 +245,55 @@ def late_runs() -> list[dict]:
     return runs
 
 
-def activities(gen: dict, train: dict, loop: dict, longs: list[dict], lates: list[dict]) -> list[dict]:
+GROWTH = 1.3   # a simulated day gets dearer as accounts grow: wall time to reach fraction f of a run is taken as T * f**GROWTH
+
+
+def timed(state: dict, key: str, frac: float, now: float, started: float | None = None, growth: float = GROWTH) -> dict:
+    """Percent, elapsed and ETA of one activity. The start is when the collector first saw it (or the given file time); a drop in
+    progress means the activity restarted, so its clock restarts too."""
+    seen = state.setdefault("act_start", {})
+    last = state.setdefault("act_frac", {})
+    if frac < last.get(key, 0) - 0.02 or key not in seen:
+        seen[key] = started or now
+    last[key] = frac
+    elapsed = max(now - (started or seen[key]), 0)
+    eta_s = None
+    if 0.03 <= frac < 1 and elapsed > 20:
+        eta_s = int(max(elapsed / frac ** growth - elapsed, 0))
+    return {"pct": round(min(frac, 1) * 100, 1), "elapsed": int(elapsed), "eta_s": eta_s}
+
+
+def activities(gen: dict, train: dict, loop: dict, longs: list[dict], lates: list[dict], state: dict | None = None, now: float = 0.0, gen_eta: int | None = None) -> list[dict]:
     """What is being worked on right now, read from which logs are still being written (nothing here is a fixed list of steps)."""
     rows = []
+    state = state if state is not None else {}
+    now = now or time.time()
     active = [u for u in gen["universes"] if not u["done"] and u["idle"] is not None and u["idle"] < FRESH]
     if active:
         finished = sum(1 for u in gen["universes"] if u["done"])
-        rows.append({"what": "Making practice games", "detail": f"{len(active)} game worlds are being played at once; {finished} of {gen['target']} are finished"})
+        done_days = sum(u["days"] if u["done"] else u["day"] for u in gen["universes"])
+        total_days = sum(u["days"] for u in gen["universes"]) + max(gen["target"] - len(gen["universes"]), 0) * gen["plan_days"]
+        rows.append({"what": "Making practice games", "phase": "data", "detail": f"{len(active)} game worlds are being played at once; {finished} of {gen['target']} are finished",
+                     "pct": round(done_days / total_days * 100, 1) if total_days else 0, "eta_s": gen_eta, "elapsed": int(now - parse_epoch(read(RL / "gen.start"), now))})
     if train["epochs"] and not train["metrics"] and (train.get("idle") or 0) < FRESH:
-        rows.append({"what": "Teaching the model", "detail": f"run {train['run']}: round {len(train['epochs'])} of {train['total']}, now right {train['epochs'][-1].get('val_top1_3plus') or train['epochs'][-1]['val_top1']:.0%} of the time on the hard choices"})
+        rows.append({"what": "Teaching the model", "phase": "train", "detail": f"run {train['run']}: round {len(train['epochs'])} of {train['total']}, now right {train['epochs'][-1].get('val_top1_3plus') or train['epochs'][-1]['val_top1']:.0%} of the time on the hard choices",
+                     **timed(state, f"train:{train['run']}", len(train["epochs"]) / max(train["total"], 1), now, growth=1.0)})
     if running_epochs() and not (train["epochs"] and (train.get("idle") or 0) < FRESH):
-        rows.append({"what": "Teaching the model", "detail": "loading the recorded games into the trainer; the first round starts in a few minutes"})
+        rows.append({"what": "Teaching the model", "phase": "train", "detail": "loading the recorded games into the trainer; the first round starts in a few minutes", "pct": 0, "eta_s": None, "elapsed": None})
     live = [p for p in loop["pairs"] if not (p.get("teacher", {}).get("done") and p.get("policy", {}).get("done")) and min(p.get(s, {}).get("idle") or 99999 for s in ("teacher", "policy")) < FRESH]
     if live:
         finished = sum(1 for p in loop["pairs"] if p.get("teacher", {}).get("done") and p.get("policy", {}).get("done"))
-        rows.append({"what": "Testing the model in whole games", "detail": f"{len(live)} test worlds are being played; {finished} of {loop['target']} pairs are finished"})
+        rows.append({"what": "Testing the model in whole games", "phase": "loop", "detail": f"{len(live)} test worlds are being played; {finished} of {loop['target']} pairs are finished",
+                     **timed(state, "loop", finished / max(loop["target"], 1), now, growth=1.0)})
     for run in lates:
         if run["running"]:
-            rows.append({"what": "Testing late-game play", "detail": f"test {run['seed']}: {run['hours']:.0f} of {run['total_hours']:.0f} hours played"})
+            started = (RL / "late" / run["seed"] / "start.sqlite")
+            rows.append({"what": "Testing late-game play", "phase": "late", "detail": f"test {run['seed']}: {run['hours']:.0f} of {run['total_hours']:.0f} simulated hours played",
+                         **timed(state, f"late:{run['seed']}", run["hours"] / max(run["total_hours"], 1), now, started.stat().st_mtime if started.exists() else None)})
     for run in longs:
         if run["running"]:
-            rows.append({"what": "Playing one long game start to finish", "detail": f"world {run['n']}: day {run['day']:.1f} of {run['days']:.0f}"})
+            rows.append({"what": "Playing one long game start to finish", "phase": "long", "detail": f"world {run['n']}: day {run['day']:.1f} of {run['days']:.0f}",
+                         **timed(state, f"long:{run['n']}", run["day"] / max(run["days"], 1), now)})
     return rows
 
 
@@ -336,6 +364,33 @@ def steps(gen: dict, train: dict, loop: dict, gate_rows: list[dict], fixed: dict
         f"{sum(1 for p in loop['pairs'] if p.get('teacher', {}).get('done') and p.get('policy', {}).get('done'))}/{loop['target']} pairs" if loop_started else "",
         fixed.get("7", {}).get("summary", "")]
     return [{"n": i, "name": names[i], "state": state[i], "summary": summary[i]} for i in range(8)]
+
+
+def phases(step_rows: list[dict], lates: list[dict], longs: list[dict], live: list[dict]) -> list[dict]:
+    """The stages of the north-star work, in order, each with its own state, a one-line summary and (while running) progress and ETA."""
+    def running(key: str) -> dict | None:
+        return next((a for a in live if a.get("phase") == key), None)
+
+    finished_late = next((r for r in lates if r["finished"]), None)
+    late_live = running("late")
+    late_state = "running" if late_live else "pending" if not finished_late else "done" if not finished_late["missing"] else "needs work"
+    late_sum = f"newest test {finished_late['seed']}: " + ("every late-game object reached" if not finished_late["missing"] else "never reached " + ", ".join(finished_late["missing"][:6])) if finished_late else "no test finished yet"
+    long_live = running("long")
+    long_state = "running" if long_live else "done" if longs and all(r["done"] for r in longs) else "pending"
+    long_sum = f"{sum(1 for r in longs if r['done'])}/{len(longs)} long games finished" if longs else "none started"
+    by = {s["n"]: s for s in step_rows}
+    def settled(n: int, key: str) -> str:
+        # The step logic calls a stage running while its old logs exist; with nothing being written it is waiting for its turn.
+        return "waiting" if by[n]["state"] == "running" and running(key) is None else by[n]["state"]
+
+    rows = [("late", "1 · Fix late-game play", late_state, late_sum, late_live),
+            ("data", "2 · Generate practice data", settled(4, "data"), by[4]["summary"], running("data")),
+            ("train", "3 · Train the model (GPU)", settled(5, "train"), by[5]["summary"], running("train")),
+            ("loop", "4 · Test the model in games", settled(6, "loop"), by[6]["summary"], running("loop")),
+            ("long", "5 · Long start-to-end games", long_state, long_sum, long_live),
+            ("record", "6 · Record results and push", by[7]["state"], by[7]["summary"], None)]
+    return [{"key": k, "name": n, "state": st, "summary": sm, "pct": a["pct"] if a else (100 if st == "done" else 0),
+             "eta_s": a["eta_s"] if a else None, "elapsed": a["elapsed"] if a else None} for k, n, st, sm, a in rows]
 
 
 def eta(state: dict, gen: dict, now: float, since: float) -> int | None:
@@ -450,14 +505,14 @@ def collect(state: dict) -> dict:
     }
     longs = long_runs()
     lates = late_runs()
-    live = activities(gen, train, loop, longs, lates)
+    live = activities(gen, train, loop, longs, lates, state, now, eta_s)
     now_text, next_text = plain.get(current["n"], ("Waiting for the next step to start.", "")) if current else ("Nothing is running right now.", "Waiting for the next step to be started.")
     if any(l["running"] for l in lates):
         next_text = "Read what the late-game accounts reached, fix whatever is missing (warship variety, defence, social), repeat; one full run and retraining only once this loop is clean."
     if live:
         now_text = " ".join(f"{a['what']}: {a['detail']}." for a in live)
     return {"at": int(now), "overall": "running" if live and overall == "idle" else overall, "current": current, "plain": {"now": now_text, "next": next_text}, "activities": live,
-            "long_runs": longs, "late_runs": lates, "steps": step_rows, "gates": gate_rows, "alarms": alarm_rows,
+            "long_runs": longs, "late_runs": lates, "steps": step_rows, "phases": phases(step_rows, lates, longs, live), "gates": gate_rows, "alarms": alarm_rows,
             "generation": {**gen, "done_days": round(done_days, 1), "total_days": total_days, "eta_seconds": eta_s,
                            "elapsed": int(now - since) if running or done_days else None,
                            "wall_started": int(since)},
