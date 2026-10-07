@@ -686,3 +686,21 @@ function raidFleetMission(int $playerId, int $targetPlanetId, Coordinate $coordi
     $mission->canceled = 0;
     $mission->save();
 }
+
+test('a won raid on an enemy moon flies as moon destruction with every deathstar the origin holds', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 20);
+    $this->planetAddUnit('deathstar', 2);
+    $foreign = $this->createForeignPlanet();
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($foreign, 2_000_000, 20, 15);
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], $foreign->getPlayer()?->getId());
+    EspionageReport::query()->whereKey($reportId)->update(['planet_type' => $moon->getPlanetType()->value]);
+
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
+
+    expect($plan)->toBeInstanceOf(QueueableRaid::class)
+        ->and($plan->missionType)->toBe(OGame\GameMissions\MoonDestructionMission::getTypeId())
+        ->and($plan->launchUnits['deathstar'] ?? 0)->toBe(2);
+});

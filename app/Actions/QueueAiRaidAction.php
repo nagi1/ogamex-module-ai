@@ -35,7 +35,7 @@ class QueueAiRaidAction implements QueueAiRaid
     ) {
     }
 
-    public function handle(int $playerId, int $originPlanetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType, ?array $launchUnits = null): AiActionResult
+    public function handle(int $playerId, int $originPlanetId, int $targetGalaxy, int $targetSystem, int $targetPosition, int $targetType, ?array $launchUnits = null, int|null $missionType = null): AiActionResult
     {
         if (!Planet::query()->whereKey($originPlanetId)->where('user_id', $playerId)->exists()) {
             return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
@@ -94,7 +94,7 @@ class QueueAiRaidAction implements QueueAiRaid
                 $origin,
                 $targetCoordinate,
                 PlanetType::from($targetType),
-                AttackMission::getTypeId(),
+                $missionType ?? AttackMission::getTypeId(),
                 $fleet,
                 new Resources(),
                 10,

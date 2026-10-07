@@ -5,29 +5,31 @@ namespace Modules\AI\Domain\Decision;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\AI\Domain\Attack\DailyAttackBudget;
-use Modules\AI\Domain\Raid\RaidEstimate;
-use Modules\AI\Enums\AiExperienceCaseFamily;
-use Modules\AI\Enums\AiRaidExperienceFeature;
-use Modules\AI\Enums\GamePhase;
-use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
-use Modules\AI\Enums\AiWorkKind;
-use Modules\AI\Enums\AiWorkState;
-use Modules\AI\Models\AiExperienceCase;
-use Modules\AI\Models\AiPhalanxScan;
-use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\LoginReservations;
+use Modules\AI\Domain\Raid\RaidEstimate;
 use Modules\AI\Domain\Raid\ReportedPlanet;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiExperienceCaseFamily;
+use Modules\AI\Enums\AiRaidExperienceFeature;
+use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Enums\GamePhase;
+use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
+use Modules\AI\Models\AiExperienceCase;
+use Modules\AI\Models\AiPhalanxScan;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\AttackMission;
-use OGame\GameMissions\RecycleMission;
 use OGame\GameMissions\BattleEngine\Services\LootService;
+use OGame\GameMissions\MoonDestructionMission;
+use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\GameObjects\Models\Units\UnitEntry;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Resources;
@@ -247,15 +249,42 @@ class RaidPlanner
             return $this->reject('below_loot_tier', $playerId, $reportId);
         }
 
+        [$missionType, $launchUnits] = $this->missionFor($report, $origin, $launchUnits);
+
         return app()->makeWith(QueueableRaid::class, [
             'originPlanetId' => $origin->getPlanetId(),
             'targetGalaxy' => (int) $report->planet_galaxy,
             'targetSystem' => (int) $report->planet_system,
             'targetPosition' => (int) $report->planet_position,
             'targetType' => (int) $report->planet_type,
-            'missionType' => AttackMission::getTypeId(),
+            'missionType' => $missionType,
             'launchUnits' => $launchUnits,
         ]);
+    }
+
+    /**
+     * A won fight on an enemy moon is flown as its destruction when the origin holds the hulls the host's
+     * moon-destruction mission needs: a player with deathstars takes the moon that hosts the enemy's jump gate
+     * and phalanx rather than only its loot. All of those hulls fly, since each one raises the odds.
+     *
+     * @param array<string, int> $launchUnits
+     * @return array{0: int, 1: array<string, int>}
+     */
+    private function missionFor(EspionageReport $report, PlanetService $origin, array $launchUnits): array
+    {
+        $breakers = array_filter(
+            MoonDestructionMission::getRequiredShipMachineNames(),
+            static fn (string $machineName): bool => $origin->getObjectAmount($machineName) > 0,
+        );
+        if ((int) $report->planet_type !== PlanetType::Moon->value || $breakers === []) {
+            return [AttackMission::getTypeId(), $launchUnits];
+        }
+
+        foreach ($breakers as $machineName) {
+            $launchUnits[$machineName] = $origin->getObjectAmount($machineName);
+        }
+
+        return [MoonDestructionMission::getTypeId(), $launchUnits];
     }
 
     /**
@@ -644,7 +673,7 @@ class RaidPlanner
      */
     private function withinBashingLimit(int $playerId, int $targetPlanetId): bool
     {
-        return ! app(DailyAttackBudget::class)->exhausted(
+        return !app(DailyAttackBudget::class)->exhausted(
             playerId: $playerId,
             targetPlanetId: $targetPlanetId,
             missionType: AttackMission::getTypeId(),

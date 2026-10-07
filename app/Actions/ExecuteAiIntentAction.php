@@ -435,7 +435,7 @@ class ExecuteAiIntentAction
         }
 
         return [
-            app(QueueAiRaid::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->launchUnits),
+            app(QueueAiRaid::class)->handle($workItem->player_id, $step->originPlanetId, $step->targetGalaxy, $step->targetSystem, $step->targetPosition, $step->targetType, $step->launchUnits, $step->missionType),
             ['target_galaxy' => $step->targetGalaxy, 'target_system' => $step->targetSystem, 'target_position' => $step->targetPosition],
             $step->originPlanetId,
         ];
