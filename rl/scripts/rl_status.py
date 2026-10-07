@@ -240,7 +240,7 @@ def late_runs() -> list[dict]:
         missions = re.search(r"^missions: (.*)$", text, re.M)
         missing = re.search(r"^MISSING: (.*)$", text, re.M)
         reasons = read(folder / "raid-reasons.txt").strip().splitlines() if (folder / "raid-reasons.txt").exists() else []
-        runs.append({"seed": folder.name, "finished": bool(text), "running": not text and info["idle"] is not None and info["idle"] < 900,
+        runs.append({"seed": folder.name, "label": read(folder / "label").strip(), "finished": bool(text), "running": not text and info["idle"] is not None and info["idle"] < 900,
                      "hours": round(info["day"] * 24, 1), "total_hours": round(info["days"] * 24, 1), "errors": info["errors"],
                      "missions": missions.group(1) if missions else None, "missing": missing.group(1).split() if missing else [],
                      "raid_reasons": [r.strip() for r in reasons[:5]]})
@@ -290,7 +290,7 @@ def activities(gen: dict, train: dict, loop: dict, longs: list[dict], lates: lis
     for run in lates:
         if run["running"]:
             started = (RL / "late" / run["seed"] / "start.sqlite")
-            rows.append({"what": "Testing late-game play", "phase": "late", "detail": f"test {run['seed']}: {run['hours']:.0f} of {run['total_hours']:.0f} simulated hours played",
+            rows.append({"what": "Testing late-game play", "phase": "late", "detail": f"{run['label'] or 'test ' + run['seed']}: {run['hours']:.0f} of {run['total_hours']:.0f} simulated hours played",
                          **timed(state, f"late:{run['seed']}", run["hours"] / max(run["total_hours"], 1), now, started.stat().st_mtime if started.exists() else None)})
     for run in longs:
         if run["running"]:

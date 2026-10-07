@@ -85,6 +85,9 @@ def sync(live: list[dict] | None = None, now: float | None = None, act_start: di
             missing = re.search(r"^MISSING: (.*)$", text, re.M)
             missions = re.search(r"^missions: (.*)$", text, re.M)
             row["outcome"] = json.dumps({"missions": missions.group(1) if missions else "", "missing": missing.group(1).split() if missing else []})
+        label = folder / "label"
+        if label.exists():
+            row["label"] = f"{label.read_text().strip()} #{folder.name}"
         upsert(db, "late", folder.name, **row)
     for log in (RL / "long").glob("sim-*.log"):
         n = digits(log.stem)

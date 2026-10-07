@@ -233,7 +233,7 @@
     function renderLate(d) {
         const runs = d.late_runs || [];
         $('latePanel').hidden = runs.length === 0;
-        const one = r => `<div style="margin-bottom:10px"><b>Test ${esc(r.seed)}</b> · ${r.finished ? 'finished' : r.running ? `running, ${r.hours} of ${r.total_hours} h` : 'stopped'}`
+        const one = r => `<div style="margin-bottom:10px"><b>${esc(r.label || 'Test ' + r.seed)}</b> <span class="sub">#${esc(r.seed)}</span> · ${r.finished ? 'finished' : r.running ? `running, ${r.hours} of ${r.total_hours} h` : 'stopped'}`
             + (r.missions ? `<div class="sub">Missions: ${esc(r.missions)}</div>` : '')
             + (r.finished ? `<div class="sub">${r.missing.length ? 'Never reached: ' + esc(r.missing.join(', ')) : 'Every late-game object was reached'}</div>` : '')
             + (r.raid_reasons.length ? `<div class="sub">Why raids were refused: ${esc(r.raid_reasons.join(' | '))}</div>` : '') + '</div>';
