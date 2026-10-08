@@ -276,3 +276,21 @@ test('an alliance joins its pact partner\'s war on a single raid', function (boo
     'a partner at war with the enemy' => [true, true],
     'no partner' => [false, false],
 ]);
+
+// A weak alliance does not declare a war it cannot trade (the judge on 9437).
+test('an alliance far weaker than the one it holds a grievance against does not declare on it', function (int $enemyPoints, bool $war): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $enemy = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'ENMY', 'Enemy');
+    $raider = allianceWarMember($enemy->id);
+    allianceWarGrudge($this->currentUserId, $raider->id);
+    allianceWarGrudge((int) allianceWarMember($ours->id)->id, $raider->id);
+    Highscore::unguarded(fn () => Highscore::updateOrCreate(['player_id' => $this->currentUserId], ['general' => 1000, 'general_rank' => 2]));
+    Highscore::unguarded(fn () => Highscore::updateOrCreate(['player_id' => $raider->id], ['general' => $enemyPoints, 'general_rank' => 1]));
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War) === [$enemy->id])->toBe($war);
+})->with([
+    'a peer' => [2000, true],
+    'ten times stronger' => [10000, false],
+]);

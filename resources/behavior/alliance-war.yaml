@@ -41,3 +41,7 @@ war_minimum_hours: 24
 # guide: "Allies are expected to support each other in war-time and revenge"). One raid (0.5) against a partner's enemy is
 # then enough where two were needed alone.
 ally_war_factor: 0.5
+
+# An alliance does not declare on one more than this many times stronger in points unless a pact partner is already at war
+# with it (the judge, 9437: a two-member club declared on a bloc it was hit by five to one). The grudge fades meanwhile.
+war_max_strength_ratio: 4.0

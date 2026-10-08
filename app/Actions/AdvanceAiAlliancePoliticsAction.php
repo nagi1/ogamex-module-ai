@@ -151,6 +151,10 @@ class AdvanceAiAlliancePoliticsAction
         foreach (Alliance::query()->whereKeyNot($alliance->id)->pluck('id') as $otherId) {
             $theirs = $this->members((int) $otherId);
             $mine = $this->grievance($members, $theirs);
+            if ($this->outmatched((int) $alliance->id, (int) $otherId)) {
+                continue;
+            }
+
             if ($mine >= $line * $this->allyFactor((int) $alliance->id, (int) $otherId) && $mine >= $this->grievance($theirs, $members) && !$this->open((int) $alliance->id, (int) $otherId, AiAllianceStance::War)) {
                 $grievances[(int) $otherId] = $mine;
             }
@@ -164,6 +168,19 @@ class AdvanceAiAlliancePoliticsAction
         $this->goToWar($alliance, Alliance::query()->findOrFail(array_key_first($grievances)), 'grievance', 'war_broadcast', 'war_to_leader');
 
         return 1;
+    }
+
+    /**
+     * A veteran does not declare a war it cannot trade: the judge read a two-member club that declared on one hit five
+     * times as often as it hit back (9437). An alliance more than this many times weaker in points sits the grudge out,
+     * and the grudge fades (grudges.yaml) until it grows or a partner is fighting the same side.
+     */
+    private function outmatched(int $allianceId, int $enemyId): bool
+    {
+        $ratio = (float) ($this->policy['war_max_strength_ratio'] ?? 0.0);
+
+        return $ratio > 0.0 && $this->points($enemyId) > $ratio * max(1.0, $this->points($allianceId))
+            && $this->allyFactor($allianceId, $enemyId) >= 1.0;
     }
 
     /**
