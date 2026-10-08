@@ -183,3 +183,13 @@ test('a raider held at the war line is warned once and never twice', function (s
     'a grudge at the war line' => ['0.9000', 1],
     'one raid only' => ['0.5000', 0],
 ]);
+
+// Every persona's warning line must be one the classifier reads back as a warning, or the exchange never happens.
+test('every voice\'s raid warning is read as a warning by the receiving account', function (): void {
+    $voices = Symfony\Component\Yaml\Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/social-voices.yaml');
+    $lines = collect($voices)->flatMap(static fn (array $voice): array => $voice['raid_warning'] ?? [])
+        ->merge(Symfony\Component\Yaml\Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/social-lines.yaml')['default']['raid_warning']);
+
+    expect($lines)->not->toBeEmpty()
+        ->and($lines->reject(static fn (string $line): bool => app(Modules\AI\Actions\ClassifyInboundSocialExchangeAction::class)->handle($line)?->type === AiSocialExchangeType::Warning)->all())->toBe([]);
+});

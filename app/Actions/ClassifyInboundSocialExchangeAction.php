@@ -120,7 +120,7 @@ class ClassifyInboundSocialExchangeAction
 
     private function warning(string $text): InboundSocialExchange|null
     {
-        if (!$this->matches($text, 'stop attacking|or else|you will regret|last warning|back off|leave (me|us) alone|we will (crush|destroy|hunt|wipe)')) {
+        if (!$this->matches($text, 'stop (attacking|hitting|raiding|farming)|quit (attacking|hitting|raiding|farming)|off my planets|or else|you will regret|last warning|back off|leave (me|us|my planets) alone|we will (crush|destroy|hunt|wipe)')) {
             return null;
         }
 

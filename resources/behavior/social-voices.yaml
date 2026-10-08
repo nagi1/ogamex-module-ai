@@ -135,6 +135,11 @@ miner:
     - 'numbers first'
     - 'what exact amounts?'
     - 'need numbers first'
+  raid_warning:
+    - 'stop attacking me'
+    - 'stop attacking my planets'
+    - "back off, i'm not your farm"
+    - 'quit raiding me'
   attacker_notice:
     - 'here :)'
     - 'saw it :)'
@@ -281,6 +286,11 @@ turtle:
     - 'give me numbers'
     - 'exact amounts only'
     - 'numbers first'
+  raid_warning:
+    - 'quit attacking me'
+    - 'stop hitting my planets'
+    - 'back off, not your farm'
+    - 'leave my planets alone'
   attacker_notice:
     - "I'm online :)"
     - 'saw that coming :)'
@@ -425,6 +435,11 @@ fleeter:
     - 'exact amounts first'
     - 'give me numbers'
     - "what's the amount?"
+  raid_warning:
+    - 'stop hitting me'
+    - 'off my planets'
+    - 'back off, not your farm'
+    - 'stop raiding me'
   attacker_notice:
     - 'online :)'
     - 'saw that :)'
@@ -569,6 +584,10 @@ raider:
     - 'numbers first'
     - 'give me numbers'
     - 'exact res first'
+  raid_warning:
+    - 'stop hitting me'
+    - 'stop hitting my planets'
+    - 'back off, not your farm'
   attacker_notice:
     - 'online :P'
     - 'saw that :P'
@@ -715,6 +734,11 @@ hybrid:
     - 'give me numbers'
     - 'what are the numbers?'
     - 'exact amounts please'
+  raid_warning:
+    - 'stop attacking me'
+    - 'stop attacking my planets'
+    - "back off, I'm not your farm"
+    - 'quit attacking me'
   attacker_notice:
     - 'online :)'
     - 'I saw it :)'
@@ -860,6 +884,11 @@ trader:
     - 'give me numbers'
     - 'exact amounts first'
     - 'numbers, please'
+  raid_warning:
+    - 'stop attacking me'
+    - 'stop attacking my planets'
+    - "back off, I'm not your farm"
+    - 'quit attacking me'
   attacker_notice:
     - 'online :)'
     - 'saw that :)'
@@ -1006,6 +1035,11 @@ casual:
     - 'give me numbers'
     - 'exact amounts first'
     - 'numbers first'
+  raid_warning:
+    - 'stop attacking me'
+    - 'stop attacking my planets'
+    - "back off, i'm not your farm"
+    - 'quit hitting me'
   attacker_notice:
     - 'online :)'
     - 'I saw that. :)'
