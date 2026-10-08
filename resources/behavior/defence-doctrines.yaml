@@ -84,6 +84,7 @@ doctrines:
       Plasma Turret: 10
       Small Shield Dome: 1
       Large Shield Dome: 1
+      Anti-ballistic Missile: 20 # two per Plasma Turret (wiki ABM tip); the silo caps the stock
     rationale: upper-tier ships (Battleships, Bombers, Destroyers) break a wall that has no
       big guns, so Gauss and Plasma are the point of this doctrine
     sources: [WIK-013]
@@ -100,6 +101,7 @@ doctrines:
       Plasma Turret: 1
       Small Shield Dome: 1
       Large Shield Dome: 1
+      Anti-ballistic Missile: 2 # two per Plasma Turret (wiki ABM tip); the silo caps the stock
     rationale: fodder supports a fleet held in orbit rather than replacing it
     known_weakness: vulnerable when the attacker brings Death Stars, because those shots
       ignore fodder
@@ -115,6 +117,7 @@ doctrines:
       Heavy Laser: 10
       Gauss Cannon: 10
       Plasma Turret: 5
+      Anti-ballistic Missile: 10 # two per Plasma Turret (wiki ABM tip); the silo caps the stock
     rationale: mixes fodder types so Cruiser and Destroyer rapid fire cannot chew one type
       away; the domes and ABMs are added as they become affordable
     sources: [WIK-013]
@@ -130,6 +133,7 @@ doctrines:
       Plasma Turret: 600
       Small Shield Dome: 1
       Large Shield Dome: 1
+      Anti-ballistic Missile: 1200 # two per Plasma Turret (wiki ABM tip); the silo caps the stock
     rationale: Plasma Turrets and Shield Domes are the only defence units a Death Star does
       not rapid-fire, so they must be numerous enough to be hit rather than hidden behind
       fodder; the source states the resulting plasma-to-fodder ratio is about 1 to 10
@@ -143,5 +147,6 @@ doctrines:
       Rocket Launcher: 50 # stated 50, "up to 100 depending on resources"
       Small Shield Dome: 1
       Large Shield Dome: 1
+      Anti-ballistic Missile: 2 # two per Plasma Turret (wiki ABM tip); the silo caps the stock
     sources: [WIK-013]
     claim_type: CONTESTED
