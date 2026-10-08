@@ -117,7 +117,9 @@ class DefenseCompositionPlanner
                 continue;
             }
 
-            $affordable = $this->queueableAmount($planet, $unit);
+            // The host's cap is asked of built units only, so a one-per-planet unit already in the yard read as orderable
+            // again and the wall order was spent on a refusal every login (9348: 86 small shield dome orders, 2 built).
+            $affordable = $this->queueableAmount($planet, $unit) - ($pending[$unit->machine_name] ?? 0);
             if ($affordable <= 0) {
                 continue;
             }

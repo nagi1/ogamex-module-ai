@@ -91,6 +91,23 @@ test('the recycle action launches the host harvest mission', function (): void {
         ->and(FleetMission::query()->where('mission_type', RecycleMission::getTypeId())->count())->toBe(1);
 });
 
+// With no harvester on hand the action builds them once; a second attempt while they are still in the yard orders
+// nothing more (9348: 88 recycler orders stacked behind the war fleet).
+test('the recycle action builds the harvesters once, not on every attempt while they are in the yard', function (): void {
+    recycleProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(10_000_000, 10_000_000, 10_000_000));
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->playerSetResearchLevel('shielding_technology', 2);
+    DebrisField::create(['galaxy' => 1, 'system' => 2, 'planet' => 7, 'metal' => 200_000, 'crystal' => 200_000, 'deuterium' => 0]);
+
+    app(QueueAiRecycle::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 2, 7, PlanetType::DebrisField->value);
+    app(QueueAiRecycle::class)->handle($this->currentUserId, $this->currentPlanetId, 1, 2, 7, PlanetType::DebrisField->value);
+
+    $recycler = OGame\Services\ObjectService::getUnitObjectByMachineName('recycler');
+    expect(OGame\Models\UnitQueue::query()->where('planet_id', $this->currentPlanetId)->where('object_id', $recycler->id)->count())->toBe(1);
+});
+
 test('the recycle action refuses a body it does not own', function (): void {
     recycleProfile($this->currentUserId);
     $this->planetAddUnit('recycler', 1);

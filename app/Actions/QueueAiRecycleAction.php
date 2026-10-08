@@ -14,6 +14,7 @@ use OGame\Models\Enums\PlanetType;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
+use OGame\Models\UnitQueue;
 use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -126,6 +127,12 @@ class QueueAiRecycleAction implements QueueAiRecycle
         }
 
         $ship = ObjectService::getShipObjectByMachineName(RecycleMission::getHarvesterMachineNameForPosition($position));
+        // The hulls already in the yard are the ones this field waits for: re-ordering them on every attempt stacked 88
+        // recycler orders behind the war fleet in one late-game test (9348).
+        if (UnitQueue::query()->where('planet_id', $origin->getPlanetId())->where('object_id', $ship->id)->where('processed', 0)->exists()) {
+            return AiActionResult::rejected(AiQueueActionReason::ShipyardBusy);
+        }
+
         $capacity = $ship->properties->capacity->calculate($player)->totalValue;
         $count = max(1, (int) ceil($mass / max(1, $capacity)));
 
