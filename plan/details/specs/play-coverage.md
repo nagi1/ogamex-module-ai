@@ -183,3 +183,15 @@ Moons received the gate's money but never built it. Each cause was read from a f
 9373: robotics 9 and lunar base 5 on a moon, gate queued as an 8.5 h build instead of 84 h. 9371 (24 h, before the
 last fix): **nothing missing** for the first time: a gate built, 103 attacks, 80 battles, 90 missile strikes. No jump
 yet: a jump needs a gate on both moons.
+
+### 8 Oct, evening: moon destruction and the mission check
+
+The reach check counted objects only. In 9383-9392 no moon was ever destroyed: every report on an enemy moon was
+refused at `below_loot_tier` or `unprofitable`, because a moon carries little home. Fixed in e25734e. An enemy moon
+reached by a fleet that holds the host's moon-breaking hulls skips the loot and profit gates; survival and fuel still
+decide. `reach.txt` now lists `mission:<name>` for any mission nobody flew, plus the light units and the small dome.
+Verification: worlds 9401-9404 (12 h, 6 accounts).
+
+Alliance politics (wars, pacts, betrayal, a coalition against a dominant alliance) shipped in 3eea3b4, 9fb8cf3 and
+718f330, and is being read in 9393-9394. The language-model and classifier stack (JEV readings, agents, distillation;
+f4cdfa3-12eb1ba) is off until the owner supplies a key.
