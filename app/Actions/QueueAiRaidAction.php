@@ -69,9 +69,11 @@ class QueueAiRaidAction implements QueueAiRaid
             // of the way and loose resources spent, but a wall and the pile it
             // covers stay where they are, so that haul is still there to take
             // (LIFE_FIGHTS).
-            // A moon strike flies at an online defender too: the fleet can be saved, the moon cannot.
-            $strike = $missionType === MoonDestructionMission::getTypeId();
             $target = $this->planetServiceFactory->makeForCoordinate($targetCoordinate, false, PlanetType::from($targetType));
+            // A moon strike flies at an online defender too: the fleet can be saved, the moon cannot. So does a strike on an
+            // enemy at war: an alliance hits whoever is online, and the defender's answer (a save or a fight) is the war.
+            $strike = $missionType === MoonDestructionMission::getTypeId()
+                || ($target !== null && isset(app(Enemies::class)->of($playerId)[(int) $target->getPlayer()?->getId()]));
             if (!$strike && $target !== null && $this->activityIntelReader->activityAt($target) && $target->getDefenseUnits()->units === []) {
                 return AiActionResult::rejected(AiQueueActionReason::TargetActiveAtDispatch);
             }
