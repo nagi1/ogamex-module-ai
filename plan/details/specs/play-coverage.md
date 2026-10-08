@@ -247,4 +247,10 @@ In every world so far, no jump gate was built and no fleet jumped. Two other thi
 | Cause (world) | Fix | Commit |
 |---|---|---|
 | Staged late-game moons started bare, while their planets stood at robotics 17. A gate on a bare moon is about thirty hours of building at speed 8, so no day-long world could see a jump (9393-9414) | A late account's moons get a share of the staging budget. A moon's own stations keep only the base's field. Moons now start at base 14, phalanx 10, gate 4 | 466ecc2 |
-| A raider and a miner wanted an alliance and stayed solo all day beside one two-seat club. Only a drawn leader founds (9414-9417) | Two or more joiners no club will take get a second club from the kind that most readily leads. One alone still waits | 67477da |
+| A raider and a miner wanted an alliance and stayed solo all day beside one two-seat club. Only a drawn leader founds (9414-9417) | A joiner no club will take founds one when another such joiner would follow it (language, pace, no grudge). The first version founded three one-seat clubs (9425) | 67477da, e117521 |
+| Accounts held millions of metal and deuterium beside forty thousand crystal. The merchant was called only when a store was 80% full, which late-game stores never reach (9419, 9421) | The merchant is also called when one stock is worth twenty times a thin one at base rates. 9425 called it 7 times | 4ce4dff |
+| Domes were last in every defence ratio, so a planet missing several kinds always took a laser first. The balanced doctrine named no dome at all (9424: 4 domes on about 80 planets) | Domes lead every doctrine's ratio, and balanced names them | 00b227f |
+
+**Complete worlds:** 9420, 9424 and 9426 (12 h, 6 accounts) each used every object and every mission. In each, fleets jumped
+through gates (gate stamps on 2 to 8 moons). 9426 flew 238 ACS attacks and 218 missile strikes and fought 160 battles. The weak
+side is alliances: with six accounts, each holds a grudge against someone in every club.
