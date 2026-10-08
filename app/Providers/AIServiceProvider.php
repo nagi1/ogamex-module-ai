@@ -30,6 +30,7 @@ use Modules\AI\Console\Commands\AdvanceAiCampaigns;
 use Modules\AI\Console\Commands\BondExistingAllianceMembers;
 use Modules\AI\Console\Commands\CreateAiRlUniverse;
 use Modules\AI\Console\Commands\ExplainAiDecision;
+use Modules\AI\Console\Commands\ProposeAiDoctrine;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
 use Modules\AI\Console\Commands\RecordAiScoreSamples;
@@ -142,6 +143,7 @@ class AIServiceProvider extends ModuleServiceProvider
         AdvanceAiAllianceLife::class,
         BondExistingAllianceMembers::class,
         ExplainAiDecision::class,
+        ProposeAiDoctrine::class,
         PruneAiRecords::class,
         ReconcileLanguageRequests::class,
         RecordAiScoreSamples::class,
