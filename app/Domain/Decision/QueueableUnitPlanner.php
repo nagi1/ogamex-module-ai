@@ -99,6 +99,9 @@ class QueueableUnitPlanner
     /** The yard time one war-fleet batch may take: the yard runs its queue in order, so a longer batch starves the probes behind it. */
     private const FLEET_BATCH_SECONDS = 2 * 3600;
 
+    /** The most yard time a planet keeps queued: two war batches. */
+    private const YARD_BACKLOG_SECONDS = 2 * self::FLEET_BATCH_SECONDS;
+
     private const PROBE_STOCK = 15;
 
     public function __construct(
@@ -1121,13 +1124,24 @@ class QueueableUnitPlanner
 
     private function queueable(PlanetService $planet, UnitObject $unit): bool
     {
-        if (!$this->requirementsMet($planet, $unit)) {
+        if (!$this->requirementsMet($planet, $unit) || $this->yardBacklogged($planet)) {
             return false;
         }
 
         // The host service silently returns when the amount is unaffordable, so a published
         // capability that cannot pay would schedule work that creates no queue row.
         return ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true) >= self::FIRST_CARGO_AMOUNT;
+    }
+
+    /**
+     * A yard already holding hours of work takes nothing more: the host builds the queue in order, and orders stacked
+     * behind forty hours of cargo and recyclers never came up within a run (9341: 72 cargo and 46 recycler orders waiting).
+     */
+    private function yardBacklogged(PlanetService $planet): bool
+    {
+        $lastEnd = (int) UnitQueue::query()->where('planet_id', $planet->getPlanetId())->where('processed', 0)->max('time_end');
+
+        return $lastEnd > CarbonImmutable::now()->addSeconds(self::YARD_BACKLOG_SECONDS)->getTimestamp();
     }
 
     /**

@@ -310,3 +310,25 @@ test('the war fleet takes only the template\'s warships, never its cargo share',
     expect($escort->reason)->toStartWith('doctrine:fleet:')
         ->and(collect(ObjectService::getMilitaryShipObjects())->pluck('machine_name')->all())->toContain($hull->machine_name);
 });
+
+test('a yard already holding hours of work takes no further war order', function (): void {
+    capitalProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 8);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->playerSetResearchLevel('impulse_drive', 6);
+    $this->playerSetResearchLevel('weapon_technology', 6);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+    $this->playerSetResearchLevel('armor_technology', 6);
+    $this->planetAddUnit('large_cargo', 5);
+    expect(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId))->not->toBeNull();
+
+    OGame\Models\UnitQueue::query()->forceCreate([
+        'planet_id' => $this->currentPlanetId, 'object_id' => ObjectService::getUnitObjectByMachineName('large_cargo')->id, 'object_amount' => 5_000,
+        'time_duration' => 5 * 3600, 'time_start' => now()->timestamp, 'time_end' => now()->addHours(5)->timestamp,
+        'time_progress' => 0, 'object_amount_progress' => 0, 'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'processed' => 0,
+    ]);
+
+    expect(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId))->toBeNull();
+});
