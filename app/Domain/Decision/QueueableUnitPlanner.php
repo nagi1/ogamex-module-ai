@@ -6,6 +6,7 @@ use Modules\AI\Domain\Defense\AntiBallisticMissile;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Domain\Login\GamePhaseMachine;
+use Modules\AI\Domain\Login\ManagerDoctrine;
 use Modules\AI\Enums\GamePhase;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
@@ -1188,7 +1189,29 @@ class QueueableUnitPlanner
      */
     private function affordable(PlanetService $planet, UnitObject $unit): int
     {
-        return ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true);
+        return min(ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true), $this->siloRoom($planet, $unit));
+    }
+
+    /**
+     * An account that fires missiles keeps half its silo for them: whatever else the silo stores (the wall's
+     * interceptors) fills only the other half, or the interceptors take every slot and no strike is ever stocked
+     * (9401-9404: a raider's silo held 100 interceptors and no missile).
+     */
+    private function siloRoom(PlanetService $planet, UnitObject $unit): int
+    {
+        $stored = array_filter($unit->requirements, static fn ($requirement): bool => $requirement->object_machine_name === self::MISSILE_SILO);
+        if ($unit->machine_name === self::MISSILE || $stored === []) {
+            return PHP_INT_MAX;
+        }
+
+        $profile = AiProfile::query()->where('player_id', $planet->getPlayer()->getId())->first();
+        if ($profile === null || !app(ManagerDoctrine::class)->bool($profile->archetype, 'missiles')) {
+            return PHP_INT_MAX;
+        }
+
+        $half = intdiv(AntiBallisticMissile::policy()->abmCapacity($planet->getObjectLevel(self::MISSILE_SILO)), 2);
+
+        return max(0, $half - $planet->getObjectAmount($unit->machine_name) - $this->inYard($planet, $unit));
     }
 
     /**
