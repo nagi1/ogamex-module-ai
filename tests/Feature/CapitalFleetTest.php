@@ -240,3 +240,22 @@ test('the escort is ordered in the capital hull\'s yard, not a weaker planet lis
     expect($escort?->reason)->toStartWith('doctrine:fleet:')
         ->and($escort?->planetId)->toBe($colony->getPlanetId());
 });
+
+test('an escort is weighed by price: a capital hull beside a cheap swarm is still followed by a template hull', function (): void {
+    capitalProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 12);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    foreach (['combustion_drive' => 6, 'impulse_drive' => 6, 'hyperspace_drive' => 8, 'hyperspace_technology' => 8, 'weapon_technology' => 6,
+        'shielding_technology' => 6, 'armor_technology' => 6, 'ion_technology' => 5, 'laser_technology' => 12, 'graviton_technology' => 1] as $research => $level) {
+        $this->playerSetResearchLevel($research, $level);
+    }
+
+    $first = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+    $this->planetAddUnit(ObjectService::getUnitObjectById($first->unitId)->machine_name, 1);
+    // Many units, little value: under a head count this swarm was already a full escort.
+    $this->planetAddUnit('light_fighter', 100);
+
+    expect($first?->reason)->toBe('role:capital:deathstar')
+        ->and(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId)?->reason)->toStartWith('doctrine:fleet:');
+});

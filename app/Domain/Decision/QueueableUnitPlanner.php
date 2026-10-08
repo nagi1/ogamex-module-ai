@@ -411,7 +411,7 @@ class QueueableUnitPlanner
 
     /**
      * A fleet is a heavy core with a mixed escort around it: the doctrine's template hull while the
-     * escort is thinner than twenty to each capital hull, the priciest hull otherwise (the first capital hull comes first). Before this the
+     * escort is worth less than its capital hulls, the priciest hull otherwise (the first capital hull comes first). Before this the
      * template was never read and a 24 h late-game run held deathstars and no cruiser, battleship,
      * battlecruiser or bomber.
      *
@@ -427,8 +427,8 @@ class QueueableUnitPlanner
         }
 
         $military = array_map(static fn (UnitObject $hull): int => $hull->id, ObjectService::getMilitaryShipObjects());
-        $escort = 0;
-        $core = 0;
+        $escort = 0.0;
+        $core = 0.0;
         // Hulls paid for in a yard count as the fleet's own: a deathstar takes hours to build, and counting only finished
         // ones ordered another every login while no escort was ever ordered (9316: 13 deathstar orders, no bomber).
         $planetIds = array_map(static fn (PlanetService $planet): int => $planet->getPlanetId(), $planets);
@@ -439,10 +439,13 @@ class QueueableUnitPlanner
                 $owned[$entry->unitObject->id] = ($owned[$entry->unitObject->id] ?? 0) + $entry->amount;
             }
         }
+        // Weighed by price, not counted: one deathstar allowed twenty escort units, and one batch of light fighters filled
+        // that, so the account went back to deathstars and never reached the bomber or battlecruiser (9330).
         foreach ($owned as $objectId => $amount) {
             $isCore = $objectId === $capital->unitId;
-            $core += $isCore ? $amount : 0;
-            $escort += !$isCore && in_array($objectId, $military, true) ? $amount : 0;
+            $value = in_array($objectId, $military, true) ? $amount * $this->metalEquivalent(ObjectService::getObjectRawPrice(ObjectService::getUnitObjectById($objectId)->machine_name)) : 0.0;
+            $core += $isCore ? $value : 0.0;
+            $escort += $isCore ? 0.0 : $value;
         }
 
         $ownedByName = [];
@@ -455,7 +458,7 @@ class QueueableUnitPlanner
         // often a fresh colony whose yard takes nothing above a heavy fighter (9324: no battleship, bomber or battlecruiser).
         usort($planets, static fn (PlanetService $a, PlanetService $b): int => ($b->getPlanetId() === $capital->planetId) <=> ($a->getPlanetId() === $capital->planetId));
 
-        return $escort < 20 * $core ? ($this->templateHull($planets, $profile, $ownedByName) ?? $capital) : $capital;
+        return $escort < $core ? ($this->templateHull($planets, $profile, $ownedByName) ?? $capital) : $capital;
     }
 
     /**
