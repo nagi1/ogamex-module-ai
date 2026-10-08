@@ -1,2 +1,2 @@
-FAIL invariant:DISPATCH_REFUSALS 56s —  ! [DISPATCH_REFUSALS] player 63 planet 175 source_short_at_dispatch refused 14 times in six hours
-PROOF: FAIL DISPATCH-ROOT-002 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS:  ! [DISPATCH_REFUSALS] player 63 planet 175 source_short_at_dispatch refused 14 times in six hours
+FAIL invariant:DISPATCH_REFUSALS 1s — service "ogamex-app" is not running
+PROOF: FAIL DISPATCH-ROOT-002 (invariant:DISPATCH_REFUSALS) at invariant:DISPATCH_REFUSALS: service "ogamex-app" is not running
