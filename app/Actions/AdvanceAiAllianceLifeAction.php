@@ -44,7 +44,9 @@ class AdvanceAiAllianceLifeAction
     {
         // An account no club fits founds its own first: a club founded after the leave half would
         // be the freed account's answer to a question the join half below has not asked it yet.
-        $advanced = $this->foundFirstAlliance() + $this->foundWhenLockedOut();
+        // Quiet grudges fade first, so this pass's leave, kick and join halves read who is still an enemy today.
+        $advanced = app(FadeAiGrudgesAction::class)->handle();
+        $advanced += $this->foundFirstAlliance() + $this->foundWhenLockedOut();
 
         // The leave comes before the join so the account this pass frees asks on this pass: that
         // is what keeps the lane the scorecard's alliance aspect measures moving on a cohort that

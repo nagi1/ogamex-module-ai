@@ -1,0 +1,21 @@
+# How long a grudge lasts once nobody acts on it (FadeAiGrudgesAction).
+#
+# Players remember who hit them, then let it go once the hitting stops. An account's grudge (the threat it holds against
+# another, and any trust or affinity that went below zero) stands untouched for `grace_hours` after the last thing the
+# two did to each other, then halves every `half_life_hours` until it falls under `floor` and is gone. A fresh raid or
+# message resets the clock, so a feud that is still being fought never fades; only a quiet one does. One raid (about
+# 0.5 threat) is forgotten in about three days of quiet, a crash (1.0) drops under the war line in about two.
+#
+# Sources (2004-2008 era, read 8 Oct 2026):
+# - board.en.ogame.gameforge.com, "Old Interviews and Select Old CRs (A Walk Through History)", 2006 interviews:
+#   after the Cursed/Schism split, "There was no real bitterness on our side, but we knew we had to deal with them -
+#   that's game"; of Fury, "There are obvious hostilities, and they send a few attacks at our colonies every so often",
+#   tensions that had diminished after several crashes; KIA KAHA "was started up to target Mara.Dim" with "no mutual
+#   hate". Grudges are about the fighting, and they go quiet when it does.
+# - ogame.fandom.com/wiki/War: a war is declared on the diplomacy board, bashing opens 12 hours later, and it ends by
+#   peace or surrender, not by a timer. Wars stay alliance rows (alliance-war.yaml); this file only fades the
+#   individual grudge under them.
+# The numbers are a reading of those accounts, not a stated rule of the game.
+grace_hours: 24
+half_life_hours: 48
+floor: 0.02

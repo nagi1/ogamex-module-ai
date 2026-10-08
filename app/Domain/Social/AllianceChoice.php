@@ -71,7 +71,8 @@ class AllianceChoice
                 continue;
             }
 
-            $score = $this->tierScore($alliance, $ratio, $policy['tier']) + $this->fitScore($account, $club, $policy['fit']);
+            $score = $this->tierScore($alliance, $ratio, $policy['tier']) + $this->fitScore($account, $club, $policy['fit'])
+                + $this->commonEnemyScore($playerId, $alliance, $policy['fit']);
 
             if ($score > $bestScore) {
                 $best = $alliance;
@@ -265,6 +266,26 @@ class AllianceChoice
             ->map(static fn ($other): int => (int) $other)
             ->values()
             ->all();
+    }
+
+    /**
+     * The enemy of my enemy: a club whose members hold a grudge against someone the account holds one against is the
+     * club it joins (2006 Cursed/Schism/Fury feuds: sides were drawn by who hit whom, alliance_fit.yaml common_enemy).
+     */
+    private function commonEnemyScore(int $playerId, Alliance $alliance, array $fit): float
+    {
+        $weight = (float) ($fit['common_enemy'] ?? 0.0);
+        $enemies = $this->enemies($playerId);
+        $threshold = $this->enmityThreshold();
+        if ($weight <= 0.0 || $enemies === [] || $threshold === null) {
+            return 0.0;
+        }
+
+        $members = User::query()->where('alliance_id', $alliance->id)->pluck('id')->all();
+        $shared = AiRelationship::query()->whereIn('player_id', $members)->whereIn('other_player_id', $enemies)
+            ->where('threat', '>=', $threshold)->distinct()->count('other_player_id');
+
+        return min($shared, 3) * $weight;
     }
 
     /** The threat at which a counterparty is read as an enemy, or null when the file states none. */

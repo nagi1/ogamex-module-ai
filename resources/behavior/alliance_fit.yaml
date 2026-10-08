@@ -38,6 +38,11 @@ fit:
   # measures creates nothing (ALLY-001).
   enmity_threat: 0.25
 
+  # Score added per enemy of the account (up to three) that the club's members hold a grudge against too: the enemy of my
+  # enemy is a club I want. Sides in the 2006 board stories (Cursed, Schism, Fury; KIA KAHA "started up to target
+  # Mara.Dim") formed around who was hitting whom. It only ranks clubs the language, pace and enmity rules already admit.
+  common_enemy: 2.0
+
 # What the account's rank against the population says it can reach: a weak account aims at a
 # catch-all, a strong one at a high points-per-member core, a mid one balances the two.
 tier:
