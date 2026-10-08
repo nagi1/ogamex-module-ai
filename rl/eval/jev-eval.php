@@ -1,8 +1,8 @@
 <?php
 // JEV effectiveness on the alliance and war paths: labelled messages, pages and applications through the module's real
 // readers, the authored matcher as the baseline, then the human-leader flow end to end. Everything rolls back.
-require __DIR__ . '/../../vendor/autoload.php';
-$app = require __DIR__ . '/../../bootstrap/app.php';
+require dirname(__DIR__, 4) . '/vendor/autoload.php';
+$app = require dirname(__DIR__, 4) . '/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use Illuminate\Support\Facades\Cache;

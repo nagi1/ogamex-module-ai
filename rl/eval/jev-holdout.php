@@ -1,6 +1,6 @@
 <?php
-require __DIR__ . '/../../vendor/autoload.php';
-$app = require __DIR__ . '/../../bootstrap/app.php';
+require dirname(__DIR__, 4) . '/vendor/autoload.php';
+$app = require dirname(__DIR__, 4) . '/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Actions\ReadAiHumanMessageAction;
