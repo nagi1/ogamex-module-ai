@@ -272,6 +272,10 @@ class QueueableBuildingPlanner
             // saving the economy is holding back does not veto it, because a planet with no wall is
             // the state the account is fixing, not a step it chooses between (QUAL-003).
             'wall' => fn (PlanetService $planet): array => $this->facilityChain->wallPending($planet),
+            // A moon builds in its own queue, so its next station does not wait behind every planet's mines: in the routine
+            // pass a login's step limit was spent on fifteen planets first, and a moon sat six hours on a robotics level
+            // worth a few thousand while its gate came after the run (9407).
+            'moon' => fn (PlanetService $planet): array => $planet->getPlanetType() === PlanetType::Moon ? $this->facilityChain->pending($planet) : [],
             // The archetype's written opening and research path (architecture step 4): the build list a guide
             // gives, in order, before the payback rules below take over. An object the host lacks is skipped.
             'doctrine' => fn (PlanetService $planet): array => [

@@ -7,6 +7,7 @@ use Modules\AI\Domain\Decision\FacilityChain;
 use Modules\AI\Domain\Decision\QueueableJumpGate;
 use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
+use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiQueueActionReason;
@@ -16,6 +17,7 @@ use Modules\AI\Models\AiRelationship;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\Planet;
+use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -189,3 +191,23 @@ test('with no threat a fleet jumps to the gated moon nearest an enemy', function
             ->and($plan->targetMoonId)->toBe($forwardMoon->getPlanetId());
     }
 })->with('staging enemies');
+
+// A moon builds in its own queue: its next station is planned before the planets' economy spends a login's step limit
+// (9407: a moon sat six hours on a robotics level while fifteen planets took every step, and its gate came after the run).
+test('a moon gets its station step before the planets spend the login', function (): void {
+    jumpGateProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(5_000_000, 5_000_000, 5_000_000));
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+    foreach (range(1, 4) as $i) {
+        Planet::factory()->create([
+            'user_id' => $this->currentUserId, 'galaxy' => 3, 'system' => 10 + $i, 'planet' => 8,
+            'metal' => 5_000_000, 'crystal' => 5_000_000, 'deuterium' => 5_000_000, 'time_last_update' => now()->getTimestamp(),
+        ]);
+    }
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet(app(PlanetServiceFactory::class)->makeForPlayer($player, $this->currentPlanetId, false), 2_000_000, 20);
+    Planet::query()->whereKey($moon->getPlanetId())->update(['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+
+    $steps = app(QueueableBuildingPlanner::class)->steps($this->currentUserId, null, 2);
+
+    expect(array_map(static fn ($step): int => $step->planetId, $steps))->toContain($moon->getPlanetId());
+});
