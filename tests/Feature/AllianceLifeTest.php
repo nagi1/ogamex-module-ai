@@ -94,9 +94,9 @@ test('a universe with no drawn leader has its most ambitious joiner found the fi
     'a turtle joiner' => [AiArchetype::Turtle, false],
 ]);
 
-// Past the first club, joiners no club fits and no drawn leader stayed solo all day (9414-9417). Two of them get a club
-// from the kind that most readily leads; one alone founds nothing, so six empires never end in six clubs (9372).
-test('joiners no club will take get a second club only when there are two of them', function (bool $second, bool $founds): void {
+// Past the first club, joiners no club fits and no drawn leader stayed solo all day (9414-9417). A club is founded for a
+// joiner who would follow: one alone, or one whose would-be follower it raided, founds nothing (9372, 9425).
+test('joiners no club will take get a second club only when one would follow the founder', function (bool $second, bool $grudge, bool $founds): void {
     enableProfile($this->currentUserId);
     rank($this->currentUserId, 1000, 1);
     $shut = openAlliance(User::factory()->create()->id, 'SHUT');
@@ -105,14 +105,18 @@ test('joiners no club will take get a second club only when there are two of the
         $other = User::factory()->create();
         AiProfile::create(['player_id' => $other->id, 'archetype' => AiArchetype::Turtle, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 8, 'enabled' => true]);
         rank($other->id, 900, 2);
+        if ($grudge) {
+            AiRelationship::unguarded(fn () => AiRelationship::create(['player_id' => $other->id, 'other_player_id' => $this->currentUserId, 'threat' => '1.0000', 'trust' => '-1.0000', 'revision' => 0]));
+        }
     }
 
     app(AdvanceAiAllianceLifeAction::class)->handle();
 
     expect(Alliance::query()->where('founder_user_id', $this->currentUserId)->exists())->toBe($founds);
 })->with([
-    'a casual and a turtle: the casual founds' => [true, true],
-    'a casual alone waits' => [false, false],
+    'a casual and a turtle: the casual founds' => [true, false, true],
+    'a casual alone waits' => [false, false, false],
+    'a turtle the casual raided will not follow it' => [true, true, false],
 ]);
 
 test('an account already in an alliance is left alone', function (): void {

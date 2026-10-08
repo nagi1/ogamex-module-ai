@@ -108,6 +108,20 @@ class AllianceChoice
     }
 
     /**
+     * Whether this account would ask a club the founder kept: the same language, pace and enmity rule an application
+     * meets, so a club is founded for someone and not for its founder alone.
+     */
+    public function wouldFollow(int $founderId, int $playerId): bool
+    {
+        $policy = $this->policy();
+        if (in_array($founderId, $this->enemies($playerId), true) || in_array($playerId, $this->enemies($founderId), true)) {
+            return false;
+        }
+
+        return $policy === null || $this->fits($this->accountFit($playerId), $this->accountFit($founderId), $policy['fit']);
+    }
+
+    /**
      * Whether the club the account sits in still fits it: the same language and pace rule that picked
      * it. A club that does not is one a player leaves, which is how a cohort that all joined one club
      * spreads out instead of staying piled into it.

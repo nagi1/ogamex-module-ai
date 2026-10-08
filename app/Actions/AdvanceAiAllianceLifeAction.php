@@ -224,13 +224,13 @@ class AdvanceAiAllianceLifeAction
                 || app(AllianceChoice::class)->hasOpenCandidate($playerId))
             ->values();
         // Only a leader founds: every locked-out account founding its own left six empires in six clubs (9372). With no
-        // drawn leader among them, two or more joiners no club fits get one from the kind that most readily leads, as
-        // the first club does (9414-9417: a raider and a miner stayed solo all day beside one two-seat club).
+        // drawn leader among them, a joiner no club fits founds one when another such joiner would follow it, the kind
+        // that most readily leads first (9414-9417: a raider and a miner stayed solo all day beside a two-seat club;
+        // 9425: without the follower, three one-seat clubs nobody could ask).
         $founderId = $lockedOut->first(fn (int $playerId): bool => $ambition->leads($playerId))
-            ?? ($lockedOut->count() >= 2
-                ? $lockedOut->filter(fn (int $playerId): bool => $ambition->leadShare($playerId) > 0.0)
-                    ->sortByDesc(fn (int $playerId): float => $ambition->leadShare($playerId))->first()
-                : null);
+            ?? $lockedOut->filter(fn (int $playerId): bool => $ambition->leadShare($playerId) > 0.0
+                    && $lockedOut->contains(fn (int $other): bool => $other !== $playerId && app(AllianceChoice::class)->wouldFollow($playerId, $other)))
+                ->sortByDesc(fn (int $playerId): float => $ambition->leadShare($playerId))->first();
 
         return $founderId === null ? 0 : $this->foundAlliance($founderId, $this->tagFor($founderId));
     }
