@@ -27,6 +27,9 @@ class InitiateAiSocialContactAction
     /** One session thanks at most this many senders, so a pile never reads as spam. */
     private const MAXIMUM_INITIATIONS_PER_SESSION = 5;
 
+    /** A warned raider that keeps raiding is pleaded with this long after the warning. */
+    private const PLEA_AFTER_HOURS = 6;
+
     /** A member this sociable or more greets a newcomer; below it the account stays quiet. */
     private const WELCOME_SOCIABILITY_FLOOR = 0.5;
 
@@ -71,7 +74,42 @@ class InitiateAiSocialContactAction
             }
         }
 
+        foreach ($this->unpleadedRaiders($playerId, $now) as $observation) {
+            if ($sent >= $maximum) {
+                break;
+            }
+
+            if ($this->open($observation, $profile, 'ceasefire_plea', AiSocialExchangeType::CeasefireRequest)) {
+                $sent++;
+            }
+        }
+
         return $sent;
+    }
+
+    /**
+     * A raider who kept hitting after the warning: the account asks for a truce once, a quarter day after it warned, when
+     * a raid newer than the warning has landed. Players warn, then plead, before they give up the planet or hit back; the
+     * raider's own cognition answers the plea (a grudge at the war line refuses it).
+     *
+     * @return Collection<int, AiObservation>
+     */
+    private function unpleadedRaiders(int $playerId, CarbonImmutable $now): Collection
+    {
+        $warned = AiSocialExchange::query()->where('player_id', $playerId)->where('type', AiSocialExchangeType::Warning)
+            ->where('created_at', '<=', $now->subHours(self::PLEA_AFTER_HOURS))->get(['counterparty_player_id', 'created_at'])
+            ->mapWithKeys(static fn (AiSocialExchange $exchange): array => [(int) $exchange->counterparty_player_id => $exchange->created_at]);
+        $pleaded = AiSocialExchange::query()->where('player_id', $playerId)->where('type', AiSocialExchangeType::CeasefireRequest)->pluck('counterparty_player_id');
+
+        return AiObservation::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiObservationKind::BattleReportObserved)
+            ->whereIn('subject_player_id', $warned->keys()->all())
+            ->whereNotIn('subject_player_id', $pleaded)
+            ->oldest('id')
+            ->get()
+            ->filter(static fn (AiObservation $observation): bool => $observation->source_time->greaterThan($warned[(int) $observation->subject_player_id]))
+            ->unique('subject_player_id');
     }
 
     /**
@@ -95,15 +133,20 @@ class InitiateAiSocialContactAction
 
     private function warn(AiObservation $observation, AiProfile $profile): bool
     {
+        return $this->open($observation, $profile, 'raid_warning', AiSocialExchangeType::Warning);
+    }
+
+    /** One opening line to a raider, recorded as sent: the raider's own turn answers it, through its own cognition. */
+    private function open(AiObservation $observation, AiProfile $profile, string $key, AiSocialExchangeType $type): bool
+    {
         $raiderId = (int) $observation->subject_player_id;
-        $message = app(BuildAuthoredSocialReplyAction::class)->line($profile, 'raid_warning', (string) $raiderId);
+        $message = app(BuildAuthoredSocialReplyAction::class)->line($profile, $key, (string) $raiderId);
 
         if ($raiderId <= 0 || $raiderId === $profile->player_id || $message === null) {
             return false;
         }
 
-        // Recorded as sent, not evaluated: the raider's own turn answers it, through its own cognition.
-        $exchange = app(RecordAiSocialExchangeAction::class)->handle($profile->player_id, $raiderId, $observation->id, AiSocialExchangeType::Warning, [], null, 1);
+        $exchange = app(RecordAiSocialExchangeAction::class)->handle($profile->player_id, $raiderId, $observation->id, $type, [], null, 1);
 
         if ($exchange === null) {
             return false;

@@ -193,3 +193,29 @@ test('every voice\'s raid warning is read as a warning by the receiving account'
     expect($lines)->not->toBeEmpty()
         ->and($lines->reject(static fn (string $line): bool => app(Modules\AI\Actions\ClassifyInboundSocialExchangeAction::class)->handle($line)?->type === AiSocialExchangeType::Warning)->all())->toBe([]);
 });
+
+// A warned raider that keeps hitting is asked for a truce once, a quarter day after the warning.
+test('a raider who kept hitting after the warning is asked for a truce once', function (int $hoursAfterWarning, bool $newRaid, int $pleas): void {
+    $raider = $this->createUser();
+    initiationProfile($this->currentUserId);
+    $warnedAt = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
+    $first = raidedObservation($this->currentUserId, $raider->id, 7201);
+    AiSocialExchange::unguarded(fn () => AiSocialExchange::create([
+        'player_id' => $this->currentUserId, 'counterparty_player_id' => $raider->id, 'source_observation_id' => $first->id,
+        'type' => AiSocialExchangeType::Warning, 'terms' => [], 'state' => 1, 'revision' => 1, 'protocol_depth' => 1,
+        'created_at' => $warnedAt, 'updated_at' => $warnedAt,
+    ]));
+    if ($newRaid) {
+        AiObservation::query()->where('id', raidedObservation($this->currentUserId, $raider->id, 7202)->id)->update(['source_time' => $warnedAt->addMinutes(30)]);
+    }
+    $now = $warnedAt->addHours($hoursAfterWarning);
+
+    app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, $now);
+    app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, $now);
+
+    expect(AiSocialExchange::query()->where('player_id', $this->currentUserId)->where('type', AiSocialExchangeType::CeasefireRequest)->count())->toBe($pleas);
+})->with([
+    'hit again, a day later' => [24, true, 1],
+    'hit again but only an hour later' => [1, true, 0],
+    'not hit again' => [24, false, 0],
+]);
