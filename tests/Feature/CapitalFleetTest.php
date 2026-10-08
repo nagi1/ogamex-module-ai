@@ -216,3 +216,27 @@ test('a rich planet short of its wall orders wall from the yard plan while the f
     expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->toStartWith('role:defense:standing:')
         ->and(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId)?->reason)->toStartWith('role:capital:');
 });
+
+test('the escort is ordered in the capital hull\'s yard, not a weaker planet listed first', function (): void {
+    capitalProfile($this->currentUserId);
+    foreach (['combustion_drive' => 6, 'impulse_drive' => 6, 'hyperspace_drive' => 8, 'hyperspace_technology' => 8, 'weapon_technology' => 6,
+        'shielding_technology' => 6, 'armor_technology' => 6, 'ion_technology' => 5, 'laser_technology' => 12, 'graviton_technology' => 1] as $research => $level) {
+        $this->playerSetResearchLevel($research, $level);
+    }
+    // The homeworld is listed first but has a small yard; the colony holds the big yard the capital hull needs.
+    $this->planetAddResources(new Resources(5_000_000, 5_000_000, 5_000_000));
+    $this->planetSetObjectLevel('shipyard', 2);
+    $colony = $this->secondPlanetService;
+    $colony->addResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $colony->setObjectLevel(ObjectService::getObjectByMachineName('shipyard')->id, 12, true);
+    $colony->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 10, true);
+
+    $first = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+    expect($first?->planetId)->toBe($colony->getPlanetId());
+    $colony->addUnit(ObjectService::getUnitObjectById($first->unitId)->machine_name, 1);
+
+    $escort = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+
+    expect($escort?->reason)->toStartWith('doctrine:fleet:')
+        ->and($escort?->planetId)->toBe($colony->getPlanetId());
+});

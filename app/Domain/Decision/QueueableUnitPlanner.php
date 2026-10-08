@@ -451,6 +451,10 @@ class QueueableUnitPlanner
             $ownedByName += $name === null ? [] : [$name => $amount];
         }
 
+        // The escort is built in the capital's yard first, the strongest the account has: the first planet in the list was
+        // often a fresh colony whose yard takes nothing above a heavy fighter (9324: no battleship, bomber or battlecruiser).
+        usort($planets, static fn (PlanetService $a, PlanetService $b): int => ($b->getPlanetId() === $capital->planetId) <=> ($a->getPlanetId() === $capital->planetId));
+
         return $escort < 20 * $core ? ($this->templateHull($planets, $profile, $ownedByName) ?? $capital) : $capital;
     }
 
