@@ -65,3 +65,31 @@ test('a moon a few hundred short of its lunar base is ferried the difference', f
         // The planner keeps a tenth of a balance after a purchase and a moon cannot refill it, so the price alone is not enough.
         ->and(19_600 + $plan?->metal)->toBeGreaterThanOrEqual(20_000 / 0.9 - 1);
 });
+
+// A moon step no planet can pay at once is gathered in trips: the source sends what it spares above its reserve.
+test('a moon step dearer than any one planet holds is ferried in instalments', function (): void {
+    app()->bind(QueueAiTransfer::class, QueueAiTransferAction::class);
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Miner,
+        'skill_band' => AiSkillBand::Standard,
+        'random_seed' => 9_200 + $this->currentUserId,
+        'enabled' => true,
+    ]);
+
+    $moon = app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->planetService, 2_000_000, 20, 15);
+    $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('lunar_base')->id, 1, true);
+    $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('sensor_phalanx')->id, 1, true);
+    $this->playerSetResearchLevel('hyperspace_technology', 7);
+    // The gate is a step only for an account with a second moon to jump to.
+    app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20, 15);
+    $this->planetAddResources(new Resources(3_000_000, 3_000_000, 3_000_000));
+    $this->planetAddUnit('large_cargo', 400);
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableTransfer::class)
+        ->and($plan?->targetPlanetId)->toBe($moon->getPlanetId())
+        ->and($plan?->crystal)->toBeGreaterThan(0)
+        ->and($plan?->crystal)->toBeLessThanOrEqual(3_000_000 + $this->planetService->crystal()->get());
+});

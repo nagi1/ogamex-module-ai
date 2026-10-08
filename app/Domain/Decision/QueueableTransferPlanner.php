@@ -106,6 +106,9 @@ class QueueableTransferPlanner
             }
 
             $source = $this->source($planets, $target, $need, $player, $refusedOrigins);
+            [$source, $need] = $source === null && $target->getPlanetType() === PlanetType::Moon
+                ? $this->moonInstalment($planets, $target, $need, $player, $refusedOrigins) ?? [null, $need]
+                : [$source, $need];
             if ($source === null) {
                 continue;
             }
@@ -511,6 +514,36 @@ class QueueableTransferPlanner
         $fuel = $this->transferAction->flightFuel($player, $source, $target, $need);
 
         return $fuel !== null && $fuel <= floor($source->deuterium()->get());
+    }
+
+    /**
+     * A moon step no single planet can pay at once (a jump gate is millions) is gathered in trips: the first source with
+     * holds sends what it spares above its reserve. Waiting for one planet to hold the whole price left the only moon
+     * that reached its jump gate unbuilt for the rest of a late-game test (9319).
+     *
+     * @param array<int, PlanetService> $planets
+     * @param array<int, true> $refusedOrigins
+     * @return array{0: PlanetService, 1: Resources}|null
+     */
+    private function moonInstalment(array $planets, PlanetService $target, Resources $need, PlayerService $player, array $refusedOrigins): ?array
+    {
+        foreach ($planets as $source) {
+            if ($source->getPlanetId() === $target->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || !$this->hasCargo($source, $player)) {
+                continue;
+            }
+
+            $spare = $this->aboveFloor($source, $this->reserveFloor->floor($source, ReserveFloor::ECONOMY_HOURS), false);
+            $instalment = new Resources(
+                min($need->metal->get(), $spare->metal->get()),
+                min($need->crystal->get(), $spare->crystal->get()),
+                min($need->deuterium->get(), $spare->deuterium->get()),
+            );
+            if ($this->worthShipping($instalment) && $this->canPayFuel($source, $target, $instalment, $player)) {
+                return [$source, $instalment];
+            }
+        }
+
+        return null;
     }
 
     private function worthShipping(Resources $need): bool
