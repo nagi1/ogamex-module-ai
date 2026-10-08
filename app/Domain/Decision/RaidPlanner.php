@@ -195,6 +195,10 @@ class RaidPlanner
             return $this->reject('spared', $playerId, $reportId);
         }
 
+        if (app(AllianceDeterrence::class)->deters($playerId, (int) $report->planet_user_id)) {
+            return $this->reject('deterred', $playerId, $reportId);
+        }
+
         if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
             return $this->reject('blacklisted', $playerId, $reportId);
         }
