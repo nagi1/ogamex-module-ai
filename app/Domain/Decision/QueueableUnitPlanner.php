@@ -514,12 +514,15 @@ class QueueableUnitPlanner
      */
     private function templateHull(array $planets, AiProfile $profile, array $owned): ?QueueableUnit
     {
+        $warships = array_map(static fn (UnitObject $hull): string => $hull->machine_name, ObjectService::getMilitaryShipObjects());
         foreach ($planets as $planet) {
             $name = app(ArchetypeDoctrine::class)->nextTemplateUnit(
                 $profile->archetype,
                 'fleet_template',
                 $owned,
-                fn (string $machineName): bool => $this->unitNamed($machineName) !== null && $this->queueable($planet, $this->unitNamed($machineName)),
+                // Only the template's warships: its cargo and recyclers are the cargo roles' to order, and taken here a two-hour
+                // batch of small cargo went first on every login while the bomber waited (9335: small_cargo x400).
+                fn (string $machineName): bool => in_array($machineName, $warships, true) && $this->queueable($planet, $this->unitNamed($machineName)),
             );
             if ($name === null) {
                 continue;

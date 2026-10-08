@@ -286,3 +286,27 @@ test('cargo the account already holds counts against the template, so the escort
     expect($escort?->reason)->toStartWith('doctrine:fleet:')
         ->and($escort?->reason)->not->toBeIn(['doctrine:fleet:large_cargo', 'doctrine:fleet:small_cargo', 'doctrine:fleet:recycler']);
 });
+
+test('the war fleet takes only the template\'s warships, never its cargo share', function (): void {
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Miner,
+        'skill_band' => AiSkillBand::Standard,
+        'random_seed' => 7,
+        'enabled' => true,
+    ]);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 12);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    foreach (['combustion_drive' => 6, 'impulse_drive' => 6, 'hyperspace_drive' => 8, 'hyperspace_technology' => 8, 'weapon_technology' => 6,
+        'shielding_technology' => 6, 'armor_technology' => 6, 'ion_technology' => 5, 'laser_technology' => 12, 'graviton_technology' => 1] as $research => $level) {
+        $this->playerSetResearchLevel($research, $level);
+    }
+    $this->planetAddUnit('deathstar', 1);
+
+    $escort = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+    $hull = ObjectService::getUnitObjectById($escort->unitId);
+
+    expect($escort->reason)->toStartWith('doctrine:fleet:')
+        ->and(collect(ObjectService::getMilitaryShipObjects())->pluck('machine_name')->all())->toContain($hull->machine_name);
+});
