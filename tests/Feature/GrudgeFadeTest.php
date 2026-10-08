@@ -70,3 +70,23 @@ test('the enemy of my enemy: between two alike clubs the account asks the one wh
 
     expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($clubs['BBB']->id);
 });
+
+// "You theoretically get far less raid from others after joining an alliance" (alliance guide): the farmed look for a club.
+test('a player two others keep hitting wants a club even when their kind never would', function (int $raiders, bool $wants): void {
+    $seed = collect(range(1, 80))->first(function (int $seed): bool {
+        OGame\Models\User::query()->whereKey($this->currentUserId)->exists();
+        Modules\AI\Models\AiProfile::query()->where('player_id', $this->currentUserId)->delete();
+        Modules\AI\Models\AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => Modules\AI\Enums\AiArchetype::Turtle,
+            'skill_band' => Modules\AI\Enums\AiSkillBand::Standard, 'random_seed' => $seed, 'enabled' => true]);
+
+        return ! app(Modules\AI\Domain\Social\AllianceAmbition::class)->wantsAlliance($this->currentUserId);
+    });
+    foreach (range(1, $raiders) as $ignored) {
+        grudge($this->currentUserId, User::factory()->create()->id, '0.9000', now()->toDateTimeString());
+    }
+
+    expect(app(Modules\AI\Domain\Social\AllianceAmbition::class)->wantsAlliance($this->currentUserId))->toBe($wants);
+})->with([
+    'one raider' => [1, false],
+    'two raiders' => [2, true],
+]);

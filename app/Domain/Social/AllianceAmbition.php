@@ -2,7 +2,9 @@
 
 namespace Modules\AI\Domain\Social;
 
+use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -19,7 +21,19 @@ class AllianceAmbition
 
     public function wantsAlliance(int $playerId): bool
     {
-        return $this->draws($playerId, 'joins') || $this->leads($playerId);
+        return $this->draws($playerId, 'joins') || $this->leads($playerId) || $this->besieged($playerId);
+    }
+
+    /**
+     * A player several others keep hitting looks for a club whatever kind they are: "you theoretically get far less raid
+     * from others after joining an alliance" (alliance guide). Without it the solos a dominant club farmed never organised
+     * and no second bloc ever stood against it (JEV judge, 9437/9441/9442: 9 of 14 players unallied, 88 raids on them).
+     */
+    private function besieged(int $playerId): bool
+    {
+        $enemies = (int) ($this->policy()['siege_enemies'] ?? 0);
+
+        return $enemies > 0 && AiRelationship::query()->where('player_id', $playerId)->where('threat', '>=', Enemies::ENEMY_THREAT)->count() >= $enemies;
     }
 
     public function leads(int $playerId): bool

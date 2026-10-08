@@ -18,3 +18,7 @@ archetypes:
 
 # A club's rejection is answered, not final: the applicant grows and asks again after this long.
 reapply_after_hours: 24
+
+# A player at war-level threat toward this many others wants a club whatever their archetype (alliance guide: joining an
+# alliance means far fewer raids). 0 turns the rule off.
+siege_enemies: 2
