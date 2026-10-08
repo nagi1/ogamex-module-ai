@@ -294,3 +294,29 @@ test('an alliance far weaker than the one it holds a grievance against does not 
     'a peer' => [2000, true],
     'ten times stronger' => [10000, false],
 ]);
+
+// A club at war does not open a second front (the judge on 9444).
+test('an alliance already at war does not declare on a second one', function (int $open, bool $declares): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $mate = allianceWarMember($ours->id);
+    $targets = [];
+    foreach (['ONE', 'TWO'] as $tag) {
+        $targets[$tag] = app(AllianceService::class)->createAlliance(User::factory()->create()->id, $tag, $tag . ' club');
+        $raider = allianceWarMember($targets[$tag]->id);
+        allianceWarGrudge($this->currentUserId, $raider->id);
+        allianceWarGrudge($mate->id, $raider->id);
+    }
+    // The second club is the bigger grievance, so it is the one declared on when nothing holds the leader back.
+    allianceWarGrudge($this->currentUserId, (int) $targets['TWO']->founder_user_id);
+    if ($open > 0) {
+        AiAllianceRelation::query()->create(['alliance_id' => $ours->id, 'other_alliance_id' => $targets['ONE']->id, 'stance' => AiAllianceStance::War,
+            'cause' => 'grievance', 'declared_by' => $this->currentUserId, 'started_at' => now()]);
+    }
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(in_array($targets['TWO']->id, AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War), true))->toBe($declares);
+})->with([
+    'no war yet' => [0, true],
+    'one war on' => [1, false],
+]);

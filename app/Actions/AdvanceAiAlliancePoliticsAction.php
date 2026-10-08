@@ -145,6 +145,12 @@ class AdvanceAiAlliancePoliticsAction
     private function declareWar(Alliance $alliance): int
     {
         $line = (float) ($this->policy['war_grievance'] ?? 1.5);
+        // A veteran leader does not open a second front while one war is on (the judge on 9444: a club declared on two
+        // alliances in eight minutes and lost both exchanges).
+        if (count(AiAllianceRelation::counterparts((int) $alliance->id, AiAllianceStance::War)) >= (int) ($this->policy['max_open_wars'] ?? PHP_INT_MAX)) {
+            return 0;
+        }
+
         $members = $this->members((int) $alliance->id);
         $grievances = [];
 

@@ -45,3 +45,7 @@ ally_war_factor: 0.5
 # An alliance does not declare on one more than this many times stronger in points unless a pact partner is already at war
 # with it (the judge, 9437: a two-member club declared on a bloc it was hit by five to one). The grudge fades meanwhile.
 war_max_strength_ratio: 4.0
+
+# An alliance does not declare a war while it is already at war with this many alliances, as declarer or target: a second
+# front against two blocs at once loses both (the judge on 9444). A coalition war (conspire) is not counted.
+max_open_wars: 1
