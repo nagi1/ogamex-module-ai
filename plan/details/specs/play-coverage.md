@@ -231,3 +231,20 @@ turtle ratio) was already in defence-doctrines.yaml.
 
 9412 (12 h, fixes through 818c58d): **10 ACS attacks, 6 moon destructions, 4 missile strikes**. Before these fixes, 12 h
 worlds flew none of these. 9393 (24 h, 12 accounts, earlier code) flew everything except moon destruction and gate jumps.
+
+### 8 Oct, night: a full day of war; bare moons; solo joiners
+
+9415 (24 h, 6 accounts, fixes through 8cd41ce) used every mission except gate jumps:
+
+- 216 ACS attacks, 103 attacks and 217 battles.
+- 69 missile strikes and 12 moon destructions.
+- 31 holds, 122 recycles and 287 deploys.
+
+9417 (the same build) declared the first alliance war. 9414 flew 18 moon destructions.
+
+In every world so far, no jump gate was built and no fleet jumped. Two other things held back.
+
+| Cause (world) | Fix | Commit |
+|---|---|---|
+| Staged late-game moons started bare, while their planets stood at robotics 17. A gate on a bare moon is about thirty hours of building at speed 8, so no day-long world could see a jump (9393-9414) | A late account's moons get a share of the staging budget. A moon's own stations keep only the base's field. Moons now start at base 14, phalanx 10, gate 4 | 466ecc2 |
+| A raider and a miner wanted an alliance and stayed solo all day beside one two-seat club. Only a drawn leader founds (9414-9417) | Two or more joiners no club will take get a second club from the kind that most readily leads. One alone still waits | 67477da |
