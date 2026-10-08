@@ -331,7 +331,7 @@ class ReviewAiAllianceApplicationsAction
         $reading = app(ReadAiTextAction::class)->handle('application', (string) $application->application_message, [
             'kind' => new Choice('What is this OGame alliance application?', [
                 'serious' => 'a player who wants to join and play with the alliance',
-                'spy' => 'someone fishing for the alliance\'s members, fleets or plans, such as an enemy\'s second account',
+                'spy' => 'someone fishing for the alliance\'s members, their online times, fleets or plans, such as an enemy\'s second account',
                 'farm' => 'an account that only wants protection or resources and will not play',
                 'spam' => 'advertising or nonsense',
             ]),
