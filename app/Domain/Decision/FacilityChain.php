@@ -7,6 +7,7 @@ use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Calculations\CalculationType;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\Models\BuildingQueue;
 use OGame\Models\Enums\PlanetType;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -131,12 +132,15 @@ class FacilityChain
                 $this->addRequirement($planet, $raiser, $planet->getObjectLevel($raiser) + 1, $ordered, $producers, 'moon-station');
             }
 
-            // A moon has no factory of its own, so a jump gate there took three and a half days (9328). A player builds the
-            // station that shortens construction first whenever it pays back on the next one; the host's time formula decides.
-            $next = $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1 ? self::JUMP_GATE_STATION : ($raiser ?? self::PHALANX_STATION);
-            // Every level takes a field, so the accelerator waits until the moon has one for it and one for the station: built
-            // into the last field it held every moon below its lunar base and phalanx (9340).
-            $accelerator = $planet->getPlanetFieldMax() - $planet->getBuildingCount() >= 2 ? $this->buildAccelerator($planet, $next) : null;
+            // A moon has no factory of its own, so a jump gate there took three and a half days (9328): the station that
+            // shortens construction comes first when the host's time formula says it pays back on the gate. Every level
+            // takes a field, queued ones included, so it waits for a field of its own beside the gate's; asked of the
+            // short phalanx too, it took every field of a moon that never got its phalanx (9338).
+            $queued = BuildingQueue::query()->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)->count();
+            $gateDue = $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1;
+            $accelerator = $gateDue && $planet->getPlanetFieldMax() - $planet->getBuildingCount() - $queued >= 2
+                ? $this->buildAccelerator($planet, self::JUMP_GATE_STATION)
+                : null;
             if ($accelerator !== null) {
                 $this->addRequirement($planet, $accelerator, $planet->getObjectLevel($accelerator) + 1, $ordered, $producers, 'moon-station');
             }
@@ -608,8 +612,14 @@ class FacilityChain
     {
         $isResearch = ObjectService::getObjectByMachineName($machineName)->type === GameObjectType::Research;
 
+        // A level already in the build queue is reached as far as the chain is concerned: read on built levels alone, the
+        // same step was asked again on every login and the host queued the next level each time (9338: jump gate levels
+        // two to four queued behind the first, a phalanx at level two).
         if (!$isResearch) {
-            return $planet->getObjectLevel($machineName);
+            $queued = (int) BuildingQueue::query()->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)
+                ->where('object_id', ObjectService::getObjectByMachineName($machineName)->id)->max('object_level_target');
+
+            return max($planet->getObjectLevel($machineName), $queued);
         }
 
         // A planet always has an owner on the host; the nullable signature is the

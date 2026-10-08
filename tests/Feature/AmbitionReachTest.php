@@ -142,6 +142,43 @@ test('a moon with one field left builds its station, not the factory that would 
         ->and($reasons)->not->toContain('moon-station:robot_factory');
 });
 
+test('a moon station already in the build queue is not asked for again', function (): void {
+    ambitionProfile($this->currentUserId);
+    $this->playerSetResearchLevel('hyperspace_technology', 7);
+    $this->playerSetResearchLevel('energy_technology', 8);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 3, true);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('sensor_phalanx')->id, 1, true);
+    app(PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20);
+    OGame\Models\BuildingQueue::query()->forceCreate([
+        'planet_id' => $moon->getPlanetId(), 'object_id' => ObjectService::getObjectByMachineName('jump_gate')->id, 'object_level_target' => 1,
+        'time_duration' => 3600, 'time_start' => now()->timestamp, 'time_end' => now()->addHour()->timestamp,
+        'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'building' => 1, 'processed' => 0, 'canceled' => 0,
+    ]);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+
+    expect($reasons)->not->toContain('moon-station:jump_gate');
+});
+
+test('a moon with no gate due builds no factory for its short phalanx', function (): void {
+    ambitionProfile($this->currentUserId);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 3, true);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+
+    expect($reasons)->toContain('moon-station:sensor_phalanx')
+        ->and($reasons)->not->toContain('moon-station:robot_factory');
+});
+
 test('a technology priced in energy makes the planet raise its capacity until it can pay', function (): void {
     ambitionProfile($this->currentUserId);
     $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 900_000_000, 'crystal' => 900_000_000, 'deuterium' => 900_000_000]));
