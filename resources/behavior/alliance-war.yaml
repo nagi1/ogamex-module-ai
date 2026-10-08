@@ -19,6 +19,7 @@ lines:
   conspiracy_accept: "Agreed. We hit [{tag}] together."
   pact_refuse: "No pact. [{tag}] has hit us too often for that."
   war_declared_on_us: "[{tag}] has declared war on us. Their planets and moons are targets; join every ACS on them."
+  peace_broadcast: "The war with [{tag}] is over. Stand down; no fleet of ours flies at them unless they hit us again."
   betrayal_to_leader: "The war that made us partners is finished, and so is our pact. [{tag}] and we are at war."
 
 # A leader who betrays (persona taste, alliance-ambition.yaml) breaks a pact only once no war is left open and its
@@ -28,3 +29,10 @@ betray_strength_ratio: 2.0
 # When one alliance holds more than this share of all alliance points, the two strongest AI-led runners-up conspire:
 # a private pact and a shared war on it. One alliance owning the server is what makes the rest gang up.
 coalition_share: 0.5
+
+# A war ends by peace, not a timer (wiki War: "peace or surrender"; 2006 board interviews: hostilities "diminished" and
+# "no real bitterness" once the fighting stopped, grudges.yaml). Once it has stood this many hours and the grievance the two
+# sides still hold against each other (both ways, grudges fading) is under this line, the declarer announces peace. A new
+# raid raises the grievance again and a new war follows at war_grievance: the gap between the two lines is the truce.
+peace_grievance: 0.3
+war_minimum_hours: 24

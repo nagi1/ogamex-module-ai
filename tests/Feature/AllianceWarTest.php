@@ -234,3 +234,23 @@ test('two raids on a small alliance are a war', function (): void {
     expect(app(AdvanceAiAlliancePoliticsAction::class)->handle())->toBe(1)
         ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->toBe([$theirs->id]);
 });
+
+// A war ends by peace, not a timer; the grudges under it fade (alliance-war.yaml, grudges.yaml).
+test('a war whose grudges have faded is ended, while a hot or a fresh one stands', function (string $threat, int $hours, bool $ended): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $theirs = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'THEM', 'Them');
+    allianceWarMember($theirs->id);
+    allianceWarGrudge($this->currentUserId, (int) $theirs->founder_user_id, $threat);
+    AiAllianceRelation::query()->create([
+        'alliance_id' => $ours->id, 'other_alliance_id' => $theirs->id, 'stance' => AiAllianceStance::War,
+        'cause' => 'grievance', 'declared_by' => $this->currentUserId, 'started_at' => now()->subHours($hours),
+    ]);
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War) === [])->toBe($ended);
+})->with([
+    'forgotten and old' => ['0.1000', 72, true],
+    'forgotten but only hours old' => ['0.1000', 2, false],
+    'still hot' => ['0.8000', 72, false],
+]);

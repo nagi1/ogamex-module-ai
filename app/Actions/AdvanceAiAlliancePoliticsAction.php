@@ -45,7 +45,7 @@ class AdvanceAiAlliancePoliticsAction
     {
         $this->loadPolicy();
         $founders = AiProfile::query()->where('enabled', true)->pluck('player_id')->all();
-        $moves = $this->conspire($founders) + $this->readBoards($founders);
+        $moves = $this->makePeace() + $this->conspire($founders) + $this->readBoards($founders);
 
         foreach (Alliance::query()->whereIn('founder_user_id', $founders)->orderBy('id')->get() as $alliance) {
             $moves += $this->declareWar($alliance) + $this->offerPact($alliance, $founders) + $this->betrayPact($alliance);
@@ -99,6 +99,47 @@ class AdvanceAiAlliancePoliticsAction
         }
 
         return 1;
+    }
+
+    /**
+     * A war ends when it has run its course, not on a timer (wiki: peace or surrender): once it has stood the minimum and
+     * what the two sides still hold against each other, both ways, has faded under the peace line, the founder who
+     * declared it announces peace. A war a coalition is fighting on a dominant alliance stays until that one shrinks.
+     */
+    private function makePeace(): int
+    {
+        $peace = (float) ($this->policy['peace_grievance'] ?? 0.0);
+        $minimum = (int) ($this->policy['war_minimum_hours'] ?? 0);
+        $ended = 0;
+
+        foreach (AiAllianceRelation::query()->whereNull('ended_at')->where('stance', AiAllianceStance::War)->where('cause', '!=', 'coalition')
+            ->where('started_at', '<=', now()->subHours($minimum))->get() as $war) {
+            $ours = $this->members((int) $war->alliance_id);
+            $theirs = $this->members((int) $war->other_alliance_id);
+            if ($this->grievance($ours, $theirs) + $this->grievance($theirs, $ours) >= $peace) {
+                continue;
+            }
+
+            $war->update(['ended_at' => now()]);
+            $this->announcePeace($war);
+            $ended++;
+        }
+
+        return $ended;
+    }
+
+    private function announcePeace(AiAllianceRelation $war): void
+    {
+        $declarer = Alliance::query()->find($war->alliance_id);
+        $other = Alliance::query()->find($war->other_alliance_id);
+        if ($declarer === null || $other === null) {
+            return;
+        }
+
+        try {
+            app(AllianceService::class)->sendBroadcastMessage((int) $declarer->id, (int) $declarer->founder_user_id, $this->line('peace_broadcast', (string) $other->alliance_tag), ['-1']);
+        } catch (Exception) {
+        }
     }
 
     private function declareWar(Alliance $alliance): int
