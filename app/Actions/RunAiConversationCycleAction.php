@@ -17,6 +17,7 @@ use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSocialExchange;
+use Modules\AI\Models\AiTextReading;
 use Modules\AI\Support\AiRuntimeSettings;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
@@ -290,6 +291,14 @@ class RunAiConversationCycleAction
         return true;
     }
 
+    /** The classifier's reading of the human message behind an observation; cached, so asking twice costs nothing. */
+    private function humanReading(int $observationId): AiTextReading|null
+    {
+        $message = ChatMessage::query()->find(AiObservation::query()->whereKey($observationId)->value('source_id'));
+
+        return $message === null ? null : app(ReadAiHumanMessageAction::class)->handle((int) $message->sender_id, (string) $message->message);
+    }
+
     private function classify(ChatMessage $message): InboundSocialExchange|null
     {
         $reader = app(ReadAiHumanMessageAction::class);
@@ -325,6 +334,7 @@ class RunAiConversationCycleAction
     private function recordContact(AiObservation $observation, AiSocialExchangeType $type, array $terms): void
     {
         $impact = app(ContactImpactPolicy::class)->impactFor($type, $terms);
+        $weight = app(ReadAiHumanMessageAction::class)->weight($this->humanReading((int) $observation->id));
 
         app(RecordAiRelationshipInteractionAction::class)->handle(
             (int) $observation->player_id,
@@ -335,7 +345,7 @@ class RunAiConversationCycleAction
             $impact->threat,
             $impact->affinity,
             $impact->respect,
-            $impact->socialImportance,
+            $impact->socialImportance * $weight,
         );
     }
 
@@ -381,6 +391,10 @@ class RunAiConversationCycleAction
     private function mayReachProvider(AiSocialExchange $exchange): bool
     {
         if (!app(AiRuntimeSettings::class)->languageEnabled()) {
+            return false;
+        }
+
+        if (!app(ReadAiHumanMessageAction::class)->providerSafe($this->humanReading((int) $exchange->source_observation_id))) {
             return false;
         }
 
