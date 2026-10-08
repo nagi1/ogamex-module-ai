@@ -97,3 +97,31 @@ test('a wall missing several kinds takes its domes first, under every doctrine',
     'production shell' => [AiDefenseDoctrine::ProductionShell],
     'fodder heavy' => [AiDefenseDoctrine::FodderHeavy],
 ]);
+
+// The anchor is the doctrine's own unit, yet the balanced ratio leaves it out: once the domes led the ratio no light laser
+// was built in a whole world (9428).
+test('a wall holding everything its ratio names still builds the doctrine anchor', function (): void {
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Fleeter,
+        'skill_band' => AiSkillBand::Standard,
+        'defense_doctrine' => AiDefenseDoctrine::BalancedMixed,
+        'random_seed' => 35_000 + $this->currentUserId,
+        'enabled' => true,
+    ]);
+    $this->planetAddResources(new Resources(50_000_000, 50_000_000, 50_000_000));
+    $this->planetSetObjectLevel('shipyard', 12);
+    $this->planetSetObjectLevel('missile_silo', 6);
+    foreach (['energy_technology' => 8, 'laser_technology' => 10, 'ion_technology' => 5, 'plasma_technology' => 7, 'weapon_technology' => 6,
+        'shielding_technology' => 6, 'armor_technology' => 6, 'combustion_drive' => 6, 'impulse_drive' => 6] as $research => $level) {
+        $this->playerSetResearchLevel($research, $level);
+    }
+    foreach (['small_shield_dome' => 1, 'large_shield_dome' => 1, 'rocket_launcher' => 20, 'ion_cannon' => 20, 'heavy_laser' => 10,
+        'gauss_cannon' => 10, 'plasma_turret' => 5, 'anti_ballistic_missile' => 10] as $unit => $amount) {
+        $this->planetAddUnit($unit, $amount);
+    }
+
+    $wall = app(DefenseCompositionPlanner::class)->plan($this->planetService->getPlayer(), $this->planetService);
+
+    expect($wall?->unit->machine_name)->toBe('light_laser');
+});

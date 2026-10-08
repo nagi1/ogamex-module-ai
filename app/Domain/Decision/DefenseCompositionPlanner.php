@@ -102,7 +102,10 @@ class DefenseCompositionPlanner
         $best = null;
         $bestBehind = 0.0;
 
-        foreach ($doctrine['ratio'] as $name => $ratio) {
+        // The anchor is the doctrine's own unit, stated per its count, yet most ratios leave it out: it was only ever bought
+        // by the fallback, and once the domes led the ratio no light laser was built at all (9428).
+        $ratios = $doctrine['ratio'] + [$doctrine['anchor']['unit'] => $anchorCount];
+        foreach ($ratios as $name => $ratio) {
             $unit = $this->resolveUnit($name, $defenceObjects);
             $target = (int) ceil($ratio * $scale / $anchorCount);
             $have = $held($unit->machine_name);
