@@ -71,3 +71,20 @@ test('a login that can pay for nothing queues no wall on the bare sibling', func
     expect($situation->work())->not->toBeEmpty()
         ->and(array_intersect($defence, $situation->queued()))->toBe([], 'a wall was queued without the resources to pay for it; ' . $situation->account());
 });
+
+// Once the domes led every doctrine a bare colony's first wall was one dome, each login went to it, and the probes the raids
+// follow were never ordered (9429: 144 spy missions where 9426 flew 350). A bare planet takes the floor, guns before shields.
+test('a bare sibling that could hold a dome is walled with guns first', function (): void {
+    Situation::of($this)
+        ->colony()
+        ->levelEveryPlanet('robot_factory', 2)
+        ->levelEveryPlanet('shipyard', 4)
+        ->defence('rocket_launcher', 20)
+        ->stockEveryPlanet(20_000_000, 10_000_000, 5_000_000);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+
+    $orders = app(QueueableUnitPlanner::class)->standingDefenceOrders($this->currentUserId);
+
+    expect($orders)->not->toBeEmpty()
+        ->and(collect($orders)->every(static fn ($order): bool => $order->amount > 1))->toBeTrue();
+});

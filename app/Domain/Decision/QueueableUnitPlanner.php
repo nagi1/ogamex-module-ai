@@ -1312,7 +1312,9 @@ class QueueableUnitPlanner
         }
 
         $defense = $this->defenseComposition->plan($player, $planet, $need);
-        if ($defense !== null && $this->requirementsMet($planet, $defense->unit)) {
+        // A bare planet's first wall is the floor, guns before shields: once the domes led every doctrine a new colony's
+        // first order was one dome, a login went to it, and the probes the raids follow were never ordered (9429).
+        if ($defense !== null && $this->requirementsMet($planet, $defense->unit) && ObjectService::getObjectMaxBuildAmount($defense->unit->machine_name, $planet, true) > 1) {
             // The host refuses an order it cannot pay for whole (QueueUnits: queue_not_created), and a
             // planet whose plan repeats that refusal every login stays naked forever, so the order is
             // capped by what this planet can actually pay for right now.
