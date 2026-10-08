@@ -254,3 +254,15 @@ In every world so far, no jump gate was built and no fleet jumped. Two other thi
 **Complete worlds:** 9420, 9424 and 9426 (12 h, 6 accounts) each used every object and every mission. In each, fleets jumped
 through gates (gate stamps on 2 to 8 moons). 9426 flew 238 ACS attacks and 218 missile strikes and fought 160 battles. The weak
 side is alliances: with six accounts, each holds a grudge against someone in every club.
+
+### 8 Oct, evening: alliance diagnosis, then grudges that fade
+
+9427 (12 accounts) took five members in half an hour and kept two. The members left minutes after acceptance: they were raided between applying and being accepted (f262e9e: a leader seats an applicant only if the applicant would still ask). Missiles were not the cause (16ce425 spares mates anyway). 9429's war collapsed when bare colonies took one dome per login and starved the probes (6b26fb2); 9428 built no light laser once domes led the ratio (92d587b).
+
+The social model had one more fault: threat only rose. 63 of 86 relationships in 9432 stood at 0.6 or more, and a war, once declared, was never ended. Read against the 2006 board interviews (Cursed, Schism, Fury: "no real bitterness", hostilities that "diminished" when the fighting did, sides drawn by who hit whom) and the wiki's "wars end by peace or surrender":
+
+- Grudges fade after 24 quiet hours, halving every 48 (`grudges.yaml`, 5ace00e). A new raid resets the clock.
+- A club that shares the account's enemy ranks higher when it picks one (`common_enemy` in `alliance_fit.yaml`, 5ace00e).
+- A war ends in peace once it has stood 24 hours and the grudges between the two sides have faded under 0.3 (`alliance-war.yaml`, 0e1e09f).
+
+9434 (12 accounts, `COGNITION=full`, 6 h) used every mission and object and held 109 social exchanges (the native worlds hold none), but one club of 6 and no alliance war. No exchange was an apology, ceasefire or compensation: the ceasefire evaluator always answers "enforcement unavailable". 9435 (36 h, with the fade and peace) and 9433 (100 accounts, 6 h) are running; their reads follow.
