@@ -56,7 +56,7 @@ alliances that are hard to enter, mid and small clubs, and many players in none;
 | Churn hacks | `leaveOneMisfit`, the cooldown clears | deleted; leaving happens for a reason (enemy in the club, a better seat accepted, a grudge with the leader) |
 | Elite bar, race, size | `ReviewAiAllianceApplicationsAction`: peer share and size from YAML, strongest pending first | change |
 | Rejection memory | `AllianceChoice`: a rejection blocks reapplying for the cooldown, not for ever | change |
-| Alliance relations | one table `ai_alliance_relations` (alliance, other, stance war/pact, since, cause) and one action `AdvanceAiAllianceDiplomacyAction` per pass: declare war, offer and answer a pact, break a pact, conspire | new (one class, one table) |
+| Alliance relations | one table `ai_alliance_relations` (alliance, other, stance war/pact, since, cause) and one action `AdvanceAiAlliancePoliticsAction` per pass: declare war, offer and answer a pact, break a pact, conspire | new (one class, one table) |
 | Enemies at war, partners spared | `Enemies::of` adds members of alliances at war and removes members of pact partners | change |
 | Words | authored templates for declaration, pact offer and answer, betrayal, invitation; delivered through the host's broadcast, alliance texts and private messages | data |
 | Stance | the existing `SocialCognition` seam: PsychSim when configured, the native engine otherwise | reuse |
@@ -90,6 +90,10 @@ Refused, with the reasons from the driver note: choosing the stance or the emoti
 targets, any call on the login path, any label used as an RL reward.
 
 ## 5. Slices
+
+State 8 Oct 2026: S1 (39d0760), S2 (3eea3b4) and S3's pact, betrayal and conspiracy (9fb8cf3 and the conspiracy commit) are in;
+poaching and the human-facing P1-P3 readers are open. Pacts are signed between AI leaders only until P1 reads a human's answer.
+Wars do not end yet: an ending needs a measured reason (a side's fleet crushed, a surrender), not a timer.
 
 | Slice | Done when (situation or invariant) |
 | --- | --- |

@@ -20,7 +20,9 @@ use Symfony\Component\Yaml\Yaml;
  * - war: on the alliance its members hold the most grievance against (the threat recorded after being raided), when
  *   past the line and larger than the other side's, so a war starts where empires have been hitting each other;
  * - pact: with an alliance at war with the same enemy, the enemy of my enemy, when the other leader does not hate it;
- * - betrayal: a leader of the betraying kind breaks a pact once no war is left and it has outgrown the partner.
+ * - betrayal: a leader of the betraying kind breaks a pact once no war is left and it has outgrown the partner;
+ * - conspiracy: when one alliance holds most of the points, the two strongest runners-up agree in private on a pact and
+ *   a shared war on it, so the dominant alliance meets a coalition, the great war of a server's end.
  * The leader announces each one to its members, the other leader and the board, as OGame players do.
  */
 class AdvanceAiAlliancePoliticsAction
@@ -35,13 +37,60 @@ class AdvanceAiAlliancePoliticsAction
         $file = Yaml::parseFile(dirname(__DIR__, 2) . self::FILE);
         $this->policy = is_array($file) ? $file : [];
         $founders = AiProfile::query()->where('enabled', true)->pluck('player_id')->all();
-        $moves = 0;
+        $moves = $this->conspire($founders);
 
         foreach (Alliance::query()->whereIn('founder_user_id', $founders)->orderBy('id')->get() as $alliance) {
             $moves += $this->declareWar($alliance) + $this->offerPact($alliance, $founders) + $this->betrayPact($alliance);
         }
 
         return $moves;
+    }
+
+    /** @param list<int> $founders */
+    private function conspire(array $founders): int
+    {
+        $points = Alliance::query()->pluck('id')->mapWithKeys(fn ($id): array => [(int) $id => $this->points((int) $id)])->sortDesc();
+        $dominantId = (int) $points->keys()->first();
+        if ($points->count() < 3 || $points->first() <= (float) ($this->policy['coalition_share'] ?? 0.5) * $points->sum()) {
+            return 0;
+        }
+
+        $plotters = Alliance::query()->whereIn('id', $points->keys()->slice(1)->all())->whereIn('founder_user_id', $founders)->get()
+            ->sortByDesc(fn (Alliance $alliance): float => $points[$alliance->id])->take(2)->values();
+        if ($plotters->count() < 2) {
+            return 0;
+        }
+
+        [$first, $second] = [$plotters[0], $plotters[1]];
+        $atWar = $this->open((int) $first->id, $dominantId, AiAllianceStance::War) && $this->open((int) $second->id, $dominantId, AiAllianceStance::War);
+        if ($atWar || $this->open((int) $first->id, (int) $second->id, AiAllianceStance::War)
+            || $this->hates((int) $first->founder_user_id, $this->members((int) $second->id))
+            || $this->hates((int) $second->founder_user_id, $this->members((int) $first->id))) {
+            return 0;
+        }
+
+        $dominant = Alliance::query()->findOrFail($dominantId);
+        // Leader to leader only: the members learn of the plot from the war, not before.
+        if (!AiAllianceRelation::query()->openBetween((int) $first->id, (int) $second->id)->exists()) {
+            app(DeliverAiDirectReplyAction::class)->handle((int) $first->founder_user_id, (int) $second->founder_user_id, $this->line('conspiracy_offer', (string) $dominant->alliance_tag));
+            AiAllianceRelation::query()->create([
+                'alliance_id' => $first->id,
+                'other_alliance_id' => $second->id,
+                'stance' => AiAllianceStance::Nap,
+                'cause' => 'coalition',
+                'declared_by' => $first->founder_user_id,
+                'started_at' => now(),
+            ]);
+            app(DeliverAiDirectReplyAction::class)->handle((int) $second->founder_user_id, (int) $first->founder_user_id, $this->line('conspiracy_accept', (string) $dominant->alliance_tag));
+        }
+
+        foreach ([$first, $second] as $plotter) {
+            if (!$this->open((int) $plotter->id, $dominantId, AiAllianceStance::War)) {
+                $this->goToWar($plotter, $dominant, 'coalition', 'war_broadcast', 'war_to_leader');
+            }
+        }
+
+        return 1;
     }
 
     private function declareWar(Alliance $alliance): int

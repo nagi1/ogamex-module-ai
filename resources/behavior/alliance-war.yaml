@@ -14,8 +14,14 @@ lines:
   pact_offer: "We are both at war with [{tag}]. Non-aggression between us until it is over?"
   pact_accept: "Agreed. No fleet of ours flies at [{tag}]."
   betrayal_broadcast: "Our pact with [{tag}] is over. They are a target from today; hit them before they regroup."
+  conspiracy_offer: "[{tag}] holds half the universe. A pact between us and war on them together; not a word to our members until the fleets fly."
+  conspiracy_accept: "Agreed. We hit [{tag}] together."
   betrayal_to_leader: "The war that made us partners is finished, and so is our pact. [{tag}] and we are at war."
 
 # A leader who betrays (persona taste, alliance-ambition.yaml) breaks a pact only once no war is left open and its
 # alliance has this many times the partner's points: players turn on a weaker partner, not on an equal.
 betray_strength_ratio: 2.0
+
+# When one alliance holds more than this share of all alliance points, the two strongest AI-led runners-up conspire:
+# a private pact and a shared war on it. One alliance owning the server is what makes the rest gang up.
+coalition_share: 0.5

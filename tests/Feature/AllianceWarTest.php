@@ -197,3 +197,26 @@ test('an account never scouts its alliance mate or a pact partner', function ():
 
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
 });
+
+test('the two strongest runners-up conspire against an alliance holding most of the points', function (int $dominantPoints, bool $coalition): void {
+    $dominantLeader = User::factory()->create();
+    $dominant = allianceWarLeader($dominantLeader->id, 'BIG');
+    $first = allianceWarLeader($this->currentUserId, 'ONE');
+    $secondLeader = User::factory()->create();
+    $second = allianceWarLeader($secondLeader->id, 'TWO');
+    $smallLeader = User::factory()->create();
+    allianceWarLeader($smallLeader->id, 'SMALL');
+    allianceWarPoints($dominantLeader->id, $dominantPoints);
+    allianceWarPoints($this->currentUserId, 3_000);
+    allianceWarPoints($secondLeader->id, 2_000);
+    allianceWarPoints($smallLeader->id, 500);
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($first->id, AiAllianceStance::War) === [$dominant->id])->toBe($coalition)
+        ->and(AiAllianceRelation::counterparts($second->id, AiAllianceStance::War) === [$dominant->id])->toBe($coalition)
+        ->and(AiAllianceRelation::counterparts($first->id, AiAllianceStance::Nap) === [$second->id])->toBe($coalition);
+})->with([
+    'an alliance with two thirds of the points' => [12_000, true],
+    'the strongest of four with under half' => [5_000, false],
+]);
