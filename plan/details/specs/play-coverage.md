@@ -195,3 +195,25 @@ Verification: worlds 9401-9404 (12 h, 6 accounts).
 Alliance politics (wars, pacts, betrayal, a coalition against a dominant alliance) shipped in 3eea3b4, 9fb8cf3 and
 718f330, and is being read in 9393-9394. The language-model and classifier stack (JEV readings, agents, distillation;
 f4cdfa3-12eb1ba) is off until the owner supplies a key.
+
+### 8 Oct, late afternoon: strikes that never launched, a full silo, JEV live
+
+| Cause (world) | Fix | Commit |
+|---|---|---|
+| The planner chose deathstar strikes on enemy moons; dispatch refused them because the defender was online (9401) | A moon strike launches at an online defender: logging in can save a fleet, never a moon | e4d15da |
+| Interceptors filled every silo slot, so no attack missile was ever stocked (9401-9404) | An account whose doctrine fires missiles fills only half its silo with interceptors | bfdc3e2 |
+| The fleet sat on moons, while raids launched from the first body with any ship, a home with probes (9405) | A raid launches from the body holding the most valuable free fleet | 5e5163d |
+| No gated fleet was ever attacked, so the escape jump never fired (9392) | With no threat, a fleet jumps to a gated moon nearer an enemy | 9a4fb4e |
+
+9406 flew **4 moon destructions**, the first in any world. reach.txt now also counts gate jumps.
+
+JEV is live (key in the root .env, jev-1.13.0, 0.4 s a reading). `rl/eval/jev-eval.php` and `jev-holdout.php` measure it on
+labelled messages, alliance pages and applications:
+
+- Message acts: 40/40 on the tuning set, 21/24 held out. The authored matcher scores 9/40 and 4/24.
+- Alliance pages: 8/8. Applications: 8/8.
+- Human-leader flow: a pact offer, a pact break, a war declaration and an alliance page each move the AI alliance's
+  relations. A human mate's ACS call puts the target's owner at enemy threat for the AI mates.
+
+807 persona voice lines are installed (resources/behavior/social-voices.yaml). The one doctrine proposal (WIK-013
+turtle ratio) was already in defence-doctrines.yaml.
