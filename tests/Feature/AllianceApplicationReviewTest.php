@@ -182,6 +182,37 @@ test('an elite alliance rejects a bottom-half applicant', function (): void {
         ->and($application->fresh()->status)->toBe(AllianceApplication::STATUS_REJECTED);
 });
 
+// Past a million points per member every alliance read as elite, and a top-15% cut in a six-empire universe admitted no one (9372).
+test('an elite alliance admits a peer as strong as its members', function (): void {
+    reviewProfile($this->currentUserId);
+    $alliance = reviewAlliance($this->currentUserId);
+    AllianceHighscore::unguarded(fn () => AllianceHighscore::create([
+        'alliance_id' => $alliance->id,
+        'general' => 2_000_000,
+        'economy' => 0,
+        'research' => 0,
+        'military' => 0,
+    ]));
+
+    $applicant = User::factory()->create();
+    Highscore::unguarded(fn () => Highscore::updateOrCreate(
+        ['player_id' => $applicant->id],
+        ['general' => 1_500_000, 'general_rank' => 0, 'economy' => 1000, 'research' => 1000],
+    ));
+    foreach (range(1, 4) as $stronger) {
+        Highscore::unguarded(fn () => Highscore::updateOrCreate(
+            ['player_id' => User::factory()->create()->id],
+            ['general' => 5_000_000, 'general_rank' => 0, 'economy' => 1000, 'research' => 1000],
+        ));
+    }
+
+    $application = reviewApplication($applicant->id, $alliance->id);
+    ageReviewApplication($application->id, 20);
+
+    expect(app(ReviewAiAllianceApplicationsAction::class)->handle())->toBe(1)
+        ->and($application->fresh()->status)->toBe(AllianceApplication::STATUS_ACCEPTED);
+});
+
 test('a ranked account every alliance rejected founds its own alliance', function (): void {
     reviewProfile($this->currentUserId);
     $alliance = reviewAlliance($this->currentUserId, 'ORBITAL');

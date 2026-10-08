@@ -45,6 +45,9 @@ class ReviewAiAllianceApplicationsAction
     /** Points per member at or above which an alliance reads as an elite core. */
     private const ELITE_POINTS_PER_MEMBER = 1_000_000;
 
+    /** An applicant holding this share of the alliance's points per member is a peer, whatever the alliance's tier. */
+    private const PEER_SHARE = 0.5;
+
     /** Points per member at or below which an alliance reads as mass / still recruiting. */
     private const MASS_POINTS_PER_MEMBER = 10_000;
 
@@ -100,7 +103,7 @@ class ReviewAiAllianceApplicationsAction
                 break;
             }
 
-            if (!$this->shouldAccept($ratio, $alliance)) {
+            if (!$this->shouldAccept($ratio, $alliance, (int) $application->user_id)) {
                 $decided += $this->reject($alliance, $application);
 
                 continue;
@@ -159,13 +162,19 @@ class ReviewAiAllianceApplicationsAction
         return ($ahead + 1) / max(1, $scored);
     }
 
-    private function shouldAccept(float $ratio, Alliance $alliance): bool
+    private function shouldAccept(float $ratio, Alliance $alliance, int $applicantId): bool
     {
         if ($ratio <= self::STRONG_RANK_RATIO) {
             return true;
         }
 
+        // An elite club takes a player as strong as its own members: past a million points per member every alliance read
+        // as elite and a top-15% cut in a six-empire universe admitted no one, so each empire founded its own (9372).
         $ppm = $this->pointsPerMember($alliance);
+        $points = (float) (Highscore::query()->where('player_id', $applicantId)->value('general') ?? 0);
+        if ($points >= self::PEER_SHARE * $ppm && $points > 0) {
+            return true;
+        }
 
         if ($ppm >= self::ELITE_POINTS_PER_MEMBER) {
             return false;

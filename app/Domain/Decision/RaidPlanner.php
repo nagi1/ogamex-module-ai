@@ -73,6 +73,9 @@ class RaidPlanner
 
     private const LOOT_TIER_DEFENDED = 2.0;
 
+    /** The share of the loot an account at war risks on a fight with the enemy, whatever its archetype: a raider's. */
+    private const WAR_LOSS_TOLERANCE = 0.5;
+
     /** A phalanx scan stays authoritative for the raid decision this long. */
     private const PHALANX_SCAN_TTL_HOURS = 2;
 
@@ -213,12 +216,19 @@ class RaidPlanner
 
         // A fight's wreckage is profit only to an account that can pick it up: one that owns the
         // host's harvest hull for this position (the recycler fleet a player builds for the field).
-        $debris = $this->canHarvest($origin, $target) ? $estimate->p20Debris : 0.0;
+        // Against an enemy the wreckage is the point: the fleet that raided the alliance is gone either way.
+        $enemy = isset(app(Enemies::class)->of($playerId)[(int) $report->planet_user_id]);
+        $debris = $enemy || $this->canHarvest($origin, $target) ? $estimate->p20Debris : 0.0;
 
         // A raider crashes a defended planet when the loot and the wreckage beat the usual loss and takes
         // the bad tail now and then; only a farm must never lose. The share of the loot an account will
-        // risk on the tail is its archetype's taste (a fight is the point of a fleet: LIFE_FIGHTS).
-        $tolerance = $this->defencelessTarget($target) ? 0.0 : $this->lossTolerance($profile);
+        // risk on the tail is its archetype's taste (a fight is the point of a fleet: LIFE_FIGHTS); at war
+        // even a miner takes a raider's share.
+        $tolerance = match (true) {
+            $this->defencelessTarget($target) => 0.0,
+            $enemy => max(self::WAR_LOSS_TOLERANCE, $this->lossTolerance($profile)),
+            default => $this->lossTolerance($profile),
+        };
         if ($estimate->p20NetProfit + $debris + $tolerance * $estimate->p20Loot <= 0.0) {
             return $this->reject('unprofitable', $playerId, $reportId);
         }

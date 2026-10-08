@@ -14,6 +14,7 @@ use Modules\AI\Support\FlightFuel;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\EspionageMission;
+use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
@@ -188,7 +189,7 @@ class QueueableSpyPlanner
             ->select('planets.*')
             ->orderByRaw('ABS(CAST(`planets`.`galaxy` AS SIGNED) - ?) * 100000 + ABS(CAST(`planets`.`system` AS SIGNED) - ?) * 20 + ABS(CAST(`planets`.`planet` AS SIGNED) - ?), `planets`.`id`', [$home->galaxy, $home->system, $home->position])
             ->cursor()
-            ->reject(static fn (Planet $planet): bool => isset($skipCoordinates["{$planet->galaxy}:{$planet->system}:{$planet->planet}"]))
+            ->reject(static fn (Planet $planet): bool => self::skipped($skipCoordinates, $planet))
             ->take(self::MAX_CANDIDATES)
             ->values();
 
@@ -199,14 +200,13 @@ class QueueableSpyPlanner
         $priorities = $this->intelBook->priorities($player->getId());
         $payoffWeight = $this->intelBook->priorityWeight();
         $fighter = $this->ownsWarFleet($idleOrigins);
+        $enemies = $fighter ? app(Enemies::class)->of($player->getId()) : [];
+        $breaker = $fighter && $this->holdsMoonBreakers($idleOrigins);
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
         $scored = [];
 
         foreach ($candidates as $planet) {
             $coordinateKey = "{$planet->galaxy}:{$planet->system}:{$planet->planet}";
-            if (isset($skipCoordinates[$coordinateKey])) {
-                continue;
-            }
 
             // The candidate model is already in hand; building a PlanetService
             // from it skips the per-candidate Planet::find + refreshUser that
@@ -224,9 +224,12 @@ class QueueableSpyPlanner
                 continue;
             }
             $distance = $fleetMissions->calculateFleetMissionDistance($origin, new Coordinate((int) $planet->galaxy, (int) $planet->system, (int) $planet->planet));
+            $enemy = isset($enemies[(int) $planet->user_id]);
             $scored[] = [
                 'planet' => $planet,
                 'origin' => $origin,
+                'enemy' => $enemy,
+                'enemy_moon' => $enemy && $breaker && (int) $planet->planet_type === PlanetType::Moon->value,
                 'inactive' => $owner?->isInactive() ?? false,
                 'quiet' => !$this->activityIntelReader->activityAt($target),
                 'defended' => $fighter && isset($intel['defended'][$coordinateKey]),
@@ -245,9 +248,42 @@ class QueueableSpyPlanner
         // An account that owns a war fleet reads the bodies known to fight back first: an administrator
         // sees raids that pillage empty planets as a dead universe (LIFE_FIGHTS), and a fleet is built
         // to be flown at something that shoots.
-        usort($scored, static fn (array $left, array $right): int => [$right['defended'], $right['inactive'], $right['quiet'], $right['score']] <=> [$left['defended'], $left['inactive'], $left['quiet'], $left['score']]);
+        // At war the enemy is read first, the moon holding its gate and phalanx first of all for an account that can break it:
+        // a late empire raided by every neighbour still scouted the nearest farm, and no rival's fleet or moon was ever hit.
+        usort($scored, static fn (array $left, array $right): int => [$right['enemy_moon'], $right['enemy'], $right['defended'], $right['inactive'], $right['quiet'], $right['score']]
+            <=> [$left['enemy_moon'], $left['enemy'], $left['defended'], $left['inactive'], $left['quiet'], $left['score']]);
 
         return [$scored[0]['origin'], $scored[0]['planet']];
+    }
+
+    /**
+     * A coordinate in flight, intended or refused covers both bodies there; fresh intel covers only the body it read.
+     *
+     * @param array<string, true> $skipCoordinates
+     */
+    private static function skipped(array $skipCoordinates, Planet $planet): bool
+    {
+        $coordinate = "{$planet->galaxy}:{$planet->system}:{$planet->planet}";
+
+        return isset($skipCoordinates[$coordinate]) || isset($skipCoordinates["{$coordinate}:{$planet->planet_type}"]);
+    }
+
+    /**
+     * Whether any scouting base holds the hulls the host's moon-destruction mission asks for.
+     *
+     * @param list<PlanetService> $origins
+     */
+    private function holdsMoonBreakers(array $origins): bool
+    {
+        foreach ($origins as $origin) {
+            foreach (MoonDestructionMission::getRequiredShipMachineNames() as $machineName) {
+                if ($origin->getObjectAmount($machineName) > 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -455,8 +491,9 @@ class QueueableSpyPlanner
             ->pluck('espionage_report_id');
 
         $coordinates = [];
-        foreach (EspionageReport::query()->whereIn('id', $reportIds)->get(['planet_galaxy', 'planet_system', 'planet_position']) as $report) {
-            $coordinates["{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}"] = true;
+        // Keyed with the body: a fresh report on a planet said nothing about the moon beside it, which was never read.
+        foreach (EspionageReport::query()->whereIn('id', $reportIds)->get(['planet_galaxy', 'planet_system', 'planet_position', 'planet_type']) as $report) {
+            $coordinates["{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}:{$report->planet_type}"] = true;
         }
 
         return $coordinates;
