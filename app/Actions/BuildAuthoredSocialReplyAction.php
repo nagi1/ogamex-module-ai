@@ -53,9 +53,35 @@ class BuildAuthoredSocialReplyAction
      */
     private function replyLines(AiSocialExchangeType $type, AiSocialResponse $response, string $stance, AiProfile $profile): array
     {
-        $file = $this->lines();
         $exchange = Str::snake($type->name);
-        $keys = ["{$exchange}." . strtolower($response->name) . ".{$stance}", "{$exchange}." . strtolower($response->name), $exchange];
+
+        return $this->keyedLines($profile, ["{$exchange}." . strtolower($response->name) . ".{$stance}", "{$exchange}." . strtolower($response->name), $exchange]);
+    }
+
+    /**
+     * One authored line outside an exchange (a leader's welcome), in the persona's voice first, the same pick per salt.
+     *
+     * @param array<string, string> $vars
+     */
+    public function line(AiProfile $profile, string $key, string $salt, array $vars = []): string|null
+    {
+        $lines = $this->keyedLines($profile, [$key]);
+        if ($lines === []) {
+            return null;
+        }
+
+        $line = $lines[(int) floor($this->randomSource->unitInterval($profile->random_seed, $key . ':' . $salt) * count($lines))];
+
+        return strtr($line, array_combine(array_map(static fn (string $name): string => '{' . $name . '}', array_keys($vars)), $vars));
+    }
+
+    /**
+     * @param list<string> $keys
+     * @return list<string>
+     */
+    private function keyedLines(AiProfile $profile, array $keys): array
+    {
+        $file = $this->lines();
 
         foreach ([(array) ($file['voices'][strtolower((string) $profile->archetype?->name)] ?? []), (array) ($file['default'] ?? [])] as $voice) {
             foreach ($keys as $key) {

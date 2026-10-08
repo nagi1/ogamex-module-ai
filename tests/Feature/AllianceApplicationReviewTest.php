@@ -16,9 +16,12 @@ use OGame\Models\Alliance;
 use OGame\Models\AllianceApplication;
 use OGame\Models\AllianceHighscore;
 use OGame\Models\Highscore;
+use OGame\Models\ChatMessage;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
 use Tests\IsolatedAccountTestCase;
+
+require_once __DIR__ . '/../Support/VoicedLines.php';
 
 uses(IsolatedAccountTestCase::class);
 
@@ -307,4 +310,19 @@ test('the leader seats the strongest applicant waiting, not the first', function
 
     expect($second->fresh()->status)->toBe(AllianceApplication::STATUS_ACCEPTED)
         ->and($first->fresh()->status)->toBe(AllianceApplication::STATUS_PENDING);
+});
+
+// Every club sent the same sentence to every newcomer, and a judge read both alliances as automated (9406). The welcome is
+// one of the leader's own lines, in its persona's voice first, with the club's tag.
+test('a seated applicant gets a welcome in the leader\'s voice', function (): void {
+    reviewProfile($this->currentUserId);
+    $alliance = reviewAlliance($this->currentUserId, 'WLCM');
+    $applicant = User::factory()->create();
+    reviewRank($applicant->id, 1);
+    ageReviewApplication(reviewApplication($applicant->id, $alliance->id)->id, 30);
+
+    app(ReviewAiAllianceApplicationsAction::class)->handle();
+
+    $welcome = (string) ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $applicant->id)->value('message');
+    expect(str_replace('WLCM', '{tag}', $welcome))->toBeIn(voicedLines('casual', 'alliance_welcome'));
 });

@@ -3,8 +3,9 @@
 # Nobody schedules a war: members record a grudge (threat, 0..1) toward each player who hit them. An alliance's
 # grievance against another is the sum of what its members hold toward the other's members; past this line its
 # leader declares war, provided the other side does not hold the larger grievance (then it is theirs to declare).
-# Two members each fully hostile to one enemy is a war; one bad raid is not.
-war_grievance: 1.5
+# A battle leaves about 0.5 of threat (0.3 appraised, 0.2 recorded): one raid is a grudge, two are a war. At 1.5, two
+# near-equal alliances of two traded four battles and never declared (9406).
+war_grievance: 0.8
 
 # The leader's words. {tag} is the other alliance's tag. Players read these; the module wrote them from the decision.
 lines:

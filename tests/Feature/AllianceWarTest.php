@@ -73,7 +73,8 @@ test('an alliance whose members two rivals have been raiding declares war on the
 test('one bad raid on one member is a grudge, not a war', function (): void {
     $ours = allianceWarLeader($this->currentUserId, 'OURS');
     $theirs = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'THEM', 'Them');
-    allianceWarGrudge($this->currentUserId, (int) $theirs->founder_user_id);
+    // One battle's worth of threat (alliance-war.yaml).
+    allianceWarGrudge($this->currentUserId, (int) $theirs->founder_user_id, '0.5000');
 
     expect(app(AdvanceAiAlliancePoliticsAction::class)->handle())->toBe(0)
         ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->toBe([]);
@@ -220,3 +221,16 @@ test('the two strongest runners-up conspire against an alliance holding most of 
     'an alliance with two thirds of the points' => [12_000, true],
     'the strongest of four with under half' => [5_000, false],
 ]);
+
+// Two near-equal clubs of two that traded four battles were never at war: 0.9 of grievance against a line of 1.5 (9406).
+test('two raids on a small alliance are a war', function (): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $mate = allianceWarMember($ours->id);
+    $theirs = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'THEM', 'Them');
+    $raider = allianceWarMember($theirs->id);
+    allianceWarGrudge($this->currentUserId, $raider->id, '0.6000');
+    allianceWarGrudge($mate->id, (int) $theirs->founder_user_id, '0.3000');
+
+    expect(app(AdvanceAiAlliancePoliticsAction::class)->handle())->toBe(1)
+        ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->toBe([$theirs->id]);
+});

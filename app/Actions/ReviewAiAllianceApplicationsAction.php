@@ -219,11 +219,11 @@ class ReviewAiAllianceApplicationsAction
         }
 
         // DEF-007: a leader communicates with a new member. Delivery is best-effort.
-        app(DeliverAiDirectReplyAction::class)->handle(
-            $alliance->founder_user_id,
-            (int) $application->user_id,
-            'Welcome to ' . $alliance->alliance_tag . '. Settle in and check the alliance page.',
-        );
+        $founder = AiProfile::query()->where('player_id', $alliance->founder_user_id)->first();
+        $welcome = $founder === null ? null : app(BuildAuthoredSocialReplyAction::class)->line($founder, 'alliance_welcome', (string) $application->id, ['tag' => (string) $alliance->alliance_tag]);
+        if ($welcome !== null) {
+            app(DeliverAiDirectReplyAction::class)->handle($alliance->founder_user_id, (int) $application->user_id, $welcome);
+        }
 
         return true;
     }

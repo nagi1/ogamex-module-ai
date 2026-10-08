@@ -36,3 +36,4 @@ default:
   compensation_offer.counter: ["need exact amounts first", "give me numbers"]
   attacker_notice: ["online :)", "I saw that. :)", "nice try ;)", "still here. :)"]
   transport_thanks: ["thx for the res!", "got it, thanks", "ty for the shipment"]
+  alliance_welcome: ["welcome to {tag} o/", "welcome aboard, read the alliance page and ask if anything", "you're in. welcome to {tag}", "welcome! join the acs when you see one", "welcome, glad to have you in {tag}"]
