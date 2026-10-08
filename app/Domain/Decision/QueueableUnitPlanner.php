@@ -619,12 +619,18 @@ class QueueableUnitPlanner
         // non-zero by the time it is sized.
         $capacity = $cargo->properties->capacity->calculate($player)->totalValue;
         $needed = (int) ceil($loot * 1.2 / $capacity);
-        $owned = (int) floor($planet->getShipUnits()->getTotalCargoCapacity($player) / $capacity);
-        $missing = min($needed - $owned, ObjectService::getObjectMaxBuildAmount($cargo->machine_name, $planet, true));
+        // Holds still in the yard count as held, and a batch is the yard's couple of hours like a war batch: two loot-sized
+        // orders of 2,182 cargos ten minutes apart held a yard for seven hours, and its missiles came after the run (9409).
+        $owned = (int) floor($planet->getShipUnits()->getTotalCargoCapacity($player) / $capacity) + $this->inYard($planet, $cargo);
+        $wanted = min($needed - $owned, ObjectService::getObjectMaxBuildAmount($cargo->machine_name, $planet, true));
+        if ($wanted <= 0 || $this->yardBacklogged($planet)) {
+            return null;
+        }
 
         // A player mines while short: a loot-sized cargo batch is thousands of large cargos, and paid from the crystal a
         // facility is saving for it kept the nanite factory out of every account for twenty days (measured on a long run).
-        if ($missing <= 0 || $this->starvesSaving($planet, $profile, $cargo, $missing)) {
+        $missing = $this->yardBatch($planet, $cargo, $wanted);
+        if ($this->starvesSaving($planet, $profile, $cargo, $missing)) {
             return null;
         }
 

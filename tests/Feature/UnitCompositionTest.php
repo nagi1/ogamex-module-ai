@@ -146,7 +146,7 @@ function compositionProfile(int $playerId, AiArchetype $archetype = AiArchetype:
 }
 
 /** A fresh report on a rich target, delivered through the account's own messages. */
-function compositionRichReport(int $playerId, ?array $defense = []): void
+function compositionRichReport(int $playerId, ?array $defense = [], int $metal = 100_000): void
 {
     $foreign = test()->createForeignPlanet();
     $foreignPlayer = $foreign->getPlayer();
@@ -158,7 +158,7 @@ function compositionRichReport(int $playerId, ?array $defense = []): void
     $report->planet_position = $foreign->getPlanetCoordinates()->position;
     $report->planet_type = (int) $foreign->getPlanetType()->value;
     $report->planet_user_id = $foreignPlayer->getId();
-    $report->resources = ['metal' => 100_000, 'crystal' => 0, 'deuterium' => 0, 'energy' => 0];
+    $report->resources = ['metal' => $metal, 'crystal' => 0, 'deuterium' => 0, 'energy' => 0];
     $report->debris = [];
     $report->buildings = [];
     $report->research = [];
@@ -170,3 +170,27 @@ function compositionRichReport(int $playerId, ?array $defense = []): void
     $player = app(PlayerServiceFactory::class)->make($playerId, true);
     app(MessageService::class)->sendEspionageReportMessageToPlayer($player, $report->id);
 }
+
+// A loot-sized batch is a couple of hours of yard, and the next login counts the holds still in the yard as held:
+// 9409 queued 2,182 and then 2,183 large cargos ten minutes apart, and its missiles came after the run.
+test('a payload cargo batch is capped by yard time and the yard counts as held', function (): void {
+    compositionProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(500_000_000, 500_000_000, 500_000_000));
+    $this->planetSetObjectLevel('shipyard', 4);
+    $this->playerSetResearchLevel('combustion_drive', 2);
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddUnit('espionage_probe', 1);
+    compositionRichReport($this->currentUserId, [], 300_000_000);
+
+    $first = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+    $perUnit = $this->planetService->getUnitConstructionTime(ObjectService::getUnitObjectById($first->unitId)->machine_name);
+
+    expect($first->reason)->toBe('role:cargo:payload')
+        ->and($first->amount * $perUnit)->toBeLessThanOrEqual(2 * 3600);
+
+    $this->addShipyardBuildRequest(ObjectService::getUnitObjectById($first->unitId)->machine_name, $first->amount);
+    $second = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
+
+    expect($second?->reason === 'role:cargo:payload' ? $second->amount : 0)->toBeLessThanOrEqual($first->amount);
+});
