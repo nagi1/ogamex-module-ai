@@ -25,6 +25,9 @@ class QueueableTradePlanner
 
     private const OFFER_SHARE = 0.33;
 
+    /** A stock worth this many times the thin one at the merchant's base rates is a surplus however large the store. */
+    private const IMBALANCE = 20.0;
+
     /** A trade smaller than this does not repay the dark matter. */
     private const MINIMUM_GIVE = 100_000;
 
@@ -78,12 +81,33 @@ class QueueableTradePlanner
             }
         }
 
-        if ($give === null || $receive === null) {
+        if ($receive === null) {
+            return null;
+        }
+
+        // Late-game stores dwarf any stock, so nothing ever filled one: accounts held millions of metal and deuterium
+        // beside forty thousand crystal, and every crystal-bound dome and missile waited (9419).
+        $give ??= $this->surplus($planet, $receive['resource']);
+        if ($give === null) {
             return null;
         }
 
         $amount = (int) floor($give['stock'] * self::OFFER_SHARE);
 
         return $amount < self::MINIMUM_GIVE ? null : new QueueableTrade($planet->getPlanetId(), $give['resource'], $receive['resource'], $amount);
+    }
+
+    /** @return array{resource: string, stock: float}|null the resource worth IMBALANCE times the thin one, the largest first */
+    private function surplus(PlanetService $planet, string $thin): ?array
+    {
+        $value = static fn (string $resource): float => $planet->{$resource}()->get() / MerchantService::getBaseRate($resource);
+        $best = null;
+        foreach (array_diff(self::RESOURCES, [$thin]) as $resource) {
+            if ($value($resource) >= self::IMBALANCE * max(1.0, $value($thin)) && ($best === null || $value($resource) > $value($best))) {
+                $best = $resource;
+            }
+        }
+
+        return $best === null ? null : ['resource' => $best, 'stock' => $planet->{$best}()->get()];
     }
 }

@@ -46,7 +46,7 @@ foreach ($ids as $pid) {
     }
     $home = $planets[0];
     echo "\n== player {$pid} · {$profile->archetype->name} · phase " . app(GamePhaseMachine::class)->of($player)->value . ' · rung ' . app(GamePhaseMachine::class)->targetRung($player)->value . ' · planets ' . count($planets) . "\n";
-    echo '   home held ' . $fmt($home->getResources()) . ' · saving ' . $fmt($builder->savingFor($home, $profile)) . "\n";
+    echo '   home held ' . $fmt($home->getResources()) . ' · saving ' . $fmt($builder->savingFor($home, $profile)) . ' for ' . (($c = $call($builder, 'savingCandidate', $home, $profile)) === null ? '-' : OGame\Services\ObjectService::getObjectById($c->buildingId)->machine_name . ' (' . $c->reason . ')') . "\n";
 
     $step = $builder->plan($pid, $player);
     echo '   build/research next: ' . ($step === null ? 'nothing' : ($step->reason ?? get_class($step))) . "\n";
