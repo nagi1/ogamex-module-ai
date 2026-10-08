@@ -34,6 +34,7 @@ default:
   compensation_offer.reject: ["keep your res, stay away", "no deal"]
   compensation_offer.clarify: ["how much and when?", "what exactly, and by when?"]
   compensation_offer.counter: ["need exact amounts first", "give me numbers"]
+  raid_warning: ["stop attacking me", "stop attacking my planets", "back off, I'm not your farm"]
   attacker_notice: ["online :)", "I saw that. :)", "nice try ;)", "still here. :)"]
   transport_thanks: ["thx for the res!", "got it, thanks", "ty for the shipment"]
   alliance_welcome: ["welcome to {tag} o/", "welcome aboard, read the alliance page and ask if anything", "you're in. welcome to {tag}", "welcome! join the acs when you see one", "welcome, glad to have you in {tag}"]

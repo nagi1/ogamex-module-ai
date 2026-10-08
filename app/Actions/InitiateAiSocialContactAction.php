@@ -4,11 +4,13 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Domain\Persona\PersonaTaste;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\RandomSource;
 
@@ -59,7 +61,57 @@ class InitiateAiSocialContactAction
             }
         }
 
+        foreach ($this->unwarnedRaiders($playerId) as $observation) {
+            if ($sent >= $maximum) {
+                break;
+            }
+
+            if ($this->warn($observation, $profile)) {
+                $sent++;
+            }
+        }
+
         return $sent;
+    }
+
+    /**
+     * The raids of players this account holds at the war line that it has not yet told to stop, one per raider: a player
+     * whom the same account keeps hitting writes once, "stop attacking me", before anything else (2006 board: hostilities
+     * began with a message, not silence). The line is the only thing a reply to it can be wrong about.
+     *
+     * @return Collection<int, AiObservation>
+     */
+    private function unwarnedRaiders(int $playerId): Collection
+    {
+        return AiObservation::query()
+            ->where('player_id', $playerId)
+            ->where('kind', AiObservationKind::BattleReportObserved)
+            ->whereIn('subject_player_id', AiRelationship::query()->where('player_id', $playerId)->where('threat', '>=', Enemies::ENEMY_THREAT)->select('other_player_id'))
+            ->whereNotIn('subject_player_id', AiSocialExchange::query()->where('player_id', $playerId)->where('type', AiSocialExchangeType::Warning)->select('counterparty_player_id'))
+            ->oldest('id')
+            ->get()
+            ->unique('subject_player_id');
+    }
+
+    private function warn(AiObservation $observation, AiProfile $profile): bool
+    {
+        $raiderId = (int) $observation->subject_player_id;
+        $message = app(BuildAuthoredSocialReplyAction::class)->line($profile, 'raid_warning', (string) $raiderId);
+
+        if ($raiderId <= 0 || $raiderId === $profile->player_id || $message === null) {
+            return false;
+        }
+
+        // Recorded as sent, not evaluated: the raider's own turn answers it, through its own cognition.
+        $exchange = app(RecordAiSocialExchangeAction::class)->handle($profile->player_id, $raiderId, $observation->id, AiSocialExchangeType::Warning, [], null, 1);
+
+        if ($exchange === null) {
+            return false;
+        }
+
+        app(DeliverAiDirectReplyAction::class)->handle($profile->player_id, $raiderId, $message);
+
+        return true;
     }
 
     /**

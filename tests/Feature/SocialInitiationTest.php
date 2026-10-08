@@ -149,3 +149,37 @@ test('a newcomer is welcomed only once', function (): void {
         ->and($action->handle($chatty->id, $now))->toBe(0)
         ->and(ChatMessage::query()->where('sender_id', $chatty->id)->where('recipient_id', $joiner->id)->count())->toBe(1);
 });
+
+function raidedObservation(int $playerId, int $raiderId, int $sourceId): AiObservation
+{
+    return AiObservation::query()->firstOrCreate([
+        'player_id' => $playerId,
+        'source_type' => AiObservationSource::BattleReport,
+        'source_id' => $sourceId,
+    ], [
+        'kind' => AiObservationKind::BattleReportObserved,
+        'subject_player_id' => $raiderId,
+        'source_time' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC'),
+        'observed_at' => CarbonImmutable::parse('2024-01-01 00:00:00 UTC'),
+    ]);
+}
+
+// A player the raider keeps hitting writes once, "stop attacking me"; the raider's own turn answers it.
+test('a raider held at the war line is warned once and never twice', function (string $threat, int $warnings): void {
+    $raider = $this->createUser();
+    initiationProfile($this->currentUserId);
+    raidedObservation($this->currentUserId, $raider->id, 7101);
+    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+        'player_id' => $this->currentUserId, 'other_player_id' => $raider->id, 'threat' => $threat, 'revision' => 0,
+    ]));
+    $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
+
+    app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, $now);
+    app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, $now);
+
+    expect(AiSocialExchange::query()->where('player_id', $this->currentUserId)->where('type', AiSocialExchangeType::Warning)->count())->toBe($warnings)
+        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $raider->id)->count())->toBe($warnings);
+})->with([
+    'a grudge at the war line' => ['0.9000', 1],
+    'one raid only' => ['0.5000', 0],
+]);
