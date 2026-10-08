@@ -45,3 +45,27 @@ test('a one-per-planet unit already in the yard is not ordered again', function 
 
     expect($wall?->unit->machine_name)->not->toBeIn(['small_shield_dome', 'large_shield_dome']);
 });
+
+test('the archetype wall template does not offer a dome already in the yard', function (): void {
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Turtle,
+        'skill_band' => AiSkillBand::Standard,
+        'random_seed' => 33_000 + $this->currentUserId,
+        'enabled' => true,
+    ]);
+    $this->planetAddResources(new Resources(50_000_000, 50_000_000, 50_000_000));
+    $this->planetSetObjectLevel('shipyard', 12);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+    $this->planetAddUnit('rocket_launcher', 10);
+    OGame\Models\UnitQueue::query()->forceCreate([
+        'planet_id' => $this->currentPlanetId, 'object_id' => ObjectService::getUnitObjectByMachineName('small_shield_dome')->id, 'object_amount' => 1,
+        'time_duration' => 3600, 'time_start' => now()->timestamp, 'time_end' => now()->addHour()->timestamp,
+        'time_progress' => 0, 'object_amount_progress' => 0, 'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'processed' => 0,
+    ]);
+
+    $planner = app(Modules\AI\Domain\Decision\QueueableUnitPlanner::class);
+    $unit = (new ReflectionMethod($planner, 'templateDefence'))->invoke($planner, $this->planetService);
+
+    expect($unit?->machine_name)->not->toBe('small_shield_dome');
+});

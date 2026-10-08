@@ -332,3 +332,29 @@ test('a yard already holding hours of work takes no further war order', function
 
     expect(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId))->toBeNull();
 });
+
+test('while one yard builds a war batch the next goes to the account\'s other big yard', function (): void {
+    capitalProfile($this->currentUserId);
+    foreach (['combustion_drive' => 6, 'impulse_drive' => 6, 'weapon_technology' => 6, 'shielding_technology' => 6, 'armor_technology' => 6] as $research => $level) {
+        $this->playerSetResearchLevel($research, $level);
+    }
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 8);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    $colony = $this->secondPlanetService;
+    $colony->addResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $colony->setObjectLevel(ObjectService::getObjectByMachineName('shipyard')->id, 8, true);
+    $colony->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 10, true);
+
+    $first = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+    OGame\Models\UnitQueue::query()->forceCreate([
+        'planet_id' => $first->planetId, 'object_id' => $first->unitId, 'object_amount' => $first->amount,
+        'time_duration' => 3600, 'time_start' => now()->timestamp, 'time_end' => now()->addHour()->timestamp,
+        'time_progress' => 0, 'object_amount_progress' => 0, 'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'processed' => 0,
+    ]);
+
+    $next = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+
+    expect($next)->not->toBeNull()
+        ->and($next->planetId)->not->toBe($first->planetId);
+});

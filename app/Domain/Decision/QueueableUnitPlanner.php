@@ -359,6 +359,10 @@ class QueueableUnitPlanner
         $bestPrice = -INF;
 
         foreach ($planets as $planet) {
+            if ($this->warshipsInYard($planet)) {
+                continue;
+            }
+
             $hulls = array_filter(
                 ObjectService::getMilitaryShipObjects(),
                 fn (UnitObject $hull): bool => $this->canAttack($player, $hull) && $this->queueable($planet, $hull),
@@ -478,7 +482,7 @@ class QueueableUnitPlanner
         return max(self::FIRST_CARGO_AMOUNT, min($amount, intdiv(self::FLEET_BATCH_SECONDS, $perUnit)));
     }
 
-    /** A hull that shoots: probes and satellites are military in the catalogue's grouping but fight nothing. */
+    /** The defence this planet is furthest behind on against its archetype's template, among those it can order now. */
     private function templateDefence(PlanetService $planet): ?UnitObject
     {
         $profile = AiProfile::query()->where('player_id', $planet->getPlayer()?->getId() ?? 0)->first();
@@ -486,16 +490,19 @@ class QueueableUnitPlanner
             return null;
         }
 
+        // What is in the yard counts as held, and against the host's cap too: the cap is asked of built units only, so a
+        // one-per-planet dome already queued read as orderable again on every login (9349: 41 small shield dome orders).
         $owned = [];
         foreach ($planet->getDefenseUnits()->units as $entry) {
-            $owned[$entry->unitObject->machine_name] = $entry->amount;
+            $owned[$entry->unitObject->machine_name] = $entry->amount + $this->inYard($planet, $entry->unitObject);
         }
 
         $name = app(ArchetypeDoctrine::class)->nextTemplateUnit(
             $profile->archetype,
             'defence_template',
             $owned,
-            fn (string $machineName): bool => $this->unitNamed($machineName) !== null && $this->requirementsMet($planet, $this->unitNamed($machineName)) && $this->affordable($planet, $this->unitNamed($machineName)) >= self::FIRST_CARGO_AMOUNT,
+            fn (string $machineName): bool => $this->unitNamed($machineName) !== null && $this->requirementsMet($planet, $this->unitNamed($machineName))
+                && $this->affordable($planet, $this->unitNamed($machineName)) - $this->inYard($planet, $this->unitNamed($machineName)) >= self::FIRST_CARGO_AMOUNT,
         );
 
         return $name === null ? null : $this->unitNamed($name);
@@ -519,6 +526,10 @@ class QueueableUnitPlanner
     {
         $warships = array_map(static fn (UnitObject $hull): string => $hull->machine_name, ObjectService::getMilitaryShipObjects());
         foreach ($planets as $planet) {
+            if ($this->warshipsInYard($planet)) {
+                continue;
+            }
+
             $name = app(ArchetypeDoctrine::class)->nextTemplateUnit(
                 $profile->archetype,
                 'fleet_template',
@@ -1132,6 +1143,17 @@ class QueueableUnitPlanner
         // The host service silently returns when the amount is unaffordable, so a published
         // capability that cannot pay would schedule work that creates no queue row.
         return ObjectService::getObjectMaxBuildAmount($unit->machine_name, $planet, true) >= self::FIRST_CARGO_AMOUNT;
+    }
+
+    /**
+     * Whether this yard is still building a war batch: the next one goes to another yard the account owns, as a player
+     * keeps every big shipyard busy, instead of waiting hours on the first (9351: one war order per account every few hours).
+     */
+    private function warshipsInYard(PlanetService $planet): bool
+    {
+        $warships = array_map(static fn (UnitObject $hull): int => $hull->id, ObjectService::getMilitaryShipObjects());
+
+        return UnitQueue::query()->where('planet_id', $planet->getPlanetId())->whereIn('object_id', $warships)->where('processed', 0)->exists();
     }
 
     /**

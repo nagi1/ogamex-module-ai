@@ -55,10 +55,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use OGame\Factories\PlayerServiceFactory;
-use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\Planet;
-use OGame\Models\UnitQueue;
-use OGame\Services\ObjectService;
 
 /**
  * Turns a session's selected intent into the one work item that carries it out.
@@ -340,7 +337,7 @@ class ScheduleAiIntentAction
             // The shipyard gets what the buildings leave, so its order waits until they are placed:
             // the host cancels a building it cannot pay for, and a ship order placed first would cause it.
             // A marked wall is already written above; the repeat finds that row and leaves its time.
-            AiCandidateActionType::QueueUnits => $this->scheduleShipyard($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $units),
+            AiCandidateActionType::QueueUnits => $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $units),
             AiCandidateActionType::Colonize => $this->scheduleColony($profile, $sessionWorkItem),
             AiCandidateActionType::Expedition => $this->scheduleExpedition($profile, $sessionWorkItem),
             // The ferry moves stock the buildings were priced against, so it waits for them the way
@@ -377,13 +374,10 @@ class ScheduleAiIntentAction
             ? $units
             : $this->queueableUnitPlanner->capitalFleetOrder($profile->player_id);
 
-        // A player whose yard still holds an unfinished order does not click buy again: the surplus
-        // hull is a habit, not an errand, and a login that ordered on top of an unfinished batch
-        // buried the shipyard under identical hulls (measured live 3 Oct 2026: 425 unit orders in
-        // half an hour against 1,057 buildings). The wall orders above are untouched: keeping a
-        // planet alive is what the yard is for.
+        // A yard still building a war batch is never offered (the planner skips it for another yard the account owns), so
+        // a login does not stack identical hulls on an unfinished batch (measured live 3 Oct 2026: 425 unit orders in half
+        // an hour against 1,057 buildings).
         if ($capital !== null
-            && !$this->shipyardBusy($capital->planetId)
             && !($type === AiCandidateActionType::QueueUnits && $units === $capital)
             && $type !== AiCandidateActionType::DoNothing) {
             $this->scheduleUnits($profile, $sessionWorkItem, $this->clock->now()->addSeconds($economySteps * self::SECONDS_BETWEEN_PLANETS), $capital, ':capital');
@@ -531,34 +525,6 @@ class ScheduleAiIntentAction
         app(LoginReservations::class)->claim($plan->originPlanetId, $plan->launchUnits);
 
         return true;
-    }
-
-    /**
-     * The shipyard arm of a login: the plan's surplus hull, or nothing while the yard already holds an
-     * unfinished order. The hull is what the account buys when no role on any planet wanted anything --
-     * a habit rather than an errand -- so a login that finds the yard busy leaves it alone instead of
-     * stacking a second identical batch behind the first (ARB-001: units ordered on eight of six logins).
-     * The wall, the cargo and the probes above keep their orders: those are the errands.
-     */
-    private function scheduleShipyard(AiProfile $profile, AiWorkItem $sessionWorkItem, CarbonImmutable $dueAt, ?QueueableUnit $plan): void
-    {
-        if ($plan instanceof QueueableUnit && $plan->surplusSpend && $this->shipyardBusy($plan->planetId)) {
-            return;
-        }
-
-        $this->scheduleUnits($profile, $sessionWorkItem, $dueAt, $plan);
-    }
-
-    /**
-     * Whether the yard the hull would be ordered at still holds an unfinished warship batch. Only warships count: a probe,
-     * cargo or wall batch is an errand, and counting it held the war fleet back whenever one was queued (9345: no
-     * battleship, bomber or destroyer ordered in twelve late-game hours).
-     */
-    private function shipyardBusy(int $planetId): bool
-    {
-        $warships = array_map(static fn (UnitObject $hull): int => $hull->id, ObjectService::getMilitaryShipObjects());
-
-        return UnitQueue::query()->where('planet_id', $planetId)->whereIn('object_id', $warships)->where('processed', 0)->exists();
     }
 
     private function isCalmSave(AiCandidateActionType $type, DecisionTrace $trace): bool
