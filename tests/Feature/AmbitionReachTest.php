@@ -165,6 +165,42 @@ test('a moon station already in the build queue is not asked for again', functio
     expect($reasons)->not->toContain('moon-station:jump_gate');
 });
 
+// Queued behind an unbuilt lunar base and phalanx, the gate took the moon's last field before the factory could (9354).
+test('a moon with a station still in its queue is asked for no next one', function (): void {
+    ambitionProfile($this->currentUserId);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    OGame\Models\BuildingQueue::query()->forceCreate([
+        'planet_id' => $moon->getPlanetId(), 'object_id' => ObjectService::getObjectByMachineName('lunar_base')->id, 'object_level_target' => 1,
+        'time_duration' => 3600, 'time_start' => now()->timestamp, 'time_end' => now()->addHour()->timestamp,
+        'metal' => 0, 'crystal' => 0, 'deuterium' => 0, 'building' => 1, 'processed' => 0, 'canceled' => 0,
+    ]);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+
+    expect(app(FacilityChain::class)->pending($moonView, $profile))->toBe([]);
+});
+
+// A moon holds no warehouse; three were queued on one and sat unstarted ahead of its jump gate (9354).
+test('a moon full of shipped resources is offered no storage', function (): void {
+    $profile = ambitionProfile($this->currentUserId);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 3, true);
+    $moon->addResources(app()->makeWith(Resources::class, ['metal' => 50_000_000, 'crystal' => 50_000_000, 'deuterium' => 50_000_000]));
+
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = [];
+    foreach (app(QueueableBuildingPlanner::class)->passes($profile) as $pass) {
+        foreach ($pass($moonView) as $step) {
+            $reasons[] = $step->reason;
+        }
+    }
+
+    expect(implode(' ', $reasons))->not->toContain('storage');
+});
+
 test('a moon with no gate due builds no factory for its short phalanx', function (): void {
     ambitionProfile($this->currentUserId);
     $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];

@@ -137,7 +137,13 @@ class FacilityChain
             // takes a field, queued ones included, so it waits for a field of its own beside the gate's; asked of the
             // short phalanx too, it took every field of a moon that never got its phalanx (9338).
             $queued = BuildingQueue::query()->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)->count();
-            $gateDue = $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1;
+            // A moon's next station is chosen once the last one stands: queued behind an unbuilt lunar base and phalanx, the
+            // gate took the moon's last field before the factory that halves it could, and ran three and a half days (9354).
+            if ($queued > 0) {
+                $ordered = [];
+                $producers = [];
+            }
+            $gateDue = $queued === 0 && $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1;
             $accelerator = $gateDue && $planet->getPlanetFieldMax() - $planet->getBuildingCount() - $queued >= 2
                 ? $this->buildAccelerator($planet, self::JUMP_GATE_STATION)
                 : null;

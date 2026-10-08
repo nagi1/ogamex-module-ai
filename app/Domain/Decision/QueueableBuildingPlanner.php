@@ -251,6 +251,19 @@ class QueueableBuildingPlanner
      */
     public function passes(AiProfile $profile): array
     {
+        // A moon's few fields are the moon block's (RV-008/RV-009): a storage or surplus pass took them on every moon
+        // fed for its jump gate, three warehouse levels queued ahead of the gate on one (9354).
+        return array_map(
+            static fn (callable $pass): callable => static fn (PlanetService $planet): array => $planet->getPlanetType() === PlanetType::Moon
+                ? array_values(array_filter($pass($planet), static fn (BuildCandidate $step): bool => str_starts_with($step->reason, 'moon-station')))
+                : $pass($planet),
+            $this->planetPasses($profile),
+        );
+    }
+
+    /** @return array<string, callable(PlanetService): list<BuildCandidate>> */
+    private function planetPasses(AiProfile $profile): array
+    {
         return [
             // A planet holding no defence while a sibling already stands a wall is past the
             // account's opening with a sibling walled everywhere else: the facilities the wall

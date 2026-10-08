@@ -14,6 +14,7 @@ use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\TransportMission;
 use OGame\Models\BattleReport;
+use OGame\Models\BuildingQueue;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet;
@@ -549,11 +550,13 @@ class QueueableTransferPlanner
     /**
      * A moon makes nothing, so what it holds while a station is still owed is that station's money: a moon has no storage,
      * so the surplus sweep found it "near cap" and flew every jump-gate instalment straight back out (9352: 11.7M metal in,
-     * 12.9M out, no gate on any moon).
+     * 12.9M out, no gate on any moon). A station in its queue is owed too: the chain names the next one only once it stands.
      */
     private function savingForStation(PlanetService $body): bool
     {
-        return $body->getPlanetType() === PlanetType::Moon && $this->facilityChain->pending($body) !== [];
+        return $body->getPlanetType() === PlanetType::Moon
+            && ($this->facilityChain->pending($body) !== []
+                || BuildingQueue::query()->where('planet_id', $body->getPlanetId())->where('processed', 0)->where('canceled', 0)->exists());
     }
 
     private function worthShipping(Resources $need): bool
