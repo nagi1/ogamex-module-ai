@@ -93,3 +93,27 @@ test('a moon step dearer than any one planet holds is ferried in instalments', f
         ->and($plan?->crystal)->toBeGreaterThan(0)
         ->and($plan?->crystal)->toBeLessThanOrEqual(3_000_000 + $this->planetService->crystal()->get());
 });
+
+// A moon has no storage, so the surplus sweep read the gate's instalments as overflow and flew them back out (9352).
+test('a moon saving for its jump gate is not swept back to the planets', function (): void {
+    app()->bind(QueueAiTransfer::class, QueueAiTransferAction::class);
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Miner,
+        'skill_band' => AiSkillBand::Standard,
+        'random_seed' => 9_300 + $this->currentUserId,
+        'enabled' => true,
+    ]);
+
+    $moon = app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->planetService, 2_000_000, 20, 15);
+    $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('lunar_base')->id, 1, true);
+    $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('sensor_phalanx')->id, 1, true);
+    $this->playerSetResearchLevel('hyperspace_technology', 7);
+    app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20, 15);
+    $moon->addResources(new Resources(1_500_000, 3_000_000, 1_000_000));
+    $moon->addUnit('large_cargo', 400);
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+
+    expect($plan?->sourcePlanetId)->not->toBe($moon->getPlanetId());
+});

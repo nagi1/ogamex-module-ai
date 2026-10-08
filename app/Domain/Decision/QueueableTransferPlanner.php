@@ -221,7 +221,7 @@ class QueueableTransferPlanner
             }
 
             foreach ($planets as $source) {
-                if (isset($refusedOrigins[$source->getPlanetId()])) {
+                if (isset($refusedOrigins[$source->getPlanetId()]) || $this->savingForStation($source)) {
                     continue;
                 }
 
@@ -298,7 +298,7 @@ class QueueableTransferPlanner
         }
 
         foreach ($planets as $source) {
-            if ($source->getPlanetId() === $drop->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || !$this->nearCap($source)) {
+            if ($source->getPlanetId() === $drop->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || !$this->nearCap($source) || $this->savingForStation($source)) {
                 continue;
             }
 
@@ -476,7 +476,7 @@ class QueueableTransferPlanner
     private function source(array $planets, PlanetService $target, Resources $need, PlayerService $player, array $refusedOrigins): ?PlanetService
     {
         foreach ($planets as $source) {
-            if ($source->getPlanetId() === $target->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()])) {
+            if ($source->getPlanetId() === $target->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || $this->savingForStation($source)) {
                 continue;
             }
 
@@ -528,7 +528,7 @@ class QueueableTransferPlanner
     private function moonInstalment(array $planets, PlanetService $target, Resources $need, PlayerService $player, array $refusedOrigins): ?array
     {
         foreach ($planets as $source) {
-            if ($source->getPlanetId() === $target->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || !$this->hasCargo($source, $player)) {
+            if ($source->getPlanetId() === $target->getPlanetId() || isset($refusedOrigins[$source->getPlanetId()]) || $this->savingForStation($source) || !$this->hasCargo($source, $player)) {
                 continue;
             }
 
@@ -544,6 +544,16 @@ class QueueableTransferPlanner
         }
 
         return null;
+    }
+
+    /**
+     * A moon makes nothing, so what it holds while a station is still owed is that station's money: a moon has no storage,
+     * so the surplus sweep found it "near cap" and flew every jump-gate instalment straight back out (9352: 11.7M metal in,
+     * 12.9M out, no gate on any moon).
+     */
+    private function savingForStation(PlanetService $body): bool
+    {
+        return $body->getPlanetType() === PlanetType::Moon && $this->facilityChain->pending($body) !== [];
     }
 
     private function worthShipping(Resources $need): bool
