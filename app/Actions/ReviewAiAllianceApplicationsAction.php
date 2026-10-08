@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Exception;
 use Illuminate\Support\Collection;
 use Laravel\Ai\Classification\Choice;
+use Modules\AI\Domain\Social\AllianceChoice;
 use Modules\AI\Enums\AiToMStance;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
@@ -117,6 +118,13 @@ class ReviewAiAllianceApplicationsAction
             }
 
             if ($this->atRecruitmentCeiling($alliance, (int) $application->user_id)) {
+                $decided += $this->reject($alliance, $application);
+
+                continue;
+            }
+
+            // An AI applicant that has since fought the club is not seated to leave on the next pass.
+            if ($this->isAiManaged((int) $application->user_id) && !app(AllianceChoice::class)->stillWants((int) $application->user_id, $alliance)) {
                 $decided += $this->reject($alliance, $application);
 
                 continue;

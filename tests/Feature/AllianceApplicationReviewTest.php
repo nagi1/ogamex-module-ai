@@ -326,3 +326,31 @@ test('a seated applicant gets a welcome in the leader\'s voice', function (): vo
     $welcome = (string) ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $applicant->id)->value('message');
     expect(str_replace('WLCM', '{tag}', $welcome))->toBeIn(voicedLines('casual', 'alliance_welcome'));
 });
+
+// The leader answers by rank, and a quarter hour of raids on the applicant can have made the club one it walks out of:
+// 9427 seated three accounts at 00:15 to 00:25 and all three had left by 00:30.
+test('an AI applicant the club has since fought is not seated', function (bool $fought, int $status): void {
+    reviewProfile($this->currentUserId);
+    $alliance = reviewAlliance($this->currentUserId, 'FOES');
+    $applicant = User::factory()->create();
+    reviewProfile($applicant->id);
+    reviewRank($applicant->id, 1);
+    // The rest of the cohort sits outside the club, so seating one more is not the share ceiling's refusal.
+    foreach (User::factory()->count(3)->create() as $outsider) {
+        reviewProfile($outsider->id);
+    }
+    $application = reviewApplication($applicant->id, $alliance->id);
+    ageReviewApplication($application->id, 30);
+    if ($fought) {
+        AiRelationship::unguarded(fn () => AiRelationship::create([
+            'player_id' => $applicant->id, 'other_player_id' => $this->currentUserId, 'threat' => '0.9000', 'trust' => '-0.5000', 'revision' => 0,
+        ]));
+    }
+
+    app(ReviewAiAllianceApplicationsAction::class)->handle();
+
+    expect($application->fresh()->status)->toBe($status);
+})->with([
+    'the club hit the applicant after it applied' => [true, AllianceApplication::STATUS_REJECTED],
+    'no fight: the usual seat' => [false, AllianceApplication::STATUS_ACCEPTED],
+]);

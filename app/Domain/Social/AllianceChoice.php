@@ -122,6 +122,19 @@ class AllianceChoice
     }
 
     /**
+     * Whether the applicant would still ask this club today: the same enemy, language and pace rule the application met,
+     * asked again when the leader answers, because a quarter hour of raids can have made the club one the applicant walks
+     * out of (9427: three accepted at 00:15 to 00:25 had left by 00:30).
+     */
+    public function stillWants(int $playerId, Alliance $alliance): bool
+    {
+        $policy = $this->policy();
+
+        return $policy === null
+            || (!$this->holdsEnemy($playerId, $alliance) && $this->fits($this->accountFit($playerId), $this->clubFit($alliance), $policy['fit']));
+    }
+
+    /**
      * Whether the club the account sits in still fits it: the same language and pace rule that picked
      * it. A club that does not is one a player leaves, which is how a cohort that all joined one club
      * spreads out instead of staying piled into it.
