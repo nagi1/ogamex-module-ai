@@ -13,4 +13,8 @@ return [
     'daily_readings' => (int) env('AI_CLASSIFICATION_DAILY_READINGS', 5_000),
     // After a provider failure the readers stay on the rules this long rather than paying a timeout per message.
     'failure_pause_minutes' => (int) env('AI_CLASSIFICATION_FAILURE_PAUSE_MINUTES', 5),
+    // Small models distilled from Jev's readings (rl/ogrl/distil_text.py), one JSON file per purpose and question. A
+    // reading every question of which a model answers this surely is made in process, without a call.
+    'distilled_path' => env('AI_CLASSIFICATION_DISTILLED_PATH', dirname(__DIR__) . '/resources/models/text'),
+    'distilled_confidence' => (float) env('AI_CLASSIFICATION_DISTILLED_CONFIDENCE', 0.9),
 ];

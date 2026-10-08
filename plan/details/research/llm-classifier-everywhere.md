@@ -260,6 +260,28 @@ or inactivity (Jev, Measure), which the farm and war logic would weigh against h
 Measure before building: the trade-scam score, lure detection, galaxy-name reading, teacher-data filtering, semantic
 recall.
 
+### State, 8 Oct 2026: all nine built, off by default
+
+Everything goes through laravel/ai: `Classification` (Jev on the `typesafe` provider) for every read, structured
+`Agent`s for extraction, judging and voices, and the SDK fakes in every test. One switch, `AI_CLASSIFICATION_ENABLED`,
+plus `TYPESAFE_API_KEY`; the language-model commands use the configured `AI_LANGUAGE_PROVIDER`.
+
+| # | Where | Run or switch |
+| --- | --- | --- |
+| reader | `ReadAiTextAction`, `ai_text_readings` (cache + labels), daily cap, failure pause | `AI_CLASSIFICATION_ENABLED=true` |
+| 1 | `GuardAiOutboundTextAction` in both deliver actions and before a provider reply replaces the authored one | on with the reader |
+| 2 | `ReadAiHumanMessageAction` (act, urgency, needs reply, language), `ReactAiToHumanMessageAction` on the language lane | on with the reader |
+| 3 | `AdvanceAiAlliancePoliticsAction::answerHumanLeader`, alliance pages, `applicationReadsAsSpy` | on with the reader |
+| 4 | mate's ACS / help call with coordinates → enemy | on with the reader |
+| 5 | `ai:doctrine-proposals <wiki files>` → `plan/research/ogame/doctrine-proposals.yaml` | offline |
+| 6 | `ai:judge-world --sqlite=storage/rl/late/<seed>/end.sqlite --out=…/judge.md` | offline |
+| 7 | `resources/behavior/social-lines.yaml`, `ai:write-social-voices <archetypes>` → `social-voices.yaml` | offline, review |
+| 8 | memorable weight, manipulation and abuse keep a message off the provider | on with the reader |
+| 9 | `ai:export-text-readings <purpose>` → `python -m ogrl.distil_text … <question> resources/models/text/<purpose>.<question>.json`; used only at ≥500 readings and ≥0.95 held-out agreement | offline, then automatic |
+
+Open: the trade offer cannot be completed (no transfer path is wired for a message), and the language read is stored
+but not yet used to answer in the human's language.
+
 ## 5. Refused everywhere
 
 Choosing builds, research, ships, defence, targets, fleet sizes, timings or stances; battle or loot estimates; an LLM

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Contracts\Question;
 use Laravel\Ai\Responses\Data\Answer;
+use Modules\AI\Domain\Language\DistilledTextModel;
 use Modules\AI\Models\AiTextReading;
 use Throwable;
 
@@ -32,6 +33,11 @@ class ReadAiTextAction
             return $cached;
         }
 
+        $distilled = $this->distilled($purpose, $text, $questions);
+        if ($distilled !== null) {
+            return $distilled;
+        }
+
         if (Cache::has(self::PAUSE_KEY) || AiTextReading::query()->where('created_at', '>=', now()->startOfDay())->count() >= (int) config('ai.classification.daily_readings')) {
             return null;
         }
@@ -51,5 +57,26 @@ class ReadAiTextAction
             'provider' => $response->meta->provider ?? '',
             'model' => $response->meta->model ?? '',
         ]);
+    }
+
+    /**
+     * The reading the distilled models make on their own when every question has one that is sure enough. It is not
+     * stored: the readings table holds the classifier's labels the models learn from, never their own guesses.
+     *
+     * @param array<string, Question> $questions
+     */
+    private function distilled(string $purpose, string $text, array $questions): AiTextReading|null
+    {
+        $answers = [];
+        foreach (array_keys($questions) as $question) {
+            $answer = app(DistilledTextModel::class)->answer($purpose, $question, $text, (float) config('ai.classification.distilled_confidence'));
+            if ($answer === null) {
+                return null;
+            }
+
+            $answers[$question] = $answer;
+        }
+
+        return app()->makeWith(AiTextReading::class, ['attributes' => ['purpose' => $purpose, 'text' => $text, 'answers' => $answers, 'provider' => 'distilled', 'model' => $purpose]]);
     }
 }
