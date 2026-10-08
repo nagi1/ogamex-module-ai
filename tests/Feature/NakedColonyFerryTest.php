@@ -120,3 +120,25 @@ test('a moon saving for its jump gate is not swept back to the planets', functio
 
     expect($plan?->sourcePlanetId)->not->toBe($moon->getPlanetId());
 });
+
+// Behind every planet's routine step a moon waited up to seventeen hours for its first shipment (9373).
+test('a bare moon is fed before a colony short of its wall facilities', function (): void {
+    app()->bind(QueueAiTransfer::class, QueueAiTransferAction::class);
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Miner,
+        'skill_band' => AiSkillBand::Standard,
+        'random_seed' => 9_400 + $this->currentUserId,
+        'enabled' => true,
+    ]);
+
+    $moon = app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20, 15);
+    $this->planetAddResources(new Resources(3_000_000, 3_000_000, 3_000_000));
+    $this->planetAddUnit('large_cargo', 400);
+    // A bare colony beside a walled homeworld is owed its wall's facilities: a planet with a shipment of its own due.
+    $this->planetAddUnit('rocket_launcher', 10);
+
+    $plan = app(QueueableTransferPlanner::class)->plan($this->currentUserId);
+
+    expect($plan?->targetPlanetId)->toBe($moon->getPlanetId());
+});

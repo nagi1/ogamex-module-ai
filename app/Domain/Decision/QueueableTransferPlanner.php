@@ -96,7 +96,11 @@ class QueueableTransferPlanner
             $planet->updateResourceStorageStats(false);
         }
 
-        foreach ($planets as $target) {
+        // A moon makes nothing and wants only its few stations, so it is fed before another planet's routine step: behind them it
+        // waited up to seventeen hours for its first shipment while the account sent twenty elsewhere (9373).
+        $targets = $planets;
+        usort($targets, static fn (PlanetService $left, PlanetService $right): int => ($right->getPlanetType() === PlanetType::Moon) <=> ($left->getPlanetType() === PlanetType::Moon));
+        foreach ($targets as $target) {
             $wallNeed = $this->wallNeed($target, $planets, $playerId);
             $need = $wallNeed ?? $this->need($target, $profile, $playerId);
             // A moon makes nothing, so the last few hundred it is short for a station never arrives on its own:
