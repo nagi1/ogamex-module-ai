@@ -254,3 +254,25 @@ test('a war whose grudges have faded is ended, while a hot or a fresh one stands
     'forgotten but only hours old' => ['0.1000', 2, false],
     'still hot' => ['0.8000', 72, false],
 ]);
+
+// Allies are expected to support each other in war-time (alliance guide): a partner's enemy takes one raid, not two.
+test('an alliance joins its pact partner\'s war on a single raid', function (bool $partnered, bool $war): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $partner = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'PART', 'Partner');
+    $enemy = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'ENMY', 'Enemy');
+    allianceWarMember($enemy->id);
+    if ($partnered) {
+        AiAllianceRelation::query()->create(['alliance_id' => $ours->id, 'other_alliance_id' => $partner->id, 'stance' => AiAllianceStance::Nap,
+            'cause' => 'common-enemy', 'declared_by' => $this->currentUserId, 'started_at' => now()]);
+        AiAllianceRelation::query()->create(['alliance_id' => $partner->id, 'other_alliance_id' => $enemy->id, 'stance' => AiAllianceStance::War,
+            'cause' => 'grievance', 'declared_by' => $partner->founder_user_id, 'started_at' => now()]);
+    }
+    allianceWarGrudge($this->currentUserId, (int) $enemy->founder_user_id, '0.5000');
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War) === [$enemy->id])->toBe($war);
+})->with([
+    'a partner at war with the enemy' => [true, true],
+    'no partner' => [false, false],
+]);

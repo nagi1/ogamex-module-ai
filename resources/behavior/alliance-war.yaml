@@ -36,3 +36,8 @@ coalition_share: 0.5
 # raid raises the grievance again and a new war follows at war_grievance: the gap between the two lines is the truce.
 peace_grievance: 0.3
 war_minimum_hours: 24
+
+# An alliance whose pact partner is already at war with another joins that war on this share of war_grievance (alliance
+# guide: "Allies are expected to support each other in war-time and revenge"). One raid (0.5) against a partner's enemy is
+# then enough where two were needed alone.
+ally_war_factor: 0.5

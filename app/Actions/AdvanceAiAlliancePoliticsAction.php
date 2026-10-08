@@ -151,7 +151,7 @@ class AdvanceAiAlliancePoliticsAction
         foreach (Alliance::query()->whereKeyNot($alliance->id)->pluck('id') as $otherId) {
             $theirs = $this->members((int) $otherId);
             $mine = $this->grievance($members, $theirs);
-            if ($mine >= $line && $mine >= $this->grievance($theirs, $members) && !$this->open((int) $alliance->id, (int) $otherId, AiAllianceStance::War)) {
+            if ($mine >= $line * $this->allyFactor((int) $alliance->id, (int) $otherId) && $mine >= $this->grievance($theirs, $members) && !$this->open((int) $alliance->id, (int) $otherId, AiAllianceStance::War)) {
                 $grievances[(int) $otherId] = $mine;
             }
         }
@@ -164,6 +164,18 @@ class AdvanceAiAlliancePoliticsAction
         $this->goToWar($alliance, Alliance::query()->findOrFail(array_key_first($grievances)), 'grievance', 'war_broadcast', 'war_to_leader');
 
         return 1;
+    }
+
+    /**
+     * "Allies are expected to support each other in war-time" (alliance guide): the grievance an alliance needs to join a
+     * war falls to this share of the usual line when a pact partner is already fighting the other side.
+     */
+    private function allyFactor(int $allianceId, int $enemyId): float
+    {
+        $partners = AiAllianceRelation::counterparts($allianceId, AiAllianceStance::Nap);
+        $fighting = array_intersect($partners, AiAllianceRelation::counterparts($enemyId, AiAllianceStance::War));
+
+        return $fighting === [] ? 1.0 : (float) ($this->policy['ally_war_factor'] ?? 1.0);
     }
 
     /**
