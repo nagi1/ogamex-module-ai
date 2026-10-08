@@ -704,3 +704,25 @@ test('a won raid on an enemy moon flies as moon destruction with every deathstar
         ->and($plan->missionType)->toBe(OGame\GameMissions\MoonDestructionMission::getTypeId())
         ->and($plan->launchUnits['deathstar'] ?? 0)->toBe(2);
 });
+
+test('a raid launches from the moon the fleet sits on, not the home holding probes', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('espionage_probe', 5);
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($this->planetService, 2_000_000, 20);
+    Planet::query()->whereKey($moon->getPlanetId())->update(['small_cargo' => 50, 'deuterium' => 1_000_000]);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $reportId = raidDepthReport(
+        $this->currentUserId,
+        $foreign->getPlanetCoordinates()->galaxy,
+        $foreign->getPlanetCoordinates()->system,
+        $foreign->getPlanetCoordinates()->position,
+        ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000],
+    );
+
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
+
+    expect($plan?->originPlanetId)->toBe($moon->getPlanetId());
+});

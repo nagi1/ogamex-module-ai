@@ -50,6 +50,18 @@ class LoginReservations
         return $free;
     }
 
+    /** What the planet's unpromised ships cost to build: the measure of where the fleet is. */
+    public function freeValue(PlanetService $planet): float
+    {
+        $value = 0.0;
+        foreach ($planet->getShipUnits()->units as $entry) {
+            $free = max(0, $entry->amount - ($this->units[$planet->getPlanetId()][$entry->unitObject->machine_name] ?? 0));
+            $value += $free * $entry->unitObject->price->resources->sum();
+        }
+
+        return $value;
+    }
+
     public function slotsClaimed(): int
     {
         return $this->slots;

@@ -542,16 +542,23 @@ class RaidPlanner
     /**
      * The first planet carrying a fleet that this login has not already promised to another order.
      */
+    /**
+     * The body holding the most valuable unpromised fleet: a player launches from where the fleet sits, and a fleet parked
+     * on a moon left the home planet with a handful of probes that the first-with-ships rule used to send (9405).
+     */
     private function origin(PlayerService $player): ?PlanetService
     {
         $claims = app(LoginReservations::class);
+        $best = null;
+        $bestValue = 0.0;
         foreach ($player->planets->all() as $planet) {
-            if ($planet->getShipUnits()->units !== [] && $claims->freeShips($planet) > 0) {
-                return $planet;
+            $value = $claims->freeValue($planet);
+            if ($value > $bestValue) {
+                [$best, $bestValue] = [$planet, $value];
             }
         }
 
-        return null;
+        return $best;
     }
 
     /**
