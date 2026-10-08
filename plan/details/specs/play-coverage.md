@@ -153,3 +153,18 @@ The yard was the bottleneck: it runs its queue in order, and junk orders held it
 Before (9311-9315): 0-6 attacks, most late units missing. After the batch cap (9316-9321): 4-13 attacks, 13-23 battles,
 up to 70 recycles, 18 missiles, deploys and holds; gauss and ion appear. Still missing: jump gate, large dome,
 anti-ballistic missile, and in most worlds battlecruiser and bomber (the last three fixes target these).
+
+### Later on 8 Oct: the war fleet and the moon
+
+| Fix | Commit |
+|---|---|
+| Escort built in the capital hull's yard first | 6b47e23 |
+| Interceptors in the later defence doctrines (two per plasma turret); uncalled advice class deleted | 433634b |
+| Escort weighed by price, not counted; template counts cargo it holds; escort takes only warships | 121b53f, 28cf886, bbba8c1 |
+| Moon builds the station that shortens construction before the jump gate, with a field of its own; queued levels count | 5c610ef, 345a22e, 42f9acc |
+| Yard backlog capped at four hours; only a warship batch holds the next war order back; a yard mid-batch is skipped for the next big yard | cab3188, 98589e0, 25644e3 |
+| Recyclers and one-per-planet domes already queued are not reordered | 711bdbb |
+
+24 h world 9339 (budget 2e11, 6 accounts): 102 attacks, 89 battles, 91 missile strikes, 132 recycles, 131 deploys,
+24 holds, 40 colonisations. Every ship, defence and station reached except the jump gate, which was still building.
+12 h worlds now miss one to three hulls at most (yard time, not a gate).
