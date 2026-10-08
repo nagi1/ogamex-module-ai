@@ -70,6 +70,9 @@ test('an attack', function (bool $enemy, int $missionType): void {
 })->with('standing');
 
 test('a mate attacking the target of an open ACS joins it', function (): void {
+    // The join window is measured from the first fleet's arrival; a clock that ticks between the two launches under
+    // a loaded parallel run moved the second fleet outside it.
+    $this->freezeTime();
     $this->planetAddResources(new Resources(0, 0, 1_000_000));
     $this->planetAddUnit('cruiser', 20);
     [$mate, $target] = acsWar($this->currentUserId, fn () => $this->createForeignPlanet());

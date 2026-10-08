@@ -3,6 +3,7 @@
 namespace Modules\AI\Actions;
 
 use Exception;
+use Laravel\Ai\Classification\Choice;
 use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Domain\Social\AllianceAmbition;
 use Modules\AI\Enums\AiAllianceStance;
@@ -10,6 +11,7 @@ use Modules\AI\Models\AiAllianceRelation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use OGame\Models\Alliance;
+use OGame\Models\ChatMessage;
 use OGame\Models\Highscore;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
@@ -24,20 +26,26 @@ use Symfony\Component\Yaml\Yaml;
  * - conspiracy: when one alliance holds most of the points, the two strongest runners-up agree in private on a pact and
  *   a shared war on it, so the dominant alliance meets a coalition, the great war of a server's end.
  * The leader announces each one to its members, the other leader and the board, as OGame players do.
+ *
+ * Humans take part through the same rows: a human leader's message (read by the classifier) declares war, offers,
+ * accepts or breaks a pact, and a human alliance's page that declares war on, or lists a pact with, an AI alliance
+ * counts as said (llm-classifier-everywhere.md, step 3). With the classifier off only AI leaders take part.
  */
 class AdvanceAiAlliancePoliticsAction
 {
     private const FILE = '/resources/behavior/alliance-war.yaml';
+
+    /** A pact offer to a human stands this long: offered once, then awaited, then offered again. */
+    private const OFFER_DAYS = 3;
 
     /** @var array<string, mixed> */
     private array $policy = [];
 
     public function handle(): int
     {
-        $file = Yaml::parseFile(dirname(__DIR__, 2) . self::FILE);
-        $this->policy = is_array($file) ? $file : [];
+        $this->loadPolicy();
         $founders = AiProfile::query()->where('enabled', true)->pluck('player_id')->all();
-        $moves = $this->conspire($founders);
+        $moves = $this->conspire($founders) + $this->readBoards($founders);
 
         foreach (Alliance::query()->whereIn('founder_user_id', $founders)->orderBy('id')->get() as $alliance) {
             $moves += $this->declareWar($alliance) + $this->offerPact($alliance, $founders) + $this->betrayPact($alliance);
@@ -117,6 +125,125 @@ class AdvanceAiAlliancePoliticsAction
         return 1;
     }
 
+    /**
+     * A human leader's war or pact message to an AI leader, as the classifier read its act. The answer is the AI
+     * leader's own: a pact is taken unless it hates the other side, an acceptance counts only for a pact it offered.
+     */
+    public function answerHumanLeader(int $senderId, int $recipientId, string $act): bool
+    {
+        $this->loadPolicy();
+        $theirs = Alliance::query()->where('founder_user_id', $senderId)->first();
+        $ours = Alliance::query()->where('founder_user_id', $recipientId)->first();
+        if ($theirs === null || $ours === null || !AiProfile::query()->where('player_id', $recipientId)->where('enabled', true)->exists()) {
+            return false;
+        }
+
+        return match ($act) {
+            'war' => $this->warDeclaredOn($ours, $theirs, 'declared'),
+            'pact_offer' => $this->pactOffered($ours, $theirs, 'offered', true),
+            'pact_accept' => $this->offeredTo($ours, $senderId) && $this->pactOffered($ours, $theirs, 'accepted', false),
+            'pact_break' => AiAllianceRelation::query()->openBetween((int) $ours->id, (int) $theirs->id)->where('stance', AiAllianceStance::Nap)->update(['ended_at' => now()]) > 0,
+            default => false,
+        };
+    }
+
+    /**
+     * A human alliance's external page is where players post wars and pacts ("War: [X]", "NAP [Y]"). Each page is read
+     * once per AI-led alliance it might name, and only again when its text changes (the readings are the cache).
+     *
+     * @param list<int> $founders
+     */
+    private function readBoards(array $founders): int
+    {
+        $moves = 0;
+        $boards = Alliance::query()->whereNotIn('founder_user_id', $founders)->whereNotNull('external_text')->where('external_text', '!=', '')->get();
+
+        foreach ($boards as $board) {
+            foreach (Alliance::query()->whereIn('founder_user_id', $founders)->get() as $ours) {
+                $reading = app(ReadAiTextAction::class)->handle('board:' . $ours->id, (string) $board->external_text, [
+                    'stance' => new Choice("What does this OGame alliance page say about the alliance [{$ours->alliance_tag}]?", [
+                        'war' => "it declares or lists a war with [{$ours->alliance_tag}]",
+                        'nap' => "it lists a pact or non-aggression with [{$ours->alliance_tag}]",
+                        'none' => "it says nothing about [{$ours->alliance_tag}]",
+                    ]),
+                ]);
+
+                $moves += (int) match ($reading?->choice('stance')) {
+                    'war' => $this->warDeclaredOn($ours, $board, 'board'),
+                    'nap' => $this->pactOffered($ours, $board, 'board', false),
+                    default => false,
+                };
+            }
+        }
+
+        return $moves;
+    }
+
+    private function warDeclaredOn(Alliance $ours, Alliance $theirs, string $cause): bool
+    {
+        if ($this->open((int) $ours->id, (int) $theirs->id, AiAllianceStance::War)) {
+            return false;
+        }
+
+        AiAllianceRelation::query()->openBetween((int) $ours->id, (int) $theirs->id)->update(['ended_at' => now()]);
+        AiAllianceRelation::query()->create([
+            'alliance_id' => $theirs->id,
+            'other_alliance_id' => $ours->id,
+            'stance' => AiAllianceStance::War,
+            'cause' => $cause,
+            'declared_by' => $theirs->founder_user_id,
+            'started_at' => now(),
+        ]);
+
+        try {
+            app(AllianceService::class)->sendBroadcastMessage((int) $ours->id, (int) $ours->founder_user_id, $this->line('war_declared_on_us', (string) $theirs->alliance_tag), ['-1']);
+        } catch (Exception) {
+        }
+
+        return true;
+    }
+
+    /** The AI leader takes a pact unless it already holds a stance toward them or hates them; $answer says whether it replies. */
+    private function pactOffered(Alliance $ours, Alliance $theirs, string $cause, bool $answer): bool
+    {
+        $founderId = (int) $ours->founder_user_id;
+        if (AiAllianceRelation::query()->openBetween((int) $ours->id, (int) $theirs->id)->exists()) {
+            return false;
+        }
+
+        if ($this->hates($founderId, $this->members((int) $theirs->id))) {
+            if ($answer) {
+                app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_refuse', (string) $theirs->alliance_tag));
+            }
+
+            return false;
+        }
+
+        AiAllianceRelation::query()->create([
+            'alliance_id' => $theirs->id,
+            'other_alliance_id' => $ours->id,
+            'stance' => AiAllianceStance::Nap,
+            'cause' => $cause,
+            'declared_by' => $theirs->founder_user_id,
+            'started_at' => now(),
+        ]);
+        if ($answer) {
+            app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_accept', (string) $theirs->alliance_tag));
+        }
+
+        return true;
+    }
+
+    /** Whether the AI leader offered this human a pact lately: the offer is the message it sent, no other record. */
+    private function offeredTo(Alliance $ours, int $humanId): bool
+    {
+        $offer = $this->line('pact_offer', '');
+        $opening = substr($offer, 0, (int) strpos($offer . '[', '['));
+
+        return ChatMessage::query()->where('sender_id', $ours->founder_user_id)->where('recipient_id', $humanId)
+            ->where('created_at', '>=', now()->subDays(self::OFFER_DAYS))->where('message', 'like', $opening . '%')->exists();
+    }
+
     /** @param list<int> $founders */
     private function offerPact(Alliance $alliance, array $founders): int
     {
@@ -125,15 +252,24 @@ class AdvanceAiAlliancePoliticsAction
         foreach ($enemies as $enemyId) {
             foreach (AiAllianceRelation::counterparts($enemyId, AiAllianceStance::War) as $partnerId) {
                 $partner = Alliance::query()->find($partnerId);
-                // Only an AI leader answers here; a human leader's reply needs the classifier (alliance-politics.md S4).
-                if ($partner === null || $partnerId === $alliance->id || !in_array($partner->founder_user_id, $founders, true)
+                if ($partner === null || $partnerId === $alliance->id || $partner->founder_user_id === null
                     || AiAllianceRelation::query()->openBetween((int) $alliance->id, $partnerId)->exists()
                     || $this->hates((int) $alliance->founder_user_id, $this->members($partnerId))) {
                     continue;
                 }
 
+                // A human leader answers in their own words (answerHumanLeader), so the offer is made once and awaited.
+                $human = !in_array($partner->founder_user_id, $founders, true);
+                if ($human && $this->offeredTo($alliance, (int) $partner->founder_user_id)) {
+                    continue;
+                }
+
                 $enemyTag = (string) Alliance::query()->whereKey($enemyId)->value('alliance_tag');
                 app(DeliverAiDirectReplyAction::class)->handle((int) $alliance->founder_user_id, (int) $partner->founder_user_id, $this->line('pact_offer', $enemyTag));
+                if ($human) {
+                    return 1;
+                }
+
                 if ($this->hates((int) $partner->founder_user_id, $this->members((int) $alliance->id))) {
                     continue;
                 }
@@ -204,6 +340,12 @@ class AdvanceAiAlliancePoliticsAction
         if ($enemy->founder_user_id !== null) {
             app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $enemy->founder_user_id, $this->line($toLeader, $tag));
         }
+    }
+
+    private function loadPolicy(): void
+    {
+        $file = Yaml::parseFile(dirname(__DIR__, 2) . self::FILE);
+        $this->policy = is_array($file) ? $file : [];
     }
 
     private function open(int $allianceId, int $otherId, AiAllianceStance $stance): bool

@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Carbon\CarbonImmutable;
 use Exception;
 use Illuminate\Support\Collection;
+use Laravel\Ai\Classification\Choice;
 use Modules\AI\Enums\AiToMStance;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
@@ -109,7 +110,7 @@ class ReviewAiAllianceApplicationsAction
                 continue;
             }
 
-            if ($this->readsAsExploitative($alliance, (int) $application->user_id)) {
+            if ($this->readsAsExploitative($alliance, (int) $application->user_id) || $this->applicationReadsAsSpy($application)) {
                 $decided += $this->reject($alliance, $application);
 
                 continue;
@@ -316,6 +317,29 @@ class ReviewAiAllianceApplicationsAction
      * when the rank rule would take them. Only a recorded relationship can carry that read; a
      * stranger is decided on rank alone.
      */
+    /**
+     * A human's application text, read by the classifier: an enemy's alt fishing for the alliance's intel, a farm or
+     * spam is refused as an exploitative stance is (llm-classifier-everywhere.md, step 3). An AI applicant's text is
+     * authored and never read; with the classifier off nothing is.
+     */
+    private function applicationReadsAsSpy(AllianceApplication $application): bool
+    {
+        if (AiProfile::query()->where('player_id', $application->user_id)->exists() || trim((string) $application->application_message) === '') {
+            return false;
+        }
+
+        $reading = app(ReadAiTextAction::class)->handle('application', (string) $application->application_message, [
+            'kind' => new Choice('What is this OGame alliance application?', [
+                'serious' => 'a player who wants to join and play with the alliance',
+                'spy' => 'someone fishing for the alliance\'s members, fleets or plans, such as an enemy\'s second account',
+                'farm' => 'an account that only wants protection or resources and will not play',
+                'spam' => 'advertising or nonsense',
+            ]),
+        ]);
+
+        return in_array($reading?->choice('kind', 0.6), ['spy', 'farm', 'spam'], true);
+    }
+
     private function readsAsExploitative(Alliance $alliance, int $applicantId): bool
     {
         return app(PsychSimTheoryOfMind::class)->stanceToward((int) $alliance->founder_user_id, $applicantId) === AiToMStance::Defect;

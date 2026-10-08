@@ -16,6 +16,8 @@ lines:
   betrayal_broadcast: "Our pact with [{tag}] is over. They are a target from today; hit them before they regroup."
   conspiracy_offer: "[{tag}] holds half the universe. A pact between us and war on them together; not a word to our members until the fleets fly."
   conspiracy_accept: "Agreed. We hit [{tag}] together."
+  pact_refuse: "No pact. [{tag}] has hit us too often for that."
+  war_declared_on_us: "[{tag}] has declared war on us. Their planets and moons are targets; join every ACS on them."
   betrayal_to_leader: "The war that made us partners is finished, and so is our pact. [{tag}] and we are at war."
 
 # A leader who betrays (persona taste, alliance-ambition.yaml) breaks a pact only once no war is left open and its
