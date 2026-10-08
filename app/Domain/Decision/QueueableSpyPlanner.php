@@ -183,6 +183,7 @@ class QueueableSpyPlanner
         $candidates = Planet::query()
             ->leftJoin('users', 'users.id', '=', 'planets.user_id')
             ->where('planets.user_id', '!=', $player->getId())
+            ->whereNotIn('planets.user_id', app(Enemies::class)->spared($player->getId()))
             ->where('planets.destroyed', 0)
             ->where(fn ($owner) => $owner->whereNull('users.vacation_mode')->orWhere('users.vacation_mode', 0))
             ->whereIn('planets.planet_type', [PlanetType::Planet->value, PlanetType::Moon->value])

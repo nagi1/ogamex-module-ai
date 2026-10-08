@@ -11,3 +11,11 @@ lines:
   war_broadcast: "We are at war with [{tag}]. Their planets and moons are targets; join every ACS on them."
   war_to_leader: "Your members have hit ours once too often. [{tag}] and we are at war."
   war_external: "War: [{tag}]"
+  pact_offer: "We are both at war with [{tag}]. Non-aggression between us until it is over?"
+  pact_accept: "Agreed. No fleet of ours flies at [{tag}]."
+  betrayal_broadcast: "Our pact with [{tag}] is over. They are a target from today; hit them before they regroup."
+  betrayal_to_leader: "The war that made us partners is finished, and so is our pact. [{tag}] and we are at war."
+
+# A leader who betrays (persona taste, alliance-ambition.yaml) breaks a pact only once no war is left open and its
+# alliance has this many times the partner's points: players turn on a weaker partner, not on an equal.
+betray_strength_ratio: 2.0

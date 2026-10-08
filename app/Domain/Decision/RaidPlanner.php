@@ -190,6 +190,11 @@ class RaidPlanner
             return $this->reject('target_already_offered', $playerId, $reportId);
         }
 
+        // A mate's or a pact partner's report reaches the account through the alliance (ACS reports, shared intel).
+        if (in_array((int) $report->planet_user_id, app(Enemies::class)->spared($playerId), true)) {
+            return $this->reject('spared', $playerId, $reportId);
+        }
+
         if ($this->blacklisted($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position)) {
             return $this->reject('blacklisted', $playerId, $reportId);
         }

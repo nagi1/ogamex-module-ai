@@ -10,7 +10,7 @@ use OGame\Models\User;
 /**
  * The players this account is at war with: the ones it, or anyone in its alliance, holds at the threat the
  * social replies already refuse at, less its own alliance, plus every member of an alliance its own is at war
- * with, less any it holds a non-aggression pact with (DeclareAiAllianceWarsAction, alliance-politics.md).
+ * with, less any it holds a non-aggression pact with (AdvanceAiAlliancePoliticsAction, alliance-politics.md).
  */
 class Enemies
 {
@@ -37,6 +37,23 @@ class Enemies
         }
 
         return $grudges->mapWithKeys(static fn ($id): array => [(int) $id => true])->all();
+    }
+
+    /**
+     * The players the account never scouts or raids: its alliance mates and the members of any alliance its own holds a
+     * non-aggression pact with. Hitting a mate, or a partner mid-pact, is what gets a player kicked or a pact broken.
+     *
+     * @return list<int>
+     */
+    public function spared(int $playerId): array
+    {
+        $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
+        if ($allianceId === null) {
+            return [];
+        }
+
+        return User::query()->where('alliance_id', $allianceId)->whereKeyNot($playerId)->pluck('id')
+            ->map(static fn ($id): int => (int) $id)->merge($this->membersOf((int) $allianceId, AiAllianceStance::Nap))->values()->all();
     }
 
     /** @return list<int> */

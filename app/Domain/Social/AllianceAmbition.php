@@ -27,6 +27,11 @@ class AllianceAmbition
         return $this->draws($playerId, 'leads');
     }
 
+    public function betrays(int $playerId): bool
+    {
+        return $this->draws($playerId, 'betrays');
+    }
+
     public function reapplyAfterHours(): int
     {
         return (int) ($this->policy()['reapply_after_hours'] ?? 24);

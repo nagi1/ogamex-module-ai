@@ -5,15 +5,16 @@
 # they found a club when none of their tier will take them. Everyone else applies, waits, grows and applies again.
 #
 # joins: the share of the archetype's accounts that want an alliance. leads: the share that found one.
+# betrays: the share of leaders who break a pact with a partner they have outgrown once the common enemy is gone.
 # An account's draw is fixed by its seed, so the same account always wants the same thing.
 archetypes:
-  fleeter: { joins: 0.9, leads: 0.35 }
-  raider: { joins: 0.85, leads: 0.3 }
-  hybrid: { joins: 0.75, leads: 0.2 }
-  trader: { joins: 0.6, leads: 0.1 }
-  miner: { joins: 0.55, leads: 0.05 }
-  casual: { joins: 0.5, leads: 0.05 }
-  turtle: { joins: 0.4, leads: 0.0 }
+  fleeter: { joins: 0.9, leads: 0.35, betrays: 0.5 }
+  raider: { joins: 0.85, leads: 0.3, betrays: 0.6 }
+  hybrid: { joins: 0.75, leads: 0.2, betrays: 0.3 }
+  trader: { joins: 0.6, leads: 0.1, betrays: 0.2 }
+  miner: { joins: 0.55, leads: 0.05, betrays: 0.05 }
+  casual: { joins: 0.5, leads: 0.05, betrays: 0.1 }
+  turtle: { joins: 0.4, leads: 0.0, betrays: 0.0 }
 
 # A club's rejection is answered, not final: the applicant grows and asks again after this long.
 reapply_after_hours: 24
