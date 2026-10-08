@@ -106,6 +106,28 @@ test('a moon whose fields are all used raises its field ceiling next', function 
     expect($reasons)->toContain('moon-station:lunar_base');
 });
 
+// A moon has no factory, so its jump gate took three and a half days; the station that shortens construction comes first
+// whenever the host's time formula says it pays back.
+test('a moon about to build its jump gate first builds the station that shortens it', function (): void {
+    ambitionProfile($this->currentUserId);
+    $this->playerSetResearchLevel('hyperspace_technology', 7);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 3, true);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('sensor_phalanx')->id, 1, true);
+    app(PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+    $gate = array_search('moon-station:jump_gate', $reasons, true);
+    $factory = array_search('moon-station:robot_factory', $reasons, true);
+
+    expect($gate)->not->toBeFalse()
+        ->and($factory)->not->toBeFalse()
+        ->and($factory)->toBeLessThan($gate);
+});
+
 test('a technology priced in energy makes the planet raise its capacity until it can pay', function (): void {
     ambitionProfile($this->currentUserId);
     $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 900_000_000, 'crystal' => 900_000_000, 'deuterium' => 900_000_000]));

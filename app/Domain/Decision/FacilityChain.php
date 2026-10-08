@@ -103,6 +103,10 @@ class FacilityChain
         // A moon the account owns wants its sensor phalanx: the station is module taste, and
         // the host's own recursive requirement graph puts the lunar base first (RV-008).
         if ($planet->getPlanetType() === PlanetType::Moon) {
+            // Only moon stations survive the filter below, and a planet chain's entry for the same object (a robotics
+            // factory, say) would shadow the moon's own request for it and then be dropped with the rest.
+            $ordered = [];
+            $producers = [];
             $this->addRequirement($planet, self::PHALANX_STATION, 1, $ordered, $producers, 'moon-station');
 
             foreach (ObjectService::getRecursiveRequirements(self::PHALANX_STATION) as $machineName => $level) {
@@ -125,6 +129,14 @@ class FacilityChain
             $raiser = $planet->getBuildingCount() >= $planet->getPlanetFieldMax() ? $this->fieldRaiser($planet) : null;
             if ($raiser !== null) {
                 $this->addRequirement($planet, $raiser, $planet->getObjectLevel($raiser) + 1, $ordered, $producers, 'moon-station');
+            }
+
+            // A moon has no factory of its own, so a jump gate there took three and a half days (9328). A player builds the
+            // station that shortens construction first whenever it pays back on the next one; the host's time formula decides.
+            $next = $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1 ? self::JUMP_GATE_STATION : ($raiser ?? self::PHALANX_STATION);
+            $accelerator = $this->buildAccelerator($planet, $next);
+            if ($accelerator !== null) {
+                $this->addRequirement($planet, $accelerator, $planet->getObjectLevel($accelerator) + 1, $ordered, $producers, 'moon-station');
             }
         }
 
@@ -225,6 +237,35 @@ class FacilityChain
         $this->sortOrdered($ordered, $planet);
 
         return $this->withProducers($ordered, $producers, $planet);
+    }
+
+    /**
+     * The station whose next level saves more time on `$target` than it takes to build, by the host's own construction
+     * time formula; null when none pays back.
+     */
+    private function buildAccelerator(PlanetService $planet, string $target): ?string
+    {
+        $best = null;
+        $bestSaving = 0;
+        $before = $planet->getBuildingConstructionTime($target);
+        foreach (ObjectService::getStationObjects() as $station) {
+            if ($station->machine_name === $target || !ObjectService::objectValidPlanetType($station->machine_name, $planet)
+                || !ObjectService::objectRequirementsMet($station->machine_name, $planet)) {
+                continue;
+            }
+
+            $level = $planet->getObjectLevel($station->machine_name);
+            $cost = $planet->getBuildingConstructionTime($station->machine_name);
+            $planet->setObjectLevel($station->id, $level + 1, false);
+            $saving = $before - $planet->getBuildingConstructionTime($target) - $cost;
+            $planet->setObjectLevel($station->id, $level, false);
+            if ($saving > $bestSaving) {
+                $best = $station->machine_name;
+                $bestSaving = $saving;
+            }
+        }
+
+        return $best;
     }
 
     /** The station whose next level adds fields to this body, by the host's own field formula; null when none does. */
