@@ -196,3 +196,23 @@ test('a capital hull already paid for in the yard is not ordered again before it
 
     expect(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId)?->unitId)->not->toBe($first->unitId);
 });
+
+test('a rich planet short of its wall orders wall from the yard plan while the fleet keeps its own order', function (): void {
+    capitalProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 8);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->playerSetResearchLevel('impulse_drive', 6);
+    $this->playerSetResearchLevel('weapon_technology', 6);
+    $this->playerSetResearchLevel('shielding_technology', 6);
+    $this->playerSetResearchLevel('armor_technology', 6);
+    $this->planetAddUnit('large_cargo', 5000);
+    $this->planetAddUnit('small_cargo', 5);
+    $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddUnit('rocket_launcher', 10);
+
+    expect(app(QueueableUnitPlanner::class)->plan($this->currentUserId)?->reason)->toStartWith('role:defense:standing:')
+        ->and(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId)?->reason)->toStartWith('role:capital:');
+});

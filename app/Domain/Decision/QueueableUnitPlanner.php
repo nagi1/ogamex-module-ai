@@ -315,12 +315,8 @@ class QueueableUnitPlanner
             $standing[] = [$planet, $this->unit($planet, $defense->unit, 'role:defense:standing:'.$defense->unit->machine_name, $amount, $bare)];
         }
 
-        // The floor a planet that stands nothing takes is the one wall order that outranks the fleet:
-        // keeping a planet alive is what the wall is for, and a bare planet beside a walled sibling
-        // is the first thing the account fixes. Wall beyond that floor yields to the war fleet -- an
-        // account past its opening spends its surplus on the strongest hull the host lets it build
-        // before it buys another turret, which is how a cohort grows a fleet at all (measured live
-        // 3 Oct 2026: one wall order per login and no hull above the median in a hundred accounts).
+        // The floor a planet that stands nothing takes comes first: keeping a planet alive is what the
+        // wall is for, and a bare planet beside a walled sibling is the first thing the account fixes.
         $floor = array_values(array_filter($standing, static fn (array $entry): bool => $entry[1]->aheadOfEconomy));
         if ($floor !== []) {
             usort($floor, static fn (array $a, array $b): int => $a[0]->getDefenseUnits()->getAmount() <=> $b[0]->getDefenseUnits()->getAmount());
@@ -328,11 +324,8 @@ class QueueableUnitPlanner
             return $floor[0][1];
         }
 
-        $fleet = $this->warFleet($player, $planets, $profile);
-        if ($fleet !== null) {
-            return $fleet;
-        }
-
+        // The wall comes before the fleet here because the schedule places the fleet's own order on every login anyway
+        // (capitalFleetOrder): with the fleet first, a late-game home stood a two-launcher floor through 21 battles (9316).
         if ($standing !== []) {
             // The least-defended planet that still wants a wall takes the next order, so a wall rises
             // everywhere it is wanted instead of forever in one place. Counting units rather than
@@ -342,7 +335,7 @@ class QueueableUnitPlanner
             return $standing[0][1];
         }
 
-        return null;
+        return $this->warFleet($player, $planets, $profile);
     }
 
     /**
@@ -1178,11 +1171,25 @@ class QueueableUnitPlanner
                 continue;
             }
 
-            // A moon without defence is ordinary (the invariant leaves it out too): it is not a bare sibling.
-            $bare = $bare || $planet->getPlanetType() !== PlanetType::Moon;
+            // A moon without defence is ordinary (the invariant leaves it out too): it is not a bare sibling. Nor is a new
+            // colony whose yard cannot build any wall yet: it held every walled sibling at its floor until its shipyard
+            // stood (9316: homes at zero through 21 battles beside three yardless colonies).
+            $bare = $bare || ($planet->getPlanetType() !== PlanetType::Moon && $this->canStandWall($planet));
         }
 
         return $walled && $bare;
+    }
+
+    /** Whether the planet's yard can build any defence at all, from the host's requirement graph. */
+    private function canStandWall(PlanetService $planet): bool
+    {
+        foreach (ObjectService::getDefenseObjects() as $unit) {
+            if ($unit instanceof UnitObject && $this->requirementsMet($planet, $unit)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
