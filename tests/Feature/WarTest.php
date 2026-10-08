@@ -12,6 +12,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\AttackMission;
 use OGame\GameMissions\MoonDestructionMission;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
@@ -182,4 +183,36 @@ test('a deathstar holder flies a strike on an enemy moon that carries no loot', 
 })->with([
     'an enemy moon: the gate and phalanx it hosts are the point' => [true, true],
     'a neutral moon is not worth the trip' => [false, false],
+]);
+
+test('a moon strike is dispatched at an online defender, a raid is not', function (bool $strike, bool $flies): void {
+    warProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 23);
+    $this->planetAddResources(new Resources(0, 0, 5_000_000));
+    $this->planetAddUnit('deathstar', 2);
+    $this->planetAddUnit('cruiser', 40);
+    $enemyPlanet = $this->createForeignPlanet();
+    app(PlanetServiceFactory::class)->createMoonForPlanet($enemyPlanet, 2_000_000, 20);
+    $moon = Planet::query()->where('user_id', $enemyPlanet->getPlayer()->getId())->where('planet_type', PlanetType::Moon->value)->firstOrFail();
+    warGrudge($this->currentUserId, $enemyPlanet->getPlayer()->getId());
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, warReport($this->currentUserId, $moon, [], PlanetType::Moon->value));
+    expect($plan)->not->toBeNull();
+    // The defender touches the moon between the plan and the launch.
+    Planet::query()->whereKey($moon->id)->update(['time_last_update' => now()->getTimestamp()]);
+
+    $result = app(QueueAiRaid::class)->handle(
+        $this->currentUserId,
+        $plan->originPlanetId,
+        $plan->targetGalaxy,
+        $plan->targetSystem,
+        $plan->targetPosition,
+        $plan->targetType,
+        $plan->launchUnits,
+        $strike ? $plan->missionType : AttackMission::getTypeId(),
+    );
+
+    expect($result->successful)->toBe($flies, $result->reason);
+})->with([
+    'the moon cannot be saved by logging in' => [true, true],
+    'an attack meets a saved fleet and spent stock' => [false, false],
 ]);

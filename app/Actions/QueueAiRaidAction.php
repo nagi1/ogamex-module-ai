@@ -10,6 +10,7 @@ use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\AttackMission;
+use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
@@ -68,8 +69,10 @@ class QueueAiRaidAction implements QueueAiRaid
             // of the way and loose resources spent, but a wall and the pile it
             // covers stay where they are, so that haul is still there to take
             // (LIFE_FIGHTS).
+            // A moon strike flies at an online defender too: the fleet can be saved, the moon cannot.
+            $strike = $missionType === MoonDestructionMission::getTypeId();
             $target = $this->planetServiceFactory->makeForCoordinate($targetCoordinate, false, PlanetType::from($targetType));
-            if ($target !== null && $this->activityIntelReader->activityAt($target) && $target->getDefenseUnits()->units === []) {
+            if (!$strike && $target !== null && $this->activityIntelReader->activityAt($target) && $target->getDefenseUnits()->units === []) {
                 return AiActionResult::rejected(AiQueueActionReason::TargetActiveAtDispatch);
             }
 
@@ -77,7 +80,7 @@ class QueueAiRaidAction implements QueueAiRaid
             // fleet on the moon — staging the trap a raid would fly into
             // (NIN-005). Flying into it is a ninja, not a raid.
             $moon = $this->planetServiceFactory->makeMoonForCoordinate($targetCoordinate);
-            if ($moon !== null && $target !== null && $this->activityIntelReader->moonOnlyActivity($moon, $target)) {
+            if (!$strike && $moon !== null && $target !== null && $this->activityIntelReader->moonOnlyActivity($moon, $target)) {
                 return AiActionResult::rejected(AiQueueActionReason::TargetStagingAtDispatch);
             }
 
