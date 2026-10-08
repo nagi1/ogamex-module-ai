@@ -168,3 +168,18 @@ anti-ballistic missile, and in most worlds battlecruiser and bomber (the last th
 24 h world 9339 (budget 2e11, 6 accounts): 102 attacks, 89 battles, 91 missile strikes, 132 recycles, 131 deploys,
 24 holds, 40 colonisations. Every ship, defence and station reached except the jump gate, which was still building.
 12 h worlds now miss one to three hulls at most (yard time, not a gate).
+
+### 8 Oct, afternoon: the jump gate
+
+Moons received the gate's money but never built it. Each cause was read from a finished world's end state.
+
+| Cause (world) | Fix | Commit |
+|---|---|---|
+| A moon has no storage, so the surplus sweep flew every gate instalment back out (9352) | A moon still owed a station is never a source | 9df9713 |
+| Gate queued behind an unbuilt base and phalanx, at robotics 0, taking 3.5 days; warehouses took moon fields (9354) | One moon station at a time; only moon stations on a moon | 0131fed |
+| Factory bought whenever the gate was unaffordable, so the gate still ran 43 h; factories filled every field (9361) | While the factory pays back, the gate waits; the factory takes only fields not owed to the gate or phalanx, otherwise the lunar base rises; a moon's cheap step is ferried; the gate's research is not a moon step | 3e19828 |
+| Bare moons waited up to 17 h for their first shipment behind the planets (9373) | Moons are fed first | e5d46fa |
+
+9373: robotics 9 and lunar base 5 on a moon, gate queued as an 8.5 h build instead of 84 h. 9371 (24 h, before the
+last fix): **nothing missing** for the first time: a gate built, 103 attacks, 80 battles, 90 missile strikes. No jump
+yet: a jump needs a gate on both moons.
