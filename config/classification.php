@@ -8,6 +8,9 @@ return [
     'provider' => env('AI_CLASSIFICATION_PROVIDER', 'typesafe'),
     // Null takes the provider's default classification model (jev-latest).
     'model' => env('AI_CLASSIFICATION_MODEL'),
+    // Off, a message from another AI account is never read (AI-to-AI stays free). On, it is read like a human's, to build
+    // the readings the small distilled models learn from; the daily reading count above still caps it.
+    'read_ai_senders' => (bool) env('AI_CLASSIFICATION_READ_AI_SENDERS', false),
     'timeout_seconds' => (int) env('AI_CLASSIFICATION_TIMEOUT_SECONDS', 10),
     // Fresh readings per day across the universe; a cached text costs nothing and is not counted.
     'daily_readings' => (int) env('AI_CLASSIFICATION_DAILY_READINGS', 5_000),

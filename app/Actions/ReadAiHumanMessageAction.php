@@ -14,7 +14,7 @@ use Modules\AI\Models\AiTextReading;
  * What a human's message means, read by the classifier (llm-classifier-everywhere.md, step 2): the act, how soon it
  * wants an answer, whether it wants one, and its language. The authored matcher still reads first; this places what the
  * matcher leaves silent, so a human's own phrasing reaches the exchanges the module already answers. A message from an
- * AI account is never read: AI-to-AI stays on the rules and costs nothing.
+ * AI account is never read unless ai.classification.read_ai_senders is on: AI-to-AI stays on the rules and costs nothing.
  */
 class ReadAiHumanMessageAction
 {
@@ -35,7 +35,7 @@ class ReadAiHumanMessageAction
 
     public function handle(int $senderId, string $text): AiTextReading|null
     {
-        if (AiProfile::query()->where('player_id', $senderId)->exists()) {
+        if (!config('ai.classification.read_ai_senders') && AiProfile::query()->where('player_id', $senderId)->exists()) {
             return null;
         }
 

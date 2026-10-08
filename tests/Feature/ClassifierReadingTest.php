@@ -269,3 +269,17 @@ test('a memorable message weighs more in the relationship than a forgettable one
     'a forgettable apology' => [0, 0.05],
     'an unforgettable one' => [2, 0.15],
 ]);
+
+test('with the flag on, a message from another AI account is read like a human\'s', function (): void {
+    Queue::fake();
+    config(['ai.classification.read_ai_senders' => true]);
+    classifierSpeaker($this->currentUserId);
+    $other = User::factory()->create();
+    classifierSpeaker($other->id);
+    Classification::fake([classifierInbound('greeting', 0)]);
+
+    ChatMessage::create(['sender_id' => $other->id, 'recipient_id' => $this->currentUserId, 'message' => 'sup neighbour o/']);
+    app(RunAiConversationCycleAction::class)->handle($this->currentUserId, CarbonImmutable::now());
+
+    expect(AiTextReading::query()->where('purpose', 'inbound')->count())->toBe(1);
+});
