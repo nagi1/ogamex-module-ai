@@ -438,10 +438,10 @@ class QueueableTransferPlanner
         // The ferry funds the step the planet cannot reach on its own, so a candidate whose whole
         // price is below the shipment floor -- a cheap research the planet pays for from an hour of
         // income -- is not the shortfall a player ships resources for; the next step down the same
-        // list is.
+        // list is. A moon makes nothing, so its cheap step (the first factory level its gate waits on) is shipped too.
         foreach ($candidates as $candidate) {
             $price = ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet);
-            if ($this->worthShipping($price)) {
+            if ($planet->getPlanetType() === PlanetType::Moon || $this->worthShipping($price)) {
                 return $price;
             }
         }

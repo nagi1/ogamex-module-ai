@@ -106,8 +106,8 @@ test('a moon whose fields are all used raises its field ceiling next', function 
     expect($reasons)->toContain('moon-station:lunar_base');
 });
 
-// A moon has no factory, so its jump gate took three and a half days; the station that shortens construction comes first
-// whenever the host's time formula says it pays back.
+// A moon has no factory, so its jump gate took three and a half days; while the station that shortens construction pays
+// back by the host's time formula, it is the step and the gate waits (an unaffordable gate let the factory in anyway, 9361).
 test('a moon about to build its jump gate first builds the station that shortens it', function (): void {
     ambitionProfile($this->currentUserId);
     $this->playerSetResearchLevel('hyperspace_technology', 7);
@@ -120,12 +120,44 @@ test('a moon about to build its jump gate first builds the station that shortens
     $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
     $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
     $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
-    $gate = array_search('moon-station:jump_gate', $reasons, true);
-    $factory = array_search('moon-station:robot_factory', $reasons, true);
 
-    expect($gate)->not->toBeFalse()
-        ->and($factory)->not->toBeFalse()
-        ->and($factory)->toBeLessThan($gate);
+    expect($reasons)->toContain('moon-station:robot_factory')
+        ->and($reasons)->not->toContain('moon-station:jump_gate');
+});
+
+// Factories at level 7 filled moons that then had no field left for the gate (9361).
+test('a moon whose spare fields the gate and phalanx are owed raises its fields before the factory', function (): void {
+    ambitionProfile($this->currentUserId);
+    $this->playerSetResearchLevel('hyperspace_technology', 7);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 1, true);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, $moon->getPlanetFieldMax() - 3, true);
+    app(PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+
+    expect($reasons)->toContain('moon-station:lunar_base')
+        ->and($reasons)->not->toContain('moon-station:robot_factory');
+});
+
+test('a moon whose factory no longer pays back on the gate builds the gate', function (): void {
+    ambitionProfile($this->currentUserId);
+    $this->playerSetResearchLevel('hyperspace_technology', 7);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('lunar_base')->id, 8, true);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('sensor_phalanx')->id, 1, true);
+    $moon->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 14, true);
+    app(PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+
+    expect($reasons)->toContain('moon-station:jump_gate');
 });
 
 test('a moon with one field left builds its station, not the factory that would take that field', function (): void {

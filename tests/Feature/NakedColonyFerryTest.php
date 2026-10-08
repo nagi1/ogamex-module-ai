@@ -80,6 +80,9 @@ test('a moon step dearer than any one planet holds is ferried in instalments', f
     $moon = app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->planetService, 2_000_000, 20, 15);
     $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('lunar_base')->id, 1, true);
     $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('sensor_phalanx')->id, 1, true);
+    // A factory that no longer pays back on the gate, so the gate itself is the step.
+    $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('lunar_base')->id, 8, true);
+    $moon->setObjectLevel(OGame\Services\ObjectService::getObjectByMachineName('robot_factory')->id, 14, true);
     $this->playerSetResearchLevel('hyperspace_technology', 7);
     // The gate is a step only for an account with a second moon to jump to.
     app(OGame\Factories\PlanetServiceFactory::class)->createMoonForPlanet($this->secondPlanetService, 2_000_000, 20, 15);
@@ -90,7 +93,7 @@ test('a moon step dearer than any one planet holds is ferried in instalments', f
 
     expect($plan)->toBeInstanceOf(QueueableTransfer::class)
         ->and($plan?->targetPlanetId)->toBe($moon->getPlanetId())
-        ->and($plan?->crystal)->toBeGreaterThan(0)
+        ->and($plan?->crystal)->toBeGreaterThan(1_000_000)
         ->and($plan?->crystal)->toBeLessThanOrEqual(3_000_000 + $this->planetService->crystal()->get());
 });
 

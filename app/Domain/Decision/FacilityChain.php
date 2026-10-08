@@ -110,7 +110,7 @@ class FacilityChain
             $producers = [];
             $this->addRequirement($planet, self::PHALANX_STATION, 1, $ordered, $producers, 'moon-station');
 
-            foreach (ObjectService::getRecursiveRequirements(self::PHALANX_STATION) as $machineName => $level) {
+            foreach ($this->moonRequirements(self::PHALANX_STATION, $planet) as $machineName => $level) {
                 $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'moon-station');
             }
 
@@ -119,7 +119,7 @@ class FacilityChain
             if ($this->hasTwoMoons($planet)) {
                 $this->addRequirement($planet, self::JUMP_GATE_STATION, 1, $ordered, $producers, 'moon-station');
 
-                foreach (ObjectService::getRecursiveRequirements(self::JUMP_GATE_STATION) as $machineName => $level) {
+                foreach ($this->moonRequirements(self::JUMP_GATE_STATION, $planet) as $machineName => $level) {
                     $this->addRequirement($planet, $machineName, $level, $ordered, $producers, 'moon-station');
                 }
             }
@@ -132,10 +132,6 @@ class FacilityChain
                 $this->addRequirement($planet, $raiser, $planet->getObjectLevel($raiser) + 1, $ordered, $producers, 'moon-station');
             }
 
-            // A moon has no factory of its own, so a jump gate there took three and a half days (9328): the station that
-            // shortens construction comes first when the host's time formula says it pays back on the gate. Every level
-            // takes a field, queued ones included, so it waits for a field of its own beside the gate's; asked of the
-            // short phalanx too, it took every field of a moon that never got its phalanx (9338).
             $queued = BuildingQueue::query()->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)->count();
             // A moon's next station is chosen once the last one stands: queued behind an unbuilt lunar base and phalanx, the
             // gate took the moon's last field before the factory that halves it could, and ran three and a half days (9354).
@@ -143,12 +139,22 @@ class FacilityChain
                 $ordered = [];
                 $producers = [];
             }
-            $gateDue = $queued === 0 && $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1;
-            $accelerator = $gateDue && $planet->getPlanetFieldMax() - $planet->getBuildingCount() - $queued >= 2
-                ? $this->buildAccelerator($planet, self::JUMP_GATE_STATION)
-                : null;
+
+            // A moon has no factory of its own, so a jump gate there took three and a half days (9328): while the station that
+            // shortens construction pays back on the gate (the host's time formula asked), it comes first and the gate waits,
+            // or the moon bought the factory whenever the gate was unaffordable and the gate ran 43 hours anyway (9361). Every
+            // level takes a field, so it only takes one the gate and the phalanx are not owed; short of that, the moon raises
+            // its fields first (9361: factories at 7 filled moons that then had no field for the gate).
+            $gateDue = $queued === 0 && $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1
+                && ObjectService::objectRequirementsMet(self::JUMP_GATE_STATION, $planet);
+            $accelerator = $gateDue ? $this->buildAccelerator($planet, self::JUMP_GATE_STATION) : null;
             if ($accelerator !== null) {
-                $this->addRequirement($planet, $accelerator, $planet->getObjectLevel($accelerator) + 1, $ordered, $producers, 'moon-station');
+                unset($ordered[self::JUMP_GATE_STATION]);
+                $owed = count(array_filter([self::PHALANX_STATION, self::JUMP_GATE_STATION], static fn (string $station): bool => $planet->getObjectLevel($station) < 1));
+                $step = $planet->getPlanetFieldMax() - $planet->getBuildingCount() > $owed ? $accelerator : $this->fieldRaiser($planet);
+                if ($step !== null) {
+                    $this->addRequirement($planet, $step, $planet->getObjectLevel($step) + 1, $ordered, $producers, 'moon-station');
+                }
             }
         }
 
@@ -278,6 +284,22 @@ class FacilityChain
         }
 
         return $best;
+    }
+
+    /**
+     * The prerequisites of a moon station a moon can build itself. The gate's technology and the laboratory behind it are the
+     * planets' to climb: listed on the moon, the laboratory was the step a moon was ferried for and could never build.
+     *
+     * @return array<string, int>
+     */
+    private function moonRequirements(string $station, PlanetService $planet): array
+    {
+        return array_filter(
+            ObjectService::getRecursiveRequirements($station),
+            static fn (int $level, string $machineName): bool => ObjectService::getObjectByMachineName($machineName)->type !== GameObjectType::Research
+                && ObjectService::objectValidPlanetType($machineName, $planet),
+            ARRAY_FILTER_USE_BOTH,
+        );
     }
 
     /** The station whose next level adds fields to this body, by the host's own field formula; null when none does. */
