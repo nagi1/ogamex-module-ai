@@ -30,7 +30,9 @@ def summary(path):
     for col in TECH:
         out[col] = c.execute(f"select coalesce(max({col}),0), count(case when {col}>0 then 1 end) from users_tech").fetchone()
     out["moons"] = (c.execute("select count(*) from planets where planet_type=3").fetchone()[0], 0)
-    out["battles"] = (c.execute("select count(*) from battle_reports").fetchone()[0], 0)
+    # A gate's cooldown stamp is left on both moons after a jump; a gate nobody jumped through is still unused.
+    out["gate_jumps"] = (c.execute("select count(*) from planets where jump_gate_cooldown is not null").fetchone()[0], 0)
+    out["battles"] =(c.execute("select count(*) from battle_reports").fetchone()[0], 0)
     out["alliance_members"] = (c.execute("select coalesce(max(n),0) from (select count(*) n from alliance_members group by alliance_id)").fetchone()[0], 0)
     missions = dict(c.execute("select mission_type, count(*) from fleet_missions group by 1").fetchall())
     return out, {MISSION.get(k, k): v for k, v in missions.items()}
