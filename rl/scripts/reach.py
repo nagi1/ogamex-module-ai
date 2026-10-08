@@ -9,8 +9,8 @@ import sqlite3
 import sys
 
 BUILD = "nano_factory terraformer lunar_base sensor_phalanx jump_gate space_dock missile_silo alliance_depot fusion_plant research_lab shipyard".split()
-SHIPS = "battle_ship battlecruiser bomber destroyer deathstar reaper pathfinder recycler colony_ship large_cargo cruiser".split()
-DEF = "plasma_turret gauss_cannon ion_cannon large_shield_dome anti_ballistic_missile interplanetary_missile".split()
+SHIPS = "light_fighter heavy_fighter battle_ship battlecruiser bomber destroyer deathstar reaper pathfinder recycler colony_ship large_cargo cruiser".split()
+DEF = "rocket_launcher light_laser heavy_laser plasma_turret gauss_cannon ion_cannon small_shield_dome large_shield_dome anti_ballistic_missile interplanetary_missile".split()
 TECH = "plasma_technology hyperspace_technology hyperspace_drive astrophysics intergalactic_research_network graviton_technology computer_technology ion_technology".split()
 IDS = {"light_fighter": 204, "heavy_fighter": 205, "cruiser": 206, "battle_ship": 207, "colony_ship": 208, "recycler": 209, "bomber": 211, "destroyer": 213, "deathstar": 214, "battlecruiser": 215, "reaper": 218, "pathfinder": 219, "large_cargo": 203, "rocket_launcher": 401, "light_laser": 402, "heavy_laser": 403, "gauss_cannon": 404, "ion_cannon": 405, "plasma_turret": 406, "small_shield_dome": 407, "large_shield_dome": 408, "anti_ballistic_missile": 502, "interplanetary_missile": 503}
 MISSION = {1: "attack", 2: "acs_attack", 3: "transport", 4: "deploy", 5: "hold", 6: "espionage", 7: "colonise", 8: "recycle", 9: "moon_destroy", 10: "missile", 15: "expedition"}
@@ -47,6 +47,8 @@ def main():
         if mark:
             missing.append(name)
         print(f"  {name:28} max {peak:>8}  total {total:>10}" + (f"  (start max {was[0]}, total {was[1]})" if start else "") + mark)
+    # A mission nobody flew is as missing as an object nobody built: the grand war uses every one.
+    missing += [f"mission:{name}" for name in MISSION.values() if name not in missions]
     print("MISSING:", " ".join(missing) or "none")
 
 

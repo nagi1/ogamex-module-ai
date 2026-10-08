@@ -234,7 +234,10 @@ class RaidPlanner
             $enemy => max(self::WAR_LOSS_TOLERANCE, $this->lossTolerance($profile)),
             default => $this->lossTolerance($profile),
         };
-        if ($estimate->p20NetProfit + $debris + $tolerance * $estimate->p20Loot <= 0.0) {
+        // A strike on an enemy moon by a fleet that can break it is flown for the moon, not its loot: the gate and phalanx
+        // it hosts are what the war is about, and a moon holds little to carry home (9383-9392: no moon was ever destroyed).
+        $strike = $enemy && $this->breakers($report, $origin) !== [];
+        if (!$strike && $estimate->p20NetProfit + $debris + $tolerance * $estimate->p20Loot <= 0.0) {
             return $this->reject('unprofitable', $playerId, $reportId);
         }
 
@@ -260,7 +263,7 @@ class RaidPlanner
             return $this->reject('fuel_tank_short', $playerId, $reportId);
         }
 
-        if (!$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
+        if (!$strike && !$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
             return $this->reject('below_loot_tier', $playerId, $reportId);
         }
 
@@ -287,11 +290,8 @@ class RaidPlanner
      */
     private function missionFor(EspionageReport $report, PlanetService $origin, array $launchUnits): array
     {
-        $breakers = array_filter(
-            MoonDestructionMission::getRequiredShipMachineNames(),
-            static fn (string $machineName): bool => $origin->getObjectAmount($machineName) > 0,
-        );
-        if ((int) $report->planet_type !== PlanetType::Moon->value || $breakers === []) {
+        $breakers = $this->breakers($report, $origin);
+        if ($breakers === []) {
             return [AttackMission::getTypeId(), $launchUnits];
         }
 
@@ -300,6 +300,23 @@ class RaidPlanner
         }
 
         return [MoonDestructionMission::getTypeId(), $launchUnits];
+    }
+
+    /**
+     * The hulls of the host's moon-destruction mission the origin holds, when the report is of a moon.
+     *
+     * @return list<string>
+     */
+    private function breakers(EspionageReport $report, PlanetService $origin): array
+    {
+        if ((int) $report->planet_type !== PlanetType::Moon->value) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            MoonDestructionMission::getRequiredShipMachineNames(),
+            static fn (string $machineName): bool => $origin->getObjectAmount($machineName) > 0,
+        ));
     }
 
     /**

@@ -12,6 +12,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\MoonDestructionMission;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\Planet;
@@ -160,3 +161,25 @@ test('a costly fight with no loot', function (bool $enemy, bool $fought): void {
 beforeEach(function (): void {
     app()->bind(QueueAiRaid::class, QueueAiRaidAction::class);
 });
+
+test('a deathstar holder flies a strike on an enemy moon that carries no loot', function (bool $enemy, bool $struck): void {
+    warProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 23);
+    $this->planetAddResources(new Resources(0, 0, 5_000_000));
+    $this->planetAddUnit('deathstar', 2);
+    $this->planetAddUnit('cruiser', 40);
+    $enemyPlanet = $this->createForeignPlanet();
+    User::query()->whereKey($enemyPlanet->getPlayer()->getId())->update(['time' => (string) now()->timestamp]);
+    app(PlanetServiceFactory::class)->createMoonForPlanet($enemyPlanet, 2_000_000, 20);
+    $moon = Planet::query()->where('user_id', $enemyPlanet->getPlayer()->getId())->where('planet_type', PlanetType::Moon->value)->firstOrFail();
+    if ($enemy) {
+        warGrudge($this->currentUserId, $enemyPlanet->getPlayer()->getId());
+    }
+
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, warReport($this->currentUserId, $moon, [], PlanetType::Moon->value));
+
+    expect($plan?->missionType === MoonDestructionMission::getTypeId())->toBe($struck);
+})->with([
+    'an enemy moon: the gate and phalanx it hosts are the point' => [true, true],
+    'a neutral moon is not worth the trip' => [false, false],
+]);
