@@ -67,3 +67,12 @@ test('a refusal that blamed another coordinate does not cool this target', funct
 
     expect(app(QueueableMissilePlanner::class)->plan($this->currentUserId))->toBeInstanceOf(QueueableMissile::class);
 });
+
+// The raids spared a mate and the volleys did not: mates who fired at each other walked out of the club (9427).
+test('a probed wall in range is spared when its owner is an alliance mate', function (): void {
+    $situation = missileRefusalSituation($this);
+    $alliance = app(OGame\Services\AllianceService::class)->createAlliance($this->currentUserId, 'MATE', 'Mates');
+    OGame\Models\User::query()->whereKey($situation->neighbour()?->getPlayer()?->getId())->update(['alliance_id' => $alliance->id]);
+
+    expect(app(QueueableMissilePlanner::class)->plan($this->currentUserId))->toBeNull('a volley was offered at a mate, ' . $situation->account());
+});

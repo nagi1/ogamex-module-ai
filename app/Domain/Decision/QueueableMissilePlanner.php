@@ -65,6 +65,9 @@ class QueueableMissilePlanner
         }
 
         $reports = EspionageReport::query()->whereIn('id', $reportIds)->orderByDesc('id')->get();
+        // A mate's or a pact partner's wall reaches the account through shared intel, and the raids already spare it: the
+        // volleys did not, and mates who fired at each other walked out of the club (9427: 39 volleys between two members).
+        $spared = app(Enemies::class)->spared($playerId);
 
         foreach ($player->planets->all() as $planet) {
             if (isset($refusedOrigins[$planet->getPlanetId()])) {
@@ -87,7 +90,8 @@ class QueueableMissilePlanner
 
                 if ((int) $report->planet_galaxy !== $origin->galaxy
                     || abs((int) $report->planet_system - $origin->system) > $range
-                    || (int) $report->planet_user_id === $playerId) {
+                    || (int) $report->planet_user_id === $playerId
+                    || in_array((int) $report->planet_user_id, $spared, true)) {
                     continue;
                 }
 
