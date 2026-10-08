@@ -34,7 +34,7 @@ test('an account whose seat the host half wrote asks a fitting club on the same 
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
         'activity_band' => AiActivityBand::Regular,
-        'random_seed' => 42,
+        'random_seed' => 7,
         'enabled' => true,
     ]);
     danglingRank($this->currentUserId);

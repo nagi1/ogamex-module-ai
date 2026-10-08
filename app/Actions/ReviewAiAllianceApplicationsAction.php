@@ -135,7 +135,10 @@ class ReviewAiAllianceApplicationsAction
      */
     private function pendingApplications(Alliance $alliance): Collection
     {
-        return app(AllianceService::class)->getPendingApplications($alliance->id);
+        // The seat goes to the strongest applicant waiting, so applicants race for it rather than queue (alliance-politics.md).
+        return app(AllianceService::class)->getPendingApplications($alliance->id)
+            ->sortByDesc(fn (AllianceApplication $application): float => (float) (Highscore::query()->where('player_id', $application->user_id)->value('general') ?? 0))
+            ->values();
     }
 
     private function rankRatio(int $playerId): float|null

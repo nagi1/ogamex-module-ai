@@ -26,7 +26,7 @@ function cohortLaneProfile(int $playerId): void
         'archetype' => AiArchetype::Casual,
         'skill_band' => AiSkillBand::Standard,
         'activity_band' => AiActivityBand::Regular,
-        'random_seed' => 42,
+        'random_seed' => 8,
         'enabled' => true,
     ]);
 
@@ -70,7 +70,7 @@ function cohortLaneInertProfiles(int $amount): void
             'archetype' => AiArchetype::Casual,
             'skill_band' => AiSkillBand::Standard,
             'activity_band' => AiActivityBand::Regular,
-            'random_seed' => 42,
+            'random_seed' => 8,
             'enabled' => true,
         ]);
     }
@@ -95,7 +95,7 @@ test('a settled cohort in a club that fits it stays seated, however large the cl
         ->and(AllianceApplication::query()->whereIn('user_id', $members)->count())->toBe(0);
 });
 
-test('a club holding the cohort\'s share loses a member, who asks another club on the same pass', function (): void {
+test('a club holding the cohort\'s share loses a member, who asks another club once the host cooldown is over', function (): void {
     $members = [$this->currentUserId, User::factory()->create()->id, User::factory()->create()->id, User::factory()->create()->id, User::factory()->create()->id];
     foreach ($members as $id) {
         cohortLaneProfile($id);
@@ -109,8 +109,12 @@ test('a club holding the cohort\'s share loses a member, who asks another club o
     $elsewhere = cohortLaneClub(User::factory()->create()->id, 'SMLL');
 
     app(AdvanceAiAllianceLifeAction::class)->handle();
+    $seated = User::query()->whereIn('id', $members)->where('alliance_id', $club->id)->count();
+    // The host's join cooldown stands for the leaver (alliance-politics.md).
+    $this->travel(app(OGame\Services\SettingsService::class)->allianceCooldownDays() + 1)->days();
+    app(AdvanceAiAllianceLifeAction::class)->handle();
 
-    expect(User::query()->whereIn('id', $members)->where('alliance_id', $club->id)->count())->toBe(count($members) - 1)
+    expect($seated)->toBe(count($members) - 1)
         ->and(AllianceApplication::query()->whereIn('user_id', $members)->where('alliance_id', $elsewhere->id)
             ->where('status', AllianceApplication::STATUS_PENDING)->count())->toBe(1);
 });

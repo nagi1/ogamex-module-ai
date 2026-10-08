@@ -26,13 +26,14 @@ beforeEach(function (): void {
     app()->bind(AiClock::class, SystemAiClock::class);
 });
 
-function reviewProfile(int $playerId): void
+/** Seed 7 draws a casual who wants a club, 13 one who leads (alliance-ambition.yaml). */
+function reviewProfile(int $playerId, int $seed = 7): void
 {
     AiProfile::create([
         'player_id' => $playerId,
         'archetype' => AiArchetype::Casual,
         'skill_band' => AiSkillBand::Standard,
-        'random_seed' => 42,
+        'random_seed' => $seed,
         'enabled' => true,
     ]);
 }
@@ -213,7 +214,24 @@ test('an elite alliance admits a peer as strong as its members', function (): vo
         ->and($application->fresh()->status)->toBe(AllianceApplication::STATUS_ACCEPTED);
 });
 
-test('a ranked account every alliance rejected founds its own alliance', function (): void {
+test('a ranked leader every alliance rejected founds its own alliance', function (): void {
+    reviewProfile($this->currentUserId);
+    $alliance = reviewAlliance($this->currentUserId, 'ORBITAL');
+
+    $outcast = User::factory()->create();
+    reviewProfile($outcast->id, 13);
+    reviewRank($outcast->id, 15);
+
+    $application = reviewApplication($outcast->id, $alliance->id);
+    AllianceApplication::unguarded(fn () => $application->update(['status' => AllianceApplication::STATUS_REJECTED]));
+
+    expect(app(AdvanceAiAllianceLifeAction::class)->handle())->toBeGreaterThan(0)
+        ->and(Alliance::query()->where('founder_user_id', $outcast->id)->exists())->toBeTrue()
+        ->and(User::find($outcast->id)->alliance_id)->not->toBeNull();
+});
+
+// Every locked-out account founding its own left six empires in six clubs (9372): a follower waits and asks again.
+test('a rejected follower founds nothing', function (): void {
     reviewProfile($this->currentUserId);
     $alliance = reviewAlliance($this->currentUserId, 'ORBITAL');
 
@@ -223,10 +241,9 @@ test('a ranked account every alliance rejected founds its own alliance', functio
 
     $application = reviewApplication($outcast->id, $alliance->id);
     AllianceApplication::unguarded(fn () => $application->update(['status' => AllianceApplication::STATUS_REJECTED]));
+    app(AdvanceAiAllianceLifeAction::class)->handle();
 
-    expect(app(AdvanceAiAllianceLifeAction::class)->handle())->toBeGreaterThan(0)
-        ->and(Alliance::query()->where('founder_user_id', $outcast->id)->exists())->toBeTrue()
-        ->and(User::find($outcast->id)->alliance_id)->not->toBeNull();
+    expect(Alliance::query()->where('founder_user_id', $outcast->id)->exists())->toBeFalse();
 });
 
 test('a rankless account does not found its own alliance', function (): void {
@@ -249,7 +266,7 @@ test('a locked-out account applies to the new club on the next pass instead of f
     $alliance = reviewAlliance($this->currentUserId, 'ORBITAL');
 
     $first = User::factory()->create();
-    reviewProfile($first->id);
+    reviewProfile($first->id, 13);
     reviewRank($first->id, 15);
     $second = User::factory()->create();
     reviewProfile($second->id);
@@ -270,4 +287,24 @@ test('a locked-out account applies to the new club on the next pass instead of f
     app(AdvanceAiAllianceLifeAction::class)->handle();
     expect(Alliance::query()->where('founder_user_id', $second->id)->exists())->toBeFalse()
         ->and(AllianceApplication::query()->where('user_id', $second->id)->where('alliance_id', $firstClub->id)->where('status', AllianceApplication::STATUS_PENDING)->exists())->toBeTrue();
+});
+
+// Applicants race for a seat: the stronger one gets it even when the weaker asked first (alliance-politics.md).
+test('the leader seats the strongest applicant waiting, not the first', function (): void {
+    reviewProfile($this->currentUserId);
+    $alliance = reviewAlliance($this->currentUserId);
+    $weaker = User::factory()->create();
+    reviewRank($weaker->id, 2);
+    $stronger = User::factory()->create();
+    Highscore::unguarded(fn () => Highscore::updateOrCreate(['player_id' => $stronger->id], ['general' => 9000, 'general_rank' => 1, 'economy' => 9000, 'research' => 9000]));
+
+    $first = reviewApplication($weaker->id, $alliance->id);
+    ageReviewApplication($first->id, 30);
+    $second = reviewApplication($stronger->id, $alliance->id);
+    ageReviewApplication($second->id, 20);
+
+    app(ReviewAiAllianceApplicationsAction::class)->handle();
+
+    expect($second->fresh()->status)->toBe(AllianceApplication::STATUS_ACCEPTED)
+        ->and($first->fresh()->status)->toBe(AllianceApplication::STATUS_PENDING);
 });

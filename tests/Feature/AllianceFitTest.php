@@ -48,7 +48,7 @@ function allianceFitProfile(int $playerId, AiActivityBand|null $band, AiArchetyp
         'archetype' => $archetype,
         'skill_band' => AiSkillBand::Standard,
         'activity_band' => $band,
-        'random_seed' => 42,
+        'random_seed' => 8,
         'enabled' => true,
     ]);
 }
@@ -154,8 +154,10 @@ test('an account that states no pace joins on language alone, and joins nothing 
     expect(app(AllianceChoice::class)->choose($this->currentUserId)?->id)->toBe($club->id);
 });
 
-test('an account no club fits founds its own instead of piling into one', function (): void {
+test('a leader no club fits founds its own instead of piling into one', function (): void {
     allianceFitProfile($this->currentUserId, AiActivityBand::Hardcore, AiArchetype::Fleeter);
+    // Seed 7 draws a fleeter who leads (alliance-ambition.yaml); only a leader founds.
+    AiProfile::query()->where('player_id', $this->currentUserId)->update(['random_seed' => 7]);
     allianceFitSpeaks($this->currentUserId, 'de');
     allianceFitRank($this->currentUserId, 500, 2);
     allianceFitRank(User::factory()->create()->id, 1000, 1);

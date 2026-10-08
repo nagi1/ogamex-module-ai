@@ -36,7 +36,7 @@ function staleCohort(int $clubId, string $language): int
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
         'activity_band' => AiActivityBand::Regular,
-        'random_seed' => 42,
+        'random_seed' => 8,
         'enabled' => true,
     ]);
     staleRank($playerId, 500, 2);
@@ -75,7 +75,7 @@ function staleInertProfiles(int $amount): void
             'archetype' => AiArchetype::Miner,
             'skill_band' => AiSkillBand::Standard,
             'activity_band' => AiActivityBand::Regular,
-            'random_seed' => 42,
+            'random_seed' => 8,
             'enabled' => true,
         ]);
     }
@@ -92,7 +92,7 @@ test('a member of a club that fits is kept, and applies nowhere', function (): v
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
         'activity_band' => AiActivityBand::Regular,
-        'random_seed' => 42,
+        'random_seed' => 8,
         'enabled' => true,
     ]);
     staleRank($this->currentUserId, 500, 2);

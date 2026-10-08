@@ -1,0 +1,19 @@
+# Who wants an alliance at all, and who leads one (alliance-politics.md section 2).
+#
+# Real servers are not every player in a club: fleeters and raiders want the elite alliances that coordinate hits
+# and ACS, miners and turtles a quiet club or none, casuals a small club or none. A few players of each kind lead:
+# they found a club when none of their tier will take them. Everyone else applies, waits, grows and applies again.
+#
+# joins: the share of the archetype's accounts that want an alliance. leads: the share that found one.
+# An account's draw is fixed by its seed, so the same account always wants the same thing.
+archetypes:
+  fleeter: { joins: 0.9, leads: 0.35 }
+  raider: { joins: 0.85, leads: 0.3 }
+  hybrid: { joins: 0.75, leads: 0.2 }
+  trader: { joins: 0.6, leads: 0.1 }
+  miner: { joins: 0.55, leads: 0.05 }
+  casual: { joins: 0.5, leads: 0.05 }
+  turtle: { joins: 0.4, leads: 0.0 }
+
+# A club's rejection is answered, not final: the applicant grows and asks again after this long.
+reapply_after_hours: 24

@@ -30,7 +30,7 @@ function enableProfile(int $playerId): void
         'player_id' => $playerId,
         'archetype' => AiArchetype::Casual,
         'skill_band' => AiSkillBand::Standard,
-        'random_seed' => 42,
+        'random_seed' => 8,
         'enabled' => true,
     ]);
 }
@@ -66,8 +66,10 @@ test('an account with no alliance applies through the host path', function (): v
         ->and(AllianceApplication::where('user_id', $this->currentUserId)->first()->application_message)->not->toBeEmpty();
 });
 
-test('a universe with no alliance has the first account found one', function (): void {
+test('a universe with no alliance has its first leader found one', function (): void {
     enableProfile($this->currentUserId);
+    // Seed 13 draws a casual who leads (alliance-ambition.yaml).
+    AiProfile::query()->where('player_id', $this->currentUserId)->update(['random_seed' => 13]);
     rank($this->currentUserId, 1000, 1);
 
     expect(app(AdvanceAiAllianceLifeAction::class)->handle())->toBe(1)
@@ -324,4 +326,35 @@ test('a cooperate read keeps the alliance in the running', function (): void {
     ]));
 
     expect(app(AllianceChoice::class)->choose($this->currentUserId)->id)->toBe($alliance->id);
+});
+
+// Real servers have players in no alliance at all; the ALLY-001 lane seated every account (alliance-politics.md).
+test('a solo account applies nowhere and founds nothing', function (): void {
+    enableProfile($this->currentUserId);
+    // Seed 1 draws a casual who wants no club (alliance-ambition.yaml).
+    AiProfile::query()->where('player_id', $this->currentUserId)->update(['random_seed' => 1]);
+    rank($this->currentUserId, 1000, 1);
+    openAlliance(User::factory()->create()->id, 'TEST', 'Active players welcome');
+
+    app(AdvanceAiAllianceLifeAction::class)->handle();
+
+    expect(AllianceApplication::query()->where('user_id', $this->currentUserId)->exists())->toBeFalse()
+        ->and(Alliance::query()->where('founder_user_id', $this->currentUserId)->exists())->toBeFalse();
+});
+
+test('a rejected applicant asks the same club again once the answer has stood a day', function (): void {
+    enableProfile($this->currentUserId);
+    rank($this->currentUserId, 1000, 1);
+    $alliance = openAlliance(User::factory()->create()->id, 'TEST', 'Active players welcome');
+    AllianceApplication::unguarded(fn () => AllianceApplication::create([
+        'alliance_id' => $alliance->id, 'user_id' => $this->currentUserId, 'application_message' => 'x', 'status' => AllianceApplication::STATUS_REJECTED,
+    ]));
+
+    app(AdvanceAiAllianceLifeAction::class)->handle();
+    $waiting = AllianceApplication::query()->where('user_id', $this->currentUserId)->where('status', AllianceApplication::STATUS_PENDING)->exists();
+    $this->travel(25)->hours();
+    app(AdvanceAiAllianceLifeAction::class)->handle();
+
+    expect($waiting)->toBeFalse()
+        ->and(AllianceApplication::query()->where('user_id', $this->currentUserId)->where('status', AllianceApplication::STATUS_PENDING)->exists())->toBeTrue();
 });

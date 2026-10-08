@@ -3,6 +3,7 @@
 namespace Modules\AI\Actions;
 
 use Exception;
+use Modules\AI\Domain\Social\AllianceAmbition;
 use Modules\AI\Domain\Social\AllianceChoice;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -14,31 +15,19 @@ use OGame\Models\User;
 use OGame\Services\AllianceService;
 
 /**
- * Advances cooperative alliance life: an enabled account with no alliance and no outstanding
- * application applies to the alliance its tier would join. The host owns membership; an existing
- * membership and a pending application leave the account alone, and an alliance that already
- * rejected it is skipped by the choice, so the pass never spams the same alliance. An account
- * every alliance has refused founds its own club instead of staying alone forever (DEF-017).
- * A club that holds the cohort share is left by its members one at a time, which is what keeps
- * the apply half above fed on a cohort that was seated once.
- *
- * The lane is the cohort's only source of alliance applications: a pass that finds every account
- * already engaged creates none, so the leave half below keeps the lane moving at the rate the
- * scorecard's alliance aspect measures. The pass itself only runs when the host's every-minute
- * schedule fires, so the session path runs it too (ALLY-001).
+ * Advances alliance life (alliance-politics.md): an account that wants an alliance (persona taste,
+ * AllianceAmbition) and has no seat or pending application applies to the club its tier would join;
+ * a solo account asks nobody. Only a leader founds a club, when none of its tier will take it, so a
+ * universe ends with a few clubs, some solo players and selective elites, not one club per account.
+ * A member leaves only when its club stops fitting (shut, the cohort share, an enemy, language and
+ * pace), and the host's join cooldown stands for it. A founder kicks a member it has come to hate or
+ * a human gone inactive. The host owns membership throughout.
  *
  * A club only receives applications while the host marks it open, so a club this action founds is
- * opened for applications: a closed club is invisible to the join half above, and a cohort seated
- * into closed clubs would found new ones forever while the application lane never fires (ALLY-001).
+ * opened for applications.
  *
- * A cohort where every account is seated and every club fits has no reason to move
- * under the rules above, so the lane stops for good. The membership is therefore re-read each pass:
- * a member whose club is no longer the club it would choose today leaves it, which is how a player
- * who has outgrown or drifted from their club keeps the join half fed.
- *
- * A cohort whose seats the host only half wrote — a users.alliance_id with no alliance_members row,
- * as seeding left grand — is neither seated nor free, so the stale link is cleared and the account
- * asks on the same pass (ALLY-001).
+ * A seat the host only half wrote (a users.alliance_id with no alliance_members row, as seeding left
+ * grand) is neither seated nor free, so the stale link is cleared and the account asks on the same pass.
  */
 class AdvanceAiAllianceLifeAction
 {
@@ -66,7 +55,8 @@ class AdvanceAiAllianceLifeAction
         foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
             // Only an account with no seat and no outstanding request asks; a seated cohort asks
             // nobody, which is why the leave half above has to free one every pass.
-            if ($this->alreadyEngaged($playerId)) {
+            // A solo player asks nobody (alliance-politics.md).
+            if ($this->alreadyEngaged($playerId) || !app(AllianceAmbition::class)->wantsAlliance($playerId)) {
                 continue;
             }
 
@@ -97,7 +87,9 @@ class AdvanceAiAllianceLifeAction
                 continue;
             }
 
-            if ($this->stillTheClubItWouldChoose($playerId, (int) $allianceId)) {
+            // A seat is left when the club stops fitting (shut, the cohort share, an enemy, language and pace), never because
+            // another club scored higher: that was churn kept up for the application lane (ALLY-001).
+            if (app(AllianceChoice::class)->currentClubFits($playerId)) {
                 continue;
             }
 
@@ -147,41 +139,11 @@ class AdvanceAiAllianceLifeAction
                     continue;
                 }
 
-                // The kicked account asks elsewhere on the next pass, as a leaver does.
-                User::query()->whereKey($memberId)->whereNotNull('alliance_left_at')->update(['alliance_left_at' => null]);
-
                 return 1;
             }
         }
 
         return 0;
-    }
-
-    /**
-     * Whether the club the account sits in is still the club it would choose today: the same rank
-     * and fit rule that picks a club for an account with no seat. A club that no longer
-     * fits its language and pace, or is outscored by another is one a player leaves, which is how a
-     * cohort seated once — every member in a club that fits — keeps the join
-     * half, and so the lane the scorecard's alliance aspect measures, moving (ALLY-001).
-     */
-    private function stillTheClubItWouldChoose(int $playerId, int $allianceId): bool
-    {
-        // A club that has stopped fitting at all — shut, holding the cohort share, or holding a
-        // player the account has recorded as an enemy — is left whatever else the account's rank
-        // admits, so the club is asked its own fit before it is weighed against the other clubs.
-        if (! app(AllianceChoice::class)->currentClubFits($playerId)) {
-            return false;
-        }
-
-        $choice = app(AllianceChoice::class)->choose($playerId);
-
-        // Nothing would take the account today: no rank to be judged on, or nowhere that fits. Its
-        // seat then stands.
-        if ($choice === null) {
-            return true;
-        }
-
-        return $choice->id === $allianceId;
     }
 
     /**
@@ -203,10 +165,6 @@ class AdvanceAiAllianceLifeAction
             $user->alliance_id = null;
             $user->save();
 
-            // The same host cooldown the leave path clears: the freed account asks on the next
-            // pass, so the lane the alliance aspect measures keeps moving (ALLY-001).
-            User::query()->whereKey($playerId)->whereNotNull('alliance_left_at')->update(['alliance_left_at' => null]);
-
             return true;
         }
 
@@ -216,12 +174,7 @@ class AdvanceAiAllianceLifeAction
             return false;
         }
 
-        // The host stamps a multi-day join cooldown on the account it just removed. Left in
-        // place, the freed account can create no new application for days, and the lane the
-        // alliance aspect measures goes quiet the moment the first club is drained (ALLY-001).
-        // The account left to join a club that fits it; it asks on the next pass.
-        User::query()->whereKey($playerId)->whereNotNull('alliance_left_at')->update(['alliance_left_at' => null]);
-
+        // The host's join cooldown stands: a player who walks out waits like everyone else.
         return true;
     }
 
@@ -236,9 +189,10 @@ class AdvanceAiAllianceLifeAction
             return 0;
         }
 
-        $founderId = AiProfile::query()->where('enabled', true)->orderBy('player_id')->value('player_id');
+        $founderId = AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id')
+            ->first(fn (int $playerId): bool => app(AllianceAmbition::class)->leads($playerId) && !$this->alreadyEngaged($playerId));
 
-        if ($founderId === null || $this->alreadyEngaged($founderId)) {
+        if ($founderId === null) {
             return 0;
         }
 
@@ -256,7 +210,8 @@ class AdvanceAiAllianceLifeAction
         }
 
         foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
-            if ($this->alreadyEngaged($playerId)) {
+            // Only a leader founds: every locked-out account founding its own left six empires in six clubs (9372).
+            if ($this->alreadyEngaged($playerId) || !app(AllianceAmbition::class)->leads($playerId)) {
                 continue;
             }
 

@@ -150,9 +150,11 @@ class AllianceChoice
         return array_values(
             Alliance::query()
                 ->where('is_open', true)
+                // A rejection is answered for a while, not for ever: the applicant grows and asks again (alliance-politics.md).
                 ->whereDoesntHave('applications', fn ($query) => $query
                     ->where('user_id', $playerId)
-                    ->where('status', AllianceApplication::STATUS_REJECTED))
+                    ->where('status', AllianceApplication::STATUS_REJECTED)
+                    ->where('updated_at', '>=', now()->subHours(app(AllianceAmbition::class)->reapplyAfterHours())))
                 ->get()
                 ->reject(fn (Alliance $alliance): bool => $this->readsFounderAsExploitative($playerId, $alliance) || $this->holdsCohortShare($alliance) || $this->holdsEnemy($playerId, $alliance))
                 ->all(),

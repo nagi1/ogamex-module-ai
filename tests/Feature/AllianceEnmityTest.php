@@ -30,7 +30,7 @@ function enmityProfile(int $playerId): void
         'archetype' => AiArchetype::Miner,
         'skill_band' => AiSkillBand::Standard,
         'activity_band' => AiActivityBand::Regular,
-        'random_seed' => 42,
+        'random_seed' => 7,
         'enabled' => true,
     ]);
 }
@@ -128,12 +128,17 @@ function enmitySituation(int $playerId, float|null $threat): array
     return [$home, $fits];
 }
 
-test('a member beside a club-mate at the enmity line leaves and asks the club that fits', function (): void {
+// The host's join cooldown stands: the leaver waits it out like any player, then asks (alliance-politics.md).
+test('a member beside a club-mate at the enmity line leaves and, after the cooldown, asks the club that fits', function (): void {
     [, $fits] = enmitySituation($this->currentUserId, 0.25);
 
     app(AdvanceAiAllianceLifeAction::class)->handle();
+    $waited = AllianceApplication::query()->where('user_id', $this->currentUserId)->count();
+    $this->travel(app(OGame\Services\SettingsService::class)->allianceCooldownDays() + 1)->days();
+    app(AdvanceAiAllianceLifeAction::class)->handle();
 
     expect(User::query()->whereKey($this->currentUserId)->value('alliance_id'))->toBeNull()
+        ->and($waited)->toBe(0)
         ->and(AllianceApplication::query()->where('user_id', $this->currentUserId)
             ->where('alliance_id', $fits->id)->value('status'))->toBe(AllianceApplication::STATUS_PENDING);
 });
