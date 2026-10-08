@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\Models\Enums\PlanetType;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
@@ -25,18 +26,16 @@ class StageAiAccountAction
     /** A budget this large is a late-game account, and a late-game account owns a moon by then (battle debris made it). */
     private const MOON_BUDGET = 1e10;
 
+    /** Share of a late-game budget each moon has had spent on it: a veteran's moons carry their base, phalanx and gate. */
+    private const MOON_SHARE = 0.01;
+
     public function handle(int $playerId, float $budget): int
     {
         $lateGame = $budget >= self::MOON_BUDGET;
         $player = app(PlayerServiceFactory::class)->make($playerId, true);
         $planet = $player->planets->first();
-        $steps = 0;
-
-        while (($next = $this->cheapestNextLevel($player, $planet)) !== null && $next['cost'] <= $budget) {
-            $budget -= $next['cost'];
-            $this->apply($player, $planet, $next['machine_name'], $next['level']);
-            $steps++;
-        }
+        $moonBudget = $lateGame ? $budget * self::MOON_SHARE : 0.0;
+        $steps = $this->spend($player, $planet, $budget - 2 * $moonBudget);
 
         // The account stopped with full stores, as a player who has just saved up does; a staged planet with an empty one waits
         // days before it can afford its first late-game level.
@@ -47,7 +46,26 @@ class StageAiAccountAction
         if ($lateGame) {
             app(PlanetServiceFactory::class)->createMoonForPlanet($planet, 2_000_000, 20, 15);
             $this->colonyWithMoon($player, $planet);
+            // Every moon started bare while its planets stood at seventeen robotics, and a gate on a bare moon is thirty hours
+            // of building at speed 8: no day-long late world ever saw a jump (9393-9412).
+            foreach (app(PlayerServiceFactory::class)->make($player->getId(), true)->planets->allMoons() as $moon) {
+                $steps += $this->spend($player, $moon, $moonBudget);
+            }
         }
+
+        return $steps;
+    }
+
+    /** Buys the cheapest next level on this body until the budget is gone; the number of levels bought. */
+    private function spend(PlayerService $player, PlanetService $body, float $budget): int
+    {
+        $steps = 0;
+        while (($next = $this->cheapestNextLevel($player, $body)) !== null && $next['cost'] <= $budget) {
+            $budget -= $next['cost'];
+            $this->apply($player, $body, $next['machine_name'], $next['level']);
+            $steps++;
+        }
+        $body->save();
 
         return $steps;
     }
@@ -80,17 +98,30 @@ class StageAiAccountAction
     {
         $best = null;
         $fieldsFree = $planet->getPlanetFieldMax() - $planet->getBuildingCount();
-        $reserve = (int) ceil($planet->getPlanetFieldMax() * self::STATION_FIELD_SHARE);
+        // A moon keeps the field its base needs to add three, and one more for its own stations: a tenth of its fields kept the
+        // phalanx and the gate off it while cheaper robotics and store levels took the rest.
+        $reserve = $planet->getPlanetType() === PlanetType::Moon ? 2 : (int) ceil($planet->getPlanetFieldMax() * self::STATION_FIELD_SHARE);
         $owed = $this->owedToFieldRaisers($planet);
 
         foreach (ObjectService::getObjects() as $object) {
             $isResearch = $object->type === GameObjectType::Research;
+            // A moon has no laboratory: its share goes to its own buildings.
+            if ($isResearch && $planet->getPlanetType() === PlanetType::Moon) {
+                continue;
+            }
             if (!$isResearch && $object->type !== GameObjectType::Building && $object->type !== GameObjectType::Station) {
                 continue;
             }
 
             $level = $isResearch ? $player->getResearchLevel($object->machine_name) : $planet->getObjectLevel($object->machine_name);
-            $fieldsNeeded = ($owed[$object->machine_name] ?? 0) > $level ? 1 : $reserve + 1;
+            // A station only this kind of body holds is what the body is for (a moon's phalanx and gate), so it keeps only the
+            // raiser's field: under the full reserve the moon bought fourteen base levels and no gate.
+            $ownStation = $object->valid_planet_types === [$planet->getPlanetType()];
+            $fieldsNeeded = match (true) {
+                ($owed[$object->machine_name] ?? 0) > $level => 1,
+                $ownStation => 2,
+                default => $reserve + 1,
+            };
             if ((!$isResearch && $fieldsFree < $fieldsNeeded) || !ObjectService::objectValidPlanetType($object->machine_name, $planet)
                 || !ObjectService::objectRequirementsWithLevelsMet($object->machine_name, $level + 1, $planet)) {
                 continue;
@@ -115,7 +146,9 @@ class StageAiAccountAction
     {
         $owed = [];
         foreach (ObjectService::getObjects() as $object) {
+            // A raiser the body cannot hold owes it nothing: a moon's one field went to robotics for the terraformer.
             if (!in_array($object->type, [GameObjectType::Building, GameObjectType::Station], true)
+                || !ObjectService::objectValidPlanetType($object->machine_name, $planet)
                 || !$this->raisesFields($planet, $object->id, $planet->getObjectLevel($object->machine_name))) {
                 continue;
             }

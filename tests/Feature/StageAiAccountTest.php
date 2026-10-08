@@ -64,3 +64,13 @@ test('a late-game staged account owns two moons, home and a colony, so a jump ga
     'mid game' => [5e7, 0],
     'late game' => [2e11, 2],
 ]);
+
+test('a late-game staged account has built its moons: the base, the phalanx and the gate a veteran holds', function (): void {
+    app(StageAiAccountAction::class)->handle($this->currentUserId, 2e11);
+    $moons = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->allMoons();
+    $gate = ObjectService::getObjectByMachineName('jump_gate');
+
+    expect($moons)->toHaveCount(2)
+        ->and(collect($moons)->every(static fn ($moon): bool => $moon->getObjectLevel($gate->machine_name) >= 1
+            && ObjectService::objectRequirementsMet($gate->machine_name, $moon)))->toBeTrue();
+});
