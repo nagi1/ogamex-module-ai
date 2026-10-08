@@ -1,0 +1,1018 @@
+# Persona voices drafted by ai:write-social-voices; review before merging. Keys as in social-lines.yaml.
+miner:
+  greeting:
+    - hi
+    - 'hello o/'
+    - 'hey hey'
+    - 'hi hi'
+  thanks:
+    - 'no worries'
+    - "you're welcome"
+    - 'glad to help'
+    - 'np np'
+  help_request.accept:
+    - 'sure, happy to help'
+    - 'ok, I can help'
+    - 'yep, no problem'
+    - 'sure thing'
+  help_request.reject:
+    - "sorry, can't spare res rn"
+    - 'nah, I need my res atm'
+    - 'sorry, nothing spare right now'
+    - "can't help rn, low on res"
+  help_request.counter:
+    - 'only {amount} available'
+    - 'best I can offer is {amount}'
+    - '{amount} is all I can do'
+    - 'I can do {amount} max'
+  help_request.clarify:
+    - 'how much do you need?'
+    - 'what res, and how much?'
+    - "what's the amount?"
+    - 'how much are we talking?'
+  apology.accept.friend:
+    - 'all good, no worries'
+    - 'np, water under bridge'
+    - "no worries, it's fine"
+    - "it's ok, don't sweat it"
+  apology.accept:
+    - "ok, accepted. don't repeat it"
+    - "fine, but I'll remember"
+    - "alright, but don't do it again"
+    - "ok, but I won't forget"
+  apology.reject.foe:
+    - 'keep off my planets'
+    - 'not buying it, stay away'
+    - "don't come near my planets"
+    - 'no. stay away'
+  apology.reject:
+    - "apologies don't rebuild my fleet"
+    - 'talk is cheap'
+    - "apologies don't fix res"
+    - "words won't repair anything"
+  apology.counter.friend:
+    - 'ok, how will you make it right?'
+    - 'and how do you plan to fix it?'
+    - 'how will you make it right?'
+    - 'so how do you fix this?'
+  apology.counter:
+    - 'res first, not words'
+    - 'fix it first'
+    - 'res before words'
+    - 'actions, not words'
+  apology.clarify:
+    - 'what are you sorry for?'
+    - 'what did you do exactly?'
+    - 'apologising for what?'
+    - "what's this apology for?"
+  trade_offer.clarify:
+    - 'what res, how much?'
+    - 'which res, exact amounts?'
+    - 'what are you offering exactly?'
+    - 'details on the trade?'
+  trade_offer.reject:
+    - 'no trades rn'
+    - 'not trading atm'
+    - 'pass on trades rn'
+    - 'not doing trades now'
+  trade_offer:
+    - "can't do that trade"
+    - 'not that trade, sorry'
+    - "I'll pass on that"
+    - 'not this trade'
+  ceasefire_request.reject:
+    - 'no ceasefire, you started it'
+    - 'not happening, you started it'
+    - 'no ceasefire here'
+    - 'not agreeing to that'
+  ceasefire_request:
+    - 'maybe, if you stay off my planets'
+    - "stay off my planets, then we'll see"
+    - "we'll see, just stay away"
+    - 'maybe, stay away'
+  warning.reject:
+    - 'lol, go ahead'
+    - 'not scared'
+    - 'ha, try it'
+    - 'not worried'
+  warning:
+    - 'got it'
+    - understood
+    - 'heard you'
+    - 'ok, noted'
+  cooperation_request.reject:
+    - 'pass, thanks'
+    - 'not for me'
+    - 'no, but thanks'
+    - 'not my thing'
+  cooperation_request.clarify:
+    - "what's the plan?"
+    - 'how would that work?'
+    - 'what are you thinking?'
+    - 'how would we team up?'
+  cooperation_request:
+    - 'perhaps later'
+    - 'not atm'
+    - 'maybe another time'
+    - 'not now, maybe later'
+  compensation_offer.accept:
+    - "fine, send it over and we're good"
+    - 'deal, waiting on the res'
+    - "ok, we're good after you send"
+    - 'accepted, send when ready'
+  compensation_offer.reject:
+    - 'keep it, stay away'
+    - 'not taking that deal'
+    - 'no thanks, keep your res'
+    - 'not interested'
+  compensation_offer.clarify:
+    - "what's the amount and timing?"
+    - 'what are you offering and when?'
+    - 'what and when?'
+    - 'give me details'
+  compensation_offer.counter:
+    - 'exact amounts first, please'
+    - 'numbers first'
+    - 'what exact amounts?'
+    - 'need numbers first'
+  attacker_notice:
+    - 'here :)'
+    - 'saw it :)'
+    - 'good try ;)'
+    - 'still around :)'
+  transport_thanks:
+    - 'thanks for the res drop!'
+    - 'res came through, thx'
+    - 'ty for the delivery'
+    - 'shipment received, thx'
+turtle:
+  greeting:
+    - hey
+    - 'hi o/'
+    - 'hey there'
+    - yo
+  thanks:
+    - np
+    - 'no problem'
+    - anytime
+    - 'np :)'
+  help_request.accept:
+    - 'ok, I can help with that'
+    - 'sure, that works for me'
+    - "fine, I'll do it"
+    - 'yeah, ok'
+  help_request.reject:
+    - 'no, need my res for defense'
+    - "can't, saving everything rn"
+    - 'sorry, nothing spare'
+    - 'not giving res, need it here'
+  help_request.counter:
+    - 'maybe {amount}, no more'
+    - 'only {amount} if I must'
+    - '{amount} max'
+    - 'can do {amount} at best'
+  help_request.clarify:
+    - 'what exactly do you need?'
+    - 'how much are we talking?'
+    - 'what res and how much?'
+    - 'need details, what and how much?'
+  apology.accept.friend:
+    - 'all good, drop it'
+    - 'np, water under bridge'
+    - "we're cool, no worries"
+    - "it's fine, moving on"
+  apology.accept:
+    - "ok, accepted. don't repeat it"
+    - "fine, but I'll remember"
+    - 'alright, but no repeats'
+    - "accepted, just don't do it again"
+  apology.reject.foe:
+    - 'no. stay away from my planets'
+    - "sorry doesn't cut it, stay off my turf"
+    - 'not accepted, stay away'
+    - "words don't work, stay off my planets"
+  apology.reject:
+    - "sorry won't fix my fleet"
+    - 'words are cheap'
+    - 'not enough, my fleet is gone'
+    - "no, that doesn't fix anything"
+  apology.counter.friend:
+    - 'ok, how do you make it right?'
+    - 'and how will you fix it?'
+    - "so what's your offer to fix this?"
+    - 'how are you making this right?'
+  apology.counter:
+    - 'show me with res, not words'
+    - 'make it right first'
+    - 'res speaks, not apologies'
+    - 'fix it with res, then we talk'
+  apology.clarify:
+    - 'sorry for what exactly?'
+    - 'what are you apologizing for?'
+    - 'why are you apologising?'
+    - 'for what? clarify'
+  trade_offer.clarify:
+    - 'what res and how much?'
+    - 'which res for which, amounts?'
+    - 'need exact res and amounts'
+    - 'what are you offering exactly?'
+  trade_offer.reject:
+    - 'not trading rn'
+    - 'nah, no trades atm'
+    - 'pass, no trades now'
+    - 'not interested in trading rn'
+  trade_offer:
+    - "can't do that trade, sorry"
+    - 'pass on that one'
+    - 'no deal on that'
+    - 'not taking that trade'
+  ceasefire_request.reject:
+    - 'no ceasefire. you started this'
+    - 'not happening'
+    - 'no, you started it'
+    - 'ceasefire denied, stay off my planets'
+  ceasefire_request:
+    - "we'll see. stay off my planets"
+    - "stay off my planets and we'll see"
+    - 'maybe, if you stay away'
+    - 'keep off my planets, then we talk'
+  warning.reject:
+    - 'lol, try it'
+    - 'not scared of you'
+    - "come at me, I'm turtled"
+    - "try it, I'm ready"
+  warning:
+    - noted
+    - 'ok, heard you'
+    - understood
+    - 'message received'
+  cooperation_request.reject:
+    - 'not interested'
+    - 'no thanks'
+    - pass
+    - 'not for me'
+  cooperation_request.clarify:
+    - 'what do you have in mind?'
+    - 'team up how?'
+    - 'what kind of cooperation?'
+    - 'details? what are you thinking?'
+  cooperation_request:
+    - 'maybe later'
+    - 'not right now'
+    - 'possibly later'
+    - 'not now, maybe another time'
+  compensation_offer.accept:
+    - "ok, send it and we're good"
+    - "deal, I'll wait for the res"
+    - 'fine, send it over'
+    - 'accept, waiting for res'
+  compensation_offer.reject:
+    - 'keep your res, stay away'
+    - 'no deal'
+    - "don't want your res, stay off"
+    - 'reject, keep away'
+  compensation_offer.clarify:
+    - 'how much and when?'
+    - 'what exactly, and by when?'
+    - 'need amounts and timing'
+    - 'what res and when?'
+  compensation_offer.counter:
+    - 'need exact amounts first'
+    - 'give me numbers'
+    - 'exact amounts only'
+    - 'numbers first'
+  attacker_notice:
+    - "I'm online :)"
+    - 'saw that coming :)'
+    - 'nice try ;)'
+    - 'still here :)'
+  transport_thanks:
+    - 'thx for the res!'
+    - 'got it, thanks'
+    - 'ty for the shipment'
+    - 'res received, thx'
+fleeter:
+  greeting:
+    - yo
+    - sup
+    - hey
+    - o/
+  thanks:
+    - np
+    - 'no prob'
+    - anytime
+    - 'np :)'
+  help_request.accept:
+    - 'yeah, can do'
+    - "ok, I'm in"
+    - 'sure thing'
+    - "fine, I'll help"
+  help_request.reject:
+    - 'no can do, need my res'
+    - 'nah, all mine'
+    - "can't, my res rn"
+    - 'sorry, not sharing'
+  help_request.counter:
+    - 'only got {amount}'
+    - 'can do {amount}'
+  help_request.clarify:
+    - 'how much?'
+    - 'what and how much?'
+    - 'specify amount'
+    - 'need numbers'
+  apology.accept.friend:
+    - 'all good'
+    - 'np man'
+    - 'forget it'
+    - "we're cool"
+  apology.accept:
+    - "ok, but don't repeat"
+    - 'fine, but I remember'
+    - 'accepted, last time'
+    - 'ok, but watch it'
+  apology.reject.foe:
+    - 'stay off my planets'
+    - "sorry won't save you, stay away"
+    - 'get lost'
+    - 'stay away'
+  apology.reject:
+    - "words don't fix ships"
+    - 'sorry is cheap'
+    - "fleet's gone, sorry won't help"
+    - 'talk is cheap'
+  apology.counter.friend:
+    - 'how you gonna fix it?'
+    - "what's your offer?"
+    - 'how do you make it right?'
+    - 'so what now?'
+  apology.counter:
+    - 'show me res, not words'
+    - 'fix it first'
+    - 'res first, then talk'
+    - 'make it right'
+  apology.clarify:
+    - 'sorry for what?'
+    - 'what for?'
+    - 'apologising for what?'
+    - 'what did you do?'
+  trade_offer.clarify:
+    - 'what res? how much?'
+    - 'details?'
+    - 'which res, how much?'
+    - 'amounts?'
+  trade_offer.reject:
+    - 'no trades'
+    - 'not trading'
+    - pass
+    - 'nah, not now'
+  trade_offer:
+    - 'no deal'
+    - pass
+    - "can't do that"
+    - 'not interested'
+  ceasefire_request.reject:
+    - 'no ceasefire'
+    - 'you started it'
+    - 'not happening'
+    - 'no way'
+  ceasefire_request:
+    - 'stay off my planets, then maybe'
+    - "we'll see, stay away"
+    - 'maybe, if you stay off'
+    - "stay off and we'll talk"
+  warning.reject:
+    - 'lol, bring it'
+    - 'not scared'
+    - 'try me'
+    - 'come at me'
+  warning:
+    - noted
+    - heard
+    - ok
+    - 'got it'
+  cooperation_request.reject:
+    - 'not interested'
+    - 'no thanks'
+    - pass
+    - nah
+  cooperation_request.clarify:
+    - "what's the plan?"
+    - 'team up how?'
+    - 'details?'
+    - 'what you thinking?'
+  cooperation_request:
+    - 'maybe later'
+    - 'not now'
+    - possibly
+    - later
+  compensation_offer.accept:
+    - "send it, we're good"
+    - 'deal, waiting'
+    - 'ok, send'
+    - 'fine, send res'
+  compensation_offer.reject:
+    - 'keep it, stay away'
+    - 'no deal'
+    - "don't want your res, stay away"
+    - 'no thanks'
+  compensation_offer.clarify:
+    - 'how much? when?'
+    - 'amount and time?'
+    - 'what and when?'
+    - 'details?'
+  compensation_offer.counter:
+    - 'need numbers'
+    - 'exact amounts first'
+    - 'give me numbers'
+    - "what's the amount?"
+  attacker_notice:
+    - 'online :)'
+    - 'saw that :)'
+    - 'nice try ;)'
+    - 'still here :)'
+  transport_thanks:
+    - 'thx for res'
+    - 'got it, ty'
+    - 'ty for res'
+    - 'thanks for the res'
+raider:
+  greeting:
+    - yo
+    - sup
+    - 'hey hey'
+    - o/
+  thanks:
+    - 'no prob'
+    - 'all good'
+    - yw
+    - 'np m8'
+  help_request.accept:
+    - 'sure, works'
+    - 'ok, can do'
+    - "yeah, i'm in"
+    - 'fine by me'
+  help_request.reject:
+    - "can't spare res rn"
+    - 'nah, need my res'
+    - 'no spare res atm'
+    - "res tight, can't help"
+  help_request.counter:
+    - "{amount}, that's it"
+    - 'can do {amount}'
+  help_request.clarify:
+    - 'how much?'
+    - 'what and how much?'
+    - 'exact numbers?'
+    - 'what res, how much?'
+  apology.accept.friend:
+    - 'all good'
+    - 'forget it'
+    - 'np, done'
+    - "we're cool"
+  apology.accept:
+    - "ok, but don't repeat"
+    - 'fine, but i remember'
+    - 'accepted, last time'
+    - 'ok, one pass'
+  apology.reject.foe:
+    - 'stay off my planets'
+    - 'no. stay away'
+    - 'apology rejected. stay off'
+    - 'not buying it. stay away'
+  apology.reject:
+    - "sorry won't rebuild my fleet"
+    - "words don't fix fleet"
+    - 'cheap words'
+    - "no, fleet's gone"
+  apology.counter.friend:
+    - 'how you fixing this?'
+    - 'so how you make it right?'
+    - "what's your fix?"
+    - 'how do you square this?'
+  apology.counter:
+    - 'res, not words'
+    - 'show me res'
+    - 'make it right first'
+    - 'fix it with res'
+  apology.clarify:
+    - 'sorry for what?'
+    - "what'd you do?"
+    - 'apologising for what?'
+    - 'for what exactly?'
+  trade_offer.clarify:
+    - 'what res, how much?'
+    - 'which for which, amounts?'
+    - 'exact res amounts?'
+    - 'what and how much?'
+  trade_offer.reject:
+    - 'no trades rn'
+    - 'not trading atm'
+    - 'nah, no trade'
+    - 'pass on trades'
+  trade_offer:
+    - "can't do that trade"
+    - pass
+    - 'nah, not that trade'
+    - 'no deal on that'
+  ceasefire_request.reject:
+    - 'no ceasefire, you started it'
+    - 'not happening'
+    - 'nah, no truce'
+    - 'you started this, no'
+  ceasefire_request:
+    - "stay off my planets, then we'll see"
+    - "we'll see, stay off my planets"
+    - 'maybe, stay off my planets'
+    - 'keep off my planets and maybe'
+  warning.reject:
+    - 'lol try it'
+    - 'not scared'
+    - 'come at me'
+    - 'try it, lol'
+  warning:
+    - heard
+    - 'ok, heard'
+    - 'message received'
+    - 'got it'
+  cooperation_request.reject:
+    - 'no thx'
+    - pass
+    - nah
+    - 'not for me'
+  cooperation_request.clarify:
+    - "what's the plan?"
+    - 'team up how?'
+    - 'what you thinking?'
+    - 'how we teaming?'
+  cooperation_request:
+    - 'maybe later'
+    - 'not rn'
+    - 'later maybe'
+    - 'not now'
+  compensation_offer.accept:
+    - "ok send, we're good"
+    - 'deal, waiting on res'
+    - 'send it, square'
+    - 'ok, res and done'
+  compensation_offer.reject:
+    - 'keep res, stay away'
+    - 'no deal'
+    - "don't want your res, stay off"
+    - 'nah, no deal'
+  compensation_offer.clarify:
+    - 'how much, when?'
+    - 'what and when?'
+    - 'exact amount and time?'
+    - 'how much and by when?'
+  compensation_offer.counter:
+    - 'need exact amounts'
+    - 'numbers first'
+    - 'give me numbers'
+    - 'exact res first'
+  attacker_notice:
+    - 'online :P'
+    - 'saw that :P'
+    - 'nice try ;P'
+    - 'still here :P'
+  transport_thanks:
+    - 'thx for res'
+    - 'got it, ty'
+    - 'ty for shipment'
+    - 'res landed, thx'
+hybrid:
+  greeting:
+    - hey
+    - hi
+    - yo
+    - sup
+  thanks:
+    - np
+    - 'no prob'
+    - 'no worries'
+    - 'ur welcome'
+  help_request.accept:
+    - 'sure, I can help'
+    - "ok, I'm in"
+    - 'yeah, I can do that'
+    - 'alright, sounds good'
+  help_request.reject:
+    - "sorry, can't help rn"
+    - 'nah, I need my res'
+    - 'not now'
+    - "can't help atm"
+  help_request.counter:
+    - 'only got {amount}'
+    - 'can do {amount} max'
+    - 'I can spare {amount}'
+    - 'how about {amount}?'
+  help_request.clarify:
+    - 'what do you need?'
+    - 'how much exactly?'
+    - 'what res and how much?'
+    - 'specify please'
+  apology.accept.friend:
+    - "no worries, it's fine"
+    - 'np, forget it'
+    - 'all good'
+    - "don't worry about it"
+  apology.accept:
+    - 'ok, accepted'
+    - "fine, but don't again"
+    - "alright, but I'll remember"
+    - "ok, just don't repeat it"
+  apology.reject.foe:
+    - 'stay off my planets'
+    - 'not buying it, stay away'
+    - "sorry won't work, stay off"
+    - 'keep away from my planets'
+  apology.reject:
+    - "words won't fix my fleet"
+    - 'sorry is cheap'
+    - 'not enough'
+    - 'actions speak louder'
+  apology.counter.friend:
+    - 'how will you make it right?'
+    - 'so how do you fix it?'
+    - "what's your plan to fix it?"
+    - 'how are you going to make up for it?'
+  apology.counter:
+    - 'show me with res'
+    - 'make it right'
+    - 'res, not words'
+    - 'fix it first'
+  apology.clarify:
+    - 'sorry for what?'
+    - 'apologising for what?'
+    - 'what exactly?'
+    - 'for what?'
+  trade_offer.clarify:
+    - 'what res and how much?'
+    - 'which res for which?'
+    - 'exact amounts?'
+    - 'details on the trade?'
+  trade_offer.reject:
+    - 'not trading rn'
+    - 'no trades atm'
+    - pass
+    - 'not interested in trades'
+  trade_offer:
+    - "can't do that trade"
+    - pass
+    - 'no deal'
+    - 'not that trade'
+  ceasefire_request.reject:
+    - 'no ceasefire'
+    - 'not happening'
+    - 'you started it'
+    - 'no deal'
+  ceasefire_request:
+    - "we'll see if you stay off"
+    - "stay off my planets, then we'll talk"
+    - 'depends on you staying away'
+    - 'maybe, if you stay off'
+  warning.reject:
+    - 'lol, come at me'
+    - 'not scared'
+    - 'try it'
+    - 'lol, whatever'
+  warning:
+    - received
+    - understood
+    - 'ok, noted'
+    - 'heard you'
+  cooperation_request.reject:
+    - 'not my thing'
+    - 'no thx'
+    - pass
+    - 'not interested rn'
+  cooperation_request.clarify:
+    - "what's the idea?"
+    - 'how do we team up?'
+    - 'details?'
+    - "what's the coop?"
+  cooperation_request:
+    - 'later maybe'
+    - 'not right now'
+    - 'another time'
+    - 'not atm'
+  compensation_offer.accept:
+    - 'ok, send it'
+    - "deal, I'll wait"
+    - 'sure, send over'
+    - 'alright, send it'
+  compensation_offer.reject:
+    - 'keep it'
+    - nah
+    - 'stay away'
+    - 'no thanks'
+  compensation_offer.clarify:
+    - 'how much and when?'
+    - 'what and when?'
+    - 'exact details?'
+    - "what's the offer?"
+  compensation_offer.counter:
+    - 'need exact amounts'
+    - 'give me numbers'
+    - 'what are the numbers?'
+    - 'exact amounts please'
+  attacker_notice:
+    - 'online :)'
+    - 'I saw it :)'
+    - 'nice one ;)'
+    - 'still here :)'
+  transport_thanks:
+    - 'thx for res!'
+    - 'got it, thx'
+    - 'ty for res'
+    - 'thanks for the res'
+trader:
+  greeting:
+    - hey
+    - 'hi o/'
+    - hello
+    - yo
+  thanks:
+    - np
+    - 'no probs'
+    - anytime
+    - yw
+  help_request.accept:
+    - 'sure thing'
+    - 'ok, I can do that'
+    - "yeah, I'm in"
+    - 'np, I can help'
+  help_request.reject:
+    - 'sorry, nothing to spare rn'
+    - 'nah, I need my res'
+    - "can't help rn"
+    - 'sorry, no res to give'
+  help_request.counter:
+    - 'only {amount} max'
+    - '{amount} is all I can spare'
+    - 'best I can do is {amount}'
+  help_request.clarify:
+    - 'how much?'
+    - 'what do you need?'
+    - 'what and how much?'
+    - 'how much exactly?'
+  apology.accept.friend:
+    - 'all good'
+    - 'np, forget it'
+    - 'no worries'
+    - "it's fine"
+  apology.accept:
+    - 'ok, accepted'
+    - "fine, but don't do it again"
+    - "alright, but I'll remember"
+    - 'accepted, but watch it'
+  apology.reject.foe:
+    - 'stay away from my planets'
+    - "sorry won't cut it, stay away"
+    - "don't come near me"
+    - 'stay off my turf'
+  apology.reject:
+    - "sorry won't fix my fleet"
+    - 'words are cheap'
+    - "apologies don't pay for losses"
+    - "sorry doesn't help"
+  apology.counter.friend:
+    - 'ok, how will you fix it?'
+    - 'how do you make it right?'
+    - 'so what are you offering?'
+    - 'how are you going to make up for it?'
+  apology.counter:
+    - 'show me with res, not words'
+    - 'make it right first'
+    - 'actions over words'
+    - 'prove it with res'
+  apology.clarify:
+    - 'sorry for what?'
+    - 'what are you apologizing for?'
+    - 'apologizing for what exactly?'
+    - "what's the apology for?"
+  trade_offer.clarify:
+    - 'what res and how much?'
+    - 'which res for which?'
+    - 'exact amounts?'
+    - 'what are you offering and what do you want?'
+  trade_offer.reject:
+    - 'not trading rn'
+    - 'nah, no trades atm'
+    - 'not interested in trades right now'
+    - 'pass on trading rn'
+  trade_offer:
+    - "can't do that trade"
+    - 'pass on that'
+    - 'no thanks, not that trade'
+    - 'sorry, not that one'
+  ceasefire_request.reject:
+    - 'no ceasefire'
+    - 'not happening'
+    - 'you started this, no ceasefire'
+    - 'no way, you started it'
+  ceasefire_request:
+    - "we'll see, stay off my planets"
+    - "stay off my planets and we'll see"
+    - 'maybe, if you stay away'
+    - "stay away and I'll think about it"
+  warning.reject:
+    - 'lol, try it'
+    - 'not scared'
+    - 'go ahead, try'
+    - "you don't scare me"
+  warning:
+    - noted
+    - 'ok, heard you'
+    - 'got it'
+    - 'message received'
+  cooperation_request.reject:
+    - 'not interested'
+    - 'no thanks'
+    - pass
+    - 'not for me'
+  cooperation_request.clarify:
+    - 'what do you have in mind?'
+    - 'team up how?'
+    - "what's the plan?"
+    - 'how do you want to team up?'
+  cooperation_request:
+    - 'maybe later'
+    - 'not right now'
+    - 'perhaps another time'
+    - 'not now, maybe later'
+  compensation_offer.accept:
+    - "ok, send it and we're good"
+    - "deal, I'll wait for the res"
+    - 'sure, send it over'
+    - 'agreed, waiting for res'
+  compensation_offer.reject:
+    - 'keep your res, stay away'
+    - 'no deal'
+    - 'not interested, stay away'
+    - 'no thanks, keep it'
+  compensation_offer.clarify:
+    - 'how much and when?'
+    - 'what exactly, and by when?'
+    - 'what are you offering and when?'
+    - 'give me details: how much, when?'
+  compensation_offer.counter:
+    - 'need exact amounts first'
+    - 'give me numbers'
+    - 'exact amounts first'
+    - 'numbers, please'
+  attacker_notice:
+    - 'online :)'
+    - 'saw that :)'
+    - 'nice try ;)'
+    - 'still around :)'
+  transport_thanks:
+    - 'thx for the res!'
+    - 'got it, thanks'
+    - 'ty for the shipment'
+    - 'thanks for the res'
+casual:
+  greeting:
+    - yo
+    - hi
+    - hey
+    - sup
+  thanks:
+    - np
+    - 'no worries'
+    - anytime
+    - 'all good'
+  help_request.accept:
+    - 'sure, can do'
+    - 'ok, works for me'
+    - 'sure thing'
+    - 'yep, I can help'
+  help_request.reject:
+    - "sorry, can't spare anything rn"
+    - 'nah, need my res myself atm'
+    - "can't help rn, sorry"
+    - 'no res to spare atm'
+  help_request.counter:
+    - 'can only do {amount}'
+    - 'best I can do is {amount}'
+    - 'only {amount} rn'
+    - '{amount} max'
+  help_request.clarify:
+    - 'how much exactly?'
+    - 'what do you need, and how much?'
+    - 'how much?'
+    - 'what and how much?'
+  apology.accept.friend:
+    - 'all good, forget it'
+    - 'np, water under the bridge'
+    - 'all good, np'
+    - "forget it, we're fine"
+  apology.accept:
+    - "ok, accepted. don't do it again"
+    - "fine. but I'll remember that"
+    - "ok, accepted. just don't repeat"
+    - 'fine, but noted'
+  apology.reject.foe:
+    - 'stay away from my planets'
+    - "sorry doesn't cut it. stay away"
+    - 'keep off my planets'
+    - 'not enough. stay away'
+  apology.reject:
+    - "sorry won't fix my fleet"
+    - 'words are cheap'
+    - "sorry won't rebuild my fleet"
+    - "words don't fix res"
+  apology.counter.friend:
+    - 'ok, so how do you make it right?'
+    - 'and how are you going to fix it?'
+    - 'ok, how will you fix it?'
+    - 'how you making this right?'
+  apology.counter:
+    - 'show me with res, not words'
+    - 'make it right first'
+    - 'res, not words'
+    - 'fix it first'
+  apology.clarify:
+    - 'sorry for what exactly?'
+    - 'what are you apologising for?'
+    - 'sorry for what?'
+    - 'what you apologising for?'
+  trade_offer.clarify:
+    - 'what res and how much?'
+    - 'which res for which, exact amounts?'
+    - 'what res, how much?'
+    - 'which res for which?'
+  trade_offer.reject:
+    - 'not trading right now'
+    - 'nah, no trades atm'
+    - 'no trades rn'
+    - 'not trading atm'
+  trade_offer:
+    - "can't do that trade, sorry"
+    - 'pass on that one'
+    - "can't do that trade"
+    - 'pass on that'
+  ceasefire_request.reject:
+    - 'no ceasefire. you started this'
+    - 'not happening'
+    - 'no ceasefire, you started it'
+    - 'no. you started this'
+  ceasefire_request:
+    - "we'll see. stay off my planets"
+    - "stay off my planets and we'll see"
+    - 'maybe, if you stay off my planets'
+    - "keep off my planets, then we'll talk"
+  warning.reject:
+    - 'lol, try it'
+    - 'not scared of you'
+    - 'lol try it'
+    - 'not scared'
+  warning:
+    - noted
+    - 'ok, heard you'
+    - 'heard you'
+    - 'ok, noted'
+  cooperation_request.reject:
+    - 'not interested'
+    - 'no thanks'
+    - 'nah, not interested'
+    - pass
+  cooperation_request.clarify:
+    - 'what do you have in mind?'
+    - 'team up how?'
+    - 'what you thinking?'
+    - 'how we teaming?'
+  cooperation_request:
+    - 'maybe later'
+    - 'not right now'
+    - 'not rn'
+    - 'later maybe'
+  compensation_offer.accept:
+    - "ok, send it and we're good"
+    - "deal, I'll wait for the res"
+    - "ok, send and we're good"
+    - 'deal, waiting on res'
+  compensation_offer.reject:
+    - 'keep your res, stay away'
+    - 'no deal'
+    - 'no, keep it'
+    - "don't want your res"
+  compensation_offer.clarify:
+    - 'how much and when?'
+    - 'what exactly, and by when?'
+    - 'how much, when?'
+    - 'what and when?'
+  compensation_offer.counter:
+    - 'need exact amounts first'
+    - 'give me numbers'
+    - 'exact amounts first'
+    - 'numbers first'
+  attacker_notice:
+    - 'online :)'
+    - 'I saw that. :)'
+    - 'nice try ;)'
+    - 'still here. :)'
+  transport_thanks:
+    - 'thx for the res!'
+    - 'got it, thanks'
+    - 'ty for the shipment'
+    - 'ty for res'

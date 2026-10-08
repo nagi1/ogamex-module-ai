@@ -25,6 +25,7 @@ use OGame\Models\ChatMessage;
 require_once __DIR__ . '/../Support/AiQueueModuleTestCase.php';
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
 require_once __DIR__ . '/../Support/FixedLanguageGateway.php';
+require_once __DIR__ . '/../Support/VoicedLines.php';
 require_once __DIR__ . '/../Support/LanguageTestFixtures.php';
 
 // The module is enabled so its own bindings and configuration are the ones under test.
@@ -131,7 +132,7 @@ test('a greeting is sent authored and queues nothing', function (): void {
     escalationInboundMessage($this->currentUserId, $human->id, 'hello');
 
     expect(runEscalationCycle($this->currentUserId))->toBe(1)
-        ->and(escalationSentMessage($this->currentUserId))->toBeIn(['hey', 'hi o/', 'hey there', 'yo'])
+        ->and(escalationSentMessage($this->currentUserId))->toBeIn(voicedLines('miner', 'greeting'))
         ->and(AiConversationReply::query()->where('player_id', $this->currentUserId)->sole()->state)->toBe(AiConversationReplyState::Delivered);
 
     Queue::assertNotPushed(GenerateAiReply::class);
