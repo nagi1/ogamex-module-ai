@@ -128,6 +128,20 @@ test('a moon about to build its jump gate first builds the station that shortens
         ->and($factory)->toBeLessThan($gate);
 });
 
+test('a moon with one field left builds its station, not the factory that would take that field', function (): void {
+    ambitionProfile($this->currentUserId);
+    $homeworld = array_values(app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->all())[0];
+    $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($homeworld, 2_000_000, 20);
+    expect($moon->getPlanetFieldMax() - $moon->getBuildingCount())->toBe(1);
+
+    $profile = AiProfile::query()->where('player_id', $this->currentUserId)->firstOrFail();
+    $moonView = app(PlayerServiceFactory::class)->make($this->currentUserId, true)->planets->getById($moon->getPlanetId());
+    $reasons = array_map(fn ($step) => $step->reason, app(FacilityChain::class)->pending($moonView, $profile));
+
+    expect($reasons)->toContain('moon-station:lunar_base')
+        ->and($reasons)->not->toContain('moon-station:robot_factory');
+});
+
 test('a technology priced in energy makes the planet raise its capacity until it can pay', function (): void {
     ambitionProfile($this->currentUserId);
     $this->planetAddResources(app()->makeWith(Resources::class, ['metal' => 900_000_000, 'crystal' => 900_000_000, 'deuterium' => 900_000_000]));

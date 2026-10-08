@@ -134,7 +134,9 @@ class FacilityChain
             // A moon has no factory of its own, so a jump gate there took three and a half days (9328). A player builds the
             // station that shortens construction first whenever it pays back on the next one; the host's time formula decides.
             $next = $this->hasTwoMoons($planet) && $planet->getObjectLevel(self::JUMP_GATE_STATION) < 1 ? self::JUMP_GATE_STATION : ($raiser ?? self::PHALANX_STATION);
-            $accelerator = $this->buildAccelerator($planet, $next);
+            // Every level takes a field, so the accelerator waits until the moon has one for it and one for the station: built
+            // into the last field it held every moon below its lunar base and phalanx (9340).
+            $accelerator = $planet->getPlanetFieldMax() - $planet->getBuildingCount() >= 2 ? $this->buildAccelerator($planet, $next) : null;
             if ($accelerator !== null) {
                 $this->addRequirement($planet, $accelerator, $planet->getObjectLevel($accelerator) + 1, $ordered, $producers, 'moon-station');
             }
