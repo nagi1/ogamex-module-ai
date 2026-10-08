@@ -1,8 +1,10 @@
 <?php
 
 /**
- * The account's diplomacy stance is declared data, not code, so the module must keep
- * exposing no diplomacy contract, and the data it does ship must say it is unconfirmed.
+ * The host has no diplomacy, so the module must keep exposing no diplomacy contract (an interface a host
+ * or a driver would implement), and the data it ships must say it is unconfirmed. Owner direction 8 Oct 2026
+ * (alliance-politics.md): wars and pacts between alliances are module memory of what players do, kept in the
+ * module's own table and actions; that is politics, not a contract, so only interfaces are barred.
  */
 
 it('exposes no diplomacy contract anywhere in the module source', function () {
@@ -69,7 +71,7 @@ function aiDiplomacyAbsenceContractsIn(string $directory): array
 
         $source = (string) file_get_contents($file->getPathname());
 
-        if (preg_match('/\b(?:interface|class|enum|trait)\s+[\w\\\\]*Diplomacy\w*/i', $source) === 1) {
+        if (preg_match('/\binterface\s+[\w\\\\]*Diplomacy\w*/i', $source) === 1) {
             $contracts[] = $file->getPathname();
         }
     }

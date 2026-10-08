@@ -69,6 +69,8 @@ class AdvanceAiAllianceLifeAction
         // and answer buddy requests from known contacts (DEF-009).
         $advanced += app(ReviewAiAllianceApplicationsAction::class)->handle();
         $advanced += app(ReviewAiBuddyRequestsAction::class)->handle();
+        // Alliances that have been hitting each other go to war (alliance-politics.md).
+        $advanced += app(DeclareAiAllianceWarsAction::class)->handle();
 
         return $advanced;
     }
