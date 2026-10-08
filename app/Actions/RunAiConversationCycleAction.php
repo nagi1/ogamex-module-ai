@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Modules\AI\Domain\Conversation\ContactImpactPolicy;
+use Modules\AI\Domain\Conversation\InboundSocialExchange;
 use Modules\AI\Domain\Conversation\ConversationRoutePolicy;
 use Modules\AI\Enums\AiConversationReplyState;
 use Modules\AI\Enums\AiConversationRoute;
@@ -176,7 +177,7 @@ class RunAiConversationCycleAction
             return false;
         }
 
-        $classification = app(ClassifyInboundSocialExchangeAction::class)->handle($message->message);
+        $classification = $this->classify($message);
 
         if ($classification === null) {
             return false;
@@ -253,8 +254,9 @@ class RunAiConversationCycleAction
         }
 
         // An unrecognised message is not an exchange, so there is nothing to record, nothing
-        // to answer and nothing to remember beyond the message already received.
-        $classification = app(ClassifyInboundSocialExchangeAction::class)->handle($message->message);
+        // to answer and nothing to remember beyond the message already received. A human's message
+        // the matcher leaves silent is read by the classifier when it is on.
+        $classification = $this->classify($message);
 
         if ($classification === null) {
             return false;
@@ -286,6 +288,14 @@ class RunAiConversationCycleAction
         $this->respond($exchange, $now);
 
         return true;
+    }
+
+    private function classify(ChatMessage $message): InboundSocialExchange|null
+    {
+        $reader = app(ReadAiHumanMessageAction::class);
+
+        return app(ClassifyInboundSocialExchangeAction::class)->handle($message->message)
+            ?? $reader->exchange($reader->handle((int) $message->sender_id, $message->message));
     }
 
     /**

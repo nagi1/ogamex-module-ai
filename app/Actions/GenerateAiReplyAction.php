@@ -63,7 +63,9 @@ class GenerateAiReplyAction
 
         $startedAt = hrtime(true);
         $result = app(LanguageGateway::class)->generateConversationReply($request);
-        $this->finalizeRequest($languageRequest->id, $reply->id, $result, intdiv(hrtime(true) - $startedAt, 1_000_000));
+        // Read before the transaction: a provider line a player would take for a bot keeps the authored line instead.
+        $speakable = $result->text === null || app(GuardAiOutboundTextAction::class)->passes($result->text, [(int) $reply->counterparty_player_id]);
+        $this->finalizeRequest($languageRequest->id, $reply->id, $result, intdiv(hrtime(true) - $startedAt, 1_000_000), $speakable);
 
         return app(DeliverAiSealedReplyAction::class)->handle($reply->id);
     }
@@ -240,9 +242,9 @@ class GenerateAiReplyAction
         });
     }
 
-    private function finalizeRequest(int $languageRequestId, int $replyId, LanguageResult $result, int $latencyMilliseconds): void
+    private function finalizeRequest(int $languageRequestId, int $replyId, LanguageResult $result, int $latencyMilliseconds, bool $speakable): void
     {
-        DB::transaction(function () use ($languageRequestId, $replyId, $result, $latencyMilliseconds): void {
+        DB::transaction(function () use ($languageRequestId, $replyId, $result, $latencyMilliseconds, $speakable): void {
             $request = AiLanguageRequest::query()->lockForUpdate()->find($languageRequestId);
             $reply = AiConversationReply::query()->lockForUpdate()->find($replyId);
 
@@ -253,7 +255,7 @@ class GenerateAiReplyAction
             $state = $this->resolveState($request, $result);
             $this->updateRequest($request, $state, $result, $latencyMilliseconds);
 
-            if ($state !== AiLanguageRequestState::Completed) {
+            if ($state !== AiLanguageRequestState::Completed || !$speakable) {
                 return;
             }
 

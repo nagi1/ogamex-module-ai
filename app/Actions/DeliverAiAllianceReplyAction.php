@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Modules\AI\Models\AiProfile;
 use OGame\Models\ChatMessage;
+use OGame\Models\User;
 use OGame\Services\ChatService;
 
 /**
@@ -27,6 +28,11 @@ class DeliverAiAllianceReplyAction
         }
 
         if (!AiProfile::query()->where('player_id', $senderId)->where('enabled', true)->exists()) {
+            return null;
+        }
+
+        $members = User::query()->where('alliance_id', $allianceId)->whereKeyNot($senderId)->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+        if (!app(GuardAiOutboundTextAction::class)->passes($message, $members)) {
             return null;
         }
 

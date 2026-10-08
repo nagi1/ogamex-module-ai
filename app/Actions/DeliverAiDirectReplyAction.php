@@ -33,6 +33,10 @@ class DeliverAiDirectReplyAction
             return null;
         }
 
+        if (!app(GuardAiOutboundTextAction::class)->passes($message, [$recipientId])) {
+            return null;
+        }
+
         return $this->chatService->sendDirectMessage($senderId, $recipientId, $message, $replyToId);
     }
 
