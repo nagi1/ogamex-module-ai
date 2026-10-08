@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiRaid;
+use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Domain\Perception\ActivityIntelReader;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
@@ -11,13 +12,18 @@ use OGame\Factories\PlanetServiceFactory;
 use OGame\GameMissions\AttackMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\FleetMission;
+use OGame\Models\FleetUnion;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
+use OGame\Models\User;
 use OGame\Services\FleetMissionService;
+use OGame\Services\FleetUnionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
+use OGame\Services\SettingsService;
 
 /**
  * Module-owned adapter over the host's attack fleet path.
@@ -99,11 +105,57 @@ class QueueAiRaidAction implements QueueAiRaid
                 new Resources(),
                 10,
             );
+            $this->allianceCombat($playerId, $mission, $target);
 
             return AiActionResult::queued($mission->id);
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());
         }
+    }
+
+    /**
+     * An attack is flown with the alliance (the host's ACS): a mate's union already flying at this target is joined when the
+     * fleet arrives inside the host's delay limit, and an attack on an alliance enemy is opened as a union for the mates. A
+     * refusal leaves it the attack it already is.
+     */
+    private function allianceCombat(int $playerId, FleetMission $mission, ?PlanetService $target): void
+    {
+        if ($mission->mission_type !== AttackMission::getTypeId() || !app(SettingsService::class)->allianceCombatSystemOn()) {
+            return;
+        }
+
+        $unions = app(FleetUnionService::class);
+        $union = FleetUnion::query()
+            ->where('galaxy_to', $mission->galaxy_to)
+            ->where('system_to', $mission->system_to)
+            ->where('position_to', $mission->position_to)
+            ->where('planet_type_to', $mission->type_to)
+            ->where('user_id', '!=', $playerId)
+            ->where('time_arrival', '>', now()->timestamp)
+            ->get()
+            ->first(static fn (FleetUnion $open): bool => $unions->canPlayerJoinUnion($open, $playerId) && !$open->hasReachedMaxFleets());
+
+        try {
+            if ($union !== null && $mission->time_arrival <= $union->time_arrival + $unions->getMaxDelayTime($union)) {
+                $unions->joinUnion($union, $mission);
+
+                return;
+            }
+
+            $owner = $target?->getPlayer()?->getId();
+            if ($owner !== null && isset(app(Enemies::class)->of($playerId)[$owner]) && $this->hasAllianceMates($playerId)) {
+                $unions->createUnion($mission);
+            }
+        } catch (Exception) {
+            return;
+        }
+    }
+
+    private function hasAllianceMates(int $playerId): bool
+    {
+        $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
+
+        return $allianceId !== null && User::query()->where('alliance_id', $allianceId)->whereKeyNot($playerId)->exists();
     }
 
     /**

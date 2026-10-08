@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Closure;
+use Modules\AI\Domain\Decision\AllianceUnionTargets;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Decision\QueueableColony;
@@ -424,6 +425,16 @@ class ScheduleAiIntentAction
         // Military: raid waves on every report the planner approves, the selected one already placed.
         $waves = $doctrine->int($archetype, 'raid_waves', $phase) - ($type === AiCandidateActionType::Raid ? 1 : 0);
         $selectedReport = (int) ($trace->selected->candidate->parameters['report_id'] ?? 0);
+        // A mate's ACS flying at an enemy is joined before the account picks targets of its own.
+        foreach (app(AllianceUnionTargets::class)->reports($profile->player_id) as $reportId) {
+            if ($waves <= 0 || $slots <= 0) {
+                break;
+            }
+            if ($this->placeRaid($profile, $sessionWorkItem, $reportId, ':acs:' . $reportId)) {
+                $waves--;
+                $slots--;
+            }
+        }
         foreach ($trace->candidates as $scored) {
             if ($waves <= 0 || $slots <= 0) {
                 break;
