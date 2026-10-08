@@ -448,9 +448,12 @@ class QueueableUnitPlanner
             $escort += $isCore ? 0.0 : $value;
         }
 
+        // Every ship the template names counts, cargo and recyclers too: counting only warships read the template's cargo
+        // share as never met, and it was ordered on every login (9333: 86 large cargo where the bomber was due).
+        $ships = array_map(static fn (UnitObject $ship): int => $ship->id, ObjectService::getShipObjects());
         $ownedByName = [];
         foreach ($owned as $objectId => $amount) {
-            $name = in_array($objectId, $military, true) ? ObjectService::getUnitObjectById($objectId)->machine_name : null;
+            $name = in_array($objectId, $ships, true) ? ObjectService::getUnitObjectById($objectId)->machine_name : null;
             $ownedByName += $name === null ? [] : [$name => $amount];
         }
 

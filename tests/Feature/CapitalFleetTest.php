@@ -259,3 +259,30 @@ test('an escort is weighed by price: a capital hull beside a cheap swarm is stil
     expect($first?->reason)->toBe('role:capital:deathstar')
         ->and(app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId)?->reason)->toStartWith('doctrine:fleet:');
 });
+
+test('cargo the account already holds counts against the template, so the escort moves on to its warships', function (): void {
+    AiProfile::create([
+        'player_id' => $this->currentUserId,
+        'archetype' => AiArchetype::Miner,
+        'skill_band' => AiSkillBand::Standard,
+        'random_seed' => 7,
+        'enabled' => true,
+    ]);
+    $this->planetAddResources(new Resources(50_000_000, 30_000_000, 20_000_000));
+    $this->planetSetObjectLevel('shipyard', 12);
+    $this->planetSetObjectLevel('robot_factory', 10);
+    foreach (['combustion_drive' => 6, 'impulse_drive' => 6, 'hyperspace_drive' => 8, 'hyperspace_technology' => 8, 'weapon_technology' => 6,
+        'shielding_technology' => 6, 'armor_technology' => 6, 'ion_technology' => 5, 'laser_technology' => 12, 'graviton_technology' => 1] as $research => $level) {
+        $this->playerSetResearchLevel($research, $level);
+    }
+    $this->planetAddUnit('deathstar', 1);
+    // Far past the miner template's cargo and recycler shares, its largest.
+    $this->planetAddUnit('large_cargo', 5_000);
+    $this->planetAddUnit('small_cargo', 5_000);
+    $this->planetAddUnit('recycler', 5_000);
+
+    $escort = app(QueueableUnitPlanner::class)->capitalFleetOrder($this->currentUserId);
+
+    expect($escort?->reason)->toStartWith('doctrine:fleet:')
+        ->and($escort?->reason)->not->toBeIn(['doctrine:fleet:large_cargo', 'doctrine:fleet:small_cargo', 'doctrine:fleet:recycler']);
+});
