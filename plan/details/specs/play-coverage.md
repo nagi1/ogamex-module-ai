@@ -135,3 +135,21 @@ alliance fragmentation, phalanx with no moon, social initiation. Each is a plann
 - Missions seen: espionage 686, transport 323, expedition 120, colonise 72, deploy 51, recycle 34, hold 22, attack 20, missile 12.
 - Still missing: jump_gate (staging gives one moon per account, so a gate pair is impossible; test artefact), cruiser, battle_ship, bomber, battlecruiser, large_shield_dome, anti_ballistic_missile.
 - Next: find why the yard never picks the mid warships and the dome/missiles, then one full run and retrain.
+
+## Late-game fast loop, 8 Oct 2026 (12 h, budget 2e11, 6 accounts, teacher; `rl/scripts/probe.sh` for the why)
+
+The yard was the bottleneck: it runs its queue in order, and junk orders held it for the whole run.
+
+| Fix | Commit | What it ended |
+|---|---|---|
+| One colony ship at a time | 5a74245 | ten colony ships per account stacked behind the deathstars, none built |
+| Opening cargo only for an account with no ship anywhere | eccac73 | 63 single-cargo orders in one home yard while its fleet was out |
+| War batch at most two hours of yard time | 2810600 | 37 deathstars in one order holding the yard; no probes, no reports, no raids |
+| Planets keep holds for what they store | 0f25fb0 | a 19M home with no hull could not ferry its moon or fleet-save |
+| Yard hulls count as owned | 927ef36 | a deathstar ordered every login while the first was building; no escort |
+| Yardless colony no longer freezes walls; wall before fleet in the yard plan | dbe6b0b | homes at zero defence through 21 battles |
+| Moon steps gathered in instalments | 56715a5 | the jump gate waited for one planet to hold 2M/4M/2M |
+
+Before (9311-9315): 0-6 attacks, most late units missing. After the batch cap (9316-9321): 4-13 attacks, 13-23 battles,
+up to 70 recycles, 18 missiles, deploys and holds; gauss and ion appear. Still missing: jump gate, large dome,
+anti-ballistic missile, and in most worlds battlecruiser and bomber (the last three fixes target these).
