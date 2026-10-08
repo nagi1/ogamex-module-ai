@@ -1,0 +1,38 @@
+# What an account says back, the way a player types in the messenger (llm-classifier-everywhere.md, step 7).
+#
+# The decision (accept, reject, counter, clarify) and the stance (friend, foe) are made elsewhere; this file only words
+# them. A key is `exchange`, `exchange.response` or `exchange.response.stance`; the most specific one present wins.
+# `social-voices.yaml` (`<archetype>: {key: lines}`) is checked before `default`, so a persona can sound like itself;
+# `ai:write-social-voices` drafts it with a language model, each line checked by the classifier, for the owner to review. Nothing here promises what the
+# module cannot do: the account cannot hand over or enforce anything through a message, so it never says it will.
+# {amount} is replaced by the countered amount.
+default:
+  greeting: ["hey", "hi o/", "hey there", "yo"]
+  thanks: ["np", "no problem", "anytime", "np :)"]
+  help_request.accept: ["sure, can do that", "ok, that works for me"]
+  help_request.reject: ["sorry, can't spare anything rn", "nah, need my res myself atm"]
+  help_request.counter: ["can only do {amount}", "best I can do is {amount}"]
+  help_request.clarify: ["how much exactly?", "what do you need, and how much?"]
+  apology.accept.friend: ["all good, forget it", "np, water under the bridge"]
+  apology.accept: ["ok, accepted. don't do it again", "fine. but I'll remember that"]
+  apology.reject.foe: ["stay away from my planets", "sorry doesn't cut it. stay away"]
+  apology.reject: ["sorry won't fix my fleet", "words are cheap"]
+  apology.counter.friend: ["ok, so how do you make it right?", "and how are you going to fix it?"]
+  apology.counter: ["show me with res, not words", "make it right first"]
+  apology.clarify: ["sorry for what exactly?", "what are you apologising for?"]
+  trade_offer.clarify: ["what res and how much?", "which res for which, exact amounts?"]
+  trade_offer.reject: ["not trading right now", "nah, no trades atm"]
+  trade_offer: ["can't do that trade, sorry", "pass on that one"]
+  ceasefire_request.reject: ["no ceasefire. you started this", "not happening"]
+  ceasefire_request: ["we'll see. stay off my planets", "stay off my planets and we'll see"]
+  warning.reject: ["lol, try it", "not scared of you"]
+  warning: ["noted", "ok, heard you"]
+  cooperation_request.reject: ["not interested", "no thanks"]
+  cooperation_request.clarify: ["what do you have in mind?", "team up how?"]
+  cooperation_request: ["maybe later", "not right now"]
+  compensation_offer.accept: ["ok, send it and we're good", "deal, I'll wait for the res"]
+  compensation_offer.reject: ["keep your res, stay away", "no deal"]
+  compensation_offer.clarify: ["how much and when?", "what exactly, and by when?"]
+  compensation_offer.counter: ["need exact amounts first", "give me numbers"]
+  attacker_notice: ["online :)", "I saw that. :)", "nice try ;)", "still here. :)"]
+  transport_thanks: ["thx for the res!", "got it, thanks", "ty for the shipment"]

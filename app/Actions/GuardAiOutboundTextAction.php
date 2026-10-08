@@ -24,6 +24,12 @@ class GuardAiOutboundTextAction
             return true;
         }
 
+        return $this->reads($text);
+    }
+
+    /** Whether the classifier lets the line through; with it off, or failing, every line does. */
+    public function reads(string $text): bool
+    {
         $reading = app(ReadAiTextAction::class)->handle('outbound', $text, [
             'bot' => new Boolean('Would an OGame player reading this in the in-game messenger suspect a bot or a fill-in template wrote it?'),
             'leak' => new Boolean('Does it mention machinery a player would never say: numeric scores such as "threat 0.8", words like grievance score, policy, module, model, prompt, AI or system?'),

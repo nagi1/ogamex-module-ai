@@ -78,8 +78,8 @@ test('a trusted affordable help request becomes an accepted commitment and autho
         ->and($evaluated->commitment_id)->not->toBeNull()
         ->and(AiCommitment::query()->findOrFail($evaluated->commitment_id)->state)->toBe(AiCommitmentState::Accepted)
         ->and(app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, socialReplyProfile($this->currentUserId)))->toBeIn([
-            'I can help with the requested amount.',
-            'Your request is accepted; I will provide the agreed amount.',
+            'sure, can do that',
+            'ok, that works for me',
         ]);
 });
 
@@ -385,8 +385,8 @@ test('authored replies skip a recently delivered variant when one remains', func
     $secondExchange->id = 2;
     $secondReply = app(BuildAuthoredSocialReplyAction::class)->handle($secondExchange, $profile);
 
-    expect($firstReply)->toBeIn(['Greetings.', 'Hello.'])
-        ->and($secondReply)->toBeIn(['Greetings.', 'Hello.'])
+    expect($firstReply)->toBeIn(['hey', 'hi o/', 'hey there', 'yo'])
+        ->and($secondReply)->toBeIn(['hey', 'hi o/', 'hey there', 'yo'])
         ->and($secondReply)->not->toBe($firstReply);
 });
 
@@ -422,8 +422,8 @@ test('the same apology decision is worded warmly for a friend and coldly for a f
 
     $cold = app(BuildAuthoredSocialReplyAction::class)->handle($foe, socialReplyProfile($this->currentUserId));
 
-    expect($warm)->toBeIn(['Apology accepted — we can move past this.', 'Thank you for saying that. Let us put it behind us.'])
-        ->and($cold)->toBeIn(['Keep your distance until the threat is gone.', 'Words will not undo this. Stay away.']);
+    expect($warm)->toBeIn(['all good, forget it', 'np, water under the bridge'])
+        ->and($cold)->toBeIn(['stay away from my planets', "sorry doesn't cut it. stay away"]);
 });
 
 test('authored replies are bounded to known response variants and never invent terms', function (AiSocialResponse|null $response, array|null $terms): void {
@@ -532,8 +532,8 @@ test('greeting and thanks exchanges use their authored reply lines', function (A
     expect($evaluated->response)->toBe(AiSocialResponse::Accept)
         ->and(app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, socialReplyProfile($this->currentUserId)))->toBeIn($expectedLines);
 })->with([
-    'greeting' => [AiSocialExchangeType::Greeting, ['Greetings.', 'Hello.']],
-    'thanks' => [AiSocialExchangeType::Thanks, ['You are welcome.', 'Acknowledged.']],
+    'greeting' => [AiSocialExchangeType::Greeting, ['hey', 'hi o/', 'hey there', 'yo']],
+    'thanks' => [AiSocialExchangeType::Thanks, ['np', 'no problem', 'anytime', 'np :)']],
 ]);
 
 function socialExchangeObservation(int $playerId, int $counterpartyId, int $sourceId): AiObservation

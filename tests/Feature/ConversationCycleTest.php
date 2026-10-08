@@ -149,7 +149,7 @@ test('an inbound greeting is answered once through the authored delivery path', 
     expect($exchange->type)->toBe(AiSocialExchangeType::Greeting)
         ->and($exchange->state)->toBe(AiSocialExchangeState::Responded)
         ->and($exchange->response)->toBe(AiSocialResponse::Accept)
-        ->and($reply->message)->toBeIn(['Greetings.', 'Hello.'])
+        ->and($reply->message)->toBeIn(['hey', 'hi o/', 'hey there', 'yo'])
         ->and($reply->reply_to_id)->toBe($sourceMessageId)
         ->and(deliveredReplies($this->currentUserId))->toBe(1)
         ->and((float) AiRelationship::query()->where('player_id', $this->currentUserId)->sole()->affinity)->toBeGreaterThan(0.0);
@@ -222,7 +222,7 @@ test('a coercive warning is refused, remembered as a threat and never trusted', 
     $relationship = AiRelationship::query()->where('player_id', $this->currentUserId)->sole();
 
     expect(AiSocialExchange::query()->sole()->response)->toBe(AiSocialResponse::Reject)
-        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)->toBe('I will not accept coercive terms.')
+        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)->toBeIn(['lol, try it', 'not scared of you'])
         ->and((float) $relationship->threat)->toBe(0.15)
         // Never trusted: a coercive warning leaves the relationship colder than it started, not warmer.
         ->and((float) $relationship->trust)->toBeLessThanOrEqual(0.0);
@@ -237,7 +237,7 @@ test('an apology that names no harm is answered with a request for the acknowled
 
     expect(AiSocialExchange::query()->sole()->response)->toBe(AiSocialResponse::Clarify)
         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)
-        ->toBeIn(['Please acknowledge the harm and explain how you will repair it.', 'I need a clearer acknowledgment before we discuss forgiveness.']);
+        ->toBeIn(['sorry for what exactly?', 'what are you apologising for?']);
 });
 
 test('a trade offer is declined because the module has no transport path', function (): void {
@@ -248,7 +248,7 @@ test('a trade offer is declined because the module has no transport path', funct
     expect(runConversationCycle($this->currentUserId))->toBe(1)
         ->and(AiSocialExchange::query()->sole()->response)->toBe(AiSocialResponse::Reject)
         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->sole()->message)
-        ->toBe('I cannot authorize a trade without a validated transport path.');
+        ->toBeIn(['not trading right now', 'nah, no trades atm']);
 });
 
 test('an answered message is never reconsidered by a later cycle', function (): void {

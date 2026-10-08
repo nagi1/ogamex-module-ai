@@ -10,11 +10,17 @@ use Modules\AI\Models\AiConversationReply;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
+use Illuminate\Support\Str;
 use Modules\AI\Support\RandomSource;
+use Symfony\Component\Yaml\Yaml;
 
 class BuildAuthoredSocialReplyAction
 {
     private const REPETITION_COOLDOWN_DELIVERIES = 2;
+
+    private const FILE = '/resources/behavior/social-lines.yaml';
+
+    public const VOICES = '/resources/behavior/social-voices.yaml';
 
     public function __construct(private RandomSource $randomSource)
     {
@@ -26,7 +32,11 @@ class BuildAuthoredSocialReplyAction
             return null;
         }
 
-        $lines = $this->replyLines($exchange->type, $exchange->response, $this->stanceFor($exchange));
+        $lines = $this->replyLines($exchange->type, $exchange->response, $this->stanceFor($exchange), $profile);
+        if ($lines === []) {
+            return null;
+        }
+
         $eligibleLines = $this->withoutRecentDeliveredLines($exchange, $lines);
         $index = (int) floor($this->randomSource->unitInterval($profile->random_seed, 'social-exchange:' . $exchange->id . ':' . $exchange->revision) * count($eligibleLines));
         $line = $eligibleLines[$index];
@@ -36,27 +46,40 @@ class BuildAuthoredSocialReplyAction
     }
 
     /**
-     * English is the only supported language, so the variant set is chosen by exchange type
-     * alone. A second language means authored content and a selection input, not a
-     * configuration value, which is why no locale is carried here.
+     * The most specific key the file has for this exchange, its response and the stance, in the persona's voice first
+     * and the default voice after (resources/behavior/social-lines.yaml).
      *
      * @return list<string>
      */
-    private function replyLines(AiSocialExchangeType $type, AiSocialResponse $response, string $stance): array
+    private function replyLines(AiSocialExchangeType $type, AiSocialResponse $response, string $stance, AiProfile $profile): array
     {
-        return match ($type) {
-            AiSocialExchangeType::HelpRequest => $this->helpReplyLines($response),
-            AiSocialExchangeType::Apology => $this->apologyReplyLines($response, $stance),
-            AiSocialExchangeType::Greeting => $this->greetingReplyLines(),
-            AiSocialExchangeType::Thanks => $this->thanksReplyLines(),
-            AiSocialExchangeType::TradeOffer => $this->tradeReplyLines($response),
-            AiSocialExchangeType::CeasefireRequest => $this->ceasefireReplyLines($response),
-            AiSocialExchangeType::Warning => $this->warningReplyLines($response),
-            AiSocialExchangeType::CooperationRequest => $this->cooperationReplyLines($response),
-            AiSocialExchangeType::CompensationOffer => $this->compensationReplyLines($response),
-            AiSocialExchangeType::AttackerNotice => $this->attackerNoticeLines(),
-            AiSocialExchangeType::TransportThanks => $this->transportThanksLines(),
-        };
+        $file = $this->lines();
+        $exchange = Str::snake($type->name);
+        $keys = ["{$exchange}." . strtolower($response->name) . ".{$stance}", "{$exchange}." . strtolower($response->name), $exchange];
+
+        foreach ([(array) ($file['voices'][strtolower((string) $profile->archetype?->name)] ?? []), (array) ($file['default'] ?? [])] as $voice) {
+            foreach ($keys as $key) {
+                if (($voice[$key] ?? []) !== []) {
+                    return array_values((array) $voice[$key]);
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Read per reply, not cached: a reply is rare next to a session, and a reviewed voice file takes effect at once.
+     *
+     * @return array<string, mixed>
+     */
+    private function lines(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $file = Yaml::parseFile($root . self::FILE);
+        $voices = is_file($root . self::VOICES) ? Yaml::parseFile($root . self::VOICES) : [];
+
+        return ['default' => (array) (is_array($file) ? ($file['default'] ?? []) : []), 'voices' => is_array($voices) ? $voices : []];
     }
 
     /**
@@ -76,38 +99,6 @@ class BuildAuthoredSocialReplyAction
         $eligibleLines = array_values(array_filter($lines, fn (string $line): bool => !in_array($line, $recentLines, true)));
 
         return $eligibleLines === [] ? $lines : $eligibleLines;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function helpReplyLines(AiSocialResponse $response): array
-    {
-        return match ($response) {
-            AiSocialResponse::Accept => ['I can help with the requested amount.', 'Your request is accepted; I will provide the agreed amount.'],
-            AiSocialResponse::Reject => ['I cannot accept this request.', 'I must decline this request for now.'],
-            AiSocialResponse::Counter => ['I can only offer {amount}.', 'I cannot meet the full request; I can offer {amount}.'],
-            AiSocialResponse::Clarify => ['Please confirm the amount and terms.', 'I need clearer terms before I can respond.'],
-        };
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function apologyReplyLines(AiSocialResponse $response, string $stance): array
-    {
-        return match ($response) {
-            AiSocialResponse::Accept => $stance === 'friend'
-                ? ['Apology accepted — we can move past this.', 'Thank you for saying that. Let us put it behind us.']
-                : ['I accept your apology, but I remember what happened.', 'Your apology is acknowledged; trust will take time to rebuild.'],
-            AiSocialResponse::Reject => $stance === 'foe'
-                ? ['Keep your distance until the threat is gone.', 'Words will not undo this. Stay away.']
-                : ['An apology alone does not repair this harm.', 'I cannot accept this apology while the threat remains.'],
-            AiSocialResponse::Counter => $stance === 'friend'
-                ? ['What will you do to make this right?', 'Tell me how you intend to repair it.']
-                : ['I need a concrete repair before we can move forward.', 'Show how you will repair this harm first.'],
-            AiSocialResponse::Clarify => ['Please acknowledge the harm and explain how you will repair it.', 'I need a clearer acknowledgment before we discuss forgiveness.'],
-        };
     }
 
     /**
@@ -131,83 +122,5 @@ class BuildAuthoredSocialReplyAction
         }
 
         return 'neutral';
-    }
-
-    /** @return list<string> */
-    private function greetingReplyLines(): array
-    {
-        return ['Greetings.', 'Hello.'];
-    }
-
-    /** @return list<string> */
-    private function thanksReplyLines(): array
-    {
-        return ['You are welcome.', 'Acknowledged.'];
-    }
-
-    /** @return list<string> */
-    private function tradeReplyLines(AiSocialResponse $response): array
-    {
-        return match ($response) {
-            AiSocialResponse::Clarify => ['Please state both resources and exact amounts.'],
-            AiSocialResponse::Reject => ['I cannot authorize a trade without a validated transport path.'],
-            AiSocialResponse::Accept, AiSocialResponse::Counter => ['I cannot authorize this trade.'],
-        };
-    }
-
-    /** @return list<string> */
-    private function ceasefireReplyLines(AiSocialResponse $response): array
-    {
-        return match ($response) {
-            AiSocialResponse::Reject => ['I cannot accept this ceasefire under the current threat.'],
-            AiSocialResponse::Clarify, AiSocialResponse::Accept, AiSocialResponse::Counter => ['I cannot enforce a ceasefire through this channel.'],
-        };
-    }
-
-    /** @return list<string> */
-    private function warningReplyLines(AiSocialResponse $response): array
-    {
-        return match ($response) {
-            AiSocialResponse::Reject => ['I will not accept coercive terms.'],
-            AiSocialResponse::Clarify, AiSocialResponse::Accept, AiSocialResponse::Counter => ['Your warning is noted; no commitment is implied.'],
-        };
-    }
-
-    /** @return list<string> */
-    private function cooperationReplyLines(AiSocialResponse $response): array
-    {
-        return match ($response) {
-            AiSocialResponse::Reject => ['I cannot cooperate under the current relationship conditions.'],
-            AiSocialResponse::Clarify => ['I cannot authorize that cooperation without a supported game path.'],
-            AiSocialResponse::Accept, AiSocialResponse::Counter => ['I cannot authorize that cooperation.'],
-        };
-    }
-
-    /** @return list<string> */
-    private function compensationReplyLines(AiSocialResponse $response): array
-    {
-        return match ($response) {
-            AiSocialResponse::Accept => ['Your compensation is recorded and remains due.'],
-            AiSocialResponse::Reject => ['I cannot accept this compensation while the threat remains.'],
-            AiSocialResponse::Clarify => ['State the exact compensation and due time.'],
-            AiSocialResponse::Counter => ['I need exact compensation terms before I can respond.'],
-        };
-    }
-
-    /**
-     * The casual one-liner an alert defender sends back to a raider: seen, not
-     * escalated. Authored because one line has nothing a provider would improve.
-     *
-     * @return list<string>
-     */
-    private function attackerNoticeLines(): array
-    {
-        return ['online :)', 'I saw that. :)', 'nice try ;)', 'still here. :)'];
-    }
-
-    /** @return list<string> */
-    private function transportThanksLines(): array
-    {
-        return ['Thanks for the resources.', 'Appreciate the shipment.', 'Received — thank you.'];
     }
 }

@@ -131,7 +131,7 @@ test('a greeting is sent authored and queues nothing', function (): void {
     escalationInboundMessage($this->currentUserId, $human->id, 'hello');
 
     expect(runEscalationCycle($this->currentUserId))->toBe(1)
-        ->and(escalationSentMessage($this->currentUserId))->toBeIn(['Greetings.', 'Hello.'])
+        ->and(escalationSentMessage($this->currentUserId))->toBeIn(['hey', 'hi o/', 'hey there', 'yo'])
         ->and(AiConversationReply::query()->where('player_id', $this->currentUserId)->sole()->state)->toBe(AiConversationReplyState::Delivered);
 
     Queue::assertNotPushed(GenerateAiReply::class);

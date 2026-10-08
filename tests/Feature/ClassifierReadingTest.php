@@ -170,7 +170,7 @@ test('a human greeting in words the matcher does not know is answered as a greet
     $human = User::factory()->create();
     Classification::fake([classifierInbound('greeting')]);
 
-    ChatMessage::create(['sender_id' => $human->id, 'recipient_id' => $this->currentUserId, 'message' => 'yo neighbour o/']);
+    ChatMessage::create(['sender_id' => $human->id, 'recipient_id' => $this->currentUserId, 'message' => 'sup neighbour o/']);
     app(RunAiConversationCycleAction::class)->handle($this->currentUserId, CarbonImmutable::now());
 
     expect(AiSocialExchange::query()->where('player_id', $this->currentUserId)->value('type'))->toBe(AiSocialExchangeType::Greeting)
@@ -185,7 +185,7 @@ test('a message from another AI account is never read by the classifier', functi
     classifierSpeaker($other->id);
     Classification::fake()->preventStrayClassifications();
 
-    ChatMessage::create(['sender_id' => $other->id, 'recipient_id' => $this->currentUserId, 'message' => 'yo neighbour o/']);
+    ChatMessage::create(['sender_id' => $other->id, 'recipient_id' => $this->currentUserId, 'message' => 'sup neighbour o/']);
     app(RunAiConversationCycleAction::class)->handle($this->currentUserId, CarbonImmutable::now());
 
     Classification::assertNothingClassified();

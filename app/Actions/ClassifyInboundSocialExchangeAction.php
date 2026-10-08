@@ -165,7 +165,7 @@ class ClassifyInboundSocialExchangeAction
             return null;
         }
 
-        if ($this->matches($text, 'hi|hello|hey|greetings|good (morning|afternoon|evening)')) {
+        if ($this->matches($text, 'hi|hello|hey|yo|greetings|good (morning|afternoon|evening)')) {
             return $this->exchange(AiSocialExchangeType::Greeting, []);
         }
 
