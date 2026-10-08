@@ -217,3 +217,17 @@ labelled messages, alliance pages and applications:
 
 807 persona voice lines are installed (resources/behavior/social-voices.yaml). The one doctrine proposal (WIK-013
 turtle ratio) was already in defence-doctrines.yaml.
+
+### 8 Oct, evening: war volume, the first club, moons that wait
+
+| Cause (world) | Fix | Commit |
+|---|---|---|
+| No account drew the leader's trait, so no club formed (9402, 9405) | The joiner whose kind most readily leads founds the first club | 93c03ad |
+| target_active_at_dispatch refused 31 raids against 7 flown, and every simulated account looks online (9401) | An enemy at war is struck while online; neutrals keep the farm rule | 67ac431 |
+| Two cargo orders of about 2,180 ships held a yard for seven hours (9409) | A loot-sized cargo batch is two yard hours, and cargo in the yard counts as held | 818c58d |
+| Peer clubs traded four battles without declaring war, according to the LLM judge (9406) | war_grievance 0.8: one raid is a grudge, two are a war | 5e7d254 |
+| Every club sent the same welcome sentence, according to the judge (9406) | The welcome is an authored line in the founder's persona voice | 5e7d254 |
+| A moon waited six hours behind fifteen planets' economy, and its gate came after the run (9407, 9408) | Moon stations get their own pass right after the wall | ac7535b |
+
+9412 (12 h, fixes through 818c58d): **10 ACS attacks, 6 moon destructions, 4 missile strikes**. Before these fixes, 12 h
+worlds flew none of these. 9393 (24 h, 12 accounts, earlier code) flew everything except moon destruction and gate jumps.
