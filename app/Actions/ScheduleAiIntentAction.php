@@ -55,8 +55,10 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\Planet;
 use OGame\Models\UnitQueue;
+use OGame\Services\ObjectService;
 
 /**
  * Turns a session's selected intent into the one work item that carries it out.
@@ -547,15 +549,16 @@ class ScheduleAiIntentAction
         $this->scheduleUnits($profile, $sessionWorkItem, $dueAt, $plan);
     }
 
-    /** Whether any of the player's yards holds an order the host has not finished building yet. */
     /**
-     * Whether the yard the hull would be ordered at still holds unfinished work. Asked per planet: asked of the whole
-     * account, a probe or a wall batch on any of fifteen planets held the war fleet back for whole days (measured
-     * 8 Oct 2026: four hull orders in twelve late-game hours).
+     * Whether the yard the hull would be ordered at still holds an unfinished warship batch. Only warships count: a probe,
+     * cargo or wall batch is an errand, and counting it held the war fleet back whenever one was queued (9345: no
+     * battleship, bomber or destroyer ordered in twelve late-game hours).
      */
     private function shipyardBusy(int $planetId): bool
     {
-        return UnitQueue::query()->where('planet_id', $planetId)->where('processed', 0)->exists();
+        $warships = array_map(static fn (UnitObject $hull): int => $hull->id, ObjectService::getMilitaryShipObjects());
+
+        return UnitQueue::query()->where('planet_id', $planetId)->whereIn('object_id', $warships)->where('processed', 0)->exists();
     }
 
     private function isCalmSave(AiCandidateActionType $type, DecisionTrace $trace): bool

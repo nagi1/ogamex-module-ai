@@ -626,13 +626,14 @@ class QueueableUnitPlanner
     private function cargoForHoldings(PlayerService $player, PlanetService $planet, AiProfile $profile): ?QueueableUnit
     {
         $cargo = $this->bestCargo($player, $planet);
-        if ($cargo === null || app(GamePhaseMachine::class)->of($player) === GamePhase::Early) {
+        // One batch at a time: a login does not add holds while the last batch is still in the yard.
+        if ($cargo === null || app(GamePhaseMachine::class)->of($player) === GamePhase::Early || $this->inYard($planet, $cargo) > 0) {
             return null;
         }
 
         $capacity = $cargo->properties->capacity->calculate($player)->totalValue;
         $held = $planet->metal()->get() + $planet->crystal()->get() + $planet->deuterium()->get();
-        $holds = $planet->getShipUnits()->getTotalCargoCapacity($player) + $this->inYard($planet, $cargo) * $capacity;
+        $holds = $planet->getShipUnits()->getTotalCargoCapacity($player);
         $missing = $this->yardBatch($planet, $cargo, (int) ceil(($held - $holds) / $capacity));
         if ($held <= $holds || $this->affordable($planet, $cargo) < $missing || $this->starvesSaving($planet, $profile, $cargo, $missing)) {
             return null;

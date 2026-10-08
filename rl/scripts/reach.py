@@ -19,11 +19,14 @@ MISSION = {1: "attack", 2: "acs_attack", 3: "transport", 4: "deploy", 5: "hold",
 def summary(path):
     c = sqlite3.connect(path)
     out = {}
+    flown_cols = {row[1] for row in c.execute("pragma table_info(fleet_missions)")}
     for col in BUILD + SHIPS + DEF:
         peak, total = c.execute(f"select coalesce(max({col}),0), coalesce(sum({col}),0) from planets").fetchone()
-        # A unit paid for and still in the yard counts: the yard is slower than the money in a short test.
-        queued = c.execute("select coalesce(sum(object_amount),0) from unit_queues where processed=0 and object_id=?", (IDS.get(col, -1),)).fetchone()[0]
-        out[col] = (peak, total + queued)
+        # A unit paid for counts, in the yard or already built: ships out on a mission or lost in battle at the snapshot
+        # are not on any planet, and the end state alone listed the war fleet as missing in a war.
+        queued = c.execute("select coalesce(sum(object_amount),0) from unit_queues where object_id=?", (IDS.get(col, -1),)).fetchone()[0]
+        flown = c.execute(f"select coalesce(max({col}),0) from fleet_missions").fetchone()[0] if col in flown_cols else 0
+        out[col] = (max(peak, flown), total + queued)
     for col in TECH:
         out[col] = c.execute(f"select coalesce(max({col}),0), count(case when {col}>0 then 1 end) from users_tech").fetchone()
     out["moons"] = (c.execute("select count(*) from planets where planet_type=3").fetchone()[0], 0)

@@ -1,6 +1,7 @@
 <?php
 
 use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Tests\Support\Situation;
 use Tests\IsolatedAccountTestCase;
 
@@ -20,7 +21,9 @@ test('an established miner with nothing to farm does not order ships on every lo
         ->resources(5_000_000, 3_000_000, 1_000_000)
         ->sessions(6);
 
-    $orders = count(array_filter($situation->work(), static fn (AiWorkKind $kind): bool => $kind === AiWorkKind::QueueUnits));
+    // Ships only: a wall grown over several logins is what a miner sitting on millions does, and is not the lottery.
+    $orders = AiWorkItem::query()->where('kind', AiWorkKind::QueueUnits)->get()
+        ->reject(static fn (AiWorkItem $item): bool => str_starts_with((string) ($item->payload['reason'] ?? ''), 'role:defense'))->count();
 
     expect($orders)->toBeLessThanOrEqual(3, 'ordered ships on ' . $orders . ' of 6 logins; ' . $situation->account());
 });
