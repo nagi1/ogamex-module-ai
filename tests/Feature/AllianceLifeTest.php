@@ -78,6 +78,22 @@ test('a universe with no alliance has its first leader found one', function (): 
         ->and(User::query()->find($this->currentUserId)->alliance_id)->not->toBeNull();
 });
 
+// With no drawn leader the first club still forms: the joiner whose kind most readily leads founds it. A turtle, whose
+// kind never leads (alliance-ambition.yaml), founds nothing even when it would join (9402, 9405: no alliance in 12 h).
+test('a universe with no drawn leader has its most ambitious joiner found the first club', function (AiArchetype $archetype, bool $founds): void {
+    enableProfile($this->currentUserId);
+    // Seed 8 draws a joiner that does not lead, for both kinds.
+    AiProfile::query()->where('player_id', $this->currentUserId)->update(['random_seed' => 8, 'archetype' => $archetype]);
+    rank($this->currentUserId, 1000, 1);
+
+    app(AdvanceAiAllianceLifeAction::class)->handle();
+
+    expect(Alliance::query()->where('founder_user_id', $this->currentUserId)->exists())->toBe($founds);
+})->with([
+    'a casual joiner' => [AiArchetype::Casual, true],
+    'a turtle joiner' => [AiArchetype::Turtle, false],
+]);
+
 test('an account already in an alliance is left alone', function (): void {
     enableProfile($this->currentUserId);
     rank($this->currentUserId, 1000, 1);

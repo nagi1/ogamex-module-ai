@@ -191,8 +191,14 @@ class AdvanceAiAllianceLifeAction
             return 0;
         }
 
-        $founderId = AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id')
-            ->first(fn (int $playerId): bool => app(AllianceAmbition::class)->leads($playerId) && !$this->alreadyEngaged($playerId));
+        $ambition = app(AllianceAmbition::class);
+        $free = AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id')
+            ->reject(fn (int $playerId): bool => $this->alreadyEngaged($playerId));
+        // A universe where nobody drew the leader's trait still gets its first club: the joiner whose kind most readily
+        // leads founds it, as someone always does on a real server (9402, 9405: no alliance in twelve hours).
+        $founderId = $free->first(fn (int $playerId): bool => $ambition->leads($playerId))
+            ?? $free->filter(fn (int $playerId): bool => $ambition->wantsAlliance($playerId) && $ambition->leadShare($playerId) > 0.0)
+                ->sortByDesc(fn (int $playerId): float => $ambition->leadShare($playerId))->first();
 
         if ($founderId === null) {
             return 0;
