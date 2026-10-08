@@ -217,24 +217,22 @@ class AdvanceAiAllianceLifeAction
             return 0;
         }
 
-        foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
-            // Only a leader founds: every locked-out account founding its own left six empires in six clubs (9372).
-            if ($this->alreadyEngaged($playerId) || !app(AllianceAmbition::class)->leads($playerId)) {
-                continue;
-            }
+        $ambition = app(AllianceAmbition::class);
+        $lockedOut = AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id')
+            ->reject(fn (int $playerId): bool => $this->alreadyEngaged($playerId) || !$ambition->wantsAlliance($playerId)
+                || (int) Highscore::query()->where('player_id', $playerId)->value('general_rank') <= 0
+                || app(AllianceChoice::class)->hasOpenCandidate($playerId))
+            ->values();
+        // Only a leader founds: every locked-out account founding its own left six empires in six clubs (9372). With no
+        // drawn leader among them, two or more joiners no club fits get one from the kind that most readily leads, as
+        // the first club does (9414-9417: a raider and a miner stayed solo all day beside one two-seat club).
+        $founderId = $lockedOut->first(fn (int $playerId): bool => $ambition->leads($playerId))
+            ?? ($lockedOut->count() >= 2
+                ? $lockedOut->filter(fn (int $playerId): bool => $ambition->leadShare($playerId) > 0.0)
+                    ->sortByDesc(fn (int $playerId): float => $ambition->leadShare($playerId))->first()
+                : null);
 
-            if ((int) Highscore::query()->where('player_id', $playerId)->value('general_rank') <= 0) {
-                continue;
-            }
-
-            if (app(AllianceChoice::class)->hasOpenCandidate($playerId)) {
-                continue;
-            }
-
-            return $this->foundAlliance($playerId, $this->tagFor($playerId));
-        }
-
-        return 0;
+        return $founderId === null ? 0 : $this->foundAlliance($founderId, $this->tagFor($founderId));
     }
 
     /**

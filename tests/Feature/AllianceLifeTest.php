@@ -94,6 +94,27 @@ test('a universe with no drawn leader has its most ambitious joiner found the fi
     'a turtle joiner' => [AiArchetype::Turtle, false],
 ]);
 
+// Past the first club, joiners no club fits and no drawn leader stayed solo all day (9414-9417). Two of them get a club
+// from the kind that most readily leads; one alone founds nothing, so six empires never end in six clubs (9372).
+test('joiners no club will take get a second club only when there are two of them', function (bool $second, bool $founds): void {
+    enableProfile($this->currentUserId);
+    rank($this->currentUserId, 1000, 1);
+    $shut = openAlliance(User::factory()->create()->id, 'SHUT');
+    $shut->update(['is_open' => false]);
+    if ($second) {
+        $other = User::factory()->create();
+        AiProfile::create(['player_id' => $other->id, 'archetype' => AiArchetype::Turtle, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 8, 'enabled' => true]);
+        rank($other->id, 900, 2);
+    }
+
+    app(AdvanceAiAllianceLifeAction::class)->handle();
+
+    expect(Alliance::query()->where('founder_user_id', $this->currentUserId)->exists())->toBe($founds);
+})->with([
+    'a casual and a turtle: the casual founds' => [true, true],
+    'a casual alone waits' => [false, false],
+]);
+
 test('an account already in an alliance is left alone', function (): void {
     enableProfile($this->currentUserId);
     rank($this->currentUserId, 1000, 1);
