@@ -4,15 +4,19 @@ use Modules\AI\Actions\QueueAiFleetSaveAction;
 use Modules\AI\Contracts\QueueAiFleetSave;
 use Modules\AI\Domain\Decision\BuildCandidate;
 use Modules\AI\Domain\Decision\FacilityChain;
+use Modules\AI\Domain\Decision\QueueableJumpGate;
+use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
 use Modules\AI\Domain\Decision\QueueableFleetSave;
 use Modules\AI\Domain\Decision\QueueableFleetSavePlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\Planet;
+use OGame\Models\User;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use Tests\IsolatedAccountTestCase;
@@ -155,3 +159,33 @@ test('a jump gate is a chain step once the account owns two moons', function ():
 
     expect($names)->toContain('jump_gate');
 });
+
+dataset('staging enemies', [
+    'an enemy beside the far moon' => [true, true],
+    'a neutral beside the far moon' => [false, false],
+]);
+
+test('with no threat a fleet jumps to the gated moon nearest an enemy', function (bool $enemy, bool $jumps): void {
+    jumpGateProfile($this->currentUserId);
+    Planet::query()->whereKey($this->currentPlanetId)->update(['galaxy' => 5, 'system' => 100, 'planet' => 5]);
+    [$originMoon, $forwardMoon] = jumpGateMoonPair($this->currentUserId, $this->currentPlanetId);
+    $other = User::factory()->create();
+    Planet::factory()->create(['user_id' => $other->id, 'galaxy' => 2, 'system' => 3, 'planet' => 4]);
+    if ($enemy) {
+        AiRelationship::unguarded(fn () => AiRelationship::create([
+            'player_id' => $this->currentUserId,
+            'other_player_id' => $other->id,
+            'threat' => '1.0000',
+            'trust' => '-1.0000',
+            'revision' => 0,
+        ]));
+    }
+
+    $plan = app(QueueableJumpGatePlanner::class)->plan($this->currentUserId);
+
+    expect($plan instanceof QueueableJumpGate)->toBe($jumps);
+    if ($jumps) {
+        expect($plan->sourceMoonId)->toBe($originMoon->getPlanetId())
+            ->and($plan->targetMoonId)->toBe($forwardMoon->getPlanetId());
+    }
+})->with('staging enemies');

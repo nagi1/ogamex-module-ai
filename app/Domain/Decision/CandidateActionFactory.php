@@ -245,7 +245,7 @@ class CandidateActionFactory
         ])];
     }
 
-    /** @return array<int, CandidateAction> A jump needs no fleet slot: a gate-moon under threat, a ready partner and ships to carry. */
+    /** @return array<int, CandidateAction> A jump needs no fleet slot: ships on a ready gate-moon under threat, or a ready partner nearer the enemy. */
     private function eligibleJumpGateCandidates(PerceptionSnapshot $perception): array
     {
         if ($this->queueableJumpGatePlanner->plan($perception->playerId) === null) {
