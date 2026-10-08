@@ -53,6 +53,7 @@ fleet_template:
   small_cargo: 20
   recycler: 15
   light_fighter: 15
+  battle_ship: 5 # even a miner keeps a few battleships to cover its recyclers and answer a raid
   battlecruiser: 5
 defence_template:
   rocket_launcher: 50

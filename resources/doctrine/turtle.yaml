@@ -46,6 +46,7 @@ fleet_template:
   large_cargo: 50
   recycler: 30
   light_fighter: 20
+  battle_ship: 5 # even a turtle keeps a few battleships to cover its recyclers and answer a raid
   battlecruiser: 5
 defence_template:
   rocket_launcher: 35
