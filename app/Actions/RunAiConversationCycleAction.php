@@ -42,6 +42,9 @@ class RunAiConversationCycleAction
 
     private const MAXIMUM_PENDING_MESSAGES = 20;
 
+    /** A hello answers a hello once; a pleasantry arriving after we already wrote to them within this window ends the thread. */
+    private const PLEASANTRY_QUIET_HOURS = 24;
+
     /**
      * @return int the number of exchanges this cycle answered
      */
@@ -267,7 +270,8 @@ class RunAiConversationCycleAction
         $counterpartyPlayerId = (int) $observation->subject_player_id;
         $turns = $this->answeredTurns($playerId, $counterpartyPlayerId, $now);
 
-        if ($turns >= self::MAXIMUM_RESPONSE_TURNS) {
+        // Nobody answers an answer to their hello: two accounts traded nine greetings a day for a day (9471).
+        if ($turns >= self::MAXIMUM_RESPONSE_TURNS || ($this->isPleasantry($classification->type) && $this->wroteRecently($playerId, $counterpartyPlayerId, $now))) {
             return false;
         }
 
@@ -297,6 +301,17 @@ class RunAiConversationCycleAction
         $message = ChatMessage::query()->find(AiObservation::query()->whereKey($observationId)->value('source_id'));
 
         return $message === null ? null : app(ReadAiHumanMessageAction::class)->handle((int) $message->sender_id, (string) $message->message);
+    }
+
+    private function isPleasantry(AiSocialExchangeType $type): bool
+    {
+        return in_array($type, [AiSocialExchangeType::Greeting, AiSocialExchangeType::Thanks], true);
+    }
+
+    private function wroteRecently(int $playerId, int $counterpartyPlayerId, CarbonImmutable $now): bool
+    {
+        return ChatMessage::query()->where('sender_id', $playerId)->where('recipient_id', $counterpartyPlayerId)
+            ->where('created_at', '>', $now->subHours(self::PLEASANTRY_QUIET_HOURS))->exists();
     }
 
     private function classify(ChatMessage $message): InboundSocialExchange|null

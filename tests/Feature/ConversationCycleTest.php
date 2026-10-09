@@ -282,6 +282,7 @@ test('the protocol stops after one response turn', function (): void {
 });
 
 test('two automated neighbours stop greeting each other instead of looping', function (): void {
+    $this->travelTo(CarbonImmutable::parse(CONVERSATION_NOW));
     $neighbour = $this->createUser();
     enabledAiProfile($this->currentUserId);
     enabledAiProfile($neighbour->id, 7);
@@ -294,12 +295,12 @@ test('two automated neighbours stop greeting each other instead of looping', fun
 
     $total = ChatMessage::query()->whereIn('sender_id', [$this->currentUserId, $neighbour->id])->count();
 
-    expect(deliveredReplies($this->currentUserId))->toBe(2)
-        ->and(deliveredReplies($neighbour->id))->toBe(2)
-        ->and($total)->toBe(5)
+    expect(deliveredReplies($this->currentUserId))->toBe(1)
+        ->and(deliveredReplies($neighbour->id))->toBe(0)
+        ->and($total)->toBe(2)
         ->and(runConversationCycle($this->currentUserId))->toBe(0)
         ->and(runConversationCycle($neighbour->id))->toBe(0)
-        ->and(ChatMessage::query()->whereIn('sender_id', [$this->currentUserId, $neighbour->id])->count())->toBe(5);
+        ->and(ChatMessage::query()->whereIn('sender_id', [$this->currentUserId, $neighbour->id])->count())->toBe(2);
 });
 
 test('a session answers a pending message before it decides anything else', function (): void {
