@@ -93,7 +93,7 @@ test('a member answers a recognised alliance message in the channel', function (
     chatProfile($member->id);
     chatMember($member->id, $alliance->id);
 
-    $message = postAllianceMessage($this->currentUserId, $alliance->id, 'hello');
+    $message = postAllianceMessage($this->currentUserId, $alliance->id, 'stop attacking my planets');
     app(RecordObservedChatMessageAction::class)->handleAlliance($message->id);
 
     expect(app(RunAiConversationCycleAction::class)->handle($member->id, CarbonImmutable::now()))->toBe(1)
@@ -102,6 +102,21 @@ test('a member answers a recognised alliance message in the channel', function (
             ->where('sender_id', $member->id)
             ->where('id', '!=', $message->id)
             ->exists())->toBeTrue();
+});
+
+// 9484: a greeting in the channel was answered by every member and each answer was answered again, 1,676 times.
+test('a greeting in the alliance channel is not answered', function (): void {
+    chatProfile($this->currentUserId);
+    $alliance = chatAlliance($this->currentUserId);
+    $member = User::factory()->create();
+    chatProfile($member->id);
+    chatMember($member->id, $alliance->id);
+
+    $message = postAllianceMessage($this->currentUserId, $alliance->id, 'hello');
+    app(RecordObservedChatMessageAction::class)->handleAlliance($message->id);
+
+    expect(app(RunAiConversationCycleAction::class)->handle($member->id, CarbonImmutable::now()))->toBe(0)
+        ->and(ChatMessage::query()->where('alliance_id', $alliance->id)->count())->toBe(1);
 });
 
 test('a member never answers its own alliance message', function (): void {

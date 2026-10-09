@@ -184,7 +184,9 @@ class RunAiConversationCycleAction
 
         $classification = $this->classify($message);
 
-        if ($classification === null) {
+        // Nobody answers a "hi" in a channel of nine: each answer is a "hi" that the other eight answer again (9484: 1,676
+        // greetings in one club's channel).
+        if ($classification === null || $this->isPleasantry($classification->type)) {
             return false;
         }
 
