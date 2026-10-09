@@ -18,7 +18,7 @@ use Throwable;
         {--out= : Write here instead of resources/behavior/social-voices.yaml}')]
 class WriteAiSocialVoices extends Command
 {
-    private const SAMPLES = ['{attacker}' => 'Zorak', '{victim}' => 'Lena', '{coords}' => '2:45:7', '{name}' => 'Kira', '{tag}' => 'ORBITAL', '{amount}' => '50000', '{hits}' => '4'];
+    private const SAMPLES = ['{attacker}' => 'Zorak', '{victim}' => 'Lena', '{coords}' => '2:45:7', '{name}' => 'Kira', '{tag}' => 'ORBITAL', '{amount}' => '50000', '{hits}' => '4', '{ships}' => '120'];
 
     public function handle(): int
     {

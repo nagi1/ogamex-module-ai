@@ -77,6 +77,8 @@ class QueueAiDefendAction implements QueueAiDefend
                 self::HOLDING_HOURS,
             );
 
+            app(SpeakInAllianceChannelAction::class)->announceDefend($playerId, $targetPlanetId, $fleet->getAmount());
+
             return AiActionResult::queued($mission->id);
         } catch (Exception $exception) {
             return AiActionResult::rejected($exception->getMessage());

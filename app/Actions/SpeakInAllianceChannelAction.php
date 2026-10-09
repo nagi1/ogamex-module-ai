@@ -10,6 +10,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\RandomSource;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Models\Planet;
 use OGame\Models\User;
 
 /**
@@ -54,6 +55,28 @@ class SpeakInAllianceChannelAction
         ]);
 
         return $line !== null && app(DeliverAiAllianceReplyAction::class)->handle($playerId, (int) $allianceId, $line) !== null ? 1 : 0;
+    }
+
+    /**
+     * The words that go with a fleet in the air: a member who has just sent ships to hold at a mate's planet says so, once
+     * per mission, so what the channel reads is what the radar shows. It does not wait on the quiet windows above.
+     */
+    public function announceDefend(int $playerId, int $targetPlanetId, int $ships): bool
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        $allianceId = $profile === null ? null : User::query()->whereKey($playerId)->value('alliance_id');
+        $target = $allianceId === null ? null : Planet::query()->find($targetPlanetId);
+        if ($target === null || $ships < 1) {
+            return false;
+        }
+
+        $line = app(BuildAuthoredSocialReplyAction::class)->line($profile, 'ally_defend', (string) $targetPlanetId . ':' . $ships, [
+            'victim' => (string) User::query()->whereKey($target->user_id)->value('username'),
+            'coords' => "{$target->galaxy}:{$target->system}:{$target->planet}",
+            'ships' => (string) $ships,
+        ]);
+
+        return $line !== null && app(DeliverAiAllianceReplyAction::class)->handle($playerId, (int) $allianceId, $line) !== null;
     }
 
     /** One member speaks per window for the whole alliance, and no member twice in a row. */

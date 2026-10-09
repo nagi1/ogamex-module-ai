@@ -82,3 +82,14 @@ test('an old hit is not announced', function (): void {
 
     expect(app(SpeakInAllianceChannelAction::class)->handle($victim->id, CarbonImmutable::parse(CHANNEL_NOW)->addHours(5)))->toBe(0);
 });
+
+// Words that go with a fleet: the member who sends ships to hold at a mate says what and where.
+test('a member who sends a defence to a mate says how many ships and where', function (): void {
+    [$allianceId, $speaker, $victim] = channelClubUnderAttack();
+    $planet = OGame\Models\Planet::factory()->create(['user_id' => $victim->id, 'galaxy' => 2, 'system' => 45, 'planet' => 7]);
+
+    expect(app(SpeakInAllianceChannelAction::class)->announceDefend($speaker->id, $planet->id, 120))->toBeTrue();
+
+    expect(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->toContain('120')->toContain($victim->username)
+        ->and(app(SpeakInAllianceChannelAction::class)->announceDefend($speaker->id, $planet->id, 0))->toBeFalse();
+});

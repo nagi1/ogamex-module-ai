@@ -163,6 +163,11 @@ miner:
     - '{name} o/ welcome to {tag}'
     - 'welcome aboard {name} in {tag}, read the alliance page'
     - 'welcome {name}, good to have you in {tag}'
+  ally_defend:
+    - 'sending {ships} ships to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} ships holding at {coords}'
+    - '{victim} hold on, {ships} ships coming to {coords}'
+    - 'sending {ships} ships to {victim} ({coords})'
 turtle:
   greeting:
     - hey
@@ -328,6 +333,11 @@ turtle:
     - '{name} o/ welcome to {tag}'
     - 'welcome aboard {name}, read the alliance page and ask if anything in {tag}'
     - 'welcome {name}, check the {tag} alliance page and ask if anything'
+  ally_defend:
+    - 'sending {ships} ships to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} ships holding at {coords}'
+    - '{victim} hold on, {ships} ships coming to {coords}'
+    - '{ships} ships en route to {victim} at {coords}'
 fleeter:
   greeting:
     - yo
@@ -492,6 +502,11 @@ fleeter:
     - '{name} in {tag}, welcome'
     - 'welcome {name}, {tag} got you'
     - '{name} joins {tag}, welcome'
+  ally_defend:
+    - 'sending {ships} to {victim} at {coords}'
+    - '{ships} en route to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} at {coords}'
+    - '{victim} hold, {ships} ships to {coords}'
 raider:
   greeting:
     - yo
@@ -655,6 +670,11 @@ raider:
     - '{name} o/ welcome to {tag}'
     - 'welcome {name}. read alliance page, ask if needed'
     - 'welcome aboard {name}, {tag} got you'
+  ally_defend:
+    - 'sending {ships} ships to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} ships holding at {coords}'
+    - '{victim} hold on, {ships} ships coming to {coords}'
+    - '{ships} ships inbound to {victim} at {coords}'
 hybrid:
   greeting:
     - hey
@@ -820,6 +840,11 @@ hybrid:
     - '{name} o\/ welcome to {tag}'
     - 'welcome aboard {name}. read the alliance page and ask if anything'
     - 'welcome {name}! check the alliance page'
+  ally_defend:
+    - 'sending {ships} ships to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} ships holding at {coords}'
+    - '{victim} hold on, {ships} ships coming to {coords}'
+    - 'sending {ships} ships, {victim}, {coords}'
 trader:
   greeting:
     - hey
@@ -984,6 +1009,11 @@ trader:
     - '{name} o/ welcome to {tag}'
     - 'welcome aboard {name}, read the alliance page in {tag}'
     - 'glad to have you in {tag}, {name}'
+  ally_defend:
+    - 'sending {ships} ships to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} ships at {coords}'
+    - '{victim} hold on, {ships} ships to {coords}'
+    - '{ships} ships en route to {victim} at {coords}'
 casual:
   greeting:
     - yo
@@ -1149,3 +1179,8 @@ casual:
     - '{name} o/ welcome to {tag}'
     - 'welcome aboard {name}. read the alliance page and ask if anything in {tag}'
     - 'welcome {name}, {tag} is glad to have you'
+  ally_defend:
+    - 'sending {ships} ships to {victim} at {coords}'
+    - 'on my way to {victim}, {ships} ships holding at {coords}'
+    - '{victim} hold on, {ships} ships coming to {coords}'
+    - 'en route to {victim} with {ships} ships, will be at {coords}'
