@@ -299,3 +299,17 @@ Worlds judged since (great war / politics / human-like, out of 3): 9463 3/-/-, 9
 Still open, per the 9472 judge: truce talk without terms (duration, scope), a war declared without a public broadcast, nine players in no club (the join chance by kind is deliberate, so left alone), 9457/9472 not carrying the hit-count lines (launched before them).
 
 Judge readings after the enemy-first and pact fixes (great war / politics / human-like): 9468 3/2/2, 9469 2/2/3 (the first human-like 3/3), 9470 3/2/2, 9471 3/1/2, 9472 2/1/2. Before them the best typical read was 2/1/1. Worlds 9474-9476 are the first with the hit-count lines and the greeting fix (greetings were 100-200 per world, eight pairs trading nine each). If those hold at 2/2/2 or better, the war and alliance aspects move and the one full run and retrain is next.
+
+### 10 Oct: what the downloaded real-game data says (`storage/rl/external/sources`, 370 MB)
+
+Measured against 244k players in 438 universes, 599 real late battles (OGMem) and 267 universe snapshots:
+
+| Measure | Real | Ours | Verdict |
+|---|---|---|---|
+| Active players in an alliance | median 65% (p10 24%, p90 77%) | 45-62% | within range; the "9 of 16 unallied" judge finding is not a defect |
+| Planets per player | median 5, p90 13 | 5-9 | matches |
+| Attacker fleet, ships | median 175k, p90 3.5M | median 2, max 469-2,530 | **two to four orders of magnitude short** |
+| Loss per battle | median 1.7e9 | median 0, max 2e7 | same gap |
+| Attack hull mix by count | 35-50% battlecruisers, 20-45% cruisers, 2-3% destroyers and bombers | destroyer- and bomber-heavy lists | fleeter and raider templates replaced (this commit) |
+
+World 9487 runs the same late scenario at 50x the stage budget (1e13) to see whether the simulation copes with fleets of that scale. The real archive has no tech levels, so the engines cannot be checked against it exactly.
