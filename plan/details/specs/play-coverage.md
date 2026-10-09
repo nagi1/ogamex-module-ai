@@ -297,3 +297,5 @@ Worlds judged since (great war / politics / human-like, out of 3): 9463 3/-/-, 9
 | The judge listed the game's own paired messages (probe report and detection, missile attack and defence) as findings | Judge instructions say they are the game | in this commit series |
 
 Still open, per the 9472 judge: truce talk without terms (duration, scope), a war declared without a public broadcast, nine players in no club (the join chance by kind is deliberate, so left alone), 9457/9472 not carrying the hit-count lines (launched before them).
+
+Judge readings after the enemy-first and pact fixes (great war / politics / human-like): 9468 3/2/2, 9469 2/2/3 (the first human-like 3/3), 9470 3/2/2, 9471 3/1/2, 9472 2/1/2. Before them the best typical read was 2/1/1. Worlds 9474-9476 are the first with the hit-count lines and the greeting fix (greetings were 100-200 per world, eight pairs trading nine each). If those hold at 2/2/2 or better, the war and alliance aspects move and the one full run and retrain is next.
