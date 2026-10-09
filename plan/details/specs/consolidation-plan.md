@@ -53,6 +53,12 @@ The one verified, unbuilt mechanic, and the reason politics stays at 1/3.
 
 ### 2. One plan per session: arbitration against held goals
 
+**Result (10 Oct, read of the code): already closed, no code.** The saving goal is a reservation every spender honours:
+`SavingsGoal::reserved()/spendable()` for builds, `QueueableUnitPlanner::starvesSaving()` for the yard, and
+`ReserveFloor` for transfers. The one exception is deliberate and measured: a goal more than a day of production away
+does not hold the yard (`SAVING_HORIZON_HOURS`, 7 Oct), which is why the probe shows a deathstar order beside a
+terraformer goal. The proof below stays as the guard.
+
 - Test first: a session with a held saving goal and an affordable yard or build order. Prove whether the goal is spent
   past. If it is not, close this stage with the test as the guard and move on.
 - If it is: the saving goal becomes a reservation every spender subtracts before pricing (one shared reserved amount on
@@ -60,6 +66,12 @@ The one verified, unbuilt mechanic, and the reason politics stays at 1/3.
 - Proof: `invariant:saving-goal-held` across a 12 h world (no spend breaks a held goal unless the goal itself is dropped).
 
 ### 3. Know only what a player knows
+
+**First pass (10 Oct): no leak found in `app/Domain` and `app/Actions` queries on `planets` and `fleet_missions`.**
+Cross-player reads are galaxy-view data (coordinates, owner, vacation mode, destroyed) in the spy, phalanx and
+jump-gate planners, phalanx scans gated by the host's `canScanTarget`, and raid planning reads a copy of the planet
+rebuilt from the espionage report (`ReportedPlanet`), never the live row. Still to audit: reads of `users`, research
+and highscore columns, and the Rust battle-sim inputs. The invariant test below is not written yet.
 
 - One audit pass: every query in `app/Domain/Decision` and the planners that reads `planets`, `fleet_missions`,
   `users_tech` or unit columns for a player other than the account. Each is either through a report/observation the
