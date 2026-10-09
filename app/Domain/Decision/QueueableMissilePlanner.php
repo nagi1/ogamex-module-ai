@@ -68,6 +68,7 @@ class QueueableMissilePlanner
         // A mate's or a pact partner's wall reaches the account through shared intel, and the raids already spare it: the
         // volleys did not, and mates who fired at each other walked out of the club (9427: 39 volleys between two members).
         $spared = app(Enemies::class)->spared($playerId);
+        $enemies = app(Enemies::class)->of($playerId);
 
         foreach ($player->planets->all() as $planet) {
             if (isset($refusedOrigins[$planet->getPlanetId()])) {
@@ -82,6 +83,7 @@ class QueueableMissilePlanner
             $origin = $planet->getPlanetCoordinates();
             $best = null;
             $bestWall = 0;
+            $bestEnemy = false;
 
             foreach ($reports as $report) {
                 if (isset($refusedTargets["{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}"])) {
@@ -97,12 +99,20 @@ class QueueableMissilePlanner
 
                 $wall = (int) array_sum($report->defense ?? []);
                 // The host's own interceptor is not a wall: the missiles of the target's silo answer 1:1 elsewhere.
-                if ($wall < self::MIN_DEFENCE_UNITS || $wall <= $bestWall || $this->shielded($player, (int) $report->planet_user_id)) {
+                if ($wall < self::MIN_DEFENCE_UNITS || $this->shielded($player, (int) $report->planet_user_id)) {
+                    continue;
+                }
+
+                // The wall a player thins is the one the fleet is about to hit, and at war that is the enemy's: its wall
+                // outranks a bigger one beside it (9445: 1,036 volleys on planets, 24 moon strikes).
+                $enemy = isset($enemies[(int) $report->planet_user_id]);
+                if ($best !== null && ($enemy === $bestEnemy ? $wall <= $bestWall : $bestEnemy)) {
                     continue;
                 }
 
                 $best = $report;
                 $bestWall = $wall;
+                $bestEnemy = $enemy;
             }
 
             if ($best === null) {

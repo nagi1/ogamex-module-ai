@@ -76,3 +76,26 @@ test('a probed wall in range is spared when its owner is an alliance mate', func
 
     expect(app(QueueableMissilePlanner::class)->plan($this->currentUserId))->toBeNull('a volley was offered at a mate, ' . $situation->account());
 });
+
+// A player thins the wall the fleet is about to hit, and at war that is the enemy's, even when a bigger wall stands beside it.
+test('a volley goes to the enemy wall over a bigger wall that is not an enemy', function (): void {
+    $situation = missileRefusalSituation($this);
+    $enemyId = $situation->neighbour()?->getPlayer()?->getId();
+    $enemyReport = OGame\Models\EspionageReport::query()->where('planet_user_id', $enemyId)->latest('id')->firstOrFail();
+    $biggerWall = $enemyReport->replicate();
+    $biggerWall->planet_user_id = OGame\Models\User::factory()->create()->id;
+    $biggerWall->planet_position = $enemyReport->planet_position === 15 ? 14 : (int) $enemyReport->planet_position + 1;
+    $biggerWall->defense = ['rocket_launcher' => 400];
+    $biggerWall->save();
+    app(OGame\Services\MessageService::class)->sendEspionageReportMessageToPlayer(app(OGame\Factories\PlayerServiceFactory::class)->make($this->currentUserId, true), $biggerWall->id);
+    $chosen = fn (): string => ($plan = app(QueueableMissilePlanner::class)->plan($this->currentUserId)) === null ? '' : "{$plan->targetGalaxy}:{$plan->targetSystem}:{$plan->targetPosition}";
+
+    expect($chosen())->toBe("{$biggerWall->planet_galaxy}:{$biggerWall->planet_system}:{$biggerWall->planet_position}");
+
+    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+        'player_id' => $this->currentUserId, 'other_player_id' => $enemyId, 'threat' => '0.9000', 'trust' => '-0.5000',
+        'affinity' => '0.0000', 'revision' => 0, 'last_interaction_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+    ]));
+
+    expect($chosen())->toBe(missileRefusalTarget($situation));
+});
