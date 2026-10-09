@@ -32,6 +32,15 @@ class EvaluateAiSocialExchangeAction
      */
     private const COMPENSATION_DUE_WINDOW_HOURS = 48;
 
+    /** A truce asked for without a length runs a day, the usual "24h and we'll see" between two players. */
+    private const CEASEFIRE_WINDOW_HOURS = 24;
+
+    /** @var array<int, int> */
+    private const DUE_WINDOW_HOURS = [
+        AiSocialExchangeType::CompensationOffer->value => self::COMPENSATION_DUE_WINDOW_HOURS,
+        AiSocialExchangeType::CeasefireRequest->value => self::CEASEFIRE_WINDOW_HOURS,
+    ];
+
     public function handle(int $exchangeId, float $availableAmount, CarbonImmutable $evaluatedAt): AiSocialExchange|null
     {
         return DB::transaction(function () use ($exchangeId, $availableAmount, $evaluatedAt): AiSocialExchange|null {
@@ -54,9 +63,10 @@ class EvaluateAiSocialExchangeAction
                 return $exchange->refresh();
             }
 
-            if ($exchange->type === AiSocialExchangeType::CompensationOffer && $exchange->due_at === null) {
+            $window = self::DUE_WINDOW_HOURS[$exchange->type->value] ?? null;
+            if ($window !== null && $exchange->due_at === null) {
                 $exchange->update([
-                    'due_at' => $evaluatedAt->addHours(self::COMPENSATION_DUE_WINDOW_HOURS),
+                    'due_at' => $evaluatedAt->addHours($window),
                     'revision' => $exchange->revision + 1,
                 ]);
                 $exchange->refresh();
@@ -161,13 +171,13 @@ class EvaluateAiSocialExchangeAction
 
     private function responseCreatesCommitment(AiSocialExchange $exchange): bool
     {
-        return in_array($exchange->type, [AiSocialExchangeType::HelpRequest, AiSocialExchangeType::CompensationOffer], true);
+        return in_array($exchange->type, [AiSocialExchangeType::HelpRequest, AiSocialExchangeType::CompensationOffer, AiSocialExchangeType::CeasefireRequest], true);
     }
 
     private function commitmentDirection(AiSocialExchange $exchange): AiCommitmentDirection
     {
         return match ($exchange->type) {
-            AiSocialExchangeType::HelpRequest => AiCommitmentDirection::PromisedByPlayer,
+            AiSocialExchangeType::HelpRequest, AiSocialExchangeType::CeasefireRequest => AiCommitmentDirection::PromisedByPlayer,
             AiSocialExchangeType::CompensationOffer => AiCommitmentDirection::ExpectedFromCounterparty,
             default => throw app()->makeWith(LogicException::class, ['message' => 'Only commitment-producing exchanges have a direction.']),
         };

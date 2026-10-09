@@ -1,0 +1,71 @@
+<?php
+
+use Carbon\CarbonImmutable;
+use Modules\AI\Actions\BreakAiCeasefireAction;
+use Modules\AI\Actions\EvaluateAiSocialExchangeAction;
+use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
+use Modules\AI\Actions\RecordAiSocialExchangeAction;
+use Modules\AI\Contracts\SocialCognition;
+use Modules\AI\Domain\Conversation\NativeSocialCognition;
+use Modules\AI\Domain\Decision\Enemies;
+use Modules\AI\Enums\AiCommitmentState;
+use Modules\AI\Enums\AiSocialExchangeType;
+use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Models\AiCommitment;
+use Modules\AI\Models\AiSocialExchange;
+use OGame\Models\User;
+use OGame\Services\AllianceService;
+use Tests\IsolatedAccountTestCase;
+
+uses(IsolatedAccountTestCase::class);
+
+const CEASEFIRE_NOW = '2026-10-10 12:00:00';
+
+beforeEach(function (): void {
+    app()->bind(SocialCognition::class, NativeSocialCognition::class);
+    $this->travelTo(CarbonImmutable::parse(CEASEFIRE_NOW));
+});
+
+function askedForTruce(int $playerId, int $askerId): AiSocialExchange|null
+{
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($playerId, $askerId, 92001, AiSocialExchangeType::CeasefireRequest, []);
+
+    return app(EvaluateAiSocialExchangeAction::class)->handle($exchange?->id ?? 0, 0, CarbonImmutable::now());
+}
+
+// Every judge reading flagged truce talk with no terms: a ceasefire was always answered "we'll see" and never held.
+test('a ceasefire asked for under the refusal line is agreed for a day and binds both sides', function (bool $inAlliance): void {
+    $asker = User::factory()->create();
+    if ($inAlliance) {
+        app(AllianceService::class)->createAlliance($this->currentUserId, 'TRC' . $this->currentUserId % 100, 'Truce');
+    }
+
+    $exchange = askedForTruce($this->currentUserId, $asker->id);
+
+    expect($exchange?->response)->toBe(AiSocialResponse::Accept)
+        ->and($exchange?->commitment_id)->not->toBeNull()
+        ->and(AiCommitment::query()->find($exchange?->commitment_id)?->due_at?->equalTo(CarbonImmutable::now()->addHours(24)))->toBeTrue()
+        ->and(app(Enemies::class)->spared($this->currentUserId))->toContain($asker->id)
+        ->and(app(Enemies::class)->spared($asker->id))->toContain($this->currentUserId);
+
+    $this->travel(25)->hours();
+
+    expect(app(Enemies::class)->spared($this->currentUserId))->not->toContain($asker->id);
+})->with(['alone' => [false], 'in an alliance' => [true]]);
+
+test('a ceasefire is refused to a player already held as an enemy', function (): void {
+    $asker = User::factory()->create();
+    app(RecordAiRelationshipInteractionAction::class)->handle($this->currentUserId, $asker->id, 92000, CarbonImmutable::now(), threatChange: 0.9);
+
+    expect(askedForTruce($this->currentUserId, $asker->id)?->response)->toBe(AiSocialResponse::Reject)
+        ->and(app(Enemies::class)->spared($this->currentUserId))->not->toContain($asker->id);
+});
+
+test('a hit inside the ceasefire breaks it and the attacker is no longer spared', function (): void {
+    $asker = User::factory()->create();
+    $commitmentId = askedForTruce($this->currentUserId, $asker->id)?->commitment_id;
+
+    expect(app(BreakAiCeasefireAction::class)->handle($asker->id, $this->currentUserId))->toBe(1)
+        ->and(AiCommitment::query()->find($commitmentId)?->state)->toBe(AiCommitmentState::Broken)
+        ->and(app(Enemies::class)->spared($this->currentUserId))->not->toContain($asker->id);
+});

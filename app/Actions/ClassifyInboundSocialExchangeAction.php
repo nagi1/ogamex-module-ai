@@ -137,9 +137,8 @@ class ClassifyInboundSocialExchangeAction
             return null;
         }
 
-        // No expiry is fabricated: the module cannot enforce an agreement through an
-        // in-game message, so the exchange is recorded and answered honestly instead of
-        // inventing a term it would then have to keep.
+        // The length is set when it is weighed (EvaluateAiSocialExchangeAction), and an agreed one is held by
+        // Enemies::spared() for both sides.
         return $this->exchange(AiSocialExchangeType::CeasefireRequest, []);
     }
 

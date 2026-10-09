@@ -65,6 +65,7 @@ class RecordObservedBattleReportAction
     private function recordObservations(BattleReport $battleReport, int $defenderPlayerId, int $attackerPlayerId): int
     {
         $this->signalCampaignEvents($battleReport, $defenderPlayerId, $attackerPlayerId);
+        app(BreakAiCeasefireAction::class)->handle($attackerPlayerId, $defenderPlayerId);
 
         /** @var array<int, int> $counterparties Each participant maps to the player it faced. */
         $counterparties = [

@@ -19,7 +19,9 @@ enum AiSocialResponseReason: string
     case TransportCapabilityUnavailable = 'transport_capability_unavailable';
     case MissingCeasefireExpiry = 'missing_ceasefire_expiry';
     case UnsafeCeasefireRequest = 'unsafe_ceasefire_request';
+    // Kept so exchanges recorded before ceasefires were held still load.
     case CeasefireEnforcementUnavailable = 'ceasefire_enforcement_unavailable';
+    case CeasefireAgreed = 'ceasefire_agreed';
     case CoerciveWarning = 'coercive_warning';
     case WarningAcknowledgedWithoutCommitment = 'warning_acknowledged_without_commitment';
     case MissingCooperationScope = 'missing_cooperation_scope';

@@ -4,6 +4,7 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Enums\AiAllianceStance;
 use Modules\AI\Models\AiAllianceRelation;
+use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiRelationship;
 use OGame\Models\User;
 
@@ -36,12 +37,13 @@ class Enemies
                 ->diff($this->membersOf((int) $allianceId, AiAllianceStance::Nap));
         }
 
-        return $grudges->mapWithKeys(static fn ($id): array => [(int) $id => true])->all();
+        return $grudges->diff($this->truces($playerId))->mapWithKeys(static fn ($id): array => [(int) $id => true])->all();
     }
 
     /**
-     * The players the account never scouts or raids: its alliance mates and the members of any alliance its own holds a
-     * non-aggression pact with. Hitting a mate, or a partner mid-pact, is what gets a player kicked or a pact broken.
+     * The players the account never scouts or raids: its alliance mates, the members of any alliance its own holds a
+     * non-aggression pact with, and anyone it agreed a ceasefire with that still runs. Hitting a mate, a partner
+     * mid-pact or a player mid-truce is what gets a player kicked, a pact broken or a name passed around as a liar.
      *
      * @return list<int>
      */
@@ -49,11 +51,20 @@ class Enemies
     {
         $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
         if ($allianceId === null) {
-            return [];
+            return $this->truces($playerId);
         }
 
         return User::query()->where('alliance_id', $allianceId)->whereKeyNot($playerId)->pluck('id')
-            ->map(static fn ($id): int => (int) $id)->merge($this->membersOf((int) $allianceId, AiAllianceStance::Nap))->values()->all();
+            ->map(static fn ($id): int => (int) $id)->merge($this->membersOf((int) $allianceId, AiAllianceStance::Nap))
+            ->merge($this->truces($playerId))->unique()->values()->all();
+    }
+
+    /** @return list<int> */
+    private function truces(int $playerId): array
+    {
+        return AiCommitment::query()->heldCeasefire($playerId)->get(['player_id', 'counterparty_player_id'])
+            ->map(static fn (AiCommitment $truce): int => $truce->player_id === $playerId ? $truce->counterparty_player_id : $truce->player_id)
+            ->unique()->values()->all();
     }
 
     /** @return list<int> */
