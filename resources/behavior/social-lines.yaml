@@ -36,6 +36,8 @@ default:
   compensation_offer.counter: ["need exact amounts first", "give me numbers"]
   raid_warning: ["stop attacking me", "stop attacking my planets", "back off, I'm not your farm"]
   ceasefire_plea: ["truce? this is pointless for both of us", "can we call a truce", "ceasefire? you made your point"]
+  raid_warning.detail: ["that's {hits} attacks now", "{hits} hits so far, I counted", "{hits} raids on me already"]
+  ceasefire_plea.detail: ["{hits} raids and you still want more?", "you've hit me {hits} times already", "{hits} attacks is enough for anyone"]
   attacker_notice: ["online :)", "I saw that. :)", "nice try ;)", "still here. :)"]
   transport_thanks: ["thx for the res!", "got it, thanks", "ty for the shipment"]
   alliance_welcome: ["welcome to {tag} o/", "welcome aboard, read the alliance page and ask if anything", "you're in. welcome to {tag}", "welcome! join the acs when you see one", "welcome, glad to have you in {tag}"]

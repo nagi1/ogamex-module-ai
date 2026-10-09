@@ -219,3 +219,19 @@ test('a raider who kept hitting after the warning is asked for a truce once', fu
     'hit again but only an hour later' => [1, true, 0],
     'not hit again' => [24, false, 0],
 ]);
+
+// 9457: every warning and plea was the same bare line to everyone, which the judge read as a script.
+test('a warning to a repeat raider says how many times they hit', function (): void {
+    $raider = $this->createUser();
+    initiationProfile($this->currentUserId);
+    raidedObservation($this->currentUserId, $raider->id, 7301);
+    raidedObservation($this->currentUserId, $raider->id, 7302);
+    raidedObservation($this->currentUserId, $raider->id, 7303);
+    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+        'player_id' => $this->currentUserId, 'other_player_id' => $raider->id, 'threat' => '0.9000', 'revision' => 0,
+    ]));
+
+    app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, CarbonImmutable::parse('2024-01-01 00:00:00 UTC'));
+
+    expect(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $raider->id)->value('message'))->toContain('3');
+});
