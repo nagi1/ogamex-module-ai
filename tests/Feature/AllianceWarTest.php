@@ -152,6 +152,23 @@ test('a leader who hates the offering alliance refuses the pact', function (): v
     expect(AiAllianceRelation::counterparts($partner->id, AiAllianceStance::Nap))->toBe([]);
 });
 
+// 9464: a leader who refused the pact was asked again on every pass, the same line twenty times.
+test('an offer a leader refused is not made again', function (): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $partnerLeader = User::factory()->create();
+    $partner = allianceWarLeader($partnerLeader->id, 'PART');
+    $enemy = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'ENEM', 'Enemy');
+    allianceWarAt($ours->id, $enemy->id);
+    allianceWarAt($partner->id, $enemy->id);
+    allianceWarGrudge($partnerLeader->id, $this->currentUserId);
+
+    foreach (range(1, 4) as $pass) {
+        app(AdvanceAiAlliancePoliticsAction::class)->handle();
+    }
+
+    expect(OGame\Models\ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $partnerLeader->id)->count())->toBe(1);
+});
+
 test('a betraying leader with no war left turns on the partner it has outgrown', function (int $seed, int $partnerPoints, bool $betrayed): void {
     $ours = allianceWarLeader($this->currentUserId, 'OURS', $seed);
     $partnerLeader = User::factory()->create();

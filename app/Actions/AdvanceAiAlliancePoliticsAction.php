@@ -335,9 +335,11 @@ class AdvanceAiAlliancePoliticsAction
                     continue;
                 }
 
-                // A human leader answers in their own words (answerHumanLeader), so the offer is made once and awaited.
+                // The offer is made once and awaited: a human leader answers in their own words (answerHumanLeader), and an
+                // AI leader that hates the offerer refuses once instead of being asked again on every pass (9464: the
+                // same offer twenty times to one leader).
                 $human = !in_array($partner->founder_user_id, $founders, true);
-                if ($human && $this->offeredTo($alliance, (int) $partner->founder_user_id)) {
+                if ($this->offeredTo($alliance, (int) $partner->founder_user_id)) {
                     continue;
                 }
 
@@ -348,7 +350,9 @@ class AdvanceAiAlliancePoliticsAction
                 }
 
                 if ($this->hates((int) $partner->founder_user_id, $this->members((int) $alliance->id))) {
-                    continue;
+                    app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_refuse', (string) $alliance->alliance_tag));
+
+                    return 1;
                 }
 
                 AiAllianceRelation::query()->create([
