@@ -42,16 +42,19 @@ phases:
     opening: []
 # The late hulls and defences (shares of the late fleet and wall the wiki describes) stay in the same list: one the account
 # cannot build yet is skipped, so they only start to count once their requirements are met.
+# Attack hulls follow 599 real late battles (OGMem archive, read 10 Oct 2026): by count the attacking fleet is about
+# 35-50% battlecruisers and 20-45% cruisers, 4-7% battleships, 3-13% light fighters, and only 2-3% destroyers and bombers.
+# A destroyer-and-bomber heavy list (the wiki's theory) is not what players fly.
 fleet_template:
-  light_fighter: 15
-  cruiser: 20
-  battle_ship: 20
-  battlecruiser: 15
-  large_cargo: 15
-  recycler: 10
-  bomber: 5
-  destroyer: 10
-  deathstar: 2
+  battlecruiser: 35
+  cruiser: 25
+  battle_ship: 7
+  light_fighter: 6
+  destroyer: 4
+  bomber: 3
+  deathstar: 3
+  large_cargo: 10
+  recycler: 7
 defence_template:
   rocket_launcher: 60
   light_laser: 40
