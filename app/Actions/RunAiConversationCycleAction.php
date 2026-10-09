@@ -77,6 +77,7 @@ class RunAiConversationCycleAction
         // After answering, the account also reaches out when something happened:
         // a received transport earns a thank-you (SOC1, DEF-018).
         $answered += app(InitiateAiSocialContactAction::class)->handle($playerId, $now);
+        $answered += app(SpeakInAllianceChannelAction::class)->handle($playerId, $now);
 
         return $answered;
     }

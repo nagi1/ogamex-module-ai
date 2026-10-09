@@ -117,37 +117,53 @@ test('a chatty account thanks a whole pile of senders, a quiet one thanks one', 
         ->and($action->handle($chatty->id, $now))->toBe(3);
 });
 
-test('a chatty member welcomes a newcomer and a quiet one stays silent', function (): void {
+/** A club of the given accounts, as the host holds it: members carry the alliance id. */
+function initiationClub(int $founderId, int ...$memberIds): int
+{
+    $alliance = app(OGame\Services\AllianceService::class)->createAlliance($founderId, 'CLUB' . $founderId % 100, 'Club');
+    OGame\Models\User::query()->whereIn('id', $memberIds)->update(['alliance_id' => $alliance->id]);
+
+    return $alliance->id;
+}
+
+test('a chatty member welcomes a newcomer in the alliance channel and a quiet one stays silent', function (): void {
     $chatty = $this->createUser();
     $quiet = $this->createUser();
     $joiner = $this->createUser();
     initiationProfile($chatty->id, 9);  // sociability 0.90 -> greets
     initiationProfile($quiet->id, 5);   // sociability 0.10 -> silent
+    $allianceId = initiationClub($joiner->id, $chatty->id, $quiet->id);
     joinedObservation($chatty->id, $joiner->id, 8101);
-    joinedObservation($quiet->id, $joiner->id, 8102);
+    joinedObservation($quiet->id, $joiner->id, 8101);
 
     $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
     $action = app(InitiateAiSocialContactAction::class);
 
     expect($action->handle($chatty->id, $now))->toBe(1)
-        ->and(ChatMessage::query()->where('sender_id', $chatty->id)->where('recipient_id', $joiner->id)->exists())->toBeTrue()
-        ->and(AiSocialExchange::query()->where('player_id', $chatty->id)->where('counterparty_player_id', $joiner->id)->where('type', AiSocialExchangeType::Greeting)->exists())->toBeTrue()
+        ->and(ChatMessage::query()->where('sender_id', $chatty->id)->where('alliance_id', $allianceId)->exists())->toBeTrue()
+        ->and(ChatMessage::query()->where('sender_id', $chatty->id)->whereNotNull('recipient_id')->exists())->toBeFalse()
         ->and($action->handle($quiet->id, $now))->toBe(0)
         ->and(ChatMessage::query()->where('sender_id', $quiet->id)->exists())->toBeFalse();
 });
 
-test('a newcomer is welcomed only once', function (): void {
-    $chatty = $this->createUser();
+// 9471: eight co-members each sent the joiner a hello; a real club has one member welcome them.
+test('a newcomer is welcomed once by one member, not by every chatty one', function (): void {
+    $first = $this->createUser();
+    $second = $this->createUser();
     $joiner = $this->createUser();
-    initiationProfile($chatty->id, 9);
-    joinedObservation($chatty->id, $joiner->id, 8201);
+    initiationProfile($first->id, 9);
+    initiationProfile($second->id, 9);
+    initiationClub($joiner->id, $first->id, $second->id);
+    joinedObservation($first->id, $joiner->id, 8201);
+    joinedObservation($second->id, $joiner->id, 8201);
 
     $action = app(InitiateAiSocialContactAction::class);
     $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
 
-    expect($action->handle($chatty->id, $now))->toBe(1)
-        ->and($action->handle($chatty->id, $now))->toBe(0)
-        ->and(ChatMessage::query()->where('sender_id', $chatty->id)->where('recipient_id', $joiner->id)->count())->toBe(1);
+    expect($action->handle($first->id, $now))->toBe(1)
+        ->and($action->handle($first->id, $now))->toBe(0)
+        ->and($action->handle($second->id, $now))->toBe(0)
+        ->and(ChatMessage::query()->whereNotNull('alliance_id')->count())->toBe(1);
 });
 
 function raidedObservation(int $playerId, int $raiderId, int $sourceId): AiObservation

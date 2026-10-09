@@ -150,6 +150,19 @@ miner:
     - 'res came through, thx'
     - 'ty for the delivery'
     - 'shipment received, thx'
+  ally_hit.victim:
+    - '{attacker} is hitting me at {coords}, anyone in range?'
+    - 'got hit by {attacker} at {coords}, need a defend'
+    - '{attacker} on my {coords} again, can someone send fleet?'
+  ally_hit.witness:
+    - '{attacker} is farming {victim} again, anyone got ships near {coords}?'
+    - 'heads up, {attacker} attacked {victim} ({coords})'
+    - '{attacker} hit {victim} at {coords}, who can help?'
+  member_welcome:
+    - 'welcome {name}, glad to have you in {tag}'
+    - '{name} o/ welcome to {tag}'
+    - 'welcome aboard {name} in {tag}, read the alliance page'
+    - 'welcome {name}, good to have you in {tag}'
 turtle:
   greeting:
     - hey
@@ -301,6 +314,20 @@ turtle:
     - 'got it, thanks'
     - 'ty for the shipment'
     - 'res received, thx'
+  ally_hit.victim:
+    - '{attacker} is hitting me at {coords}, anyone in range?'
+    - 'got hit by {attacker} at {coords}, need a defend'
+    - '{attacker} on my {coords} again, can someone send fleet?'
+    - '{attacker} attacking me at {coords}, anyone in range?'
+  ally_hit.witness:
+    - '{attacker} is farming {victim} again, anyone got ships near {coords}?'
+    - 'heads up, {attacker} attacked {victim} ({coords})'
+    - "{victim} hit by {attacker} at {coords}, who's close?"
+  member_welcome:
+    - 'welcome {name}, glad to have you in {tag}'
+    - '{name} o/ welcome to {tag}'
+    - 'welcome aboard {name}, read the alliance page and ask if anything in {tag}'
+    - 'welcome {name}, check the {tag} alliance page and ask if anything'
 fleeter:
   greeting:
     - yo
@@ -450,6 +477,21 @@ fleeter:
     - 'got it, ty'
     - 'ty for res'
     - 'thanks for the res'
+  ally_hit.victim:
+    - '{attacker} on me at {coords}, anyone near?'
+    - 'hit by {attacker} at {coords}, need help'
+    - '{attacker} at {coords}, anyone in range?'
+    - "getting hit by {attacker} at {coords}, who's close?"
+  ally_hit.witness:
+    - "{attacker} hit {victim} at {coords}, who's near?"
+    - 'saw {attacker} on {victim} at {coords}, anyone close?'
+    - '{victim} hit by {attacker} at {coords}, need backup?'
+    - "{attacker} farming {victim} at {coords}, who's in range?"
+  member_welcome:
+    - 'welcome {name} to {tag}'
+    - '{name} in {tag}, welcome'
+    - 'welcome {name}, {tag} got you'
+    - '{name} joins {tag}, welcome'
 raider:
   greeting:
     - yo
@@ -598,6 +640,21 @@ raider:
     - 'got it, ty'
     - 'ty for shipment'
     - 'res landed, thx'
+  ally_hit.victim:
+    - '{attacker} hitting me at {coords}, anyone in range?'
+    - 'got hit by {attacker} at {coords}, need defend'
+    - '{attacker} on my {coords} again, send fleet?'
+    - '{attacker} at {coords}, need help'
+  ally_hit.witness:
+    - "{victim} hit by {attacker} at {coords}, who's in range?"
+    - '{attacker} farming {victim} again near {coords}?'
+    - 'heads up, {attacker} hit {victim} at {coords}'
+    - '{victim} got hit by {attacker} ({coords})'
+  member_welcome:
+    - "welcome {name}, glad you're in {tag}"
+    - '{name} o/ welcome to {tag}'
+    - 'welcome {name}. read alliance page, ask if needed'
+    - 'welcome aboard {name}, {tag} got you'
 hybrid:
   greeting:
     - hey
@@ -749,6 +806,20 @@ hybrid:
     - 'got it, thx'
     - 'ty for res'
     - 'thanks for the res'
+  ally_hit.victim:
+    - '{attacker} is hitting me at {coords}, anyone in range?'
+    - 'got hit by {attacker} at {coords}, need a defend'
+    - '{attacker} on my {coords} again, can someone send fleet?'
+    - 'under attack by {attacker} at {coords}, need help'
+  ally_hit.witness:
+    - '{attacker} is farming {victim} again, anyone got ships near {coords}?'
+    - 'heads up, {attacker} attacked {victim} ({coords})'
+    - '{victim} hit by {attacker} at {coords}, anyone near?'
+  member_welcome:
+    - 'welcome {name}, glad to have you in {tag}'
+    - '{name} o\/ welcome to {tag}'
+    - 'welcome aboard {name}. read the alliance page and ask if anything'
+    - 'welcome {name}! check the alliance page'
 trader:
   greeting:
     - hey
@@ -899,6 +970,20 @@ trader:
     - 'got it, thanks'
     - 'ty for the shipment'
     - 'thanks for the res'
+  ally_hit.victim:
+    - '{attacker} is hitting me at {coords}, anyone in range?'
+    - 'got hit by {attacker} at {coords}, need a defend'
+    - '{attacker} on my {coords} again, can someone send fleet?'
+    - '{attacker} attacking me at {coords}, help?'
+  ally_hit.witness:
+    - '{attacker} is farming {victim} again, anyone got ships near {coords}?'
+    - 'heads up, {attacker} attacked {victim} ({coords})'
+    - '{attacker} hit {victim} at {coords}, anyone nearby?'
+  member_welcome:
+    - 'welcome {name}, glad to have you in {tag}'
+    - '{name} o/ welcome to {tag}'
+    - 'welcome aboard {name}, read the alliance page in {tag}'
+    - 'glad to have you in {tag}, {name}'
 casual:
   greeting:
     - yo
@@ -1050,3 +1135,17 @@ casual:
     - 'got it, thanks'
     - 'ty for the shipment'
     - 'ty for res'
+  ally_hit.victim:
+    - '{attacker} is hitting me at {coords}, anyone in range?'
+    - 'got hit by {attacker} at {coords}, need a defend'
+    - '{attacker} on my {coords} again, can someone send fleet?'
+    - '{attacker} attacking me at {coords}, who can help?'
+  ally_hit.witness:
+    - '{attacker} is farming {victim} again, anyone near {coords}?'
+    - 'heads up, {attacker} attacked {victim} ({coords})'
+    - '{attacker} hit {victim} at {coords}, need backup?'
+  member_welcome:
+    - 'welcome {name}, glad to have you in {tag}'
+    - '{name} o/ welcome to {tag}'
+    - 'welcome aboard {name}. read the alliance page and ask if anything in {tag}'
+    - 'welcome {name}, {tag} is glad to have you'

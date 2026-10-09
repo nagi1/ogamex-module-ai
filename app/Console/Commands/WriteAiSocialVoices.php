@@ -18,6 +18,8 @@ use Throwable;
         {--out= : Write here instead of resources/behavior/social-voices.yaml}')]
 class WriteAiSocialVoices extends Command
 {
+    private const SAMPLES = ['{attacker}' => 'Zorak', '{victim}' => 'Lena', '{coords}' => '2:45:7', '{name}' => 'Kira', '{tag}' => 'ORBITAL', '{amount}' => '50000', '{hits}' => '4'];
+
     public function handle(): int
     {
         config(['ai.classification.enabled' => true]);
@@ -58,12 +60,29 @@ class WriteAiSocialVoices extends Command
         $voice = [];
         foreach ($keys as $entry) {
             $key = (string) ($entry['key'] ?? '');
-            $lines = array_values(array_filter((array) ($entry['lines'] ?? []), static fn ($line): bool => is_string($line) && app(GuardAiOutboundTextAction::class)->reads($line)));
-            if (array_key_exists($key, $defaults) && $lines !== []) {
+            if (!array_key_exists($key, $defaults)) {
+                continue;
+            }
+
+            // A line keeps the slots all the defaults share, and is judged the way a player sees it: with the slots filled.
+            $slots = $this->sharedSlots((array) $defaults[$key]);
+            $lines = array_values(array_filter((array) ($entry['lines'] ?? []), fn ($line): bool => is_string($line)
+                && array_reduce($slots, static fn (bool $kept, string $slot): bool => $kept && str_contains($line, $slot), true)
+                && app(GuardAiOutboundTextAction::class)->reads(strtr($line, self::SAMPLES))));
+            if ($lines !== []) {
                 $voice[$key] = $lines;
             }
         }
 
         return $voice;
+    }
+
+    /**
+     * @param list<string> $lines
+     * @return list<string>
+     */
+    private function sharedSlots(array $lines): array
+    {
+        return array_values(array_filter(array_keys(self::SAMPLES), static fn (string $slot): bool => $lines !== [] && count(array_filter($lines, static fn (string $line): bool => str_contains($line, $slot))) === count($lines)));
     }
 }

@@ -40,4 +40,7 @@ default:
   ceasefire_plea.detail: ["{hits} raids and you still want more?", "you've hit me {hits} times already", "{hits} attacks is enough for anyone"]
   attacker_notice: ["online :)", "I saw that. :)", "nice try ;)", "still here. :)"]
   transport_thanks: ["thx for the res!", "got it, thanks", "ty for the shipment"]
+  ally_hit.victim: ["{attacker} is hitting me at {coords}, anyone in range?", "got hit by {attacker} at {coords}, need a defend", "{attacker} on my {coords} again, can someone send fleet?"]
+  ally_hit.witness: ["{victim} just got hit by {attacker} at {coords}, who's in range?", "{attacker} is farming {victim} again, anyone got ships near {coords}?", "heads up, {attacker} attacked {victim} ({coords})"]
+  member_welcome: ["welcome {name}, glad to have you in {tag}", "{name} o/ welcome to {tag}", "welcome aboard {name}. read the alliance page and ask if anything"]
   alliance_welcome: ["welcome to {tag} o/", "welcome aboard, read the alliance page and ask if anything", "you're in. welcome to {tag}", "welcome! join the acs when you see one", "welcome, glad to have you in {tag}"]

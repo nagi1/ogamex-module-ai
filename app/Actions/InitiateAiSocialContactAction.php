@@ -13,6 +13,8 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\RandomSource;
+use OGame\Models\Alliance;
+use OGame\Models\User;
 
 /**
  * Initiates contact the way a player does: after something happened. A received
@@ -264,39 +266,27 @@ class InitiateAiSocialContactAction
         }
 
         $joinerId = (int) $observation->subject_player_id;
+        $allianceId = $joinerId > 0 ? User::query()->whereKey($joinerId)->value('alliance_id') : null;
 
-        if ($joinerId <= 0 || $joinerId === $profile->player_id) {
+        if ($joinerId === $profile->player_id || $allianceId === null || $this->alreadyWelcomed($observation, $joinerId)) {
             return false;
         }
 
-        $exchange = app(RecordAiSocialExchangeAction::class)->handle(
-            $profile->player_id,
-            $joinerId,
-            $observation->id,
-            AiSocialExchangeType::Greeting,
-            [],
-            null,
-            1,
-        );
+        // One member welcomes a newcomer, in the alliance channel where the club can see it, not eight DMs to the joiner.
+        $line = app(BuildAuthoredSocialReplyAction::class)->line($profile, 'member_welcome', (string) $observation->id, [
+            'name' => (string) User::query()->whereKey($joinerId)->value('username'),
+            'tag' => (string) Alliance::query()->whereKey($allianceId)->value('alliance_tag'),
+        ]);
+        $exchange = $line === null ? null : app(RecordAiSocialExchangeAction::class)->handle($profile->player_id, $joinerId, $observation->id, AiSocialExchangeType::Greeting, [], null, 1);
 
-        if ($exchange === null) {
-            return false;
-        }
+        return $exchange !== null && app(DeliverAiAllianceReplyAction::class)->handle($profile->player_id, (int) $allianceId, $line) !== null;
+    }
 
-        $evaluated = app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, $now);
-
-        if ($evaluated === null) {
-            return false;
-        }
-
-        $message = app(BuildAuthoredSocialReplyAction::class)->handle($evaluated, $profile);
-
-        if ($message === null) {
-            return false;
-        }
-
-        app(DeliverAiDirectReplyAction::class)->handle($profile->player_id, $joinerId, $message);
-
-        return true;
+    /** Another member already greeted this join: the same membership row is observed by every co-member. */
+    private function alreadyWelcomed(AiObservation $observation, int $joinerId): bool
+    {
+        return AiSocialExchange::query()->where('type', AiSocialExchangeType::Greeting)->where('counterparty_player_id', $joinerId)
+            ->whereIn('source_observation_id', AiObservation::query()->where('kind', AiObservationKind::AllianceMembershipJoined)
+                ->where('source_type', $observation->source_type)->where('source_id', $observation->source_id)->select('id'))->exists();
     }
 }
