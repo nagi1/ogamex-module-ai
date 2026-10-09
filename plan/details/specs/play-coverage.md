@@ -266,3 +266,19 @@ The social model had one more fault: threat only rose. 63 of 86 relationships in
 - A war ends in peace once it has stood 24 hours and the grudges between the two sides have faded under 0.3 (`alliance-war.yaml`, 0e1e09f).
 
 9434 (12 accounts, `COGNITION=full`, 6 h) used every mission and object and held 109 social exchanges (the native worlds hold none), but one club of 6 and no alliance war. No exchange was an apology, ceasefire or compensation: the ceasefire evaluator always answers "enforcement unavailable". 9435 (36 h, with the fade and peace) and 9433 (100 accounts, 6 h) are running; their reads follow.
+
+### 9 Oct, night: the veteran judge, the language lane and the corpus
+
+The JEV judge (`ai:judge-world`, saved under `plan/research/judge-*.md`) now reads every finished social world. Scores for great war and politics, out of 3: 9437 1/1, 9441 0/0, 9442 0/0 (one club, no war), then 9443 2/1, 9444 2/1 and 9447 2/2 (three clubs, wars, a pact, no departures).
+
+| Finding (world) | Fix | Commit |
+|---|---|---|
+| The classifier never read AI-to-AI messages, so no world recorded a reading (9434, 9440-9442) | `AI_CLASSIFICATION_READ_AI_SENDERS` (default off; on in 9449 and 9450-9452) | d414a76 |
+| Only routine notices, greetings and thanks were sent, so no exchange reached the language model (9440: 0 requests) | A raided account writes "stop attacking me" once, and asks a raider who kept hitting for a truce six hours later; persona lines are model-drafted and read back by the classifier | 8c0524c, 9ce6b5c, 9069534 |
+| 9 of 14 players unallied and farmed 88 times; no second bloc (9437, 9441, 9442) | A player with two war-level grudges wants a club whatever their kind | 18e6994 |
+| A club declared war on a bloc five times stronger and was hit five to one (9437) | No declaration on an alliance more than four times stronger, unless a pact partner already fights it | 26881ff |
+| A club declared on two blocs in eight minutes and lost both exchanges (9444, 9443) | One open war at a time | 7b3cd69 |
+| Solos hit the dominant club back 23 to 88 | A raider leaves the members of an alliance more than three times its own side alone, unless it is an enemy | cd07a7c |
+| Allies are expected to support each other in war | An alliance joins a partner's war on half the grievance | 32b6f9d |
+
+Language lane: 37 to 46 model-written replies a world for under one cent, e.g. "lol chill, nobody said anything about a farm. gl out there." The corpus (`rl/scripts/social_corpus.py`) holds 138 model-written lines, no JEV readings yet. Still open, per the judge: repeated one-liners across clubs, only four public broadcasts, one reactive pact, and the dominant club still farming solos (96 raids) during its war although the spy planner reads enemies first. Mid-staged 24-hour worlds do not reach the moon, gate or battlecruiser objects; the late-staged ones do (9447: every object, 5 moon destructions).
