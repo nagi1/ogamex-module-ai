@@ -313,11 +313,12 @@ class AdvanceAiAlliancePoliticsAction
     /** Whether the AI leader offered this human a pact lately: the offer is the message it sent, no other record. */
     private function offeredTo(Alliance $ours, int $humanId): bool
     {
-        $offer = $this->line('pact_offer', '');
-        $opening = substr($offer, 0, (int) strpos($offer . '[', '['));
+        $offers = (array) (((array) ($this->policy['lines'] ?? []))['pact_offer'] ?? []);
+        $openings = array_map(static fn (string $offer): string => substr($offer, 0, (int) strpos($offer . '[', '[')), array_values($offers));
 
         return ChatMessage::query()->where('sender_id', $ours->founder_user_id)->where('recipient_id', $humanId)
-            ->where('created_at', '>=', now()->subDays(self::OFFER_DAYS))->where('message', 'like', $opening . '%')->exists();
+            ->where('created_at', '>=', now()->subDays(self::OFFER_DAYS))
+            ->where(fn ($query) => array_reduce($openings, static fn ($query, string $opening) => $query->orWhere('message', 'like', $opening . '%'), $query))->exists();
     }
 
     /** @param list<int> $founders */
@@ -457,6 +458,10 @@ class AdvanceAiAlliancePoliticsAction
 
     private function line(string $key, string $tag): string
     {
-        return str_replace('{tag}', $tag, (string) (((array) ($this->policy['lines'] ?? []))[$key] ?? ''));
+        $line = ((array) ($this->policy['lines'] ?? []))[$key] ?? '';
+        // Several wordings per line, picked by the other alliance's tag so the same declaration is not repeated verbatim.
+        $line = is_array($line) ? (string) ($line[crc32($key . $tag) % max(1, count($line))] ?? '') : (string) $line;
+
+        return str_replace('{tag}', $tag, $line);
     }
 }

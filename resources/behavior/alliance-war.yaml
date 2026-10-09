@@ -9,11 +9,11 @@ war_grievance: 0.8
 
 # The leader's words. {tag} is the other alliance's tag. Players read these; the module wrote them from the decision.
 lines:
-  war_broadcast: "We are at war with [{tag}]. Their planets and moons are targets; join every ACS on them."
-  war_to_leader: "Your members have hit ours once too often. [{tag}] and we are at war."
+  war_broadcast: ["We are at war with [{tag}]. Their planets and moons are targets; join every ACS on them.", "War with [{tag}]. Hit their planets and moons, join every ACS you see.", "[{tag}] is the enemy now. Probe them, hit them, and join the ACS on their moons."]
+  war_to_leader: ["Your members have hit ours once too often. [{tag}] and we are at war.", "[{tag}]: we are done being farmed by your people. This is war.", "Enough. Your members keep hitting ours, so [{tag}] and we are at war from now."]
   war_external: "War: [{tag}]"
-  pact_offer: "We are both at war with [{tag}]. Non-aggression between us until it is over?"
-  pact_accept: "Agreed. No fleet of ours flies at [{tag}]."
+  pact_offer: ["We are both at war with [{tag}]. Non-aggression between us until it is over?", "[{tag}] is hitting us both. NAP until they are dealt with?", "Same enemy, [{tag}]. Want to leave each other alone and focus on them?"]
+  pact_accept: ["Agreed. No fleet of ours flies at [{tag}].", "Deal. We stay off you, [{tag}] is the target.", "Ok, NAP. Our fleets stay clear of [{tag}]."]
   betrayal_broadcast: "Our pact with [{tag}] is over. They are a target from today; hit them before they regroup."
   conspiracy_offer: "[{tag}] holds half the universe. A pact between us and war on them together; not a word to our members until the fleets fly."
   conspiracy_accept: "Agreed. We hit [{tag}] together."
