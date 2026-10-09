@@ -726,3 +726,51 @@ test('a raid launches from the moon the fleet sits on, not the home holding prob
 
     expect($plan?->originPlanetId)->toBe($moon->getPlanetId());
 });
+
+// 9460 and 9461: the top club sent 123 and 157 raids at the solos beside it, against 142 and 180 at the alliance it
+// fought. At war the fleet goes to the enemy; the others wait for a session with no enemy to hit.
+test('at war an account raids its enemy first and the other targets wait', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 40);
+    $enemy = $this->createForeignPlanet();
+    $enemy->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $solo = $this->createForeignPlanet();
+    $solo->addResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $now = CarbonImmutable::create(2026, 9, 11, 8, 0, 0, 'UTC');
+    $reports = [];
+    foreach ([$enemy, $solo] as $planet) {
+        $coordinates = $planet->getPlanetCoordinates();
+        $reports[] = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+    }
+    $playerId = $this->currentUserId;
+    $planetId = $this->currentPlanetId;
+    $snapshot = static fn (array $ids): PerceptionSnapshot => app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => $playerId,
+        'observedAt' => $now,
+        'planets' => [['id' => $planetId, 'resources' => ['metal' => 5_000, 'crystal' => 5_000, 'deuterium' => 5_000]]],
+        'targetReports' => array_map(static fn (int $id): array => [
+            'report_id' => $id, 'observed_at' => $now->getTimestamp(), 'expires_at' => $now->addHour()->getTimestamp(),
+            'confidence' => 0.8, 'travel_cost' => 0.2, 'attack_permitted' => true, 'score_viable' => true,
+        ], $ids),
+        'availableActions' => array_fill_keys(array_map(static fn (AiCapability $capability): string => $capability->value, AiCapability::cases()), false),
+        'fleetsaveEligible' => false,
+        'recoveryFactor' => 0.1,
+        'sourceTimestamps' => [],
+        'fleetSlotsFree' => 2,
+    ]);
+    $raids = static fn ($generation): array => collect($generation->candidates)
+        ->filter(static fn ($candidate): bool => $candidate->type === AiCandidateActionType::Raid)
+        ->map(static fn ($candidate): int => $candidate->parameters['report_id'])->values()->all();
+
+    expect($raids(app(CandidateActionFactory::class)->create($snapshot($reports))))->toBe($reports);
+
+    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+        'player_id' => $this->currentUserId, 'other_player_id' => $enemy->getPlayer()?->getId(), 'threat' => '0.9000', 'trust' => '-0.5000',
+        'affinity' => '0.0000', 'revision' => 0, 'last_interaction_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+    ]));
+    $war = app(CandidateActionFactory::class)->create($snapshot($reports));
+
+    expect($raids($war))->toBe([$reports[0]])
+        ->and($war->rejections)->toHaveKey('report:' . $reports[1], AiCandidateRejectionReason::EnemyPreferred->value);
+});

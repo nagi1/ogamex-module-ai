@@ -10,4 +10,5 @@ enum AiCandidateRejectionReason: string
     case ScoreBelowViability = 'score_below_viability';
     case RaidNotViable = 'raid_not_viable';
     case DefendedTargetPreferred = 'defended_target_preferred';
+    case EnemyPreferred = 'enemy_preferred';
 }

@@ -10,6 +10,7 @@ use Modules\AI\Enums\AiCapability;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiWorkItem;
+use OGame\Models\EspionageReport;
 
 class CandidateActionFactory
 {
@@ -397,24 +398,66 @@ class CandidateActionFactory
         // planner, the empty farm waits: the fight is the better play and the farm stays for the sessions
         // that have nothing defended to hit.
         if ($farms !== [] && count($farms) < count($candidates)) {
-            $candidates = array_values(array_filter(
-                $candidates,
-                static function (CandidateAction $candidate) use ($farms, &$rejections): bool {
-                    $key = 'report:' . ($candidate->parameters['report_id'] ?? '');
-                    if (!in_array($key, $farms, true)) {
-                        return true;
-                    }
-                    $rejections[$key] = AiCandidateRejectionReason::DefendedTargetPreferred->value;
+            $candidates = $this->waitFor($candidates, $farms, AiCandidateRejectionReason::DefendedTargetPreferred, $rejections);
+        }
 
-                    return false;
-                },
-            ));
+        // At war the fleet goes to the enemy first (a club's raids on the alliance it fights, not on the solos beside it):
+        // other targets wait for the sessions that have no enemy to hit. 9460 and 9461 sent 123 and 157 raids at solos
+        // beside 142 and 180 at the declared enemy.
+        $enemies = $this->enemyReports($perception->playerId, $candidates);
+        if ($enemies !== [] && count($enemies) < count($candidates)) {
+            $candidates = $this->waitFor($candidates, $enemies, AiCandidateRejectionReason::EnemyPreferred, $rejections, true);
         }
 
         return app()->makeWith(CandidateGeneration::class, [
             'candidates' => $candidates,
             'rejections' => $rejections,
         ]);
+    }
+
+    /**
+     * The candidates whose report key is (or, with $keep, is not) in the list, the rest recorded as waiting.
+     *
+     * @param list<CandidateAction> $candidates
+     * @param list<string> $keys
+     * @param array<string, string> $rejections
+     * @return list<CandidateAction>
+     */
+    private function waitFor(array $candidates, array $keys, AiCandidateRejectionReason $reason, array &$rejections, bool $keep = false): array
+    {
+        return array_values(array_filter(
+            $candidates,
+            static function (CandidateAction $candidate) use ($keys, $reason, $keep, &$rejections): bool {
+                $key = 'report:' . ($candidate->parameters['report_id'] ?? '');
+                if (in_array($key, $keys, true) === $keep) {
+                    return true;
+                }
+                $rejections[$key] = $reason->value;
+
+                return false;
+            },
+        ));
+    }
+
+    /**
+     * The report keys among these candidates that belong to a player this account is at war with.
+     *
+     * @param list<CandidateAction> $candidates
+     * @return list<string>
+     */
+    private function enemyReports(int $playerId, array $candidates): array
+    {
+        $enemies = app(Enemies::class)->of($playerId);
+        if ($enemies === [] || $candidates === []) {
+            return [];
+        }
+
+        return EspionageReport::query()
+            ->whereIn('id', array_map(static fn (CandidateAction $candidate): int => (int) ($candidate->parameters['report_id'] ?? 0), $candidates))
+            ->whereIn('planet_user_id', array_keys($enemies))
+            ->pluck('id')
+            ->map(static fn ($id): string => 'report:' . $id)
+            ->all();
     }
 
     /**
