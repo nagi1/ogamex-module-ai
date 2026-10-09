@@ -43,5 +43,7 @@ default:
   ally_hit.victim: ["{attacker} is hitting me at {coords}, anyone in range?", "got hit by {attacker} at {coords}, need a defend", "{attacker} on my {coords} again, can someone send fleet?"]
   ally_hit.witness: ["{victim} just got hit by {attacker} at {coords}, who's in range?", "{attacker} is farming {victim} again, anyone got ships near {coords}?", "heads up, {attacker} attacked {victim} ({coords})"]
   ally_defend: ["sending {ships} ships to {victim} at {coords}", "on my way to {victim}, {ships} ships holding at {coords}", "{victim} hold on, {ships} ships coming to {coords}"]
+  ally_acs_open: ["opened an ACS on {target} at {coords}, join in", "ACS up on {target} ({coords}), hop on if you can", "hitting {target} at {coords}, join the ACS"]
+  ally_acs_join: ["joined the ACS on {target} at {coords}", "in on the {target} ACS ({coords})", "my fleet is in the {coords} ACS on {target}"]
   member_welcome: ["welcome {name}, glad to have you in {tag}", "{name} o/ welcome to {tag}", "welcome aboard {name}. read the alliance page and ask if anything"]
   alliance_welcome: ["welcome to {tag} o/", "welcome aboard, read the alliance page and ask if anything", "you're in. welcome to {tag}", "welcome! join the acs when you see one", "welcome, glad to have you in {tag}"]

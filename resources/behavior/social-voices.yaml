@@ -168,6 +168,15 @@ miner:
     - 'on my way to {victim}, {ships} ships holding at {coords}'
     - '{victim} hold on, {ships} ships coming to {coords}'
     - 'sending {ships} ships to {victim} ({coords})'
+  ally_acs_open:
+    - 'opened an ACS on {target} at {coords}, join in'
+    - 'ACS up on {target} ({coords}), hop on if you can'
+    - 'hitting {target} at {coords}, join the ACS'
+    - 'ACS on {target} at {coords}, come join'
+  ally_acs_join:
+    - 'joined the ACS on {target} at {coords}'
+    - 'in on the {target} ACS ({coords})'
+    - "I'm in the {target} ACS at {coords}"
 turtle:
   greeting:
     - hey
@@ -338,6 +347,15 @@ turtle:
     - 'on my way to {victim}, {ships} ships holding at {coords}'
     - '{victim} hold on, {ships} ships coming to {coords}'
     - '{ships} ships en route to {victim} at {coords}'
+  ally_acs_open:
+    - 'ACS on {target} at {coords}, join in'
+    - 'ACS up on {target} ({coords}), hop on'
+    - 'hitting {target} at {coords}, join the ACS'
+    - 'ACS open on {target} at {coords}'
+  ally_acs_join:
+    - 'joined the ACS on {target} at {coords}'
+    - 'in on the {target} ACS ({coords})'
+    - "I'm in the {target} ACS at {coords}"
 fleeter:
   greeting:
     - yo
@@ -507,6 +525,16 @@ fleeter:
     - '{ships} en route to {victim} at {coords}'
     - 'on my way to {victim}, {ships} at {coords}'
     - '{victim} hold, {ships} ships to {coords}'
+  ally_acs_open:
+    - 'ACS on {target} at {coords}, join'
+    - 'ACS up on {target} ({coords}), hop on'
+    - 'hitting {target} at {coords}, join ACS'
+    - 'ACS open on {target} at {coords}'
+  ally_acs_join:
+    - 'joined ACS on {target} at {coords}'
+    - 'in on {target} ACS ({coords})'
+    - 'my fleet in {coords} ACS on {target}'
+    - 'joined {target} at {coords}'
 raider:
   greeting:
     - yo
@@ -675,6 +703,16 @@ raider:
     - 'on my way to {victim}, {ships} ships holding at {coords}'
     - '{victim} hold on, {ships} ships coming to {coords}'
     - '{ships} ships inbound to {victim} at {coords}'
+  ally_acs_open:
+    - 'ACS on {target} at {coords}, join'
+    - 'ACS up on {target} ({coords}), hop in'
+    - 'hitting {target} at {coords}, join ACS'
+    - 'ACS open on {target} at {coords}'
+  ally_acs_join:
+    - 'joined ACS on {target} at {coords}'
+    - 'in on {target} ACS ({coords})'
+    - 'my fleet is in {coords} ACS on {target}'
+    - 'joined {target} at {coords}'
 hybrid:
   greeting:
     - hey
@@ -845,6 +883,15 @@ hybrid:
     - 'on my way to {victim}, {ships} ships holding at {coords}'
     - '{victim} hold on, {ships} ships coming to {coords}'
     - 'sending {ships} ships, {victim}, {coords}'
+  ally_acs_open:
+    - 'opened an ACS on {target} at {coords}, join in'
+    - 'ACS up on {target} ({coords}), hop on if you can'
+    - 'hitting {target} at {coords}, join the ACS'
+    - 'ACS open on {target} at {coords}, join if you can'
+  ally_acs_join:
+    - 'joined the ACS on {target} at {coords}'
+    - 'in on the {target} ACS ({coords})'
+    - 'joined the {target} ACS at {coords}'
 trader:
   greeting:
     - hey
@@ -1014,6 +1061,16 @@ trader:
     - 'on my way to {victim}, {ships} ships at {coords}'
     - '{victim} hold on, {ships} ships to {coords}'
     - '{ships} ships en route to {victim} at {coords}'
+  ally_acs_open:
+    - 'ACS on {target} at {coords}, join'
+    - 'ACS up on {target} ({coords}), join in'
+    - 'hitting {target} at {coords}, ACS open'
+    - 'join ACS on {target} at {coords}'
+  ally_acs_join:
+    - 'joined ACS on {target} at {coords}'
+    - 'in on {target} ACS ({coords})'
+    - 'my fleet in {coords} ACS on {target}'
+    - 'joined {target} ACS at {coords}'
 casual:
   greeting:
     - yo
@@ -1184,3 +1241,13 @@ casual:
     - 'on my way to {victim}, {ships} ships holding at {coords}'
     - '{victim} hold on, {ships} ships coming to {coords}'
     - 'en route to {victim} with {ships} ships, will be at {coords}'
+  ally_acs_open:
+    - 'ACS open on {target} at {coords}, join'
+    - 'ACS up on {target} ({coords}), hop in'
+    - 'hitting {target} at {coords}, join ACS'
+    - 'ACS on {target} at {coords}, all welcome'
+  ally_acs_join:
+    - 'joined ACS on {target} at {coords}'
+    - 'in on {target} ACS ({coords})'
+    - 'my fleet is in {coords} ACS on {target}'
+    - 'joined the {target} ACS at {coords}'

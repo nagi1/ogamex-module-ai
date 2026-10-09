@@ -63,18 +63,27 @@ class SpeakInAllianceChannelAction
      */
     public function announceDefend(int $playerId, int $targetPlanetId, int $ships): bool
     {
-        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
-        $allianceId = $profile === null ? null : User::query()->whereKey($playerId)->value('alliance_id');
-        $target = $allianceId === null ? null : Planet::query()->find($targetPlanetId);
-        if ($target === null || $ships < 1) {
-            return false;
-        }
+        $target = Planet::query()->find($targetPlanetId);
 
-        $line = app(BuildAuthoredSocialReplyAction::class)->line($profile, 'ally_defend', (string) $targetPlanetId . ':' . $ships, [
+        return $target !== null && $ships > 0 && $this->say($playerId, 'ally_defend', $targetPlanetId . ':' . $ships, [
             'victim' => (string) User::query()->whereKey($target->user_id)->value('username'),
             'coords' => "{$target->galaxy}:{$target->system}:{$target->planet}",
             'ships' => (string) $ships,
         ]);
+    }
+
+    /** The same for an attack flown with the club: opening an ACS for the mates, or joining one already flying. */
+    public function announceStrike(int $playerId, string $key, int $missionId, string $targetName, string $coords): bool
+    {
+        return $this->say($playerId, $key, (string) $missionId, ['target' => $targetName, 'coords' => $coords]);
+    }
+
+    /** @param array<string, string> $vars */
+    private function say(int $playerId, string $key, string $salt, array $vars): bool
+    {
+        $profile = AiProfile::query()->where('player_id', $playerId)->where('enabled', true)->first();
+        $allianceId = $profile === null ? null : User::query()->whereKey($playerId)->value('alliance_id');
+        $line = $allianceId === null ? null : app(BuildAuthoredSocialReplyAction::class)->line($profile, $key, $salt, $vars);
 
         return $line !== null && app(DeliverAiAllianceReplyAction::class)->handle($playerId, (int) $allianceId, $line) !== null;
     }

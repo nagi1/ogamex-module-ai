@@ -93,3 +93,10 @@ test('a member who sends a defence to a mate says how many ships and where', fun
     expect(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->toContain('120')->toContain($victim->username)
         ->and(app(SpeakInAllianceChannelAction::class)->announceDefend($speaker->id, $planet->id, 0))->toBeFalse();
 });
+
+test('a member who opens or joins an ACS says on whom and where', function (string $key): void {
+    [$allianceId, $speaker, , $attacker] = channelClubUnderAttack();
+
+    expect(app(SpeakInAllianceChannelAction::class)->announceStrike($speaker->id, $key, 55, $attacker->username, '2:45:7'))->toBeTrue()
+        ->and(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->toContain($attacker->username)->toContain('2:45:7');
+})->with(['an opened ACS' => ['ally_acs_open'], 'a joined ACS' => ['ally_acs_join']]);

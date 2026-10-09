@@ -143,6 +143,7 @@ class QueueAiRaidAction implements QueueAiRaid
         try {
             if ($union !== null && $mission->time_arrival <= $union->time_arrival + $unions->getMaxDelayTime($union)) {
                 $unions->joinUnion($union, $mission);
+                $this->announceStrike($playerId, 'ally_acs_join', $mission, $target);
 
                 return;
             }
@@ -150,10 +151,22 @@ class QueueAiRaidAction implements QueueAiRaid
             $owner = $target?->getPlayer()?->getId();
             if ($owner !== null && isset(app(Enemies::class)->of($playerId)[$owner]) && $this->hasAllianceMates($playerId)) {
                 $unions->createUnion($mission);
+                $this->announceStrike($playerId, 'ally_acs_open', $mission, $target);
             }
         } catch (Exception) {
             return;
         }
+    }
+
+    private function announceStrike(int $playerId, string $key, FleetMission $mission, ?PlanetService $target): void
+    {
+        app(SpeakInAllianceChannelAction::class)->announceStrike(
+            $playerId,
+            $key,
+            (int) $mission->id,
+            (string) $target?->getPlayer()?->getUsername(),
+            "{$mission->galaxy_to}:{$mission->system_to}:{$mission->position_to}",
+        );
     }
 
     private function hasAllianceMates(int $playerId): bool
