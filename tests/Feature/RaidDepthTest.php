@@ -76,6 +76,24 @@ test('the raid planner refuses a distant farm that burns more fuel than the tier
     expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->toBeNull();
 });
 
+// 9480: the loot tier turned away raids on a declared enemy that a farmer would also refuse.
+test('the raid planner flies at a war enemy whose pile does not clear the farm tier', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $this->planetAddUnit('small_cargo', 1);
+    $farUser = User::factory()->create();
+    Planet::factory()->create([
+        'user_id' => $farUser->id, 'galaxy' => 5, 'system' => 10, 'planet' => 15,
+        'metal' => 100, 'crystal' => 0, 'deuterium' => 0, 'time_last_update' => now()->subHour()->getTimestamp(),
+    ]);
+    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+        'player_id' => $this->currentUserId, 'other_player_id' => $farUser->id, 'threat' => '0.9000', 'revision' => 0,
+    ]));
+    $reportId = raidDepthReport($this->currentUserId, 5, 10, 15, ['metal' => 100, 'crystal' => 0, 'deuterium' => 0]);
+
+    expect(app(RaidPlanner::class)->plan($this->currentUserId, $reportId))->not->toBeNull();
+});
+
 test('the raid action refuses a target that is active at dispatch', function (): void {
     raidDepthProfile($this->currentUserId);
     $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));

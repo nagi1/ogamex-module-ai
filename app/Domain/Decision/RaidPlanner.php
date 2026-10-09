@@ -267,7 +267,9 @@ class RaidPlanner
             return $this->reject('fuel_tank_short', $playerId, $reportId);
         }
 
-        if (!$strike && !$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
+        // A loot-per-fuel tier is the farmer's rule; a war enemy is hit to break its fleet and economy, so the loot is not the
+        // measure there (9480: a club flew 134 raids at solos and 30 at its declared enemy, 68 enemy raids refused on the tier).
+        if (!$strike && !$enemy && !$this->clearsLootTier($estimate->p20Loot + $debris, $fuel, $target->getDefenseUnits()->units !== [])) {
             return $this->reject('below_loot_tier', $playerId, $reportId);
         }
 
