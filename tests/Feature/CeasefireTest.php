@@ -2,6 +2,11 @@
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\BreakAiCeasefireAction;
+use Modules\AI\Actions\InitiateAiSocialContactAction;
+use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Models\AiProfile;
+use OGame\Models\ChatMessage;
 use Modules\AI\Actions\EvaluateAiSocialExchangeAction;
 use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Actions\RecordAiSocialExchangeAction;
@@ -68,4 +73,18 @@ test('a hit inside the ceasefire breaks it and the attacker is no longer spared'
     expect(app(BreakAiCeasefireAction::class)->handle($asker->id, $this->currentUserId))->toBe(1)
         ->and(AiCommitment::query()->find($commitmentId)?->state)->toBe(AiCommitmentState::Broken)
         ->and(app(Enemies::class)->spared($this->currentUserId))->not->toContain($asker->id);
+});
+
+test('the player whose truce was broken says so once, to the one who broke it', function (): void {
+    AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 7, 'enabled' => true]);
+    $asker = User::factory()->create();
+    askedForTruce($this->currentUserId, $asker->id);
+    app(BreakAiCeasefireAction::class)->handle($asker->id, $this->currentUserId);
+
+    $first = app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, CarbonImmutable::now());
+    $second = app(InitiateAiSocialContactAction::class)->handle($this->currentUserId, CarbonImmutable::now());
+
+    expect($first)->toBe(1)
+        ->and($second)->toBe(0)
+        ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $asker->id)->count())->toBe(1);
 });

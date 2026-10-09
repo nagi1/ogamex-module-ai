@@ -13,8 +13,17 @@ class BreakAiCeasefireAction
 {
     public function handle(int $attackerPlayerId, int $defenderPlayerId): int
     {
-        return AiCommitment::query()->heldCeasefire($attackerPlayerId)
+        $broken = 0;
+        $truces = AiCommitment::query()->heldCeasefire($attackerPlayerId)
             ->where(static fn ($side) => $side->where('player_id', $defenderPlayerId)->orWhere('counterparty_player_id', $defenderPlayerId))
-            ->update(['state' => AiCommitmentState::Broken]);
+            ->get();
+
+        foreach ($truces as $truce) {
+            // The terms stay as agreed; who broke it is added beside them so the wronged side can say so once.
+            $truce->update(['state' => AiCommitmentState::Broken, 'terms' => $truce->terms + ['broken_by' => $attackerPlayerId], 'revision' => $truce->revision + 1]);
+            $broken++;
+        }
+
+        return $broken;
     }
 }

@@ -6,8 +6,10 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Domain\Persona\PersonaTaste;
+use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiSocialExchangeType;
+use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -76,6 +78,16 @@ class InitiateAiSocialContactAction
             }
         }
 
+        foreach ($this->brokenTruces($playerId) as $truce) {
+            if ($sent >= $maximum) {
+                break;
+            }
+
+            if ($this->reproach($truce, $profile)) {
+                $sent++;
+            }
+        }
+
         foreach ($this->unpleadedRaiders($playerId, $now) as $observation) {
             if ($sent >= $maximum) {
                 break;
@@ -131,6 +143,40 @@ class InitiateAiSocialContactAction
             ->oldest('id')
             ->get()
             ->unique('subject_player_id');
+    }
+
+    /**
+     * Ceasefires the other side broke by hitting inside the window, not yet answered: a player whose truce was broken
+     * says so, once, before anything else.
+     *
+     * @return Collection<int, AiCommitment>
+     */
+    private function brokenTruces(int $playerId): Collection
+    {
+        $reproached = AiSocialExchange::query()->where('player_id', $playerId)->where('type', AiSocialExchangeType::Warning)->pluck('source_observation_id');
+
+        return AiCommitment::query()
+            ->where('state', AiCommitmentState::Broken)
+            ->whereIn('id', AiSocialExchange::query()->where('type', AiSocialExchangeType::CeasefireRequest)->whereNotNull('commitment_id')->select('commitment_id'))
+            ->where(static fn ($side) => $side->where('player_id', $playerId)->orWhere('counterparty_player_id', $playerId))
+            ->whereNotIn('source_observation_id', $reproached)
+            ->get()
+            ->filter(static fn (AiCommitment $truce): bool => (int) ($truce->terms['broken_by'] ?? 0) > 0 && (int) $truce->terms['broken_by'] !== $playerId);
+    }
+
+    private function reproach(AiCommitment $truce, AiProfile $profile): bool
+    {
+        $breakerId = (int) $truce->terms['broken_by'];
+        $message = app(BuildAuthoredSocialReplyAction::class)->line($profile, 'ceasefire_broken', (string) $breakerId);
+        $exchange = $message === null ? null : app(RecordAiSocialExchangeAction::class)->handle($profile->player_id, $breakerId, $truce->source_observation_id, AiSocialExchangeType::Warning, [], null, 1);
+
+        if ($exchange === null) {
+            return false;
+        }
+
+        app(DeliverAiDirectReplyAction::class)->handle($profile->player_id, $breakerId, $message);
+
+        return true;
     }
 
     private function warn(AiObservation $observation, AiProfile $profile): bool

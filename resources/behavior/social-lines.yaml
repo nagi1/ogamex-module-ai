@@ -25,6 +25,7 @@ default:
   trade_offer: ["can't do that trade, sorry", "pass on that one"]
   ceasefire_request.reject: ["no ceasefire. you started this", "not happening"]
   ceasefire_request: ["we'll see. stay off my planets", "stay off my planets and we'll see"]
+  ceasefire_broken: ["so much for the truce", "we had a deal. you broke it", "24h, you said. that lasted a while", "truce is off then. noted"]
   ceasefire_request.accept: ["deal. 24h, you stay off me too", "fine, a day of quiet. don't make me regret it", "ok, 24 hours. nobody hits anybody", "alright, a day. first fleet I see and it's over"]
   warning.reject: ["lol, try it", "not scared of you"]
   warning: ["noted", "ok, heard you"]
