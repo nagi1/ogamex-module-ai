@@ -282,3 +282,18 @@ The JEV judge (`ai:judge-world`, saved under `plan/research/judge-*.md`) now rea
 | Allies are expected to support each other in war | An alliance joins a partner's war on half the grievance | 32b6f9d |
 
 Language lane: 37 to 46 model-written replies a world for under one cent, e.g. "lol chill, nobody said anything about a farm. gl out there." The corpus (`rl/scripts/social_corpus.py`) holds 138 model-written lines, no JEV readings yet. Still open, per the judge: repeated one-liners across clubs, only four public broadcasts, one reactive pact, and the dominant club still farming solos (96 raids) during its war although the spy planner reads enemies first. Mid-staged 24-hour worlds do not reach the moon, gate or battlecruiser objects; the late-staged ones do (9447: every object, 5 moon destructions).
+
+### 9 Oct, evening: enemy-first, pacts, and what the judge reads now
+
+Worlds judged since (great war / politics / human-like, out of 3): 9463 3/-/-, 9464 and 9466 (first with enemy-first raids), 9465 2/1/1, 9457 2/1/1 (24 h, launched before the fixes), 9435 0/0/1 (36 h, old code, one club farming eight solos), 9472 2/1/2 (the first world with every fix below: human-like 2/3 for the first time, 86 raids on solos against 150 on the war enemy where older worlds farmed solos more than the enemy).
+
+| Finding (world) | Fix | Commit |
+|---|---|---|
+| A club at war farmed solos while its enemy went untouched (9457, 9464) | Raids go to enemies first; the other targets wait | 47b47ba |
+| Missiles went to the biggest wall, not the enemy's | A volley goes to the enemy wall over a bigger wall that is not one | 59e4492 |
+| The same pact offer sent twenty times to a leader who refused (9464) | One offer per leader; an AI leader that hates the offerer refuses once | d52fcd2 |
+| Two weak clubs farmed by one giant never allied (9465) | A club too weak to declare on a giant offers a pact to the clubs already at war with it | 1c33dcd |
+| Every warning and plea was one bare line (every judge) | A warning or plea to a repeat raider names the number of hits | in this commit series |
+| The judge listed the game's own paired messages (probe report and detection, missile attack and defence) as findings | Judge instructions say they are the game | in this commit series |
+
+Still open, per the 9472 judge: truce talk without terms (duration, scope), a war declared without a public broadcast, nine players in no club (the join chance by kind is deliberate, so left alone), 9457/9472 not carrying the hit-count lines (launched before them).
