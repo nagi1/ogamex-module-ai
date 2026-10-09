@@ -321,10 +321,26 @@ class AdvanceAiAlliancePoliticsAction
             ->where(fn ($query) => array_reduce($openings, static fn ($query, string $opening) => $query->orWhere('message', 'like', $opening . '%'), $query))->exists();
     }
 
+    /**
+     * The stronger clubs that hit this one hard enough for a war it dares not declare (outmatched): it looks for others
+     * at war with them, as two small clubs under one big one do (9465: both were farmed by the leader and never allied).
+     *
+     * @return list<int>
+     */
+    private function feared(Alliance $alliance): array
+    {
+        $line = (float) ($this->policy['war_grievance'] ?? 1.5);
+        $members = $this->members((int) $alliance->id);
+
+        return Alliance::query()->whereKeyNot($alliance->id)->pluck('id')->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $otherId): bool => $this->outmatched((int) $alliance->id, $otherId) && $this->grievance($members, $this->members($otherId)) >= $line)
+            ->values()->all();
+    }
+
     /** @param list<int> $founders */
     private function offerPact(Alliance $alliance, array $founders): int
     {
-        $enemies = AiAllianceRelation::counterparts((int) $alliance->id, AiAllianceStance::War);
+        $enemies = array_unique([...AiAllianceRelation::counterparts((int) $alliance->id, AiAllianceStance::War), ...$this->feared($alliance)]);
 
         foreach ($enemies as $enemyId) {
             foreach (AiAllianceRelation::counterparts($enemyId, AiAllianceStance::War) as $partnerId) {

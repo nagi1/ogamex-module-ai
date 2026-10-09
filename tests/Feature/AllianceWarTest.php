@@ -337,3 +337,24 @@ test('an alliance already at war does not declare on a second one', function (in
     'no war yet' => [0, true],
     'one war on' => [1, false],
 ]);
+
+// 9465: two clubs a giant was farming never allied, because the weaker one dared not declare and so shared no war with the other.
+test('a club too weak to declare on a giant allies with the club that is at war with it', function (): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $partner = allianceWarLeader(User::factory()->create()->id, 'PART');
+    $giant = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'GIAN', 'Giant');
+    $raider = allianceWarMember($giant->id);
+    allianceWarGrudge($this->currentUserId, $raider->id);
+    allianceWarGrudge((int) allianceWarMember($ours->id)->id, $raider->id);
+    Highscore::unguarded(fn () => Highscore::updateOrCreate(['player_id' => $this->currentUserId], ['general' => 1000, 'general_rank' => 2]));
+    Highscore::unguarded(fn () => Highscore::updateOrCreate(['player_id' => $raider->id], ['general' => 10000, 'general_rank' => 1]));
+    // A fourth club keeps the giant under the share at which the runners-up conspire against it.
+    $bystander = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'BYST', 'Bystander');
+    allianceWarPoints((int) $bystander->founder_user_id, 12000);
+    allianceWarAt($partner->id, $giant->id);
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->not->toContain($giant->id)
+        ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap))->toBe([$partner->id]);
+});
