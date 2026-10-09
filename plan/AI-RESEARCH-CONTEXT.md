@@ -65,7 +65,8 @@ human raters.
 | 6 Oct | Economy BC v4 closed loop vs teacher | +3.8% total value (16 pairs × 12 accounts × 12 days, mostly early game; late rows ~3% of data) | `plan/rl/next-steps.md` §4 |
 | 6 Oct | BC v4 offline agreement | top-1 0.921 on 3+-legal-choice states (offline only) | same |
 | 9–10 Oct | Late worlds: every ship, defence and mission reached | 9484: ACS 501, recycle 499, missile 189, moon destruction 10, deathstars 14 | `storage/rl/late/9484/reach.txt` |
-| 10 Oct | Act classifier, distilled, world-split | 0.761 held out on later worlds (2,866 unique texts), not installed | this file, open experiments |
+| 10 Oct | Act classifier, distilled | 0.767 on later worlds, **0.711 on templates it never saw**; acs_call recall 0.00, warning 0.44, pact_break 0.45 (2,866 unique texts); not installed | this file |
+| 10 Oct | Act classifier training text | every text is one of our own authored lines labelled by the live classifier; the external data holds no human chat, so the model learns our wording, not human wording | corpus.jsonl `reading` kind |
 | 10 Oct | Social corpus cleaned | dialogue 23,445 → 7,498 lines, greetings ~25% → 3.7% | `rl/scripts/social_curate.py` |
 | 10 Oct | Fleet scale vs real servers | real battles field thousands of ships per side; our best world peaked at 172 battleships | `plan/details/specs/play-coverage.md` |
 
@@ -76,7 +77,7 @@ human raters.
 | Ceasefire as a commitment (stage 1) | Agreed, enforced 24 h truces lift social continuity: truces kept, raids paused, betrayals remembered | old behaviour: every truce answered "we'll see" | code in (2107e5b); needs a world read |
 | Channel greeting guard | Stopping answers to channel pleasantries removes the greeting flood without silencing the channel | 9484: 1,676 greetings of 1,788 channel messages | code in (0b96d44); worlds 9492–9493 running |
 | Fleet scale at 50× budget (9487) | A larger staged budget gives real-server fleet sizes and battle losses | 2e11 budget worlds | running |
-| Act classifier install | A distilled act model matches the live classifier on ambiguous text at no generative cost | live Jev/LLM classifier | waits for rare-label merge and a hand-checked ambiguous set |
+| Act classifier on human-style text | A distilled act model trained on LLM-written human-style variants of each act (labelled by construction, not by the classifier) matches the live classifier on a hand-written challenge set | live Jev/LLM classifier; today's own-lines model at 0.711 | design only: write ~40 human lines per act with the voice writer, hold 20% of acts' phrasings out, add a 100-line hand-written set by the owner; install only above the live classifier's agreement with the owner's labels |
 | Economy retrain with late rows weighted | A policy trained on a lifecycle run keeps its edge into late game | BC v4 / teacher | held until every aspect of play moves (consolidation stage 4) |
 
 ## Where things are
