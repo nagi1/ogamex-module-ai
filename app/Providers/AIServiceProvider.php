@@ -45,6 +45,7 @@ use Modules\AI\Console\Commands\RunLanguageConformance;
 use Modules\AI\Console\Commands\SeedAiTestUniverse;
 use Modules\AI\Console\Commands\SeedGrandTest;
 use Modules\AI\Console\Commands\SimulateAiTime;
+use Modules\AI\Console\Commands\WriteAiHumanTexts;
 use Modules\AI\Console\Commands\WriteAiSocialVoices;
 use Modules\AI\Contracts\AffectEngine;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
@@ -161,6 +162,7 @@ class AIServiceProvider extends ModuleServiceProvider
         SeedGrandTest::class,
         SimulateAiTime::class,
         CreateAiRlUniverse::class,
+        WriteAiHumanTexts::class,
         WriteAiSocialVoices::class,
     ];
 

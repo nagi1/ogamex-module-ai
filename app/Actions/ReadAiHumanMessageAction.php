@@ -20,6 +20,27 @@ class ReadAiHumanMessageAction
 {
     public const URGENCY_NOW = 2;
 
+    /** What an inbound message can be doing, with how to tell. The human-text writer (ai:write-human-texts) reads the same list. */
+    public const ACTS = [
+        'greeting' => 'says hello',
+        'thanks' => 'sincerely thanks the reader',
+        'apology' => 'apologises, for a raid or otherwise',
+        'warning' => 'threatens to attack or retaliate',
+        'taunt' => 'mocks the reader, often with mock thanks or "gg" after a raid or a battle',
+        'ceasefire' => 'asks to stop fighting, or asks the reader to stop raiding or farming them',
+        'cooperation' => 'asks to team up or plan a campaign together, or invites the reader into an alliance',
+        'trade' => 'offers a resource deal',
+        'help_request' => 'asks the reader for resources or help',
+        'war' => 'declares war between alliances',
+        'pact_offer' => 'offers a non-aggression pact between alliances',
+        'pact_accept' => 'accepts a pact the reader offered',
+        'pact_break' => 'ends or cancels a pact or NAP between alliances ("the nap is off")',
+        'acs_call' => 'calls the reader to join a joint attack (ACS) on given coordinates at a given time',
+        'bot_question' => 'asks or hints whether the reader is a bot',
+        'small_talk' => 'chats or complains about nothing that needs acting on',
+        'other' => 'anything else',
+    ];
+
     /** The acts the module already has an authored answer for; the rest are read for their consumers, not answered here. */
     private const EXCHANGES = [
         'greeting' => AiSocialExchangeType::Greeting,
@@ -40,25 +61,7 @@ class ReadAiHumanMessageAction
         }
 
         return app(ReadAiTextAction::class)->handle('inbound', $text, [
-            'act' => new Choice('What is this OGame player\'s message to another player doing?', [
-                'greeting' => 'says hello',
-                'thanks' => 'sincerely thanks the reader',
-                'apology' => 'apologises, for a raid or otherwise',
-                'warning' => 'threatens to attack or retaliate',
-                'taunt' => 'mocks the reader, often with mock thanks or "gg" after a raid or a battle',
-                'ceasefire' => 'asks to stop fighting, or asks the reader to stop raiding or farming them',
-                'cooperation' => 'asks to team up or plan a campaign together, or invites the reader into an alliance',
-                'trade' => 'offers a resource deal',
-                'help_request' => 'asks the reader for resources or help',
-                'war' => 'declares war between alliances',
-                'pact_offer' => 'offers a non-aggression pact between alliances',
-                'pact_accept' => 'accepts a pact the reader offered',
-                'pact_break' => 'ends or cancels a pact or NAP between alliances ("the nap is off")',
-                'acs_call' => 'calls the reader to join a joint attack (ACS) on given coordinates at a given time',
-                'bot_question' => 'asks or hints whether the reader is a bot',
-                'small_talk' => 'chats or complains about nothing that needs acting on',
-                'other' => 'anything else',
-            ]),
+            'act' => new Choice('What is this OGame player\'s message to another player doing?', self::ACTS),
             'urgency' => new Score('How soon does the writer expect an answer or an action?', [
                 'it can wait a day',
                 'within a few hours',
