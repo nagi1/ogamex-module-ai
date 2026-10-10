@@ -20,9 +20,12 @@ import sys
 from pathlib import Path
 
 GREETING = re.compile(r"\b(hi|hello|hey|welcome|greetings|o/)\b", re.I)
+COORDS = re.compile(r"\b\d{1,2}:\d{1,3}:\d{1,2}\b")
+CALL = re.compile(r"acs|union|join|hop", re.I)
+HISTORY = re.compile(r"\b\d+ (raids|hits|times|attacks)\b|\bhit me \d+", re.I)
 METRICS = [
     "accounts", "battles", "attacker_loss_share", "loot", "attack_pairs",
-    "wars", "pacts", "truces_agreed", "truces_broken", "messages", "distinct_share", "greeting_share",
+    "wars", "pacts", "truces_agreed", "truces_broken", "messages", "distinct_share", "greeting_share", "repeat_calls", "history_lines",
     "acs_attacks", "recycles", "missiles", "expeditions", "moon_destroys", "growth_median", "errors",
 ]
 
@@ -55,6 +58,8 @@ def score(world: Path) -> dict | None:
 
     messages = [row[0] or "" for row in db.execute("select message from chat_messages")]
     growth = sorted(row[0] for row in db.execute("select general from highscores where player_id in (select player_id from ai_profiles where enabled=1)"))
+    # An alliance call is one line per target; the same coordinates called again is the macro a judge keeps flagging.
+    calls = [COORDS.search(m).group(0) for m, in db.execute("select message from chat_messages where alliance_id is not null") if m and COORDS.search(m) and CALL.search(m)]
     errors = 0
     log = world / "sim.log"
     if log.exists():
@@ -75,6 +80,8 @@ def score(world: Path) -> dict | None:
         "messages": len(messages),
         "distinct_share": round(len(set(messages)) / len(messages), 3) if messages else 0.0,
         "greeting_share": round(sum(1 for m in messages if GREETING.search(m)) / len(messages), 3) if messages else 0.0,
+        "repeat_calls": len(calls) - len(set(calls)),
+        "history_lines": sum(1 for m in messages if HISTORY.search(m)),
         "acs_attacks": missions.get(2, 0),
         "recycles": missions.get(8, 0),
         "missiles": missions.get(10, 0),

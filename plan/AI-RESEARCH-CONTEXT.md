@@ -74,6 +74,10 @@ human raters.
 
 Across six finished worlds, spread as coefficient of variation (sd over mean): truces agreed 0.68, truces broken 1.08, pacts 0.82, moon destructions 0.52, loot 0.37, battles 0.17, attack pairs 0.12, distinct-line share 0.08. Staged growth is flat (0.00), so it says nothing. A change below those spreads cannot be read from one world; counts of rare social events need many worlds per arm, so compare rates per exchange or per account, not world totals. Worlds are deterministic for a seed, so the paired design is the same seeds with and without the change. External review of 10 Oct (area 2): one world per change is for crash detection only.
 
+## Objective readings beat the judge (12 Oct, world 9515 with the ACS-call and raid-count fixes)
+
+Same-code-family worlds before the fixes repeated an alliance call for the same coordinates 277 to 490 times per world; 9515: **7**. Lines that cite a raid count (history in refusals): 39 to 60 before, **87** in 9515. The judge read 9515 at human-like 1/3 and politics 1/3, lower than the worlds with 300 repeated calls, so the judge reading is not the scoreboard: the counts are (consolidation review, area 2). 9515 formed no pact (0), where the flank rule was expected to; one world is no verdict on pact rate.
+
 ## Real battles against ours (12 Oct, `rl/scripts/real_battle_calibration.py`, 563 OGMem battles, 29 universes, vs 860 battles in 6 of our worlds)
 
 | | Real (OGMem) | Ours |
