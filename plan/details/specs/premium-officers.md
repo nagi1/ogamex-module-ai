@@ -1,6 +1,15 @@
 # Premium officers — plan (AI)
 
-Status: **plan, nothing implemented** (owner-requested 10 October 2026). The host side shipped: the
+Status: **OFF-001 implemented 10 October 2026** (module commits 9cf2801, 21b6b4e); the rest below is still plan.
+Built: `QueueableOfficerPlanner` (reads `OfficerService::COSTS`/`DURATIONS`, doctrine in
+`resources/behavior/officers.yaml`, reserve floor, 7 or 90 days, renewal inside 2 days), `QueueAiOfficerAction`
+(the host's `OfficerService::purchase`), candidate kind `AiCandidateActionType::Officer = 21`, work kind `Officer = 21`.
+The errand choice seam already carries it: the errand encoder one-hots every candidate action type, so the officer is
+one more errand row (encoder VERSION 3, every earlier model and dataset is the old width). Staged late accounts now
+hold 60,000 dark matter so the data shows purchases. No separate choice point was needed, so OFF-002 reduces to
+retraining on v3 data (BC v5, full cognition, regenerating). Not built: OFF-003 taste beyond the five doctrine rows,
+OFF-004 scorecard aspect. Test lanes now key their migration stamp on the host migrations (the `officers` table).
+(owner-requested 10 October 2026). The host side shipped: the
 premium officers system merged into the host `main` on 10 October 2026 (imported from upstream
 lanedirt/OGameX#1385). This file is the module half; the host connection points it needs are in
 [Host connection points](#host-connection-points) below and are mirrored into

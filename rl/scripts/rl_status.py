@@ -15,6 +15,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -145,10 +146,23 @@ def parse_target() -> tuple[int, int]:
     return (int(cmd[0]), int(cmd[1])) if len(cmd) > 1 else (32, 30)
 
 
+def gpu_reading() -> dict:
+    # The first GPU only (the training card); an unreadable one is an empty reading and the page says so.
+    query = "name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw"
+    try:
+        line = subprocess.run(["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+                              capture_output=True, text=True, timeout=5, check=True).stdout.splitlines()[0]
+        name, util, used, total, temp, power = [part.strip() for part in line.split(",")]
+        return {"name": name, "util": float(util), "mem_used": float(used), "mem_total": float(total),
+                "temp": float(temp), "power": float(power)}
+    except (OSError, subprocess.SubprocessError, IndexError, ValueError):
+        return {}
+
+
 def machine() -> dict:
     load = float(read(Path("/proc/loadavg")).split()[0] or 0)
     mem = {k: int(v.split()[0]) for k, v in (ln.split(":", 1) for ln in read(Path("/proc/meminfo")).splitlines() if ":" in ln)}
-    gpu = {}
+    gpu = gpu_reading()
     free = os.statvfs(str(RL))
     return {"cpus": os.cpu_count(), "load": load,
             "mem_used_mb": (mem.get("MemTotal", 0) - mem.get("MemAvailable", 0)) // 1024, "mem_total_mb": mem.get("MemTotal", 0) // 1024,
