@@ -6,6 +6,15 @@ return [
     // AI counterparty keeps the authored zero-prompt path, so an all-AI universe spends
     // nothing unless the operator turns this on. Daily limits and the monthly wall still apply.
     'ai_to_ai' => (bool) env('AI_LANGUAGE_AI_TO_AI', false),
+    // The model words the account's own lines (alliance politics, calls, pleas, refusals) from the facts of the situation;
+    // the authored line stays the fallback and the decision is never the model's. Off (default) for tests and installs
+    // that have not chosen to spend; the sim scripts and the deployment turn it on.
+    'compose' => (bool) env('AI_LANGUAGE_COMPOSE', false),
+    'compose_limits' => [
+        'universe' => ['attempts' => (int) env('AI_LANGUAGE_COMPOSE_UNIVERSE_ATTEMPTS', 4_000), 'input_tokens' => 4_000_000, 'output_tokens' => 400_000],
+        'player' => ['attempts' => (int) env('AI_LANGUAGE_COMPOSE_PLAYER_ATTEMPTS', 400), 'input_tokens' => 400_000, 'output_tokens' => 40_000],
+        'conversation' => ['attempts' => 40, 'input_tokens' => 40_000, 'output_tokens' => 4_000],
+    ],
     'provider' => env('AI_LANGUAGE_PROVIDER', 'deepseek'),
     'model' => env('AI_LANGUAGE_MODEL', 'deepseek-flash'),
     'timeout_seconds' => (int) env('AI_LANGUAGE_TIMEOUT_SECONDS', 20),

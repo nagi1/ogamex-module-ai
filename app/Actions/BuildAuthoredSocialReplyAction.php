@@ -45,21 +45,27 @@ class BuildAuthoredSocialReplyAction
         $amount = $exchange->response_terms[AiSocialTerm::Amount->value] ?? null;
 
         $line = is_int($amount) || is_float($amount) ? str_replace('{amount}', (string) $amount, $line) : $line;
-        $detail = $this->hitsDetail($exchange, $profile);
+        $hits = 0;
+        $detail = $this->hitsDetail($exchange, $profile, $hits);
+        $line = $detail === null ? $line : rtrim($line, '.?!') . '. ' . $detail;
 
-        return $detail === null ? $line : rtrim($line, '.?!') . '. ' . $detail;
+        // Worded by the model when it is on; the decision and every fact in the line are the module's.
+        return app(ComposeAiLineAction::class)->handle($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name), $line, [
+            'amount' => is_int($amount) || is_float($amount) ? (string) $amount : null,
+            'hits' => $detail !== null ? (string) $hits : null,
+        ]);
     }
 
     /**
      * A refusal or a warning that names how often the other side has hit the account ("5 raids on me and now it's a
      * truce?"): a reply that points at the history reads as a player's, a bare "no deal" does not (judge, 9509 to 9511).
      */
-    private function hitsDetail(AiSocialExchange $exchange, AiProfile $profile): string|null
+    private function hitsDetail(AiSocialExchange $exchange, AiProfile $profile, int &$hits): string|null
     {
         $hits = AiObservation::query()->where('player_id', $exchange->player_id)->where('kind', AiObservationKind::BattleReportObserved)
             ->where('subject_player_id', $exchange->counterparty_player_id)->count();
 
-        return $hits < 2 ? null : $this->line($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name) . '.detail', (string) $exchange->id, ['hits' => (string) $hits]);
+        return $hits < 2 ? null : $this->authoredLine($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name) . '.detail', (string) $exchange->id, ['hits' => (string) $hits]);
     }
 
     /**
@@ -82,6 +88,16 @@ class BuildAuthoredSocialReplyAction
      */
     public function line(AiProfile $profile, string $key, string $salt, array $vars = []): string|null
     {
+        $rendered = $this->authoredLine($profile, $key, $salt, $vars);
+
+        return $rendered === null ? null : app(ComposeAiLineAction::class)->handle($profile, $key, $rendered, $vars);
+    }
+
+    /**
+     * @param array<string, string> $vars
+     */
+    private function authoredLine(AiProfile $profile, string $key, string $salt, array $vars = []): string|null
+    {
         $lines = $this->keyedLines($profile, [$key]);
         if ($lines === []) {
             return null;
@@ -89,7 +105,7 @@ class BuildAuthoredSocialReplyAction
 
         $line = $lines[(int) floor($this->randomSource->unitInterval($profile->random_seed, $key . ':' . $salt) * count($lines))];
 
-        return strtr($line, array_combine(array_map(static fn (string $name): string => '{' . $name . '}', array_keys($vars)), $vars));
+        return $vars === [] ? $line : strtr($line, array_combine(array_map(static fn (string $name): string => '{' . $name . '}', array_keys($vars)), $vars));
     }
 
     /**

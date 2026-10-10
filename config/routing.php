@@ -60,6 +60,10 @@ return [
         'campaign_consultation' => [
             ['provider' => 'deepseek', 'model' => 'deepseek-v4-pro'],
         ],
+        'message_composition' => [
+            ['provider' => 'deepseek', 'model' => 'deepseek-flash'],
+            ['provider' => 'openai', 'model' => 'gpt-5.6-luna'],
+        ],
         'conformance' => [
             ['provider' => 'deepseek', 'model' => 'deepseek-flash'],
         ],

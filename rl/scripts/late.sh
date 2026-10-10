@@ -6,6 +6,8 @@
 # generated or trained without them). COGNITION=native is the control arm of an A/B, never the default.
 set -euo pipefail
 export BROADCAST_CONNECTION=log CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync
+# The model words the accounts' own lines (alliance politics, calls, pleas, refusals); the authored line is the fallback.
+export AI_LANGUAGE_COMPOSE=${AI_LANGUAGE_COMPOSE:-true} AI_LANGUAGE_AI_TO_AI=${AI_LANGUAGE_AI_TO_AI:-true}
 SEED=${1:?seed}; BUDGET=${2:-2e11}; HOURS=${3:-24}; POLICY=${4:-teacher}; ACC=${5:-8}; SPEED=${6:-8}
 AT=2026-10-05T00:00:00Z; OUT=storage/rl/late/$SEED; mkdir -p "$OUT"
 rm -f "$OUT"/start.sqlite "$OUT"/end.sqlite "$OUT"/sim.log

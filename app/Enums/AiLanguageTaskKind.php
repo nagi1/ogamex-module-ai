@@ -16,6 +16,9 @@ enum AiLanguageTaskKind: string
     /** A critical campaign decision consultation, where a typed recommendation over supplied candidates is the point. */
     case CampaignConsultation = 'campaign_consultation';
 
+    /** One short in-game line (a leader's announcement, a call, a plea) worded from the facts of the situation. */
+    case MessageComposition = 'message_composition';
+
     /** The opt-in sanitized provider run, which must be able to name its own vendor. */
     case Conformance = 'conformance';
 }

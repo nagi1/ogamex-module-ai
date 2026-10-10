@@ -85,6 +85,11 @@ final class AiRuntimeSettings
         return (bool) $this->settings->get('ai_language_enabled', $this->boolDefault('ai.language.enabled', true));
     }
 
+    public function languageCompose(): bool
+    {
+        return (bool) $this->settings->get('ai_language_compose', $this->boolDefault('ai.language.compose', false));
+    }
+
     public function languageAiToAi(): bool
     {
         return (bool) $this->settings->get('ai_language_ai_to_ai', $this->boolDefault('ai.language.ai_to_ai', false));

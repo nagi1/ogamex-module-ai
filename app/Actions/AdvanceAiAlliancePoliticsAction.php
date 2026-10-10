@@ -80,7 +80,7 @@ class AdvanceAiAlliancePoliticsAction
         $dominant = Alliance::query()->findOrFail($dominantId);
         // Leader to leader only: the members learn of the plot from the war, not before.
         if (!AiAllianceRelation::query()->openBetween((int) $first->id, (int) $second->id)->exists()) {
-            app(DeliverAiDirectReplyAction::class)->handle((int) $first->founder_user_id, (int) $second->founder_user_id, $this->line('conspiracy_offer', (string) $dominant->alliance_tag));
+            app(DeliverAiDirectReplyAction::class)->handle((int) $first->founder_user_id, (int) $second->founder_user_id, $this->line('conspiracy_offer', (string) $dominant->alliance_tag, (int) $first->founder_user_id));
             AiAllianceRelation::query()->create([
                 'alliance_id' => $first->id,
                 'other_alliance_id' => $second->id,
@@ -89,7 +89,7 @@ class AdvanceAiAlliancePoliticsAction
                 'declared_by' => $first->founder_user_id,
                 'started_at' => now(),
             ]);
-            app(DeliverAiDirectReplyAction::class)->handle((int) $second->founder_user_id, (int) $first->founder_user_id, $this->line('conspiracy_accept', (string) $dominant->alliance_tag));
+            app(DeliverAiDirectReplyAction::class)->handle((int) $second->founder_user_id, (int) $first->founder_user_id, $this->line('conspiracy_accept', (string) $dominant->alliance_tag, (int) $second->founder_user_id));
         }
 
         foreach ([$first, $second] as $plotter) {
@@ -137,7 +137,7 @@ class AdvanceAiAlliancePoliticsAction
         }
 
         try {
-            app(AllianceService::class)->sendBroadcastMessage((int) $declarer->id, (int) $declarer->founder_user_id, $this->line('peace_broadcast', (string) $other->alliance_tag), ['-1']);
+            app(AllianceService::class)->sendBroadcastMessage((int) $declarer->id, (int) $declarer->founder_user_id, $this->line('peace_broadcast', (string) $other->alliance_tag, (int) $declarer->founder_user_id), ['-1']);
         } catch (Exception) {
         }
     }
@@ -272,7 +272,7 @@ class AdvanceAiAlliancePoliticsAction
         ]);
 
         try {
-            app(AllianceService::class)->sendBroadcastMessage((int) $ours->id, (int) $ours->founder_user_id, $this->line('war_declared_on_us', (string) $theirs->alliance_tag), ['-1']);
+            app(AllianceService::class)->sendBroadcastMessage((int) $ours->id, (int) $ours->founder_user_id, $this->line('war_declared_on_us', (string) $theirs->alliance_tag, (int) $ours->founder_user_id), ['-1']);
         } catch (Exception) {
         }
 
@@ -289,7 +289,7 @@ class AdvanceAiAlliancePoliticsAction
 
         if ($this->hates($founderId, $this->members((int) $theirs->id))) {
             if ($answer) {
-                app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_refuse', (string) $theirs->alliance_tag));
+                app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_refuse', (string) $theirs->alliance_tag, $founderId));
             }
 
             return false;
@@ -304,7 +304,7 @@ class AdvanceAiAlliancePoliticsAction
             'started_at' => now(),
         ]);
         if ($answer) {
-            app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_accept', (string) $theirs->alliance_tag));
+            app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_accept', (string) $theirs->alliance_tag, $founderId));
         }
 
         return true;
@@ -358,13 +358,13 @@ class AdvanceAiAlliancePoliticsAction
             }
 
             $enemyTag = (string) Alliance::query()->whereKey($enemyId)->value('alliance_tag');
-            app(DeliverAiDirectReplyAction::class)->handle((int) $alliance->founder_user_id, (int) $partner->founder_user_id, $this->line($cause === 'flank' ? 'flank_offer' : 'pact_offer', $enemyTag));
+            app(DeliverAiDirectReplyAction::class)->handle((int) $alliance->founder_user_id, (int) $partner->founder_user_id, $this->line($cause === 'flank' ? 'flank_offer' : 'pact_offer', $enemyTag, (int) $alliance->founder_user_id));
             if ($human) {
                 return 1;
             }
 
             if ($this->feudOutweighs((int) $partner->founder_user_id, $partnerId, (int) $alliance->id, $enemyId)) {
-                app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_refuse', (string) $alliance->alliance_tag));
+                app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_refuse', (string) $alliance->alliance_tag, (int) $partner->founder_user_id));
 
                 return 1;
             }
@@ -377,7 +377,7 @@ class AdvanceAiAlliancePoliticsAction
                 'declared_by' => $alliance->founder_user_id,
                 'started_at' => now(),
             ]);
-            app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_accept', (string) $alliance->alliance_tag));
+            app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_accept', (string) $alliance->alliance_tag, (int) $partner->founder_user_id));
 
             return 1;
         }
@@ -459,14 +459,14 @@ class AdvanceAiAlliancePoliticsAction
         // The announcements are the visible half; the host refusing one (permission, length) leaves the war standing.
         $service = app(AllianceService::class);
         try {
-            $service->sendBroadcastMessage((int) $alliance->id, $founderId, $this->line($broadcast, $tag), ['-1']);
+            $service->sendBroadcastMessage((int) $alliance->id, $founderId, $this->line($broadcast, $tag, $founderId), ['-1']);
             $external = trim((string) $alliance->external_text . "\n" . $this->line('war_external', $tag));
             $service->updateTexts((int) $alliance->id, $founderId, $alliance->internal_text, $external, $alliance->application_text);
         } catch (Exception) {
         }
 
         if ($enemy->founder_user_id !== null) {
-            app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $enemy->founder_user_id, $this->line($toLeader, $tag));
+            app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $enemy->founder_user_id, $this->line($toLeader, $tag, $founderId));
         }
     }
 
@@ -520,12 +520,16 @@ class AdvanceAiAlliancePoliticsAction
         return User::query()->where('alliance_id', $allianceId)->pluck('id')->map(static fn ($id): int => (int) $id)->all();
     }
 
-    private function line(string $key, string $tag): string
+    /** The leader's own wording of one announcement; the model words it when it is on, and the authored line is the fallback. */
+    private function line(string $key, string $tag, int $speakerId = 0): string
     {
         $line = ((array) ($this->policy['lines'] ?? []))[$key] ?? '';
         // Several wordings per line, picked by the other alliance's tag so the same declaration is not repeated verbatim.
         $line = is_array($line) ? (string) ($line[crc32($key . $tag) % max(1, count($line))] ?? '') : (string) $line;
 
-        return str_replace('{tag}', $tag, $line);
+        $line = str_replace('{tag}', $tag, $line);
+        $profile = $speakerId > 0 ? AiProfile::query()->where('player_id', $speakerId)->where('enabled', true)->first() : null;
+
+        return $profile === null || $line === '' ? $line : app(ComposeAiLineAction::class)->handle($profile, 'alliance_politics.' . $key, $line, ['tag' => $tag]);
     }
 }
