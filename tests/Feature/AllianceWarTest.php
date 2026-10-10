@@ -377,3 +377,20 @@ test('a club too weak to declare on a giant allies with the club that is at war 
     expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->not->toContain($giant->id)
         ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap))->toBe([$partner->id]);
 });
+
+// 9509 and 9511: two wars among four clubs, and not one pact, because no two clubs shared an enemy.
+test('a club at war signs with a third club it has traded hits with, so the war is not fought on two fronts', function (bool $traded, bool $signed): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $thirdLeader = User::factory()->create();
+    $third = allianceWarLeader($thirdLeader->id, 'THRD');
+    $enemy = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'ENEM', 'Enemy');
+    allianceWarAt($ours->id, $enemy->id);
+    if ($traded) {
+        allianceWarGrudge($thirdLeader->id, $this->currentUserId, '0.6000');
+    }
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap) === [$third->id])->toBe($signed)
+        ->and(AiAllianceRelation::query()->where('cause', 'flank')->count())->toBe($signed ? 1 : 0);
+})->with(['traded hits' => [true, true], 'strangers' => [false, false]]);

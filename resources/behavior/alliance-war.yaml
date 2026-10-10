@@ -13,6 +13,7 @@ lines:
   war_to_leader: ["Your members have hit ours once too often. [{tag}] and we are at war.", "[{tag}]: we are done being farmed by your people. This is war.", "Enough. Your members keep hitting ours, so [{tag}] and we are at war from now."]
   war_external: "War: [{tag}]"
   pact_offer: ["We are both at war with [{tag}]. Non-aggression between us until it is over?", "[{tag}] is hitting us both. NAP until they are dealt with?", "Same enemy, [{tag}]. Want to leave each other alone and focus on them?"]
+  flank_offer: ["We have our hands full with [{tag}]. NAP between us so neither of us fights two wars?", "[{tag}] is the war we are fighting. Leave each other alone, we have no time for a second front?", "We are busy with [{tag}]. Non-aggression with you, so we can finish that first?"]
   pact_accept: ["Agreed. No fleet of ours flies at [{tag}].", "Deal. We stay off you, [{tag}] is the target.", "Ok, NAP. Our fleets stay clear of [{tag}]."]
   betrayal_broadcast: "Our pact with [{tag}] is over. They are a target from today; hit them before they regroup."
   conspiracy_offer: "[{tag}] holds half the universe. A pact between us and war on them together; not a word to our members until the fleets fly."

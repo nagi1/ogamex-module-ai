@@ -313,7 +313,8 @@ class AdvanceAiAlliancePoliticsAction
     /** Whether the AI leader offered this human a pact lately: the offer is the message it sent, no other record. */
     private function offeredTo(Alliance $ours, int $humanId): bool
     {
-        $offers = (array) (((array) ($this->policy['lines'] ?? []))['pact_offer'] ?? []);
+        $lines = (array) ($this->policy['lines'] ?? []);
+        $offers = [...(array) ($lines['pact_offer'] ?? []), ...(array) ($lines['flank_offer'] ?? [])];
         $openings = array_map(static fn (string $offer): string => substr($offer, 0, (int) strpos($offer . '[', '[')), array_values($offers));
 
         return ChatMessage::query()->where('sender_id', $ours->founder_user_id)->where('recipient_id', $humanId)
@@ -340,52 +341,82 @@ class AdvanceAiAlliancePoliticsAction
     /** @param list<int> $founders */
     private function offerPact(Alliance $alliance, array $founders): int
     {
-        $enemies = array_unique([...AiAllianceRelation::counterparts((int) $alliance->id, AiAllianceStance::War), ...$this->feared($alliance)]);
+        foreach ($this->pactCandidates($alliance) as [$enemyId, $partnerId, $cause]) {
+            $partner = Alliance::query()->find($partnerId);
+            if ($partner === null || $partnerId === $alliance->id || $partner->founder_user_id === null
+                || AiAllianceRelation::query()->openBetween((int) $alliance->id, $partnerId)->exists()
+                || $this->feudOutweighs((int) $alliance->founder_user_id, (int) $alliance->id, $partnerId, $enemyId)) {
+                continue;
+            }
 
-        foreach ($enemies as $enemyId) {
-            foreach (AiAllianceRelation::counterparts($enemyId, AiAllianceStance::War) as $partnerId) {
-                $partner = Alliance::query()->find($partnerId);
-                if ($partner === null || $partnerId === $alliance->id || $partner->founder_user_id === null
-                    || AiAllianceRelation::query()->openBetween((int) $alliance->id, $partnerId)->exists()
-                    || $this->feudOutweighs((int) $alliance->founder_user_id, (int) $alliance->id, $partnerId, $enemyId)) {
-                    continue;
-                }
+            // The offer is made once and awaited: a human leader answers in their own words (answerHumanLeader), and an
+            // AI leader that hates the offerer refuses once instead of being asked again on every pass (9464: the
+            // same offer twenty times to one leader).
+            $human = !in_array($partner->founder_user_id, $founders, true);
+            if ($this->offeredTo($alliance, (int) $partner->founder_user_id)) {
+                continue;
+            }
 
-                // The offer is made once and awaited: a human leader answers in their own words (answerHumanLeader), and an
-                // AI leader that hates the offerer refuses once instead of being asked again on every pass (9464: the
-                // same offer twenty times to one leader).
-                $human = !in_array($partner->founder_user_id, $founders, true);
-                if ($this->offeredTo($alliance, (int) $partner->founder_user_id)) {
-                    continue;
-                }
+            $enemyTag = (string) Alliance::query()->whereKey($enemyId)->value('alliance_tag');
+            app(DeliverAiDirectReplyAction::class)->handle((int) $alliance->founder_user_id, (int) $partner->founder_user_id, $this->line($cause === 'flank' ? 'flank_offer' : 'pact_offer', $enemyTag));
+            if ($human) {
+                return 1;
+            }
 
-                $enemyTag = (string) Alliance::query()->whereKey($enemyId)->value('alliance_tag');
-                app(DeliverAiDirectReplyAction::class)->handle((int) $alliance->founder_user_id, (int) $partner->founder_user_id, $this->line('pact_offer', $enemyTag));
-                if ($human) {
-                    return 1;
-                }
-
-                if ($this->feudOutweighs((int) $partner->founder_user_id, $partnerId, (int) $alliance->id, $enemyId)) {
-                    app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_refuse', (string) $alliance->alliance_tag));
-
-                    return 1;
-                }
-
-                AiAllianceRelation::query()->create([
-                    'alliance_id' => $alliance->id,
-                    'other_alliance_id' => $partnerId,
-                    'stance' => AiAllianceStance::Nap,
-                    'cause' => 'common-enemy',
-                    'declared_by' => $alliance->founder_user_id,
-                    'started_at' => now(),
-                ]);
-                app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_accept', (string) $alliance->alliance_tag));
+            if ($this->feudOutweighs((int) $partner->founder_user_id, $partnerId, (int) $alliance->id, $enemyId)) {
+                app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_refuse', (string) $alliance->alliance_tag));
 
                 return 1;
             }
+
+            AiAllianceRelation::query()->create([
+                'alliance_id' => $alliance->id,
+                'other_alliance_id' => $partnerId,
+                'stance' => AiAllianceStance::Nap,
+                'cause' => $cause,
+                'declared_by' => $alliance->founder_user_id,
+                'started_at' => now(),
+            ]);
+            app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_accept', (string) $alliance->alliance_tag));
+
+            return 1;
         }
 
         return 0;
+    }
+
+    /**
+     * Who this alliance would sign with, in the order a veteran thinks of them: whoever fights the same enemy, then a
+     * third club it has been trading hits with while a war is on, so the war is not fought on two fronts (the judge on
+     * 9509 and 9511: two wars, four clubs, no pact anywhere, because no two clubs shared an enemy).
+     *
+     * @return list<array{0: int, 1: int, 2: string}> enemy id, partner id, cause
+     */
+    private function pactCandidates(Alliance $alliance): array
+    {
+        $wars = AiAllianceRelation::counterparts((int) $alliance->id, AiAllianceStance::War);
+        $candidates = [];
+
+        foreach (array_unique([...$wars, ...$this->feared($alliance)]) as $enemyId) {
+            foreach (AiAllianceRelation::counterparts($enemyId, AiAllianceStance::War) as $partnerId) {
+                $candidates[] = [$enemyId, $partnerId, 'common-enemy'];
+            }
+        }
+
+        if ($wars === []) {
+            return $candidates;
+        }
+
+        $own = $this->members((int) $alliance->id);
+        $line = (float) ($this->policy['peace_grievance'] ?? 0.3);
+        foreach (Alliance::query()->whereKeyNot($alliance->id)->whereNotIn('id', $wars)->orderBy('id')->pluck('id') as $otherId) {
+            $theirs = $this->members((int) $otherId);
+            if ($this->grievance($own, $theirs) + $this->grievance($theirs, $own) >= $line) {
+                $candidates[] = [$wars[0], (int) $otherId, 'flank'];
+            }
+        }
+
+        return $candidates;
     }
 
     private function betrayPact(Alliance $alliance): int
