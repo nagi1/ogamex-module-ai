@@ -198,7 +198,8 @@ class InitiateAiSocialContactAction
         // A player names what was done to them ("that's 6 attacks"); a bare "stop" repeated to everyone reads as a script.
         $hits = AiObservation::query()->where('player_id', $profile->player_id)->where('kind', AiObservationKind::BattleReportObserved)->where('subject_player_id', $raiderId)->count();
         $detail = $hits > 1 ? $lines->line($profile, $key . '.detail', (string) $raiderId, ['hits' => (string) $hits]) : null;
-        $message = $detail === null ? $message : $message . ' ' . $detail;
+        // Two sentences, not one run-on (9499: "truce? this is pointless for both of us 4 attacks is enough for anyone").
+        $message = $detail === null ? $message : rtrim($message, '.?!') . '. ' . $detail;
 
         $exchange = app(RecordAiSocialExchangeAction::class)->handle($profile->player_id, $raiderId, $observation->id, $type, [], null, 1);
 
