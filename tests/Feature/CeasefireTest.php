@@ -19,7 +19,11 @@ use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
+use Modules\AI\Actions\BuildAuthoredSocialReplyAction;
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Models\AiCommitment;
+use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiSocialExchange;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
@@ -124,4 +128,27 @@ test('an agreed and a broken truce are remembered as readable sentences', functi
     expect(array_column(array_column($facts, 'value'), 'summary'))
         ->toContain('we agreed a ceasefire of 24 hours')
         ->toContain('they hit us during an agreed ceasefire');
+});
+
+// 9509 to 9511: "no deal" and "good try ;)" with no mention of the raids that came before them.
+test('a refused truce names how many times the asker has hit the account', function (): void {
+    $asker = User::factory()->create();
+    foreach ([8101, 8102, 8103] as $reportId) {
+        AiObservation::query()->create([
+            'player_id' => $this->currentUserId,
+            'source_type' => AiObservationSource::BattleReport,
+            'source_id' => $reportId,
+            'kind' => AiObservationKind::BattleReportObserved,
+            'subject_player_id' => $asker->id,
+            'source_time' => CarbonImmutable::now(),
+            'observed_at' => CarbonImmutable::now(),
+        ]);
+    }
+    app(RecordAiRelationshipInteractionAction::class)->handle($this->currentUserId, $asker->id, 92000, CarbonImmutable::now(), threatChange: 0.9);
+
+    $refused = askedForTruce($this->currentUserId, $asker->id);
+    $profile = AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 7, 'enabled' => true]);
+
+    expect($refused?->response)->toBe(AiSocialResponse::Reject)
+        ->and(app(BuildAuthoredSocialReplyAction::class)->handle($refused, $profile))->toContain('3');
 });

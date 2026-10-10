@@ -3,10 +3,12 @@
 namespace Modules\AI\Actions;
 
 use Modules\AI\Enums\AiConversationReplyState;
+use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialTerm;
 use Modules\AI\Models\AiConversationReply;
+use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
@@ -42,7 +44,22 @@ class BuildAuthoredSocialReplyAction
         $line = $eligibleLines[$index];
         $amount = $exchange->response_terms[AiSocialTerm::Amount->value] ?? null;
 
-        return is_int($amount) || is_float($amount) ? str_replace('{amount}', (string) $amount, $line) : $line;
+        $line = is_int($amount) || is_float($amount) ? str_replace('{amount}', (string) $amount, $line) : $line;
+        $detail = $this->hitsDetail($exchange, $profile);
+
+        return $detail === null ? $line : rtrim($line, '.?!') . '. ' . $detail;
+    }
+
+    /**
+     * A refusal or a warning that names how often the other side has hit the account ("5 raids on me and now it's a
+     * truce?"): a reply that points at the history reads as a player's, a bare "no deal" does not (judge, 9509 to 9511).
+     */
+    private function hitsDetail(AiSocialExchange $exchange, AiProfile $profile): string|null
+    {
+        $hits = AiObservation::query()->where('player_id', $exchange->player_id)->where('kind', AiObservationKind::BattleReportObserved)
+            ->where('subject_player_id', $exchange->counterparty_player_id)->count();
+
+        return $hits < 2 ? null : $this->line($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name) . '.detail', (string) $exchange->id, ['hits' => (string) $hits]);
     }
 
     /**
