@@ -30,12 +30,24 @@ class Policy:
         self.session = ort.InferenceSession(model, options, providers=["CUDAExecutionProvider"])
         if self.session.get_providers()[0] != "CUDAExecutionProvider":
             raise RuntimeError("the model did not load on the GPU: " + str(self.session.get_providers()))
+        schema_file = os.path.join(os.path.dirname(os.path.abspath(model)), "schema.json")
+        if not os.path.exists(schema_file):
+            raise RuntimeError(f"{schema_file} is missing: a model is served only with the schema it was trained on")
+        with open(schema_file) as handle:
+            schema = json.load(handle)
+        self.version = int(schema["version"])
+        self.widths = (len(schema["state"]), len(schema["candidate"]))
         self.temperature = temperature
         self.seed = seed
         self.lock = threading.Lock()
         self.served = 0
 
     def choose(self, request: dict) -> int:
+        # A stale model must never play silently: the PHP side counts the refusal as a fallback to the planner.
+        if "v" in request and int(request["v"]) != self.version:
+            raise ValueError(f"encoder version {request['v']} but the model was trained on version {self.version}")
+        if len(request["state"]) != self.widths[0] or any(len(row) != self.widths[1] for row in request["cands"]):
+            raise ValueError(f"widths {len(request['state'])}/{len(request['cands'][0])} but the model expects {self.widths}")
         state = np.asarray(request["state"], dtype=np.float32)[None, :]
         cands = np.asarray(request["cands"], dtype=np.float32)[None, :, :]
         legal = np.asarray(request["legal"], dtype=bool)[None, :]

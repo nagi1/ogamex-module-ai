@@ -9,6 +9,8 @@ export BROADCAST_CONNECTION=log CACHE_STORE=array SESSION_DRIVER=array QUEUE_CON
 SEED=${1:?seed}; BUDGET=${2:-2e11}; HOURS=${3:-24}; POLICY=${4:-teacher}; ACC=${5:-8}; SPEED=${6:-8}
 AT=2026-10-05T00:00:00Z; OUT=storage/rl/late/$SEED; mkdir -p "$OUT"
 rm -f "$OUT"/start.sqlite "$OUT"/end.sqlite "$OUT"/sim.log
+# A world is read against the code it started on: the module and host commits, and whether the tree was edited.
+{ echo "module $(git -C Modules/AI rev-parse --short HEAD 2>/dev/null) dirty=$(git -C Modules/AI status --porcelain 2>/dev/null | grep -v '^??' | wc -l)"; echo "host $(git rev-parse --short HEAD 2>/dev/null)"; } > "$OUT/commit" 2>/dev/null || true
 php artisan ai:rl-universe "$OUT/start.sqlite" --accounts="$ACC" --seed="$SEED" --stage-budget="$BUDGET" --speed="$SPEED" --at="$AT" > "$OUT/universe.log" 2>&1
 cp "$OUT/start.sqlite" "$OUT/run.sqlite"
 DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$OUT/run.sqlite")" nice -n 15 php -d memory_limit=4G artisan ai:sim --in-memory $([ "${COGNITION:-full}" = native ] && echo --native-cognition) --full-play \

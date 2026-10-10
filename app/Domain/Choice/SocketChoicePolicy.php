@@ -21,6 +21,8 @@ class SocketChoicePolicy implements ChoicePolicy
     {
         $answer = $this->ask([
             'key' => $point->key,
+            // The server refuses a request whose encoder version is not its model's: a stale model must fall back loudly.
+            'v' => EconomyChoiceEncoder::VERSION,
             'player' => $point->playerId,
             'kind' => $point->kind,
             'state' => $point->state,

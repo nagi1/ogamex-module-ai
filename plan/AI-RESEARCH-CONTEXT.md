@@ -70,6 +70,10 @@ human raters.
 | 10 Oct | Social corpus cleaned | dialogue 23,445 → 7,498 lines, greetings ~25% → 3.7% | `rl/scripts/social_curate.py` |
 | 10 Oct | Fleet scale vs real servers | real battles field thousands of ships per side; our best world peaked at 172 battleships | `plan/details/specs/play-coverage.md` |
 
+## Noise floor (12 Oct, `rl/scripts/world_scorecard.py` on 9507, 9509–9512, 9514)
+
+Across six finished worlds, spread as coefficient of variation (sd over mean): truces agreed 0.68, truces broken 1.08, pacts 0.82, moon destructions 0.52, loot 0.37, battles 0.17, attack pairs 0.12, distinct-line share 0.08. Staged growth is flat (0.00), so it says nothing. A change below those spreads cannot be read from one world; counts of rare social events need many worlds per arm, so compare rates per exchange or per account, not world totals. Worlds are deterministic for a seed, so the paired design is the same seeds with and without the change. External review of 10 Oct (area 2): one world per change is for crash detection only.
+
 ## Open experiments
 
 | Experiment | Hypothesis | Baseline | Status |
