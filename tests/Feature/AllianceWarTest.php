@@ -152,6 +152,25 @@ test('a leader who hates the offering alliance refuses the pact', function (): v
     expect(AiAllianceRelation::counterparts($partner->id, AiAllianceStance::Nap))->toBe([]);
 });
 
+// 9500: CACLUB and ESCLUB both fought the giant and kept hitting each other; neither ever signed.
+test('two clubs at war with the same giant sign despite a feud that is the smaller grudge', function (): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $partnerLeader = User::factory()->create();
+    $partner = allianceWarLeader($partnerLeader->id, 'PART');
+    $enemyLeader = User::factory()->create();
+    $enemy = app(AllianceService::class)->createAlliance($enemyLeader->id, 'ENEM', 'Enemy');
+    allianceWarAt($ours->id, $enemy->id);
+    allianceWarAt($partner->id, $enemy->id);
+    allianceWarGrudge($this->currentUserId, $partnerLeader->id, '0.8000');
+    allianceWarGrudge($this->currentUserId, $enemyLeader->id, '1.0000');
+    allianceWarGrudge($partnerLeader->id, $this->currentUserId, '0.8000');
+    allianceWarGrudge($partnerLeader->id, $enemyLeader->id, '1.0000');
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap))->toBe([$partner->id]);
+});
+
 // 9464: a leader who refused the pact was asked again on every pass, the same line twenty times.
 test('an offer a leader refused is not made again', function (): void {
     $ours = allianceWarLeader($this->currentUserId, 'OURS');

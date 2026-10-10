@@ -347,7 +347,7 @@ class AdvanceAiAlliancePoliticsAction
                 $partner = Alliance::query()->find($partnerId);
                 if ($partner === null || $partnerId === $alliance->id || $partner->founder_user_id === null
                     || AiAllianceRelation::query()->openBetween((int) $alliance->id, $partnerId)->exists()
-                    || $this->hates((int) $alliance->founder_user_id, $this->members($partnerId))) {
+                    || $this->feudOutweighs((int) $alliance->founder_user_id, (int) $alliance->id, $partnerId, $enemyId)) {
                     continue;
                 }
 
@@ -365,7 +365,7 @@ class AdvanceAiAlliancePoliticsAction
                     return 1;
                 }
 
-                if ($this->hates((int) $partner->founder_user_id, $this->members((int) $alliance->id))) {
+                if ($this->feudOutweighs((int) $partner->founder_user_id, $partnerId, (int) $alliance->id, $enemyId)) {
                     app(DeliverAiDirectReplyAction::class)->handle((int) $partner->founder_user_id, (int) $alliance->founder_user_id, $this->line('pact_refuse', (string) $alliance->alliance_tag));
 
                     return 1;
@@ -448,6 +448,19 @@ class AdvanceAiAlliancePoliticsAction
     private function open(int $allianceId, int $otherId, AiAllianceStance $stance): bool
     {
         return AiAllianceRelation::query()->openBetween($allianceId, $otherId)->where('stance', $stance)->exists();
+    }
+
+    /**
+     * Whether a leader's grudge against the other club is worse than the one against the enemy they share. Two clubs
+     * fighting the same giant set a small feud aside to face it (9500: two clubs at war with the giant kept hitting each
+     * other and never signed); a feud that is the bigger grudge still refuses the pact.
+     */
+    private function feudOutweighs(int $leaderId, int $allianceId, int $otherId, int $enemyId): bool
+    {
+        $own = $this->members($allianceId);
+
+        return $this->hates($leaderId, $this->members($otherId))
+            && $this->grievance($own, $this->members($otherId)) >= $this->grievance($own, $this->members($enemyId));
     }
 
     /** @param list<int> $players */
