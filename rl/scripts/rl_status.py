@@ -247,7 +247,7 @@ def late_runs() -> list[dict]:
         reasons = read(folder / "raid-reasons.txt").strip().splitlines() if (folder / "raid-reasons.txt").exists() else []
         runs.append({"seed": folder.name, "label": read(folder / "label").strip(), "finished": bool(text), "running": not text and info["idle"] is not None and info["idle"] < 900,
                      "hours": round(info["day"] * 24, 1), "total_hours": round(info["days"] * 24, 1), "errors": info["errors"],
-                     "missions": missions.group(1) if missions else None, "missing": missing.group(1).split() if missing else [],
+                     "missions": missions.group(1) if missions else None, "missing": [name for name in missing.group(1).split() if name != "none"] if missing else [],
                      "raid_reasons": [r.strip() for r in reasons[:5]]})
     return runs
 
