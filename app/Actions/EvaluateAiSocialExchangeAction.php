@@ -19,6 +19,7 @@ use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
+use OGame\Models\User;
 
 class EvaluateAiSocialExchangeAction
 {
@@ -145,7 +146,22 @@ class EvaluateAiSocialExchangeAction
             'archetype' => AiProfile::query()->where('player_id', $exchange->player_id)->first()?->archetype,
             'counterpartyPlayerId' => $exchange->counterparty_player_id,
             'history' => $this->recalledHistory($exchange, $evaluatedAt),
+            'truceBreaches' => $exchange->type === AiSocialExchangeType::CeasefireRequest ? $this->truceBreaches($exchange) : 0,
         ]);
+    }
+
+    /** Ceasefires the counterparty broke, with this account or with a member of its alliance (the memory of a betrayal). */
+    private function truceBreaches(AiSocialExchange $exchange): int
+    {
+        $allianceId = User::query()->whereKey($exchange->player_id)->value('alliance_id');
+        $side = $allianceId === null ? [] : User::query()->where('alliance_id', $allianceId)->pluck('id')->all();
+        $side[] = $exchange->player_id;
+
+        return AiCommitment::query()
+            ->where('state', AiCommitmentState::Broken)
+            ->where('terms->broken_by', $exchange->counterparty_player_id)
+            ->where(static fn ($party) => $party->whereIn('player_id', $side)->orWhereIn('counterparty_player_id', $side))
+            ->count();
     }
 
     /**

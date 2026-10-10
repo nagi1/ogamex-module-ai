@@ -16,6 +16,7 @@ use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialResponseReason;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiSocialExchange;
 use OGame\Models\User;
@@ -87,4 +88,19 @@ test('the player whose truce was broken says so once, to the one who broke it', 
     expect($first)->toBe(1)
         ->and($second)->toBe(0)
         ->and(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $asker->id)->count())->toBe(1);
+});
+
+// A betrayed account remembers: the one who broke a truce is not given another on the same words, a stranger is.
+test('a player who broke a truce with the account is refused the next one', function (): void {
+    $breaker = User::factory()->create();
+    $stranger = User::factory()->create();
+    askedForTruce($this->currentUserId, $breaker->id);
+    app(BreakAiCeasefireAction::class)->handle($breaker->id, $this->currentUserId);
+
+    $again = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $breaker->id, 92002, AiSocialExchangeType::CeasefireRequest, []);
+    $refused = app(EvaluateAiSocialExchangeAction::class)->handle($again?->id ?? 0, 0, CarbonImmutable::now());
+
+    expect($refused?->response)->toBe(AiSocialResponse::Reject)
+        ->and($refused?->response_reason)->toBe(AiSocialResponseReason::TruceBrokenBefore)
+        ->and(askedForTruce($this->currentUserId, $stranger->id)?->response)->toBe(AiSocialResponse::Accept);
 });

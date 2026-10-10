@@ -22,6 +22,7 @@ enum AiSocialResponseReason: string
     // Kept so exchanges recorded before ceasefires were held still load.
     case CeasefireEnforcementUnavailable = 'ceasefire_enforcement_unavailable';
     case CeasefireAgreed = 'ceasefire_agreed';
+    case TruceBrokenBefore = 'truce_broken_before';
     case CoerciveWarning = 'coercive_warning';
     case WarningAcknowledgedWithoutCommitment = 'warning_acknowledged_without_commitment';
     case MissingCooperationScope = 'missing_cooperation_scope';

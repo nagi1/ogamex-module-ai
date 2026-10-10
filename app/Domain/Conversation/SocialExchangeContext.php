@@ -38,6 +38,9 @@ readonly class SocialExchangeContext
         // cognition reads a subset (an outstanding debt cools a new help request); a driver
         // never receives raw memory, so this stays module-side.
         public array $history = [],
+        // Truces this counterparty broke with the account or anyone in its alliance. A player who has broken one is not
+        // given another on the same words.
+        public int $truceBreaches = 0,
     ) {
     }
 }

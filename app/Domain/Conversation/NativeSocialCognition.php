@@ -127,6 +127,10 @@ class NativeSocialCognition implements SocialCognition
             return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::UnsafeCeasefireRequest]);
         }
 
+        if ($exchange->truceBreaches > 0) {
+            return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Reject, 'reason' => AiSocialResponseReason::TruceBrokenBefore]);
+        }
+
         return app()->makeWith(SocialExchangeEvaluation::class, ['response' => AiSocialResponse::Accept, 'reason' => AiSocialResponseReason::CeasefireAgreed]);
     }
 
