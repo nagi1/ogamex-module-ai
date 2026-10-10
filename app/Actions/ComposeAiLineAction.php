@@ -34,7 +34,7 @@ class ComposeAiLineAction
     /**
      * @param array<string, scalar|null> $facts what the line may refer to; every non-empty value must survive into the text
      */
-    public function handle(AiProfile $profile, string $key, string $authored, array $facts = []): string
+    public function handle(AiProfile $profile, string $key, string $authored, array $facts = [], int|null $counterpartyId = null): string
     {
         $settings = app(AiRuntimeSettings::class);
         if (!$settings->languageEnabled() || !$settings->languageCompose()) {
@@ -42,20 +42,24 @@ class ComposeAiLineAction
         }
 
         $facts = array_filter($facts, static fn (mixed $value): bool => $value !== null && $value !== '');
-        $cacheKey = 'ai-compose:' . sha1($profile->player_id . '|' . $key . '|' . json_encode($facts) . '|' . $authored);
+        $cacheKey = 'ai-compose:' . sha1($profile->player_id . '|' . $key . '|' . json_encode($facts) . '|' . $authored . '|' . $counterpartyId);
         $cached = Cache::get($cacheKey);
         if (is_string($cached)) {
             return $cached;
         }
 
-        $line = $this->ask($profile, $key, $authored, $facts, $cacheKey) ?? $authored;
+        $inner = $counterpartyId === null ? [] : app(ReadAiInnerStateAction::class)->handle((int) $profile->player_id, $counterpartyId, $authored);
+        $line = $this->ask($profile, $key, $authored, $facts, $inner, $cacheKey) ?? $authored;
         Cache::put($cacheKey, $line, now()->addHours(6));
 
         return $line;
     }
 
-    /** @param array<string, scalar> $facts */
-    private function ask(AiProfile $profile, string $key, string $authored, array $facts, string $cacheKey): string|null
+    /**
+     * @param array<string, scalar> $facts
+     * @param array<string, string|list<string>> $inner
+     */
+    private function ask(AiProfile $profile, string $key, string $authored, array $facts, array $inner, string $cacheKey): string|null
     {
         $ladder = app(ResolveAiProviderRouteAction::class)->handle(AiLanguageTaskKind::MessageComposition, $this->clock->now());
         if ($ladder->isEmpty()) {
@@ -84,7 +88,7 @@ class ComposeAiLineAction
                 'archetype' => strtolower((string) $profile->archetype?->name),
                 'maximumCharacters' => (string) self::MAXIMUM_CHARACTERS,
             ])->prompt(
-                json_encode(['situation' => $key, 'facts' => $facts, 'example_line' => $authored], JSON_THROW_ON_ERROR),
+                json_encode(['situation' => $key, 'facts' => $facts, 'inner_state' => $inner, 'example_line' => $authored], JSON_THROW_ON_ERROR),
                 provider: $ladder->toProviderMap(),
                 timeout: app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
             );
@@ -108,7 +112,8 @@ class ComposeAiLineAction
     /** @param array<string, scalar> $facts */
     private function keepsTheFacts(string $text, array $facts): bool
     {
-        if ($text === '' || mb_strlen($text) > self::MAXIMUM_CHARACTERS) {
+        // A dash used as punctuation reads as a model; players type a comma or start a new sentence.
+        if ($text === '' || mb_strlen($text) > self::MAXIMUM_CHARACTERS || preg_match('/[—–]| - /u', $text) === 1) {
             return false;
         }
 

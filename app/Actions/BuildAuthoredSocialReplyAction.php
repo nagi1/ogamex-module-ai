@@ -53,7 +53,7 @@ class BuildAuthoredSocialReplyAction
         return app(ComposeAiLineAction::class)->handle($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name), $line, [
             'amount' => is_int($amount) || is_float($amount) ? (string) $amount : null,
             'hits' => $detail !== null ? (string) $hits : null,
-        ]);
+        ], (int) $exchange->counterparty_player_id);
     }
 
     /**

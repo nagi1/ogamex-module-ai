@@ -32,6 +32,7 @@ use Modules\AI\Console\Commands\CreateAiRlUniverse;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\ExportAiTextReadings;
 use Modules\AI\Console\Commands\JudgeAiWorld;
+use Modules\AI\Console\Commands\EvalAiComposer;
 use Modules\AI\Console\Commands\ProposeAiDoctrine;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
@@ -149,6 +150,7 @@ class AIServiceProvider extends ModuleServiceProvider
         ExplainAiDecision::class,
         ExportAiTextReadings::class,
         JudgeAiWorld::class,
+        EvalAiComposer::class,
         ProposeAiDoctrine::class,
         PruneAiRecords::class,
         ReconcileLanguageRequests::class,
