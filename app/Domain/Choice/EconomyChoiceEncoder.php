@@ -26,7 +26,7 @@ use OGame\Services\SettingsService;
  */
 class EconomyChoiceEncoder
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     /** The planner's pass names, in its order (QueueableBuildingPlanner::passes). */
     private const PASSES = ['wall', 'doctrine', 'storage', 'surplus', 'routine', 'ambition'];

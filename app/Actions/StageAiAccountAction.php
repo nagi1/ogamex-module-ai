@@ -11,6 +11,7 @@ use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Models\User;
 use OGame\Services\PlayerService;
 
 /**
@@ -26,12 +27,18 @@ class StageAiAccountAction
     /** A budget this large is a late-game account, and a late-game account owns a moon by then (battle debris made it). */
     private const MOON_BUDGET = 1e10;
 
+    /** Dark matter a veteran holds by then (expeditions, a few purchases): enough for an officer or two above the reserve. */
+    private const LATE_GAME_DARK_MATTER = 60_000;
+
     /** Share of a late-game budget each moon has had spent on it: a veteran's moons carry their base, phalanx and gate. */
     private const MOON_SHARE = 0.01;
 
     public function handle(int $playerId, float $budget): int
     {
         $lateGame = $budget >= self::MOON_BUDGET;
+        if ($lateGame) {
+            User::query()->whereKey($playerId)->where('dark_matter', '<', self::LATE_GAME_DARK_MATTER)->update(['dark_matter' => self::LATE_GAME_DARK_MATTER]);
+        }
         $player = app(PlayerServiceFactory::class)->make($playerId, true);
         $planet = $player->planets->first();
         $moonBudget = $lateGame ? $budget * self::MOON_SHARE : 0.0;
