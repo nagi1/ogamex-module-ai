@@ -241,6 +241,32 @@ test('the hybrid social engine withholds an acceptance the driver says cannot st
         ->and($evaluation->volition)->toBeNull();
 });
 
+// 9494: every truce the native rules accepted was withheld, because a rapport-gated driver has no volition for a plea from a foe.
+test('the hybrid social engine leaves a ceasefire to the module rule, whatever the rapport', function (): void {
+    config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
+    $this->fakeFatimaDriver();
+
+    $context = app()->makeWith(SocialExchangeContext::class, [
+        'exchangeId' => 2,
+        'type' => AiSocialExchangeType::CeasefireRequest,
+        'terms' => [],
+        'trust' => -0.4,
+        'affinity' => -0.4,
+        'threat' => 0.3,
+        'outstandingCommitments' => 0,
+        'availableAmount' => 0.0,
+        'evaluatedAt' => CarbonImmutable::parse('2026-09-11 12:00:00 UTC'),
+        'dueAt' => CarbonImmutable::parse('2026-09-12 12:00:00 UTC'),
+        'archetype' => AiArchetype::Miner,
+        'counterpartyPlayerId' => 42,
+    ]);
+
+    $evaluation = app(SocialCognition::class)->evaluateSocialExchange($context);
+
+    expect($evaluation->response)->toBe(AiSocialResponse::Accept)
+        ->and($evaluation->reason)->toBe(AiSocialResponseReason::CeasefireAgreed);
+});
+
 test('the hybrid social engine questions an acceptance the driver only weakly supports', function (): void {
     config(['ai.cognition.driver' => 'fatima', 'ai.cognition.mode' => 'hybrid']);
     // The authored influence rule sets a constant, so the driver answers 7 or nothing at all and

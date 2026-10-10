@@ -45,7 +45,7 @@ class FatimaSocialCognition implements SocialCognition
      */
     public function evidence(SocialExchangeContext $exchange): array|null
     {
-        if ($exchange->archetype === null || $exchange->counterpartyPlayerId === null) {
+        if ($exchange->archetype === null || $exchange->counterpartyPlayerId === null || !$exchange->type->drivenByWillingness()) {
             return null;
         }
 

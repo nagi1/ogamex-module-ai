@@ -49,7 +49,7 @@ class PsychSimSocialCognition implements SocialCognition
 
         // The driver models the account against a counterparty; without one there is no
         // one to reason about, so the native stance stands.
-        if ($exchange->counterpartyPlayerId === null) {
+        if ($exchange->counterpartyPlayerId === null || !$exchange->type->drivenByWillingness()) {
             return null;
         }
 

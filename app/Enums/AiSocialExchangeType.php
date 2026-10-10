@@ -15,4 +15,14 @@ enum AiSocialExchangeType: int
     case CompensationOffer = 9;
     case AttackerNotice = 10;
     case TransportThanks = 11;
+
+    /**
+     * Whether a cognition driver's willingness may hold the exchange back. A ceasefire is asked for by someone the account
+     * likes least, so a driver that gates on rapport refuses it every time (9494: 19 of 19 accepted truces withheld, none ever
+     * agreed); the module's own rule on threat and terms decides it.
+     */
+    public function drivenByWillingness(): bool
+    {
+        return $this !== self::CeasefireRequest;
+    }
 }
