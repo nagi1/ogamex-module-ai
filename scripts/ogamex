@@ -253,7 +253,8 @@ prepare_lane_database() {
     # its own migration creates, so no row that adds a migration could ever verify. `migrate --force` is
     # incremental, so the marker is keyed on the migrations on disk and only a changed set pays for it.
     local stamp
-    stamp="$(ls "$MODULE_ROOT/database/migrations" 2>/dev/null | md5sum | cut -c1-12)"
+    # The host adds tables too (the premium officers' `officers`), so its migrations are part of the key.
+    stamp="$(ls "$MODULE_ROOT/database/migrations" "$OGAMEX_ROOT/database/migrations" 2>/dev/null | md5sum | cut -c1-12)"
     [ -e "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE-$stamp" ] && return
     prepare_coverage_database_for "$AI_DB_OVERRIDE" && : > "/tmp/ogamex-lane-ready-$AI_DB_OVERRIDE-$stamp"
 }

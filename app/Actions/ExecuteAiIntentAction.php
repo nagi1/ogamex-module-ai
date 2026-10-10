@@ -39,6 +39,8 @@ use Modules\AI\Domain\Decision\QueueableDefend;
 use Modules\AI\Domain\Decision\QueueableDefendPlanner;
 use Modules\AI\Domain\Decision\QueueableJumpGate;
 use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
+use Modules\AI\Domain\Decision\QueueableOfficer;
+use Modules\AI\Domain\Decision\QueueableOfficerPlanner;
 use Modules\AI\Domain\Decision\QueueableRelocation;
 use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableTrade;
@@ -144,6 +146,7 @@ class ExecuteAiIntentAction
             AiWorkKind::Defend => $this->defend($workItem, $planetId),
             AiWorkKind::Trade => $this->trade($workItem, $planetId),
             AiWorkKind::Relocate => $this->relocate($workItem, $planetId),
+            AiWorkKind::Officer => $this->officer($workItem),
             AiWorkKind::JumpGate => $this->jumpGate($workItem, $planetId),
             AiWorkKind::Missile => $this->missile($workItem, $planetId),
             AiWorkKind::RaidWave => $this->raidWave($workItem, $planetId),
@@ -508,6 +511,28 @@ class ExecuteAiIntentAction
         return [
             app(QueueAiRelocation::class)->handle($workItem->player_id, $step->planetId, $step->galaxy, $step->system, $step->position),
             ['planet_id' => $step->planetId, 'galaxy' => $step->galaxy, 'system' => $step->system, 'position' => $step->position],
+            $step->planetId,
+        ];
+    }
+
+    /**
+     * @return array{0: AiActionResult|null, 1: array<string, mixed>, 2: int}
+     */
+    private function officer(AiWorkItem $workItem): array
+    {
+        $step = $this->fromPayload(QueueableOfficer::class, [
+            'officerKey' => $workItem->payload['officer'] ?? null,
+            'days' => $workItem->payload['days'] ?? null,
+            'planetId' => $workItem->payload[self::PAYLOAD_PLANET_ID] ?? null,
+        ]) ?? app(QueueableOfficerPlanner::class)->plan($workItem->player_id);
+
+        if (!$step instanceof QueueableOfficer) {
+            return [null, [], 0];
+        }
+
+        return [
+            app(QueueAiOfficerAction::class)->handle($workItem->player_id, $step->officerKey, $step->days),
+            ['officer' => $step->officerKey, 'days' => $step->days],
             $step->planetId,
         ];
     }

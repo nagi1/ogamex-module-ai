@@ -1,0 +1,35 @@
+# Which premium officers the account buys, in the order a veteran thinks of them, and what has to be true first.
+# The host sells the officers and prices them (OfficerService); this file only says which benefit the account is
+# already using. An officer the host sells that is not named here is still bought, last, once the account can spare
+# the dark matter (so a modded officer is reachable with no edit); one the host no longer sells is skipped.
+#
+# A trigger is a set of facts about the account, every one of which must hold:
+#   queue_items:       a planet already has this many buildings in its queue (the queue is the Commander's benefit)
+#   building / level:  a planet holds this building at this level or more
+#   ships:             this many ships standing on the account's planets
+#   research_queued:   this many researches in progress
+#   defence_units:     this many defence units standing on the account's planets
+order:
+  - officer: commander
+    when: { queue_items: 1 }
+  - officer: geologist
+    when: { building: metal_mine, level: 8 }
+  - officer: admiral
+    when: { ships: 10 }
+  - officer: technocrat
+    when: { research_queued: 1 }
+  - officer: engineer
+    when: { defence_units: 20 }
+
+# Never spend the last of it: a relocation, a merchant call or a halving is paid from what is kept.
+reserve_floor: 2000
+
+# 7 days to try, 90 when the account means to keep it (cheaper per day); the longer one only when the reserve survives it.
+default_days: 7
+long_days: 90
+
+# A held officer is renewed when fewer than this many days are left, so she does not lapse mid-queue.
+renew_days: 2
+
+# Sold, but not a single officer: the bundle is the five at once and is never bought as a shortcut.
+ignore: [all_officers]

@@ -14,6 +14,7 @@ enum AiCandidateReason: string
     case AllyUnderAttack = 'ally_under_attack';
     case EligibleTrade = 'eligible_trade';
     case EligibleRelocation = 'eligible_relocation';
+    case EligibleOfficer = 'eligible_officer';
     case EligibleJumpGate = 'eligible_jump_gate';
     case EligibleMissile = 'eligible_missile';
     case EligibleRecycle = 'eligible_recycle';

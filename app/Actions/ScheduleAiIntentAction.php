@@ -25,6 +25,8 @@ use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecall;
 use Modules\AI\Domain\Decision\QueueableRecycle;
 use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
+use Modules\AI\Domain\Decision\QueueableOfficer;
+use Modules\AI\Domain\Decision\QueueableOfficerPlanner;
 use Modules\AI\Domain\Decision\QueueableRelocation;
 use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
@@ -146,6 +148,7 @@ class ScheduleAiIntentAction
         private QueueableDefendPlanner $queueableDefendPlanner,
         private QueueableTradePlanner $queueableTradePlanner,
         private QueueableRelocationPlanner $queueableRelocationPlanner,
+        private QueueableOfficerPlanner $queueableOfficerPlanner,
         private QueueableJumpGatePlanner $queueableJumpGatePlanner,
         private RaidPlanner $raidPlanner,
         private SaveFailurePolicy $saveFailurePolicy,
@@ -356,6 +359,7 @@ class ScheduleAiIntentAction
             AiCandidateActionType::Defend => $this->scheduleDefend($profile, $sessionWorkItem),
             AiCandidateActionType::Trade => $this->scheduleTrade($profile, $sessionWorkItem),
             AiCandidateActionType::Relocate => $this->scheduleRelocation($profile, $sessionWorkItem),
+            AiCandidateActionType::Officer => $this->scheduleOfficer($profile, $sessionWorkItem),
             AiCandidateActionType::JumpGate => $this->scheduleJumpGate($profile, $sessionWorkItem),
             AiCandidateActionType::Missile => $this->scheduleMissile($profile, $sessionWorkItem),
             AiCandidateActionType::DoNothing => $this->recordQuietDecision($profile, $trace),
@@ -934,6 +938,21 @@ class ScheduleAiIntentAction
             self::PAYLOAD_SYSTEM => $plan->system,
             self::PAYLOAD_POSITION => $plan->position,
             self::PAYLOAD_REASON => 'relocate:' . $plan->planetId,
+        ]);
+    }
+
+    private function scheduleOfficer(AiProfile $profile, AiWorkItem $sessionWorkItem): void
+    {
+        $plan = $this->queueableOfficerPlanner->plan($profile->player_id);
+        if (!$plan instanceof QueueableOfficer) {
+            return;
+        }
+
+        $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Officer, [
+            self::PAYLOAD_PLANET_ID => $plan->planetId,
+            'officer' => $plan->officerKey,
+            'days' => $plan->days,
+            self::PAYLOAD_REASON => 'officer:' . $plan->officerKey . ':' . $plan->days,
         ]);
     }
 

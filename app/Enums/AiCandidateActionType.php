@@ -27,4 +27,5 @@ enum AiCandidateActionType: int
     case Relocate = 18;
     case JumpGate = 19;
     case Missile = 20;
+    case Officer = 21;
 }

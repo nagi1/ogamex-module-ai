@@ -40,6 +40,23 @@ test('a build selection schedules and executes a building', function (): void {
     expect($result[0]?->successful)->toBeTrue($result[0]?->reason);
 });
 
+test('an officer selection schedules and buys the officer the account has a use for', function (): void {
+    $profile = intentProfile($this->currentUserId);
+    $this->planetSetObjectLevel('metal_mine', 8);
+    OGame\Models\User::query()->whereKey($this->currentUserId)->update(['dark_matter' => 20_000]);
+
+    $intent = intentSchedule($profile, AiCandidateActionType::Officer, $this->currentPlanetId);
+
+    expect($intent?->kind)->toBe(AiWorkKind::Officer)
+        ->and($intent?->payload['officer'])->toBe('geologist');
+
+    $result = intentExecute($intent, $this->currentPlanetId);
+    app(OGame\Services\OfficerService::class)->clearCache(OGame\Models\User::query()->findOrFail($this->currentUserId));
+
+    expect($result[0]?->successful)->toBeTrue($result[0]?->reason)
+        ->and(app(OGame\Services\OfficerService::class)->isActive(OGame\Models\User::query()->findOrFail($this->currentUserId), 'geologist'))->toBeTrue();
+});
+
 test('a research selection schedules and executes a technology', function (): void {
     $profile = intentProfile($this->currentUserId);
     $this->planetAddResources(intentPlenty());

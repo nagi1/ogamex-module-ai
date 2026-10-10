@@ -26,6 +26,7 @@ class CandidateActionFactory
         private readonly QueueableDefendPlanner $queueableDefendPlanner,
         private readonly QueueableTradePlanner $queueableTradePlanner,
         private readonly QueueableRelocationPlanner $queueableRelocationPlanner,
+        private readonly QueueableOfficerPlanner $queueableOfficerPlanner,
         private readonly QueueableJumpGatePlanner $queueableJumpGatePlanner,
     ) {
     }
@@ -47,6 +48,7 @@ class CandidateActionFactory
                 ...$this->eligibleDefendCandidates($perception),
                 ...$this->eligibleTradeCandidates($perception),
                 ...$this->eligibleRelocationCandidates($perception),
+                ...$this->eligibleOfficerCandidates($perception),
                 ...$this->eligibleJumpGateCandidates($perception),
                 ...$this->eligibleMissileCandidates($perception),
                 ...$this->eligibleRecycleCandidates($perception),
@@ -242,6 +244,22 @@ class CandidateActionFactory
             'reason' => AiCandidateReason::EligibleRelocation->value,
             'parameters' => [],
             'features' => $this->features(AiCandidateActionType::Relocate, 0, 0, 0, $perception->recoveryFactor),
+            'sourceTimestamps' => $perception->sourceTimestamps,
+        ])];
+    }
+
+    /** @return array<int, CandidateAction> An officer needs no fleet slot, only a benefit in use and the dark matter above the reserve. */
+    private function eligibleOfficerCandidates(PerceptionSnapshot $perception): array
+    {
+        if ($this->queueableOfficerPlanner->plan($perception->playerId) === null) {
+            return [];
+        }
+
+        return [app()->makeWith(CandidateAction::class, [
+            'type' => AiCandidateActionType::Officer,
+            'reason' => AiCandidateReason::EligibleOfficer->value,
+            'parameters' => [],
+            'features' => $this->features(AiCandidateActionType::Officer, 0, 0, 0, $perception->recoveryFactor),
             'sourceTimestamps' => $perception->sourceTimestamps,
         ])];
     }
@@ -530,6 +548,8 @@ class CandidateActionFactory
             AiCandidateActionType::Trade => [0.8, 0.3, 0.0, 0.0],
             // A move the account can already pay for and that never stops improving the planet: a slow errand.
             AiCandidateActionType::Relocate => [0.6, 0.3, 0.0, 0.0],
+            // The planner found an officer whose benefit the account already uses and the dark matter above the reserve.
+            AiCandidateActionType::Officer => [0.7, 0.2, 0.0, 0.0],
             // A fleet standing at a threatened moon can leave at once: as pressing as a save.
             AiCandidateActionType::JumpGate => [1.0, 0.2, 0.0, 0.0],
             // The planner found a wall in range and missiles in the silo: as pressing as a raid it softens.

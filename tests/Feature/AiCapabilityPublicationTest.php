@@ -377,7 +377,8 @@ function capabilityFillBuildingQueues(int $playerId): void
 {
     $queue = app(BuildingQueueService::class);
     foreach (app(PlayerServiceFactory::class)->make($playerId, true)->planets->all() as $planet) {
-        for ($index = 0; $index < 5; $index++) {
+        // The queue holds one order without the Commander and five with her: fill whatever room the host gives.
+        for ($index = 0; $index < 5 && !$queue->retrieveQueue($planet)->isQueueFull(); $index++) {
             // A metal mine has no requirements, so the host queues it while the queue has room.
             $queue->add($planet, 1);
         }

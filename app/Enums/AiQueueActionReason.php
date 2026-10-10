@@ -35,4 +35,5 @@ enum AiQueueActionReason: string
     case JumpGateJumped = 'jump_gate_jumped';
     case JumpGateUnavailable = 'jump_gate_unavailable';
     case GiftNotAllowed = 'gift_not_allowed';
+    case OfficerPurchased = 'officer_purchased';
 }

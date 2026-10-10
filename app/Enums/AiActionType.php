@@ -15,4 +15,5 @@ enum AiActionType: int
     case TradeResources = 9;
     case RelocatePlanet = 10;
     case JumpShips = 11;
+    case PurchaseOfficer = 12;
 }
