@@ -493,6 +493,35 @@ test('a light-fighter swarm draws cruisers as the launch subset', function (): v
         ->and($plan->launchUnits)->not->toHaveKey('light_fighter');
 });
 
+// 9492: a far target needs more fuel than the hulls picked for the fight can hold; the account adds freighters, it does not
+// turn the trip down.
+test('a far raid is topped up with freighters until the fleet holds its fuel', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(50_000_000, 50_000_000, 50_000_000));
+    $this->planetAddUnit('bomber', 3000);
+    $this->planetAddUnit('large_cargo', 400);
+    $farUser = User::factory()->create();
+    Planet::factory()->create([
+        'user_id' => $farUser->id, 'galaxy' => 9, 'system' => 10, 'planet' => 15,
+        'metal' => 10_000, 'crystal' => 10_000, 'deuterium' => 10_000, 'time_last_update' => now()->subHour()->getTimestamp(),
+    ]);
+    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+        'player_id' => $this->currentUserId, 'other_player_id' => $farUser->id, 'threat' => '0.9000', 'revision' => 0,
+    ]));
+    $reportId = raidDepthReport($this->currentUserId, 9, 10, 15, ['metal' => 10_000, 'crystal' => 10_000, 'deuterium' => 10_000], null, ['light_fighter' => 100]);
+
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+    $fleet = new UnitCollection();
+    foreach ($plan?->launchUnits ?? [] as $name => $amount) {
+        $fleet->addUnit(ObjectService::getUnitObjectByMachineName($name), $amount);
+    }
+
+    expect($plan)->toBeInstanceOf(QueueableRaid::class)
+        ->and($plan->launchUnits['large_cargo'] ?? 0)->toBeGreaterThan(1)
+        ->and($fleet->getTotalFuelCapacity($player))->toBeGreaterThan(3_000_000);
+});
+
 // U6: an undefended farm gets cargo for the haul plus one kill hull, never the whole stock.
 test('an undefended farm sends kill ships plus cargo, not the whole stock', function (): void {
     raidDepthProfile($this->currentUserId);

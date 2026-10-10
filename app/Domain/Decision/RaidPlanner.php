@@ -55,6 +55,9 @@ class RaidPlanner
     /** The host's hard bashing limit: at most six attacks on one target per day. Single source of truth for the raid cap. */
     public const int BASHING_LIMIT = 6;
 
+    /** How many times the fleet is topped up with freighters to hold the fuel of a far trip, each hull burning more. */
+    private const FUEL_TOP_UP_ROUNDS = 3;
+
     private const BASHING_WINDOW_HOURS = 24;
 
     /** A farm is not re-hit inside this window, however many sessions run (a machine signature otherwise). */
@@ -256,7 +259,7 @@ class RaidPlanner
         // back, so a distant farm that spends more fuel than the tier allows is refused even when it
         // would "profit" (RAID-006, RAID-011). The fuel is the launch fleet's: priced from the whole
         // stock it ran to hundreds of times the real trip and turned away 6 reports in 10.
-        $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
+        [$launchUnits, $fuel] = $this->withFuelTank($player, $origin, $target, $launchUnits);
         if ($fuel > floor($origin->deuterium()->get())) {
             return $this->reject('not_enough_fuel', $playerId, $reportId);
         }
@@ -284,6 +287,34 @@ class RaidPlanner
             'missionType' => $missionType,
             'launchUnits' => $launchUnits,
         ]);
+    }
+
+    /**
+     * A far target costs more fuel than the hulls picked for the fight can hold, and a player then adds freighters to the
+     * fleet rather than turn the trip down (9492: 14 reports of one account refused as "fuel tank short"). Each added hull
+     * burns fuel too, so the top-up is re-priced, a few rounds at most.
+     *
+     * @param array<string, int> $launchUnits
+     * @return array{0: array<string, int>, 1: int}
+     */
+    private function withFuelTank(PlayerService $player, PlanetService $origin, PlanetService $target, array $launchUnits): array
+    {
+        $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
+
+        for ($round = 0; $round < self::FUEL_TOP_UP_ROUNDS; $round++) {
+            $deficit = (int) ($fuel / 2) - $this->fleet($launchUnits)->getTotalFuelCapacity($player);
+            $extra = $deficit > 0 ? $this->cargoForLoot($player, $origin, $deficit, $launchUnits) : [];
+            if ($extra === []) {
+                break;
+            }
+
+            foreach ($extra as $name => $amount) {
+                $launchUnits[$name] = ($launchUnits[$name] ?? 0) + $amount;
+            }
+            $fuel = $this->roundTripFuel($player, $origin, $target, $this->fleet($launchUnits));
+        }
+
+        return [$launchUnits, $fuel];
     }
 
     /**
@@ -440,15 +471,16 @@ class RaidPlanner
      * intact while the military hulls shrink to the counters. Civil vs military is the host's own
      * split, so a mod-added transport is cargo with no edit (gate 1).
      *
+     * @param array<string, int> $already hulls the launch holds, which the volume must come on top of
      * @return array<string, int>
      */
-    private function cargoForLoot(PlayerService $player, PlanetService $origin, int $volume): array
+    private function cargoForLoot(PlayerService $player, PlanetService $origin, int $volume, array $already = []): array
     {
         $stock = $origin->getShipUnits();
         $ships = [];
 
         foreach (ObjectService::getCivilShipObjects() as $ship) {
-            $amount = $stock->getAmountByMachineName($ship->machine_name);
+            $amount = $stock->getAmountByMachineName($ship->machine_name) - ($already[$ship->machine_name] ?? 0);
             $capacity = $this->capacity($player, $ship);
             if ($amount > 0 && $capacity > 0) {
                 $ships[] = ['unit' => $ship, 'amount' => $amount, 'capacity' => $capacity];
