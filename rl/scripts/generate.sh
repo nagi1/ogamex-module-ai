@@ -33,7 +33,7 @@ run_one() {
   if grep -q '^SIM: .* played' "$OUT/sim-$i.log" 2>/dev/null; then echo "universe $i: kept"; return; fi
   rm -f "$OUT/choices-$i.jsonl" "$OUT/choices-$i.jsonl.schema.json"
   [ -f "$universe" ] || $PHP artisan ai:rl-universe "$universe" --accounts="$ACCOUNTS" --seed="$i" --stage-budget="$(stage_budget "$i")" --speed="$(cycle "${SPEEDS:-8}" "$i")" --at="$AT" > "$OUT/universe-$i.log" 2>&1
-  DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$universe")" $PHP -d memory_limit=4G artisan ai:sim --in-memory --native-cognition \
+  DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$universe")" $PHP -d memory_limit=4G artisan ai:sim --in-memory $([ "${COGNITION:-full}" = native ] && echo --native-cognition) \
     --seed="$i" ${FULLPLAY:+--full-play} --hours=$((DAYS * 24)) --from="$AT" --choice-policy="$POLICY" --choice-epsilon="$EPS" ${SOCK:+--choice-socket="$SOCK"} ${SHARE:+--learner-share="$SHARE"} \
     --record-choices="$(realpath "$OUT")/choices-$i.jsonl" > "$OUT/sim-$i.log" 2>&1
   echo "universe $i: $(grep -h '^SIM: .* played' "$OUT/sim-$i.log" || echo FAILED)"

@@ -26,7 +26,7 @@ run_pair() {
   [ -f "$universe" ] || $PHP artisan ai:rl-universe "$universe" --accounts="$ACCOUNTS" --seed="$i" --at="$AT" > /dev/null 2>&1
   for side in teacher policy; do
     local policy=teacher; [ "$side" = policy ] && policy=socket
-    DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$universe")" $PHP -d memory_limit=4G artisan ai:sim --in-memory --native-cognition \
+    DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$universe")" $PHP -d memory_limit=4G artisan ai:sim --in-memory $([ "${COGNITION:-full}" = native ] && echo --native-cognition) \
       --seed="$i" --hours=$((DAYS * 24)) --from="$AT" --choice-policy=$policy --choice-socket="$SOCK" --learner-share="$SHARE" \
       --record-choices="$(realpath "$OUT")/$side/choices-$i.jsonl" > "$OUT/$side/sim-$i.log" 2>&1
   done
