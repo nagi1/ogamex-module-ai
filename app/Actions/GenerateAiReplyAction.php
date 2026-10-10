@@ -5,9 +5,11 @@ namespace Modules\AI\Actions;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\LanguageGateway;
+use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\ConversationContextSection;
 use Modules\AI\Domain\Conversation\LanguageRequest;
 use Modules\AI\Domain\Conversation\LanguageResult;
+use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Domain\Conversation\UsageBudgetLimit;
 use Modules\AI\Domain\Conversation\UsageBudgetLimits;
 use Modules\AI\Domain\Conversation\UsageReservationRequest;
@@ -27,6 +29,9 @@ use OGame\Models\ChatMessage;
 
 class GenerateAiReplyAction
 {
+    /** How many remembered facts the reply's context carries at most. */
+    private const MEMORIES_IN_CONTEXT = 4;
+
     public function __construct(private readonly AiClock $clock)
     {
     }
@@ -136,6 +141,16 @@ class GenerateAiReplyAction
             ]);
         }
 
+        $remembered = $this->memories($reply, $messages->pluck('message')->implode(' '));
+        if ($remembered !== []) {
+            // Not protected: when the context is tight the memories are the part that gives way, not the message.
+            $sections[] = app()->makeWith(ConversationContextSection::class, [
+                'name' => 'memories',
+                'value' => $remembered,
+                'isProtected' => false,
+            ]);
+        }
+
         $sections[] = app()->makeWith(ConversationContextSection::class, [
             'name' => 'messages',
             'value' => $messages->map(fn (ChatMessage $message): array => ['source_message_id' => $message->id, 'text' => $message->message])->all(),
@@ -166,6 +181,34 @@ class GenerateAiReplyAction
             'timeoutSeconds' => app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
             'maximumReplyCharacters' => app(AiRuntimeSettings::class)->languageMaximumReplyCharacters(),
         ]);
+    }
+
+    /**
+     * What the account remembers about the counterparty that bears on what was just said, as short sentences the wording
+     * can refer to ("they hit us during an agreed ceasefire"). Ranked by the memory driver against the incoming words.
+     *
+     * @return list<array{what: string}>
+     */
+    private function memories(AiConversationReply $reply, string $incoming): array
+    {
+        $facts = app(LongTermMemory::class)->recallRelevantMemories(app()->makeWith(MemoryRecallQuery::class, [
+            'playerId' => $reply->player_id,
+            'subjectPlayerId' => $reply->counterparty_player_id,
+            'now' => $this->clock->now(),
+            // Repeated hits are one sentence each time; asking for more keeps a truce from being crowded out by them.
+            'limit' => self::MEMORIES_IN_CONTEXT * 5,
+            'queryText' => $incoming,
+        ]));
+
+        $sentences = array_unique(array_filter(
+            array_map(static fn (array $fact): mixed => $fact['value']['summary'] ?? null, $facts),
+            'is_string',
+        ));
+
+        return array_map(
+            static fn (string $sentence): array => ['what' => $sentence],
+            array_slice(array_values($sentences), 0, self::MEMORIES_IN_CONTEXT),
+        );
     }
 
     /**

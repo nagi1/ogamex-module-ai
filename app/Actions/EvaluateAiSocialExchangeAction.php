@@ -12,6 +12,8 @@ use Modules\AI\Domain\Conversation\SocialExchangeContext;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiCommitmentDirection;
 use Modules\AI\Enums\AiCommitmentState;
+use Modules\AI\Enums\AiMemoryEvidenceKind;
+use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
@@ -99,6 +101,18 @@ class EvaluateAiSocialExchangeAction
             );
             $commitment = app(AcceptAiCommitmentAction::class)->handle($commitment->id);
             $exchange->update(['commitment_id' => $commitment?->id]);
+
+            if ($exchange->type === AiSocialExchangeType::CeasefireRequest) {
+                app(RecordAiMemoryFactAction::class)->handle(
+                    $exchange->player_id,
+                    $exchange->counterparty_player_id,
+                    AiMemoryPredicate::TruceAgreed,
+                    AiMemoryEvidenceKind::Verified,
+                    ['summary' => 'we agreed a ceasefire of ' . self::CEASEFIRE_WINDOW_HOURS . ' hours'],
+                    $exchange->source_observation_id,
+                    $evaluatedAt,
+                );
+            }
 
             return $exchange->refresh();
         });

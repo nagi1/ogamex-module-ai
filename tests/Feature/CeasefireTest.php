@@ -17,6 +17,8 @@ use Modules\AI\Enums\AiCommitmentState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
+use Modules\AI\Contracts\LongTermMemory;
+use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiSocialExchange;
 use OGame\Models\User;
@@ -103,4 +105,23 @@ test('a player who broke a truce with the account is refused the next one', func
     expect($refused?->response)->toBe(AiSocialResponse::Reject)
         ->and($refused?->response_reason)->toBe(AiSocialResponseReason::TruceBrokenBefore)
         ->and(askedForTruce($this->currentUserId, $stranger->id)?->response)->toBe(AiSocialResponse::Accept);
+});
+
+// The memory driver ranks sentences, so an agreed and a broken truce are stored as sentences it can be asked about.
+test('an agreed and a broken truce are remembered as readable sentences', function (): void {
+    $asker = User::factory()->create();
+    askedForTruce($this->currentUserId, $asker->id);
+    app(BreakAiCeasefireAction::class)->handle($asker->id, $this->currentUserId);
+
+    $facts = app(LongTermMemory::class)->recallRelevantMemories(app()->makeWith(MemoryRecallQuery::class, [
+        'playerId' => $this->currentUserId,
+        'subjectPlayerId' => $asker->id,
+        'now' => CarbonImmutable::now(),
+        'limit' => 5,
+        'queryText' => 'you broke our truce',
+    ]));
+
+    expect(array_column(array_column($facts, 'value'), 'summary'))
+        ->toContain('we agreed a ceasefire of 24 hours')
+        ->toContain('they hit us during an agreed ceasefire');
 });

@@ -115,9 +115,20 @@ class AppraiseObservedBattleReportAction
             $attackerPlayerId,
             AiMemoryPredicate::AttackReceived,
             AiMemoryEvidenceKind::Verified,
-            [],
+            $this->attackSummary(),
             $observation->id,
             $occurredAt,
         );
+    }
+
+    /**
+     * What a later conversation can be reminded of. A bare "attack received" has nothing for a memory ranking to match a
+     * question against; no coordinates, because this sentence can reach a language provider.
+     *
+     * @return array<string, string>
+     */
+    private function attackSummary(): array
+    {
+        return ['summary' => 'they attacked us'];
     }
 }

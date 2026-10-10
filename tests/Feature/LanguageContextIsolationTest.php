@@ -2,6 +2,9 @@
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\GenerateAiReplyAction;
+use Modules\AI\Actions\RecordAiMemoryFactAction;
+use Modules\AI\Enums\AiMemoryEvidenceKind;
+use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Ai\Agents\OgameConversationReplyAgent;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\LanguageGateway;
@@ -79,6 +82,35 @@ test('the provider-facing context carries only the approved envelope and no acco
     foreach (['planet', 'galaxy', 'system', 'position', 'fleet', 'alliance', 'metal', 'crystal', 'deuterium', 'defense', 'moon', 'coordinate'] as $secret) {
         expect($captured->context->serialized)->not->toContain($secret);
     }
+});
+
+// The wording can only refer to what the account remembers if the reply's context carries it.
+test('the reply context carries what the account remembers of the counterparty, once per sentence', function (): void {
+    [$reply] = sealedLanguageReply(fn () => $this->createUser(), $this->currentUserId, 'You broke our truce.');
+    foreach (['they hit us during an agreed ceasefire', 'they attacked us', 'they attacked us'] as $index => $sentence) {
+        app(RecordAiMemoryFactAction::class)->handle(
+            $this->currentUserId,
+            $reply->counterparty_player_id,
+            AiMemoryPredicate::AttackReceived,
+            AiMemoryEvidenceKind::Verified,
+            ['summary' => $sentence],
+            $index + 1,
+            CarbonImmutable::parse('2023-12-31 00:00:00 UTC')->addMinutes($index),
+        );
+    }
+
+    $captured = null;
+    bindFixedLanguageResult(
+        languageResult(AiLanguageResultStatus::Completed, 'ok', 10, 5),
+        function (LanguageRequest $request) use (&$captured): void {
+            $captured = $request;
+        },
+    );
+
+    app(GenerateAiReplyAction::class)->handle($reply->id);
+
+    expect(array_column($captured->context->sections['memories'], 'what'))
+        ->toEqualCanonicalizing(['they hit us during an agreed ceasefire', 'they attacked us']);
 });
 
 test('the reply agent tells the model that conversation content is untrusted and offers no tools', function (): void {
