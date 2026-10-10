@@ -100,3 +100,15 @@ test('a member who opens or joins an ACS says on whom and where', function (stri
     expect(app(SpeakInAllianceChannelAction::class)->announceStrike($speaker->id, $key, 55, $attacker->username, '2:45:7'))->toBeTrue()
         ->and(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->toContain($attacker->username)->toContain('2:45:7');
 })->with(['an opened ACS' => ['ally_acs_open'], 'a joined ACS' => ['ally_acs_join']]);
+
+// 9509 to 9511: "ACS up on <name> (1:6:12), hop in" for the same coordinates again and again read as a macro.
+test('a target already called in the channel is not called again, a new one is', function (): void {
+    [$allianceId, $speaker, , $attacker] = channelClubUnderAttack();
+    $action = app(SpeakInAllianceChannelAction::class);
+
+    expect($action->announceStrike($speaker->id, 'ally_acs_open', 55, $attacker->username, '2:45:7'))->toBeTrue()
+        ->and($action->announceStrike($speaker->id, 'ally_acs_open', 56, $attacker->username, '2:45:7'))->toBeFalse()
+        ->and($action->announceStrike($speaker->id, 'ally_acs_join', 57, $attacker->username, '2:45:7'))->toBeFalse()
+        ->and($action->announceStrike($speaker->id, 'ally_acs_open', 58, $attacker->username, '3:100:4'))->toBeTrue()
+        ->and(ChatMessage::query()->where('alliance_id', $allianceId)->count())->toBe(2);
+});

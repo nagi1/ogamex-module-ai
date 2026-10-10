@@ -28,6 +28,9 @@ class SpeakInAllianceChannelAction
 
     private const ALLIANCE_QUIET_MINUTES = 45;
 
+    /** A target already called in the channel is not called again inside this window. */
+    private const STRIKE_QUIET_HOURS = 6;
+
     /** A member below this sociability does not type in the channel unprompted. */
     private const SOCIABILITY_FLOOR = 0.3;
 
@@ -75,6 +78,14 @@ class SpeakInAllianceChannelAction
     /** The same for an attack flown with the club: opening an ACS for the mates, or joining one already flying. */
     public function announceStrike(int $playerId, string $key, int $missionId, string $targetName, string $coords): bool
     {
+        // A leader posts the call once per target (9509 to 9511: the same coordinates called eight times in an evening);
+        // a farm flown by many unions in a row is one call and then silence.
+        $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
+        if ($allianceId !== null && ChatMessage::query()->where('alliance_id', $allianceId)->where('created_at', '>', now()->subHours(self::STRIKE_QUIET_HOURS))
+            ->where('message', 'like', '%' . $coords . '%')->exists()) {
+            return false;
+        }
+
         return $this->say($playerId, $key, (string) $missionId, ['target' => $targetName, 'coords' => $coords]);
     }
 
