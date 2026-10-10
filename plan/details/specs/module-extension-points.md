@@ -39,3 +39,13 @@ Small identity flags can use existing metadata. High-volume schedules, memory an
 Phase 1 and Phase 2 complete their module-only slices through E1. E2 and E4 are evaluated only when Phase 3 needs durable facts; E3 is evaluated only when a future executable combat feature needs an estimate. E5 remains future UI; E6–E7 are shipped for Package 6's cooperative mode.
 
 Update host docs/modules.md as the supported contract catalogue and mark the old draft's completed sections accurately. Add event/slot examples to HelloWorld only where useful. Record the minimum supported host revision in the module release notes. Every host change proves module-disabled behavior and relevant race cases; avoid speculative extension points.
+
+## Premium officers (10 October 2026)
+
+The host now ships the premium officers system (Commander, Admiral, Engineer, Geologist, Technocrat and
+the Commanding Staff bundle), bought with Dark Matter. The module reuses the shipped services —
+`OfficerService::purchase()/isActive()/getOfficer()` with public `TYPE_MAP`/`COSTS`/`DURATIONS`,
+`DarkMatterService`, and the `PlayerService::has*()` benefit flags — and adds exactly one point: a
+read-only officer-expiry accessor (R12 in [`host-change-request.md`](host-change-request.md)). The
+Commander is the building queue itself (`BuildingQueueService::getMaxQueueItems`), so the module reads
+`isQueueFull()` and never restates the cap. Design: [`premium-officers.md`](premium-officers.md).

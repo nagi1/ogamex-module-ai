@@ -24,6 +24,7 @@ Ordered by what it unblocks, not by size.
 | R9 | A mission-required-ship query: "which unit does this mission type consume?" | small | Removes `colony_ship` / `espionage_probe` references from module code (gate 1) | **Implemented 15 September 2026** — `GameMission::getRequiredShipMachineNames()`; the module's role keys are deleted |
 | R10 | A mission-required-**research** query: "which technology does this mission wait on?" | small | Makes a capability a leaf technology gates reachable, without naming it in module code (gate 1, `R2`) | **Implemented 15 September 2026** — `GameMission::getRequiredResearch()`; the module's chain climbs it |
 | R11 | Keep the module's built assets out of the host repository | trivial | A clean host `git status` once the module's own frontend build writes to `public/modules/ai/build` | **Requested 18 September 2026.** Nothing is blocked on it: the fallback is untracked build artifacts in the host tree |
+| R12 | A read-only officer-expiry accessor: "when does this officer lapse?" | trivial | Officer perception and renewal (`OFF-001`, `OFF-002`); `plan/details/specs/premium-officers.md` | **Requested 10 October 2026.** Fallback: the module tracks its own purchase times and renews from those — a host fact it should not have to duplicate |
 
 ## R1 — A read-only, seedable battle question
 
