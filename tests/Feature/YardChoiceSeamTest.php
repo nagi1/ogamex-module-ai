@@ -84,3 +84,23 @@ test('an exploring policy only orders what the host would accept, and the order 
         ->and($row['legal'][$row['chosen']])->toBeTrue()
         ->and($order?->unitId)->toBe($picked);
 });
+
+// The yard planner orders the unit furthest behind its doctrine template, so a policy that never saw that number scored
+// 0.61 held out against the planner's 1.0 (11 Oct): the number is part of the row, and the teacher's unit has the largest.
+test('the yard row carries each unit\'s gap against the doctrine, and the planner\'s pick is the largest listed', function (): void {
+    ['order' => $order, 'rows' => $rows] = yardSeamRecord($this->currentUserId, 'teacher');
+    $names = EconomyChoiceEncoder::candidateNames();
+    $gap = array_search('u_template_gap', $names, true);
+    $listed = array_search('u_template_listed', $names, true);
+    $yard = array_values(array_filter($rows, static fn (array $row): bool => $row['kind'] === 'yard'));
+
+    expect($gap)->not->toBeFalse()->and($listed)->not->toBeFalse()->and($yard)->not->toBeEmpty();
+
+    $row = $yard[0];
+    $listedGaps = array_map(static fn (array $features): float => (float) $features[$gap], array_filter($row['cands'], static fn (array $features): bool => $features[$listed] === 1.0));
+    expect(array_sum(array_map(static fn (array $features): float => (float) $features[$listed], $row['cands'])))->toBeGreaterThan(0.0);
+    if ($order !== null && str_starts_with((string) ($order->reason ?? ''), 'doctrine:')) {
+        $picked = (float) $row['cands'][$row['teacher']][$gap];
+        expect($picked)->toBe(max($listedGaps));
+    }
+});

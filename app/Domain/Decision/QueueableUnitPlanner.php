@@ -439,14 +439,7 @@ class QueueableUnitPlanner
         $core = 0.0;
         // Hulls paid for in a yard count as the fleet's own: a deathstar takes hours to build, and counting only finished
         // ones ordered another every login while no escort was ever ordered (9316: 13 deathstar orders, no bomber).
-        $planetIds = array_map(static fn (PlanetService $planet): int => $planet->getPlanetId(), $planets);
-        $owned = UnitQueue::query()->whereIn('planet_id', $planetIds)->where('processed', 0)
-            ->selectRaw('object_id, sum(object_amount) as amount')->groupBy('object_id')->pluck('amount', 'object_id')->map(static fn ($amount): int => (int) $amount)->all();
-        foreach ($planets as $planet) {
-            foreach ($planet->getShipUnits()->units as $entry) {
-                $owned[$entry->unitObject->id] = ($owned[$entry->unitObject->id] ?? 0) + $entry->amount;
-            }
-        }
+        $owned = $this->heldUnits($planets);
         // Weighed by price, not counted: one deathstar allowed twenty escort units, and one batch of light fighters filled
         // that, so the account went back to deathstars and never reached the bomber or battlecruiser (9330).
         foreach ($owned as $objectId => $amount) {
@@ -456,14 +449,7 @@ class QueueableUnitPlanner
             $escort += $isCore ? 0.0 : $value;
         }
 
-        // Every ship the template names counts, cargo and recyclers too: counting only warships read the template's cargo
-        // share as never met, and it was ordered on every login (9333: 86 large cargo where the bomber was due).
-        $ships = array_map(static fn (UnitObject $ship): int => $ship->id, ObjectService::getShipObjects());
-        $ownedByName = [];
-        foreach ($owned as $objectId => $amount) {
-            $name = in_array($objectId, $ships, true) ? ObjectService::getUnitObjectById($objectId)->machine_name : null;
-            $ownedByName += $name === null ? [] : [$name => $amount];
-        }
+        $ownedByName = $this->shipsByName($owned);
 
         // The escort is built in the capital's yard first, the strongest the account has: the first planet in the list was
         // often a fresh colony whose yard takes nothing above a heavy fighter (9324: no battleship, bomber or battlecruiser).
@@ -481,6 +467,84 @@ class QueueableUnitPlanner
         $perUnit = max(1, $planet->getUnitConstructionTime($hull->machine_name));
 
         return max(self::FIRST_CARGO_AMOUNT, min($amount, intdiv(self::FLEET_BATCH_SECONDS, $perUnit)));
+    }
+
+    /**
+     * Units held across the planets, in the yard counted as held: a deathstar takes hours to build, and counting only
+     * finished ones ordered another every login while no escort was ever ordered (9316: 13 deathstar orders, no bomber).
+     *
+     * @param array<int, PlanetService> $planets
+     * @return array<int, int> unit id => amount
+     */
+    private function heldUnits(array $planets): array
+    {
+        $planetIds = array_map(static fn (PlanetService $planet): int => $planet->getPlanetId(), $planets);
+        $owned = UnitQueue::query()->whereIn('planet_id', $planetIds)->where('processed', 0)
+            ->selectRaw('object_id, sum(object_amount) as amount')->groupBy('object_id')->pluck('amount', 'object_id')->map(static fn ($amount): int => (int) $amount)->all();
+        foreach ($planets as $planet) {
+            foreach ($planet->getShipUnits()->units as $entry) {
+                $owned[$entry->unitObject->id] = ($owned[$entry->unitObject->id] ?? 0) + $entry->amount;
+            }
+        }
+
+        return $owned;
+    }
+
+    /**
+     * Every ship the template names counts, cargo and recyclers too: counting only warships read the template's cargo
+     * share as never met, and it was ordered on every login (9333: 86 large cargo where the bomber was due).
+     *
+     * @param array<int, int> $owned unit id => amount
+     * @return array<string, int> machine name => amount
+     */
+    private function shipsByName(array $owned): array
+    {
+        $ships = array_map(static fn (UnitObject $ship): int => $ship->id, ObjectService::getShipObjects());
+        $byName = [];
+        foreach ($owned as $objectId => $amount) {
+            $byName += in_array($objectId, $ships, true) ? [ObjectService::getUnitObjectById($objectId)->machine_name => $amount] : [];
+        }
+
+        return $byName;
+    }
+
+    /**
+     * Each template unit's gap against the account's doctrine, ships across the account and defence on this planet:
+     * the quantity the yard order follows, handed to a learned policy so it can see what the planner sees.
+     *
+     * @return array<string, float> machine name => gap
+     */
+    public function yardTemplateGaps(PlayerService $player, PlanetService $planet): array
+    {
+        $profile = AiProfile::query()->where('player_id', $player->getId())->first();
+        if ($profile === null) {
+            return [];
+        }
+
+        $doctrine = app(ArchetypeDoctrine::class);
+        $defence = [];
+        foreach ($planet->getDefenseUnits()->units as $entry) {
+            $defence[$entry->unitObject->machine_name] = $entry->amount + $this->inYard($planet, $entry->unitObject);
+        }
+
+        return $doctrine->templateGaps($profile->archetype, 'fleet_template', $this->shipsByName($this->heldUnits($player->planets->all())))
+            + $doctrine->templateGaps($profile->archetype, 'defence_template', $defence);
+    }
+
+    /**
+     * The share of the account's military value that is not its single heaviest hull: the planner orders escort while
+     * this is under a half and the capital hull after.
+     */
+    private function escortShare(PlayerService $player): float
+    {
+        $military = array_map(static fn (UnitObject $hull): int => $hull->id, ObjectService::getMilitaryShipObjects());
+        $values = [];
+        foreach ($this->heldUnits($player->planets->all()) as $objectId => $amount) {
+            $values[] = in_array($objectId, $military, true) ? $amount * $this->metalEquivalent(ObjectService::getObjectRawPrice(ObjectService::getUnitObjectById($objectId)->machine_name)) : 0.0;
+        }
+        $total = array_sum($values);
+
+        return $total > 0.0 ? 1.0 - max($values) / $total : 0.0;
     }
 
     /** The defence this planet is furthest behind on against its archetype's template, among those it can order now. */
@@ -882,6 +946,8 @@ class QueueableUnitPlanner
             'under_attack' => $this->threatResponses->plan($player->getId(), $player)->underAttack ? 1.0 : 0.0,
             'defended_target_seen' => $this->observedDefendedTarget($player->getId()) ? 1.0 : 0.0,
             'planet_bare' => $this->holdsNoDefence($planet) ? 1.0 : 0.0,
+            'reinforce_defence' => $this->threatResponses->plan($player->getId(), $player)->holds($planet->getPlanetId(), AiThreatResponse::ReinforceDefense) ? 1.0 : 0.0,
+            'escort_share' => $this->escortShare($player),
         ];
     }
 

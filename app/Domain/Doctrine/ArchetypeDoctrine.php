@@ -100,32 +100,47 @@ class ArchetypeDoctrine
      */
     public function nextTemplateUnit(AiArchetype $archetype, string $template, array $owned, callable $buildable): ?string
     {
+        $best = null;
+        $bestGap = -INF;
+
+        foreach ($this->templateGaps($archetype, $template, $owned) as $machineName => $gap) {
+            if ($this->object($machineName) === null || !$buildable($machineName) || $gap <= $bestGap) {
+                continue;
+            }
+
+            $best = $machineName;
+            $bestGap = $gap;
+        }
+
+        return $best;
+    }
+
+    /**
+     * How far behind its template each unit the template names is: the template's share minus the share held. One of each
+     * comes before more of any (a unit held none of gets +1), so a small share (a dome, a deathstar) is not starved behind
+     * the large ones for ever (measured 8 Oct 2026: no dome in any late-game test while every one could build it). This is
+     * the number the yard order follows, so a policy that learns the yard reads it too.
+     *
+     * @param array<string, int> $owned machine name => units held
+     * @return array<string, float> machine name => gap
+     */
+    public function templateGaps(AiArchetype $archetype, string $template, array $owned): array
+    {
         $shares = $this->file($archetype)[$template] ?? [];
         if (!is_array($shares) || $shares === []) {
-            return null;
+            return [];
         }
 
         $total = max(1, array_sum(array_map(static fn (string $name): int => $owned[$name] ?? 0, array_keys($shares))));
         $weight = max(1, array_sum($shares));
-        $best = null;
-        $bestGap = -INF;
+        $gaps = [];
 
         foreach ($shares as $machineName => $share) {
-            if ($this->object((string) $machineName) === null || !$buildable((string) $machineName)) {
-                continue;
-            }
-
-            // One of each before more of any: a unit the account owns none of comes first, so a small share (a shield
-            // dome, a deathstar) is not starved behind the large ones forever (measured 8 Oct 2026: no dome in any
-            // late-game test while every one could build it).
-            $gap = ((float) $share / $weight) - (($owned[$machineName] ?? 0) / $total) + (($owned[$machineName] ?? 0) === 0 ? 1.0 : 0.0);
-            if ($gap > $bestGap) {
-                $best = (string) $machineName;
-                $bestGap = $gap;
-            }
+            $held = $owned[$machineName] ?? 0;
+            $gaps[(string) $machineName] = ((float) $share / $weight) - ($held / $total) + ($held === 0 ? 1.0 : 0.0);
         }
 
-        return $best;
+        return $gaps;
     }
 
     /**

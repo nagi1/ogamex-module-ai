@@ -21,12 +21,13 @@ class YardChoiceEncoder
     public const STATE = [
         'yard_planet_ships', 'yard_planet_defence', 'yard_acct_ships', 'yard_acct_defence', 'yard_owns_colony_ship',
         'yard_owns_probe', 'yard_planet_room', 'yard_under_attack', 'yard_defended_target_seen', 'yard_planet_bare',
+        'yard_reinforce_defence', 'yard_escort_share',
     ];
 
     /** @var list<string> */
     public const CANDIDATE = [
         'type_ship', 'type_defence', 'u_attack', 'u_shield', 'u_hull', 'u_speed', 'u_capacity', 'u_fuel',
-        'u_amount', 'u_standing', 'u_strength_per_cost', 'u_total_cost_vs_stock',
+        'u_amount', 'u_standing', 'u_strength_per_cost', 'u_total_cost_vs_stock', 'u_template_gap', 'u_template_listed',
     ];
 
     private const MAX_ROWS = 32;
@@ -45,6 +46,7 @@ class YardChoiceEncoder
         $stock = max(1.0, $held->metal->get() + $held->crystal->get() + $held->deuterium->get());
         $productionPerHour = max(1.0, $planet->getMetalProductionPerHour() + $planet->getCrystalProductionPerHour() + max(0.0, $planet->getDeuteriumProductionPerHour()));
 
+        $gaps = $this->units->yardTemplateGaps($player, $planet);
         $candidates = [];
         $teacherIndex = 0;
         $waitEta = 0.0;
@@ -52,7 +54,7 @@ class YardChoiceEncoder
             if (count($candidates) >= self::MAX_ROWS - 1 && !($teacher !== null && $teacher->unitId === $row['unit']->id && $teacher->planetId === $planet->getPlanetId())) {
                 continue;
             }
-            [$features, $eta] = $this->features($player, $planet, $row, $index, $stock, $productionPerHour);
+            [$features, $eta] = $this->features($player, $planet, $row, $index, $stock, $productionPerHour, $gaps);
             $waitEta = $eta > 0.0 && ($waitEta === 0.0 || $eta < $waitEta) ? $eta : $waitEta;
             $candidates[] = app()->makeWith(ChoiceCandidate::class, ['objectId' => $row['unit']->id, 'pass' => null, 'reason' => 'yard', 'legal' => $row['legal'], 'features' => $features]);
             $teacherIndex = $teacher !== null && $teacher->unitId === $row['unit']->id && $teacher->planetId === $planet->getPlanetId() ? count($candidates) : $teacherIndex;
@@ -96,9 +98,10 @@ class YardChoiceEncoder
 
     /**
      * @param array{unit: \OGame\GameObjects\Models\UnitObject, amount: int, legal: bool, teacherOk: bool} $row
+     * @param array<string, float> $gaps
      * @return array{0: list<float>, 1: float}
      */
-    private function features(PlayerService $player, PlanetService $planet, array $row, int $index, float $stock, float $productionPerHour): array
+    private function features(PlayerService $player, PlanetService $planet, array $row, int $index, float $stock, float $productionPerHour, array $gaps): array
     {
         $unit = $row['unit'];
         $price = ObjectService::getObjectPrice($unit->machine_name, $planet);
@@ -138,6 +141,8 @@ class YardChoiceEncoder
         $set('u_standing', log1p($planet->getObjectAmount($unit->machine_name)));
         $set('u_strength_per_cost', log1p($unitCost > 0.0 ? ($attack + $shield + $hull) / $unitCost : 0.0));
         $set('u_total_cost_vs_stock', min(10.0, $total / $stock) / 10);
+        $set('u_template_gap', $gaps[$unit->machine_name] ?? 0.0);
+        $set('u_template_listed', isset($gaps[$unit->machine_name]) ? 1.0 : 0.0);
 
         return [$features, $eta];
     }
