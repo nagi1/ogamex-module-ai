@@ -1,5 +1,8 @@
 # Handoff — where the AI module stands and how to keep it moving
 
+> **11 Oct 2026:** `plan/RECOVERY-PLAN.md` is the proposed new work order (diagnosis, data, API-only language model and
+> JEV, observer benchmark, fast simulator, PvE, engine ablations). Until the owner accepts it, nothing below changes.
+
 Written 1 October 2026 at the end of the course correction. `AGENTS.md` → "Direction" is the standing
 rule; this file is the state of play and the order of work. Update the "State" table after every
 evidence run; replace the file when the work order changes.
