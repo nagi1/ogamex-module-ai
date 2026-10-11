@@ -110,8 +110,11 @@ def sim_progress(log: Path) -> dict:
         day = (moment - START).total_seconds() / 86400
     fell_back = re.search(r"(\d+) choice\(s\) fell back", text)
     errors = int(played.group(2)) if played else errors
+    # The sim log gains a line per sim hour, which under load is further apart than any sensible stall limit; the
+    # recording beside it grows continuously, so the later of the two is when the sim last did anything.
     try:
-        idle = time.time() - log.stat().st_mtime
+        recording = log.with_name(log.name.replace("sim-", "choices-").replace(".log", ".jsonl"))
+        idle = time.time() - max(log.stat().st_mtime, recording.stat().st_mtime if recording.exists() else 0)
     except OSError:
         idle = None
     return {"day": round(day, 2), "days": round(hours / 24, 1), "done": done, "errors": errors,
@@ -318,15 +321,27 @@ def activities(gen: dict, train: dict, loop: dict, longs: list[dict], lates: lis
     return rows
 
 
+LOST_AFTER = 3 * 3600
+
+
 def alarms(gen: dict, mach: dict, train: dict, loop: dict) -> list[dict]:
     found = []
+    lost: list[int] = []
     run_started = parse_epoch(read(RL / "run.started"), 0)
     for u in gen["universes"]:
         if u["errors"] > 0:
             found.append({"where": f"universe {u['n']}", "what": f"{u['errors']} sim error(s)", "detail": "; ".join(u["kinds"])})
         # A queued universe keeps the log of an earlier attempt; only a sim this run started and that went silent is stalled.
-        if not u["done"] and u["idle"] is not None and time.time() - u["idle"] >= run_started and u["idle"] is not None and u["idle"] > 900 and not (RL / ".paused").exists():
-            found.append({"where": f"universe {u['n']}", "what": f"stalled {u['idle'] // 60} min", "detail": ""})
+        # Silent for hours means the sim is gone, not slow: those are one line (the generator retries them on its next
+        # run), not a row each.
+        if u["done"] or u["idle"] is None or u["idle"] <= 1800 or (RL / ".paused").exists() or time.time() - u["idle"] < run_started:
+            continue
+        if u["idle"] > LOST_AFTER:
+            lost.append(u["n"])
+            continue
+        found.append({"where": f"universe {u['n']}", "what": f"stalled {u['idle'] // 60} min", "detail": ""})
+    if lost:
+        found.append({"where": "generation", "what": f"{len(lost)} universe(s) lost, no sim running", "detail": "seeds " + ", ".join(map(str, lost)) + "; bash Modules/AI/rl/scripts/resume.sh reruns them"})
     for pair in loop["pairs"]:
         for side, p in pair.items():
             if side == "n":

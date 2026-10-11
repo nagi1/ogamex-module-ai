@@ -86,6 +86,10 @@ def load(pattern: str | list[str], min_legal: int = 2, only_teacher_label: bool 
                     continue
                 if only_teacher_label and row["teacher"] >= K:
                     continue
+                # A label the host's own mask rejects (the state moved between the plan and the check) has no legal
+                # logit: one such row makes the whole loss infinite.
+                if only_teacher_label and not (row["teacher"] < len(legal) and legal[row["teacher"]]):
+                    continue
                 c = np.zeros((K, C), dtype=np.float32)
                 c[: min(n, K)] = np.asarray(row["cands"][:K], dtype=np.float32)
                 m = np.zeros(K, dtype=bool)
