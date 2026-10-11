@@ -7,6 +7,7 @@
 # module cannot do: the account cannot hand over or enforce anything through a message, so it never says it will.
 # {amount} is replaced by the countered amount.
 default:
+  ally_win: ["hit {victim} at {coords}, {loot} res in the hold", "{victim} {coords} went well, {loot} res", "farm run on {victim} ({coords}) is back, {loot} res, gg"]
   greeting: ["hey", "hi o/", "hey there", "yo"]
   thanks: ["np", "no problem", "anytime", "np :)"]
   help_request.accept: ["sure, can do that", "ok, that works for me"]

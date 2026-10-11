@@ -112,3 +112,24 @@ test('a target already called in the channel is not called again, a new one is',
         ->and($action->announceStrike($speaker->id, 'ally_acs_open', 58, $attacker->username, '3:100:4'))->toBeTrue()
         ->and(ChatMessage::query()->where('alliance_id', $allianceId)->count())->toBe(2);
 });
+
+// The community threads: the attacker posts the hit report, and the club answers it. Only the best raid of the day is posted.
+test('a member posts the best raid of the day to the alliance channel, and a smaller one stays quiet', function (): void {
+    [$allianceId, $speaker, , $attacker] = channelClubUnderAttack();
+    $now = CarbonImmutable::parse(CHANNEL_NOW);
+    $raid = static function (int $loot, int $minutesAgo) use ($speaker, $attacker, $now): void {
+        $report = BattleReport::unguarded(fn () => BattleReport::create(['planet_galaxy' => 3, 'planet_system' => 12, 'planet_position' => 4, 'planet_user_id' => $attacker->id, 'planet_type' => 1, 'loot' => ['metal' => $loot, 'crystal' => 0, 'deuterium' => 0]]));
+        AiObservation::create(['player_id' => $speaker->id, 'source_type' => AiObservationSource::BattleReport, 'source_id' => $report->id, 'kind' => AiObservationKind::BattleReportObserved,
+            'subject_player_id' => $attacker->id, 'source_time' => $now->subMinutes($minutesAgo), 'observed_at' => $now]);
+    };
+    AiObservation::query()->where('player_id', $speaker->id)->delete();
+    $raid(900000, 600);
+    $raid(400000, 20);
+
+    expect(app(SpeakInAllianceChannelAction::class)->handle($speaker->id, $now))->toBe(0);
+
+    $raid(2500000, 10);
+
+    expect(app(SpeakInAllianceChannelAction::class)->handle($speaker->id, $now))->toBe(1)
+        ->and(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->toContain('3:12:4')->toContain('2,500,000');
+});
