@@ -61,6 +61,17 @@ def cell_weights(data: datalib.Dataset, balance: float) -> np.ndarray:
     return np.clip(per_cell[inverse], 0.25, 4.0).astype(np.float32)
 
 
+def drop_features(ds: datalib.Dataset, names: list[str]) -> None:
+    unknown = [n for n in names if n not in ds.schema.state and n not in ds.schema.candidate]
+    if unknown:
+        raise ValueError(f"unknown features: {unknown}")
+    for n in names:
+        if n in ds.schema.state:
+            ds.state[:, ds.schema.state.index(n)] = 0.0
+        if n in ds.schema.candidate:
+            ds.cands[:, :, ds.schema.candidate.index(n)] = 0.0
+
+
 def macro_key(v: dict) -> float:
     """The checkpoint is the one best on average over the choice kinds, so a kind with few rows is not drowned by the
     kind with most; a set with one kind reduces to that kind's top-1 on 3+ legal rows."""
@@ -85,6 +96,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--balance", type=float, default=0.5,
                     help="row weight = (cell share)^-balance over (kind, phase) cells, clipped to [0.25, 4]; 0 = plain imitation")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--drop", default="", help="comma-separated state or candidate features zeroed on every row: an "
+                                                "ablation on the same rows, so a feature's worth is measured without new data")
     args = ap.parse_args(argv)
 
     seed_everything(args.seed)
@@ -92,6 +105,7 @@ def main(argv: list[str] | None = None) -> None:
     out.mkdir(parents=True, exist_ok=True)
 
     ds = datalib.load(args.data, min_legal=args.min_legal)
+    drop_features(ds, [n for n in args.drop.split(",") if n])
     train, val = datalib.split_by_universe(ds, args.validation)
     print(f"choices: {len(ds)} (train {len(train)}, validation {len(val)}), universes {len(np.unique(ds.group))}, "
           f"state {ds.state.shape[1]}, candidate {ds.cands.shape[2]}, schema v{ds.schema.version}")
