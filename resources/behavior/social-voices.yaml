@@ -85,6 +85,10 @@ miner:
     - 'not happening, you started it'
     - 'no ceasefire here'
     - 'not agreeing to that'
+  ceasefire_request.accept:
+    - 'ok, {length}. no hits, no probes'
+    - 'fine, {length} of quiet. I just want to mine'
+    - 'deal, {length}. stay off my planets'
   ceasefire_request:
     - 'maybe, if you stay off my planets'
     - "stay off my planets, then we'll see"
@@ -263,6 +267,10 @@ turtle:
     - 'not happening'
     - 'no, you started it'
     - 'ceasefire denied, stay off my planets'
+  ceasefire_request.accept:
+    - 'ok, {length}. no attacks, no probes'
+    - 'deal, {length}. my defence stays up anyway'
+    - 'fine, {length}. keep your fleet away'
   ceasefire_request:
     - "we'll see. stay off my planets"
     - "stay off my planets and we'll see"
@@ -440,6 +448,10 @@ fleeter:
     - 'you started it'
     - 'not happening'
     - 'no way'
+  ceasefire_request.accept:
+    - 'ok, {length}. no hits either way'
+    - "deal, {length}. first probe I see and it's off"
+    - "fine, {length}. don't test it"
   ceasefire_request:
     - 'stay off my planets, then maybe'
     - "we'll see, stay away"
@@ -619,6 +631,10 @@ raider:
     - 'not happening'
     - 'nah, no truce'
     - 'you started this, no'
+  ceasefire_request.accept:
+    - "fine, {length}. you're off my farm list till then"
+    - 'ok, {length}. no hits, no probes, both ways'
+    - "deal, {length}. after that we'll see"
   ceasefire_request:
     - "stay off my planets, then we'll see"
     - "we'll see, stay off my planets"
@@ -799,6 +815,10 @@ hybrid:
     - 'not happening'
     - 'you started it'
     - 'no deal'
+  ceasefire_request.accept:
+    - 'ok, {length}. no hits, no probes'
+    - 'deal, {length}, both ways'
+    - 'fine, {length}. stay off my planets'
   ceasefire_request:
     - "we'll see if you stay off"
     - "stay off my planets, then we'll talk"
@@ -977,6 +997,10 @@ trader:
     - 'not happening'
     - 'you started this, no ceasefire'
     - 'no way, you started it'
+  ceasefire_request.accept:
+    - 'deal, {length}. good for trade too'
+    - 'ok, {length}. no probes either'
+    - 'fine, {length}. nobody hits anybody'
   ceasefire_request:
     - "we'll see, stay off my planets"
     - "stay off my planets and we'll see"
@@ -1157,6 +1181,10 @@ casual:
     - 'not happening'
     - 'no ceasefire, you started it'
     - 'no. you started this'
+  ceasefire_request.accept:
+    - 'ok, {length} then'
+    - 'sure, {length}. no attacks'
+    - 'deal, {length}'
   ceasefire_request:
     - "we'll see. stay off my planets"
     - "stay off my planets and we'll see"

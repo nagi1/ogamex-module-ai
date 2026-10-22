@@ -14,4 +14,6 @@ enum AiSocialTerm: string
     case RequestedAmount = 'requested_amount';
     case Coercive = 'coercive';
     case Scope = 'scope';
+    case LengthHours = 'length_hours';
+    case OpenEnded = 'open_ended';
 }

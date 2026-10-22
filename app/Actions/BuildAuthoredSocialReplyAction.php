@@ -45,6 +45,8 @@ class BuildAuthoredSocialReplyAction
         $amount = $exchange->response_terms[AiSocialTerm::Amount->value] ?? null;
 
         $line = is_int($amount) || is_float($amount) ? str_replace('{amount}', (string) $amount, $line) : $line;
+        $length = $this->agreedLength($exchange);
+        $line = $length === null ? $line : str_replace('{length}', $length, $line);
         $hits = 0;
         $detail = $this->hitsDetail($exchange, $profile, $hits);
         $line = $detail === null ? $line : rtrim($line, '.?!') . '. ' . $detail;
@@ -53,7 +55,20 @@ class BuildAuthoredSocialReplyAction
         return app(ComposeAiLineAction::class)->handle($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name), $line, [
             'amount' => is_int($amount) || is_float($amount) ? (string) $amount : null,
             'hits' => $detail !== null ? (string) $hits : null,
+            'length' => $length,
         ], (int) $exchange->counterparty_player_id);
+    }
+
+    /** An agreed truce's length the way players type it: "24h", "36h", "3 days". */
+    private function agreedLength(AiSocialExchange $exchange): string|null
+    {
+        if ($exchange->type !== AiSocialExchangeType::CeasefireRequest || $exchange->due_at === null || $exchange->responded_at === null) {
+            return null;
+        }
+
+        $hours = (int) round($exchange->responded_at->diffInHours($exchange->due_at, true));
+
+        return $hours >= 48 && $hours % 24 === 0 ? ($hours / 24) . ' days' : $hours . 'h';
     }
 
     /**

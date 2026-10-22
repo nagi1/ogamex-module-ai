@@ -52,7 +52,7 @@ Privacy: authors are pseudonymised by the collector; nothing here stores handles
 
 - Already guarded by a test or a host rule: bashing cap of 6 per day (`RaidBashingCapTest`), pact partners spared
   (`Enemies::spared`), truce kept and a breach remembered (`CeasefireTest`).
-- Gaps the situations name that we do not do: a truce or NAP with **stated terms and an end date** (ours is a fixed 24 h with
-  no terms); bringing a NAP to the alliance before answering; apology and compensation after a NAP breach; checking a
+- Gaps the situations name that we do not do: ~~a truce or NAP with **stated terms and an end date**~~ (done 23 Oct: the asked
+  length is agreed, capped at 14 days, an open-ended ask gets 14 days, and the reply states it; `CeasefireTest`); bringing a NAP to the alliance before answering; apology and compensation after a NAP breach; checking a
   recruit's spy history before accepting; never saving a fleet at the same minute every day. These are the next
   scripted situations, in that order.

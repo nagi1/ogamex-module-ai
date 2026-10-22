@@ -17,6 +17,7 @@ use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiSocialExchangeState;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
+use Modules\AI\Enums\AiSocialTerm;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -37,6 +38,12 @@ class EvaluateAiSocialExchangeAction
 
     /** A truce asked for without a length runs a day, the usual "24h and we'll see" between two players. */
     private const CEASEFIRE_WINDOW_HOURS = 24;
+
+    /**
+     * The longest truce agreed in one go: a veteran gives a NAP a fixed end date (two weeks is the usual one) and never
+     * an open-ended one, so a longer or endless ask is agreed for this long and renewed later if it held.
+     */
+    private const CEASEFIRE_LONGEST_HOURS = 336;
 
     /** @var array<int, int> */
     private const DUE_WINDOW_HOURS = [
@@ -66,7 +73,7 @@ class EvaluateAiSocialExchangeAction
                 return $exchange->refresh();
             }
 
-            $window = self::DUE_WINDOW_HOURS[$exchange->type->value] ?? null;
+            $window = $this->windowHours($exchange);
             if ($window !== null && $exchange->due_at === null) {
                 $exchange->update([
                     'due_at' => $evaluatedAt->addHours($window),
@@ -108,7 +115,7 @@ class EvaluateAiSocialExchangeAction
                     $exchange->counterparty_player_id,
                     AiMemoryPredicate::TruceAgreed,
                     AiMemoryEvidenceKind::Verified,
-                    ['summary' => 'we agreed a ceasefire of ' . self::CEASEFIRE_WINDOW_HOURS . ' hours'],
+                    ['summary' => 'we agreed a ceasefire of ' . (int) round($evaluatedAt->diffInHours($exchange->due_at, true)) . ' hours'],
                     $exchange->source_observation_id,
                     $evaluatedAt,
                 );
@@ -197,6 +204,23 @@ class EvaluateAiSocialExchangeAction
             'now' => $evaluatedAt,
             'limit' => self::HISTORY_RECALL_LIMIT,
         ]));
+    }
+
+    /** How long the answer gives the exchange: the asked truce length within the longest one agreed, else the type's own window. */
+    private function windowHours(AiSocialExchange $exchange): int|null
+    {
+        $window = self::DUE_WINDOW_HOURS[$exchange->type->value] ?? null;
+        if ($exchange->type !== AiSocialExchangeType::CeasefireRequest) {
+            return $window;
+        }
+
+        if (($exchange->terms[AiSocialTerm::OpenEnded->value] ?? false) === true) {
+            return self::CEASEFIRE_LONGEST_HOURS;
+        }
+
+        $asked = (int) ($exchange->terms[AiSocialTerm::LengthHours->value] ?? 0);
+
+        return $asked > 0 ? min($asked, self::CEASEFIRE_LONGEST_HOURS) : $window;
     }
 
     private function responseCreatesCommitment(AiSocialExchange $exchange): bool

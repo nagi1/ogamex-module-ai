@@ -20,6 +20,7 @@ use Modules\AI\Enums\AiSocialResponseReason;
 use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Actions\BuildAuthoredSocialReplyAction;
+use Modules\AI\Actions\ClassifyInboundSocialExchangeAction;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Models\AiCommitment;
@@ -152,3 +153,25 @@ test('a refused truce names how many times the asker has hit the account', funct
     expect($refused?->response)->toBe(AiSocialResponse::Reject)
         ->and(app(BuildAuthoredSocialReplyAction::class)->handle($refused, $profile))->toContain('3');
 });
+
+// A veteran answers a truce with its length and gives it a fixed end date, never an open-ended one (veteran situations:
+// truce_after_raids, nap_request_from_war_ally, vacation_truce_return).
+test('a truce runs for the length the asker names, capped at two weeks, and the reply states it', function (string $message, int $hours, string $said): void {
+    $asker = User::factory()->create();
+    $inbound = app(ClassifyInboundSocialExchangeAction::class)->handle($message);
+    $exchange = app(RecordAiSocialExchangeAction::class)->handle($this->currentUserId, $asker->id, 92003, $inbound->type, $inbound->terms);
+    $agreed = app(EvaluateAiSocialExchangeAction::class)->handle($exchange?->id ?? 0, 0, CarbonImmutable::now());
+    $profile = AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 7, 'enabled' => true]);
+
+    expect($inbound->type)->toBe(AiSocialExchangeType::CeasefireRequest)
+        ->and($agreed?->response)->toBe(AiSocialResponse::Accept)
+        ->and(AiCommitment::query()->find($agreed?->commitment_id)?->due_at?->equalTo(CarbonImmutable::now()->addHours($hours)))->toBeTrue()
+        ->and(app(BuildAuthoredSocialReplyAction::class)->handle($agreed, $profile))->toContain($said);
+})->with([
+    'no length named' => ['truce please', 24, '24h'],
+    'hours' => ['nap 36h?', 36, '36h'],
+    'days' => ['truce for 3 days?', 72, '3 days'],
+    'a week' => ['nap for a week', 168, '7 days'],
+    'longer than two weeks' => ['nap for 2 months', 336, '14 days'],
+    'open ended' => ['can we have a permanent nap', 336, '14 days'],
+]);

@@ -30,6 +30,9 @@ class ClassifyInboundSocialExchangeAction
     /** Resource words, including the abbreviation the community actually types. */
     private const RESOURCE_WORDS = 'metal|crystal|deuterium|deut';
 
+    /** Hours in each unit a truce length is typed in, keyed by the unit's first letter ("mo" for months). */
+    private const UNIT_HOURS = ['h' => 1, 'd' => 24, 'w' => 168, 'mo' => 720];
+
     public function handle(string $text): InboundSocialExchange|null
     {
         $normalised = strtolower(trim(preg_replace('/\s+/', ' ', $text) ?? ''));
@@ -137,9 +140,29 @@ class ClassifyInboundSocialExchangeAction
             return null;
         }
 
-        // The length is set when it is weighed (EvaluateAiSocialExchangeAction), and an agreed one is held by
+        // The length is settled when it is weighed (EvaluateAiSocialExchangeAction), and an agreed one is held by
         // Enemies::spared() for both sides.
-        return $this->exchange(AiSocialExchangeType::CeasefireRequest, []);
+        return $this->exchange(AiSocialExchangeType::CeasefireRequest, $this->truceLength($text));
+    }
+
+    /**
+     * The length the asker names ("nap 48h", "truce for 3 days", "a week"), or that they asked for one with no end.
+     *
+     * @return array<string, mixed>
+     */
+    private function truceLength(string $text): array
+    {
+        if ($this->matches($text, 'forever|permanent\w*|for good|no end( date)?|indefinite\w*|open[- ]ended')) {
+            return [AiSocialTerm::OpenEnded->value => true];
+        }
+
+        if (preg_match('/\b(\d+|a|one)\s*(h|hrs?|hours?|d|days?|w|wks?|weeks?|months?)\b/', $text, $length) !== 1) {
+            return [];
+        }
+
+        $count = ctype_digit($length[1]) ? (int) $length[1] : 1;
+
+        return $count === 0 ? [] : [AiSocialTerm::LengthHours->value => $count * self::UNIT_HOURS[str_starts_with($length[2], 'mo') ? 'mo' : $length[2][0]]];
     }
 
     private function cooperation(string $text): InboundSocialExchange|null
