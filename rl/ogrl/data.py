@@ -10,12 +10,16 @@ from __future__ import annotations
 import glob
 import hashlib
 import json
+import os
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from . import MAX_CANDIDATES
+
+META_KEYS = ("kind", "archetype", "n_legal", "phase", "player", "t", "value", "policy", "learner", "seed")
 
 
 @dataclass
@@ -65,57 +69,19 @@ def load(pattern: str | list[str], min_legal: int = 2, only_teacher_label: bool 
         raise FileNotFoundError(f"no recorded choices match {pattern}")
 
     schema = Schema.read(files[0])
-    S, C, K = len(schema.state), len(schema.candidate), MAX_CANDIDATES
-    states, cands, masks, presents, teachers, chosens, groups = [], [], [], [], [], [], []
-    meta: dict[str, list] = {k: [] for k in ("kind", "archetype", "n_legal", "phase", "player", "t", "value", "policy", "learner", "seed")}
-    phase_names = [n for n in schema.state if n.startswith("phase_")]
-    phase_at = [schema.state.index(n) for n in phase_names]
-
     for path in files:
         other = Schema.read(path)
         if other.to_json() != schema.to_json():
             raise ValueError(f"{path} has a different feature schema (v{other.version}); record with one encoder version")
-        with open(path) as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                n = len(row["cands"])
-                legal = row["legal"][:K]
-                if sum(legal) < min_legal:
-                    continue
-                if only_teacher_label and row["teacher"] >= K:
-                    continue
-                # A label the host's own mask rejects (the state moved between the plan and the check) has no legal
-                # logit: one such row makes the whole loss infinite.
-                if only_teacher_label and not (row["teacher"] < len(legal) and legal[row["teacher"]]):
-                    continue
-                c = np.zeros((K, C), dtype=np.float32)
-                c[: min(n, K)] = np.asarray(row["cands"][:K], dtype=np.float32)
-                m = np.zeros(K, dtype=bool)
-                m[: len(legal)] = legal
-                p = np.zeros(K, dtype=bool)
-                p[: min(n, K)] = True
-                st = np.asarray(row["state"], dtype=np.float32)
-                if st.shape[0] != S or c.shape[1] != C:
-                    raise ValueError(f"{path}: row dims do not match the schema")
-                states.append(st)
-                cands.append(c)
-                masks.append(m)
-                presents.append(p)
-                teachers.append(int(row["teacher"]))
-                chosens.append(int(row["chosen"]))
-                groups.append(_group_id(row.get("seed", 0), path))
-                meta["kind"].append(row["kind"])
-                meta["archetype"].append(row["archetype"])
-                meta["n_legal"].append(int(sum(legal)))
-                meta["phase"].append(phase_names[int(np.argmax(st[phase_at]))].removeprefix("phase_") if phase_at else "unknown")
-                meta["player"].append(int(row["player"]))
-                meta["t"].append(int(row["t"]))
-                meta["value"].append(float(row["value"]))
-                meta["policy"].append(row["policy"])
-                meta["learner"].append(bool(row["learner"]))
-                meta["seed"].append(int(row.get("seed", 0)))
+
+    # One file per process: parsing JSON lines is the slow, single-core part, and files are independent.
+    # `map` keeps file order, so the rows (and therefore the split and the seeds' results) do not change.
+    workers = min(len(files), os.cpu_count() or 1)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        parts = list(pool.map(_load_file, files, [schema] * len(files), [min_legal] * len(files), [only_teacher_label] * len(files)))
+
+    states, cands, masks, presents, teachers, chosens, groups = ([x for part in parts for x in part[i]] for i in range(7))
+    meta: dict[str, list] = {k: [x for part in parts for x in part[7][k]] for k in META_KEYS}
 
     if not states:
         raise ValueError("no usable choice points (all filtered out)")
@@ -126,6 +92,58 @@ def load(pattern: str | list[str], min_legal: int = 2, only_teacher_label: bool 
         np.asarray(teachers, dtype=np.int64), np.asarray(chosens, dtype=np.int64), np.asarray(groups, dtype=np.int64),
         {k: np.asarray(v) for k, v in meta.items()},
     )
+
+
+def _load_file(path: str, schema: Schema, min_legal: int, only_teacher_label: bool) -> tuple:
+    S, C, K = len(schema.state), len(schema.candidate), MAX_CANDIDATES
+    states, cands, masks, presents, teachers, chosens, groups = [], [], [], [], [], [], []
+    meta: dict[str, list] = {k: [] for k in META_KEYS}
+    phase_names = [n for n in schema.state if n.startswith("phase_")]
+    phase_at = [schema.state.index(n) for n in phase_names]
+
+    with open(path) as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            n = len(row["cands"])
+            legal = row["legal"][:K]
+            if sum(legal) < min_legal:
+                continue
+            if only_teacher_label and row["teacher"] >= K:
+                continue
+            # A label the host's own mask rejects (the state moved between the plan and the check) has no legal
+            # logit: one such row makes the whole loss infinite.
+            if only_teacher_label and not (row["teacher"] < len(legal) and legal[row["teacher"]]):
+                continue
+            c = np.zeros((K, C), dtype=np.float32)
+            c[: min(n, K)] = np.asarray(row["cands"][:K], dtype=np.float32)
+            m = np.zeros(K, dtype=bool)
+            m[: len(legal)] = legal
+            p = np.zeros(K, dtype=bool)
+            p[: min(n, K)] = True
+            st = np.asarray(row["state"], dtype=np.float32)
+            if st.shape[0] != S or c.shape[1] != C:
+                raise ValueError(f"{path}: row dims do not match the schema")
+            states.append(st)
+            cands.append(c)
+            masks.append(m)
+            presents.append(p)
+            teachers.append(int(row["teacher"]))
+            chosens.append(int(row["chosen"]))
+            groups.append(_group_id(row.get("seed", 0), path))
+            meta["kind"].append(row["kind"])
+            meta["archetype"].append(row["archetype"])
+            meta["n_legal"].append(int(sum(legal)))
+            meta["phase"].append(phase_names[int(np.argmax(st[phase_at]))].removeprefix("phase_") if phase_at else "unknown")
+            meta["player"].append(int(row["player"]))
+            meta["t"].append(int(row["t"]))
+            meta["value"].append(float(row["value"]))
+            meta["policy"].append(row["policy"])
+            meta["learner"].append(bool(row["learner"]))
+            meta["seed"].append(int(row.get("seed", 0)))
+
+    return states, cands, masks, presents, teachers, chosens, groups, meta
 
 
 def split_by_universe(data: Dataset, validation: float = 0.2, salt: str = "ogrl") -> tuple[Dataset, Dataset]:
