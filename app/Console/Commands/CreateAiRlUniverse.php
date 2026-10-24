@@ -6,14 +6,12 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
 use Modules\AI\Actions\SeedAiTestUniverseAction;
 use Modules\AI\Actions\StageAiAccountAction;
+use Modules\AI\Console\Commands\Concerns\OpensRlUniverse;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\SimulatedTime;
 use OGame\Actions\Fortify\CreateNewUser;
-use OGame\Factories\PlanetServiceFactory;
-use OGame\Factories\PlayerServiceFactory;
 use OGame\Services\SettingsService;
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
@@ -36,6 +34,8 @@ use Random\Randomizer;
     {--at=2026-10-05T00:00:00Z : The instant the universe is created at; start ai:sim --from here}')]
 class CreateAiRlUniverse extends Command
 {
+    use OpensRlUniverse;
+
     public function handle(): int
     {
         $path = (string) $this->argument('path');
@@ -43,12 +43,7 @@ class CreateAiRlUniverse extends Command
         @unlink($path);
         touch($path);
 
-        config(['database.connections.ai_rl_universe' => ['driver' => 'sqlite', 'database' => $path, 'prefix' => '', 'foreign_key_constraints' => false]]);
-        config(['database.default' => 'ai_rl_universe']);
-        DB::setDefaultConnection('ai_rl_universe');
-        foreach ([SettingsService::class, PlayerServiceFactory::class, PlanetServiceFactory::class] as $cached) {
-            app()->forgetInstance($cached);
-        }
+        $this->openRlUniverse($path);
 
         $seed = (int) $this->option('seed');
         app()->instance(Randomizer::class, new Randomizer(new Xoshiro256StarStar($seed)));

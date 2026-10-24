@@ -1,0 +1,22 @@
+[package]
+name = "ogsim"
+version = "0.1.0"
+edition = "2021"
+description = "OGame as equations in time: the host's economy tables played event to event (plan/rl)"
+
+[lib]
+name = "ogsim"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
+
+[features]
+default = []
+python = ["dep:pyo3"]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
