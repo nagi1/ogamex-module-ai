@@ -155,6 +155,7 @@ def main(argv: list[str] | None = None) -> None:
 
     env = MultiEnv(args.catalogue, args.envs, args.seed)
     s_dim, k, c_dim = env.dims()
+    names = dict(zip(("state", "candidate"), ogsim.VecEnv.feature_names()))
     eval_player = [baseline_values(c, "player") for c in args.eval]
 
     model = CandidateScorer(s_dim, c_dim, args.width).to(device)
@@ -254,9 +255,9 @@ def main(argv: list[str] | None = None) -> None:
         if it % 5 == 0 or it == iterations or not np.isnan(eval_rel):
             print(f"it {it:>4}/{iterations} steps {it * T * N:>9,} {seconds:>6.0f}s  train vs player {train_rel:+.2%}  eval {eval_rel:+.2%} ({", ".join(f"{e:+.1%}" for e in eval_each)})  entropy {np.mean(ents):.3f}  kl {np.mean(kls):.4f}  clip {np.mean(clips):.2f}  ev {explained:.2f}  invalid {invalid}", flush=True)
         if it % args.eval_every == 0 or it == iterations:
-            torch.save({"model": model.state_dict(), "state_dim": s_dim, "cand_dim": c_dim, "width": args.width, "iteration": it}, out / f"checkpoint-{it:05d}.pt")
+            torch.save({"model": model.state_dict(), "state_dim": s_dim, "cand_dim": c_dim, "width": args.width, "iteration": it, "names": names}, out / f"checkpoint-{it:05d}.pt")
 
-    torch.save({"model": model.state_dict(), "state_dim": s_dim, "cand_dim": c_dim, "width": args.width, "iteration": iterations}, out / "model.pt")
+    torch.save({"model": model.state_dict(), "state_dim": s_dim, "cand_dim": c_dim, "width": args.width, "iteration": iterations, "names": names}, out / "model.pt")
     print(f"done in {time.time() - started:.0f}s -> {out / 'model.pt'}")
 
 

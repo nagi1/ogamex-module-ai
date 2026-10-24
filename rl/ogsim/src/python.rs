@@ -1,6 +1,6 @@
 //! Python side of ogsim: many games stepped in one call, arrays handed over as raw bytes (numpy.frombuffer).
 
-use crate::{next_random, Baseline, Catalogue, Game, CAND_DIM, STATE_DIM};
+use crate::{next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -43,8 +43,8 @@ impl VecEnv {
 #[pymethods]
 impl VecEnv {
     #[new]
-    #[pyo3(signature = (catalogue, planets, n_envs, horizon_hours=72.0, bonus_hours=24.0, seed=0, eval=false))]
-    fn new(catalogue: &str, planets: Vec<usize>, n_envs: usize, horizon_hours: f64, bonus_hours: f64, seed: u64, eval: bool) -> PyResult<Self> {
+    #[pyo3(signature = (catalogue, planets, n_envs, horizon_hours=72.0, bonus_hours=24.0, seed=0, eval=false, trace=false))]
+    fn new(catalogue: &str, planets: Vec<usize>, n_envs: usize, horizon_hours: f64, bonus_hours: f64, seed: u64, eval: bool, trace: bool) -> PyResult<Self> {
         let catalogue = Arc::new(Catalogue::load(catalogue).map_err(PyValueError::new_err)?);
         if planets.is_empty() || planets.iter().any(|&p| p >= catalogue.planets.len()) {
             return Err(PyValueError::new_err("planets must be indices into the catalogue's planets"));
@@ -52,7 +52,16 @@ impl VecEnv {
         let n_envs = if eval { planets.len() } else { n_envs };
         let mut env = VecEnv { catalogue, games: Vec::new(), planets, horizon_hours, bonus_hours, rng: seed, eval, finished: Vec::new() };
         env.games = (0..n_envs).map(|slot| env.fresh_game(slot)).collect();
+        if trace {
+            env.games.iter_mut().for_each(|g| g.trace = Some(Vec::new()));
+        }
         Ok(env)
+    }
+
+    /// The feature names, in column order: EconomyChoiceEncoder's own names for the columns this simulator computes.
+    #[staticmethod]
+    fn feature_names() -> (Vec<&'static str>, Vec<&'static str>) {
+        (STATE_NAMES.to_vec(), CAND_NAMES.to_vec())
     }
 
     /// (state width, candidates per choice, candidate width)
@@ -137,6 +146,11 @@ impl VecEnv {
     /// Build order of game i: (start second, host object id, end second, stock before paying).
     fn history(&self, i: usize) -> Vec<(f64, i64, f64, [f64; 3])> {
         self.games[i].history.iter().map(|&(s, k, e, stock)| (s, self.catalogue.objects[k].id, e, stock)).collect()
+    }
+
+    /// Decision-time features of game i, one entry per build: (decision second, state, candidates [K*C] row-major, legal flags).
+    fn trace(&self, i: usize) -> Vec<(f64, Vec<f32>, Vec<f32>, Vec<u8>)> {
+        self.games[i].trace.clone().unwrap_or_default()
     }
 
     /// Stock and levels of game i now: ([metal, crystal, deuterium], [(host object id, level)]).

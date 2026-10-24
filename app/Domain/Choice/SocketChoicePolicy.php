@@ -28,16 +28,23 @@ class SocketChoicePolicy implements ChoicePolicy
             'state' => $point->state,
             'cands' => array_map(static fn (ChoiceCandidate $candidate): array => $candidate->features, $point->candidates),
             'legal' => array_map(static fn (ChoiceCandidate $candidate): bool => $candidate->legal, $point->candidates),
+            // Rows a policy that names "the next thing to build" may pick: payable now, or worth saving for.
+            'buildable' => array_map(static fn (ChoiceCandidate $candidate): bool => $candidate->buildable(), $point->candidates),
+            'teacher' => $point->teacherIndex,
         ]);
 
         $index = is_array($answer) && isset($answer['index']) && is_int($answer['index']) ? $answer['index'] : null;
-        if ($index === null || !($point->candidates[$index] ?? null)?->legal) {
-            self::$fallbacks++;
-
-            return $point->teacherIndex;
+        $candidate = $index === null ? null : ($point->candidates[$index] ?? null);
+        if ($candidate?->legal === true) {
+            return $index;
         }
+        if ($candidate?->payableLater === true) {
+            // The row 0 wait: the pick cannot be paid yet, so the planet keeps its stock and the next login asks again.
+            return 0;
+        }
+        self::$fallbacks++;
 
-        return $index;
+        return $point->teacherIndex;
     }
 
     public function name(): string

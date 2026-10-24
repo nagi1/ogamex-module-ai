@@ -127,7 +127,7 @@ class EconomyChoiceEncoder
 
     /**
      * @param list<float> $account
-     * @param array{planet: PlanetService, research: bool, candidates: list<array{candidate: BuildCandidate, pass: string, legal: bool, teacherOk: bool, spendable: bool}>, teacher: ?int} $set
+     * @param array{planet: PlanetService, research: bool, candidates: list<array{candidate: BuildCandidate, pass: string, legal: bool, teacherOk: bool, spendable: bool, payableLater?: bool}>, teacher: ?int} $set
      */
     public function point(int $playerId, array $account, array $set, string $key): ChoicePoint
     {
@@ -147,6 +147,7 @@ class EconomyChoiceEncoder
                 'reason' => $row['candidate']->reason,
                 'legal' => $row['legal'],
                 'features' => $features,
+                'payableLater' => $row['payableLater'] ?? false,
             ]);
         }
 

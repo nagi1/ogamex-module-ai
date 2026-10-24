@@ -1,37 +1,63 @@
-# Next steps and status (updated 4 October 2026)
+# Next steps and status (updated 25 October 2026)
 
 How to work on this: `.github/skills/ogame-rl-training/SKILL.md` (also `.claude/skills/ogame-rl-training`).
 The handout for the training machine: [HANDOUT-local-agent.md](HANDOUT-local-agent.md).
 
-## 1. Status
+## 1. The plan: one small model per decision (owner direction, 25 October 2026)
 
-| Phase | State | Where |
-| --- | --- | --- |
-| 0 Environment hygiene | **Done**, merged to `main` (host + module) | seedable `Random\Randomizer`, live battle seeds, portable SQL (`CoordinateDistanceCalculator`, `WreckFieldService`), report-copy cache fix, `symfony/yaml` declared, SQLite date lookups, `ai:sim --in-memory --seed --save-sqlite`; gate G1 passed (MySQL = SQLite under one seed on a battle-heavy state) |
-| 1 Cheap PHP speed-ups | **Not started** | next cloud task: one snapshot per login, no triple planning, N+1 `users` reads; each proven behaviour-neutral with `--seed` + `bench/digest.php` |
-| 2 Choice seam + dataset | **Done**, merged to `main` | `QueueableBuildingPlanner::choiceSets`, `DecideAiEconomyStepsAction`, `EconomyChoiceEncoder` (v1: 45 state, 27 candidate features), teacher/epsilon/socket policies, `ChoiceRecorder`, `ai:rl-universe`, `ai:sim --choice-policy --choice-epsilon --choice-socket --learner-share --record-choices`, `tests/Feature/EconomyChoiceSeamTest.php`. Recording proven behaviour-neutral (same seed, identical digest with and without it) |
-| 3 Behaviour cloning | **Code done, not yet run** | `rl/` package (`ogrl.data`, `model`, `train_bc`, `metrics`, `export`, `serve`, `evaluate`), `rl/scripts/generate.sh`, `rl/scripts/closed_loop.sh`. Runs on the RTX machine (handout) |
-| 4 PPO on C1–C3 | Not started, gated on the two BC gates | skill `references/improving.md` §5 |
-| 5 Production shadow mode | Not started | roadmap |
+No single RL model plays the game. Each decision area gets its own small model (or a bandit, or stays rules), its own
+fast simulator or data, its own evaluation and its own ONNX file. `ogrl.serve` routes each request to the model for its
+`kind`, and the planner (the teacher) stays the default and the fallback for every kind that has no model.
+Social life, diplomacy, alliances and emotion stay rules plus supervised readers (`classification-use-plan.md`), never RL.
 
-## 2. What depends on the owner
+Every phase has the same exit gate, in this order:
 
-1. **Run the handout** on the Xeon + RTX 3090 machine (or give it to the local agent there) and keep its
-   Results rows below.
-2. **The boundary decision**: the learned policy re-ranks the planner's own candidates behind a switch, with the
-   planner as default and fallback (`docs/architecture-diagnosis.md` §5 said no RL in the play loop).
-3. **Production weights**: if the learned policy ever plays live, `ai.cognition.affect.decision_weight` and
-   `experience.decision_weight` must be the same as in training (0) for those accounts, or become features.
-4. Known module test failures on `main` (8, none from this work; the local agent fixes the small ones):
-   `AiExploitationGuardTest` ×2, `AiOperationsTest`, `ColonySpyExecutorTest`, `CoverageCompletionTest`,
-   `ExpeditionDispatchSlotTest`, `SpyDepthTest`, `TransferDepthTest`.
-5. Optional: `ogamex:scheduler:process-planet-queues` now runs every minute in production but not in `ai:sim`;
-   decide whether simulations should run it too (it changes when planets are touched, see
-   `game-simulation-audit.md`, update-cadence section).
+1. **Simulator gate** (when the phase has a simulator): the simulator replays on the real host with 0 gaps
+   (`ai:rl-replay`, `python -m ogrl.econ compare`).
+2. **Learning gate**: on held-out universes, each training seed beats the best simple rule by at least 3% mean paired
+   gain, 95% CI above 0. The checkpoint is picked by the training metric, never by the evaluation.
+3. **Serving gate**: the exported file, fed the PHP encoder's own vectors, makes the same choices it made in the
+   simulator (`python -m ogrl.econ served`), and a PHP world runs with 0 socket fallbacks.
+4. **Closed-loop gate**: twin PHP worlds (model versus teacher, full cognition, seeds never used in training), account
+   value ΔV within ±5% of the teacher or better, with its 95% CI, for at least 16 pairs over at least 3 days.
 
-## 3. Language-model classification and RL
+| Phase | Decision | How it learns | Hardware | State |
+| --- | --- | --- | --- | --- |
+| M1–M4 | Building order on one planet | PPO in `rl/ogsim` (Rust, host-exact economy) | sim on CPU, learner on the 4070 | **Done.** Gates 1–3 pass: 0.0000% replay gap; +5 to +12% over the player rule at speeds 4–16; the exported file picks the simulator's object in 310 of 310 decisions from PHP vectors |
+| M5 | Same model in PHP worlds | closed loop against the teacher | ~26 CPU sims | **Now**: gate 4 |
+| M6 | Research order | extend ogsim with labs and research times, same PPO | CPU + 3090 in parallel with M5 | next |
+| M7 | Colonise where and when | contextual bandit on staged worlds | CPU | after M6 |
+| M8 | Raid targets and fleet size | Rust battle engine + PvE targets, PPO or bandit | CPU + GPU | after M7 |
+| M9 | Fleet save timing | rules first; a model only if the rules fail the authenticity read | CPU | after M8 |
+| M10 | Doctrine choice (which written strategy to follow) | bandit over `resources/doctrine/` | CPU | last |
 
-Kept out of data generation, training, the reward and play. Where it belongs: `plan/details/specs/classification-use-plan.md`.
+Two tracks run side by side so both GPUs and the CPU budget stay busy: **fast-sim training** (Rust sims on socket 1
+via Windows-native processes, learners on the GPUs) beside **PHP-world verification** (closed loops on socket 0).
+
+Deferred, needs the owner: a build-speedup feature (`time_gain`) in the encoder would raise the building model's gain
+back toward the +30% it had with simulator-only features, but it bumps `EconomyChoiceEncoder::VERSION` and makes the
+recorded v4 data unreadable by new models.
+
+## 2. What the collected data is for
+
+| Data | Size | Use | Not used for |
+| --- | --- | --- | --- |
+| Our own recorded choices (`storage/rl/bc*`, `late`, `long`, v4 encoder) | ~15 GB | warm start (behaviour cloning) for each new kind's model before RL; the teacher baseline every gate compares to; DAgger rows | the building model (it learns in ogsim) |
+| Public OGame API, 267 universes (`PUB-*`) | 650k planets, 112k players | **reality targets**: planets per player, positions, moon share, alliance share; starting states for the colonise (M7) and raid (M8) worlds | training actions (it holds no actions) |
+| OStats hourly scores (`OSTATS`) | 244k players, 24 h curves | **human-likeness check**: our accounts' hourly growth curve against real players' at the same rank (Gate 3, authenticity) | training actions |
+| OGMem real battles (`OGMEM`) | 599 late battles | scale targets for M8 (real fleets are ~1e5 ships; ours were tiny) and a check of the battle engine on real fleets | per-battle tactics (no tech levels) |
+| OGame wiki and guides (`HFGUIDE`, `WIK-*`) | Q&A, pages | strategies written as YAML under `resources/doctrine/` and `resources/behavior/`, which M10 chooses between | model training |
+| Diplomacy and social corpora (Cicero/DipNet, CaSiNo, STAC, werewolf, Avalon, DeliData...) | ~630 MB | the supervised readers of the social side (intent of a message: threat, request, offer) and authored reply wording | RL |
+| Other games (SC2, Catan, Tribal Wars, Grepolis), OGame clones and bots | ~880 MB | clones: cross-check of host formulas (already mined); other games: parked, no use found yet | anything until a phase needs it |
+
+`storage/rl/discarded` (3.5 GB) and old `bc-stress-*`/`gpuburn*` outputs are leftovers; deleting them is the owner's call.
+
+## 3. What depends on the owner
+
+1. The `time_gain` encoder feature (above): yes or later.
+2. **Production weights**: if a learned policy ever plays live, `ai.cognition.affect.decision_weight` and
+   `experience.decision_weight` must be the same as in training for those accounts, or become features.
+3. Whether `ogamex:scheduler:process-planet-queues` should run in `ai:sim` (see `game-simulation-audit.md`).
 
 ## 4. Results (append one row per run; newest last)
 

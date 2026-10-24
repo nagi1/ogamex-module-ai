@@ -15,10 +15,22 @@ mod python;
 /// Metal-equivalent weights of the closed-loop value (plan/rl/reward-design.md §2), so the simulator and the PHP
 /// evaluation score the same thing.
 pub const WEIGHTS: [f64; 3] = [1.0, 1.5, 2.0];
-pub const STATE_DIM: usize = 18;
-pub const CAND_DIM: usize = 14;
+/// The model's inputs are a named subset of what EconomyChoiceEncoder emits, computed here with the encoder's own
+/// formulas, so the model trained in this crate is served from the PHP vectors with a column pick (plan/rl).
+pub const STATE_NAMES: [&str; 17] = [
+    "speed_economy", "pl_metal", "pl_crystal", "pl_deuterium", "pl_metal_fill", "pl_crystal_fill", "pl_deuterium_fill",
+    "pl_metal_ph", "pl_crystal_ph", "pl_deuterium_ph", "pl_energy_max", "pl_energy_used", "pl_factor", "pl_temperature",
+    "pl_fields_used", "pl_fields_max", "pl_position",
+];
+pub const CAND_NAMES: [&str; 13] = [
+    "cost_metal", "cost_crystal", "cost_deuterium", "cost_hours", "cost_vs_stock", "build_hours", "level", "gain_ph",
+    "payback_hours", "energy_delta", "storage_gain", "unlocks", "eta_hours",
+];
+pub const STATE_DIM: usize = STATE_NAMES.len();
+pub const CAND_DIM: usize = CAND_NAMES.len();
+/// The encoder's caps: a payback and a wait never exceed this many hours.
+const FAR_HOURS: f64 = 10_000.0;
 const NEVER: f64 = 1e9;
-const NO_PAYBACK_HOURS: f64 = 1e5;
 
 #[derive(Deserialize)]
 struct RawCatalogue {
@@ -33,6 +45,7 @@ struct RawCatalogue {
 struct RawObject {
     id: i64,
     consumes_field: bool,
+    unlocks: f64,
     requirements: Vec<RawRequirement>,
     price: Vec<[f64; 3]>,
     build_seconds: Vec<f64>,
@@ -66,6 +79,7 @@ struct RawPlanet {
 pub struct Object {
     pub id: i64,
     pub consumes_field: bool,
+    pub unlocks: f64,
     /// (object index, level); no index means a requirement outside the table (research), met only at level 0.
     pub requires: Vec<(Option<usize>, u32)>,
     /// Price and host build time (every station at zero) of the level after index `level`.
@@ -118,6 +132,9 @@ pub struct Game {
     pub invalid: u32,
     /// (start second, object index, end second, stock before paying) of every build, for traces and the host replay.
     pub history: Vec<(f64, usize, f64, [f64; 3])>,
+    /// With tracing on: (decision second, state features, candidate features of every object, legal flags) per build, taken the
+    /// moment the free queue asks, so the host encoder can be compared with this one on the same planet state.
+    pub trace: Option<Vec<(f64, Vec<f32>, Vec<f32>, Vec<u8>)>>,
 }
 
 #[derive(Clone, Copy)]
@@ -144,8 +161,9 @@ fn ln1p(value: f64) -> f32 {
     value.max(0.0).ln_1p() as f32
 }
 
+/// EconomyChoiceEncoder::signedLog.
 fn signed_log(value: f64) -> f32 {
-    (value.signum() * value.abs().ln_1p()) as f32
+    (if value < 0.0 { -(-value).ln_1p() } else { value.ln_1p() }) as f32
 }
 
 fn weighted(values: [f64; 3]) -> f64 {
@@ -169,6 +187,7 @@ impl Catalogue {
         let objects = raw.objects.iter().map(|o| Object {
             id: o.id,
             consumes_field: o.consumes_field,
+            unlocks: o.unlocks,
             requires: o.requirements.iter().map(|r| (index.get(&r.id).copied(), r.level)).collect(),
             price: o.price.clone(),
             build_seconds: o.build_seconds.clone(),
@@ -193,7 +212,7 @@ impl Catalogue {
         let c = &self.planets[config];
         let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0 };
         self.refresh(&mut planet);
-        let mut game = Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, history: Vec::new() };
+        let mut game = Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, history: Vec::new(), trace: None };
         if !self.any_legal(&game) {
             self.finish(&mut game);
         }
@@ -322,6 +341,16 @@ impl Catalogue {
     /// the last step adds `bonus_hours` of the production left running, so the end of the horizon is not a cliff.
     pub fn step(&self, game: &mut Game, k: usize) -> f64 {
         let before = game.value();
+        if game.trace.is_some() {
+            let (mut state, mut cands) = (vec![0f32; STATE_DIM], vec![0f32; self.objects.len() * CAND_DIM]);
+            self.state_features(game, &mut state);
+            for j in 0..self.objects.len() {
+                self.candidate_features(game, j, &mut cands[j * CAND_DIM..(j + 1) * CAND_DIM]);
+            }
+            let legal = (0..self.objects.len()).map(|j| u8::from(self.legal(&game.planet, j))).collect();
+            let at = game.t;
+            game.trace.as_mut().unwrap().push((at, state, cands, legal));
+        }
         let start = game.t + self.wait_seconds(&game.planet, k);
         if start >= game.horizon {
             self.finish(game);
@@ -350,22 +379,34 @@ impl Catalogue {
         game.value() - before + bonus
     }
 
+    /// EconomyChoiceEncoder::account (speed) and ::planetState, field for field, in STATE_NAMES order.
     pub fn state_features(&self, game: &Game, out: &mut [f32]) {
         let p = &game.planet;
         let c = &self.planets[p.config];
-        let fill = |r: usize| if p.cap[r] > 0.0 { (p.res[r] / p.cap[r]) as f32 } else { 0.0 };
+        let fill = |r: usize| if p.cap[r] > 0.0 { (p.res[r] / p.cap[r]).min(1.0) as f32 } else { 0.0 };
+        let fields_max = c.field_max.max(1) as f64;
         let values = [
+            self.speed.max(1.0).ln() as f32,
             ln1p(p.res[0]), ln1p(p.res[1]), ln1p(p.res[2]), fill(0), fill(1), fill(2),
-            ln1p(p.rate[0]), ln1p(p.rate[1]), ln1p(p.rate[2]), ln1p(p.energy_max), ln1p(p.energy_used), p.factor as f32,
-            (c.temperature / 100.0) as f32, (c.position / 15.0) as f32, self.fields_used(p) as f32 / c.field_max.max(1) as f32,
-            (game.t / game.horizon) as f32, ln1p((game.horizon - game.t) / 3600.0), ln1p(self.speed),
+            signed_log(p.rate[0]), signed_log(p.rate[1]), signed_log(p.rate[2]),
+            ln1p(p.energy_max), ln1p(p.energy_used), p.factor as f32, (c.temperature / 100.0) as f32,
+            (self.fields_used(p) as f64 / fields_max).min(1.0) as f32, (fields_max / 200.0) as f32, (c.position / 15.0) as f32,
         ];
         out.copy_from_slice(&values);
     }
 
-    /// What a player reads about the next level of object k, from the tables alone: no identity, only numbers.
+    /// Hours until the planet's own production covers the price (EconomyChoiceEncoder::etaHours); 0 when it can.
+    fn eta_hours(&self, planet: &Planet, price: [f64; 3]) -> f64 {
+        (0..3).filter(|&r| price[r] > planet.res[r])
+            .map(|r| if planet.rate[r] > 0.0 { (price[r] - planet.res[r]) / planet.rate[r] } else { FAR_HOURS })
+            .fold(0.0, f64::max).min(FAR_HOURS)
+    }
+
+    /// EconomyChoiceEncoder::candidateFeatures for the next level of object k, in CAND_NAMES order. The gain, energy
+    /// and storage columns read the host's own per-level tables, as the encoder reads the host's per-level answers.
     pub fn candidate_features(&self, game: &Game, k: usize, out: &mut [f32]) {
         let p = &game.planet;
+        let c = &self.planets[p.config];
         let o = &self.objects[k];
         let level = p.levels[k] as usize;
         if level >= o.price.len() {
@@ -373,22 +414,24 @@ impl Catalogue {
             return;
         }
         let price = o.price[level];
-        let cost = weighted(price);
-        let mut next = p.clone();
-        next.levels[k] += 1;
-        self.refresh(&mut next);
-        let gain = weighted(next.rate) - weighted(p.rate);
-        let nominal_gain = weighted(self.production(&next, true).0) - weighted(self.production(p, true).0);
-        let energy_delta = (next.energy_max - next.energy_used) - (p.energy_max - p.energy_used);
-        let time_gain = self.modifiers.iter().find(|(m, _)| *m == k)
-            .map_or(0.0, |(_, d)| 1.0 - d[level.min(d.len() - 1)] / d[(level + 1).min(d.len() - 1)]);
-        let payback = if gain > 0.0 { (cost / gain).min(NO_PAYBACK_HOURS) } else { NO_PAYBACK_HOURS };
-        let unlocks = (0..self.objects.len()).filter(|&j| !self.requirements_met(&p.levels, j) && self.requirements_met(&next.levels, j)).count();
+        let cost: f64 = price.iter().sum();
+        let production_per_hour = (p.rate[0] + p.rate[1] + p.rate[2].max(0.0)).max(1.0);
+        let stock = (p.res.iter().sum::<f64>()).max(1.0);
+        let at = |rows: &Vec<[f64; 4]>, l: usize| rows[l.min(rows.len() - 1)];
+        let (gain, energy) = c.production[k].as_ref().map_or((0.0, 0.0), |rows| {
+            let (now, next) = (at(rows, level), at(rows, level + 1));
+            ((next[0] + next[1] + next[2]) - (now[0] + now[1] + now[2]), next[3] - now[3])
+        });
+        let storage = c.storage[k].as_ref().map_or(0.0, |rows| {
+            let sum = |l: usize| rows[l.min(rows.len() - 1)].iter().sum::<f64>();
+            (sum(level + 1) - sum(level)).max(0.0)
+        });
         let values = [
             ln1p(price[0]), ln1p(price[1]), ln1p(price[2]),
-            ln1p(self.wait_seconds(p, k) / 3600.0), ln1p(self.build_seconds(p, k) / 3600.0), ln1p(level as f64),
-            signed_log(gain), signed_log(energy_delta), ln1p(weighted(next.cap) - weighted(p.cap)), time_gain as f32,
-            ln1p(payback), unlocks as f32, ln1p(cost / (weighted(p.res) + 1.0)), signed_log(nominal_gain),
+            ln1p(cost / production_per_hour), (cost / stock).min(10.0) as f32 / 10.0,
+            ln1p(self.build_seconds(p, k) / 3600.0), level as f32 / 40.0,
+            signed_log(gain), ln1p(if gain > 0.0 { (cost / gain).min(FAR_HOURS) } else { FAR_HOURS }),
+            signed_log(energy), ln1p(storage), (o.unlocks / 10.0) as f32, ln1p(self.eta_hours(p, price)),
         ];
         out.copy_from_slice(&values);
     }

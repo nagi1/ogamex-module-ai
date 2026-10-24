@@ -67,9 +67,9 @@ def policy_for(name: str):
     return (lambda env: env.baseline(name)) if name in BASELINES else ModelPolicy(name)
 
 
-def play(catalogue: str, planets: list[int], policy, seed: int = 0) -> tuple["ogsim.VecEnv", dict[int, tuple]]:
+def play(catalogue: str, planets: list[int], policy, seed: int = 0, trace: bool = False) -> tuple["ogsim.VecEnv", dict[int, tuple]]:
     """Every listed planet played once to the horizon; result per planet: (value, rate per hour, decisions, invalid)."""
-    env = ogsim.VecEnv(catalogue, planets, 0, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed, eval=True)
+    env = ogsim.VecEnv(catalogue, planets, 0, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed, eval=True, trace=trace)
     while not env.all_done():
         env.step(policy(env))
     return env, {f[0]: f[1:] for f in env.take_finished()}
@@ -84,15 +84,53 @@ def bench(catalogue: str) -> None:
 
 
 def schedule(catalogue: str, planet: int, out: str, policy: str) -> None:
-    env, _ = play(catalogue, [planet], policy_for(policy), seed=1)
+    env, _ = play(catalogue, [planet], policy_for(policy), seed=1, trace=True)
     stock, levels = env.state(0)
-    meta = json.loads(Path(catalogue).read_text())["planets"][planet]
-    steps = [{"start": s, "id": i, "end": e, "stock": list(st)} for s, i, e, st in env.history(0)]
+    full = json.loads(Path(catalogue).read_text())
+    meta = full["planets"][planet]
+    steps = [{"start": s, "id": i, "end": e, "stock": list(st), "decision": d, "sim_state": list(fs), "sim_cands": list(fc), "sim_legal": list(lg)}
+             for (s, i, e, st), (d, fs, fc, lg) in zip(env.history(0), env.trace(0))]
     Path(out).write_text(json.dumps({
-        "planet_id": meta["planet_id"], "horizon_seconds": int(HORIZON_HOURS * 3600), "steps": steps,
+        "planet_id": meta["planet_id"], "horizon_seconds": int(HORIZON_HOURS * 3600), "steps": steps, "objects": [o["id"] for o in full["objects"]],
         "final": {"stock": list(stock), "levels": {str(i): l for i, l in levels}},
     }))
     print(f"planet {planet} (host id {meta['planet_id']}): {len(steps)} build(s) by {policy} -> {out}")
+
+
+def feature_gaps(replay: dict) -> dict[str, float]:
+    """Largest absolute gap per shared feature between the simulator's snapshot and the host encoder's vectors."""
+    state_names, cand_names = ogsim.VecEnv.feature_names()
+    s_at = [replay["names"]["state"].index(n) for n in state_names]
+    c_at = [replay["names"]["candidate"].index(n) for n in cand_names]
+    gaps: dict[str, float] = {n: 0.0 for n in (*state_names, *cand_names)}
+    for row in replay["steps"]:
+        host = row.get("host_features")
+        if host is None:
+            continue
+        for n, i, sim in zip(state_names, s_at, row["sim_state"]):
+            gaps[n] = max(gaps[n], abs(host["state"][i] - sim))
+        sim_c = np.array(row["sim_cands"], dtype=np.float64).reshape(len(host["cands"]), len(cand_names))
+        host_c = np.array(host["cands"], dtype=np.float64)[:, c_at]
+        for j, n in enumerate(cand_names):
+            gaps[n] = max(gaps[n], float(np.abs(host_c[:, j] - sim_c[:, j]).max()))
+    return gaps
+
+
+def served_agrees(replay_path: str, onnx_path: str) -> bool:
+    """The exported file, fed the PHP encoder's own vectors from a host replay, names the object the model built in the simulator."""
+    import onnxruntime as ort
+
+    replay = json.loads(Path(replay_path).read_text())
+    objects = json.loads(Path(replay_path).with_name(Path(replay_path).name.replace("replay-", "sched-")).read_text())["objects"]
+    session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+    agree = 0
+    for row in replay["steps"]:
+        host = row["host_features"]
+        mask = np.array(row["sim_legal"], dtype=bool)[None, :]
+        logits = session.run(["logits"], {"state": np.array(host["state"], dtype=np.float32)[None, :], "cands": np.array(host["cands"], dtype=np.float32)[None, :, :], "mask": mask})[0][0]
+        agree += int(objects[int(np.where(mask[0], logits, -np.inf).argmax())] == row["id"])
+    print(f"{replay_path}: the exported model on PHP vectors picks the simulator's object in {agree} of {len(replay['steps'])} decisions")
+    return agree == len(replay["steps"])
 
 
 def compare(path: str) -> bool:
@@ -112,7 +150,12 @@ def compare(path: str) -> bool:
     print(f"{path}: {len(replay['steps'])} steps, host refused {refused}, build time differs {time_off}, "
           f"worst stock gap {worst:.4%}, final stock gap {final_off:.4%}, level gaps {level_gaps or 'none'}")
     print(f"  final stock sim {[round(x) for x in final_sim]} host {[round(x) for x in final_host]}")
-    return refused == 0 and not level_gaps and worst < 0.01 and final_off < 0.01
+    features_ok = True
+    if any(r.get("host_features") for r in replay["steps"]):
+        gaps = feature_gaps(replay)
+        features_ok = max(gaps.values()) < 1e-3
+        print(f"  features: worst gap {max(gaps.values()):.2e}" + ("" if features_ok else f"  differing: { {n: round(g, 5) for n, g in gaps.items() if g >= 1e-3} }"))
+    return refused == 0 and not level_gaps and worst < 0.01 and final_off < 0.01 and features_ok
 
 
 def bootstrap_ci(values: np.ndarray, seed: int = 0, draws: int = 10_000) -> tuple[float, float]:
@@ -146,6 +189,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("bench"); p.add_argument("catalogue")
     p = sub.add_parser("schedule"); p.add_argument("catalogue"); p.add_argument("planet", type=int); p.add_argument("out"); p.add_argument("--policy", default="payback")
     p = sub.add_parser("compare"); p.add_argument("replays", nargs="+")
+    p = sub.add_parser("served"); p.add_argument("onnx"); p.add_argument("replays", nargs="+")
     p = sub.add_parser("eval"); p.add_argument("catalogue"); p.add_argument("models", nargs="*"); p.add_argument("--out")
     args = parser.parse_args(argv)
     match args.command:
@@ -153,6 +197,7 @@ def main(argv: list[str] | None = None) -> None:
         case "bench": bench(args.catalogue)
         case "schedule": schedule(args.catalogue, args.planet, args.out, args.policy)
         case "compare": raise SystemExit(0 if all([compare(r) for r in args.replays]) else 1)
+        case "served": raise SystemExit(0 if all([served_agrees(r, args.onnx) for r in args.replays]) else 1)
         case "eval": evaluate(args.catalogue, args.models, args.out)
 
 

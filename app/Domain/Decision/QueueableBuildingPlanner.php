@@ -143,7 +143,7 @@ class QueueableBuildingPlanner
      * the plan itself never pays for it.
      *
      * @param list<QueueableBuilding|QueueableResearch> $chosen what steps() returned for this player
-     * @return list<array{planet: PlanetService, research: bool, candidates: list<array{candidate: BuildCandidate, pass: string, legal: bool, teacherOk: bool, spendable: bool}>, teacher: ?int}>
+     * @return list<array{planet: PlanetService, research: bool, candidates: list<array{candidate: BuildCandidate, pass: string, legal: bool, teacherOk: bool, spendable: bool, payableLater: bool}>, teacher: ?int}>
      */
     public function choiceSets(int $playerId, array $chosen, PlayerService $player): array
     {
@@ -233,6 +233,7 @@ class QueueableBuildingPlanner
                 'legal' => $research ? $this->queueableResearch($planet, $candidate, null) !== null : $this->refusal($planet, $candidate, null) === null,
                 'teacherOk' => $research ? $this->queueableResearch($planet, $candidate) !== null : $this->refusal($planet, $candidate) === null,
                 'spendable' => $this->canSpendFor($planet, $pass === self::WALL_STEP ? null : $goal, $candidate),
+                'payableLater' => !$research && $this->refusal($planet, $candidate, null, true) === null && $this->payableEventually($planet, $candidate),
             ];
             $teacher = $candidate->buildingId === $teacherObjectId ? count($rows) - 1 : $teacher;
         }
@@ -694,7 +695,7 @@ class QueueableBuildingPlanner
      * met requirements, a balance it can pay and a field the building still fits in. Named, so a
      * planet that never builds says why instead of reading as idle.
      */
-    public function refusal(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::ECONOMY_HOURS): ?string
+    public function refusal(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::ECONOMY_HOURS, bool $ignoringPrice = false): ?string
     {
         $object = ObjectService::getObjectById($candidate->buildingId);
         $machineName = $object->machine_name;
@@ -717,7 +718,7 @@ class QueueableBuildingPlanner
         if (!ObjectService::objectRequirementsMetWithQueue($machineName, $planet->getObjectLevel($machineName) + 1, $planet)) {
             return 'requirements';
         }
-        if (!$planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), $reserveHours))) {
+        if (!$ignoringPrice && !$planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), $reserveHours))) {
             return 'price plus reserve';
         }
         // `BuildingQueueService::start()` refuses a field-consuming building once the planet's fields
@@ -727,6 +728,25 @@ class QueueableBuildingPlanner
         }
 
         return null;
+    }
+
+    /** Whether the planet's stores can hold the price and its mines make every resource it is short of. */
+    private function payableEventually(PlanetService $planet, BuildCandidate $candidate): bool
+    {
+        $price = ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet);
+        $held = $planet->getResources();
+
+        foreach ([
+            [$price->metal->get(), $held->metal->get(), $planet->metalStorage()->get(), $planet->getMetalProductionPerHour()],
+            [$price->crystal->get(), $held->crystal->get(), $planet->crystalStorage()->get(), $planet->getCrystalProductionPerHour()],
+            [$price->deuterium->get(), $held->deuterium->get(), $planet->deuteriumStorage()->get(), $planet->getDeuteriumProductionPerHour()],
+        ] as [$cost, $stored, $capacity, $perHour]) {
+            if ($cost > $stored && ($cost > $capacity || $perHour <= 0.0)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

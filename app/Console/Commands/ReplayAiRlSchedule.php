@@ -32,7 +32,7 @@ class ReplayAiRlSchedule extends Command
 
         DB::beginTransaction();
         $planet = app(PlanetServiceFactory::class)->make((int) $schedule['planet_id'], true);
-        $result = app(ReplayAiEconomyScheduleAction::class)->handle($planet, $schedule['steps'], (int) $schedule['horizon_seconds']);
+        $result = app(ReplayAiEconomyScheduleAction::class)->handle($planet, $schedule['steps'], (int) $schedule['horizon_seconds'], $schedule['objects'] ?? []);
         DB::rollBack();
 
         file_put_contents((string) $this->argument('out'), json_encode($result + ['sim_final' => $schedule['final']], JSON_THROW_ON_ERROR));

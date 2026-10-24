@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -15,7 +16,7 @@ use OGame\Services\SettingsService;
  */
 class ExportAiEconomyCatalogueAction
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     /** The level a build-time probe uses: high enough that the host's whole seconds keep the divisor precise. */
     private const PROBE_LEVEL = 40;
@@ -75,6 +76,8 @@ class ExportAiEconomyCatalogueAction
             'id' => $object->id,
             'machine_name' => $object->machine_name,
             'consumes_field' => $object->consumesPlanetField,
+            // How many objects name this one as a requirement, counted by the encoder the model is served through.
+            'unlocks' => app(EconomyChoiceEncoder::class)->unlocks()[$object->machine_name] ?? 0,
             'requirements' => array_map(static fn ($requirement): array => [
                 'id' => ObjectService::getObjectByMachineName($requirement->object_machine_name)->id,
                 'level' => $requirement->level,

@@ -12,6 +12,14 @@ readonly class ChoiceCandidate
         public string $reason,
         public bool $legal,
         public array $features,
+        /** The host would accept it once the planet can pay and the planet can: saving for it is a legal answer. */
+        public bool $payableLater = false,
     ) {
+    }
+
+    /** Whether a policy that builds "the next thing" may name this row: payable now, or worth waiting for. */
+    public function buildable(): bool
+    {
+        return $this->legal || $this->payableLater;
     }
 }
