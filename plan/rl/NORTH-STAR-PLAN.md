@@ -104,8 +104,7 @@ Two numbers summarise a run. Both are computed by `rl/scripts/hds.py` (N4):
 1. **HDS, the in-band share:** the share of (account, measure) pairs inside the real p10-p90 of the account's matched cell
    (rank band × speed-days bucket). By construction a real account scores about 0.8. **Target ≥ 0.75.**
 2. **Turing AUC:** a classifier tells real accounts from ours on the same measure vector, in the matched cell, with 5 folds
-   grouped by universe or seed. It uses numpy logistic regression plus a k-nearest-neighbour two-sample test, and reports
-   the larger AUC. 0.5 means indistinguishable. **Target ≤ 0.60.** The measures with the largest weight are *what gives us
+   grouped by universe or seed. It uses logistic regression and gradient boosting (scikit-learn), and reports the larger AUC. 0.5 means indistinguishable. **Target ≤ 0.60.** The measures with the largest weight are *what gives us
    away*, and §6 is ordered by them.
 
 **Floors that block a change regardless of HDS:** value against the teacher no worse than -5% (CI), and 0 hard-constraint
@@ -164,6 +163,8 @@ Lanes A/B/C can run in parallel. Within a lane, one agent at a time.
   4. Use these cells:
      - rank band: `top10` (pct < 0.1), `mid` (< 0.5), `bottom` (rest);
      - speed-days bucket: `[0,8) [8,16) [16,32) [32,64) [64,128) [128,256) [256,∞)`.
+   - Also write the same cells for the speed-8 universes alone (`speed8|...`). `hds.py` prefers them for speed-8
+     seasons.
   5. Per cell, write `n`, and p10, p50 and p90 for each measure, plus `sample`: up to 2 000 raw measure vectors (for the
      classifier).
   6. From OStats, per player with a known universe and a full 24 h: `activity` = share of hours whose score rose. Write
@@ -176,7 +177,7 @@ Lanes A/B/C can run in parallel. Within a lane, one agent at a time.
 #### N4 Scorecard: `rl/scripts/hds.py`
 
 - **Why:** the one number of §4, and the ranked list of giveaways that chooses the next row.
-- **Files:** `rl/scripts/hds.py` (new). numpy only: the venv has no sklearn, and adding one needs the owner.
+- **Files:** `rl/scripts/hds.py` (new). scikit-learn, numpy (both in `.venv-rl`).
 - **Input:** one or more season JSONL files (schema §9.1) and `real-bands.json`.
 - **Steps:**
   1. Per account, take the snapshot at the **last day**. Also take every 10th day, for the growth measure.
@@ -185,9 +186,9 @@ Lanes A/B/C can run in parallel. Within a lane, one agent at a time.
      - per measure: ours p10/p50/p90 against the real values for each populated cell, and the in-band share;
      - **HDS**;
      - the hard-constraint violation counts;
-     - the **Turing AUC**: logistic regression on standardised measures, 5 folds grouped by seed or universe, plus a
-       kNN (k=10) two-sample AUC. Report the max of the two;
-     - the top 5 giveaways: |standardised logistic coefficient| × the in-band miss rate.
+     - the **Turing AUC**: logistic regression and histogram gradient boosting, `GroupKFold`(5) by universe or seed.
+       Report the larger AUC;
+     - the top 5 giveaways: permutation importance from the boosted model, beside each measure's in-band miss rate.
   4. `--baseline file.json` compares with a saved scorecard and exits 1 when HDS drops by more than the 3-seed spread or
      a floor fails.
   5. `--self-test`: split the real samples 50/50 and score one half as "ours". **HDS must come out ≈ 0.8 and the AUC ≈
@@ -369,7 +370,7 @@ scripted victim. Do it only after N8 passes.
 4. **Time boxes are hard.** At the box, stop and report what you have.
 5. **Gates.**
    - Gate 1: no object named in Rust, Python or PHP code. Bands, positions and doctrines are data.
-   - Gate 2: the smallest mechanism. No new dependency without the owner (numpy only in `hds.py`).
+   - Gate 2: the smallest mechanism. A mainstream library is fine when it removes code (§12.3); no new framework.
    - Gate 3: every scripted behaviour is something a player does. Name it in the commit message.
 6. **Files and git.**
    - Own only your row's files.
@@ -443,9 +444,20 @@ now ─┬─ Lane B: N2 ──► N4 (self-test) ─┐
 Expected first useful number (N5): about 2 days of agent time. Nothing in Lane A trains a model before N5. Training
 resumes at N7, and then every training run ends with an L1 reading.
 
-## 12. Questions for the owner (they do not block lanes A-C)
+## 12. Decisions (the planner's; the owner left them to engineering, 26 Oct)
 
-1. Is the cross-section a human sees (highscore, galaxy, arrivals) the right first definition of "indistinguishable"?
-   Session-level behaviour (reaction latency, chat) would come after.
-2. Which economy speed is the target deployment? It chooses the speed-days buckets that matter.
-3. May `hds.py` use scikit-learn later (a better classifier), or does it stay numpy-only?
+1. **"Indistinguishable" is first judged on the cross-section a player sees:** the highscore by category, the galaxy
+   view (planets, moons, positions) and inactivity. That is the only part with real numbers behind it (PUB, 267
+   universes). The behaviour a target sees comes next, at the step after N8: login rhythm, reaction latency to a probe
+   or attack, save success and raid cadence. For now it is held to the host's hard rules, and its bands come from
+   OStats activity. Chat and diplomacy stay out of this plan (rules plus readers, `next-steps.md` §1).
+2. **The target speed is economy speed 8.**
+   - 196 of the 267 real universes run at 8, so the bands are densest there.
+   - Our simulator runs and the M5 closed loop already ran at 8.
+   - Seasons run at 8. Speeds 4 and 16 are robustness checks only, and their bands come from speed-days matching.
+3. **Tooling: use what does the job.** scikit-learn 1.9.1 is installed in `.venv-rl`.
+   - `hds.py` uses `LogisticRegression` and `HistGradientBoostingClassifier`, with `GroupKFold` by universe or seed, and
+     reports the larger AUC.
+   - For the giveaways it uses permutation importance from the boosted model.
+   - An implementer may add a mainstream library (for example pandas or polars) when it removes code. Say so in the
+     commit.
