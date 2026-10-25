@@ -461,3 +461,23 @@ resumes at N7, and then every training run ends with an L1 reading.
    - For the giveaways it uses permutation importance from the boosted model.
    - An implementer may add a mainstream library (for example pandas or polars) when it removes code. Say so in the
      commit.
+
+## 13. Row status (implementers update this; one line per row)
+
+| Row | Lane | Status | Agent / date | Commit | Note |
+| --- | --- | --- | --- | --- | --- |
+| N1 | C | open | | | |
+| N2 | B | open | | | |
+| N3a | A | open | | | |
+| N4 | B | open (after N2, or against a fake file) | | | |
+| N5 | A | blocked on N2, N3a, N4 | | | |
+| N6a-e | A | blocked on N5 (order set by the planner from N5) | | | |
+| N3b | A | open after N3a | | | |
+| N7 | A | blocked on N3b, N6 | | | |
+| N8 | A | blocked on N7 | | | |
+| N9 | C | open after N1 | | | |
+| N10 | C | blocked on N8 | | | |
+| N11 | A | blocked on N8 | | | |
+
+Status words: `open`, `claimed`, `done`, `blocked on X`, `stopped: <reason>` (time box or a stop condition hit;
+see `ESCALATIONS.md`).
