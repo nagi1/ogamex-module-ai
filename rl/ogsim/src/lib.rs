@@ -36,8 +36,15 @@ const NEVER: f64 = 1e9;
 struct RawCatalogue {
     economy_speed: f64,
     time_grid_level: usize,
+    /// Catalogue v3: researches play beside the buildings, in their own queue.
+    #[serde(default)]
+    research_grid_level: usize,
     objects: Vec<RawObject>,
+    #[serde(default)]
+    research: Vec<RawObject>,
     time_modifiers: Vec<RawModifier>,
+    #[serde(default)]
+    time_modifiers_research: Vec<RawModifier>,
     planets: Vec<RawPlanet>,
 }
 
@@ -74,10 +81,21 @@ struct RawPlanet {
     levels: HashMap<String, u32>,
     production: HashMap<String, Vec<[f64; 4]>>,
     storage: HashMap<String, Vec<[f64; 3]>>,
+    /// Production rows that depend on research levels: rows[level][combo], combo row-major over `by`.
+    #[serde(default)]
+    production_research: HashMap<String, RawProductionResearch>,
+}
+
+#[derive(Deserialize)]
+struct RawProductionResearch {
+    by: Vec<i64>,
+    rows: Vec<Vec<[f64; 4]>>,
 }
 
 pub struct Object {
     pub id: i64,
+    /// 0 builds on the planet, 1 researches in the lab; each queue holds one item at a time.
+    pub queue: usize,
     pub consumes_field: bool,
     pub unlocks: f64,
     /// (object index, level); no index means a requirement outside the table (research), met only at level 0.
@@ -98,15 +116,21 @@ pub struct PlanetConfig {
     pub levels: Vec<u32>,
     pub production: Vec<Option<Vec<[f64; 4]>>>,
     pub storage: Vec<Option<Vec<[f64; 3]>>>,
+    /// Per object, the researches its production rows depend on and the rows [level][combo].
+    pub production_research: Vec<Option<(Vec<usize>, Vec<Vec<[f64; 4]>>)>>,
 }
 
 pub struct Catalogue {
     pub speed: f64,
     pub time_grid_level: usize,
+    pub research_grid_level: usize,
     pub objects: Vec<Object>,
-    /// Objects whose level divides every build time, with the divisor per level.
-    pub modifiers: Vec<(usize, Vec<f64>)>,
+    /// Per queue, the objects whose level divides every build time, with the divisor per level.
+    pub modifiers: [Vec<(usize, Vec<f64>)>; 2],
     pub planets: Vec<PlanetConfig>,
+    /// Seconds between one login of an account and the next, measured on the planner's own accounts; empty means the account
+    /// is always there and refills its queue the instant it frees.
+    pub login_gaps: Vec<f64>,
 }
 
 #[derive(Clone)]
@@ -130,11 +154,22 @@ pub struct Game {
     pub invested: f64,
     pub done: bool,
     pub invalid: u32,
+    /// The queue whose decision is due now.
+    pub queue: usize,
+    /// The second each queue is free again; NEVER once it has nothing left to do.
+    pub free: [f64; 2],
+    /// The object each queue has decided on and is saving up for; it starts the moment the stock covers its price.
+    pub commit: [Option<usize>; 2],
+    /// The account's logins so far (ascending) and the generator that draws the next gap.
+    pub login_times: Vec<f64>,
+    pub login_rng: u64,
+    /// (end second, object index) of the builds under way, earliest first; the level lands when the clock reaches it.
+    pub pending: Vec<(f64, usize)>,
     /// (start second, object index, end second, stock before paying) of every build, for traces and the host replay.
     pub history: Vec<(f64, usize, f64, [f64; 3])>,
-    /// With tracing on: (decision second, state features, candidate features of every object, legal flags) per build, taken the
+    /// With tracing on: (decision second, state features, candidate features of every object, legal flags, the object chosen) per build, taken the
     /// moment the free queue asks, so the host encoder can be compared with this one on the same planet state.
-    pub trace: Option<Vec<(f64, Vec<f32>, Vec<f32>, Vec<u8>)>>,
+    pub trace: Option<Vec<(f64, Vec<f32>, Vec<f32>, Vec<u8>, usize)>>,
 }
 
 #[derive(Clone, Copy)]
@@ -182,10 +217,12 @@ impl Catalogue {
     pub fn load(path: &str) -> Result<Catalogue, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
         let raw: RawCatalogue = serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?;
-        let index: HashMap<i64, usize> = raw.objects.iter().enumerate().map(|(i, o)| (o.id, i)).collect();
-        let count = raw.objects.len();
-        let objects = raw.objects.iter().map(|o| Object {
+        let everything: Vec<(usize, &RawObject)> = raw.objects.iter().map(|o| (0, o)).chain(raw.research.iter().map(|o| (1, o))).collect();
+        let index: HashMap<i64, usize> = everything.iter().enumerate().map(|(i, (_, o))| (o.id, i)).collect();
+        let count = everything.len();
+        let objects = everything.iter().map(|&(queue, o)| Object {
             id: o.id,
+            queue,
             consumes_field: o.consumes_field,
             unlocks: o.unlocks,
             requires: o.requirements.iter().map(|r| (index.get(&r.id).copied(), r.level)).collect(),
@@ -193,7 +230,8 @@ impl Catalogue {
             build_seconds: o.build_seconds.clone(),
             build_seconds_grid: o.build_seconds_grid.clone(),
         }).collect();
-        let modifiers = raw.time_modifiers.iter().filter_map(|m| index.get(&m.id).map(|&i| (i, m.divisor.clone()))).collect();
+        let modifiers_of = |rows: &Vec<RawModifier>| -> Vec<(usize, Vec<f64>)> { rows.iter().filter_map(|m| index.get(&m.id).map(|&i| (i, m.divisor.clone()))).collect() };
+        let modifiers = [modifiers_of(&raw.time_modifiers), modifiers_of(&raw.time_modifiers_research)];
         let planets = raw.planets.iter().map(|p| PlanetConfig {
             position: p.position,
             temperature: p.temperature,
@@ -203,20 +241,43 @@ impl Catalogue {
             levels: per_object(&p.levels, &index, count).into_iter().map(|l| l.unwrap_or(0)).collect(),
             production: per_object(&p.production, &index, count),
             storage: per_object(&p.storage, &index, count),
+            production_research: {
+                let mut rows = vec![None; count];
+                for (id, row) in &p.production_research {
+                    let by = row.by.iter().filter_map(|r| index.get(r).copied()).collect::<Vec<_>>();
+                    if let (Some(&k), true) = (id.parse::<i64>().ok().and_then(|id| index.get(&id)).as_ref().copied(), by.len() == row.by.len()) {
+                        rows[k] = Some((by, row.rows.clone()));
+                    }
+                }
+                rows
+            },
         }).collect();
 
-        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, objects, modifiers, planets })
+        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, planets, login_gaps: Vec::new() })
     }
 
-    pub fn new_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64) -> Game {
+    pub fn new_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
         let c = &self.planets[config];
         let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0 };
         self.refresh(&mut planet);
-        let mut game = Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, history: Vec::new(), trace: None };
-        if !self.any_legal(&game) {
-            self.finish(&mut game);
-        }
+        let mut game = Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, pending: Vec::new(), history: Vec::new(), trace: None };
+        self.next_decision(&mut game);
         game
+    }
+
+    /// The host's production row of object k at `level` under the planet's research levels, if k produces or burns anything.
+    fn production_row(&self, planet: &Planet, k: usize, level: usize) -> Option<[f64; 4]> {
+        let c = &self.planets[planet.config];
+        match (&c.production[k], &c.production_research[k]) {
+            (_, Some((by, grid))) => {
+                let side = self.research_grid_level + 1;
+                let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
+                let row = &grid[level.min(grid.len() - 1)];
+                Some(row[combo.min(row.len() - 1)])
+            }
+            (Some(rows), None) => Some(rows[level.min(rows.len() - 1)]),
+            _ => None,
+        }
     }
 
     /// Rates, energy and factor from the levels (PlanetService::updateResourceProductionStatsInner); with
@@ -225,15 +286,27 @@ impl Catalogue {
         let c = &self.planets[planet.config];
         let mut made = [0.0; 3];
         let (mut energy_max, mut energy_used) = (c.basic[3].max(0.0), (-c.basic[3]).max(0.0));
-        let row = |k: usize, rows: &Vec<[f64; 4]>| rows[(planet.levels[k] as usize).min(rows.len() - 1)];
-        for (k, rows) in c.production.iter().enumerate() {
-            let Some(rows) = rows else { continue };
+        let side = self.research_grid_level + 1;
+        let row = |k: usize, rows: &Vec<[f64; 4]>| match &c.production_research[k] {
+            Some((by, grid)) => {
+                let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
+                let level = (planet.levels[k] as usize).min(grid.len() - 1);
+                grid[level][combo.min(grid[level].len() - 1)]
+            }
+            None => rows[(planet.levels[k] as usize).min(rows.len() - 1)],
+        };
+        let none: Vec<[f64; 4]> = Vec::new();
+        let producers = || (0..c.production.len()).filter_map(|k| match (&c.production[k], &c.production_research[k]) {
+            (Some(rows), _) => Some((k, rows)),
+            (None, Some(_)) => Some((k, &none)),
+            _ => None,
+        });
+        for (k, rows) in producers() {
             let row = row(k, rows);
             if row[3] > 0.0 { energy_max += row[3] } else { energy_used -= row[3] }
             for r in 0..3 { made[r] += row[r] }
         }
-        for (k, rows) in c.production.iter().enumerate() {
-            let Some(rows) = rows else { continue };
+        for (k, rows) in producers() {
             let row = row(k, rows);
             if row[3] > 0.0 && row[2] < 0.0 && -row[2] > c.basic[2] + made[2] && planet.res[2] <= 0.0 {
                 energy_max -= row[3];
@@ -292,8 +365,15 @@ impl Catalogue {
             && self.wait_seconds(planet, k) < NEVER
     }
 
-    pub fn any_legal(&self, game: &Game) -> bool {
-        (0..self.objects.len()).any(|k| self.legal(&game.planet, k))
+    /// Plays the player rule for every queue but `controlled` until the controlled queue decides again (or the game ends);
+    /// returns the value those steps made.
+    pub fn play_others(&self, game: &mut Game, controlled: usize, rng: &mut u64) -> f64 {
+        let mut made = 0.0;
+        while !game.done && controlled < 2 && game.queue != controlled {
+            let Some(k) = self.baseline(game, Baseline::Player, rng) else { break };
+            made += self.step(game, k);
+        }
+        made
     }
 
     /// Whole seconds until the stock covers the next level's price; NEVER when a store is too small or a rate is zero.
@@ -314,7 +394,7 @@ impl Catalogue {
     pub fn build_seconds(&self, planet: &Planet, k: usize) -> f64 {
         let level = planet.levels[k] as usize;
         let side = self.time_grid_level + 1;
-        let cell = self.modifiers.iter().try_fold(0usize, |at, (m, _)| {
+        let cell = self.modifiers[self.objects[k].queue].iter().try_fold(0usize, |at, (m, _)| {
             let l = planet.levels[*m] as usize;
             (l < side).then(|| at * side + l)
         });
@@ -322,7 +402,7 @@ impl Catalogue {
             return self.objects[k].build_seconds_grid[level][cell];
         }
         let mut seconds = self.objects[k].build_seconds[planet.levels[k] as usize];
-        for (m, divisor) in &self.modifiers {
+        for (m, divisor) in &self.modifiers[self.objects[k].queue] {
             if *m != k {
                 seconds /= divisor[(planet.levels[*m] as usize).min(divisor.len() - 1)];
             }
@@ -330,15 +410,112 @@ impl Catalogue {
         seconds.floor().max(1.0)
     }
 
+    /// Lands every build that ends before `until` (at it too when `landing`; the horizon is a cliff for a build that ends on it), in order, accruing up to each end, then accrues up to `until`.
+    fn advance_to(&self, game: &mut Game, until: f64, landing: bool) {
+        while let Some(&(end, k)) = game.pending.first().filter(|(end, _)| if landing { *end <= until } else { *end < until }) {
+            game.pending.remove(0);
+            self.accrue(&mut game.planet, end - game.t);
+            game.t = end;
+            game.planet.levels[k] += 1;
+            self.refresh(&mut game.planet);
+        }
+        self.accrue(&mut game.planet, until - game.t);
+        game.t = until;
+    }
+
+    /// The first login at or after `x` (strictly after with `later`); with no gap table the account is always there.
+    fn login(&self, game: &mut Game, x: f64, later: bool) -> f64 {
+        if self.login_gaps.is_empty() {
+            return x;
+        }
+        if game.login_times.is_empty() {
+            game.login_times.push(0.0);
+        }
+        while game.login_times.last().is_some_and(|&last| if later { last <= x } else { last < x }) {
+            let gap = self.login_gaps[(next_random(&mut game.login_rng) % self.login_gaps.len() as u64) as usize];
+            let last = *game.login_times.last().unwrap();
+            game.login_times.push(last + gap.max(1.0));
+        }
+        let at = game.login_times.partition_point(|&t| if later { t <= x } else { t < x });
+        game.login_times[at]
+    }
+
     fn finish(&self, game: &mut Game) {
-        self.accrue(&mut game.planet, game.horizon - game.t);
-        game.t = game.horizon;
+        self.advance_to(game, game.horizon, false);
         game.done = true;
     }
 
-    /// Commits the free queue to object k: wait until it is affordable, pay, build, and stop at the next free queue.
-    /// The reward is the change in value (invested plus held, metal-equivalent), which is what the planet produced;
-    /// the last step adds `bonus_hours` of the production left running, so the end of the horizon is not a cliff.
+    pub fn queue_legal(&self, game: &Game, k: usize) -> bool {
+        self.objects[k].queue == game.queue && self.legal(&game.planet, k)
+    }
+
+    /// Runs the clock until a queue without a plan has something it can build and must decide (it becomes `game.queue`),
+    /// starting every committed build the moment its price is covered, whichever queue it belongs to. A queue with
+    /// nothing to do sleeps until the next build lands, which may unlock something; with nothing pending it sleeps
+    /// for good, and the game ends when every queue does.
+    fn next_decision(&self, game: &mut Game) {
+        let queues: Vec<usize> = (0..2).filter(|&q| self.objects.iter().any(|o| o.queue == q)).collect();
+        loop {
+            let mut when = [NEVER; 2];
+            for &q in &queues {
+                when[q] = match game.commit[q] {
+                    Some(k) => game.t + self.wait_seconds(&game.planet, k),
+                    None => self.login(game, game.free[q].max(game.t), false),
+                };
+            }
+            let next = queues.iter().copied().min_by(|&a, &b| when[a].total_cmp(&when[b]));
+            let at = next.map_or(NEVER, |q| when[q]);
+            // A landing build changes rates and stores, so a plan made before it is re-timed after it.
+            if let Some(&(end, _)) = game.pending.first().filter(|(end, _)| *end < at.min(game.horizon)) {
+                self.advance_to(game, end, true);
+                continue;
+            }
+            let Some(q) = next.filter(|_| at < game.horizon) else { return self.finish(game) };
+            self.advance_to(game, at, true);
+            if let Some(k) = game.commit[q] {
+                if self.wait_seconds(&game.planet, k) > 0.0 {
+                    self.advance_to(game, game.t + 1.0, true);
+                    continue;
+                }
+                self.start(game, q, k);
+                continue;
+            }
+            game.queue = q;
+            if (0..self.objects.len()).any(|k| self.queue_legal(game, k)) {
+                return;
+            }
+            game.free[q] = game.pending.first().map_or(NEVER, |p| p.0);
+            if game.free[q] >= game.horizon {
+                game.free[q] = NEVER;
+            }
+        }
+    }
+
+    /// Pays for object k and puts it in queue q's slot.
+    fn start(&self, game: &mut Game, q: usize, k: usize) {
+        let stock = game.planet.res;
+        let price = self.objects[k].price[game.planet.levels[k] as usize];
+        for r in 0..3 { game.planet.res[r] -= price[r] }
+        game.invested += weighted(price);
+        let start = game.t;
+        let end = start + self.build_seconds(&game.planet, k);
+        game.history.push((start, k, end, stock));
+        let at = game.pending.partition_point(|p| p.0 <= end);
+        game.pending.insert(at, (end, k));
+        game.free[q] = end;
+        game.commit[q] = None;
+    }
+
+    /// The deciding queue lets this login pass without starting anything and decides again at its next login.
+    pub fn wait_turn(&self, game: &mut Game) {
+        let queue = game.queue;
+        game.free[queue] = self.login(game, game.t, true);
+        self.next_decision(game);
+    }
+
+    /// Commits the free queue to object k and runs the clock to the next decision. The reward is the change in value
+    /// (invested plus held, metal-equivalent), which is what the planet produced; the last step adds `bonus_hours` of
+    /// the production left running, so the end of the horizon is not a cliff.
     pub fn step(&self, game: &mut Game, k: usize) -> f64 {
         let before = game.value();
         if game.trace.is_some() {
@@ -347,34 +524,18 @@ impl Catalogue {
             for j in 0..self.objects.len() {
                 self.candidate_features(game, j, &mut cands[j * CAND_DIM..(j + 1) * CAND_DIM]);
             }
-            let legal = (0..self.objects.len()).map(|j| u8::from(self.legal(&game.planet, j))).collect();
+            let legal = (0..self.objects.len()).map(|j| u8::from(self.queue_legal(game, j))).collect();
             let at = game.t;
-            game.trace.as_mut().unwrap().push((at, state, cands, legal));
+            game.trace.as_mut().unwrap().push((at, state, cands, legal, k));
         }
-        let start = game.t + self.wait_seconds(&game.planet, k);
-        if start >= game.horizon {
-            self.finish(game);
-            return game.value() - before + game.bonus_hours * game.effective_rate();
+        let queue = self.objects[k].queue;
+        if self.wait_seconds(&game.planet, k) > 0.0 && !self.login_gaps.is_empty() {
+            // The account looked, could not pay, and logs off: the queue stays empty until its next login.
+            game.free[queue] = self.login(game, game.t, true);
+        } else {
+            game.commit[queue] = Some(k);
         }
-        self.accrue(&mut game.planet, start - game.t);
-        game.t = start;
-        let stock = game.planet.res;
-        let price = self.objects[k].price[game.planet.levels[k] as usize];
-        for r in 0..3 { game.planet.res[r] -= price[r] }
-        game.invested += weighted(price);
-        let end = start + self.build_seconds(&game.planet, k);
-        game.history.push((start, k, end, stock));
-        if end >= game.horizon {
-            self.finish(game);
-            return game.value() - before + game.bonus_hours * game.effective_rate();
-        }
-        self.accrue(&mut game.planet, end - game.t);
-        game.t = end;
-        game.planet.levels[k] += 1;
-        self.refresh(&mut game.planet);
-        if !self.any_legal(game) {
-            self.finish(game);
-        }
+        self.next_decision(game);
         let bonus = if game.done { game.bonus_hours * game.effective_rate() } else { 0.0 };
         game.value() - before + bonus
     }
@@ -417,9 +578,7 @@ impl Catalogue {
         let cost: f64 = price.iter().sum();
         let production_per_hour = (p.rate[0] + p.rate[1] + p.rate[2].max(0.0)).max(1.0);
         let stock = (p.res.iter().sum::<f64>()).max(1.0);
-        let at = |rows: &Vec<[f64; 4]>, l: usize| rows[l.min(rows.len() - 1)];
-        let (gain, energy) = c.production[k].as_ref().map_or((0.0, 0.0), |rows| {
-            let (now, next) = (at(rows, level), at(rows, level + 1));
+        let (gain, energy) = self.production_row(p, k, level).zip(self.production_row(p, k, level + 1)).map_or((0.0, 0.0), |(now, next)| {
             ((next[0] + next[1] + next[2]) - (now[0] + now[1] + now[2]), next[3] - now[3])
         });
         let storage = c.storage[k].as_ref().map_or(0.0, |rows| {
@@ -440,7 +599,11 @@ impl Catalogue {
     /// short, else the next level that repays its price fastest, a store when no producer fits, else the cheapest.
     pub fn baseline(&self, game: &Game, kind: Baseline, rng: &mut u64) -> Option<usize> {
         let p = &game.planet;
-        let legal: Vec<usize> = (0..self.objects.len()).filter(|&k| self.legal(p, k)).collect();
+        let mut legal: Vec<usize> = (0..self.objects.len()).filter(|&k| self.queue_legal(game, k)).collect();
+        // An account that logs in only now and then builds what it can pay at the visit; it never spends a visit on saving up.
+        if !self.login_gaps.is_empty() && legal.iter().any(|&k| self.wait_seconds(p, k) == 0.0) {
+            legal.retain(|&k| self.wait_seconds(p, k) == 0.0);
+        }
         if legal.is_empty() {
             return None;
         }

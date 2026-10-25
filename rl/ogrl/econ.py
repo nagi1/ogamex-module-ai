@@ -20,6 +20,10 @@ import ogsim
 
 BASELINES = ("random", "soonest", "payback", "player")
 HORIZON_HOURS = 72.0
+# The queue the model decides: 0 builds, 1 researches; the other queue plays the player rule inside the simulator.
+QUEUE = 0
+# Seconds between an account's logins (a list from `login-gaps.json`); None means the account is always there.
+LOGIN_GAPS: list[float] | None = None
 BONUS_HOURS = 24.0
 
 
@@ -69,7 +73,7 @@ def policy_for(name: str):
 
 def play(catalogue: str, planets: list[int], policy, seed: int = 0, trace: bool = False) -> tuple["ogsim.VecEnv", dict[int, tuple]]:
     """Every listed planet played once to the horizon; result per planet: (value, rate per hour, decisions, invalid)."""
-    env = ogsim.VecEnv(catalogue, planets, 0, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed, eval=True, trace=trace)
+    env = ogsim.VecEnv(catalogue, planets, 0, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed, eval=True, trace=trace, queue=QUEUE, login_gaps=LOGIN_GAPS)
     while not env.all_done():
         env.step(policy(env))
     return env, {f[0]: f[1:] for f in env.take_finished()}
@@ -88,49 +92,63 @@ def schedule(catalogue: str, planet: int, out: str, policy: str) -> None:
     stock, levels = env.state(0)
     full = json.loads(Path(catalogue).read_text())
     meta = full["planets"][planet]
-    steps = [{"start": s, "id": i, "end": e, "stock": list(st), "decision": d, "sim_state": list(fs), "sim_cands": list(fc), "sim_legal": list(lg)}
-             for (s, i, e, st), (d, fs, fc, lg) in zip(env.history(0), env.trace(0))]
+    decisions: dict[int, list] = {}
+    for d, fs, fc, lg, obj in env.trace(0):
+        decisions.setdefault(obj, []).append((d, fs, fc, lg))
+    steps = []
+    for s, i, end, st, q in env.history(0):
+        d, fs, fc, lg = decisions[i].pop(0)
+        steps.append({"start": s, "id": i, "end": end, "stock": list(st), "queue": "research" if q else "building", "decision": d, "sim_state": list(fs), "sim_cands": list(fc), "sim_legal": list(lg)})
     Path(out).write_text(json.dumps({
-        "planet_id": meta["planet_id"], "horizon_seconds": int(HORIZON_HOURS * 3600), "steps": steps, "objects": [o["id"] for o in full["objects"]],
+        "planet_id": meta["planet_id"], "horizon_seconds": int(HORIZON_HOURS * 3600), "steps": steps, "objects": [o["id"] for o in full["objects"]], "research_objects": [o["id"] for o in full.get("research", [])],
         "final": {"stock": list(stock), "levels": {str(i): l for i, l in levels}},
     }))
     print(f"planet {planet} (host id {meta['planet_id']}): {len(steps)} build(s) by {policy} -> {out}")
 
 
-def feature_gaps(replay: dict) -> dict[str, float]:
+def feature_gaps(replay: dict, planned: list[dict] | None = None, building_count: int | None = None) -> dict[str, float]:
     """Largest absolute gap per shared feature between the simulator's snapshot and the host encoder's vectors."""
     state_names, cand_names = ogsim.VecEnv.feature_names()
     s_at = [replay["names"]["state"].index(n) for n in state_names]
     c_at = [replay["names"]["candidate"].index(n) for n in cand_names]
     gaps: dict[str, float] = {n: 0.0 for n in (*state_names, *cand_names)}
-    for row in replay["steps"]:
+    for at, row in enumerate(replay["steps"]):
         host = row.get("host_features")
         if host is None:
             continue
         for n, i, sim in zip(state_names, s_at, row["sim_state"]):
             gaps[n] = max(gaps[n], abs(host["state"][i] - sim))
-        sim_c = np.array(row["sim_cands"], dtype=np.float64).reshape(len(host["cands"]), len(cand_names))
+        sim_c = np.array(row["sim_cands"], dtype=np.float64).reshape(-1, len(cand_names))
+        if planned is not None and planned[at].get("queue") == "research":
+            sim_c = sim_c[building_count:]
+        elif planned is not None:
+            sim_c = sim_c[:building_count]
         host_c = np.array(host["cands"], dtype=np.float64)[:, c_at]
         for j, n in enumerate(cand_names):
             gaps[n] = max(gaps[n], float(np.abs(host_c[:, j] - sim_c[:, j]).max()))
     return gaps
 
 
-def served_agrees(replay_path: str, onnx_path: str) -> bool:
-    """The exported file, fed the PHP encoder's own vectors from a host replay, names the object the model built in the simulator."""
+def served_agrees(replay_path: str, onnx_path: str, queue: str = "building") -> bool:
+    """The exported file, fed the PHP encoder's own vectors from a host replay, names the object the model chose in the simulator."""
     import onnxruntime as ort
 
     replay = json.loads(Path(replay_path).read_text())
-    objects = json.loads(Path(replay_path).with_name(Path(replay_path).name.replace("replay-", "sched-")).read_text())["objects"]
+    schedule_file = json.loads(Path(replay_path).with_name(Path(replay_path).name.replace("replay-", "sched-")).read_text())
+    objects = schedule_file["research_objects" if queue == "research" else "objects"]
     session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
-    agree = 0
-    for row in replay["steps"]:
+    asked = agree = 0
+    for row, planned in zip(replay["steps"], schedule_file["steps"]):
+        if planned.get("queue", "building") != queue or row.get("host_features") is None:
+            continue
         host = row["host_features"]
-        mask = np.array(row["sim_legal"], dtype=bool)[None, :]
-        logits = session.run(["logits"], {"state": np.array(host["state"], dtype=np.float32)[None, :], "cands": np.array(host["cands"], dtype=np.float32)[None, :, :], "mask": mask})[0][0]
-        agree += int(objects[int(np.where(mask[0], logits, -np.inf).argmax())] == row["id"])
-    print(f"{replay_path}: the exported model on PHP vectors picks the simulator's object in {agree} of {len(replay['steps'])} decisions")
-    return agree == len(replay["steps"])
+        mask = np.array(planned["sim_legal"], dtype=bool)
+        mask = mask[len(schedule_file["objects"]):] if queue == "research" else mask[: len(schedule_file["objects"])]
+        logits = session.run(["logits"], {"state": np.array(host["state"], dtype=np.float32)[None, :], "cands": np.array(host["cands"], dtype=np.float32)[None, :, :], "mask": mask[None, :]})[0][0]
+        asked += 1
+        agree += int(objects[int(np.where(mask, logits, -np.inf).argmax())] == row["id"])
+    print(f"{replay_path}: the exported {queue} model on PHP vectors picks the simulator's object in {agree} of {asked} decisions")
+    return asked > 0 and agree == asked
 
 
 def compare(path: str) -> bool:
@@ -152,7 +170,8 @@ def compare(path: str) -> bool:
     print(f"  final stock sim {[round(x) for x in final_sim]} host {[round(x) for x in final_host]}")
     features_ok = True
     if any(r.get("host_features") for r in replay["steps"]):
-        gaps = feature_gaps(replay)
+        schedule_file = json.loads(Path(path).with_name(Path(path).name.replace("replay-", "sched-")).read_text())
+        gaps = feature_gaps(replay, schedule_file["steps"], len(schedule_file["objects"]))
         features_ok = max(gaps.values()) < 1e-3
         print(f"  features: worst gap {max(gaps.values()):.2e}" + ("" if features_ok else f"  differing: { {n: round(g, 5) for n, g in gaps.items() if g >= 1e-3} }"))
     return refused == 0 and not level_gaps and worst < 0.01 and final_off < 0.01 and features_ok
@@ -187,17 +206,20 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("merge"); p.add_argument("out"); p.add_argument("catalogues", nargs="+")
     p = sub.add_parser("bench"); p.add_argument("catalogue")
-    p = sub.add_parser("schedule"); p.add_argument("catalogue"); p.add_argument("planet", type=int); p.add_argument("out"); p.add_argument("--policy", default="payback")
+    p = sub.add_parser("schedule"); p.add_argument("catalogue"); p.add_argument("planet", type=int); p.add_argument("out"); p.add_argument("--policy", default="payback"); p.add_argument("--queue", type=int, default=0)
     p = sub.add_parser("compare"); p.add_argument("replays", nargs="+")
-    p = sub.add_parser("served"); p.add_argument("onnx"); p.add_argument("replays", nargs="+")
+    p = sub.add_parser("served"); p.add_argument("onnx"); p.add_argument("replays", nargs="+"); p.add_argument("--queue", default="building")
     p = sub.add_parser("eval"); p.add_argument("catalogue"); p.add_argument("models", nargs="*"); p.add_argument("--out")
     args = parser.parse_args(argv)
     match args.command:
         case "merge": merge(args.out, args.catalogues)
         case "bench": bench(args.catalogue)
-        case "schedule": schedule(args.catalogue, args.planet, args.out, args.policy)
+        case "schedule":
+            global QUEUE
+            QUEUE = args.queue
+            schedule(args.catalogue, args.planet, args.out, args.policy)
         case "compare": raise SystemExit(0 if all([compare(r) for r in args.replays]) else 1)
-        case "served": raise SystemExit(0 if all([served_agrees(r, args.onnx) for r in args.replays]) else 1)
+        case "served": raise SystemExit(0 if all([served_agrees(r, args.onnx, args.queue) for r in args.replays]) else 1)
         case "eval": evaluate(args.catalogue, args.models, args.out)
 
 

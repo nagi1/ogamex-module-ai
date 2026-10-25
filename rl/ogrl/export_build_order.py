@@ -30,7 +30,7 @@ class PickColumns(nn.Module):
         return self.model(state[:, self.state_columns], cands[:, :, self.cand_columns], mask)
 
 
-def export(checkpoint: str, out_dir: str, schema_path: str) -> Path:
+def export(checkpoint: str, out_dir: str, schema_path: str, kind: str = "build_order") -> Path:
     saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
     schema = json.loads(Path(schema_path).read_text())
     names = saved["names"]
@@ -43,7 +43,7 @@ def export(checkpoint: str, out_dir: str, schema_path: str) -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     export_onnx(wrapped, out / "model.onnx", len(schema["state"]), len(schema["candidate"]))
-    (out / "schema.json").write_text(json.dumps({"version": schema["version"], "state": schema["state"], "candidate": schema["candidate"], "kind": "build_order", "uses": names}, indent=1))
+    (out / "schema.json").write_text(json.dumps({"version": schema["version"], "state": schema["state"], "candidate": schema["candidate"], "kind": kind, "uses": names}, indent=1))
     print(f"{checkpoint} -> {out / 'model.onnx'} (encoder v{schema['version']}, {len(names['state'])} state and {len(names['candidate'])} candidate columns)")
     return out / "model.onnx"
 
@@ -53,8 +53,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("checkpoint")
     ap.add_argument("out_dir")
     ap.add_argument("--schema", required=True, help="the schema.json of recorded choices: the encoder's full column names")
+    ap.add_argument("--kind", default="build_order", help="build_order for buildings, research_order for the research queue")
     args = ap.parse_args(argv)
-    export(args.checkpoint, args.out_dir, args.schema)
+    export(args.checkpoint, args.out_dir, args.schema, args.kind)
 
 
 if __name__ == "__main__":

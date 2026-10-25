@@ -2,6 +2,7 @@
 # Closed-loop twin test: the same seeded universes played by the planner (A) and by a trained model (B), then
 # compared account by account (ogrl.evaluate). Seeds here must not overlap the training seeds.
 #
+#   MODEL_FLAG=--build-model selects the build-order file (rl/ogrl/export_build_order.py) instead of a BC model.
 #   PHP=php bash Modules/AI/rl/scripts/closed_loop.sh <model.onnx> <out-dir> <first-seed> <universes> <days> <parallel> [learner-share]
 #   PHP=php bash Modules/AI/rl/scripts/closed_loop.sh runs/bc/model.onnx storage/rl/eval 1001 30 30 16 0.25
 set -euo pipefail
@@ -15,7 +16,7 @@ mkdir -p "$OUT/teacher" "$OUT/policy" "$OUT/universes"
 # bind mount shows the socket under a different path; EVALUATE=0 leaves the comparison to the host, which has the venv.
 if [ -z "${SOCK:-}" ]; then
   SOCK=/tmp/ogrl-$$.sock
-  $PY -m ogrl.serve --model "$MODEL" --socket "$SOCK" > "$OUT/serve.log" 2>&1 &
+  $PY -m ogrl.serve ${MODEL_FLAG:---model} "$MODEL" --socket "$SOCK" > "$OUT/serve.log" 2>&1 &
   SERVER=$!; trap 'kill $SERVER 2>/dev/null; rm -f $SOCK' EXIT
   sleep 3
 fi
@@ -25,6 +26,8 @@ run_pair() {
   local universe="$OUT/universes/universe-$i.sqlite"
   [ -f "$universe" ] || $PHP artisan ai:rl-universe "$universe" --accounts="$ACCOUNTS" --seed="$i" --at="$AT" > /dev/null 2>&1
   for side in teacher policy; do
+    # SKIP_TEACHER=1 reuses a finished planner side of the same seeds (it does not depend on the model).
+    [ "${SKIP_TEACHER:-0}" = 1 ] && [ "$side" = teacher ] && [ -f "$OUT/teacher/choices-$i.jsonl" ] && continue
     local policy=teacher; [ "$side" = policy ] && policy=socket
     DB_CONNECTION=sqlite DB_DATABASE="$(realpath "$universe")" $PHP -d memory_limit=4G artisan ai:sim --in-memory $([ "${COGNITION:-full}" = native ] && echo --native-cognition) \
       --seed="$i" --hours=$((DAYS * 24)) --from="$AT" --choice-policy=$policy --choice-socket="$SOCK" --learner-share="$SHARE" \
@@ -32,6 +35,6 @@ run_pair() {
   done
   echo "pair $i done"
 }
-export -f run_pair; export PHP OUT DAYS SHARE AT SOCK ACCOUNTS
+export -f run_pair; export PHP OUT DAYS SHARE AT SOCK ACCOUNTS SKIP_TEACHER
 seq "$FIRST" $((FIRST + N - 1)) | xargs -P "$PAR" -I{} bash -c 'run_pair {}'
 [ "${EVALUATE:-1}" = 0 ] || $PY -m ogrl.evaluate --a "$OUT/teacher/*.jsonl" --b "$OUT/policy/*.jsonl" | tee "$OUT/report.json"

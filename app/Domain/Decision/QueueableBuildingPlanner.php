@@ -187,7 +187,7 @@ class QueueableBuildingPlanner
     }
 
     /**
-     * Each object once, in the order the passes offer it, tagged with the first pass that offered it.
+     * Each object once, in the order the passes offer it, tagged with the first pass that offered it, then every other object the host lets the planet queue, tagged open.
      *
      * @param array<string, callable(PlanetService): list<BuildCandidate>> $passes
      * @return list<array{candidate: BuildCandidate, pass: string}>
@@ -204,6 +204,15 @@ class QueueableBuildingPlanner
                 $seen[$candidate->buildingId] = true;
                 $offered[] = ['candidate' => $candidate, 'pass' => $name];
             }
+        }
+
+        // The planner's passes are its taste, not the universe: a policy that orders the economy must also see what no
+        // pass offers right now (a warehouse before it is nearly full, a mine the pass skipped), as the host would accept it.
+        foreach ([...ObjectService::getBuildingObjects(), ...ObjectService::getStationObjects()] as $object) {
+            if (isset($seen[$object->id]) || !ObjectService::objectValidPlanetType($object->machine_name, $planet)) {
+                continue;
+            }
+            $offered[] = ['candidate' => app()->makeWith(BuildCandidate::class, ['buildingId' => $object->id, 'reason' => 'open:' . $object->machine_name]), 'pass' => 'open'];
         }
 
         return $offered;

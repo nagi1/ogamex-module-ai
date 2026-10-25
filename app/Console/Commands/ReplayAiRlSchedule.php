@@ -11,15 +11,15 @@ use Modules\AI\Console\Commands\Concerns\OpensRlUniverse;
 use OGame\Factories\PlanetServiceFactory;
 
 /**
- * Parity check of the fast simulator (plan/rl, rl/ogsim): replays a simulated build order on the same host planet
- * and writes both sides next to each other. Everything runs in a transaction that is rolled back.
+ * Parity check of the fast simulator (plan/rl, rl/ogsim): replays a simulated build and research order on the same
+ * host planet and writes both sides next to each other. Everything runs in a transaction that is rolled back.
  *
  * DEV TOOLING: it opens only the universe file it is given and leaves it unchanged.
  */
 #[Description('Replay an ogsim build order on the host and report the differences (plan/rl).')]
 #[Signature('ai:rl-replay
     {universe : The ai:rl-universe SQLite file the catalogue was exported from}
-    {schedule : JSON written by python -m ogrl.econ schedule}
+    {schedule : JSON written by python -m ogrl.econ schedule; a step with "queue":"research" uses the research queue}
     {out : JSON file for the side-by-side result}')]
 class ReplayAiRlSchedule extends Command
 {
@@ -32,7 +32,7 @@ class ReplayAiRlSchedule extends Command
 
         DB::beginTransaction();
         $planet = app(PlanetServiceFactory::class)->make((int) $schedule['planet_id'], true);
-        $result = app(ReplayAiEconomyScheduleAction::class)->handle($planet, $schedule['steps'], (int) $schedule['horizon_seconds'], $schedule['objects'] ?? []);
+        $result = app(ReplayAiEconomyScheduleAction::class)->handle($planet, $schedule['steps'], (int) $schedule['horizon_seconds'], $schedule['objects'] ?? [], $schedule['research_objects'] ?? []);
         DB::rollBack();
 
         file_put_contents((string) $this->argument('out'), json_encode($result + ['sim_final' => $schedule['final']], JSON_THROW_ON_ERROR));

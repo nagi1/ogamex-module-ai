@@ -15,6 +15,7 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\Resources;
+use OGame\Services\ObjectService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -188,4 +189,22 @@ test('a socket answer naming a row to save for waits, a payable row is queued, a
         ->and($request['teacher'])->toBe(1);
     proc_close($server['process']);
     @unlink($server['log']);
+});
+
+test('a building choice offers every object the host lets the planet queue, not only what the planner\'s passes name', function (): void {
+    $planner = app(QueueableBuildingPlanner::class);
+    $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+
+    $offered = [];
+    foreach ($planner->choiceSets($this->currentUserId, $planner->steps($this->currentUserId), $player) as $set) {
+        if (!$set['research'] && $set['planet']->getPlanetId() === $this->planetService->getPlanetId()) {
+            $offered = array_map(static fn (array $row): int => $row['candidate']->buildingId, $set['candidates']);
+        }
+    }
+    $queueable = array_map(
+        static fn ($object): int => $object->id,
+        array_filter([...ObjectService::getBuildingObjects(), ...ObjectService::getStationObjects()], fn ($object): bool => ObjectService::objectValidPlanetType($object->machine_name, $this->planetService)),
+    );
+
+    expect($offered)->toEqualCanonicalizing(array_values($queueable));
 });

@@ -19,6 +19,11 @@ struct VecEnv {
     rng: u64,
     /// Evaluation plays every listed planet exactly once (env i plays planets[i]) and never resets.
     eval: bool,
+    /// The queue the model decides (0 buildings, 1 research); the other plays the player rule.
+    queue: usize,
+    trace: bool,
+    /// A fixed login schedule for every game (replaying a recorded account); empty draws logins from the gap table.
+    login_times: Vec<f64>,
     finished: Vec<Finished>,
 }
 
@@ -29,9 +34,19 @@ fn bytes<'py, T: Copy>(py: Python<'py>, values: &[T]) -> Bound<'py, PyBytes> {
 }
 
 impl VecEnv {
-    fn fresh_game(&mut self, slot: usize) -> Game {
+    fn fresh_game(&mut self, slot: usize, retries: u32) -> Game {
         let config = if self.eval { self.planets[slot] } else { self.planets[(next_random(&mut self.rng) % self.planets.len() as u64) as usize] };
-        self.catalogue.new_game(config, self.horizon_hours, self.bonus_hours)
+        let login_seed = next_random(&mut self.rng);
+        let mut game = self.catalogue.new_game(config, self.horizon_hours, self.bonus_hours, login_seed);
+        game.trace = self.trace.then(Vec::new);
+        game.login_times = self.login_times.clone();
+        self.catalogue.play_others(&mut game, self.queue, &mut self.rng);
+        // A start whose controlled queue never gets a decision (research with no lab) is played out by the rule and teaches
+        // nothing; training redraws, evaluation keeps it so every listed planet has its value.
+        if game.done && !self.eval && retries > 0 {
+            return self.fresh_game(slot, retries - 1);
+        }
+        game
     }
 
     fn record(&mut self, slot: usize) {
@@ -43,17 +58,27 @@ impl VecEnv {
 #[pymethods]
 impl VecEnv {
     #[new]
-    #[pyo3(signature = (catalogue, planets, n_envs, horizon_hours=72.0, bonus_hours=24.0, seed=0, eval=false, trace=false))]
-    fn new(catalogue: &str, planets: Vec<usize>, n_envs: usize, horizon_hours: f64, bonus_hours: f64, seed: u64, eval: bool, trace: bool) -> PyResult<Self> {
-        let catalogue = Arc::new(Catalogue::load(catalogue).map_err(PyValueError::new_err)?);
+    #[pyo3(signature = (catalogue, planets, n_envs, horizon_hours=72.0, bonus_hours=24.0, seed=0, eval=false, trace=false, queue=0, login_gaps=None, login_times=None))]
+    fn new(catalogue: &str, planets: Vec<usize>, n_envs: usize, horizon_hours: f64, bonus_hours: f64, seed: u64, eval: bool, trace: bool, queue: usize, login_gaps: Option<Vec<f64>>, login_times: Option<Vec<f64>>) -> PyResult<Self> {
+        let mut loaded = Catalogue::load(catalogue).map_err(PyValueError::new_err)?;
+        loaded.login_gaps = login_gaps.unwrap_or_default();
+        if login_times.is_some() && loaded.login_gaps.is_empty() {
+            loaded.login_gaps = vec![1e9];
+        }
+        let catalogue = Arc::new(loaded);
         if planets.is_empty() || planets.iter().any(|&p| p >= catalogue.planets.len()) {
             return Err(PyValueError::new_err("planets must be indices into the catalogue's planets"));
         }
         let n_envs = if eval { planets.len() } else { n_envs };
-        let mut env = VecEnv { catalogue, games: Vec::new(), planets, horizon_hours, bonus_hours, rng: seed, eval, finished: Vec::new() };
-        env.games = (0..n_envs).map(|slot| env.fresh_game(slot)).collect();
-        if trace {
-            env.games.iter_mut().for_each(|g| g.trace = Some(Vec::new()));
+        let mut env = VecEnv { catalogue, games: Vec::new(), planets, horizon_hours, bonus_hours, rng: seed, eval, queue, trace, login_times: login_times.unwrap_or_default(), finished: Vec::new() };
+        env.games = (0..n_envs).map(|slot| env.fresh_game(slot, 100)).collect();
+        for slot in 0..env.games.len() {
+            if env.eval && env.games[slot].done {
+                env.record(slot);
+            }
+        }
+        if queue < 2 && !(env.catalogue.objects.iter().any(|o| o.queue == queue)) {
+            return Err(PyValueError::new_err("the catalogue has no objects for that queue"));
         }
         Ok(env)
     }
@@ -67,6 +92,11 @@ impl VecEnv {
     /// (state width, candidates per choice, candidate width)
     fn dims(&self) -> (usize, usize, usize) {
         (STATE_DIM, self.catalogue.objects.len(), CAND_DIM)
+    }
+
+    /// The queue that decides next in every game.
+    fn decision_queues(&self) -> Vec<usize> {
+        self.games.iter().map(|g| g.queue).collect()
     }
 
     fn all_done(&self) -> bool {
@@ -84,7 +114,7 @@ impl VecEnv {
             for j in 0..k {
                 let at = (i * k + j) * CAND_DIM;
                 self.catalogue.candidate_features(g, j, &mut cands[at..at + CAND_DIM]);
-                legal[i * k + j] = u8::from(!g.done && self.catalogue.legal(&g.planet, j));
+                legal[i * k + j] = u8::from(!g.done && self.catalogue.queue_legal(g, j));
             }
         }
         (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
@@ -105,17 +135,27 @@ impl VecEnv {
             }
             let cat = Arc::clone(&self.catalogue);
             let game = &mut self.games[i];
-            let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && cat.legal(&game.planet, k));
+            if action == -2 {
+                self.catalogue.wait_turn(&mut self.games[i]);
+                if self.games[i].done {
+                    dones[i] = 1;
+                    self.record(i);
+                }
+                continue;
+            }
+            let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && cat.queue_legal(game, k));
             let k = chosen.unwrap_or_else(|| {
                 game.invalid += 1;
-                (0..cat.objects.len()).find(|&k| cat.legal(&game.planet, k)).unwrap_or(0)
+                (0..cat.objects.len()).find(|&k| cat.queue_legal(game, k)).unwrap_or(0)
             });
-            rewards[i] = cat.step(game, k) as f32;
+            let mut rng = self.rng;
+            rewards[i] = (cat.step(game, k) + cat.play_others(game, self.queue, &mut rng)) as f32;
+            self.rng = next_random(&mut rng);
             if game.done {
                 dones[i] = 1;
                 self.record(i);
                 if !self.eval {
-                    self.games[i] = self.fresh_game(i);
+                    self.games[i] = self.fresh_game(i, 100);
                 }
             }
         }
@@ -143,14 +183,14 @@ impl VecEnv {
         std::mem::take(&mut self.finished)
     }
 
-    /// Build order of game i: (start second, host object id, end second, stock before paying).
-    fn history(&self, i: usize) -> Vec<(f64, i64, f64, [f64; 3])> {
-        self.games[i].history.iter().map(|&(s, k, e, stock)| (s, self.catalogue.objects[k].id, e, stock)).collect()
+    /// Build order of game i: (start second, host object id, end second, stock before paying, queue).
+    fn history(&self, i: usize) -> Vec<(f64, i64, f64, [f64; 3], usize)> {
+        self.games[i].history.iter().map(|&(s, k, e, stock)| (s, self.catalogue.objects[k].id, e, stock, self.catalogue.objects[k].queue)).collect()
     }
 
     /// Decision-time features of game i, one entry per build: (decision second, state, candidates [K*C] row-major, legal flags).
-    fn trace(&self, i: usize) -> Vec<(f64, Vec<f32>, Vec<f32>, Vec<u8>)> {
-        self.games[i].trace.clone().unwrap_or_default()
+    fn trace(&self, i: usize) -> Vec<(f64, Vec<f32>, Vec<f32>, Vec<u8>, i64)> {
+        self.games[i].trace.iter().flatten().map(|(d, s, c, l, k)| (*d, s.clone(), c.clone(), l.clone(), self.catalogue.objects[*k].id)).collect()
     }
 
     /// Stock and levels of game i now: ([metal, crystal, deuterium], [(host object id, level)]).

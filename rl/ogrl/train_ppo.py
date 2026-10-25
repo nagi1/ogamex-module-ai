@@ -27,6 +27,7 @@ from torch.distributions import Categorical
 
 import ogsim
 
+from . import econ
 from .econ import BONUS_HOURS, HORIZON_HOURS, observe, play
 from .model import CandidateScorer, parameter_count
 
@@ -57,11 +58,11 @@ class MultiEnv:
     """
 
     def __init__(self, catalogues: list[str], envs: int, seed: int):
-        ids = [[o["id"] for o in json.loads(Path(c).read_text())["objects"]] for c in catalogues]
+        ids = [[o["id"] for o in (lambda raw: raw["objects"] + raw.get("research", []))(json.loads(Path(c).read_text()))] for c in catalogues]
         assert all(i == ids[0] for i in ids), "catalogues must list the same objects in the same order"
         sizes = [envs // len(catalogues) + (i < envs % len(catalogues)) for i in range(len(catalogues))]
         self.envs = [
-            ogsim.VecEnv(c, list(range(ogsim.VecEnv.planet_count(c))), n, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed + i)
+            ogsim.VecEnv(c, list(range(ogsim.VecEnv.planet_count(c))), n, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed + i, queue=econ.QUEUE, login_gaps=econ.LOGIN_GAPS)
             for i, (c, n) in enumerate(zip(catalogues, sizes))
         ]
         self.sizes = sizes
@@ -126,6 +127,8 @@ def evaluate(model: CandidateScorer, catalogue: str, device: str, reference: np.
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ogrl.train_ppo")
+    ap.add_argument("--queue", type=int, default=0, help="0 decides buildings, 1 decides research (the other queue plays the player rule)")
+    ap.add_argument("--login-gaps", help="JSON list of seconds between logins; accounts then act only at logins, as in the game")
     ap.add_argument("--catalogue", nargs="+", required=True)
     ap.add_argument("--eval", nargs="+", required=True)
     ap.add_argument("--out", required=True)
@@ -153,6 +156,8 @@ def main(argv: list[str] | None = None) -> None:
     np.random.seed(args.seed)
     device = args.device
 
+    econ.QUEUE = args.queue
+    econ.LOGIN_GAPS = json.loads(Path(args.login_gaps).read_text()) if args.login_gaps else None
     env = MultiEnv(args.catalogue, args.envs, args.seed)
     s_dim, k, c_dim = env.dims()
     names = dict(zip(("state", "candidate"), ogsim.VecEnv.feature_names()))
