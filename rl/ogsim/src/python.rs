@@ -1,5 +1,7 @@
 //! Python side of ogsim: many games stepped in one call, arrays handed over as raw bytes (numpy.frombuffer).
 
+use crate::fleet::Coord;
+use crate::world::{Rules, World};
 use crate::{next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -206,7 +208,192 @@ impl VecEnv {
     }
 }
 
+/// A transition closed by the account deciding again or by its world ending: (ticket, reward, done).
+type Closed = (u64, f32, u8);
+
+/// Many worlds of many accounts each. Every world holds one pending decision of an account the caller controls; the
+/// other accounts play the player rule inside the world. Several accounts act in one world, so a decision's reward is
+/// known only when that account decides again: `observe` hands out a ticket per decision and `step` returns the
+/// transitions it closed, by ticket.
+#[pyclass]
+struct VecWorld {
+    catalogue: Arc<Catalogue>,
+    rules: Option<Arc<Rules>>,
+    worlds: Vec<World>,
+    /// Per world: the deciding account and its ticket.
+    deciding: Vec<(usize, u64)>,
+    /// Per world and account: the open transition (ticket, value when it acted).
+    open: Vec<Vec<Option<(u64, f64)>>>,
+    controlled: Vec<bool>,
+    planets: Vec<usize>,
+    horizon_hours: f64,
+    bonus_hours: f64,
+    rng: u64,
+    tickets: u64,
+    closed: Vec<Closed>,
+    finished: Vec<Finished>,
+}
+
+impl VecWorld {
+    fn fresh_world(&mut self) -> World {
+        let accounts = self.controlled.len();
+        let configs: Vec<usize> = (0..accounts).map(|_| self.planets[(next_random(&mut self.rng) % self.planets.len() as u64) as usize]).collect();
+        let mut world = World::new(&self.catalogue, &configs, self.horizon_hours, self.bonus_hours, next_random(&mut self.rng));
+        if let Some(rules) = &self.rules {
+            let (galaxies, systems) = (rules.settings.number_of_galaxies as u64, rules.settings.number_of_systems as u64);
+            let coords = (0..accounts).map(|_| Coord {
+                galaxy: 1 + (next_random(&mut self.rng) % galaxies) as i64,
+                system: 1 + (next_random(&mut self.rng) % systems) as i64,
+                position: 4 + (next_random(&mut self.rng) % 9) as i64,
+            }).collect();
+            world.arm(Arc::clone(rules), coords);
+        }
+        world
+    }
+
+    /// Runs world w until a controlled account decides, closing that account's previous transition; a finished world
+    /// closes every open transition (with the bonus for the production left running), is recorded, and starts afresh.
+    fn advance(&mut self, w: usize) {
+        let cat = Arc::clone(&self.catalogue);
+        loop {
+            let Some(a) = self.worlds[w].next_decision(&cat) else {
+                for a in 0..self.controlled.len() {
+                    let g = &self.worlds[w].games[a];
+                    if let Some((ticket, before)) = self.open[w][a].take() {
+                        self.closed.push((ticket, (g.value() - before + g.bonus_hours * g.effective_rate()) as f32, 1));
+                    }
+                    self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid));
+                }
+                self.worlds[w] = self.fresh_world();
+                continue;
+            };
+            if !self.controlled[a] {
+                let mut rng = self.rng;
+                let game = &self.worlds[w].games[a];
+                match cat.baseline(&game.planet, game.queue, Baseline::Player, &mut rng).filter(|&k| self.worlds[w].legal(&cat, a, k)) {
+                    Some(k) => self.worlds[w].commit(&cat, a, k),
+                    None => self.worlds[w].wait(&cat, a),
+                }
+                self.rng = next_random(&mut rng);
+                continue;
+            }
+            let value = self.worlds[w].games[a].value();
+            if let Some((ticket, before)) = self.open[w][a].take() {
+                self.closed.push((ticket, (value - before) as f32, 0));
+            }
+            self.tickets += 1;
+            self.deciding[w] = (a, self.tickets);
+            return;
+        }
+    }
+}
+
+#[pymethods]
+impl VecWorld {
+    /// `controlled[a]` says whether account slot a of every world is the caller's; the rest play the player rule.
+    /// With `units`, `fleet_settings` and `combat` (the host exports) the worlds are armed: ships, defence and fleets.
+    #[new]
+    #[pyo3(signature = (catalogue, planets, n_worlds, controlled, horizon_hours=240.0, bonus_hours=24.0, seed=0, login_gaps=None, units=None, fleet_settings=None, combat=None))]
+    fn new(catalogue: &str, planets: Vec<usize>, n_worlds: usize, controlled: Vec<bool>, horizon_hours: f64, bonus_hours: f64, seed: u64, login_gaps: Option<Vec<f64>>, units: Option<&str>, fleet_settings: Option<&str>, combat: Option<&str>) -> PyResult<Self> {
+        let mut loaded = Catalogue::load(catalogue).map_err(PyValueError::new_err)?;
+        loaded.login_gaps = login_gaps.unwrap_or_default();
+        if loaded.login_gaps.is_empty() {
+            return Err(PyValueError::new_err("a world needs login gaps: an account that is always there decides forever at one second"));
+        }
+        if planets.is_empty() || planets.iter().any(|&p| p >= loaded.planets.len()) || !controlled.iter().any(|&c| c) {
+            return Err(PyValueError::new_err("planets must index the catalogue and at least one account must be controlled"));
+        }
+        let rules = match (units, fleet_settings, combat) {
+            (Some(u), Some(f), Some(c)) => Some(Arc::new(Rules::load(&loaded, u, f, c).map_err(PyValueError::new_err)?)),
+            (None, None, None) => None,
+            _ => return Err(PyValueError::new_err("units, fleet_settings and combat come together")),
+        };
+        let accounts = controlled.len();
+        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new() };
+        env.worlds = (0..n_worlds).map(|_| env.fresh_world()).collect();
+        for w in 0..n_worlds {
+            env.advance(w);
+        }
+        Ok(env)
+    }
+
+    /// (state width, candidates per choice, candidate width), as VecEnv, so the same models read both.
+    fn dims(&self) -> (usize, usize, usize) {
+        (STATE_DIM, self.catalogue.objects.len(), CAND_DIM)
+    }
+
+    /// Per world: (deciding account, its queue, ticket).
+    fn decisions(&self) -> Vec<(usize, usize, u64)> {
+        self.deciding.iter().enumerate().map(|(w, &(a, t))| (a, self.worlds[w].games[a].queue, t)).collect()
+    }
+
+    /// The deciding account's planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]).
+    fn observe<'py>(&self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
+        let (n, k) = (self.worlds.len(), self.catalogue.objects.len());
+        let mut state = vec![0f32; n * STATE_DIM];
+        let mut cands = vec![0f32; n * k * CAND_DIM];
+        let mut legal = vec![0u8; n * k];
+        for (w, world) in self.worlds.iter().enumerate() {
+            let a = self.deciding[w].0;
+            let planet = &world.games[a].planet;
+            self.catalogue.state_features(planet, &mut state[w * STATE_DIM..(w + 1) * STATE_DIM]);
+            for j in 0..k {
+                let at = (w * k + j) * CAND_DIM;
+                self.catalogue.candidate_features(planet, j, &mut cands[at..at + CAND_DIM]);
+                legal[w * k + j] = u8::from(world.legal(&self.catalogue, a, j));
+            }
+        }
+        (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
+    }
+
+    /// One answer per world for its deciding account: an object index, or -2 to let the login pass. An illegal answer
+    /// is counted and replaced by the first legal row. Returns the transitions closed since the last call.
+    fn step(&mut self, actions: Vec<i64>) -> PyResult<Vec<Closed>> {
+        if actions.len() != self.worlds.len() {
+            return Err(PyValueError::new_err("one action per world"));
+        }
+        let cat = Arc::clone(&self.catalogue);
+        for (w, &action) in actions.iter().enumerate() {
+            let (a, ticket) = self.deciding[w];
+            let world = &mut self.worlds[w];
+            self.open[w][a] = Some((ticket, world.games[a].value()));
+            if action == -2 {
+                world.wait(&cat, a);
+            } else {
+                let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && world.legal(&cat, a, k));
+                match chosen.or_else(|| (0..cat.objects.len()).find(|&k| world.legal(&cat, a, k))) {
+                    Some(k) => {
+                        if chosen.is_none() { world.games[a].invalid += 1 }
+                        world.commit(&cat, a, k);
+                    }
+                    None => world.wait(&cat, a),
+                }
+            }
+            self.advance(w);
+        }
+        Ok(std::mem::take(&mut self.closed))
+    }
+
+    /// The player rule's answer for every world's deciding account (-2 when it has none).
+    fn baseline(&mut self) -> Vec<i64> {
+        let cat = Arc::clone(&self.catalogue);
+        let mut rng = self.rng;
+        let picks = self.worlds.iter().zip(&self.deciding).map(|(world, &(a, _))| {
+            let g = &world.games[a];
+            cat.baseline(&g.planet, g.queue, Baseline::Player, &mut rng).filter(|&k| world.legal(&cat, a, k)).map_or(-2, |k| k as i64)
+        }).collect();
+        self.rng = next_random(&mut rng);
+        picks
+    }
+
+    /// Accounts whose world finished since the last call: (planet config, value, effective rate, builds, invalid).
+    fn take_finished(&mut self) -> Vec<Finished> {
+        std::mem::take(&mut self.finished)
+    }
+}
+
 #[pymodule]
 fn ogsim(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<VecEnv>()
+    m.add_class::<VecEnv>()?;
+    m.add_class::<VecWorld>()
 }
