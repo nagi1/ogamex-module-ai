@@ -1,7 +1,7 @@
 # Next steps and status (updated 25 October 2026)
 
-**Current work (owner direction, 25 October): the whole game in the fast simulator. Plan, status and handoff:
-[WORLD-SIM-PLAN.md](WORLD-SIM-PLAN.md). Read that first.**
+**Current work order (26 October): [NORTH-STAR-PLAN.md](NORTH-STAR-PLAN.md). Read that first.** The simulator record is
+[WORLD-SIM-PLAN.md](WORLD-SIM-PLAN.md).
 
 How to work on this: `.github/skills/ogame-rl-training/SKILL.md` (also `.claude/skills/ogame-rl-training`).
 The handout for the training machine: [HANDOUT-local-agent.md](HANDOUT-local-agent.md).

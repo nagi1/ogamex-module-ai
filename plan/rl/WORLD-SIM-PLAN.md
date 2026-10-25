@@ -1,5 +1,8 @@
 # The whole game in the fast simulator: plan and handoff
 
+**26 Oct 2026: the work order moved to [NORTH-STAR-PLAN.md](NORTH-STAR-PLAN.md).** This file stays the record of the
+simulator and its parity; take new rows only from that plan.
+
 Owner direction, 25 October 2026: OGame is equations in time plus persisted state, so the whole game runs in the
 Rust simulator `rl/ogsim`. Training and evaluation happen there, and PHP is only the referee that checks the
 simulator still matches the host. This file is the working plan. An agent picking up the work reads it top to
