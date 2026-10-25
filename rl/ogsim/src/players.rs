@@ -14,16 +14,18 @@ use crate::economy::{Baseline, Catalogue, WEIGHTS};
 use crate::fleet::{self, SystemState};
 use crate::world::{Decision, EventKind, Mission, Outcome, Rules, SpyReport, World};
 
-const SLOTS: usize = 4;
-const NEIGHBOURS: usize = 5;
-const REPORT_HOURS: f64 = 24.0;
-const RAID_COOLDOWN: f64 = 3.0 * 3600.0;
+pub(crate) const SLOTS: usize = 4;
+pub(crate) const NEIGHBOURS: usize = 5;
+pub(crate) const REPORT_HOURS: f64 = 24.0;
+pub(crate) const RAID_COOLDOWN: f64 = 3.0 * 3600.0;
 /// A target is worth the trip when the loot pays this many times its fuel.
-const PAYS: f64 = 3.0;
+pub(crate) const PAYS: f64 = 3.0;
 /// A target whose guns do more than this share of our hull in three rounds is left alone.
-const SAFE_SHARE: f64 = 0.3;
+pub(crate) const SAFE_SHARE: f64 = 0.3;
+/// The most probes one spy is sent with.
+pub(crate) const SPY_PROBES: i64 = 4;
 
-fn weighted(r: [f64; 3]) -> f64 {
+pub(crate) fn weighted(r: [f64; 3]) -> f64 {
     (0..3).map(|i| WEIGHTS[i] * r[i]).sum()
 }
 
@@ -102,7 +104,6 @@ fn send(w: &mut World, cat: &Catalogue, a: usize, target: usize, mission: Missio
 fn movable(rules: &Rules, id: u32, research: &HashMap<u32, u32>) -> bool {
     !rules.combat.is_defense(id) && rules.fleet.speed(id, research) > 0
 }
-
 /// The ships the roles are made of, found in the tables.
 #[derive(Clone, Copy)]
 pub struct Kit {
@@ -138,18 +139,18 @@ impl Kit {
 }
 
 /// Ships of one kind the account owns: on the shelf, in the yard's queue, or flying.
-fn owned(w: &World, a: usize, id: u32) -> i64 {
+pub(crate) fn owned(w: &World, a: usize, id: u32) -> i64 {
     let Some(u) = w.rules[a].units.index(id as i64) else { return 0 };
     let queued: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
     let flying: i64 = w.fleets.iter().filter(|f| f.owner == a).flat_map(|f| f.ships.iter()).filter(|s| s.0 == id).map(|s| s.1).sum();
     (w.yards[a].counts[u] + queued) as i64 + flying
 }
 
-fn on_shelf(w: &World, a: usize, id: u32) -> i64 {
+pub(crate) fn on_shelf(w: &World, a: usize, id: u32) -> i64 {
     w.rules[a].units.index(id as i64).map_or(0, |u| w.yards[a].counts[u] as i64)
 }
 
-fn account_distance(w: &World, a: usize, b: usize) -> i64 {
+pub(crate) fn account_distance(w: &World, a: usize, b: usize) -> i64 {
     fleet::distance(&w.rules[a].settings, w.coords[a], w.coords[b], &|_, _| SystemState::Active)
 }
 
@@ -161,7 +162,7 @@ fn others_by_distance(w: &World, a: usize) -> Vec<usize> {
 }
 
 /// The nearest other accounts, the inactive ones (OGame's 'i') before the rest, each group closest first.
-fn nearest(w: &mut World, cat: &Catalogue, a: usize, n: usize) -> Vec<usize> {
+pub(crate) fn nearest(w: &mut World, cat: &Catalogue, a: usize, n: usize) -> Vec<usize> {
     let now = w.games[a].t;
     let mut others = others_by_distance(w, a);
     let inactive: HashSet<usize> = others.iter().copied().filter(|&b| w.inactive(cat, b, now)).collect();
@@ -182,14 +183,83 @@ pub fn account_value(w: &World, a: usize) -> f64 {
 
 /// Attack and hull of a stack of units at its owner's research, as the host's engine reads them; units that stay out
 /// of a fight count for nothing.
-fn strength(rules: &Rules, research: &HashMap<u32, u32>, units: &[(u32, i64)]) -> (f64, f64) {
+pub(crate) fn strength(rules: &Rules, research: &HashMap<u32, u32>, units: &[(u32, i64)]) -> (f64, f64) {
     units.iter().filter(|&&(id, _)| rules.combat.fights(id)).fold((0.0, 0.0), |t, &(id, n)| {
         (t.0 + n as f64 * rules.combat.attack(id, research) as f64, t.1 + n as f64 * rules.combat.hull(id, research) as f64)
     })
 }
 
-fn stack(rules: &Rules, counts: &[u64]) -> Vec<(u32, i64)> {
+pub(crate) fn stack(rules: &Rules, counts: &[u64]) -> Vec<(u32, i64)> {
     rules.units.units.iter().zip(counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect()
+}
+
+/// A raid the scripted raider would send, sized from the newest report on the target.
+pub(crate) struct RaidPlan {
+    pub fleet: Vec<(u32, i64)>,
+    /// What the hold takes of the report's stock, shared out as the host shares loot.
+    pub expected: [f64; 3],
+    /// The defenders' attack in three rounds, and our hull at home: the raider's safety check.
+    pub attack: f64,
+    pub hull: f64,
+}
+
+pub(crate) fn last_report<'a>(w: &'a World, a: usize, target: usize) -> Option<&'a SpyReport> {
+    w.reports.iter().rev().find(|r| r.owner == a && r.target == target)
+}
+
+/// The raider's sizing of a raid: fighters enough to take the defenders' hull down in about three rounds, cargo ships
+/// for the loot that fits. `None` when the account does not hold that fleet, the report lacks the fleet or defence
+/// section, or there is nothing to take. Payoff and safety stay with the caller (the raider's rule, or an errand's
+/// mask), so the one sizing serves both.
+pub(crate) fn raid_plan(w: &World, cat: &Catalogue, a: usize, target: usize, kit: Kit) -> Option<RaidPlan> {
+    let report = last_report(w, a, target)?;
+    let (Some(ships), Some(defence)) = (&report.ships, &report.defence) else { return None };
+    let rules = &w.rules[a];
+    let research = w.research(cat, a);
+    let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
+    let loot = report.resources.map(|r| r.max(0) as f64 * rules.combat.rules.loot_percentage / 100.0);
+    let mut guns = stack(&w.rules[target], ships);
+    guns.extend(stack(&w.rules[target], defence));
+    let (attack, defending_hull) = strength(&w.rules[target], &w.research(cat, target), &guns);
+    let (each_attack, _) = strength(rules, &research, &[(kit.fighter, 1)]);
+    let fighters = if defending_hull > 0.0 { (defending_hull * 1.5 / (3.0 * each_attack.max(1e-9))).ceil() as i64 } else { 0 };
+    if fighters > on_shelf(w, a, kit.fighter) { return None }
+    let fighter_hold = rules.combat.capacity(&[(kit.fighter, 1)].into_iter().collect(), &research);
+    let cargo = (((loot.iter().sum::<f64>() - (fighters * fighter_hold) as f64) / hold as f64).ceil() as i64).clamp(0, on_shelf(w, a, kit.cargo));
+    let fleet: Vec<(u32, i64)> = [(kit.fighter, fighters), (kit.cargo, cargo)].into_iter().filter(|s| s.1 > 0).collect();
+    if fleet.is_empty() { return None }
+    let expected = combat::distribute_loot(loot, fighters * fighter_hold + cargo * hold);
+    let (_, hull) = strength(rules, &research, &fleet);
+    Some(RaidPlan { fleet, expected, attack, hull })
+}
+
+/// The harvesters the raider sends for the field over `target`: enough hulls to take it, never more than the account
+/// holds. `None` when the slot has no harvester hull, no field, or nothing worth the trip.
+pub(crate) fn harvest_plan(w: &World, cat: &Catalogue, a: usize, target: usize) -> Option<(u32, i64)> {
+    let rules = &w.rules[a];
+    let harvester = *rules.combat.missions.harvesters.get(&w.coords[target].position.to_string())?;
+    let research = w.research(cat, a);
+    let hold = rules.combat.capacity(&[(harvester, 1)].into_iter().collect(), &research).max(1);
+    let total = w.debris[target].iter().sum::<i64>();
+    let n = ((total as f64 / hold as f64).ceil() as i64).min(on_shelf(w, a, harvester));
+    (w.fields[target] && total >= hold / 2 && n >= 1).then_some((harvester, n))
+}
+
+/// Everything that flies going away for longer than `remaining` seconds: the nearest account whose round trip is
+/// longer, at the first speed that makes it so. `None` when nothing can fly or nowhere is far enough.
+pub(crate) fn save_plan(w: &World, cat: &Catalogue, a: usize, remaining: f64) -> Option<(usize, Vec<(u32, i64)>, f64)> {
+    let rules = &w.rules[a];
+    let research = w.research(cat, a);
+    let ships: Vec<(u32, i64)> = stack(rules, &w.yards[a].counts).into_iter().filter(|&(id, _)| movable(rules, id, &research)).collect();
+    if ships.is_empty() { return None }
+    let slowest = rules.fleet.slowest_speed(&ships, &research);
+    for speed in [1.0, 2.0, 5.0, 10.0] {
+        for b in others_by_distance(w, a) {
+            let away = 2 * fleet::flight_seconds(&rules.settings, Mission::Transport as u32, account_distance(w, a, b), slowest, speed);
+            if (away as f64) > remaining + 120.0 { return Some((b, ships, speed)) }
+        }
+    }
+    None
 }
 
 /// Today's player rule, and the odd ship bought with stock that would otherwise sit idle or overflow.
@@ -225,17 +295,25 @@ impl Miner {
     }
 
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize) {
-        let Some(kit) = Kit::of(w, cat, a) else { return };
-        let rules = Arc::clone(&w.rules[a]);
+        for (u, amount) in self.order_plans(w, cat, a) {
+            w.order_units(cat, a, u, amount as u64);
+        }
+    }
+
+    /// The ships this rule wants at this login that the account does not have, as (catalogue index, amount): what the
+    /// yard is told to build. Shared with the errand choice, whose `order` candidate is this rule's answer.
+    pub(crate) fn order_plans(&self, w: &World, cat: &Catalogue, a: usize) -> Vec<(usize, i64)> {
+        let Some(kit) = Kit::of(w, cat, a) else { return Vec::new() };
+        let rules = &w.rules[a];
         let research = w.research(cat, a);
         let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
         let stock: f64 = w.games[a].planet.res.iter().sum();
         let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
-        for (id, want) in wants {
+        wants.into_iter().filter_map(|(id, want)| {
             let missing = want - owned(w, a, id);
-            let Some(u) = rules.units.index(id as i64) else { continue };
-            if missing > 0 { w.order_units(cat, a, u, missing as u64); }
-        }
+            let u = rules.units.index(id as i64)?;
+            (missing > 0).then_some((u, missing))
+        }).collect()
     }
 }
 
@@ -271,15 +349,11 @@ impl Raider {
         pick
     }
 
-    fn last_report<'a>(w: &'a World, a: usize, target: usize) -> Option<&'a SpyReport> {
-        w.reports.iter().rev().find(|r| r.owner == a && r.target == target)
-    }
-
     fn spy(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, kit: Kit, ledger: &mut Ledger) {
         let now = w.games[a].t;
-        let fresh = Self::last_report(w, a, target).is_some_and(|r| now - r.time < REPORT_HOURS * 3600.0);
+        let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < REPORT_HOURS * 3600.0);
         let recent = self.spied.get(&target).is_some_and(|&t| now - t < 2.0 * 3600.0);
-        let probes = on_shelf(w, a, kit.probe).min(4);
+        let probes = on_shelf(w, a, kit.probe).min(SPY_PROBES);
         if fresh || recent || probes < 1 { return }
         if send(w, cat, a, target, Mission::Espionage, &[(kit.probe, probes)], 10.0, ledger).is_ok() {
             self.spied.insert(target, now);
@@ -291,47 +365,29 @@ impl Raider {
     /// target cannot hurt.
     fn raid(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, kit: Kit, ledger: &mut Ledger) -> bool {
         let now = w.games[a].t;
-        let Some(report) = Self::last_report(w, a, target) else { return false };
+        let Some(report) = last_report(w, a, target) else { return false };
         if now - report.time > REPORT_HOURS * 3600.0 || self.hit.get(&target).is_some_and(|&t| now - t < RAID_COOLDOWN) || ledger.beaten.contains(&(a, target)) { return false }
-        let (Some(ships), Some(defence)) = (&report.ships, &report.defence) else { return false };
+        let Some(plan) = raid_plan(w, cat, a, target, kit) else { return false };
         let rules = Arc::clone(&w.rules[a]);
         let research = w.research(cat, a);
-        let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
-        let loot = report.resources.map(|r| r.max(0) as f64 * rules.combat.rules.loot_percentage / 100.0);
-        let mut guns = stack(&w.rules[target], ships);
-        guns.extend(stack(&w.rules[target], defence));
-        let (attack, defending_hull) = strength(&w.rules[target], &w.research(cat, target), &guns);
-        // Enough fighters to take the defenders' hull down in about three rounds, then hold for the loot.
-        let (each_attack, _) = strength(&rules, &research, &[(kit.fighter, 1)]);
-        let fighters = if defending_hull > 0.0 { (defending_hull * 1.5 / (3.0 * each_attack.max(1e-9))).ceil() as i64 } else { 0 };
-        if fighters > on_shelf(w, a, kit.fighter) { return false }
-        let fighter_hold = rules.combat.capacity(&[(kit.fighter, 1)].into_iter().collect(), &research);
-        let cargo = (((loot.iter().sum::<f64>() - (fighters * fighter_hold) as f64) / hold as f64).ceil() as i64).clamp(0, on_shelf(w, a, kit.cargo));
-        let fleet: Vec<(u32, i64)> = [(kit.fighter, fighters), (kit.cargo, cargo)].into_iter().filter(|s| s.1 > 0).collect();
-        if fleet.is_empty() { return false }
-        let capacity = fighters * fighter_hold + cargo * hold;
-        let expected = combat::distribute_loot(loot, capacity);
-        let fuel = fleet::consumption(&rules.settings, &rules.fleet, &fleet, &research, account_distance(w, a, target), 0, 10.0) as f64;
-        if weighted(expected) < PAYS * WEIGHTS[2] * fuel { return false }
-        let (_, hull) = strength(&rules, &research, &fleet);
-        if attack * 3.0 > SAFE_SHARE * hull { return false }
+        let fuel = fleet::consumption(&rules.settings, &rules.fleet, &plan.fleet, &research, account_distance(w, a, target), 0, 10.0) as f64;
+        if weighted(plan.expected) < PAYS * WEIGHTS[2] * fuel { return false }
+        if plan.attack * 3.0 > SAFE_SHARE * plan.hull { return false }
         let had_fleet = stack(&w.rules[target], &w.yards[target].counts).iter().any(|&(id, _)| movable(&w.rules[target], id, &w.research(cat, target)));
-        let Ok(arrive) = send(w, cat, a, target, Mission::Attack, &fleet, 10.0, ledger) else { return false };
+        let Ok(arrive) = send(w, cat, a, target, Mission::Attack, &plan.fleet, 10.0, ledger) else { return false };
         self.hit.insert(target, now);
         ledger.raids.push(Raid { attacker: a, target, arrive, loot: None, target_had_fleet: had_fleet, saved: false });
         true
     }
 
     fn recycle(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, ledger: &mut Ledger) {
+        let Some((harvester, n)) = harvest_plan(w, cat, a, target) else { return };
         let field = w.debris[target];
         let rules = Arc::clone(&w.rules[a]);
-        let Some(&harvester) = rules.combat.missions.harvesters.get(&w.coords[target].position.to_string()) else { return };
         let research = w.research(cat, a);
         let hold = rules.combat.capacity(&[(harvester, 1)].into_iter().collect(), &research).max(1);
-        let total = field.iter().sum::<i64>();
         let already = w.fleets.iter().any(|f| f.owner == a && f.target == target && f.mission == Mission::Recycle);
-        let n = ((total as f64 / hold as f64).ceil() as i64).min(on_shelf(w, a, harvester));
-        if !w.fields[target] || total < hold / 2 || n < 1 || already { return }
+        if already { return }
         let fuel = fleet::consumption(&rules.settings, &rules.fleet, &[(harvester, n)], &research, account_distance(w, a, target), 0, 10.0) as f64;
         if weighted(field.map(|r| r as f64)).min((n * hold) as f64) < PAYS * WEIGHTS[2] * fuel { return }
         if send(w, cat, a, target, Mission::Recycle, &[(harvester, n)], 10.0, ledger).is_ok() { ledger.recycles += 1 }
@@ -383,25 +439,13 @@ impl FleetSaver {
     /// speed (the cheapest fuel, and the longest outward leg to recall from at the next login); the mission is a
     /// transport with an empty hold, which only keeps the ships away.
     fn leave(&self, w: &mut World, cat: &Catalogue, a: usize, remaining: f64, ledger: &mut Ledger) -> bool {
-        let rules = Arc::clone(&w.rules[a]);
-        let research = w.research(cat, a);
-        let ships: Vec<(u32, i64)> = stack(&rules, &w.yards[a].counts).into_iter().filter(|&(id, _)| movable(&rules, id, &research)).collect();
-        if ships.is_empty() { return false }
-        let slowest = rules.fleet.slowest_speed(&ships, &research);
-        let others = others_by_distance(w, a);
-        for speed in [1.0, 2.0, 5.0, 10.0] {
-            for &b in &others {
-                let away = 2 * fleet::flight_seconds(&rules.settings, Mission::Transport as u32, account_distance(w, a, b), slowest, speed);
-                if (away as f64) > remaining + 120.0 && send(w, cat, a, b, Mission::Transport, &ships, speed, ledger).is_ok() { return true }
-            }
-        }
-        false
+        let Some((b, ships, speed)) = save_plan(w, cat, a, remaining) else { return false };
+        send(w, cat, a, b, Mission::Transport, &ships, speed, ledger).is_ok()
     }
 }
 
 /// One of the three, for a world that mixes them.
-pub enum Player {
-    Miner(Miner),
+pub enum Player {    Miner(Miner),
     Raider(Raider),
     Saver(FleetSaver),
 }

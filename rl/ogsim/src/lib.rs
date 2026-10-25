@@ -21,6 +21,8 @@ pub mod expedition;
 pub mod strike;
 /// Scripted human-like players on the world: miner, raider, fleet saver.
 pub mod players;
+/// The errand choice a login makes with its fleet, as candidates a model scores (plan/rl/errand-spec.md).
+pub mod errands;
 
 pub use economy::*;
 
