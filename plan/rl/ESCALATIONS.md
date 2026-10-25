@@ -75,3 +75,24 @@ This is a §4 matching-rule decision, so it is the planner's.
    times). What is the intended rule? `hds.py` currently reports it and gates only on the two exact
    constraints (login hours, 10 s actions).
 3. The reading is counts-only until N1 lands. Is that acceptable for N5's D-answers, or does N5 wait for N1?
+
+## 26 Oct — N5 — the reading is ready, and it says the teacher is the whole problem
+
+**Reading** (§8): HDS **0.686**, Turing AUC **0.990** over 8 measures with the host's own scores, 3 seeds ×
+64 accounts × 60 days at speed 8. Giveaways in order: **planets** (48 % out of band), res_share (68 %),
+alliance (9 %), mil_share (52 %), growth (20 %).
+
+D1-D4 are answered in §8 with numbers. D5 is answered from the §9.1 event counters only (every account: 0
+colonies, 0 expeditions, 0 missiles, 0 moon shots, 0 recycles, 1 planet, 0 moons); the catalogue-wide object
+enumeration through `reach.py` was **not** done — that is a half-hour follow-up if the planner wants the full
+object list rather than the missions.
+
+**Three things the planner has to decide before N6 starts:**
+1. **N6d is not fifth.** The giveaway order puts the *research/military split* second (res_share out of band on
+   68 % of measures, mil_share on 52 %), before alliance and growth. The plan's expected order (colonise,
+   expeditions, moons, persona mix) should probably become **colonise → persona mix (the share split) →
+   expeditions → moons**, unless the planner has a reason to keep it.
+2. **Growth is not 0.21x, it is 187x-1029x below the band median at day 60** (ours p50 135-249 vs 46 709 and
+   138 909). §2's 0.21x was measured at 7.3 speed-days; the gap widens with age, so colonising is not a small
+   fix but the only one that can close a 3-order-of-magnitude gap.
+3. **The plan says stop after N5.** It is stopped here, before any N6 row, as the work order requires.
