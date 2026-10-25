@@ -90,7 +90,7 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | W6 | Colonisation and multiple planets per account: an account owns several economies, research is shared across them and done at one lab, and deploy works between own planets | W2 cases for colonise and deploy; research equal on every planet | open |
 | W7 | Scripted human-like baselines on the world: a miner (today's player rule), a raider (spy inactives, raid with cargos, recycle), and a fleet saver (leaves on an incoming attack at a login) | Bands from `plan/rl/human-growth-check.md` and the external data (memory `external-ogame-data`) | **first version done** `players.rs`: Miner, Raider, FleetSaver read from host tables; 12 accounts x 10 days: 24 raids, loot 215 k weighted, saves 1 ok / 3 late (fails 1 of 8 seeds: no save ok); ~45 k account-hours/s. Gaps are listed in row W7b |
 | W7b | World API the scripted players lack (needs W6 done first, same file `world.rs`): (1) an event log of fleet arrivals, battles and returns with cargo, so loot, losses and save outcomes are read, not inferred; (2) `Mission::Deploy` and a recall that turns a fleet home, so a saver can carry resources away and back; (3) logins for accounts with nothing left to build (today they get no decision, so a fully built late-game account can never save or raid); (4) an inactive flag per account (the 'i' status) for raid target choice; (5) public per-unit attack, hull and capacity accessors on `CombatCatalogue`; (6) a public `World::harvester` and a unit setter that syncs `planet.units` | players test passes on all 8 seeds with saves ok > 0; loot read from the log equals the stock change | open |
-| W8 | Moons, phalanx, jump gate, missiles, expeditions, ACS, moon destruction | one host case set each | open, after W7 |
+| W8 | Moons, phalanx, jump gate, missiles, expeditions, ACS, moon destruction | one host case set each | **modules done** (not yet flown by the world): `expedition.rs` 252/252 cases, `strike.rs` missiles 221 flown + 79 refused and moon destruction 265 flown, both exact; phalanx, jump gate and ACS remain, and the world must call the modules as missions |
 | W9 | Self-play training on the world: one small model per decision (next-steps §1), initialised by cloning the scripted players, then RL with a KL anchor to the clone | next-steps gates 1–4; a PHP closed loop as the final check only | open, after W5 and W7 |
 
 ## 5. Agents in flight (Sonnet, 25 Oct; each owns separate files)
@@ -98,8 +98,6 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | Agent task | Row | Files it owns |
 | --- | --- | --- |
 | Colonisation, several planets per account, deploy | W6 | `world.rs`, economy export (additive) |
-| Expedition outcomes, replayed against `more-mission-cases-u1.json` | W8 | `expedition.rs` |
-| Missiles and moon destruction, replayed against the same file | W8 | `strike.rs`, combat export (additive) |
 
 When the last two finish, the lead integrates them into `world.rs` as missions (after W6 settles the planet model).
 Agents commit nothing; the lead commits by file name. Check `git status` before starting anything.
@@ -126,3 +124,6 @@ Agents commit nothing; the lead commits by file name. Check `git status` before 
 - The defender's wreck field is created even when no ship was lost (41 of 357 attacks).
 | 25 Oct | `7ce3e6e` | W4 done: espionage 344 and recycle 351 cases exact; attacks and transports still exact |
 | 25 Oct | `6187ad5` | Second referee `ai:rl-more-mission-cases`: colonise, expedition, missile, moon destruction (1 200 cases) |
+| 25 Oct | `995daf8` | W7 first version: scripted miner, raider, fleet saver (`players.rs`) |
+| 25 Oct | `5cb28df` | Missile strikes and moon destruction exact |
+| 25 Oct | (this commit) | Expedition exact on 252 cases; combat export carries `strike` and `expedition` sections |
