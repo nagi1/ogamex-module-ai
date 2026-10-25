@@ -392,6 +392,7 @@ scripted victim. Do it only after N8 passes.
 
 | Date | Row | HDS | AUC | Top giveaways | Floors |
 | --- | --- | --- | --- | --- | --- |
+| 26 Oct | N4 on N3a seasons (3 seeds, 64 accounts, 60 d, speed 8; **stub scores, so counts only**) | **0.773** over 4 measures | **0.912** (pooled 0.882) | planets (48% out of band), alliance, moons | 0 value floor (no teacher run in a rules-only season); hard constraints: 44 weekly login-hour gaps, 0 actions under 10 s, 1 013 dark periods (definition escalated) |
 
 ## 9. Schemas (fixed so the lanes do not block each other)
 
@@ -469,8 +470,8 @@ resumes at N7, and then every training run ends with an L1 reading.
 | N1 | C | claimed | copilot:lane-c 26 Oct |  |  |
 | N2 | B | done | copilot 26 Oct | ee160aa | real-bands.json: 21 cells (19 usable), pooled table = §2 on all 24 p10/p50/p90; n differs -3/-9/-25 (ESCALATIONS) |
 | N3a | A | done | copilot:lane-a 26 Oct | ee160aa | season.rs: 3 seeds x 64 accounts x 60 days at speed 8 in 1.32-1.43 s, 3 840 §9.1 lines each, schema exact |
-| N4 | B | claimed | copilot 26 Oct | | |
-| N5 | A | blocked on N2, N3a, N4 | | | |
+| N4 | B | done | copilot 26 Oct | (pending) | self-test PASSED (HDS 0.862, continuous 0.840, AUC 0.549); fake 60-day file compared; first real reading in §8 |
+| N5 | A | claimed | copilot 26 Oct | | L1 ran: §8 row 1 is the reading (counts only, stub scores). D1-D5 answers pending |
 | N6a-e | A | blocked on N5 (order set by the planner from N5) | | | |
 | N3b | A | open after N3a | | | |
 | N7 | A | blocked on N3b, N6 | | | |
