@@ -10,7 +10,10 @@ use pyo3::types::PyBytes;
 use std::sync::Arc;
 
 /// A finished game: (planet config, final value, final effective rate per hour, decisions, invalid actions).
-type Finished = (usize, f64, f64, usize, u32);
+/// A finished account: (planet config, value, effective rate, decisions, invalid actions, fleet value). The last one
+/// is everything the account owns beyond its economy — ships at price, cargo in flight, half the fuel — so an evaluation
+/// can tell a policy that lost fleets from one that built less.
+type Finished = (usize, f64, f64, usize, u32, f64);
 
 #[pyclass]
 struct VecEnv {
@@ -54,7 +57,8 @@ impl VecEnv {
 
     fn record(&mut self, slot: usize) {
         let g = &self.games[slot];
-        self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid));
+        // The economy env has no ships, so the fleet share of an account's worth is nothing.
+        self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid, 0.0));
     }
 }
 
@@ -307,7 +311,8 @@ impl VecWorld {
                         self.closed.push((ticket, (value - before + bonus) as f32, 1));
                     }
                     let g = &self.worlds[w].games[a];
-                    self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid));
+                    let fleet = players::account_value(&self.worlds[w], a) - g.value();
+                    self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid, fleet));
                 }
                 self.worlds[w] = self.fresh_world();
                 continue;

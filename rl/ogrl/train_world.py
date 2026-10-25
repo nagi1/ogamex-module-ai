@@ -486,6 +486,7 @@ def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int], c
     does (greedy) for its queue. Returns final values [worlds, accounts] of each world's first game."""
     worlds = [load_world(args, seed, 1, catalogue) for seed in seeds]
     values = np.full((len(seeds), args.accounts), np.nan)
+    fleets = np.full((len(seeds), args.accounts), np.nan)
     alive = list(range(len(seeds)))
     while alive:
         rule_actions = [worlds[i].baseline()[0] for i in alive]
@@ -510,9 +511,11 @@ def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int], c
             done = worlds[i].take_finished()
             if len(done) >= args.accounts:
                 values[i] = [row[1] for row in done[: args.accounts]]
+                fleets[i] = [row[5] for row in done[: args.accounts]]
             else:
                 still.append(i)
         alive = still
+    play_arm.fleets = fleets
     return values
 
 
@@ -523,6 +526,7 @@ def evaluator(args, dims, stop, final_event) -> None:
     seeds = [10_000_000 + i for i in range(args.eval_worlds)]
     started = time.time()
     rule = play_arm(args, dims, None, device, args.eval_catalogue, seeds)
+    rule_fleet = play_arm.fleets
     print(f"[eval] player rule on {len(seeds)} fixed worlds ready in {time.time() - started:.0f}s", flush=True)
     done_update, last = -1, None
 
@@ -535,6 +539,7 @@ def evaluator(args, dims, stop, final_event) -> None:
         clock = time.time()
         counts = [0, 0]
         values = play_arm(args, dims, model, device, args.eval_catalogue, seeds, counts)
+        fleet = play_arm.fleets
         ctl = slice(0, args.controlled)
         per_account = values[:, ctl] / rule[:, ctl] - 1.0
         per_world = per_account.mean(1)
@@ -542,6 +547,8 @@ def evaluator(args, dims, stop, final_event) -> None:
         result = {"tag": tag, "update": int(saved["iteration"]), "worlds": len(seeds), "accounts": int(per_account.size), "value_vs_rule_mean": float(per_world.mean()), "ci95_world_bootstrap": [low, high],
                   "better_share_accounts": float((per_account > 0).mean()), "worst_account": float(per_account.min()), "rule_mean_value": float(rule[:, ctl].mean()), "model_mean_value": float(values[:, ctl].mean()),
                   "uncontrolled_accounts_identical": bool(np.allclose(values[:, args.controlled:], rule[:, args.controlled:], rtol=1e-6)),
+                  "fleet_vs_rule_mean": float(np.nanmean(fleet[:, ctl] / np.maximum(rule_fleet[:, ctl], 1.0) - 1.0)),
+                  "accounts_with_less_fleet": float(np.nanmean(fleet[:, ctl] < rule_fleet[:, ctl])),
                   "decisions_of_kind": int(counts[0]), "differs_from_rule_share": float(counts[1] / max(counts[0], 1)), "seconds": time.time() - clock}
         (out / "eval.jsonl").open("a").write(json.dumps(result) + "\n")
         done_update = result["update"]
