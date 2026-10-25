@@ -577,6 +577,7 @@ def evaluator(args, dims, stop, final_event) -> None:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ogrl.train_world")
     ap.add_argument("--queue", type=int, default=0, choices=(0, 1, 2), help="0 decides buildings, 1 research, 2 errands (the fleet side of a login); the other decisions play the player rule; this is the decision kind id")
+    ap.add_argument("--init", help="start from a checkpoint (a behaviour-cloned warm start, eg runs/bc-errand.pt)")
     ap.add_argument("--catalogue", help="default: plain-train.json for queue 0, research-train.json for queue 1, units-parity/econ-u1.json for errands")
     ap.add_argument("--eval-catalogue", help="held-out planets; default plain-eval.json / research-eval.json / the training catalogue for errands")
     ap.add_argument("--units", default=str(DATA / "units-parity/units-u1.json"), help="the host's ship and defence tables; errands need them and the fleet exports")
@@ -640,6 +641,13 @@ def main(argv: list[str] | None = None) -> None:
     norm, scale = calibrate(args, dims)
     model = CandidateScorer(dims[0], dims[2], args.width)
     model.set_normalisation(*(torch.as_tensor(x, dtype=torch.float32) for x in norm))
+    if args.init:
+        # A behaviour-cloned warm start (ogrl.train_bc_world): PPO begins where the scripted teacher plays instead of at noise.
+        saved = torch.load(args.init, map_location="cpu", weights_only=False)
+        if (saved["state_dim"], saved["cand_dim"], saved["width"]) != dims[0:1] + dims[2:3] + (args.width,):
+            raise SystemExit(f"{args.init} is {saved['state_dim']}x{saved['cand_dim']} width {saved['width']}, this run is {dims[0]}x{dims[2]} width {args.width}")
+        model.load_state_dict(saved["model"])
+        print(f"warm start from {args.init}", flush=True)
     shared = {k: v.detach().clone().share_memory_() for k, v in model.state_dict().items()}
     print(f"ogsim world PPO: {parameter_count(model):,} parameters, kind {args.queue} ({name}), {args.actors} actors x {args.worlds} worlds x {args.accounts} accounts ({args.controlled} controlled), "
           f"horizon {args.horizon:g} h, learner {args.device}, evaluator {args.eval_device}", flush=True)
