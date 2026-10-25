@@ -488,7 +488,8 @@ def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int], c
     values = np.full((len(seeds), args.accounts), np.nan)
     alive = list(range(len(seeds)))
     while alive:
-        actions = [worlds[i].baseline()[0] for i in alive]
+        rule_actions = [worlds[i].baseline()[0] for i in alive]
+        actions = list(rule_actions)
         if model is not None:
             batch = [observe(worlds[i], dims) for i in alive]
             state, cands, legal = (np.concatenate([b[j] for b in batch]) for j in range(3))
@@ -498,7 +499,8 @@ def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int], c
             kinds = [worlds[i].decisions()[0][1] for i in alive]
             actions = [int(g) if kind == args.queue and legal[j].any() else p for j, (g, kind, p) in enumerate(zip(greedy, kinds, actions))]
             if counts is not None:
-                for g, kind, p in zip(greedy, kinds, actions):
+                # Compare with the rule's own answer, not with the action already replaced by the model's.
+                for g, kind, p in zip(greedy, kinds, rule_actions):
                     if kind == args.queue:
                         counts[0] += 1
                         counts[1] += int(int(g) != int(p))
@@ -575,7 +577,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--worlds", type=int, default=256, help="worlds per actor")
     ap.add_argument("--accounts", type=int, default=12)
     ap.add_argument("--controlled", type=int, default=6, help="account slots per world the policy decides (the rest play the rule)")
-    ap.add_argument("--horizon", type=float, default=72.0, help="hours per game")
+    ap.add_argument("--horizon", type=float, default=0.0, help="hours per game; 0 = 72, or 240 for errands (a fleet takes days to exist, and in 72 h there is no raid to choose)")
     ap.add_argument("--minutes", type=float, default=15.0, help="learner wall clock; 0 = until --updates")
     ap.add_argument("--updates", type=int, default=0)
     ap.add_argument("--smoke", action="store_true", help="two minutes, 24 h games, a small evaluation")
@@ -603,6 +605,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--no-eval", action="store_true")
     args = ap.parse_args(argv)
     args.parent = os.getpid()
+    if args.horizon <= 0.0:
+        args.horizon = 240.0 if args.queue == 2 else 72.0
     if args.smoke:
         args.minutes, args.horizon, args.eval_worlds = 2.0, 24.0, min(args.eval_worlds, 16)
     name = KIND_NAMES[args.queue]
