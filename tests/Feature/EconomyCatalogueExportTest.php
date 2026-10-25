@@ -93,7 +93,7 @@ test('the research rows are the host\'s prices and times, and the lab level is f
     $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$this->planetService], 6);
     $rows = array_column($catalogue['research'], null, 'id');
 
-    expect($catalogue['version'])->toBe(3)
+    expect($catalogue['version'])->toBe(4)
         ->and(array_keys($rows))->toEqualCanonicalizing(array_map(static fn (GameObject $o): int => $o->id, ObjectService::getResearchObjects()));
 
     $energy = ObjectService::getObjectByMachineName('energy_technology');
@@ -211,5 +211,32 @@ test('a research decision step reports research candidate features with no produ
             ->and($features[$column('energy_delta')])->toBe(0.0)
             ->and($features[$column('storage_gain')])->toBe(0.0)
             ->and($features[$column('level')])->toBe($player->getResearchLevel($object->machine_name) / 40);
+    }
+});
+
+test('the units that move production are tabulated by count and put back where they were', function (): void {
+    $units = ObjectService::getUnitObjects();
+    $held = array_map(fn ($unit): int => $this->planetService->getObjectAmount($unit->machine_name), $units);
+
+    $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$this->planetService], 4, 8);
+
+    expect($catalogue['version'])->toBe(4)
+        ->and($catalogue['units'])->not->toBeEmpty()
+        ->and($catalogue['unit_probes'])->not->toBeEmpty()
+        ->and(array_map(fn ($unit): int => $this->planetService->getObjectAmount($unit->machine_name), $units))->toBe($held);
+
+    $probe = $catalogue['unit_probes'][0];
+    expect($probe['answer'])->toHaveCount(6)
+        ->and($probe['answer'][5])->toBeGreaterThanOrEqual(0)->toBeLessThanOrEqual(100)
+        ->and(count($probe['levels']))->toBeGreaterThan(0);
+
+    // One table per moving unit, in the same order, each answering at every count it is used at.
+    $planet = $catalogue['planets'][0];
+    expect(array_column($planet['unit_production'], 'id'))->toBe($catalogue['units']);
+    $tabulated = array_filter($planet['unit_production'], fn (array $table): bool => $table['energy'] !== [] || $table['own'] !== []);
+    expect($tabulated)->not->toBeEmpty();
+    foreach ($tabulated as $table) {
+        expect($table['own'] === null || count($table['own']) > 1)->toBeTrue()
+            ->and($table['energy'] === [] || count($table['energy']) > 1)->toBeTrue();
     }
 });

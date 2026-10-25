@@ -21,7 +21,9 @@ pub const STATE_DIM: usize = STATE_NAMES.len();
 pub const CAND_DIM: usize = CAND_NAMES.len();
 /// The encoder's caps: a payback and a wait never exceed this many hours.
 const FAR_HOURS: f64 = 10_000.0;
-const NEVER: f64 = 1e9;
+/// A time no event has or will have. It must be beyond every real instant, because a world can start at any second
+/// (the mission cases start at unix seconds, far past any finite "never" small enough to look like a sentinel).
+const NEVER: f64 = f64::INFINITY;
 
 #[derive(Deserialize)]
 struct RawCatalogue {
@@ -37,6 +39,20 @@ struct RawCatalogue {
     #[serde(default)]
     time_modifiers_research: Vec<RawModifier>,
     planets: Vec<RawPlanet>,
+    /// Catalogue v4: the units whose count moves production; every planet's unit lists follow this order.
+    #[serde(default)]
+    units: Vec<i64>,
+    #[serde(default)]
+    unit_probes: Vec<RawProbe>,
+}
+
+#[derive(Deserialize)]
+struct RawProbe {
+    planet: usize,
+    levels: HashMap<String, u32>,
+    units: HashMap<String, u64>,
+    /// [metal, crystal, deuterium] per hour, energy made, energy used, and the host's factor in whole percent.
+    answer: [f64; 6],
 }
 
 #[derive(Deserialize)]
@@ -64,6 +80,8 @@ struct RawModifier {
 
 #[derive(Deserialize)]
 struct RawPlanet {
+    #[serde(default)]
+    planet_id: i64,
     position: f64,
     temperature: f64,
     field_max: u32,
@@ -75,6 +93,30 @@ struct RawPlanet {
     /// Production rows that depend on research levels: rows[level][combo], combo row-major over `by`.
     #[serde(default)]
     production_research: HashMap<String, RawProductionResearch>,
+    #[serde(default)]
+    unit_counts: Vec<u64>,
+    #[serde(default)]
+    unit_production: Vec<RawUnitProduction>,
+}
+
+#[derive(Deserialize)]
+struct RawUnitProduction {
+    usable: Option<Vec<RawUsable>>,
+    own: Option<Vec<[f64; 4]>>,
+    energy: Vec<[f64; 2]>,
+    producers: Vec<RawUnitProducer>,
+}
+
+#[derive(Deserialize)]
+struct RawUsable {
+    id: i64,
+    per_level: u64,
+}
+
+#[derive(Deserialize)]
+struct RawUnitProducer {
+    id: i64,
+    rows: Vec<Vec<Vec<f64>>>,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +141,8 @@ pub struct Object {
 }
 
 pub struct PlanetConfig {
+    /// The host's planet id, which the mission cases address planets by.
+    pub planet_id: i64,
     pub position: f64,
     pub temperature: f64,
     pub field_max: u32,
@@ -109,6 +153,24 @@ pub struct PlanetConfig {
     pub storage: Vec<Option<Vec<[f64; 3]>>>,
     /// Per object, the researches its production rows depend on and the rows [level][combo].
     pub production_research: Vec<Option<(Vec<usize>, Vec<Vec<[f64; 4]>>)>>,
+    /// Units held at the start, per `Catalogue::units`.
+    pub units: Vec<u64>,
+    /// Per `Catalogue::units`, the host's answers for what that unit does to this planet's production.
+    pub unit_production: Vec<UnitProduction>,
+}
+
+/// One unit's production tables on one planet, every row indexed by the count the host puts to use: the held count,
+/// capped by `usable` (the sum of an object's level times its number) when the host bounds it. A count past a table
+/// reads its edge, which is outside what the host answered (the export's unit grid).
+pub struct UnitProduction {
+    pub usable: Option<Vec<(usize, u64)>>,
+    /// The unit's own row as a producer, [count].
+    pub own: Option<Vec<[f64; 4]>>,
+    /// [produced, used] energy the host counts outside every producer row, [count].
+    pub energy: Vec<[f64; 2]>,
+    /// (object index, the change it makes to that object's row `[level][component][count]`; a component it never
+    /// moves is an empty list).
+    pub producers: Vec<(usize, Vec<Vec<Vec<f64>>>)>,
 }
 
 pub struct Catalogue {
@@ -119,9 +181,23 @@ pub struct Catalogue {
     /// Per queue, the objects whose level divides every build time, with the divisor per level.
     pub modifiers: [Vec<(usize, Vec<f64>)>; 2],
     pub planets: Vec<PlanetConfig>,
+    /// Host ids of the units that move production; `Planet::units` and the planet tables follow this order.
+    pub units: Vec<i64>,
+    /// The host's own answers at levels and unit counts its tables are not tabulated at (`ai:rl-catalogue`).
+    pub probes: Vec<Probe>,
     /// Seconds between one login of an account and the next, measured on the planner's own accounts; empty means the account
     /// is always there and refills its queue the instant it frees.
     pub login_gaps: Vec<f64>,
+}
+
+/// One host answer to replay: a planet config at these levels holding these units, and what the host made of it.
+pub struct Probe {
+    pub config: usize,
+    pub levels: Vec<u32>,
+    /// Per `Catalogue::units`.
+    pub units: Vec<u64>,
+    /// [metal, crystal, deuterium] per hour, energy made, energy used, factor in whole percent.
+    pub answer: [f64; 6],
 }
 
 #[derive(Clone)]
@@ -134,6 +210,8 @@ pub struct Planet {
     pub energy_max: f64,
     pub energy_used: f64,
     pub factor: f64,
+    /// Units held, per `Catalogue::units`; a missing entry is none held. Call `refresh` after changing it.
+    pub units: Vec<u64>,
 }
 
 #[derive(Clone)]
@@ -224,6 +302,7 @@ impl Catalogue {
         let modifiers_of = |rows: &Vec<RawModifier>| -> Vec<(usize, Vec<f64>)> { rows.iter().filter_map(|m| index.get(&m.id).map(|&i| (i, m.divisor.clone()))).collect() };
         let modifiers = [modifiers_of(&raw.time_modifiers), modifiers_of(&raw.time_modifiers_research)];
         let planets = raw.planets.iter().map(|p| PlanetConfig {
+            planet_id: p.planet_id,
             position: p.position,
             temperature: p.temperature,
             field_max: p.field_max,
@@ -242,9 +321,23 @@ impl Catalogue {
                 }
                 rows
             },
+            units: p.unit_counts.clone(),
+            unit_production: p.unit_production.iter().map(|u| UnitProduction {
+                usable: u.usable.as_ref().map(|by| by.iter().filter_map(|b| index.get(&b.id).map(|&k| (k, b.per_level))).collect()),
+                own: u.own.clone(),
+                energy: u.energy.clone(),
+                producers: u.producers.iter().filter_map(|p| index.get(&p.id).map(|&k| (k, p.rows.clone()))).collect(),
+            }).collect(),
         }).collect();
 
-        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, planets, login_gaps: Vec::new() })
+        let unit_ids = raw.units.clone();
+
+        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, planets, units: raw.units, probes: raw.unit_probes.iter().map(|p| Probe {
+            config: p.planet,
+            levels: per_object(&p.levels, &index, count).into_iter().map(|l| l.unwrap_or(0)).collect(),
+            units: unit_ids.iter().map(|id| p.units.get(&id.to_string()).copied().unwrap_or(0)).collect(),
+            answer: p.answer,
+        }).collect(), login_gaps: Vec::new() })
     }
 
     pub fn new_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
@@ -256,24 +349,52 @@ impl Catalogue {
     /// A game at second zero whose clock has not moved yet, for a world that moves it with `tick`.
     pub fn new_paused_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
         let c = &self.planets[config];
-        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0 };
+        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone() };
         self.refresh(&mut planet);
         Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, pending: Vec::new(), history: Vec::new(), trace: None }
     }
 
-    /// The host's production row of object k at `level` under the planet's research levels, if k produces or burns anything.
+    /// The host's production row of object k at `level` under the planet's research levels and units, if k produces
+    /// or burns anything (getObjectProduction: the units held count at the planet's current levels).
     pub(crate) fn production_row(&self, planet: &Planet, k: usize, level: usize) -> Option<[f64; 4]> {
         let c = &self.planets[planet.config];
-        match (&c.production[k], &c.production_research[k]) {
+        let mut row = match (&c.production[k], &c.production_research[k]) {
             (_, Some((by, grid))) => {
                 let side = self.research_grid_level + 1;
                 let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
                 let row = &grid[level.min(grid.len() - 1)];
-                Some(row[combo.min(row.len() - 1)])
+                row[combo.min(row.len() - 1)]
             }
-            (Some(rows), None) => Some(rows[level.min(rows.len() - 1)]),
-            _ => None,
+            (Some(rows), None) => rows[level.min(rows.len() - 1)],
+            _ => return None,
+        };
+        if planet.units.iter().any(|&n| n > 0) { self.add_unit_change(planet, k, level, &mut row) }
+        Some(row)
+    }
+
+    /// Adds what the units held change in object k's row at `level`.
+    fn add_unit_change(&self, planet: &Planet, k: usize, level: usize, row: &mut [f64; 4]) {
+        for (u, unit) in self.planets[planet.config].unit_production.iter().enumerate() {
+            let n = self.units_in_use(planet, u);
+            if n == 0 { continue }
+            for (_, rows) in unit.producers.iter().filter(|(p, _)| *p == k) {
+                for (component, change) in rows[level.min(rows.len() - 1)].iter().enumerate() {
+                    if change.is_empty() { continue }
+                    row[component] += change[n.min(change.len() - 1)];
+                }
+            }
         }
+    }
+
+    /// How many of unit u the host puts to use on the planet: the count held, capped when the host bounds it by levels.
+    /// A planet with no table for the unit (one that can neither build nor hold it) has none in use.
+    fn units_in_use(&self, planet: &Planet, u: usize) -> usize {
+        let held = planet.units.get(u).copied().unwrap_or(0);
+        let table = &self.planets[planet.config].unit_production[u];
+        if held == 0 || (table.energy.is_empty() && table.own.is_none()) { return 0 }
+        let bound = self.planets[planet.config].unit_production[u].usable.as_ref()
+            .map_or(u64::MAX, |by| by.iter().map(|&(k, per)| per * planet.levels[k] as u64).sum());
+        held.min(bound) as usize
     }
 
     /// Rates, energy and factor from the levels (PlanetService::updateResourceProductionStatsInner); with
@@ -283,13 +404,17 @@ impl Catalogue {
         let mut made = [0.0; 3];
         let (mut energy_max, mut energy_used) = (c.basic[3].max(0.0), (-c.basic[3]).max(0.0));
         let side = self.research_grid_level + 1;
-        let row = |k: usize, rows: &Vec<[f64; 4]>| match &c.production_research[k] {
-            Some((by, grid)) => {
-                let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
-                let level = (planet.levels[k] as usize).min(grid.len() - 1);
-                grid[level][combo.min(grid[level].len() - 1)]
-            }
-            None => rows[(planet.levels[k] as usize).min(rows.len() - 1)],
+        let row = |k: usize, rows: &Vec<[f64; 4]>| {
+            let mut row = match &c.production_research[k] {
+                Some((by, grid)) => {
+                    let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
+                    let level = (planet.levels[k] as usize).min(grid.len() - 1);
+                    grid[level][combo.min(grid[level].len() - 1)]
+                }
+                None => rows[(planet.levels[k] as usize).min(rows.len() - 1)],
+            };
+            self.add_unit_change(planet, k, planet.levels[k] as usize, &mut row);
+            row
         };
         let none: Vec<[f64; 4]> = Vec::new();
         let producers = || (0..c.production.len()).filter_map(|k| match (&c.production[k], &c.production_research[k]) {
@@ -297,13 +422,25 @@ impl Catalogue {
             (None, Some(_)) => Some((k, &none)),
             _ => None,
         });
-        for (k, rows) in producers() {
-            let row = row(k, rows);
+        // Units that produce are producers like any building, counted at the number the host puts to use.
+        let units = || (0..c.unit_production.len()).filter_map(|u| {
+            let n = self.units_in_use(planet, u);
+            (n > 0).then_some((u, n))
+        });
+        let own = || units().filter_map(|(u, n)| c.unit_production[u].own.as_ref().map(|rows| rows[n.min(rows.len() - 1)]));
+        let rows: Vec<[f64; 4]> = producers().map(|(k, rows)| row(k, rows)).chain(own()).collect();
+        for &row in &rows {
             if row[3] > 0.0 { energy_max += row[3] } else { energy_used -= row[3] }
             for r in 0..3 { made[r] += row[r] }
         }
-        for (k, rows) in producers() {
-            let row = row(k, rows);
+        for (u, n) in units() {
+            let energy = &c.unit_production[u].energy;
+            if energy.is_empty() { continue }
+            let [produced, used] = energy[n.min(energy.len() - 1)];
+            energy_max += produced;
+            energy_used += used;
+        }
+        for &row in &rows {
             if row[3] > 0.0 && row[2] < 0.0 && -row[2] > c.basic[2] + made[2] && planet.res[2] <= 0.0 {
                 energy_max -= row[3];
             }
@@ -458,6 +595,9 @@ impl Catalogue {
             if !self.objects.iter().any(|o| o.queue == q) { continue }
             let when = match game.commit[q] {
                 Some(k) => game.t + self.wait_seconds(&game.planet, k),
+                // `NEVER` is a queue the host has nothing left to decide on (`tick` set it: no legal object and
+                // nothing building), so it has no next event; reading a login time for it would spin the clock.
+                None if game.free[q] == NEVER => continue,
                 None => self.login(game, game.free[q].max(game.t), false),
             };
             if when < best.0 { best = (when, Some(q)) }
@@ -683,5 +823,37 @@ impl Game {
     /// Metal-equivalent output per hour that still lands somewhere (a full store makes nothing).
     pub fn effective_rate(&self) -> f64 {
         (0..3).map(|r| if self.planet.res[r] < self.planet.cap[r] { WEIGHTS[r] * self.planet.rate[r] } else { 0.0 }).sum()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The host's own answer at level patterns and unit counts its tables are not tabulated at, so the module is judged
+    /// on how it combines those tables, which is the part of production no table can hold.
+    #[test]
+    fn composes_the_unit_tables_as_the_host_does() {
+        let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1.json", env!("CARGO_MANIFEST_DIR"));
+        let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no u1 catalogue; skipped") };
+        assert!(!cat.probes.is_empty(), "the catalogue carries no unit probes");
+        for probe in &cat.probes {
+            let mut planet = cat.new_paused_game(probe.config, 1.0, 0.0, 0).planet;
+            planet.levels = probe.levels.clone();
+            planet.units = probe.units.clone();
+            cat.refresh(&mut planet);
+            let where_ = format!("config {} holding {:?}", probe.config, probe.units);
+            let got = [planet.rate[0], planet.rate[1], planet.rate[2], planet.energy_max, planet.energy_used, planet.factor];
+            let want = [probe.answer[0], probe.answer[1], probe.answer[2], probe.answer[3], probe.answer[4], probe.answer[5] / 100.0];
+            assert_eq!(got, want, "rates, energy and factor at {where_}");
+        }
+        eprintln!("{} probe(s) of levels and unit counts match the host", cat.probes.len());
+        // Every probe above would also pass on code that ignored the unit tables if no probe held a unit, so at least one
+        // config must answer differently once its planet holds some.
+        let differs = cat.probes.iter().any(|held| {
+            let zero = cat.probes.iter().find(|p| p.config == held.config && p.units.iter().all(|&n| n == 0));
+            held.units.iter().any(|&n| n > 0) && zero.is_some_and(|zero| zero.answer != held.answer)
+        });
+        assert!(differs, "no probe showed a unit changing its planet's production");
     }
 }

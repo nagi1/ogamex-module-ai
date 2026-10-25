@@ -46,6 +46,9 @@ pub struct Fleet {
     /// (host unit id, amount).
     pub ships: Vec<(u32, i64)>,
     pub cargo: [f64; 3],
+    /// Deuterium paid at dispatch; the host hands half of it back inside the mission's cargo
+    /// (`FleetMissionService::getResources`), so it rides with the delivery or the loot.
+    pub fuel: f64,
     pub arrive: f64,
     pub home: f64,
     pub returning: bool,
@@ -144,6 +147,19 @@ impl World {
         if let Some(rules) = &self.rules {
             rules.units.advance(&mut self.yards[p], t as i64);
         }
+        self.sync_units(cat, p);
+    }
+
+    /// The economy reads production from the units on the planet while the shipyard owns the counts, so the shipyard's
+    /// are copied into the planet by host id whenever they may have changed; nothing else writes `planet.units`.
+    fn sync_units(&mut self, cat: &Catalogue, a: usize) {
+        let Some(rules) = &self.rules else { return };
+        let counts = &self.yards[a].counts;
+        let planet = &mut self.games[a].planet;
+        for (u, &id) in cat.units.iter().enumerate() {
+            planet.units[u] = rules.units.index(id).map_or(0, |k| counts[k]);
+        }
+        cat.refresh(planet);
     }
 
     /// Account a, while it decides, orders `amount` of unit u (units index) in its shipyard; the amount the host would queue.
@@ -153,6 +169,7 @@ impl World {
         self.catch_up(cat, a, now);
         let upgrading = self.games[a].pending.iter().find(|&&(_, k)| cat.objects[k].queue == 0).map(|&(_, k)| k);
         let queued = rules.units.order(&mut self.yards[a], &mut self.games[a].planet, u, amount, now as i64, upgrading);
+        self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
         queued
     }
@@ -187,7 +204,7 @@ impl World {
         let planet = &mut self.games[a].planet;
         for r in 0..3 { planet.res[r] -= cargo[r] }
         planet.res[2] -= fuel;
-        self.fleets.push(Fleet { owner: a, target, mission, ships: sent, cargo, arrive: now + flight, home: now + 2.0 * flight, returning: false });
+        self.fleets.push(Fleet { owner: a, target, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight, returning: false });
         self.next[a] = cat.peek(&mut self.games[a]);
         Ok(())
     }
@@ -204,7 +221,8 @@ impl World {
         self.catch_up(cat, target, at);
         match self.fleets[f].mission {
             Mission::Transport => {
-                let cargo = std::mem::take(&mut self.fleets[f].cargo);
+                let mut cargo = std::mem::take(&mut self.fleets[f].cargo);
+                cargo[2] += self.fleets[f].fuel / 2.0;
                 for r in 0..3 { self.games[target].planet.res[r] += cargo[r] }
             }
             Mission::Attack => self.attack(cat, f),
@@ -233,6 +251,9 @@ impl World {
         let defender: Vec<(u32, i64)> = rules.units.units.iter().zip(&self.yards[target].counts)
             .filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
         let (attacker_research, defender_research) = (self.research(cat, owner), self.research(cat, target));
+        // The world's current seed is the fight's, then it draws the next one, so a recorded fight is replayable.
+        let seed = self.rng;
+        self.rng = next_random(&mut self.rng);
         let battle = Battle {
             attacker: &self.fleets[f].ships,
             attacker_research: &attacker_research,
@@ -242,7 +263,7 @@ impl World {
             defender_stock: self.games[target].planet.res,
             defender_engineer: false,
             moon_exists: self.moons[target],
-            seed: next_random(&mut self.rng),
+            seed,
         };
         let fought = combat::defender_units(&rules.combat, &battle);
         let outcome = combat::fight(&rules.combat, &battle);
@@ -259,6 +280,7 @@ impl World {
         self.moons[target] |= outcome.moon_created;
         self.fleets[f].ships = outcome.attacker_left.into_iter().collect();
         self.fleets[f].cargo = outcome.loot.map(|r| r as f64);
+        self.fleets[f].cargo[2] += self.fleets[f].fuel / 2.0;
     }
 }
 
@@ -377,10 +399,233 @@ mod tests {
         idle(&cat, &mut raided);
         idle(&cat, &mut quiet);
         let lost: Vec<f64> = (0..3).map(|r| quiet.games[1].planet.res[r] - raided.games[1].planet.res[r]).collect();
-        let won: Vec<f64> = (0..3).map(|r| raided.games[0].planet.res[r] - quiet.games[0].planet.res[r] + if r == 2 { fuel } else { 0.0 }).collect();
+        // The host hands half the fuel back inside the mission's cargo, so only half of it is spent on the raid.
+        let won: Vec<f64> = (0..3).map(|r| raided.games[0].planet.res[r] - quiet.games[0].planet.res[r] + if r == 2 { fuel / 2.0 } else { 0.0 }).collect();
         assert!(lost.iter().sum::<f64>() > 0.0, "nothing looted");
         for r in 0..3 { assert!((lost[r] - won[r]).abs() < 1e-6, "resource {r}: lost {} won {}", lost[r], won[r]) }
         assert_eq!(raided.yards[0].counts, quiet.yards[0].counts, "no defence, no losses");
+    }
+
+    /// The host's own answers to missions it flew (`ai:rl-mission-cases`): a world that starts at the case's planets must
+    /// reproduce the host's departure, flight, fuel, stock, ships, debris and moon, second for second.
+    mod mission_parity {
+        use super::super::*;
+        use super::DATA;
+        use serde::Deserialize;
+        use std::collections::HashMap;
+
+        #[derive(Deserialize)]
+        struct Cases { cases: Vec<Case> }
+
+        #[derive(Deserialize)]
+        struct Case {
+            mission: String,
+            input: Input,
+            dispatch: Dispatch,
+            arrival: Option<Arrival>,
+            #[serde(rename = "return")]
+            back: Option<Back>,
+        }
+
+        #[derive(Deserialize)]
+        struct Input {
+            origin: PlanetState,
+            target: Option<PlanetState>,
+            origin_player: PlayerState,
+            target_player: Option<PlayerState>,
+            units: HashMap<String, i64>,
+            cargo: [f64; 3],
+            speed: f64,
+        }
+
+        #[derive(Deserialize)]
+        struct PlanetState {
+            id: i64,
+            coordinates: [i64; 3],
+            resources: [f64; 3],
+            #[serde(default)] ships: HashMap<String, i64>,
+            #[serde(default)] defence: HashMap<String, i64>,
+        }
+
+        #[derive(Deserialize)]
+        struct PlayerState { class: u32, research: HashMap<String, u32> }
+
+        #[derive(Deserialize)]
+        struct State { resources: [f64; 3], #[serde(default)] ships: HashMap<String, i64>, #[serde(default)] defence: HashMap<String, i64> }
+
+        #[derive(Deserialize)]
+        struct Dispatch { accepted: bool, departure: Option<f64>, arrival: Option<f64>, fuel: Option<f64>, origin_after: Option<State> }
+
+        #[derive(Deserialize)]
+        struct Arrival {
+            time: f64,
+            target_after: Option<State>,
+            #[serde(default)] debris_after: Option<[i64; 3]>,
+            /// `false` when no moon came up, and the moon itself when one did.
+            #[serde(default)] moon: Option<serde_json::Value>,
+            return_mission: Option<Again>,
+            #[serde(default)] battle: Option<BattleAnswer>,
+        }
+
+        #[derive(Deserialize)]
+        struct Again { departure: f64, arrival: f64 }
+
+        #[derive(Deserialize)]
+        struct BattleAnswer { seed: u64 }
+
+        #[derive(Deserialize)]
+        struct Back { time: f64, origin_after: Option<State> }
+
+        /// The fleet settings and combat tables of one character class: the class changes fuel and loot, and the export
+        /// writes the plain files for its own player's class and `-class2`/`-class3` for the others.
+        fn rules_for(cat: &Catalogue, class: u32) -> Option<Arc<Rules>> {
+            let suffix = match class {
+                2 => "-class2",
+                3 => "-class3",
+                _ => "",
+            };
+            Rules::load(
+                cat,
+                &format!("{DATA}/units-parity/units-u1.json"),
+                &format!("{DATA}/fleet-settings-u1{suffix}.json"),
+                &format!("{DATA}/combat-u1{suffix}.json"),
+            ).ok().map(Arc::new)
+        }
+
+        fn config_of(cat: &Catalogue, id: i64) -> Option<usize> {
+            cat.planets.iter().position(|p| p.planet_id == id)
+        }
+
+        /// Plays every fleet event and account tick due by `t`, and nothing after it.
+        fn run_until(cat: &Catalogue, w: &mut World, t: f64) {
+            let mut steps = 0usize;
+            loop {
+                steps += 1;
+                assert!(steps < 100_000, "the world's clock stopped before {t}: at {:?} next {:?} free {:?} commit {:?} pending {:?}", w.now(), w.next, w.games[0].free, w.games[0].commit, w.games[0].pending);
+                let a = (0..w.games.len()).filter(|&a| !w.games[a].done).min_by(|&x, &y| w.next[x].total_cmp(&w.next[y]));
+                let fleet = (0..w.fleets.len()).min_by(|&x, &y| w.fleets[x].next().total_cmp(&w.fleets[y].next()));
+                let account_at = a.map_or(f64::INFINITY, |a| w.next[a]);
+                if let Some(f) = fleet.filter(|&f| w.fleets[f].next() <= t && w.fleets[f].next() <= account_at) {
+                    w.fleet_event(cat, f);
+                    continue;
+                }
+                let Some(a) = a.filter(|_| account_at <= t) else { return };
+                if cat.tick(&mut w.games[a]) { cat.decide(&mut w.games[a], None) }
+                w.next[a] = cat.peek(&mut w.games[a]);
+            }
+        }
+
+        fn units_of(map: &HashMap<String, i64>) -> Vec<(u32, i64)> {
+            map.iter().filter(|(_, &n)| n > 0).map(|(id, &n)| (id.parse().unwrap(), n)).collect()
+        }
+
+        fn holds(w: &World, a: usize) -> HashMap<String, i64> {
+            let units = &w.rules.as_ref().unwrap().units;
+            units.units.iter().zip(&w.yards[a].counts).filter(|(_, &n)| n > 0)
+                .map(|(u, &n)| (u.id.to_string(), n as i64)).collect()
+        }
+
+        fn stock(state: Option<&State>, w: &World, a: usize, case: usize, when: &str) {
+            let Some(state) = state else { return };
+            let planet = &w.games[a].planet;
+            for r in 0..3 {
+                assert!((planet.res[r] - state.resources[r]).abs() < 1e-6, "case {case} {when}: resource {r} world {} host {}", planet.res[r], state.resources[r]);
+            }
+            let mut host = state.ships.clone();
+            host.extend(state.defence.clone());
+            assert_eq!(holds(w, a), host, "case {case} {when}: units on the planet");
+        }
+
+        fn coords(planet: &PlanetState) -> Coord {
+            Coord { galaxy: planet.coordinates[0], system: planet.coordinates[1], position: planet.coordinates[2] }
+        }
+
+        #[test]
+        fn replays_the_hosts_missions() {
+            let Ok(text) = std::fs::read_to_string(format!("{DATA}/mission-cases-u1.json")) else { return eprintln!("no mission cases; skipped") };
+            let cases: Cases = serde_json::from_str(&text).expect("mission cases");
+            let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")) else { return eprintln!("no u1 catalogue; skipped") };
+            cat.login_gaps = vec![1800.0];
+            let (mut flown, mut refused, mut mixed) = (0usize, 0usize, 0usize);
+            let limit: usize = std::env::var("OGSIM_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(usize::MAX);
+            // Transports are the missions the world plays end to end today. An attack also needs the host's rules for a
+            // hold of resources and for two character classes in one fight, which it does not model yet (W4), so the
+            // attack cases are run with OGSIM_MISSION=attack while that is built.
+            let only = std::env::var("OGSIM_MISSION").unwrap_or_else(|_| "transport".into());
+            let played = cases.cases.iter().enumerate().take(limit).filter(|(_, c)| c.mission == only);
+            for (index, case) in played {
+                if index % 50 == 0 { eprintln!("case {index}...") }
+                let (Some(target), Some(target_player)) = (&case.input.target, &case.input.target_player) else { continue };
+                // One catalogue bakes in one character class, so a fight between two classes cannot be set up yet; and the
+                // host flies an attack that carries resources, which the world refuses (W4).
+                if case.input.origin_player.class != target_player.class
+                    || (case.mission == "attack" && case.input.cargo.iter().any(|&c| c > 0.0)) { mixed += 1; continue }
+                let Some(rules) = rules_for(&cat, case.input.origin_player.class) else { continue };
+                // The catalogue holds the AI home planets; a case on any other planet cannot be set up and is skipped.
+                let (Some(origin_config), Some(target_config)) = (config_of(&cat, case.input.origin.id), config_of(&cat, target.id)) else { continue };
+                let mut world = World::new(&cat, &[origin_config, target_config], 1e6, 0.0, 1);
+                world.arm(rules, vec![coords(&case.input.origin), coords(target)]);
+                for (a, player) in [(0, &case.input.origin_player), (1, target_player)] {
+                    for (id, &level) in &player.research {
+                        let k = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
+                        world.games[a].planet.levels[k] = level;
+                    }
+                }
+                for (a, planet) in [(0, &case.input.origin), (1, target)] {
+                    let mut held = planet.ships.clone();
+                    held.extend(planet.defence.clone());
+                    for (id, amount) in units_of(&held) {
+                        let u = world.rules.as_ref().unwrap().units.index(id as i64).expect("a unit in the catalogue");
+                        world.yards[a].counts[u] = amount as u64;
+                    }
+                    world.games[a].planet.res = planet.resources;
+                    world.games[a].t = case.dispatch.departure.unwrap_or(0.0);
+                    // The login clock walks second by second from its last entry, so it starts where the case does.
+                    world.games[a].login_times = vec![world.games[a].t];
+                    cat.refresh(&mut world.games[a].planet);
+                }
+                let mission = if case.mission == "attack" { Mission::Attack } else { Mission::Transport };
+                let before = world.games[0].planet.res;
+                let flew = world.dispatch(&cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed);
+                if !case.dispatch.accepted {
+                    refused += 1;
+                    assert!(flew.is_err(), "case {index}: the host refused this mission and the world flew it");
+                    continue;
+                }
+                flew.unwrap_or_else(|e| panic!("case {index}: the host flew this mission and the world refused it: {e}"));
+                flown += 1;
+                let (departure, arrival, host_fuel) = (
+                    case.dispatch.departure.expect("a departure on an accepted mission"),
+                    case.dispatch.arrival.expect("an arrival on an accepted mission"),
+                    case.dispatch.fuel.expect("fuel on an accepted mission"),
+                );
+                assert_eq!(world.games[0].t, departure, "case {index}: departure");
+                assert_eq!(world.fleets[0].arrive, arrival, "case {index}: arrival");
+                let fuel = before[2] - case.input.cargo[2] - world.games[0].planet.res[2];
+                assert!((fuel - host_fuel).abs() < 1e-6, "case {index}: fuel {fuel} host {host_fuel}");
+                stock(case.dispatch.origin_after.as_ref(), &world, 0, index, "after dispatch");
+                let Some(arrival) = &case.arrival else { continue };
+                if let Some(battle) = &arrival.battle {
+                    world.rng = battle.seed;
+                }
+                run_until(&cat, &mut world, arrival.time);
+                stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
+                if let Some(debris) = arrival.debris_after {
+                    assert_eq!(world.debris[1], debris, "case {index}: debris at arrival");
+                }
+                if let Some(moon) = &arrival.moon {
+                    assert_eq!(world.moons[1], moon.as_bool().unwrap_or(!moon.is_null()), "case {index}: moon at arrival");
+                }
+                let Some(back) = &case.arrival.as_ref().and_then(|a| a.return_mission.as_ref()) else { continue };
+                let home = world.fleets.iter().find(|f| f.owner == 0).expect("the fleet comes home");
+                assert_eq!((home.arrive, home.home), (back.departure, back.arrival), "case {index}: the flight home");
+                let Some(done) = &case.back else { continue };
+                run_until(&cat, &mut world, done.time);
+                stock(done.origin_after.as_ref(), &world, 0, index, "back home");
+            }
+            eprintln!("mission parity: {flown} mission(s) flown as the host flew them, {refused} refused as the host refused them, {mixed} outside what one catalogue models");
+            assert!(flown > 0, "no mission was flown");
+        }
     }
 }
 
