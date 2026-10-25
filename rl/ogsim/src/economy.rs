@@ -407,7 +407,7 @@ impl Catalogue {
     }
 
     /// Lands every build that ends before `until` (at it too when `landing`; the horizon is a cliff for a build that ends on it), in order, accruing up to each end, then accrues up to `until`.
-    fn advance_to(&self, game: &mut Game, until: f64, landing: bool) {
+    pub(crate) fn advance_to(&self, game: &mut Game, until: f64, landing: bool) {
         while let Some(&(end, k)) = game.pending.first().filter(|(end, _)| if landing { *end <= until } else { *end < until }) {
             game.pending.remove(0);
             self.accrue(&mut game.planet, end - game.t);
