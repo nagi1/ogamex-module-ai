@@ -510,8 +510,9 @@ def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int], c
             worlds[i].step([action])
             done = worlds[i].take_finished()
             if len(done) >= args.accounts:
-                values[i] = [row[1] for row in done[: args.accounts]]
+                # The reward is everything an account owns, so the yardstick is economy + fleet, not the economy alone.
                 fleets[i] = [row[5] for row in done[: args.accounts]]
+                values[i] = [row[1] + row[5] for row in done[: args.accounts]]
             else:
                 still.append(i)
         alive = still
@@ -549,6 +550,10 @@ def evaluator(args, dims, stop, final_event) -> None:
                   "uncontrolled_accounts_identical": bool(np.allclose(values[:, args.controlled:], rule[:, args.controlled:], rtol=1e-6)),
                   "fleet_vs_rule_mean": float(np.nanmean(fleet[:, ctl] / np.maximum(rule_fleet[:, ctl], 1.0) - 1.0)),
                   "accounts_with_less_fleet": float(np.nanmean(fleet[:, ctl] < rule_fleet[:, ctl])),
+                  "economy_vs_rule_mean": float(np.nanmean((values[:, ctl] - fleet[:, ctl]) / np.maximum(rule[:, ctl] - rule_fleet[:, ctl], 1.0) - 1.0)),
+                  "accounts_with_less_economy": float(np.nanmean(values[:, ctl] < rule[:, ctl])),
+                  "tail_economy": float(np.nanmean((values[:, ctl] / np.maximum(rule[:, ctl], 1.0) - 1.0)[per_account.mean(1) < 0])),
+                  "tail_fleet": float(np.nanmean(fleet[:, ctl][per_account.mean(1) < 0])),
                   "decisions_of_kind": int(counts[0]), "differs_from_rule_share": float(counts[1] / max(counts[0], 1)), "seconds": time.time() - clock}
         (out / "eval.jsonl").open("a").write(json.dumps(result) + "\n")
         done_update = result["update"]
