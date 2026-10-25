@@ -567,7 +567,7 @@ impl Catalogue {
     }
 
     /// The first login at or after `x` (strictly after with `later`); with no gap table the account is always there.
-    fn login(&self, game: &mut Game, x: f64, later: bool) -> f64 {
+    pub fn login(&self, game: &mut Game, x: f64, later: bool) -> f64 {
         if self.login_gaps.is_empty() {
             return x;
         }

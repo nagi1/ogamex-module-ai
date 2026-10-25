@@ -19,8 +19,19 @@ use std::sync::Arc;
 
 use crate::combat::{self, Battle, CombatCatalogue};
 use crate::economy::{as_stored, next_random, Catalogue, Game, PlanetConfig};
+use crate::expedition;
 use crate::fleet::{self, Coord, FleetCatalogue, FleetSettings, SystemState};
+use crate::strike::{self, StrikeRules};
 use crate::units::{Shipyard, Units};
+
+mod strikes;
+
+/// The largest moon the host makes (x = 20 over 2 000 000 debris), so that deathstars can always destroy one.
+const MOON_DIAMETER_CAP: i64 = 8944;
+/// A second no clock reaches.
+const NEVER: f64 = f64::INFINITY;
+/// An account that has not logged in for this long is inactive (OGame's 'i' status).
+pub const INACTIVE_SECONDS: f64 = 7.0 * 86_400.0;
 
 /// The host's tables for everything past the economy, read once and shared by every world.
 pub struct Rules {
@@ -28,12 +39,22 @@ pub struct Rules {
     pub settings: FleetSettings,
     pub fleet: FleetCatalogue,
     pub combat: CombatCatalogue,
+    /// The `strike` and `expedition` sections of the combat catalogue; a catalogue without them refuses those missions.
+    pub strike: Option<StrikeRules>,
+    pub expedition: Option<expedition::Rules>,
 }
 
 impl Rules {
     /// The units export, the fleet settings and the combat catalogue (which also holds speeds and fuel) of one universe.
     pub fn load(cat: &Catalogue, units: &str, settings: &str, combat: &str) -> Result<Rules, String> {
-        Ok(Rules { units: Units::load(units, cat)?, settings: FleetSettings::load(settings)?, fleet: FleetCatalogue::load(combat)?, combat: CombatCatalogue::load(combat)? })
+        Ok(Rules {
+            units: Units::load(units, cat)?,
+            settings: FleetSettings::load(settings)?,
+            fleet: FleetCatalogue::load(combat)?,
+            combat: CombatCatalogue::load(combat)?,
+            strike: StrikeRules::load(combat).ok(),
+            expedition: expedition::Rules::load(combat).ok(),
+        })
     }
 }
 
@@ -46,6 +67,82 @@ pub enum Mission {
     Espionage = 6,
     Colonise = 7,
     Recycle = 8,
+    MoonDestroy = 9,
+    Missile = 10,
+    Expedition = 15,
+}
+
+/// What an event in the log is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EventKind {
+    /// A fleet reached its target and the mission acted (a missile struck, an expedition came back with its find).
+    Arrival,
+    /// A battle was fought: by an attack, a moon destruction, an espionage that met a counter-fight or an expedition.
+    Fight,
+    /// A fleet came home and its ships and cargo landed.
+    Return,
+    /// A fleet is gone: wiped out, swallowed or spent.
+    Lost,
+    /// The sender turned a fleet home early.
+    Recall,
+}
+
+/// How an event ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    /// Nothing contested: a delivery, a report, a landing.
+    Done,
+    /// The fleet held the field (a fight's attacker won).
+    Won,
+    /// The fleet was beaten.
+    Defeated,
+    /// Both sides stood after the last round.
+    Draw,
+    /// The mission could not do its work and the fleet turned home (a colony slot taken, a limit reached).
+    Cancelled,
+    /// An expedition's find, as the dice picked it after the host's fallbacks.
+    Found(expedition::Kind),
+    /// A moon destruction destroyed the moon.
+    MoonDestroyed,
+}
+
+/// One thing that happened to a fleet, in the order the world played it; players read results here.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Event {
+    pub kind: EventKind,
+    pub time: f64,
+    pub mission: Mission,
+    /// The slot that sent the fleet and the slot it went to (the sender's own for coordinates nobody holds).
+    pub owner: usize,
+    pub target: usize,
+    /// Ships the fleet lost.
+    pub ships_lost: Vec<(u32, i64)>,
+    /// Ships and defences the target lost for good (repairs taken out).
+    pub target_lost: Vec<(u32, i64)>,
+    /// The ships (not defences) standing on the target when a fight began: what a fleet save would have taken away.
+    pub present: Vec<(u32, i64)>,
+    /// Resources gained: the loot of a fight, the harvest of a recycler, the cargo a delivery or a landing carried.
+    pub gained: [f64; 3],
+    /// Debris a fight left over the target.
+    pub debris: [i64; 3],
+    pub outcome: Outcome,
+}
+
+/// What a moon holds: it has its own diameter, stock and units (in its owner's `Units` order), and makes nothing.
+#[derive(Clone, Debug, Default)]
+pub struct MoonHold {
+    pub diameter: i64,
+    pub stock: [f64; 3],
+    pub counts: Vec<u64>,
+}
+
+/// What kind of decision an account faces at a login.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decision {
+    /// A queue is free and something is legal: the economy's choice, plus fleet and shipyard actions.
+    Build,
+    /// Nothing to build at this login: only fleet and shipyard actions (`wait` lets it pass).
+    Idle,
 }
 
 /// One colony the host's tables describe: the economy config of `donor`'s owner at this slot, temperature and size.
@@ -147,11 +244,20 @@ pub struct Fleet {
     pub arrive: f64,
     pub home: f64,
     pub returning: bool,
+    /// The second it left, which a recall measures the time flown from.
+    pub departed: f64,
+    /// Seconds it stays at the target after arriving (an expedition's hold), real time.
+    pub holding: f64,
+    /// A missile strike's priority code.
+    pub priority: usize,
+    /// The fleet goes for the target slot's moon rather than its planet (always so for a moon destruction).
+    pub moon: bool,
 }
 
 impl Fleet {
-    fn next(&self) -> f64 {
-        if self.returning { self.home } else { self.arrive }
+    /// The second the world next acts on this fleet: its arrival and hold, or its landing at home.
+    pub fn next(&self) -> f64 {
+        if self.returning { self.home } else { self.arrive + self.holding }
     }
 }
 
@@ -190,6 +296,31 @@ pub struct World {
     /// Debris over each planet, and whether it has a moon.
     pub debris: Vec<[i64; 3]>,
     pub moons: Vec<bool>,
+    /// What each slot's moon holds (empty counts: nothing yet); read only where `moons` is true.
+    pub moon_holds: Vec<MoonHold>,
+    /// Every fleet arrival, fight, landing, loss and recall, oldest first.
+    pub events: Vec<Event>,
+    /// Dark matter per slot; an account's is the capital's.
+    pub dark_matter: Vec<i64>,
+    /// Debris over deep space (slot 16) by (galaxy, system); nothing harvests it yet.
+    pub deep_space: HashMap<(i64, i64), [i64; 3]>,
+    /// The best score in the highscore, which sets what an expedition can find.
+    pub rank1_points: i64,
+    /// The host's expedition draws for the next expedition, handed over by the referee as `recorded` is: the seed of
+    /// its random stream and, for a fight, the engine's result from the expedition fleet's side.
+    pub recorded_expedition: Option<(u32, Option<combat::EngineResult>)>,
+    /// The host's two moon destruction rolls (destroy, then loss) for the next one.
+    pub recorded_rolls: Option<[i64; 2]>,
+    /// Whether accounts also decide at logins where nothing can be built (see `decision_kind`).
+    pub idle_logins: bool,
+    /// The second of each slot's next login that no build decision serves; NEVER with `idle_logins` off and for colonies.
+    idle_next: Vec<f64>,
+    /// Whether the account that is deciding now has no build to decide.
+    idle_now: Vec<bool>,
+    /// An idle login's clock and stock as they were before the account was caught up to it, until it does something:
+    /// a login that changes nothing leaves the economy exactly as it was (floating-point accrual in finer steps is not
+    /// the same number).
+    idle_stash: Vec<Option<(f64, [f64; 3])>>,
     rng: u64,
 }
 
@@ -202,7 +333,7 @@ impl World {
             .collect();
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::new(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -217,24 +348,80 @@ impl World {
 
     /// The world's clock: the earliest second any account or fleet moves next.
     pub fn now(&self) -> f64 {
-        self.next.iter().copied().chain(self.fleets.iter().map(Fleet::next)).fold(f64::INFINITY, f64::min)
+        (0..self.games.len()).map(|a| self.moves_at(a)).chain(self.fleets.iter().map(Fleet::next)).fold(f64::INFINITY, f64::min)
     }
 
-    /// Moves the world event by event until an account has a queue to decide (its index; `games[a].queue` is the
-    /// queue), or None when every account is done. A fleet due at the same second as an account's event goes first.
+    /// The second slot a's clock moves next: its economy's next event or a login with nothing to build, whichever is first.
+    fn moves_at(&self, a: usize) -> f64 {
+        self.next[a].min(self.idle_next[a])
+    }
+
+    /// Moves the world event by event until an account has something to decide (its index; `decision_kind` says whether
+    /// that is a build, and `games[a].queue` is then the queue), or None when every account is done. A fleet due at the
+    /// same second as an account's event goes first, and an account's own economy goes before its idle login.
     pub fn next_decision(&mut self, cat: &Catalogue) -> Option<usize> {
         loop {
-            let a = (0..self.games.len()).filter(|&a| !self.games[a].done).min_by(|&x, &y| self.next[x].total_cmp(&self.next[y]).then(x.cmp(&y)))?;
+            let a = (0..self.games.len()).filter(|&a| !self.games[a].done).min_by(|&x, &y| self.moves_at(x).total_cmp(&self.moves_at(y)).then(x.cmp(&y)))?;
             let fleet = (0..self.fleets.len()).min_by(|&x, &y| self.fleets[x].next().total_cmp(&self.fleets[y].next()));
-            if let Some(f) = fleet.filter(|&f| self.fleets[f].next() <= self.next[a]) {
+            if let Some(f) = fleet.filter(|&f| self.fleets[f].next() <= self.moves_at(a)) {
                 self.fleet_event(cat, f);
                 continue;
             }
+            if self.idle_next[a] < self.next[a] {
+                self.idle_stash[a] = Some((self.games[a].t, self.games[a].planet.res));
+                self.catch_up(cat, a, self.idle_next[a]);
+                self.next[a] = cat.peek(&mut self.games[a]);
+                self.idle_now[a] = true;
+                return Some(a);
+            }
             let deciding = self.step_account(cat, a);
             if deciding && !self.games[a].done {
+                self.idle_now[a] = false;
+                self.pass_login(cat, a, self.games[a].t);
                 return Some(a);
             }
         }
+    }
+
+    /// What account slot a decides now: a build (its economy's choice and everything else), or at an idle login only
+    /// fleet and shipyard actions.
+    pub fn decision_kind(&self, a: usize) -> Decision {
+        if self.idle_now[a] { Decision::Idle } else { Decision::Build }
+    }
+
+    /// Turns on logins with nothing to build for every account's capital, from its first login at or after its clock:
+    /// without them a fully built account never decides and so can never raid or save its fleet. A build decision at a
+    /// login serves that login. Colonies share their account's logins and never decide idle.
+    pub fn enable_idle_logins(&mut self, cat: &Catalogue) {
+        self.idle_logins = true;
+        let capitals: Vec<usize> = (0..self.games.len()).filter(|&a| self.account[a] == a).collect();
+        for a in capitals {
+            let t = self.games[a].t;
+            self.idle_next[a] = self.login_after(cat, a, t, false);
+        }
+    }
+
+    /// The account's first login at or after x (after, with `later`), NEVER when the horizon comes first or logins are off.
+    fn login_after(&mut self, cat: &Catalogue, a: usize, x: f64, later: bool) -> f64 {
+        if !self.idle_logins || self.account[a] != a || cat.login_gaps.is_empty() { return NEVER }
+        let at = cat.login(&mut self.games[a], x, later);
+        if at < self.games[a].horizon { at } else { NEVER }
+    }
+
+    /// Slot a decided at its login at second `at`: the next idle login is a later one.
+    fn pass_login(&mut self, cat: &Catalogue, a: usize, at: f64) {
+        if self.idle_logins { self.idle_next[a] = self.login_after(cat, a, at, true) }
+    }
+
+    /// Whether the account of slot a counts as inactive at second `now` (OGame's 'i' status): its last login is more than
+    /// seven days old. An account with no login table is always there.
+    pub fn inactive(&mut self, cat: &Catalogue, a: usize, now: f64) -> bool {
+        if cat.login_gaps.is_empty() { return false }
+        let game = &mut self.games[self.account[a]];
+        cat.login(game, now, true);
+        let seen = game.login_times.partition_point(|&t| t <= now);
+        let last = if seen == 0 { 0.0 } else { game.login_times[seen - 1] };
+        now - last > INACTIVE_SECONDS
     }
 
     /// Moves slot a's clock by one event (`Catalogue::tick`) and hands a research that landed to the account's other planets.
@@ -298,6 +485,11 @@ impl World {
         self.fields.push(false);
         self.debris.push([0; 3]);
         self.moons.push(false);
+        self.moon_holds.push(MoonHold::default());
+        self.dark_matter.push(0);
+        self.idle_next.push(NEVER);
+        self.idle_now.push(false);
+        self.idle_stash.push(None);
         self.account.push(capital);
         self.colonies.push(Vec::new());
         self.next.push(0.0);
@@ -311,6 +503,7 @@ impl World {
 
     /// Account a commits its deciding queue to object k (`Catalogue::step` without running its clock ahead of the others).
     pub fn commit(&mut self, cat: &Catalogue, a: usize, k: usize) {
+        if self.idle_now[a] { return self.wait(cat, a) }
         debug_assert!(self.legal(cat, a, k), "account {a} cannot start object {k} now");
         cat.decide(&mut self.games[a], Some(k));
         self.next[a] = cat.peek(&mut self.games[a]);
@@ -318,13 +511,23 @@ impl World {
 
     /// Account a lets this login pass and decides again at its next one.
     pub fn wait(&mut self, cat: &Catalogue, a: usize) {
+        if self.idle_now[a] {
+            self.idle_now[a] = false;
+            if let Some((t, res)) = self.idle_stash[a].take() {
+                self.games[a].t = t;
+                self.games[a].planet.res = res;
+            }
+            self.pass_login(cat, a, self.idle_next[a]);
+            self.next[a] = cat.peek(&mut self.games[a]);
+            return;
+        }
         cat.decide(&mut self.games[a], None);
         self.next[a] = cat.peek(&mut self.games[a]);
     }
 
     /// What the deciding queue may start: the economy's rule, and no upgrade the running shipyard forbids (UnitQueueService).
     pub fn legal(&self, cat: &Catalogue, a: usize, k: usize) -> bool {
-        cat.queue_legal(&self.games[a], k) && !self.rules.get(a).is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
+        !self.idle_now[a] && cat.queue_legal(&self.games[a], k) && !self.rules.get(a).is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
     }
 
     /// Account a's research levels by host id, as the fleet and combat tables read them.
@@ -360,6 +563,7 @@ impl World {
         let rules = Arc::clone(&self.rules[a]);
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
+        self.idle_stash[a] = None;
         let upgrading = self.games[a].pending.iter().find(|&&(_, k)| cat.objects[k].queue == 0).map(|&(_, k)| k);
         let queued = rules.units.order(&mut self.yards[a], &mut self.games[a].planet, u, amount, now as i64, upgrading);
         self.sync_units(cat, a);
@@ -370,30 +574,44 @@ impl World {
     /// Account a, while it decides, sends ships (host unit id, amount) with cargo to planet `target` at `speed`
     /// (the host's 0.5..10 steps). Pays ships, cargo and fuel from the planet now; refused as the host would refuse it.
     pub fn dispatch(&mut self, cat: &Catalogue, a: usize, target: usize, mission: Mission, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64) -> Result<(), &'static str> {
-        if mission == Mission::Colonise { return Err("colonise to coordinates") }
-        self.launch(cat, a, Some(target), self.coords[target], mission, ships, cargo, speed)
+        match mission {
+            Mission::Colonise => return Err("colonise to coordinates"),
+            Mission::Expedition => return Err("expedition to coordinates"),
+            Mission::Missile => return Err("missiles launch by count"),
+            _ => {}
+        }
+        self.launch(cat, a, Some(target), self.coords[target], mission, ships, cargo, speed, 0)
+    }
+
+    /// Account a, while it decides, sends ships on an expedition to deep space at `to` (position 16) for `hold_hours`.
+    /// Refused as the host refuses: not deep space, no astrophysics, nothing but probes, or the usual checks.
+    #[allow(clippy::too_many_arguments)]
+    pub fn expedition(&mut self, cat: &Catalogue, a: usize, to: Coord, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64, hold_hours: i64) -> Result<(), &'static str> {
+        self.launch(cat, a, None, to, Mission::Expedition, ships, cargo, speed, hold_hours)
     }
 
     /// Account a, while it decides, sends a colony ship (and whatever else is in `ships`) to the free slot `to`.
     /// Refused as the host refuses: no ship, a slot out of range or taken, or not enough astrophysics for that slot.
     pub fn colonise(&mut self, cat: &Catalogue, a: usize, to: Coord, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64) -> Result<(), &'static str> {
-        self.launch(cat, a, None, to, Mission::Colonise, ships, cargo, speed)
+        self.launch(cat, a, None, to, Mission::Colonise, ships, cargo, speed, 0)
     }
 
     /// Makes slot `slot` a planet of the account whose capital is `capital` (the referee sets worlds up this way).
     pub fn join_account(&mut self, slot: usize, capital: usize) {
         self.account[slot] = capital;
         self.colonies[capital].push(slot);
+        self.idle_next[slot] = NEVER;
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn launch(&mut self, cat: &Catalogue, a: usize, target: Option<usize>, to: Coord, mission: Mission, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64) -> Result<(), &'static str> {
+    fn launch(&mut self, cat: &Catalogue, a: usize, target: Option<usize>, to: Coord, mission: Mission, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64, hold_hours: i64) -> Result<(), &'static str> {
         let rules = Arc::clone(&self.rules[a]);
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
+        self.idle_stash[a] = None;
         if target == Some(a) { return Err("own planet") }
         let own = target.is_some_and(|t| self.account[t] == self.account[a]);
-        if own && matches!(mission, Mission::Attack | Mission::Espionage) { return Err("own planet") }
+        if own && matches!(mission, Mission::Attack | Mission::Espionage | Mission::MoonDestroy) { return Err("own planet") }
         if !own && mission == Mission::Deploy { return Err("not your planet") }
         let research = self.research(cat, a);
         let mut sent = Vec::new();
@@ -410,11 +628,14 @@ impl World {
             Mission::Recycle if !sends(&[self.harvester(a, target.unwrap())]) => return Err("no harvester"),
             Mission::Recycle if !self.fields[target.unwrap()] => return Err("no debris field"),
             Mission::Colonise => self.colonisable(cat, a, to, sends(&[self.colonisation.as_ref().map_or(0, |c| c.ship)]))?,
+            Mission::MoonDestroy => self.moon_destroyable(&rules, target.unwrap(), &sends)?,
+            Mission::Expedition => self.expeditionable(cat, a, to, &rules, &sent)?,
             _ => {}
         }
         let distance = fleet::distance(&rules.settings, self.coords[a], to, &|_, _| SystemState::Active);
-        let fuel = fleet::consumption(&rules.settings, &rules.fleet, &sent, &research, distance, 0, speed) as f64;
+        let fuel = fleet::consumption(&rules.settings, &rules.fleet, &sent, &research, distance, hold_hours, speed) as f64;
         let held: combat::Units = sent.iter().copied().collect();
+        if rules.combat.fuel_capacity(&held, &research) < fuel as i64 { return Err("fuel over the tanks' capacity") }
         if cargo.iter().sum::<f64>() > rules.combat.capacity(&held, &research) as f64 { return Err("cargo over capacity") }
         let stock = self.games[a].planet.res;
         if (0..3).any(|r| cargo[r] > stock[r]) || cargo[2] + fuel > stock[2] { return Err("not enough resources") }
@@ -425,7 +646,8 @@ impl World {
         let planet = &mut self.games[a].planet;
         for r in 0..3 { planet.res[r] = as_stored(planet.res[r] - cargo[r]) }
         planet.res[2] = as_stored(planet.res[2] - fuel);
-        self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight, returning: false });
+        let holding = fleet::holding_seconds(hold_hours) as f64;
+        self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy });
         self.next[a] = cat.peek(&mut self.games[a]);
         Ok(())
     }
@@ -436,31 +658,80 @@ impl World {
         if self.fleets[f].returning {
             let fleet = self.fleets.swap_remove(f);
             self.land(cat, fleet.owner, at, &fleet.ships, fleet.cargo);
+            self.log(EventKind::Return, at, &fleet, Outcome::Done, |e| e.gained = fleet.cargo);
             return;
         }
         match self.fleets[f].mission {
             Mission::Deploy => return self.deploy(cat, f),
             Mission::Colonise => return self.found(cat, f),
+            Mission::Expedition => return self.expedition_arrives(cat, f),
+            Mission::Missile => return self.missile_strikes(cat, f),
             _ => {}
         }
         let target = self.fleets[f].target;
         self.catch_up(cat, target, at);
+        let mut outcome = Outcome::Done;
+        let mut gained = [0.0; 3];
         match self.fleets[f].mission {
-            Mission::Deploy | Mission::Colonise => unreachable!("handled above"),
+            Mission::Deploy | Mission::Colonise | Mission::Expedition | Mission::Missile => unreachable!("handled above"),
             Mission::Transport => {
                 let mut cargo = std::mem::take(&mut self.fleets[f].cargo);
                 cargo[2] += self.fleets[f].fuel / 2.0;
                 for r in 0..3 { self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + cargo[r]) }
+                gained = cargo;
             }
             Mission::Attack => self.attack(cat, f),
             Mission::Espionage => self.espionage(cat, f),
-            Mission::Recycle => self.recycle(cat, f),
+            Mission::Recycle => gained = self.recycle(cat, f),
+            Mission::MoonDestroy => outcome = self.moon_destruction(cat, f),
         }
+        let fleet = self.fleets[f].clone();
+        self.log(EventKind::Arrival, at, &fleet, outcome, |e| e.gained = gained);
         self.next[target] = cat.peek(&mut self.games[target]);
         self.fleets[f].returning = true;
         if self.fleets[f].ships.is_empty() {
             self.fleets.swap_remove(f);
+            self.log(EventKind::Lost, at, &fleet, Outcome::Defeated, |_| {});
         }
+    }
+
+    /// Appends an event about `fleet`; `fill` sets the fields that differ from an empty event.
+    fn log(&mut self, kind: EventKind, time: f64, fleet: &Fleet, outcome: Outcome, fill: impl FnOnce(&mut Event)) {
+        let mut event = Event { kind, time, mission: fleet.mission, owner: fleet.owner, target: fleet.target, ships_lost: Vec::new(), target_lost: Vec::new(), present: Vec::new(), gained: [0.0; 3], debris: [0; 3], outcome };
+        fill(&mut event);
+        self.events.push(event);
+    }
+
+    /// Account a, while it decides, turns fleet f (an index into `fleets`) home from where it is. The host's rule
+    /// (`GameMission::cancel`): only before it has arrived, never a returning fleet, an expedition on hold or a
+    /// missile; the way back takes the time already flown, and half the fuel paid comes home in the hold.
+    pub fn recall(&mut self, a: usize, f: usize) -> Result<(), &'static str> {
+        let now = self.games[a].t;
+        let fleet = self.fleets.get_mut(f).ok_or("no such fleet")?;
+        if fleet.owner != a { return Err("not your fleet") }
+        if fleet.returning { return Err("already returning") }
+        if fleet.mission == Mission::Missile { return Err("missiles cannot be recalled") }
+        if now > fleet.arrive { return Err("already arrived") }
+        fleet.cargo[2] += (fleet.fuel / 2.0).floor();
+        fleet.fuel = 0.0;
+        fleet.holding = 0.0;
+        fleet.home = now + (now - fleet.departed);
+        fleet.arrive = now;
+        fleet.returning = true;
+        let fleet = fleet.clone();
+        self.log(EventKind::Recall, now, &fleet, Outcome::Cancelled, |_| {});
+        Ok(())
+    }
+
+    /// Account a's unit of host id `id` (a ship or defence) is set to `amount` on its planet, and the economy's view of
+    /// it (production from satellites and the like) with it. False when the account's yard has no such unit.
+    pub fn set_units(&mut self, cat: &Catalogue, a: usize, id: u32, amount: u64) -> bool {
+        let Some(u) = self.rules[a].units.index(id as i64) else { return false };
+        self.idle_stash[a] = None;
+        self.yards[a].counts[u] = amount;
+        self.sync_units(cat, a);
+        self.next[a] = cat.peek(&mut self.games[a]);
+        true
     }
 
     /// DeploymentMission: the ships stay on the target planet with the cargo and half the fuel; nothing flies home.
@@ -469,6 +740,7 @@ impl World {
         let mut cargo = fleet.cargo;
         cargo[2] += fleet.fuel / 2.0;
         self.land(cat, fleet.target, fleet.arrive, &fleet.ships, cargo);
+        self.log(EventKind::Arrival, fleet.arrive, &fleet, Outcome::Done, |e| e.gained = cargo);
     }
 
     /// The host's slot test for a colony: nothing of this world or outside it stands there.
@@ -503,6 +775,8 @@ impl World {
             self.fleets[f].fuel = 0.0;
             self.fleets[f].returning = true;
             self.next[owner] = cat.peek(&mut self.games[owner]);
+            let fleet = self.fleets[f].clone();
+            self.log(EventKind::Arrival, at, &fleet, Outcome::Cancelled, |_| {});
             return;
         };
         let slot = self.add_planet(cat, owner, site.config, to, at);
@@ -517,9 +791,11 @@ impl World {
         fleet.cargo = [0.0; 3];
         fleet.fuel = 0.0;
         fleet.returning = true;
+        let fleet = fleet.clone();
         if fleet.ships.is_empty() {
             self.fleets.swap_remove(f);
         }
+        self.log(EventKind::Arrival, at, &fleet, Outcome::Done, |e| e.gained = brought);
     }
 
     /// The tabulated colony the host's draw lands on: the referee's draw when it handed one over, otherwise one of the
@@ -548,7 +824,7 @@ impl World {
     }
 
     /// The ship that harvests the field over planet `target` for account a (RecycleMission, by the slot's position).
-    fn harvester(&self, a: usize, target: usize) -> u32 {
+    pub fn harvester(&self, a: usize, target: usize) -> u32 {
         let harvesters = &self.rules[a].combat.missions.harvesters;
         *harvesters.get(&self.coords[target].position.to_string()).expect("the export names a harvester for every slot")
     }
@@ -588,6 +864,20 @@ impl World {
         for r in 0..3 { self.debris[target][r] += outcome.debris[r] }
         self.fields[target] = true;
         self.fleets[f].ships = outcome.attacker_left.iter().map(|(&id, &n)| (id, n)).collect();
+        let fleet = self.fleets[f].clone();
+        let result = match outcome.winner {
+            combat::Winner::Attacker => Outcome::Won,
+            combat::Winner::Defender => Outcome::Defeated,
+            combat::Winner::Draw => Outcome::Draw,
+        };
+        let present: Vec<(u32, i64)> = defender.iter().filter(|(id, _)| !defender_rules.combat.is_defense(*id)).copied().collect();
+        self.log(EventKind::Fight, fleet.next(), &fleet, result, |e| {
+            e.ships_lost = outcome.attacker_lost.iter().map(|(&id, &n)| (id, n)).collect();
+            e.target_lost = outcome.defender_lost.iter().map(|(&id, &n)| (id, n - outcome.repaired.get(&id).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();
+            e.present = present;
+            e.gained = outcome.loot.map(|r| r as f64);
+            e.debris = outcome.debris;
+        });
         outcome
     }
 
@@ -613,8 +903,16 @@ impl World {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
         }
-        self.moons[target] |= outcome.moon_created;
+        if outcome.moon_created && !self.moons[target] { self.raise_moon(target, outcome.debris.iter().sum()) }
         self.fleets[f].cargo = outcome.cargo.map(|r| r as f64);
+    }
+
+    /// A moon comes up over `target`, sized as the host sizes it: a random 10..20 plus the debris of the fight, rooted.
+    fn raise_moon(&mut self, target: usize, debris: i64) {
+        let x = 10 + (next_random(&mut self.rng) % 11) as i64;
+        let diameter = (((x as f64) + 3.0 * debris as f64 / 100_000.0).sqrt() * 1000.0).floor() as i64;
+        self.moons[target] = true;
+        self.moon_holds[target] = MoonHold { diameter: diameter.min(MOON_DIAMETER_CAP), stock: [0.0; 3], counts: vec![0; self.yards[target].counts.len()] };
     }
 
     /// EspionageMission: the counter-espionage chance and roll, a fight against the target's ships alone (its defence
@@ -666,7 +964,7 @@ impl World {
 
     /// RecycleMission: the slot's harvester ships alone carry, the field is shared out as loot is, and the harvest flies
     /// home on top of the mission's own resources (here the host reads them directly: no half fuel).
-    fn recycle(&mut self, cat: &Catalogue, f: usize) {
+    fn recycle(&mut self, cat: &Catalogue, f: usize) -> [f64; 3] {
         let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
         let harvester = self.harvester(owner, target);
         let count: i64 = self.fleets[f].ships.iter().filter(|(id, _)| *id == harvester).map(|s| s.1).sum();
@@ -677,6 +975,7 @@ impl World {
             self.debris[target][r] = (self.debris[target][r] as f64 - harvested[r]).floor() as i64;
             self.fleets[f].cargo[r] += harvested[r].floor();
         }
+        harvested.map(f64::floor)
     }
 }
 
@@ -692,18 +991,33 @@ mod tests {
         let Ok(mut cat) = Catalogue::load(&path) else { return eprintln!("no catalogue at {path}; skipped") };
         cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
         let configs: Vec<usize> = (0..cat.planets.len().min(8)).collect();
-        let mut world = World::new(&cat, &configs, 240.0, 0.0, 7);
-        let mut rngs: Vec<u64> = (0..configs.len() as u64).map(|a| a + 100).collect();
-        let mut last = 0.0;
-        while let Some(a) = world.next_decision(&cat) {
-            assert!(world.games[a].t >= last, "the world clock went back");
-            last = world.games[a].t;
-            let game = &world.games[a];
-            match cat.baseline(&game.planet, game.queue, Baseline::Player, &mut rngs[a]) {
-                Some(k) => world.commit(&cat, a, k),
-                None => world.wait(&cat, a),
+        // With idle logins on, an account also decides at logins with nothing to build and does nothing there: the
+        // economy must come out bit for bit as it does without them.
+        let mut worlds = Vec::new();
+        let mut idle_decisions = 0;
+        for idle_logins in [false, true] {
+            let mut world = World::new(&cat, &configs, 240.0, 0.0, 7);
+            if idle_logins { world.enable_idle_logins(&cat) }
+            let mut rngs: Vec<u64> = (0..configs.len() as u64).map(|a| a + 100).collect();
+            let mut last = 0.0;
+            while let Some(a) = world.next_decision(&cat) {
+                assert!(world.games[a].t >= last, "the world clock went back");
+                last = world.games[a].t;
+                if world.decision_kind(a) == Decision::Idle {
+                    idle_decisions += 1;
+                    world.wait(&cat, a);
+                    continue;
+                }
+                let game = &world.games[a];
+                match cat.baseline(&game.planet, game.queue, Baseline::Player, &mut rngs[a]) {
+                    Some(k) => world.commit(&cat, a, k),
+                    None => world.wait(&cat, a),
+                }
             }
+            worlds.push(world);
         }
+        assert!(idle_decisions > 0, "no login was left without a build to decide");
+        for world in &worlds {
         for (a, &c) in configs.iter().enumerate() {
             let mut alone = cat.new_game(c, 240.0, 0.0, 7u64.wrapping_add(a as u64));
             let mut rng = a as u64 + 100;
@@ -720,6 +1034,7 @@ mod tests {
                 assert_eq!((x.0, x.1, x.2), (y.0, y.1, y.2), "account {a}: build differs");
             }
             assert_eq!(world_game.planet.res, alone.planet.res, "account {a}: final stock");
+        }
         }
     }
 
@@ -838,6 +1153,119 @@ mod tests {
         assert_eq!(raided.yards[0].counts, quiet.yards[0].counts, "no defence, no losses");
     }
 
+    /// A recall turns the fleet home from where it is (`GameMission::cancel`): it leaves now, takes the time already
+    /// flown to come back, carries half the fuel it paid in its hold, and lands its ships; one that is on its way home
+    /// or has arrived cannot be recalled.
+    #[test]
+    fn a_recall_brings_the_fleet_home_in_the_time_it_has_flown() {
+        let Some((cat, mut world, mut quiet)) = pair(40.0) else { return eprintln!("no u1 catalogues; skipped") };
+        for w in [&mut world, &mut quiet] {
+            give(w, 0, 202, 10);
+            w.games[0].planet.res = [50_000.0, 20_000.0, 20_000.0];
+            w.games.iter_mut().for_each(|g| g.planet.rate = [0.0; 3]);
+        }
+        world.next_decision(&cat).unwrap();
+        world.dispatch(&cat, 0, 1, Mission::Transport, &[(202, 10)], [1000.0, 0.0, 0.0], 1.0).unwrap();
+        let sent = world.fleets[0].clone();
+        let paid = 20_000.0 - world.games[0].planet.res[2];
+        world.wait(&cat, 0);
+        // The next login of the sender while the fleet is still on its way out.
+        let now = loop {
+            let a = world.next_decision(&cat).expect("the sender logs in again");
+            let t = world.games[a].t;
+            if a == 0 && t > sent.departed { break t }
+            world.wait(&cat, a);
+        };
+        assert!(now < sent.arrive, "the login came after the arrival: {now} vs {}", sent.arrive);
+        assert_eq!(world.recall(1, 0), Err("not your fleet"));
+        world.recall(0, 0).unwrap();
+        let back = world.fleets[0].clone();
+        assert!(back.returning && back.arrive == now && back.home == now + (now - sent.departed), "returns {} to {}", back.arrive, back.home);
+        assert_eq!(back.cargo, [1000.0, 0.0, (paid / 2.0).floor()], "the cargo and half the fuel come home");
+        assert_eq!(world.recall(0, 0), Err("already returning"));
+        let kinds: Vec<EventKind> = world.events.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, vec![EventKind::Recall]);
+        world.wait(&cat, 0);
+        idle(&cat, &mut world);
+        idle(&cat, &mut quiet);
+        assert_eq!(world.yards[0].counts, quiet.yards[0].counts, "the ships landed");
+        assert_eq!(world.games[1].planet.res, quiet.games[1].planet.res, "nothing was delivered");
+        let landed = world.events.last().unwrap();
+        assert!(landed.kind == EventKind::Return && landed.time == back.home && landed.gained == back.cargo, "{landed:?}");
+    }
+
+    /// A raid writes what happened to the log: the fight with the loot the target lost, the arrival, the landing.
+    #[test]
+    fn a_raid_is_written_to_the_event_log() {
+        let Some((cat, mut raided, mut quiet)) = pair(6.0) else { return eprintln!("no u1 catalogues; skipped") };
+        for w in [&mut raided, &mut quiet] {
+            give(w, 0, 202, 20);
+            w.yards[1].counts.iter_mut().for_each(|n| *n = 0);
+            w.games[0].planet.res[2] = 20_000.0;
+            w.games[1].planet.res = [30_000.0, 20_000.0, 10_000.0];
+            w.games.iter_mut().for_each(|g| g.planet.rate = [0.0; 3]);
+        }
+        raided.next_decision(&cat).unwrap();
+        raided.dispatch(&cat, 0, 1, Mission::Attack, &[(202, 20)], [0.0; 3], 10.0).unwrap();
+        raided.wait(&cat, 0);
+        idle(&cat, &mut raided);
+        idle(&cat, &mut quiet);
+        let kinds: Vec<(EventKind, Mission)> = raided.events.iter().map(|e| (e.kind, e.mission)).collect();
+        assert_eq!(kinds, vec![(EventKind::Fight, Mission::Attack), (EventKind::Arrival, Mission::Attack), (EventKind::Return, Mission::Attack)]);
+        let fight = &raided.events[0];
+        assert!(fight.outcome == Outcome::Won && fight.ships_lost.is_empty() && fight.present.is_empty());
+        for r in 0..3 {
+            let lost = quiet.games[1].planet.res[r] - raided.games[1].planet.res[r];
+            assert!((fight.gained[r] - lost).abs() < 1e-6, "resource {r}: logged {} lost {lost}", fight.gained[r]);
+        }
+        assert!(fight.gained.iter().sum::<f64>() > 0.0 && fight.time < raided.events[2].time, "the fight comes before the landing");
+    }
+
+    /// With idle logins on, an account that is saving for a build with no queue to decide still logs in, as a decision
+    /// that offers nothing to build; without them it never decides.
+    #[test]
+    fn an_account_with_nothing_to_build_still_logs_in() {
+        let Some((cat, mut with, mut without)) = pair(6.0) else { return eprintln!("no u1 catalogues; skipped") };
+        let dear = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 0 && cat.objects[k].price[0][0] > 1e9).or_else(|| (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 0).max_by(|&x, &y| cat.objects[x].price[0].iter().sum::<f64>().total_cmp(&cat.objects[y].price[0].iter().sum::<f64>()))).unwrap();
+        for w in [&mut with, &mut without] {
+            // Saving up for the dearest building: the economy has nothing to decide for hours.
+            w.games[0].commit[0] = Some(dear);
+            w.games[0].planet.rate = [0.0; 3];
+            w.next[0] = cat.peek(&mut w.games[0]);
+        }
+        with.enable_idle_logins(&cat);
+        let mut logins = Vec::new();
+        while let Some(a) = with.next_decision(&cat) {
+            if a == 0 {
+                assert_eq!(with.decision_kind(0), Decision::Idle);
+                assert!(!(0..cat.objects.len()).any(|k| with.legal(&cat, 0, k)), "an idle login offers a build");
+                logins.push(with.games[0].t);
+            }
+            with.wait(&cat, a);
+        }
+        assert!(logins.len() >= 3 && logins.windows(2).all(|w| w[0] < w[1]), "idle logins {logins:?}");
+        let mut quiet_logins = 0;
+        while let Some(a) = without.next_decision(&cat) {
+            quiet_logins += usize::from(a == 0);
+            without.wait(&cat, a);
+        }
+        assert_eq!(quiet_logins, 0, "an account saving for a build decided without idle logins");
+    }
+
+    /// OGame's 'i' status: no login for seven days.
+    #[test]
+    fn an_account_that_has_not_logged_in_for_a_week_is_inactive() {
+        let Some((mut cat, mut world, _)) = pair(24.0 * 30.0) else { return eprintln!("no u1 catalogues; skipped") };
+        cat.login_gaps = vec![8.0 * 86_400.0];
+        world.games[0].login_times = vec![0.0];
+        let day = 86_400.0;
+        assert!(!world.inactive(&cat, 0, 6.0 * day), "six days after a login");
+        assert!(world.inactive(&cat, 0, 7.5 * day), "seven and a half days after the last login");
+        assert!(!world.inactive(&cat, 0, 8.5 * day), "back a half day after the next login");
+        cat.login_gaps = Vec::new();
+        assert!(!world.inactive(&cat, 0, 100.0 * day), "an account with no login table is always there");
+    }
+
     /// The host's own answers to missions it flew (`ai:rl-mission-cases`): a world that starts at the case's planets must
     /// reproduce the host's departure, flight, fuel, stock, ships, debris and moon, second for second.
     mod mission_parity {
@@ -851,6 +1279,7 @@ mod tests {
 
         #[derive(Deserialize)]
         struct Case {
+            #[serde(default)] case_seed: u32,
             mission: String,
             input: Input,
             dispatch: Dispatch,
@@ -871,6 +1300,11 @@ mod tests {
             #[serde(default)] target_coordinates: Option<[i64; 3]>,
             #[serde(default)] max_planets: Option<usize>,
             #[serde(default)] debris_before: Option<[i64; 3]>,
+            #[serde(default)] missiles: Option<i64>,
+            #[serde(default)] priority: Option<usize>,
+            #[serde(default)] holding_hours: Option<i64>,
+            #[serde(default)] rank1_points: Option<i64>,
+            #[serde(default)] target_type: i64,
         }
 
         #[derive(Deserialize)]
@@ -909,7 +1343,24 @@ mod tests {
             #[serde(default)] new_planet: Option<NewPlanet>,
             #[serde(default)] battle: Option<BattleAnswer>,
             #[serde(default)] espionage: Option<Spy>,
+            /// Moon destruction: the fight's seed, the two rolls, the moon's diameter, whether it stands afterwards.
+            #[serde(default)] abm_before: Option<[i64; 2]>,
+            #[serde(default)] seed: Option<u64>,
+            #[serde(default)] rolls: Option<Rolls>,
+            #[serde(default)] moon_before: Option<MoonBefore>,
+            #[serde(default)] moon_exists_after: Option<bool>,
+            /// Expedition: what was found (the host's outcome name), dark matter and deep-space debris.
+            #[serde(default)] outcome: Option<String>,
+            #[serde(default)] found_ships: HashMap<String, i64>,
+            #[serde(default)] user_changes: serde_json::Value,
+            #[serde(default)] debris_slot16: Option<[i64; 3]>,
         }
+
+        #[derive(Deserialize)]
+        struct Rolls { destroy: i64, loss: i64 }
+
+        #[derive(Deserialize)]
+        struct MoonBefore { diameter: i64 }
 
         #[derive(Deserialize)]
         struct NewPlanet { coordinates: [i64; 3], resources: [f64; 3], temp_max: i64, field_max: i64 }
@@ -932,7 +1383,14 @@ mod tests {
         struct Again { departure: f64, arrival: f64, #[serde(default)] cargo: Option<[i64; 3]>, #[serde(default)] units: Option<HashMap<String, i64>> }
 
         #[derive(Deserialize)]
-        struct BattleAnswer { #[serde(default)] seed: u64, #[serde(default)] report: Option<Report> }
+        struct BattleAnswer {
+            #[serde(default)] seed: u64,
+            #[serde(default)] report: Option<Report>,
+            /// A moon destruction's fight is flat: its survivors sit beside the rounds.
+            #[serde(default)] rounds: u32,
+            #[serde(default)] attacker_left: serde_json::Value,
+            #[serde(default)] defender_left: serde_json::Value,
+        }
 
         /// The host's own fight: its survivors, the defences it repaired, and whether its moon roll made a moon.
         #[derive(Deserialize)]
@@ -1035,7 +1493,8 @@ mod tests {
             // colonies the host drew: `ai:rl-catalogue ... --sites`).
             let only = std::env::var("OGSIM_MISSION").unwrap_or_else(|_| "transport".into());
             let (cases_file, econ_file) = match only.as_str() {
-                "colonise" => ("more-mission-cases-u1.json", "units-parity/econ-u1-colonies.json"),
+                "colonise" | "expedition" => ("more-mission-cases-u1.json", "units-parity/econ-u1-colonies.json"),
+                "missile" | "moon_destruction" => ("more-mission-cases-u1.json", "units-parity/econ-u1.json"),
                 _ => ("mission-cases-u1.json", "units-parity/econ-u1.json"),
             };
             let Ok(text) = std::fs::read_to_string(format!("{DATA}/{cases_file}")) else { return eprintln!("no mission cases; skipped") };
@@ -1120,9 +1579,14 @@ mod tests {
         /// One case end to end: `Some(true)` when the host flew it and the world did too, `Some(false)` when both refused
         /// it, `None` when it cannot be set up from the catalogue (another planet, another mission).
         fn play_case(cat: &Catalogue, case: &Case, index: usize, setup: &Setup) -> Option<bool> {
-            if case.mission == "colonise" {
-                return play_colonise(cat, case, index, setup);
+            match case.mission.as_str() {
+                "colonise" => return play_colonise(cat, case, index, setup),
+                "expedition" => return play_expedition(cat, case, index, setup),
+                _ => {}
             }
+            let (missile, moon_strike) = (case.mission == "missile", case.mission == "moon_destruction");
+            // A missile may also go for a moon: its defences are the moon's, and the planet's interceptors help it.
+            let moon = moon_strike || (missile && case.input.target_type == 3);
             let deploying = case.mission == "deploy";
             // A recycler flies to a debris field, not a planet: the world needs some planet under the field, so any other
             // account of the catalogue stands in for it, at the field's coordinates and with the sender's class.
@@ -1147,8 +1611,11 @@ mod tests {
             // A deploy goes to the sender's second planet, which the catalogue has no tables for: the sender's home config
             // stands in (its buildings are cleared below, and the planet's production is switched off).
             let target_config = match () {
-                _ if recycling => (0..cat.planets.len()).find(|&c| c != origin_config)?,
+                _ if recycling || moon_strike => (0..cat.planets.len()).find(|&c| c != origin_config)?,
                 _ if deploying => config_of(cat, target.id).unwrap_or(origin_config),
+                // A missile's target the catalogue has no tables for stands in as a deploy's second planet does.
+                _ if missile && moon => (0..cat.planets.len()).find(|&c| c != origin_config)?,
+                _ if missile => config_of(cat, target.id).or_else(|| (0..cat.planets.len()).find(|&c| c != origin_config))?,
                 _ => config_of(cat, target.id)?,
             };
             let mut world = World::new(cat, &[origin_config, target_config], 1e6, 0.0, 1);
@@ -1157,7 +1624,7 @@ mod tests {
                 world.debris[1] = debris;
                 world.fields[1] = true;
             }
-            if deploying && target_player.id == case.input.origin_player.id {
+            if (deploying || missile) && target_player.id == case.input.origin_player.id {
                 world.join_account(1, 0);
             }
             for (a, player) in [(0, &case.input.origin_player), (1, target_player)] {
@@ -1179,14 +1646,36 @@ mod tests {
                 world.games[a].login_times = vec![world.games[a].t];
                 cat.refresh(&mut world.games[a].planet);
             }
+            if moon {
+                // The target is a moon: what stands on it is the moon's, and the slot's own planet stands empty beside it.
+                let hold = &case.input.target.as_ref()?;
+                let mut held = hold.ships.clone();
+                held.extend(hold.defence.clone());
+                let diameter = case.arrival.as_ref().and_then(|a| a.moon_before.as_ref()).map_or(0, |m| m.diameter);
+                let mut counts = vec![0u64; world.yards[1].counts.len()];
+                for (id, amount) in units_of(&held) {
+                    counts[world.rules[1].units.index(id as i64).expect("a unit in the catalogue")] = amount as u64;
+                }
+                world.yards[1].counts.iter_mut().for_each(|n| *n = 0);
+                // The planet beside a moon lends it its interceptors (the host reports them as the parent's).
+                let parent = case.arrival.as_ref().and_then(|a| a.abm_before).map_or(0, |abm| abm[1]);
+                if let Some(strike) = &world.rules[1].strike {
+                    let u = world.rules[1].units.index(strike.interceptor as i64).expect("interceptors in the catalogue");
+                    world.yards[1].counts[u] = parent as u64;
+                }
+                world.moons[1] = true;
+                world.moon_holds[1] = MoonHold { diameter, stock: hold.resources, counts };
+            }
             let mission = match case.mission.as_str() {
+                "moon_destruction" => Mission::MoonDestroy,
                 "attack" => Mission::Attack,
                 "espionage" => Mission::Espionage,
                 "recycle" => Mission::Recycle,
                 "deploy" => Mission::Deploy,
                 _ => Mission::Transport,
             };
-            if deploying {
+            let stands_in = missile && (moon || config_of(cat, target.id).is_none());
+            if deploying || stands_in {
                 // The host's second planets did not produce between the dispatch and the arrival.
                 for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 0) {
                     world.games[1].planet.levels[k] = 0;
@@ -1194,7 +1683,10 @@ mod tests {
                 world.games[1].planet.rate = [0.0; 3];
             }
             let before = world.games[0].planet.res;
-            let flew = world.dispatch(cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed);
+            let flew = match missile {
+                true => world.launch_missiles(cat, 0, 1, moon, case.input.missiles.unwrap_or(0), case.input.priority.unwrap_or(0)),
+                false => world.dispatch(cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed),
+            };
             if !case.dispatch.accepted {
                 assert!(flew.is_err(), "case {index}: the host refused this mission and the world flew it");
                 return Some(false);
@@ -1211,7 +1703,18 @@ mod tests {
             assert!((fuel - host_fuel).abs() < 1e-6, "case {index}: fuel {fuel} host {host_fuel}");
             stock(case.dispatch.origin_after.as_ref(), &world, 0, index, "after dispatch");
             let Some(arrival) = &case.arrival else { return Some(true) };
-            if let Some(battle) = &arrival.battle {
+            if moon {
+                world.rng = arrival.seed.unwrap_or(0);
+                world.recorded_rolls = arrival.rolls.as_ref().map(|r| [r.destroy, r.loss]);
+                if let Some(battle) = arrival.battle.as_ref().filter(|b| b.rounds > 0 || !b.attacker_left.is_null()) {
+                    world.recorded = Some(combat::Recorded {
+                        engine: combat::EngineResult { rounds: battle.rounds, attacker_left: counted(&battle.attacker_left), defender_left: counted(&battle.defender_left) },
+                        repaired: combat::Units::new(),
+                        moon_roll: 0,
+                    });
+                }
+            }
+            if let (false, Some(battle)) = (moon, &arrival.battle) {
                 world.rng = battle.seed;
                 // The host fought with PHP's dice after the battle too, so the referee hands its fight over rather than
                 // ask the world to roll the same numbers again.
@@ -1227,7 +1730,7 @@ mod tests {
                     world.recorded = Some(recorded(report));
                 }
             }
-            if let (true, Some(before)) = (deploying, &arrival.target_before) {
+            if let (true, Some(before)) = (deploying || stands_in, &arrival.target_before) {
                 // The host's second planet had been producing with buildings the catalogue knows nothing about, so the
                 // referee hands over its stock at the arrival.
                 world.games[1].planet.res = before.resources;
@@ -1240,7 +1743,14 @@ mod tests {
             if let (Some(back), true) = (arrival.return_mission.as_ref().and_then(|b| b.cargo), case.mission != "attack") {
                 assert_eq!(world.fleets[0].cargo.map(|r| r as i64), back, "case {index}: the cargo flying home");
             }
-            stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
+            if moon {
+                moon_after(&world, arrival, index);
+            } else {
+                stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
+            }
+            if missile {
+                assert!(world.fleets.is_empty(), "case {index}: a missile does not come home");
+            }
             if deploying {
                 assert!(world.fleets.is_empty(), "case {index}: a deployed fleet stays on the planet");
             }
@@ -1250,9 +1760,114 @@ mod tests {
             if let Some(moon) = &arrival.moon {
                 assert_eq!(world.moons[1], moon.as_bool().unwrap_or(!moon.is_null()), "case {index}: moon at arrival");
             }
-            let Some(back) = case.arrival.as_ref().and_then(|a| a.return_mission.as_ref()) else { return Some(true) };
+            let Some(back) = case.arrival.as_ref().and_then(|a| a.return_mission.as_ref()) else {
+                assert!(world.fleets.is_empty(), "case {index}: no fleet is left to fly home");
+                return Some(true);
+            };
             let home = world.fleets.iter().find(|f| f.owner == 0).expect("the fleet comes home");
             assert_eq!((home.arrive, home.home), (back.departure, back.arrival), "case {index}: the flight home");
+            let Some(done) = &case.back else { return Some(true) };
+            run_until(cat, &mut world, done.time);
+            stock(done.origin_after.as_ref(), &world, 0, index, "back home");
+            Some(true)
+        }
+
+        /// What a moon holds after a moon destruction, against the host's: it stands or is gone, and what stood on it.
+        fn moon_after(w: &World, arrival: &Arrival, index: usize) {
+            let stands = arrival.moon_exists_after.unwrap_or(true);
+            assert_eq!(w.moons[1], stands, "case {index}: the moon stands after the strike");
+            let Some(after) = arrival.target_after.as_ref().filter(|_| stands) else { return };
+            let hold = &w.moon_holds[1];
+            for r in 0..3 {
+                assert!((hold.stock[r] - after.resources[r]).abs() < 1e-6, "case {index}: moon stock {r} world {} host {}", hold.stock[r], after.resources[r]);
+            }
+            let held: HashMap<String, i64> = w.rules[1].units.units.iter().zip(&hold.counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id.to_string(), n as i64)).collect();
+            let mut host = after.ships.clone();
+            host.extend(after.defence.clone());
+            assert_eq!(held, host, "case {index}: what stands on the moon");
+        }
+
+        /// An expedition case: the dispatch rules, then the arrival at the end of the hold with the host's draws (its seed,
+        /// and the engine's result when it fought), against what the host found, lost, gained and flew home with.
+        fn play_expedition(cat: &Catalogue, case: &Case, index: usize, setup: &Setup) -> Option<bool> {
+            let origin_config = config_of(cat, case.input.origin.id)?;
+            let to = case.input.target_coordinates.map(|c| Coord { galaxy: c[0], system: c[1], position: c[2] })?;
+            let mut world = World::new(cat, &[origin_config], 1e6, 0.0, 1);
+            world.arm(vec![rules_for(cat, case.input.origin_player.class)?], vec![coords(&case.input.origin)]);
+            world.colonisation = setup.colonisation.clone();
+            for (id, &level) in &case.input.origin_player.research {
+                let k = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
+                world.games[0].planet.levels[k] = level;
+            }
+            let held = &case.input.origin;
+            let mut units = held.ships.clone();
+            units.extend(held.defence.clone());
+            for (id, amount) in units_of(&units) {
+                let u = world.rules[0].units.index(id as i64).expect("a unit in the catalogue");
+                world.yards[0].counts[u] = amount as u64;
+            }
+            world.games[0].planet.res = held.resources;
+            world.games[0].t = case.dispatch.departure.unwrap_or(0.0);
+            world.games[0].login_times = vec![world.games[0].t];
+            cat.refresh(&mut world.games[0].planet);
+            let before = world.games[0].planet.res;
+            let hours = case.input.holding_hours.unwrap_or(0);
+            let flew = world.expedition(cat, 0, to, &units_of(&case.input.units), case.input.cargo, case.input.speed, hours);
+            if !case.dispatch.accepted {
+                assert!(flew.is_err(), "case {index}: the host refused this mission and the world flew it");
+                return Some(false);
+            }
+            flew.unwrap_or_else(|e| panic!("case {index}: the host flew this mission and the world refused it: {e}"));
+            let (departure, arrive, host_fuel) = (case.dispatch.departure?, case.dispatch.arrival?, case.dispatch.fuel?);
+            assert_eq!(world.games[0].t, departure, "case {index}: departure");
+            assert_eq!(world.fleets[0].arrive, arrive, "case {index}: arrival");
+            let fuel = before[2] - case.input.cargo[2] - world.games[0].planet.res[2];
+            assert!((fuel - host_fuel).abs() < 1e-6, "case {index}: fuel {fuel} host {host_fuel}");
+            stock(case.dispatch.origin_after.as_ref(), &world, 0, index, "after dispatch");
+            let arrival = case.arrival.as_ref()?;
+            world.rank1_points = case.input.rank1_points?;
+            let engine = arrival.battle.as_ref().and_then(|b| b.report.as_ref()).map(|r| combat::EngineResult {
+                rounds: r.rounds.max(1),
+                // The report is the expedition fleet's: the enemy is its attacker.
+                attacker_left: counted(&r.defender_left),
+                defender_left: counted(&r.attacker_left),
+            });
+            world.recorded_expedition = Some((case.case_seed, engine));
+            run_until(cat, &mut world, arrival.time);
+            let found = world.events.iter().rev().find(|e| e.kind == EventKind::Arrival && e.mission == Mission::Expedition).unwrap_or_else(|| panic!("case {index}: the expedition did not arrive"));
+            let host_name = arrival.outcome.as_deref()?;
+            let host_kind = match (host_name, arrival.found_ships.is_empty()) {
+                ("ships", true) => expedition::Kind::Nothing,
+                (name, _) => expedition::Kind::named(name).unwrap_or_else(|| panic!("case {index}: unknown outcome {name}")),
+            };
+            assert_eq!(found.outcome, Outcome::Found(host_kind), "case {index}: what the expedition found");
+            let dark = arrival.user_changes.get("dark_matter").map_or(0, |pair| pair[1].as_i64().unwrap() - pair[0].as_i64().unwrap());
+            assert_eq!(world.dark_matter[0], dark, "case {index}: dark matter");
+            let field = world.deep_space.get(&(to.galaxy, to.system)).copied().unwrap_or([0; 3]);
+            assert_eq!(field, arrival.debris_slot16.unwrap_or([0; 3]), "case {index}: debris over deep space");
+            let Some(back) = arrival.return_mission.as_ref() else {
+                assert!(world.fleets.is_empty(), "case {index}: nothing is left to fly home");
+                return Some(true);
+            };
+            // A speedup past the whole trip brings the fleet home the moment it is due: it has landed already.
+            if back.arrival <= back.departure {
+                assert!(world.fleets.is_empty(), "case {index}: a fleet due home at once has landed");
+                // The host stamps the landing with the return's own (earlier) second, before the hold ended, so only
+                // the ships are comparable: the world's clock has passed it.
+                if let Some(done) = case.back.as_ref().and_then(|d| d.origin_after.as_ref()) {
+                    assert_eq!(holds(&world, 0), { let mut host = done.ships.clone(); host.extend(done.defence.clone()); host }, "case {index}: the ships landed at once");
+                }
+                return Some(true);
+            }
+            let home = world.fleets.iter().find(|f| f.owner == 0).unwrap_or_else(|| panic!("case {index}: the fleet comes home"));
+            assert_eq!(home.arrive, back.departure, "case {index}: the flight home leaves at the end of the hold");
+            assert_eq!(home.home - home.arrive, (back.arrival - back.departure).max(0.0), "case {index}: the flight home");
+            let mut ships: HashMap<String, i64> = home.ships.iter().map(|&(id, n)| (id.to_string(), n)).collect();
+            ships.retain(|_, n| *n > 0);
+            assert_eq!(Some(ships), back.units.clone(), "case {index}: the ships flying home");
+            if let Some(cargo) = back.cargo {
+                assert_eq!(home.cargo.map(|r| r as i64), cargo, "case {index}: the cargo flying home");
+            }
             let Some(done) = &case.back else { return Some(true) };
             run_until(cat, &mut world, done.time);
             stock(done.origin_after.as_ref(), &world, 0, index, "back home");

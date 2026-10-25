@@ -225,7 +225,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    fn named(name: &str) -> Option<Kind> {
+    pub fn named(name: &str) -> Option<Kind> {
         Some(match name {
             "nothing" => Kind::Nothing,
             "resources" => Kind::Resources,
@@ -583,16 +583,25 @@ pub fn roll(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, 
 
 /// A whole arrival from the draws: `roll`, and a fight run through the host's Rust battle engine with a seed from `draws`.
 pub fn arrive(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32>, sent: &Sent, draws: &mut dyn Draws) -> Found {
+    arrive_with(rules, catalogue, research, sent, draws, None)
+}
+
+/// `arrive`, with a fight the referee already settled (the engine's result from the player's side, as the host's PHP
+/// engine produced it) instead of a fresh one.
+pub fn arrive_with(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32>, sent: &Sent, draws: &mut dyn Draws, recorded: Option<EngineResult>) -> Found {
     match roll(rules, catalogue, research, sent, draws) {
         Roll::Done(found) => found,
         Roll::Fight(enemy) => {
+            let rolled = enemy.kind;
+            if let Some(engine) = recorded {
+                return Found { rolled, ..settle_fight(rules, catalogue, sent, enemy, engine) };
+            }
             let seed = draws.int(1, i32::MAX as i64) as u64;
             let ours: Vec<(u32, i64)> = sent.fleet.iter().map(|(&id, &n)| (id, n)).collect();
             let theirs: Vec<(u32, i64)> = enemy.fleet.iter().map(|(&id, &n)| (id, n)).collect();
             let tech = tech_map(rules, enemy.tech);
             let battle = Battle { attacker: &ours, attacker_research: research, attacker_cargo: [0.0; 3], defender: &theirs, defender_research: &tech, defender_stock: [0.0; 3], defender_engineer: false, moon_exists: true, seed };
             let engine = combat::run_engine(&combat::engine_input(catalogue, catalogue, &battle));
-            let rolled = enemy.kind;
             Found { rolled, ..settle_fight(rules, catalogue, sent, enemy, engine) }
         }
     }

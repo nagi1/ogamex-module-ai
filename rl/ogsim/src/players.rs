@@ -1,16 +1,18 @@
 //! Scripted human-like players on the world (plan/rl/WORLD-SIM-PLAN.md, W7): a miner (the economy's player rule plus
-//! the odd cargo ship or probe), a raider (spy, raid, recycle) and a fleet saver (leaves before an attack lands).
-//! Roles come from the host's tables: a ship is movable when its speed is above zero, a cargo ship is the movable
-//! non-probe non-harvester with the most capacity per price, probes and harvesters are what the mission tables name.
-//! No object is named; targets are the nearest accounts by coordinate.
+//! the odd cargo ship or probe), a raider (spy, raid, recycle) and a fleet saver (leaves before an attack lands and
+//! recalls the fleet once it has passed). They play per account (the capital's slot; a colony only builds) and act at
+//! every login, including the ones with nothing to build. Roles come from the host's tables: a ship is movable when
+//! its speed is above zero, a cargo ship is the movable non-probe non-harvester with the most capacity per price,
+//! probes and harvesters are what the mission tables name. No object is named; targets are the nearest accounts by
+//! coordinate, the inactive ones first. Results are read from the world's event log.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::combat::{self, Battle};
+use crate::combat;
 use crate::economy::{Baseline, Catalogue, WEIGHTS};
 use crate::fleet::{self, SystemState};
-use crate::world::{Fleet, Mission, Rules, SpyReport, World};
+use crate::world::{Decision, EventKind, Mission, Outcome, Rules, SpyReport, World};
 
 const SLOTS: usize = 4;
 const NEIGHBOURS: usize = 5;
@@ -36,37 +38,52 @@ pub struct Ledger {
     pub spies: usize,
     pub saves_sent: usize,
     pub saves_refused: usize,
-    seen: HashSet<(usize, usize, u64)>,
+    /// Fleets recalled after the attack they dodged had passed.
+    pub recalls: usize,
+    /// Weighted price of the ships the players lost in fights.
+    pub lost: f64,
+    /// (attacker, target) pairs where the attacker's fleet was beaten: the raider does not go back.
+    pub beaten: HashSet<(usize, usize)>,
+    /// How many events of the world's log have been read.
+    read: usize,
 }
 
 pub struct Raid {
     pub attacker: usize,
     pub target: usize,
     pub arrive: f64,
-    /// Seen when the fleet turned home: what it brought back, fuel refund taken out.
+    /// Read from the fight's event: what the target lost to the raid.
     pub loot: Option<[f64; 3]>,
     /// The target held ships that can fly when the raid left.
     pub target_had_fleet: bool,
-    /// The target's owner sent them away before the arrival.
+    /// Read from the fight's event: no ship that can fly stood on the target when the raid arrived.
     pub saved: bool,
 }
 
 impl Ledger {
-    /// Every returning fleet seen for the first time is booked: loot of an attack, harvest of a recycler.
-    fn scan(&mut self, w: &World) {
-        for f in w.fleets.iter().filter(|f| f.returning) {
-            if !self.seen.insert((f.owner, f.target, f.home.to_bits())) { continue }
-            let brought = [f.cargo[0], f.cargo[1], f.cargo[2] - if f.mission == Mission::Attack { f.fuel / 2.0 } else { 0.0 }];
-            match f.mission {
-                Mission::Attack => {
-                    if let Some(r) = self.raids.iter_mut().find(|r| r.attacker == f.owner && r.target == f.target && r.arrive == f.arrive) { r.loot = Some(brought) }
+    /// Reads the events the world wrote since the last call: a fight settles a raid (its loot, whether anything that can
+    /// fly stood on the target, what the raider lost), a recycler's arrival books the harvest.
+    fn scan(&mut self, w: &World, cat: &Catalogue) {
+        for e in &w.events[self.read..] {
+            let price = |slot: usize, id: u32| w.rules[slot].units.index(id as i64).map_or(0.0, |u| weighted(w.rules[slot].units.units[u].price));
+            match (e.kind, e.mission) {
+                (EventKind::Fight, Mission::Attack) => {
+                    self.lost += e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
+                    if e.outcome == Outcome::Defeated { self.beaten.insert((e.owner, e.target)); }
+                    let research = w.research(cat, e.target);
+                    let stood = e.present.iter().any(|&(id, _)| movable(&w.rules[e.target], id, &research));
+                    if let Some(r) = self.raids.iter_mut().find(|r| r.attacker == e.owner && r.target == e.target && r.arrive == e.time) {
+                        r.loot = Some(e.gained);
+                        r.saved = !stood;
+                    }
                 }
-                Mission::Recycle => {
-                    for i in 0..3 { self.recycled[i] += brought[i] }
+                (EventKind::Arrival, Mission::Recycle) => {
+                    for i in 0..3 { self.recycled[i] += e.gained[i] }
                 }
                 _ => {}
             }
         }
+        self.read = w.events.len();
     }
 
     pub fn loot(&self) -> [f64; 3] {
@@ -136,10 +153,19 @@ fn account_distance(w: &World, a: usize, b: usize) -> i64 {
     fleet::distance(&w.rules[a].settings, w.coords[a], w.coords[b], &|_, _| SystemState::Active)
 }
 
-/// The nearest other accounts by coordinate, closest first.
-fn nearest(w: &World, a: usize, n: usize) -> Vec<usize> {
-    let mut others: Vec<usize> = (0..w.games.len()).filter(|&b| b != a).collect();
+/// The other accounts (their capitals) by coordinate, closest first.
+fn others_by_distance(w: &World, a: usize) -> Vec<usize> {
+    let mut others: Vec<usize> = (0..w.games.len()).filter(|&b| b != a && w.account_of(b) == b).collect();
     others.sort_by_key(|&b| (account_distance(w, a, b), b));
+    others
+}
+
+/// The nearest other accounts, the inactive ones (OGame's 'i') before the rest, each group closest first.
+fn nearest(w: &mut World, cat: &Catalogue, a: usize, n: usize) -> Vec<usize> {
+    let now = w.games[a].t;
+    let mut others = others_by_distance(w, a);
+    let inactive: HashSet<usize> = others.iter().copied().filter(|&b| w.inactive(cat, b, now)).collect();
+    others.sort_by_key(|b| !inactive.contains(b));
     others.truncate(n);
     others
 }
@@ -154,14 +180,11 @@ pub fn account_value(w: &World, a: usize) -> f64 {
     w.games[a].value() + shelf + queued + flying
 }
 
-/// Attack and hull of a stack of units at its owner's research, as the host's engine input states them.
+/// Attack and hull of a stack of units at its owner's research, as the host's engine reads them; units that stay out
+/// of a fight count for nothing.
 fn strength(rules: &Rules, research: &HashMap<u32, u32>, units: &[(u32, i64)]) -> (f64, f64) {
-    let battle = Battle { attacker: units, attacker_research: research, attacker_cargo: [0.0; 3], defender: &[], defender_research: research, defender_stock: [0.0; 3], defender_engineer: false, moon_exists: false, seed: 0 };
-    let input = combat::engine_input(&rules.combat, &rules.combat, &battle);
-    let Some(stacks) = input["attacker_fleets"][0]["units"].as_object() else { return (0.0, 0.0) };
-    stacks.values().fold((0.0, 0.0), |t, s| {
-        let n = s["amount"].as_f64().unwrap_or(0.0);
-        (t.0 + n * s["attack_power"].as_f64().unwrap_or(0.0), t.1 + n * s["hull_plating"].as_f64().unwrap_or(0.0))
+    units.iter().filter(|&&(id, _)| rules.combat.fights(id)).fold((0.0, 0.0), |t, &(id, n)| {
+        (t.0 + n as f64 * rules.combat.attack(id, research) as f64, t.1 + n as f64 * rules.combat.hull(id, research) as f64)
     })
 }
 
@@ -186,12 +209,16 @@ impl Miner {
         Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false }
     }
 
-    /// The economy's pick for the deciding queue (None lets the login pass), after any ship order.
+    /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
+    /// pick), after any ship order. Only a capital orders ships: a colony only builds.
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize) -> Option<usize> {
         let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
-        let pick = cat.baseline(planet, queue, Baseline::Player, &mut self.rng);
+        let pick = match w.decision_kind(a) {
+            Decision::Build => cat.baseline(planet, queue, Baseline::Player, &mut self.rng),
+            Decision::Idle => None,
+        };
         let overflow = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
-        if pick.is_none() || overflow || self.eager {
+        if w.account_of(a) == a && (pick.is_none() || overflow || self.eager) {
             self.order_ships(w, cat, a);
         }
         pick
@@ -232,10 +259,10 @@ impl Raider {
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
         let pick = self.miner.act(w, cat, a);
         let now = w.games[a].t;
-        if !self.hostile || now == self.last { return pick }
+        if !self.hostile || now == self.last || w.account_of(a) != a { return pick }
         self.last = now;
         let Some(kit) = Kit::of(w, cat, a) else { return pick };
-        for target in nearest(w, a, NEIGHBOURS) {
+        for target in nearest(w, cat, a, NEIGHBOURS) {
             if w.fleets.iter().filter(|f| f.owner == a).count() >= SLOTS { break }
             self.recycle(w, cat, a, target, ledger);
             if self.raid(w, cat, a, target, kit, ledger) { continue }
@@ -265,7 +292,7 @@ impl Raider {
     fn raid(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, kit: Kit, ledger: &mut Ledger) -> bool {
         let now = w.games[a].t;
         let Some(report) = Self::last_report(w, a, target) else { return false };
-        if now - report.time > REPORT_HOURS * 3600.0 || self.hit.get(&target).is_some_and(|&t| now - t < RAID_COOLDOWN) { return false }
+        if now - report.time > REPORT_HOURS * 3600.0 || self.hit.get(&target).is_some_and(|&t| now - t < RAID_COOLDOWN) || ledger.beaten.contains(&(a, target)) { return false }
         let (Some(ships), Some(defence)) = (&report.ships, &report.defence) else { return false };
         let rules = Arc::clone(&w.rules[a]);
         let research = w.research(cat, a);
@@ -311,44 +338,58 @@ impl Raider {
     }
 }
 
-/// Watches for hostile fleets bound for its planet and sends its ships out of reach, to come home after the attack.
+/// Watches for hostile fleets bound for its capital and sends its ships out of reach; once the attack has landed it
+/// recalls them, so they are home in the time they had flown instead of after the whole round trip.
 pub struct FleetSaver {
     pub miner: Miner,
     /// Attacks (attacker, arrival bits) already answered.
     answered: HashSet<(usize, u64)>,
+    /// Fleets sent away (departure bits) with the second of the attack they dodge.
+    saving: Vec<(u64, f64)>,
 }
 
 impl FleetSaver {
     pub fn new(seed: u64) -> FleetSaver {
-        FleetSaver { miner: Miner::new(seed), answered: HashSet::new() }
+        FleetSaver { miner: Miner::new(seed), answered: HashSet::new(), saving: Vec::new() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
         let pick = self.miner.act(w, cat, a);
+        if w.account_of(a) != a { return pick }
         let now = w.games[a].t;
-        let coming: Vec<Fleet> = w.fleets.iter().filter(|f| f.target == a && f.mission == Mission::Attack && !f.returning && f.arrive > now).cloned().collect();
-        let fresh: Vec<&Fleet> = coming.iter().filter(|f| self.answered.insert((f.owner, f.arrive.to_bits()))).collect();
-        for attack in fresh {
-            let saved = self.leave(w, cat, a, attack.arrive - now, ledger);
+        self.recall_passed(w, a, now, ledger);
+        let coming: Vec<(usize, f64)> = w.fleets.iter().filter(|f| f.target == a && f.mission == Mission::Attack && !f.returning && f.arrive > now).map(|f| (f.owner, f.arrive)).collect();
+        let fresh: Vec<f64> = coming.into_iter().filter(|c| self.answered.insert((c.0, c.1.to_bits()))).map(|c| c.1).collect();
+        for lands in fresh {
+            let saved = self.leave(w, cat, a, lands - now, ledger);
+            if saved { self.saving.push((w.fleets.last().map_or(0, |f| f.departed.to_bits()), lands)) }
             ledger.saves_sent += usize::from(saved);
             ledger.saves_refused += usize::from(!saved);
-            if let Some(r) = ledger.raids.iter_mut().find(|r| r.attacker == attack.owner && r.target == a && r.arrive == attack.arrive) { r.saved = saved }
         }
         pick
     }
 
-    /// Everything that flies goes to the nearest account it cannot be back from before the attack lands, at the
-    /// fastest speed that is enough; the mission is a transport with an empty hold, which only keeps the ships away.
+    /// Turns home every saved fleet whose attack has landed and which is still on its way out.
+    fn recall_passed(&mut self, w: &mut World, a: usize, now: f64, ledger: &mut Ledger) {
+        let (passed, waiting): (Vec<_>, Vec<_>) = self.saving.iter().copied().partition(|&(_, lands)| lands <= now);
+        self.saving = waiting;
+        for (departed, _) in passed {
+            let Some(f) = w.fleets.iter().position(|f| f.owner == a && !f.returning && f.departed.to_bits() == departed) else { continue };
+            if w.recall(a, f).is_ok() { ledger.recalls += 1 }
+        }
+    }
+
+    /// Everything that flies goes to the nearest account it cannot be back from before the attack lands, at the slowest
+    /// speed (the cheapest fuel, and the longest outward leg to recall from at the next login); the mission is a
+    /// transport with an empty hold, which only keeps the ships away.
     fn leave(&self, w: &mut World, cat: &Catalogue, a: usize, remaining: f64, ledger: &mut Ledger) -> bool {
         let rules = Arc::clone(&w.rules[a]);
         let research = w.research(cat, a);
         let ships: Vec<(u32, i64)> = stack(&rules, &w.yards[a].counts).into_iter().filter(|&(id, _)| movable(&rules, id, &research)).collect();
         if ships.is_empty() { return false }
         let slowest = rules.fleet.slowest_speed(&ships, &research);
-        let mut others = nearest(w, a, w.games.len());
-        others.reverse();
-        others.sort_by_key(|&b| account_distance(w, a, b));
-        for speed in [10.0, 5.0, 2.0, 1.0] {
+        let others = others_by_distance(w, a);
+        for speed in [1.0, 2.0, 5.0, 10.0] {
             for &b in &others {
                 let away = 2 * fleet::flight_seconds(&rules.settings, Mission::Transport as u32, account_distance(w, a, b), slowest, speed);
                 if (away as f64) > remaining + 120.0 && send(w, cat, a, b, Mission::Transport, &ships, speed, ledger).is_ok() { return true }
@@ -368,7 +409,7 @@ pub enum Player {
 impl Player {
     /// What the account does at its deciding login: the economy's pick for the queue.
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
-        ledger.scan(w);
+        ledger.scan(w, cat);
         match self {
             Player::Miner(p) => p.act(w, cat, a),
             Player::Raider(p) => p.act(w, cat, a, ledger),
@@ -392,8 +433,9 @@ mod tests {
         seconds: f64,
     }
 
-    fn seed() -> u64 {
-        std::env::var("OGSIM_SEED").ok().and_then(|s| s.parse().ok()).unwrap_or(5)
+    /// The seeds the test plays: the one in OGSIM_SEED, or 1 to 8.
+    fn seeds() -> Vec<u64> {
+        std::env::var("OGSIM_SEED").ok().and_then(|s| s.parse().ok()).map_or_else(|| (1..=8).collect(), |s| vec![s])
     }
 
     fn role(a: usize) -> usize {
@@ -406,6 +448,8 @@ mod tests {
         let rules = Arc::new(Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")).ok()?);
         let configs: Vec<usize> = (0..ACCOUNTS).collect();
         let mut world = World::new(&cat, &configs, HOURS, 0.0, seed);
+        // A fully built account still logs in, to raid or to save its fleet.
+        world.enable_idle_logins(&cat);
         let coords = (0..ACCOUNTS).map(|a| Coord { galaxy: 1, system: 10 + 2 * a as i64, position: 4 + (a % 8) as i64 }).collect();
         world.arm(vec![Arc::clone(&rules); ACCOUNTS], coords);
         // Starting stock of ships: raiders a hold and probes, savers a fleet to protect, miners a probe.
@@ -441,22 +485,27 @@ mod tests {
                 None => world.wait(&cat, a),
             }
         }
-        ledger.scan(&world);
+        ledger.scan(&world, &cat);
         println!("decisions {n}, last per account (h) {:?}", lastd.iter().map(|t| (t / 3600.0) as i64).collect::<Vec<_>>());
         Some((cat, Run { world, ledger, seconds: start.elapsed().as_secs_f64() }))
     }
 
-    #[test]
-    fn miners_raiders_and_savers_play_ten_days() {
-        let Some((_, raided)) = run(true, seed()) else { return eprintln!("no u1 catalogues; skipped") };
-        let (_, quiet) = run(false, seed()).unwrap();
+    /// One seed: the raided world against its peaceful twin. Returns (saves ok, saves late, fleets recalled) of the
+    /// savers' resolved raids.
+    fn play_seed(seed: u64) -> Option<(usize, usize, usize)> {
+        let (_, raided) = run(true, seed)?;
+        let (_, quiet) = run(false, seed)?;
         let (w, l) = (&raided.world, &raided.ledger);
         let values: Vec<f64> = (0..ACCOUNTS).map(|a| account_value(w, a)).collect();
         let quiet_values: Vec<f64> = (0..ACCOUNTS).map(|a| account_value(&quiet.world, a)).collect();
-        let had: Vec<&Raid> = l.raids.iter().filter(|r| role(r.target) == 1 && r.target_had_fleet).collect();
+        let had: Vec<&Raid> = l.raids.iter().filter(|r| role(r.target) == 1 && r.target_had_fleet && r.loot.is_some()).collect();
         let (ok, failed) = (had.iter().filter(|r| r.saved).count(), had.iter().filter(|r| !r.saved).count());
         let loot = l.loot();
-        println!("\nraids {} (resolved {}), spies {}, recycles {}, saves ok {} / late {} (refused sends {})", l.raids.len(), l.raids.iter().filter(|r| r.loot.is_some()).count(), l.spies, l.recycles, ok, failed, l.saves_refused);
+        println!("\nseed {seed}: raids {} (resolved {}), spies {}, recycles {}, saves ok {} / late {} (refused sends {}, recalled {}), ships lost {:.0}", l.raids.len(), l.raids.iter().filter(|r| r.loot.is_some()).count(), l.spies, l.recycles, ok, failed, l.saves_refused, l.recalls, l.lost);
+        if std::env::var("OGSIM_TRACE").is_ok() {
+            for r in had.iter() { println!("  raid on saver {} by {}: arrives {:.0}s ({:.1}h) saved {} loot {:?}", r.target, r.attacker, r.arrive, r.arrive / 3600.0, r.saved, r.loot.map(|l| weighted(l) as i64)); }
+            for e in w.events.iter().filter(|e| matches!(e.kind, EventKind::Recall) || (e.mission == Mission::Transport && role(e.owner) == 1)) { println!("  event {:?} {:?} owner {} target {} at {:.0}", e.kind, e.mission, e.owner, e.target, e.time); }
+        }
         println!("loot m/c/d {:.0}/{:.0}/{:.0} = {:.0} weighted, fuel {:.0}, recycled {:.0}", loot[0], loot[1], loot[2], weighted(loot), l.fuel, weighted(l.recycled));
         println!("{:<8} {:>14} {:>14} {:>9}", "role", "value (raid)", "value (quiet)", "delta %");
         for (r, name) in ["raider", "saver", "miner"].iter().enumerate() {
@@ -467,17 +516,35 @@ mod tests {
         let hours = ACCOUNTS as f64 * HOURS;
         println!("throughput: {:.0} account-hours/s ({:.2}s for both runs: {:.2}s raided, {:.2}s quiet)", hours / raided.seconds, raided.seconds + quiet.seconds, raided.seconds, quiet.seconds);
 
-        assert!(!l.raids.is_empty(), "no raid was flown");
-        assert!(weighted(loot) > 0.0, "no loot was brought home");
-        assert!(ok >= 1, "no fleet save succeeded");
-        assert!(failed >= 1, "no fleet save failed");
+        assert!(!l.raids.is_empty(), "seed {seed}: no raid was flown");
+        assert!(weighted(loot) > 0.0, "seed {seed}: no loot was brought home");
         for a in 0..ACCOUNTS {
-            assert!(w.games[a].planet.res.iter().all(|&r| r >= 0.0), "account {a} went negative: {:?}", w.games[a].planet.res);
+            assert!(w.games[a].planet.res.iter().all(|&r| r >= 0.0), "seed {seed}: account {a} went negative: {:?}", w.games[a].planet.res);
             assert!(w.yards[a].counts.iter().all(|&n| n < u64::MAX / 2));
         }
+        // The loot read from the log is what the targets lost: every logged fight's loot left the target's stock.
+        let logged: f64 = w.events.iter().filter(|e| e.kind == EventKind::Fight && e.mission == Mission::Attack).map(|e| weighted(e.gained)).sum();
+        assert!((logged - weighted(loot)).abs() < 1e-6, "seed {seed}: the ledger's loot {} is not the log's {logged}", weighted(loot));
         // What raiding moved: the loot, the fuel and what was lost; the rest of the gap would be a leak.
         let (v, q): (f64, f64) = (values.iter().sum(), quiet_values.iter().sum());
-        let moved = weighted(loot) + l.fuel + weighted(l.recycled);
-        assert!((v - q).abs() <= moved + 0.03 * q, "world value {v:.0} vs quiet {q:.0}: gap {:.0} is more than raids moved ({moved:.0})", (v - q).abs());
+        let moved = weighted(loot) + l.fuel + weighted(l.recycled) + l.lost;
+        assert!((v - q).abs() <= moved + 0.03 * q, "seed {seed}: world value {v:.0} vs quiet {q:.0}: gap {:.0} is more than raids moved ({moved:.0})", (v - q).abs());
+        Some((ok, failed, l.recalls))
+    }
+
+    #[test]
+    fn miners_raiders_and_savers_play_ten_days() {
+        let mut saves = Vec::new();
+        for seed in seeds() {
+            let Some(result) = play_seed(seed) else { return eprintln!("no u1 catalogues; skipped") };
+            saves.push((seed, result));
+        }
+        println!("\nsaves ok / late / recalled by seed: {saves:?}");
+        // A save needs a login between the raid leaving and landing, and the flights are short, so a seed may have none;
+        // the seed set must show saves, failures and a recall.
+        let total = |pick: fn(&(usize, usize, usize)) -> usize| saves.iter().map(|(_, r)| pick(r)).sum::<usize>();
+        assert!(total(|r| r.0) >= 1, "no fleet save succeeded on any seed");
+        assert!(total(|r| r.1) >= 1, "no fleet save failed on any seed: a save that cannot fail is not a save");
+        assert!(total(|r| r.2) >= 1, "no saved fleet was ever recalled");
     }
 }

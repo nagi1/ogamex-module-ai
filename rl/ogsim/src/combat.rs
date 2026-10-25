@@ -42,6 +42,9 @@ struct RawProperties {
     shield: RawTable,
     attack: RawTable,
     capacity: RawTable,
+    /// What a ship can hold of deuterium for its flight; a catalogue written before this was exported lacks it.
+    #[serde(default)]
+    fuel_capacity: Option<RawTable>,
 }
 
 #[derive(Deserialize)]
@@ -200,6 +203,40 @@ impl CombatCatalogue {
     /// A defence (the host's `defense` type), as against a ship.
     pub fn is_defense(&self, id: u32) -> bool {
         self.unit(id).defense
+    }
+
+    /// Whether the unit takes part in a fight (missiles and interceptors, for one, do not).
+    pub fn fights(&self, id: u32) -> bool {
+        !self.non_combatants.contains(&id)
+    }
+
+    /// One unit's attack power at these research levels, as the engine's input states it.
+    pub fn attack(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+        self.cell(&self.unit(id).properties.attack, research)
+    }
+
+    /// One unit's hull plating at these research levels, as the engine's input states it (a tenth of the structure).
+    pub fn hull(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+        self.cell(&self.unit(id).properties.structural_integrity, research).div_euclid(10)
+    }
+
+    /// One unit's shield points at these research levels.
+    pub fn shield(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+        self.cell(&self.unit(id).properties.shield, research)
+    }
+
+    /// One unit's cargo capacity at these research levels.
+    pub fn unit_capacity(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+        self.cell(&self.unit(id).properties.capacity, research)
+    }
+
+    /// UnitCollection::getTotalFuelCapacity: the deuterium the fleet's tanks hold, which must cover its flight's fuel
+    /// (the host refuses with "You don't have sufficient storage capacity!"). Without the table it is the cargo capacity.
+    pub fn fuel_capacity(&self, units: &Units, research: &HashMap<u32, u32>) -> i64 {
+        units.iter().map(|(&id, &n)| {
+            let properties = &self.unit(id).properties;
+            self.cell(properties.fuel_capacity.as_ref().unwrap_or(&properties.capacity), research) * n
+        }).sum()
     }
 
     /// UnitCollection::getTotalCargoCapacity.
