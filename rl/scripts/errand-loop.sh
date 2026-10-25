@@ -21,7 +21,7 @@ ACCOUNTS=${ACCOUNTS:-8}
 CONTROLLED=${CONTROLLED:-4}
 SEED=${SEED:-1}
 KL=${KL:-0.5}
-DATA=${DATA:-../../storage/rl/ogsim}
+DATA=${DATA:-../../../storage/rl/ogsim}
 OUT=${OUT:-$DATA/runs/loop}
 
 echo "== behaviour cloning the teacher ($ROWS rows)"
@@ -42,8 +42,9 @@ print(f"  value vs the scripted teacher : {last['value_vs_rule_mean']:+.2%}  95%
 print(f"  accounts better than teacher  : {last['better_share_accounts']:.0%} of {last['accounts']}")
 print(f"  differs from teacher          : {last.get('differs_from_rule_share', 0):.0%} of {last.get('decisions_of_kind', 0):,} decisions")
 if 'economy_vs_rule_mean' in last:
-    print(f"  economy / fleet share         : {last['economy_vs_rule_mean']:+.2%} / "
-          f"{last['accounts_with_less_fleet']:.0%} of accounts hold less fleet")
+    print(f"  economy vs the teacher        : {last['economy_vs_rule_mean']:+.2%}")
+    print(f"  fleet vs the teacher          : x{1 + last['fleet_vs_rule_mean']:,.0f}"
+          f" ({1 - last['accounts_with_less_fleet']:.0%} of accounts hold more)")
 print(f"  worst account                 : {last['worst_account']:+.2%}")
 verdict = "PASS" if last["value_vs_rule_mean"] > 0 and last["ci95_world_bootstrap"][0] > 0 else "FAIL"
 print(f"  verdict                       : {verdict} (needs value > 0 and its whole CI above 0)")

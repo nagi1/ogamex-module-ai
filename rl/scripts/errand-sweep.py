@@ -59,7 +59,7 @@ def run_config(python: str, out: Path, config: dict, args) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="errand-sweep", description=__doc__.splitlines()[0])
     ap.add_argument("--baseline", required=True, help="the behaviour-cloned checkpoint every run starts from")
-    ap.add_argument("--out", default="../../storage/rl/ogsim/runs/sweep")
+    ap.add_argument("--out", default="../../../storage/rl/ogsim/runs/sweep")
     ap.add_argument("--minutes", type=float, default=3.0)
     ap.add_argument("--actors", type=int, default=12)
     ap.add_argument("--worlds", type=int, default=24)
