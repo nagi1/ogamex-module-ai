@@ -64,9 +64,9 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | Row | What | Proof | Status |
 | --- | --- | --- | --- |
 | W1 | Units that change production (solar satellites, crawlers) counted by the economy, read from host tables | Rust test exact against host production on random unit counts; games without such units bit-identical | **agent running** (owns the production code in `economy.rs`, `ExportAiEconomyCatalogueAction.php`, `EconomyCatalogueExportTest.php`) |
-| W2 | Host mission cases: `ai:rl-mission-cases {universe} {out}` for transport, deploy, espionage, attack and recycle through the host's real dispatch and processing, with writes rolled back | Pest `MissionCasesExportTest`; `storage/rl/ogsim/mission-cases-u1.json` (~2 000 cases) | **agent running** (owns only new PHP files plus its provider lines) |
-| W3 | World parity against W2: each case replayed in `world.rs` gives the host's times, fuel, stock, ships, debris and moon (battles: settle given the host's survivors, as `combat.rs` tests) | Rust test over every case | open (needs W2) |
-| W4 | Espionage (probes, the report's sections, counter-espionage) and recycle (debris, recycler capacity read from host data) in `world.rs` | W3's cases for those missions | open (needs W2) |
+| W2 | Host mission cases: `ai:rl-mission-cases {universe} {out}` for transport, deploy, espionage, attack and recycle through the host's real dispatch and processing, with writes rolled back | Pest `MissionCasesExportTest`; `storage/rl/ogsim/mission-cases-u1.json` (~2 000 cases) | **done** `fc4f464`: 2 000 cases, 1 751 accepted; every attack seed replays the host fight |
+| W3 | World parity against W2: each case replayed in `world.rs` gives the host's times, fuel, stock, ships, debris and moon (battles: settle given the host's survivors, as `combat.rs` tests) | Rust test over every case | **agent running** (owns `world.rs`, `rl/ogsim/tests/`) |
+| W4 | Espionage (probes, the report's sections, counter-espionage) and recycle (debris, recycler capacity read from host data), and deploy as a mission rule, in `world.rs` | W3's cases for those missions | **agent running** with W3 |
 | W5 | Python binding `VecWorld`: N accounts per world, observations per decision kind (building, research, shipyard order, fleet: target and ships), masks, reward per account | `train_ppo.py`-style smoke run; throughput measured (target: ≥ 1 M account-hours/s per core) | open |
 | W6 | Colonisation and multiple planets per account: an account owns several economies, research is shared across them and done at one lab, and deploy works between own planets | W2 cases for colonise and deploy; research equal on every planet | open |
 | W7 | Scripted human-like baselines on the world: a miner (today's player rule), a raider (spy inactives, raid with cargos, recycle), and a fleet saver (leaves on an incoming attack at a login) | Bands from `plan/rl/human-growth-check.md` and the external data (memory `external-ogame-data`) | open |
@@ -78,7 +78,8 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | Agent task | Row | Files it owns | Started |
 | --- | --- | --- | --- |
 | Economy: satellites and crawlers | W1 | `economy.rs` (production code), `ExportAiEconomyCatalogueAction.php`, `EconomyCatalogueExportTest.php`, minimal edits to `units.rs` | 25 Oct |
-| Mission parity cases from PHP | W2 | new `DrawAiMissionCasesAction.php`, the `ai:rl-mission-cases` command, `MissionCasesExportTest.php`, provider lines | 25 Oct |
+| World parity plus espionage, recycle and deploy | W3, W4 | `world.rs`, `rl/ogsim/tests/` | 25 Oct |
+| Lead: Python binding `VecWorld` | W5 | `python.rs` | 25 Oct |
 
 Agents commit nothing; the lead commits by file name. If an agent's session is gone, re-run its row from the
 description above. The work so far is in the working tree, so check `git status` first.
@@ -92,3 +93,13 @@ description above. The work so far is in the working tree, so check `git status`
 | 25 Oct | `b9d1a84` | Combat module: host engine linked, settling exact |
 | 25 Oct | `a95f0a9` | Units module exact on three universes |
 | 25 Oct | `ef9ab6a` | World plays raids and transports; conservation tests |
+| 25 Oct | `fc4f464` | Mission referee `ai:rl-mission-cases` |
+
+## 7. Host behaviour that differs from real OGame (the simulator mirrors the host; the owner decides on host fixes)
+
+- Half the fuel is added to the cargo of every mission (`FleetMissionService::getResources`), not only deployment;
+  recycle is the exception. A transport delivers its deuterium plus fuel/2, and attack and espionage fleets carry
+  fuel/2 home.
+- The depth of an espionage report uses the probes sent, not those that survived. A report is written even when
+  every probe dies.
+- The defender's wreck field is created even when no ship was lost (41 of 357 attacks).
