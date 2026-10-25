@@ -33,7 +33,14 @@ fn main() {
     let configs: Vec<usize> = (0..accounts).collect();
     let mut world = World::new(&cat, &configs, hours, 0.0, seed);
     world.enable_idle_logins(&cat);
-    let coords = (0..accounts).map(|a| Coord { galaxy: 1, system: 10 + 2 * a as i64, position: 4 + (a % 8) as i64 }).collect();
+    // Half the accounts are neighbours (a raider needs targets within reach) and half sit across the universe (a saver
+    // needs somewhere far enough to be out when an attack lands).
+    let systems = rules.settings.number_of_systems as i64;
+    let coords = (0..accounts as i64).map(|a| if a % 2 == 0 {
+        Coord { galaxy: 1, system: 100 + a, position: 4 + a % 5 }
+    } else {
+        Coord { galaxy: 3, system: 1 + (a * 97) % systems, position: 8 + a % 3 }
+    }).collect();
     world.arm(vec![Arc::clone(&rules); accounts], coords);
 
     let mut players: Vec<Player> = (0..accounts).map(|a| {

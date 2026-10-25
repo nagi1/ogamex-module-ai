@@ -454,6 +454,13 @@ impl FleetSaver {
         if w.account_of(a) != a { return pick }
         let now = w.games[a].t;
         self.recall_passed(w, a, now, ledger);
+        // Before the night the fleet goes out for it, as a player's does: the next login is hours away and a raid does not
+        // wait for it. A save that only answered an attack seen while awake could never happen at all (measured: zero in
+        // ten days across four savers).
+        let hours_to_night = (w.games[a].sleep_start - (now % 86_400.0) / 3600.0).rem_euclid(24.0);
+        if hours_to_night <= 1.0 && self.leave(w, cat, a, w.games[a].sleep_hours * 3600.0, ledger) {
+            ledger.saves_sent += 1;
+        }
         let coming: Vec<(usize, f64)> = w.fleets.iter().filter(|f| f.target == a && f.mission == Mission::Attack && !f.returning && f.arrive > now).map(|f| (f.owner, f.arrive)).collect();
         let fresh: Vec<f64> = coming.into_iter().filter(|c| self.answered.insert((c.0, c.1.to_bits()))).map(|c| c.1).collect();
         for lands in fresh {
