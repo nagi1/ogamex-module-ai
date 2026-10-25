@@ -15,6 +15,12 @@ pub mod fleet;
 pub mod combat;
 /// Many accounts in one universe on one clock: missions, arrivals and the events that join the modules.
 pub mod world;
+/// Expedition outcomes.
+pub mod expedition;
+/// Missile strikes and moon destruction.
+pub mod strike;
+/// Scripted human-like players on the world: miner, raider, fleet saver.
+pub mod players;
 
 pub use economy::*;
 
