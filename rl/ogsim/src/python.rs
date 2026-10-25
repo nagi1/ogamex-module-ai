@@ -110,10 +110,10 @@ impl VecEnv {
         let mut cands = vec![0f32; n * k * CAND_DIM];
         let mut legal = vec![0u8; n * k];
         for (i, g) in self.games.iter().enumerate() {
-            self.catalogue.state_features(g, &mut state[i * STATE_DIM..(i + 1) * STATE_DIM]);
+            self.catalogue.state_features(&g.planet, &mut state[i * STATE_DIM..(i + 1) * STATE_DIM]);
             for j in 0..k {
                 let at = (i * k + j) * CAND_DIM;
-                self.catalogue.candidate_features(g, j, &mut cands[at..at + CAND_DIM]);
+                self.catalogue.candidate_features(&g.planet, j, &mut cands[at..at + CAND_DIM]);
                 legal[i * k + j] = u8::from(!g.done && self.catalogue.queue_legal(g, j));
             }
         }
@@ -173,7 +173,7 @@ impl VecEnv {
         };
         let cat = Arc::clone(&self.catalogue);
         let mut rng = self.rng;
-        let choices = self.games.iter().map(|g| if g.done { -1 } else { cat.baseline(g, kind, &mut rng).map_or(-1, |k| k as i64) }).collect();
+        let choices = self.games.iter().map(|g| if g.done { -1 } else { cat.baseline(&g.planet, g.queue, kind, &mut rng).map_or(-1, |k| k as i64) }).collect();
         self.rng = next_random(&mut rng);
         Ok(choices)
     }
