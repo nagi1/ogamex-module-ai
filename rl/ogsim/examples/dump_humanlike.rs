@@ -61,7 +61,8 @@ fn main() {
     }
 
     let rows: Vec<_> = (0..accounts).map(|a| {
-        let times = &logins[a];
+        // What an observer sees is when the player logged in, not when a build landed at the same second.
+        let times = &world.games[a].login_times;
         let mut hours_seen: Vec<i64> = times.iter().map(|t| ((t % 86_400.0) / 3600.0) as i64).collect();
         hours_seen.sort_unstable();
         hours_seen.dedup();

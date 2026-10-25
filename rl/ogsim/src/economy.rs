@@ -23,6 +23,19 @@ pub const CAND_DIM: usize = CAND_NAMES.len();
 const FAR_HOURS: f64 = 10_000.0;
 /// A time no event has or will have. It must be beyond every real instant, because a world can start at any second
 /// (the mission cases start at unix seconds, far past any finite "never" small enough to look like a sentinel).
+/// The shortest gap between two actions the host does not flag (`HostDetector`: under ten seconds reads as a script).
+const MIN_GAP: f64 = 10.0;
+const DAY: f64 = 86_400.0;
+
+fn awake(game: &Game, t: f64) -> f64 {
+    let hour = (t % DAY) / 3600.0;
+    let end = game.sleep_start + game.sleep_hours;
+    let inside = if end <= 24.0 { hour >= game.sleep_start && hour < end } else { hour >= game.sleep_start || hour < end - 24.0 };
+    if !inside { return t }
+    let resume = if end <= 24.0 { end } else { end - 24.0 };
+    let day = (t / DAY).floor();
+    if resume > hour { day * DAY + resume * 3600.0 } else { (day + 1.0) * DAY + resume * 3600.0 }
+}
 const NEVER: f64 = f64::INFINITY;
 
 #[derive(Deserialize)]
@@ -234,6 +247,10 @@ pub struct Game {
     /// The account's logins so far (ascending) and the generator that draws the next gap.
     pub login_times: Vec<f64>,
     pub login_rng: u64,
+    /// When the player sleeps: the hour of day the dark window starts and how many hours it lasts (drawn per account, so
+    /// two accounts do not share a night). A player logs in outside it or not at all.
+    pub sleep_start: f64,
+    pub sleep_hours: f64,
     /// (end second, object index) of the builds under way, earliest first; the level lands when the clock reaches it.
     pub pending: Vec<(f64, usize)>,
     /// (start second, object index, end second, stock before paying) of every build, for traces and the host replay.
@@ -361,7 +378,11 @@ impl Catalogue {
         let c = &self.planets[config];
         let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone() };
         self.refresh(&mut planet);
-        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, pending: Vec::new(), history: Vec::new(), trace: None }
+        // A night between six and eight hours (the host flags a dark period under six), starting at a drawn hour.
+        let mut seed = login_seed | 1;
+        let sleep_start = (next_random(&mut seed) % 24) as f64;
+        let sleep_hours = 6.0 + (next_random(&mut seed) % 3) as f64;
+        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, sleep_start, sleep_hours, pending: Vec::new(), history: Vec::new(), trace: None }
     }
 
     /// The host's production row of object k at `level` under the planet's research levels and units, if k produces
@@ -567,6 +588,11 @@ impl Catalogue {
     }
 
     /// The first login at or after `x` (strictly after with `later`); with no gap table the account is always there.
+/// The shortest gap between two actions the host does not flag (`HostDetector`: under ten seconds reads as a script).
+
+/// The first second at or after `t` outside the account's night: a player sleeps, and the host flags a dark period under
+/// six hours as much as it flags twenty-four hours of activity.
+
     pub fn login(&self, game: &mut Game, x: f64, later: bool) -> f64 {
         if self.login_gaps.is_empty() {
             return x;
@@ -577,7 +603,7 @@ impl Catalogue {
         while game.login_times.last().is_some_and(|&last| if later { last <= x } else { last < x }) {
             let gap = self.login_gaps[(next_random(&mut game.login_rng) % self.login_gaps.len() as u64) as usize];
             let last = *game.login_times.last().unwrap();
-            game.login_times.push(last + gap.max(1.0));
+            game.login_times.push(awake(game, last + gap.max(MIN_GAP)));
         }
         let at = game.login_times.partition_point(|&t| if later { t <= x } else { t < x });
         game.login_times[at]

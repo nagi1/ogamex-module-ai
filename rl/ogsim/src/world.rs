@@ -1163,6 +1163,8 @@ mod tests {
             give(w, 0, 202, 10);
             w.games[0].planet.res = [50_000.0, 20_000.0, 20_000.0];
             w.games.iter_mut().for_each(|g| g.planet.rate = [0.0; 3]);
+            // This is about the recall's timing, so nobody sleeps through it.
+            w.games.iter_mut().for_each(|g| g.sleep_hours = 0.0);
         }
         world.next_decision(&cat).unwrap();
         world.dispatch(&cat, 0, 1, Mission::Transport, &[(202, 10)], [1000.0, 0.0, 0.0], 1.0).unwrap();
@@ -1961,4 +1963,3 @@ mod tests {
         }
     }
 }
-
