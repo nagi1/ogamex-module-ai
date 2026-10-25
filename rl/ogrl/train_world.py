@@ -481,7 +481,7 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
 
 # ------------------------------------------------------------------------------------------------- evaluator
 
-def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int]) -> np.ndarray:
+def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int], counts: list[int] | None = None) -> np.ndarray:
     """Each seed is one world of `accounts` accounts played to the horizon. The player rule decides the controlled slots, or the model
     does (greedy) for its queue. Returns final values [worlds, accounts] of each world's first game."""
     worlds = [load_world(args, seed, 1, catalogue) for seed in seeds]
@@ -497,6 +497,11 @@ def play_arm(args, dims, model, device: str, catalogue: str, seeds: list[int]) -
             greedy = logits.argmax(1).cpu().numpy()
             kinds = [worlds[i].decisions()[0][1] for i in alive]
             actions = [int(g) if kind == args.queue and legal[j].any() else p for j, (g, kind, p) in enumerate(zip(greedy, kinds, actions))]
+            if counts is not None:
+                for g, kind, p in zip(greedy, kinds, actions):
+                    if kind == args.queue:
+                        counts[0] += 1
+                        counts[1] += int(int(g) != int(p))
         still = []
         for i, action in zip(alive, actions):
             worlds[i].step([action])
@@ -526,18 +531,21 @@ def evaluator(args, dims, stop, final_event) -> None:
         model.load_state_dict(saved["model"])
         model.to(device).eval()
         clock = time.time()
-        values = play_arm(args, dims, model, device, args.eval_catalogue, seeds)
+        counts = [0, 0]
+        values = play_arm(args, dims, model, device, args.eval_catalogue, seeds, counts)
         ctl = slice(0, args.controlled)
         per_account = values[:, ctl] / rule[:, ctl] - 1.0
         per_world = per_account.mean(1)
         low, high = bootstrap_ci(per_world)
         result = {"tag": tag, "update": int(saved["iteration"]), "worlds": len(seeds), "accounts": int(per_account.size), "value_vs_rule_mean": float(per_world.mean()), "ci95_world_bootstrap": [low, high],
                   "better_share_accounts": float((per_account > 0).mean()), "worst_account": float(per_account.min()), "rule_mean_value": float(rule[:, ctl].mean()), "model_mean_value": float(values[:, ctl].mean()),
-                  "uncontrolled_accounts_identical": bool(np.allclose(values[:, args.controlled:], rule[:, args.controlled:], rtol=1e-6)), "seconds": time.time() - clock}
+                  "uncontrolled_accounts_identical": bool(np.allclose(values[:, args.controlled:], rule[:, args.controlled:], rtol=1e-6)),
+                  "decisions_of_kind": int(counts[0]), "differs_from_rule_share": float(counts[1] / max(counts[0], 1)), "seconds": time.time() - clock}
         (out / "eval.jsonl").open("a").write(json.dumps(result) + "\n")
         done_update = result["update"]
         print(f"[eval] {tag} update {result['update']}: value vs player rule {per_world.mean():+.2%} CI [{low:+.2%}, {high:+.2%}] over {len(seeds)} worlds / {per_account.size} accounts, "
-              f"better on {(per_account > 0).mean():.0%}, uncontrolled identical {result['uncontrolled_accounts_identical']} ({time.time() - clock:.0f}s)", flush=True)
+              f"better on {(per_account > 0).mean():.0%}, differs from the rule on {result['differs_from_rule_share']:.0%} of its {result['decisions_of_kind']:,} decisions, "
+              f"uncontrolled identical {result['uncontrolled_accounts_identical']} ({time.time() - clock:.0f}s)", flush=True)
         return result
 
     latest = out / "latest.pt"
