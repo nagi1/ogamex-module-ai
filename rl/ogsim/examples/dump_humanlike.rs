@@ -93,6 +93,7 @@ fn main() {
             "saves_refused": ledgers[a].saves_refused,
             "recalls": ledgers[a].recalls,
             "planets": world.planets_of(a).len().max(1),
+            "levels": cat.objects.iter().zip(&world.games[a].planet.levels).filter(|(_, &l)| l > 0).map(|(o, &l)| (o.id.to_string(), l)).collect::<std::collections::BTreeMap<_, _>>(),
             "units": world.yards[a].counts.iter().sum::<u64>(),
             "yard_busy": world.yards[a].busy(),
             "value_start": values_start[a],

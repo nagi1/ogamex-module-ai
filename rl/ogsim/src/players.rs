@@ -66,7 +66,9 @@ impl Ledger {
     /// Reads the events the world wrote since the last call: a fight settles a raid (its loot, whether anything that can
     /// fly stood on the target, what the raider lost), a recycler's arrival books the harvest.
     fn scan(&mut self, w: &World, cat: &Catalogue) {
-        for e in &w.events[self.read..] {
+        // A ledger lives as long as an account slot, and a slot whose world finished starts a fresh world whose log begins
+        // again at zero, so the cursor can sit past the end of the new log.
+        for e in &w.events[self.read.min(w.events.len())..] {
             let price = |slot: usize, id: u32| w.rules[slot].units.index(id as i64).map_or(0.0, |u| weighted(w.rules[slot].units.units[u].price));
             match (e.kind, e.mission) {
                 (EventKind::Fight, Mission::Attack) => {
