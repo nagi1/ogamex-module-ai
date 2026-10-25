@@ -93,6 +93,10 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | W8 | Moons, phalanx, jump gate, missiles, expeditions, ACS, moon destruction | one host case set each | **expedition, missile and moon destruction are flown by the world and exact** (252, 221, 265 cases, 0 differ); phalanx, jump gate, ACS, harvesting deep-space debris, attacks on a moon's own contents remain open |
 | W9 | Self-play training on the world: one small model per decision (next-steps §1), initialised by cloning the scripted players, then RL with a KL anchor to the clone | next-steps gates 1–4; a PHP closed loop as the final check only | open, after W5 and W7 |
 
+| W10 | Errand choice (spy / raid / recycle / save / order ships) as a new decision kind behind the same seam, BC from the scripted raider then PPO with a KL anchor; spec `errand-spec.md` | smoke, 20-minute run, value and human-likeness vs the scripted mix | **agent running** (owns `errands.rs`, `players.rs`, `python.rs`, `train_world.py`) |
+| W11 | Human-likeness measures (`rl/scripts/humanlike.py`, `humanlike-measures.md`): login pattern, reaction latency, save success rate, raid cadence, growth bands vs real data | table of which measures the scripted accounts fail | **agent running** (owns `humanlike.py`, `examples/dump_humanlike.rs`) |
+| W12 | PHP choice point for errands so the served model decides in the real game; sim and PHP must agree on the same states | like `ogrl.econ.compare` | open, after W10 |
+
 ## 5. Agents in flight (Sonnet, 25 Oct; each owns separate files)
 
 | Agent task | Row | Files it owns |
