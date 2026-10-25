@@ -32,6 +32,8 @@ use Modules\AI\Console\Commands\CreateAiRlUniverse;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\ExportAiRlCatalogue;
 use Modules\AI\Console\Commands\ExportAiRlCombatCatalogue;
+use Modules\AI\Console\Commands\ExportAiRlFleetSettings;
+use Modules\AI\Console\Commands\GenerateAiRlFleetCases;
 use Modules\AI\Console\Commands\ExportAiTextReadings;
 use Modules\AI\Console\Commands\JudgeAiWorld;
 use Modules\AI\Console\Commands\EvalAiComposer;
@@ -169,6 +171,8 @@ class AIServiceProvider extends ModuleServiceProvider
         CreateAiRlUniverse::class,
         ExportAiRlCatalogue::class,
         ExportAiRlCombatCatalogue::class,
+        ExportAiRlFleetSettings::class,
+        GenerateAiRlFleetCases::class,
         ReplayAiRlSchedule::class,
         WriteAiHumanTexts::class,
         WriteAiSocialVoices::class,
