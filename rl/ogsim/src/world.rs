@@ -36,6 +36,24 @@ impl Rules {
 pub enum Mission {
     Attack = 1,
     Transport = 3,
+    Espionage = 6,
+    Recycle = 8,
+}
+
+/// What an espionage report shows the spying account (EspionageMission::createEspionageReport). A section the
+/// probes could not reach is None; units are shipyard counts in the target's `Units` order, levels economy levels.
+#[derive(Clone, Debug)]
+pub struct SpyReport {
+    pub owner: usize,
+    pub target: usize,
+    pub time: f64,
+    pub resources: [i64; 3],
+    pub debris: Option<[i64; 3]>,
+    pub counter_chance: i64,
+    pub ships: Option<Vec<u64>>,
+    pub defence: Option<Vec<u64>>,
+    pub buildings: Option<Vec<u32>>,
+    pub research: Option<Vec<u32>>,
 }
 
 #[derive(Clone, Debug)]
@@ -72,6 +90,13 @@ pub struct World {
     /// A fight the host already settled, applied by the next attack instead of a fresh roll: the host's dice (PHP's
     /// `mt_rand` after the battle) cannot be repeated here, so the referee hands over what they produced.
     pub recorded: Option<combat::Recorded>,
+    /// The host's counter-espionage roll (1..100) for the next espionage, handed over by the referee as `recorded` is.
+    pub recorded_roll: Option<i64>,
+    /// Every espionage report, oldest first; the spying account reads its own.
+    pub reports: Vec<SpyReport>,
+    /// Whether a debris field exists over each planet: the host keeps a field once made, even when harvested empty,
+    /// and a recycler may fly only to one that exists.
+    pub fields: Vec<bool>,
     /// Debris over each planet, and whether it has a moon.
     pub debris: Vec<[i64; 3]>,
     pub moons: Vec<bool>,
@@ -87,7 +112,7 @@ impl World {
             .collect();
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, debris: vec![[0; 3]; n], moons: vec![false; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -196,6 +221,13 @@ impl World {
             sent.push((id, amount));
         }
         if sent.is_empty() { return Err("no ships") }
+        let sends = |ids: &[u32]| sent.iter().any(|(id, _)| ids.contains(id));
+        match mission {
+            Mission::Espionage if !sends(&rules.combat.missions.espionage_units) => return Err("no probe"),
+            Mission::Recycle if !sends(&[self.harvester(a, target)]) => return Err("no harvester"),
+            Mission::Recycle if !self.fields[target] => return Err("no debris field"),
+            _ => {}
+        }
         let distance = fleet::distance(&rules.settings, self.coords[a], self.coords[target], &|_, _| SystemState::Active);
         let fuel = fleet::consumption(&rules.settings, &rules.fleet, &sent, &research, distance, 0, speed) as f64;
         let held: combat::Units = sent.iter().copied().collect();
@@ -231,6 +263,8 @@ impl World {
                 for r in 0..3 { self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + cargo[r]) }
             }
             Mission::Attack => self.attack(cat, f),
+            Mission::Espionage => self.espionage(cat, f),
+            Mission::Recycle => self.recycle(cat, f),
         }
         self.next[target] = cat.peek(&mut self.games[target]);
         self.fleets[f].returning = true;
@@ -249,25 +283,27 @@ impl World {
         self.next[p] = cat.peek(&mut self.games[p]);
     }
 
-    /// AttackMission: the host's battle on the target's ships and defence, then repairs, loot, debris and the moon roll.
-    fn attack(&mut self, cat: &Catalogue, f: usize) {
+    /// The ship that harvests the field over planet `target` for account a (RecycleMission, by the slot's position).
+    fn harvester(&self, a: usize, target: usize) -> u32 {
+        let harvesters = &self.rules[a].combat.missions.harvesters;
+        *harvesters.get(&self.coords[target].position.to_string()).expect("the export names a harvester for every slot")
+    }
+
+    /// Fleet f fights `defender` (host unit id, amount) on its target with `cargo` in its hold, as the host's engine and
+    /// settling do, or applies the fight the referee recorded. The defender's units that fought are set to what stood
+    /// plus what was repaired, the debris lands in the field, and the fleet keeps its survivors.
+    fn fight(&mut self, cat: &Catalogue, f: usize, defender: &[(u32, i64)], cargo: [f64; 3]) -> combat::Outcome {
         let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
         let (attacker_rules, defender_rules) = (Arc::clone(&self.rules[owner]), Arc::clone(&self.rules[target]));
-        let defender: Vec<(u32, i64)> = defender_rules.units.units.iter().zip(&self.yards[target].counts)
-            .filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
         let (attacker_research, defender_research) = (self.research(cat, owner), self.research(cat, target));
         // The world's current seed is the fight's, then it draws the next one, so a recorded fight is replayable.
         let seed = self.rng;
         self.rng = next_random(&mut self.rng);
-        // The fleet enters the fight with its cargo and the half fuel the host hands back inside it
-        // (FleetMissionService::getResources): the fuel refund is destructible cargo like the rest.
-        let mut cargo = self.fleets[f].cargo;
-        cargo[2] += self.fleets[f].fuel / 2.0;
         let battle = Battle {
             attacker: &self.fleets[f].ships,
             attacker_research: &attacker_research,
             attacker_cargo: cargo,
-            defender: &defender,
+            defender,
             defender_research: &defender_research,
             defender_stock: self.games[target].planet.res,
             defender_engineer: false,
@@ -285,14 +321,95 @@ impl World {
                 self.yards[target].counts[u] = (outcome.defender_left.get(&id).copied().unwrap_or(0) + outcome.repaired.get(&id).copied().unwrap_or(0)) as u64;
             }
         }
+        for r in 0..3 { self.debris[target][r] += outcome.debris[r] }
+        self.fields[target] = true;
+        self.fleets[f].ships = outcome.attacker_left.iter().map(|(&id, &n)| (id, n)).collect();
+        outcome
+    }
+
+    /// The units on planet p (host unit id, amount), defences only or ships only.
+    fn held(&self, p: usize, defence: bool) -> Vec<(u32, i64)> {
+        let rules = &self.rules[p];
+        rules.units.units.iter().zip(&self.yards[p].counts)
+            .filter(|(u, &n)| n > 0 && rules.combat.is_defense(u.id as u32) == defence)
+            .map(|(u, &n)| (u.id as u32, n as i64)).collect()
+    }
+
+    /// AttackMission: the host's battle on the target's ships and defence, then repairs, loot, debris and the moon roll.
+    fn attack(&mut self, cat: &Catalogue, f: usize) {
+        let target = self.fleets[f].target;
+        let mut defender = self.held(target, false);
+        defender.extend(self.held(target, true));
+        // The fleet enters the fight with its cargo and the half fuel the host hands back inside it
+        // (FleetMissionService::getResources): the fuel refund is destructible cargo like the rest.
+        let mut cargo = self.fleets[f].cargo;
+        cargo[2] += self.fleets[f].fuel / 2.0;
+        let outcome = self.fight(cat, f, &defender, cargo);
         for r in 0..3 {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
-            self.debris[target][r] += outcome.debris[r];
         }
         self.moons[target] |= outcome.moon_created;
-        self.fleets[f].ships = outcome.attacker_left.into_iter().collect();
         self.fleets[f].cargo = outcome.cargo.map(|r| r as f64);
+    }
+
+    /// EspionageMission: the counter-espionage chance and roll, a fight against the target's ships alone (its defence
+    /// stands aside, no loot, no moon), then a report as deep as the probes sent and the research gap allow. The probes
+    /// that survive fly home with the mission's resources, half the fuel included.
+    fn espionage(&mut self, cat: &Catalogue, f: usize) {
+        let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
+        let missions = self.rules[owner].combat.missions.clone();
+        let level = |w: &World, a: usize| missions.espionage_research.map_or(0, |id| w.research(cat, a).get(&id).copied().unwrap_or(0)) as i64;
+        let (spy, guard) = (level(self, owner), level(self, target));
+        let probes: i64 = self.fleets[f].ships.iter().filter(|(id, _)| missions.espionage_units.contains(id)).map(|s| s.1).sum();
+        let ships = self.held(target, false);
+        let guards: i64 = ships.iter().map(|s| s.1).sum();
+        // CounterEspionageService::calculateChance.
+        let factor = guard - spy + 1;
+        let chance = if probes <= 0 || guards <= 0 || factor <= 0 { 0 } else { ((guards * factor) as f64 / (probes * 4) as f64 * 100.0).floor().clamp(0.0, 100.0) as i64 };
+        let roll = match self.recorded_roll.take() {
+            Some(roll) => roll,
+            None if chance > 0 && chance < 100 => 1 + (next_random(&mut self.rng) % 100) as i64,
+            None => 0,
+        };
+        if chance >= 100 || (chance > 0 && roll <= chance) {
+            self.fight(cat, f, &ships, [0.0; 3]);
+        }
+        // The depth counts the probes sent, not the ones that survived (EspionageMission::createEspionageReport).
+        let left = (probes - (guard - spy).max(0).pow(2)).max(0);
+        let reveals = |p: i64, l: i64| left >= p || spy - l >= guard;
+        let rules = &self.rules[target];
+        let counts = &self.yards[target].counts;
+        let only = |defence: bool| rules.units.units.iter().zip(counts).map(|(u, &n)| if rules.combat.is_defense(u.id as u32) == defence { n } else { 0 }).collect::<Vec<u64>>();
+        let levels = |queue: usize| cat.objects.iter().zip(&self.games[target].planet.levels).map(|(o, &l)| if o.queue == queue { l } else { 0 }).collect::<Vec<u32>>();
+        let report = SpyReport {
+            owner,
+            target,
+            time: self.fleets[f].arrive,
+            resources: self.games[target].planet.res.map(|r| r as i64),
+            debris: self.fields[target].then_some(self.debris[target]).filter(|d| d.iter().any(|&r| r > 0)),
+            counter_chance: chance,
+            ships: reveals(2, 1).then(|| only(false)),
+            defence: reveals(3, 2).then(|| only(true)),
+            buildings: reveals(5, 3).then(|| levels(0)),
+            research: reveals(7, 4).then(|| levels(1)),
+        };
+        self.reports.push(report);
+        self.fleets[f].cargo[2] += self.fleets[f].fuel / 2.0;
+    }
+
+    /// RecycleMission: the slot's harvester ships alone carry, the field is shared out as loot is, and the harvest flies
+    /// home on top of the mission's own resources (here the host reads them directly: no half fuel).
+    fn recycle(&mut self, cat: &Catalogue, f: usize) {
+        let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
+        let harvester = self.harvester(owner, target);
+        let count: i64 = self.fleets[f].ships.iter().filter(|(id, _)| *id == harvester).map(|s| s.1).sum();
+        let capacity = self.rules[owner].combat.capacity(&[(harvester, count)].into_iter().collect(), &self.research(cat, owner));
+        let harvested = combat::distribute_loot(self.debris[target].map(|r| r as f64), capacity);
+        for r in 0..3 {
+            self.debris[target][r] -= harvested[r] as i64;
+            self.fleets[f].cargo[r] += harvested[r];
+        }
     }
 }
 

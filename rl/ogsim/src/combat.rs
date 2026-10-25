@@ -79,6 +79,19 @@ struct RawCatalogue {
     units: Vec<RawUnit>,
     #[serde(default)]
     non_combatants: Vec<u32>,
+    #[serde(default)]
+    missions: Missions,
+}
+
+/// The units and research the mission classes read, by host id (ExportAiCombatCatalogueAction::missions).
+#[derive(Deserialize, Default, Clone, Debug)]
+pub struct Missions {
+    /// Ships an espionage fleet must hold; their count sets the report's depth.
+    pub espionage_units: Vec<u32>,
+    /// The research whose levels decide counter-espionage and the report's depth.
+    pub espionage_research: Option<u32>,
+    /// The ship that harvests debris at each slot, by position.
+    pub harvesters: HashMap<String, u32>,
 }
 
 struct Unit {
@@ -94,6 +107,7 @@ pub struct CombatCatalogue {
     units: HashMap<u32, Unit>,
     non_combatants: HashSet<u32>,
     debris_collector: Option<u32>,
+    pub missions: Missions,
 }
 
 pub type Units = BTreeMap<u32, i64>;
@@ -166,7 +180,7 @@ impl CombatCatalogue {
                 (u.id, Unit { defense: u.kind == "defense", price: u.price, rapidfire, properties: u.properties })
             })
             .collect();
-        Ok(CombatCatalogue { max_level: raw.max_level, debris_collector: raw.rules.debris_collector, rules: raw.rules, units, non_combatants: raw.non_combatants.into_iter().collect() })
+        Ok(CombatCatalogue { max_level: raw.max_level, debris_collector: raw.rules.debris_collector, rules: raw.rules, units, non_combatants: raw.non_combatants.into_iter().collect(), missions: raw.missions })
     }
 
     fn unit(&self, id: u32) -> &Unit {
@@ -181,6 +195,11 @@ impl CombatCatalogue {
             index * (self.max_level as usize + 1) + level as usize
         });
         table.values[index]
+    }
+
+    /// A defence (the host's `defense` type), as against a ship.
+    pub fn is_defense(&self, id: u32) -> bool {
+        self.unit(id).defense
     }
 
     /// UnitCollection::getTotalCargoCapacity.
@@ -348,7 +367,7 @@ pub fn roll_repairs(catalogue: &CombatCatalogue, defender_lost: &Units, engineer
 }
 
 /// LootService::distributeLoot: loot over the capacity is cut to even thirds, then the free space refilled evenly.
-fn distribute_loot(loot: [f64; 3], capacity: i64) -> [f64; 3] {
+pub fn distribute_loot(loot: [f64; 3], capacity: i64) -> [f64; 3] {
     let capacity = capacity as f64;
     if capacity >= loot[0] + loot[1] + loot[2] + 0.0 {
         return loot;
