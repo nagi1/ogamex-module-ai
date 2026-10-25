@@ -6,7 +6,7 @@
 # and nowhere else - a change that does not move the printed number is not a change.
 #
 #   PY=/path/to/.venv-rl/bin/python rl/scripts/errand-loop.sh
-#   ROWS=120000 MINUTES=6 ACTORS=16 WORLDS=32 rl/scripts/errand-loop.sh
+#   ROWS=120000 MINUTES=6 ACTORS=16 WORLDS=32 KL=0.5 rl/scripts/errand-loop.sh
 #
 # Exit code 1 when the policy does not beat the teacher, so a loop can stop on it.
 set -euo pipefail
@@ -20,6 +20,7 @@ WORLDS=${WORLDS:-32}
 ACCOUNTS=${ACCOUNTS:-8}
 CONTROLLED=${CONTROLLED:-4}
 SEED=${SEED:-1}
+KL=${KL:-0.5}
 DATA=${DATA:-../../storage/rl/ogsim}
 OUT=${OUT:-$DATA/runs/loop}
 
@@ -27,7 +28,7 @@ echo "== behaviour cloning the teacher ($ROWS rows)"
 "$PY" -m ogrl.train_bc_world --rows "$ROWS" --seed "$SEED" --out "$OUT/bc.pt" | tail -2
 
 echo "== PPO from that warm start ($MINUTES minutes, $ACTORS actors x $WORLDS worlds)"
-"$PY" -m ogrl.train_world --queue 2 --seed "$SEED" --init "$OUT/bc.pt" \
+"$PY" -m ogrl.train_world --queue 2 --seed "$SEED" --init "$OUT/bc.pt" --kl-anchor "$KL" \
     --actors "$ACTORS" --worlds "$WORLDS" --accounts "$ACCOUNTS" --controlled "$CONTROLLED" \
     --minutes "$MINUTES" --out "$OUT/ppo" > "$OUT/ppo.log" 2>&1 || { echo "PPO failed; see $OUT/ppo.log"; exit 2; }
 
