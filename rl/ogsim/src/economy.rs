@@ -638,6 +638,12 @@ impl Catalogue {
                 return true;
             }
             self.advance_to(game, at, true);
+            // A build landing changes what is legal, so a queue that found nothing to do wakes for another look: the host
+            // asks again at the account's next login, and without this the research queue of an account whose lab arrives
+            // later is asleep for good (measured: 10 of 12 scripted accounts never researched in ten days).
+            for q in 0..2 {
+                if game.free[q] == NEVER && self.objects.iter().any(|o| o.queue == q) { game.free[q] = game.t }
+            }
             return false;
         };
         self.advance_to(game, at, true);

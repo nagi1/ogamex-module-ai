@@ -47,11 +47,13 @@ fn main() {
     let mut ledgers: Vec<Ledger> = (0..accounts).map(|_| Ledger::default()).collect();
     let start: f64 = world.now();
     let mut logins: Vec<Vec<f64>> = vec![Vec::new(); accounts];
+    let mut by_queue: Vec<[usize; 2]> = vec![[0; 2]; accounts];
     let mut values_start: Vec<f64> = vec![0.0; accounts];
 
     while let Some(a) = world.next_decision(&cat) {
         if logins[a].is_empty() { values_start[a] = world.games[a].value() }
         logins[a].push(world.games[a].t);
+        by_queue[a][world.games[a].queue.min(1)] += 1;
         match players[a].act(&mut world, &cat, a, &mut ledgers[a]) {
             Some(k) => world.commit(&cat, a, k),
             None => world.wait(&cat, a),
@@ -81,6 +83,8 @@ fn main() {
             "player": a,
             "role": ROLES[a % 3],
             "logins": times.len(),
+            "decisions_build": by_queue[a][0],
+            "decisions_research": by_queue[a][1],
             "distinct_hours": hours_seen.len(),
             "busiest_week_hours": busiest,
             "longest_gap_h": gaps.iter().copied().fold(0.0f64, f64::max) / 3600.0,

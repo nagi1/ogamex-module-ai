@@ -244,7 +244,9 @@ pub(crate) fn harvest_plan(w: &World, cat: &Catalogue, a: usize, target: usize) 
     let hold = rules.combat.capacity(&[(harvester, 1)].into_iter().collect(), &research).max(1);
     let total = w.debris[target].iter().sum::<i64>();
     let n = ((total as f64 / hold as f64).ceil() as i64).min(on_shelf(w, a, harvester));
-    (w.fields[target] && total >= hold / 2 && n >= 1).then_some((harvester, n))
+    // Fuel is the dispatch's own refusal: a fleet the planet cannot fill the tanks for never leaves.
+    let fuel = fleet::consumption(&rules.settings, &rules.fleet, &[(harvester, n)], &research, account_distance(w, a, target), 0, 10.0) as f64;
+    (w.fields[target] && total >= hold / 2 && n >= 1 && fuel <= w.games[a].planet.res[2]).then_some((harvester, n))
 }
 
 /// Everything that flies going away for longer than `remaining` seconds: the nearest account whose round trip is
@@ -625,6 +627,30 @@ mod tests {
         let coords = (0..ACCOUNTS).map(|a| Coord { galaxy: 1, system: 10 + 2 * a as i64, position: 4 + (a % 8) as i64 }).collect();
         world.arm(vec![Arc::clone(&rules); ACCOUNTS], coords);
         Some((cat, world))
+    }
+
+    /// Both queues get their turn: an account whose building queue always has something payable must still research what its
+    /// ships need, or no ship is ever buildable.
+    #[test]
+    fn both_queues_get_their_turn() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        let mut miner = Raider::new(1).miner;
+        let mut by_queue = [0usize; 2];
+        for _ in 0..20_000 {
+            let Some(a) = world.next_decision(&cat) else { break };
+            if a != 0 {
+                world.wait(&cat, a);
+                continue;
+            }
+            by_queue[world.games[0].queue] += 1;
+            match miner.act(&mut world, &cat, a) {
+                Some(k) => world.commit(&cat, a, k),
+                None => world.wait(&cat, a),
+            }
+        }
+        let research: u32 = cat.objects.iter().zip(&world.games[0].planet.levels).filter(|(o, _)| o.queue == 1).map(|(_, &l)| l).sum();
+        assert!(by_queue[1] > 0, "the research queue never decided: {by_queue:?}");
+        assert!(research > 0, "nothing was ever researched: {by_queue:?}");
     }
 
     /// Without a fleet there is no fleet play at all, so a fresh account must open the way to ships: what the rule picks at
