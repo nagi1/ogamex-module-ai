@@ -105,7 +105,16 @@ pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
     if w.account_of(a) == a {
         if let Some(kit) = Kit::of(w, cat, a) {
             let now = w.games[a].t;
-            for target in nearest(w, cat, a, players::NEIGHBOURS) {
+            // The walk reaches the nearest neighbours; a player also raids the richest target it has scouted, however far.
+            // Same menu, wider: the nearest stay first, so the teacher's label and its fallback do not move.
+            let mut targets = nearest(w, cat, a, players::NEIGHBOURS);
+            let mut juicy: Vec<(usize, f64)> = w.reports.iter()
+                .filter(|r| r.owner == a && now - r.time < players::REPORT_HOURS * 3600.0 && !targets.contains(&r.target))
+                .map(|r| (r.target, players::weighted(r.resources.map(|v| v as f64))))
+                .collect();
+            juicy.sort_by(|x, y| y.1.total_cmp(&x.1));
+            targets.extend(juicy.iter().take(players::RICH_TARGETS).map(|&(t, _)| t));
+            for target in targets {
                 let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < players::REPORT_HOURS * 3600.0);
                 if !fresh && on_shelf(w, a, kit.probe) >= 1 { out.push(Errand::at(Kind::Spy, target)) }
                 if fresh && raid_plan(w, cat, a, target, kit).is_some() { out.push(Errand::at(Kind::Raid, target)) }

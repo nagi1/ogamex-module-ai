@@ -16,6 +16,8 @@ use crate::world::{Decision, EventKind, Mission, Outcome, Rules, SpyReport, Worl
 
 pub(crate) const SLOTS: usize = 4;
 pub(crate) const NEIGHBOURS: usize = 5;
+/// The scouted targets a login also weighs up, beyond the nearest ones: the richest reports.
+pub(crate) const RICH_TARGETS: usize = 6;
 pub(crate) const REPORT_HOURS: f64 = 24.0;
 pub(crate) const RAID_COOLDOWN: f64 = 3.0 * 3600.0;
 /// A target is worth the trip when the loot pays this many times its fuel.
@@ -69,7 +71,7 @@ impl Ledger {
         // A ledger lives as long as an account slot, and a slot whose world finished starts a fresh world whose log begins
         // again at zero, so the cursor can sit past the end of the new log.
         for e in &w.events[self.read.min(w.events.len())..] {
-            let price = |slot: usize, id: u32| w.rules[slot].units.index(id as i64).map_or(0.0, |u| weighted(w.rules[slot].units.units[u].price));
+            let price = |slot: usize, id: u32| unit_price(&w.rules[slot], id);
             match (e.kind, e.mission) {
                 (EventKind::Fight, Mission::Attack) => {
                     self.lost += e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
@@ -173,10 +175,15 @@ pub(crate) fn nearest(w: &mut World, cat: &Catalogue, a: usize, n: usize) -> Vec
     others
 }
 
+/// What one of a unit costs in metal equivalent, at the catalogue the account plays.
+pub(crate) fn unit_price(rules: &Rules, id: u32) -> f64 {
+    rules.units.index(id as i64).map_or(0.0, |u| weighted(rules.units.units[u].price))
+}
+
 /// Value in metal equivalent: the economy's value, ships on the shelf, in the queue and in flight at price, and what flies.
 pub fn account_value(w: &World, a: usize) -> f64 {
     let rules = &w.rules[a];
-    let price = |id: u32| rules.units.index(id as i64).map_or(0.0, |u| weighted(rules.units.units[u].price));
+    let price = |id: u32| unit_price(rules, id);
     let shelf: f64 = rules.units.units.iter().zip(&w.yards[a].counts).map(|(u, &n)| weighted(u.price) * n as f64).sum();
     let queued: f64 = w.yards[a].orders.iter().map(|o| weighted(rules.units.units[o.unit].price) * (o.amount - o.done) as f64).sum();
     let flying: f64 = w.fleets.iter().filter(|f| f.owner == a).map(|f| f.ships.iter().map(|s| price(s.0) * s.1 as f64).sum::<f64>() + weighted(f.cargo) + WEIGHTS[2] * f.fuel / 2.0).sum();

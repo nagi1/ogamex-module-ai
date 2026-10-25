@@ -115,6 +115,9 @@ pub struct Event {
     /// The slot that sent the fleet and the slot it went to (the sender's own for coordinates nobody holds).
     pub owner: usize,
     pub target: usize,
+    /// The second the fleet left. A trainer reading the log can tie an event back to the decision that dispatched it,
+    /// which is what credit attribution needs.
+    pub departed: f64,
     /// Ships the fleet lost.
     pub ships_lost: Vec<(u32, i64)>,
     /// Ships and defences the target lost for good (repairs taken out).
@@ -697,7 +700,7 @@ impl World {
 
     /// Appends an event about `fleet`; `fill` sets the fields that differ from an empty event.
     fn log(&mut self, kind: EventKind, time: f64, fleet: &Fleet, outcome: Outcome, fill: impl FnOnce(&mut Event)) {
-        let mut event = Event { kind, time, mission: fleet.mission, owner: fleet.owner, target: fleet.target, ships_lost: Vec::new(), target_lost: Vec::new(), present: Vec::new(), gained: [0.0; 3], debris: [0; 3], outcome };
+        let mut event = Event { kind, time, mission: fleet.mission, owner: fleet.owner, target: fleet.target, departed: fleet.departed, ships_lost: Vec::new(), target_lost: Vec::new(), present: Vec::new(), gained: [0.0; 3], debris: [0; 3], outcome };
         fill(&mut event);
         self.events.push(event);
     }

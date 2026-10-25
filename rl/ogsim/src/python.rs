@@ -7,6 +7,7 @@ use crate::{errands, next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAME
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A finished game: (planet config, final value, final effective rate per hour, decisions, invalid actions).
@@ -245,6 +246,15 @@ struct VecWorld {
     ledgers: Vec<Vec<Ledger>>,
     /// Per world, the errands the deciding account was offered (row 0 is always `wait`).
     offered: Vec<Vec<errands::Errand>>,
+    /// Credit attribution: the worth of every fleet event an account has had since it last decided, and of the ones whose
+    /// fleet the decision being closed dispatched. The interval reward drops the first and adds the second, so a raid is
+    /// credited to the decision that sent it and an enemy raid is not blamed on a decision that had nothing to do with it.
+    during: Vec<Vec<f64>>,
+    credited: Vec<Vec<f64>>,
+    /// (world, owner, departure second) -> the ticket that dispatched that fleet.
+    sent: HashMap<(usize, usize, u64), u64>,
+    /// How many events of each world's log have been attributed.
+    read: Vec<usize>,
 }
 
 impl VecWorld {
@@ -281,6 +291,9 @@ impl VecWorld {
                 (false, true, _) => Player::Miner(players::Miner::new(s)),
             }
         }).collect();
+        self.during.push(vec![0.0; accounts]);
+        self.credited.push(vec![0.0; accounts]);
+        self.read.push(0);
         self.players.push(players);
         self.ledgers.push((0..accounts).map(|_| Ledger::default()).collect());
         world
@@ -300,21 +313,65 @@ impl VecWorld {
 
     /// Runs world w until a controlled account decides, closing that account's previous transition; a finished world
     /// closes every open transition (with the bonus for the production left running), is recorded, and starts afresh.
+    /// Tie every fleet the deciding account just sent to its ticket, so the log can credit the outcome back to it.
+    fn register(&mut self, w: usize, a: usize, ticket: u64) {
+        for fleet in &self.worlds[w].fleets {
+            if fleet.owner == a {
+                // A fleet already claimed belongs to an older ticket: sending it again must not steal its outcome.
+                self.sent.entry((w, a, fleet.departed.to_bits())).or_insert(ticket);
+            }
+        }
+    }
+
+    /// Read the events played since the last look: every one is worth something to its owner, and the ones whose fleet
+    /// this account's open ticket dispatched are worth that to the decision being closed.
+    fn attribute(&mut self, w: usize) {
+        let start = self.read[w];
+        let world = &self.worlds[w];
+        let mut rows: Vec<(usize, f64, bool)> = Vec::new();
+        for e in &world.events[start..] {
+            let key = (w, e.owner, e.departed.to_bits());
+            let price = world.rules.get(e.owner).map_or(0.0, |r| {
+                e.ships_lost.iter().map(|&(id, n)| players::unit_price(r, id) * n.max(0) as f64).sum::<f64>()
+            });
+            let worth = players::weighted(e.gained) - price;
+            // Credit only the fleet THIS decision sent. A flight still in the air from an older ticket keeps its worth out
+            // of every reward rather than handing it to a decision that did not cause it.
+            let ours = self.open[w].get(e.owner).and_then(|t| t.map(|(ticket, _)| ticket)) == self.sent.get(&key).copied();
+            rows.push((e.owner, worth, ours));
+        }
+        self.read[w] = world.events.len();
+        for (owner, worth, ours) in rows {
+            if owner < self.during[w].len() {
+                self.during[w][owner] += worth;
+                if ours {
+                    self.credited[w][owner] += worth;
+                }
+            }
+        }
+    }
+
     fn advance(&mut self, w: usize) {
         let cat = Arc::clone(&self.catalogue);
         loop {
+            self.attribute(w);
             let Some(a) = self.worlds[w].next_decision(&cat) else {
                 for a in 0..self.controlled.len() {
                     if let Some((ticket, before)) = self.open[w][a].take() {
                         let bonus = self.worlds[w].games[a].bonus_hours * self.worlds[w].games[a].effective_rate();
                         let value = self.value(w, a);
-                        self.closed.push((ticket, (value - before + bonus) as f32, 1));
+                        let reward = value - before + bonus - self.during[w][a] + self.credited[w][a];
+                        self.closed.push((ticket, reward as f32, 1));
+                        self.during[w][a] = 0.0;
+                        self.credited[w][a] = 0.0;
                     }
                     let g = &self.worlds[w].games[a];
                     let fleet = players::account_value(&self.worlds[w], a) - g.value();
                     self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid, fleet));
                 }
+                self.sent.retain(|k, _| k.0 != w);
                 self.worlds[w] = self.fresh_world();
+                self.read[w] = 0;
                 continue;
             };
             if !self.controlled[a] {
@@ -323,7 +380,10 @@ impl VecWorld {
             }
             let value = self.value(w, a);
             if let Some((ticket, before)) = self.open[w][a].take() {
-                self.closed.push((ticket, (value - before) as f32, 0));
+                let reward = value - before - self.during[w][a] + self.credited[w][a];
+                self.closed.push((ticket, reward as f32, 0));
+                self.during[w][a] = 0.0;
+                self.credited[w][a] = 0.0;
             }
             self.tickets += 1;
             self.deciding[w] = (a, self.tickets);
@@ -359,7 +419,7 @@ impl VecWorld {
         if errands && rules.is_none() {
             return Err(PyValueError::new_err("errands need the units, fleet_settings and combat exports: nothing can fly without them"));
         }
-        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds] };
+        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds], during: Vec::new(), credited: Vec::new(), sent: HashMap::new(), read: Vec::new() };
         env.worlds = (0..n_worlds).map(|_| env.fresh_world()).collect();
         for w in 0..n_worlds {
             env.advance(w);
@@ -440,6 +500,7 @@ impl VecWorld {
                     Some(e) => { if errands::apply(&mut self.worlds[w], &cat, a, e).is_err() { self.worlds[w].games[a].invalid += 1 } }
                     None => {}
                 }
+                self.register(w, a, ticket);
                 self.play_rest(w, &cat, a);
                 self.advance(w);
                 continue;
