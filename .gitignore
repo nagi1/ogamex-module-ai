@@ -5,6 +5,10 @@
 /.phpunit.result.cache
 .DS_Store
 
+# Collected external data corpora: large and public, kept locally, never committed
+# (AGENTS.md: keep raw dumps and large data artifacts out of git).
+/storage/
+
 __pycache__/
 
 # Harness runtime state: locks, model slots and heartbeats belong to one machine and one moment.
@@ -22,3 +26,6 @@ __pycache__/
 /plan/research/ogame/provider-down
 /plan/research/ogame/provider-down.probe
 /plan/research/ogame/slow-steps.log
+
+# Scrapy runtime: the virtualenv is rebuilt from scrapers/requirements.txt, never committed.
+/scrapers/.venv/

@@ -60,7 +60,7 @@ class ThreatResponsePlanner
     {
         // An account the host no longer has has nothing an inbound could be answered with; asking the
         // host for its planets would build a player for an id that does not exist, which the host refuses.
-        if (! User::query()->whereKey($playerId)->exists()) {
+        if (!User::query()->whereKey($playerId)->exists()) {
             return app()->makeWith(ThreatResponsePlan::class, ['underAttack' => false]);
         }
 
@@ -100,7 +100,7 @@ class ThreatResponsePlanner
      */
     private function unreadInbound(PlayerService $player, FleetMissionService $missions): ThreatResponsePlan
     {
-        if (! $missions->currentPlayerUnderAttack()) {
+        if (!$missions->currentPlayerUnderAttack()) {
             return app()->makeWith(ThreatResponsePlan::class, ['underAttack' => false]);
         }
 
@@ -165,7 +165,7 @@ class ThreatResponsePlanner
         // The save and the ferry both need this body's hulls, so a body whose fleet is leaving has
         // nothing left at home to carry its pile with and the pile stays where it is. Which sibling
         // receives it and what fits in the holds stays the ferry planner's and the adapter's question.
-        if (! $leaving) {
+        if (!$leaving) {
             $ferry = $this->transfer->evacuationPlan($player->getId(), $planet->getPlanetId(), $threatenedPlanetIds);
             if ($ferry instanceof QueueableTransfer) {
                 $responses[] = AiThreatResponse::EvacuateResources;
@@ -271,7 +271,7 @@ class ThreatResponsePlanner
         $parsed = Yaml::parseFile($this->policyFile ?? module_path('AI', self::POLICY_FILE));
         $ratio = is_array($parsed) ? ($parsed['bait_ratio'] ?? null) : null;
 
-        if (! is_numeric($ratio) || (float) $ratio <= 0.0) {
+        if (!is_numeric($ratio) || (float) $ratio <= 0.0) {
             throw new RuntimeException('threat-response: the file must state a positive bait_ratio.');
         }
 

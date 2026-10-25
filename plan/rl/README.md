@@ -19,6 +19,7 @@ Numbers marked as measured come from [benchmark-plan.md](benchmark-plan.md); scr
 | [risks.md](risks.md) | Failure modes, mitigations, determinism checklist |
 | [implementation-roadmap.md](implementation-roadmap.md) | Phases, success criteria, fallbacks, stop conditions, what not to build |
 | [next-steps.md](next-steps.md) | **Start here**: status of every phase, what depends on the owner, results log |
+| [koster-2012-thesis-assessment.md](koster-2012-thesis-assessment.md) | External review: the 2012 OGame RL thesis (Koster) — extraction, verification against the host, recoverability, and the Colony-Ship benchmark experiment |
 | [HANDOUT-local-agent.md](HANDOUT-local-agent.md) | The prompt for the agent on the training machine (setup → data → BC → closed loop) |
 | `../../.github/skills/ogame-rl-training/` | The skill: how to run, measure, fix and improve the model |
 | `../../rl/` | The Python package (training, serving, evaluation) |

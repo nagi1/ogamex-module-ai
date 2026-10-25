@@ -57,9 +57,10 @@ class Scorer:
 
 
 class Policy:
-    def __init__(self, model: str | None, build_model: str | None, temperature: float, seed: int):
+    def __init__(self, model: str | None, build_model: str | None, temperature: float, seed: int, research_model: str | None = None):
         self.bc = Scorer(model) if model else None
         self.build = Scorer(build_model) if build_model else None
+        self.research = Scorer(research_model) if research_model else None
         self.temperature = temperature
         self.seed = seed
         self.lock = threading.Lock()
@@ -67,7 +68,9 @@ class Policy:
 
     def choose(self, request: dict) -> int:
         if request.get("kind") == "building" and self.build is not None and request["state"][self.build.moon_column] < 0.5:
-            return self.choose_build(request)
+            return self.choose_next(self.build, request)
+        if request.get("kind") == "research" and self.research is not None:
+            return self.choose_next(self.research, request)
         if self.bc is None:
             return int(request.get("teacher", 0))
         mask = np.asarray(request["legal"], dtype=bool)
@@ -83,14 +86,14 @@ class Policy:
         cdf = np.cumsum(p / p.sum())
         return int(min(np.searchsorted(cdf, draw), len(cdf) - 1))
 
-    def choose_build(self, request: dict) -> int:
+    def choose_next(self, scorer: Scorer, request: dict) -> int:
         """The next thing to build among the rows the host would take now or once the planet can pay; row 0 (waiting) is not one."""
         mask = np.asarray(request["buildable"], dtype=bool)
         mask[0] = False
         if not mask.any():
             return 0
         with self.lock:
-            logits = self.build.logits(request, mask)
+            logits = scorer.logits(request, mask)
             self.served += 1
         return int(np.argmax(logits))
 
@@ -99,14 +102,15 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", help="model.onnx from train_bc: answers every kind the build-order model does not own")
     ap.add_argument("--build-model", help="model.onnx from export_build_order: answers the building choices of planets")
+    ap.add_argument("--research-model", help="model.onnx from export_build_order --kind research_order: answers the research choices")
     ap.add_argument("--socket", required=True)
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args(argv)
 
-    if not (args.model or args.build_model):
-        ap.error("give --model, --build-model or both")
-    policy = Policy(args.model, args.build_model, args.temperature, args.seed)
+    if not (args.model or args.build_model or args.research_model):
+        ap.error("give --model, --build-model or --research-model")
+    policy = Policy(args.model, args.build_model, args.temperature, args.seed, args.research_model)
 
     class Handler(socketserver.StreamRequestHandler):
         def handle(self) -> None:

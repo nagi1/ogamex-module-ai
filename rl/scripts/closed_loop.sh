@@ -16,7 +16,7 @@ mkdir -p "$OUT/teacher" "$OUT/policy" "$OUT/universes"
 # bind mount shows the socket under a different path; EVALUATE=0 leaves the comparison to the host, which has the venv.
 if [ -z "${SOCK:-}" ]; then
   SOCK=/tmp/ogrl-$$.sock
-  $PY -m ogrl.serve ${MODEL_FLAG:---model} "$MODEL" --socket "$SOCK" > "$OUT/serve.log" 2>&1 &
+  $PY -m ogrl.serve ${MODEL_FLAG:---model} "$MODEL" ${SERVE_ARGS:-} --socket "$SOCK" > "$OUT/serve.log" 2>&1 &
   SERVER=$!; trap 'kill $SERVER 2>/dev/null; rm -f $SOCK' EXIT
   sleep 3
 fi

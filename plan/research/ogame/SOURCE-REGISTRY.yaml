@@ -47,6 +47,15 @@ sources:
   retrieved_at: 2026-09-28
   license: public page (private-server operator blog; derivative of WIK-013)
   raw: raw/third-party/ogame.life/def-layering/TP-021.md
+- id: TP-023
+  title: 'OGame Alliance Strategies Guide: Building a Top Team'
+  url: ogame.life "ogame/blog/ogame-alliance-strategies-guide-building-a-top-team"
+  capture_url: ''
+  family: third-party-guides
+  domains: [alliance, alliance-life, recruitment, diplomacy, social]
+  retrieved_at: 2026-10-11
+  license: public page (private-server operator blog)
+  raw: raw/third-party/ogame.life/alliance/TP-023.md
 - id: WIK-014
   title: Miner
   url: ogame.fandom.com `Miner`

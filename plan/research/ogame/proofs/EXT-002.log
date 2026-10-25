@@ -1,0 +1,3 @@
+PASS test:PublicApiSnapshotImportTest 1s
+PASS harness:self-check 0s
+PROOF: PASS EXT-002 (test:PublicApiSnapshotImportTest harness:self-check)

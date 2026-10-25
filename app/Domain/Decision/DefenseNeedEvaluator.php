@@ -4,8 +4,8 @@ namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Models\AiProfile;
-use OGame\Models\BattleReport;
 use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\Models\BattleReport;
 use OGame\Models\Resources;
 use OGame\Models\UnitQueue;
 use OGame\Services\FleetMissionService;
@@ -196,7 +196,7 @@ class DefenseNeedEvaluator
         $value = is_array($block) ? ($block['value'] ?? null) : null;
         $reason = is_array($block) ? ($block['reason'] ?? null) : null;
 
-        if (! is_numeric($value) || (float) $value <= 0.0 || ! is_string($reason)) {
+        if (!is_numeric($value) || (float) $value <= 0.0 || !is_string($reason)) {
             return null;
         }
 

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<alliances xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://s1-en.ogame.gameforge.com/api/xsd/alliances.xsd" timestamp="1791543867" serverId="en1"><alliance id="500001" name="TestAlliance" tag="TA" founder="1" foundDate="1095890237" homepage="http://example.invalid/" logo="http://example.invalid/logo.png" open="1"><player id="1"/><player id="2"/></alliance></alliances>

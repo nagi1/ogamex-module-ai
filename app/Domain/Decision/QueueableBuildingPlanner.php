@@ -187,7 +187,7 @@ class QueueableBuildingPlanner
     }
 
     /**
-     * Each object once, in the order the passes offer it, tagged with the first pass that offered it, then every other object the host lets the planet queue, tagged open.
+     * Each object once, in the order the passes offer it, tagged with the first pass that offered it, then every other building, station and research the host knows, tagged open (a row the host would refuse is marked illegal).
      *
      * @param array<string, callable(PlanetService): list<BuildCandidate>> $passes
      * @return list<array{candidate: BuildCandidate, pass: string}>
@@ -213,6 +213,11 @@ class QueueableBuildingPlanner
                 continue;
             }
             $offered[] = ['candidate' => app()->makeWith(BuildCandidate::class, ['buildingId' => $object->id, 'reason' => 'open:' . $object->machine_name]), 'pass' => 'open'];
+        }
+        foreach (ObjectService::getResearchObjects() as $object) {
+            if (!isset($seen[$object->id])) {
+                $offered[] = ['candidate' => app()->makeWith(BuildCandidate::class, ['buildingId' => $object->id, 'reason' => 'open:' . $object->machine_name]), 'pass' => 'open'];
+            }
         }
 
         return $offered;
@@ -242,7 +247,7 @@ class QueueableBuildingPlanner
                 'legal' => $research ? $this->queueableResearch($planet, $candidate, null) !== null : $this->refusal($planet, $candidate, null) === null,
                 'teacherOk' => $research ? $this->queueableResearch($planet, $candidate) !== null : $this->refusal($planet, $candidate) === null,
                 'spendable' => $this->canSpendFor($planet, $pass === self::WALL_STEP ? null : $goal, $candidate),
-                'payableLater' => !$research && $this->refusal($planet, $candidate, null, true) === null && $this->payableEventually($planet, $candidate),
+                'payableLater' => ($research ? $this->queueableResearch($planet, $candidate, null, true) !== null : $this->refusal($planet, $candidate, null, true) === null) && $this->payableEventually($planet, $candidate),
             ];
             $teacher = $candidate->buildingId === $teacherObjectId ? count($rows) - 1 : $teacher;
         }
@@ -935,7 +940,7 @@ class QueueableBuildingPlanner
      * planet, so the planet that answers is the planet whose laboratory carries it. Nothing here
      * names a technology: the price, the requirement graph and the queue are all the host's.
      */
-    private function queueableResearch(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::RESEARCH_HOURS): ?QueueableResearch
+    private function queueableResearch(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::RESEARCH_HOURS, bool $ignoringPrice = false): ?QueueableResearch
     {
         $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
 
@@ -948,7 +953,7 @@ class QueueableBuildingPlanner
 
         $queueable = !$this->researchQueueService->retrieveQueue($planet)->isQueueFull()
             && ObjectService::objectRequirementsMetWithQueue($machineName, ($planet->getPlayer()?->getResearchLevel($machineName) ?? 0) + 1, $planet)
-            && $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), $reserveHours));
+            && ($ignoringPrice || $planet->hasResources($this->withReserve($planet, ObjectService::getObjectPrice($machineName, $planet), $reserveHours)));
 
         if (!$queueable) {
             return null;

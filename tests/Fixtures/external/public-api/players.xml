@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<players xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://s1-en.ogame.gameforge.com/api/xsd/players.xsd" timestamp="1791543868" serverId="en1"><player id="1" name="PlayerOne" status="a"/><player id="2" name="PlayerTwo" status="vi" alliance="500001"/><player id="3" name="PlayerThree" status="I"/></players>

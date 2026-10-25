@@ -1011,6 +1011,14 @@ def self_check():
     assert ledger.on_path("test:X aspect:raids") and ledger.on_path("harness:self-check"), "live and loop proofs are on the path"
     assert not ledger.on_path("test:AI") and not ledger.on_path(""), "a test alone is not north-star work"
 
+    # The public-data collectors feed training, so they belong to the loop this self-check guards: a
+    # change that breaks their normalization fails here instead of silently in a later training run.
+    for name in ("ogame-public-collect.py", "ogame-ostats-collect.py", "ogame-ogmem-collect.py"):
+        collector = os.path.join(MODULE, "scripts", name)
+        assert os.path.exists(collector), f"{name} is part of the loop"
+        subprocess.run([sys.executable, collector, "--self-check"], check=True,
+                       stdout=subprocess.DEVNULL, timeout=60)
+
     # A repeat failure is the terminal state: digits, paths, ids and durations do not make two failures
     # differ, and the second identical one stops the row for good.
     assert failure_signature("Tests: 2 failed 1.04s at /var/www/a.php:32 row 18915 c0ffee12ab") == \

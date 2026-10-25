@@ -466,9 +466,9 @@ resumes at N7, and then every training run ends with an L1 reading.
 
 | Row | Lane | Status | Agent / date | Commit | Note |
 | --- | --- | --- | --- | --- | --- |
-| N1 | C | open | | | |
-| N2 | B | open | | | |
-| N3a | A | open | | | |
+| N1 | C | claimed | copilot:lane-c 26 Oct | | |
+| N2 | B | claimed | copilot 26 Oct | | |
+| N3a | A | claimed | copilot:lane-a 26 Oct | | |
 | N4 | B | open (after N2, or against a fake file) | | | |
 | N5 | A | blocked on N2, N3a, N4 | | | |
 | N6a-e | A | blocked on N5 (order set by the planner from N5) | | | |

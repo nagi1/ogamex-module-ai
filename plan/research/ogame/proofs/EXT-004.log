@@ -1,0 +1,3 @@
+PASS test:OstatsSnapshotImportTest 1s
+PASS harness:self-check 0s
+PROOF: PASS EXT-004 (test:OstatsSnapshotImportTest harness:self-check)

@@ -62,7 +62,7 @@ class MultiEnv:
         assert all(i == ids[0] for i in ids), "catalogues must list the same objects in the same order"
         sizes = [envs // len(catalogues) + (i < envs % len(catalogues)) for i in range(len(catalogues))]
         self.envs = [
-            ogsim.VecEnv(c, list(range(ogsim.VecEnv.planet_count(c))), n, horizon_hours=HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed + i, queue=econ.QUEUE, login_gaps=econ.LOGIN_GAPS)
+            ogsim.VecEnv(c, list(range(ogsim.VecEnv.planet_count(c))), n, horizon_hours=econ.HORIZON_HOURS, bonus_hours=BONUS_HOURS, seed=seed + i, queue=econ.QUEUE, login_gaps=econ.LOGIN_GAPS)
             for i, (c, n) in enumerate(zip(catalogues, sizes))
         ]
         self.sizes = sizes
@@ -127,6 +127,7 @@ def evaluate(model: CandidateScorer, catalogue: str, device: str, reference: np.
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ogrl.train_ppo")
+    ap.add_argument("--horizon", type=float, default=72.0, help="hours played per game; a longer one pays for a laboratory and research")
     ap.add_argument("--queue", type=int, default=0, help="0 decides buildings, 1 decides research (the other queue plays the player rule)")
     ap.add_argument("--login-gaps", help="JSON list of seconds between logins; accounts then act only at logins, as in the game")
     ap.add_argument("--catalogue", nargs="+", required=True)
@@ -151,12 +152,13 @@ def main(argv: list[str] | None = None) -> None:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "config.json").write_text(json.dumps(vars(args) | {"horizon_hours": HORIZON_HOURS, "bonus_hours": BONUS_HOURS}, indent=2))
+    (out / "config.json").write_text(json.dumps(vars(args) | {"horizon_hours": args.horizon, "bonus_hours": BONUS_HOURS}, indent=2))
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     device = args.device
 
     econ.QUEUE = args.queue
+    econ.HORIZON_HOURS = args.horizon
     econ.LOGIN_GAPS = json.loads(Path(args.login_gaps).read_text()) if args.login_gaps else None
     env = MultiEnv(args.catalogue, args.envs, args.seed)
     s_dim, k, c_dim = env.dims()

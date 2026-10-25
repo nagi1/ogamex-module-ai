@@ -1,0 +1,3 @@
+PASS test:OgmemBattleImportTest 1s
+PASS harness:self-check 1s
+PROOF: PASS EXT-005 (test:OgmemBattleImportTest harness:self-check)

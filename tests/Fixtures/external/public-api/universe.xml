@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<universe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://s1-en.ogame.gameforge.com/api/xsd/universe.xsd" timestamp="1791458041" serverId="en1"><planet id="1" player="1" name="Homeworld" coords="1:1:2"><moon id="9" name="Moon" size="5000"/></planet><planet id="2" player="2" name="Neighbour" coords="1:1:5"/><planet id="3" player="3" name="Cold" coords="1:2:1"><moon id="10" name="moon" size="8774"/></planet></universe>
