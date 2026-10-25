@@ -467,7 +467,7 @@ resumes at N7, and then every training run ends with an L1 reading.
 
 | Row | Lane | Status | Agent / date | Commit | Note |
 | --- | --- | --- | --- | --- | --- |
-| N1 | C | claimed | copilot:lane-c 26 Oct |  |  |
+| N1 | C | done | copilot:lane-c 26 Oct | dc5a4c7 | ai:rl-score-cases over 600 drawn accounts; score::of equals the host on all 600 (0 differ, integer); Pest 3 passed / 530 assertions incl. the rollback |
 | N2 | B | done | copilot 26 Oct | ee160aa | real-bands.json: 21 cells (19 usable), pooled table = §2 on all 24 p10/p50/p90; n differs -3/-9/-25 (ESCALATIONS) |
 | N3a | A | done | copilot:lane-a 26 Oct | ee160aa | season.rs: 3 seeds x 64 accounts x 60 days at speed 8 in 1.32-1.43 s, 3 840 §9.1 lines each, schema exact |
 | N4 | B | done | copilot 26 Oct | 5c00238 | self-test PASSED (HDS 0.862, continuous 0.840, AUC 0.549); fake 60-day file compared; first real reading in §8 |
