@@ -23,6 +23,8 @@ pub mod strike;
 pub mod players;
 /// The errand choice a login makes with its fleet, as candidates a model scores (plan/rl/errand-spec.md).
 pub mod errands;
+/// The host's highscore over a world: the four scores an account is worth (plan/rl/north-star-plan.md, N1).
+pub mod score;
 
 pub use economy::*;
 

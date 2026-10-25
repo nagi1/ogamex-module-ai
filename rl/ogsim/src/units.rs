@@ -35,6 +35,23 @@ struct RawCatalogue {
     stores: Vec<RawStore>,
     units: Vec<RawUnit>,
     planets: Vec<RawPlanet>,
+    /// The host's highscore tables (`score`): what it counts for each object level and how it splits each unit.
+    score: RawScore,
+}
+
+#[derive(Deserialize)]
+struct RawScore {
+    objects: Vec<RawScoreObject>,
+    /// Unit id => the host list it is scored from (`military_ship`, `civil_ship`, `defense`).
+    kinds: HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct RawScoreObject {
+    id: i64,
+    research: bool,
+    /// The host's cost of levels 1..=n, energy excluded (`ObjectService::getObjectCumulativeCost`).
+    cumulative: Vec<[f64; 3]>,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +112,24 @@ pub struct Store {
     pub members: Vec<usize>,
 }
 
+/// Which of the host's three unit lists a unit comes from: the highscore gives a military ship all of its price to the
+/// military score, a civil ship half to the military and half to the economy, and a defence all to both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnitKind {
+    MilitaryShip,
+    CivilShip,
+    Defence,
+}
+
+/// What the host's highscore counts for one economy object: whether it is a research, and the cost of every level up to
+/// the one held.
+#[derive(Clone)]
+pub struct Cost {
+    pub research: bool,
+    /// `cumulative[level - 1]` is the cost of levels 1..=level, in [metal, crystal, deuterium].
+    pub cumulative: Vec<[f64; 3]>,
+}
+
 pub struct Units {
     pub speed: f64,
     pub grid_level: usize,
@@ -104,6 +139,10 @@ pub struct Units {
     pub blocked: Vec<usize>,
     pub stores: Vec<Store>,
     pub units: Vec<Unit>,
+    /// Per unit index, the host list the highscore scores it from.
+    pub kind: Vec<UnitKind>,
+    /// Per economy object index, the highscore's tables (`score::of`); none for an object the export leaves out.
+    pub cost: Vec<Option<Cost>>,
     /// Per economy planet config: (units held at the start, whether the owner's class may build each unit).
     pub planets: Vec<(Vec<u64>, Vec<bool>)>,
     index: HashMap<i64, usize>,
@@ -170,6 +209,17 @@ impl Units {
             let allowed = units.iter().map(|u| p.class_allowed.contains(&u.id)).collect();
             (counts, allowed)
         }).collect();
+        let mut kind = Vec::with_capacity(units.len());
+        for u in &units {
+            kind.push(match raw.score.kinds.get(&u.id.to_string()).map(String::as_str) {
+                Some("military_ship") => UnitKind::MilitaryShip,
+                Some("civil_ship") => UnitKind::CivilShip,
+                Some("defense") => UnitKind::Defence,
+                other => return Err(format!("{path}: unit {} has kind {other:?}; re-export it (ai:rl-units-catalogue)", u.id)),
+            });
+        }
+        let scored: HashMap<i64, &RawScoreObject> = raw.score.objects.iter().map(|o| (o.id, o)).collect();
+        let cost = economy.objects.iter().map(|o| scored.get(&o.id).map(|s| Cost { research: s.research, cumulative: s.cumulative.clone() })).collect();
         Ok(Units {
             speed: raw.economy_speed,
             grid_level: raw.time_grid_level,
@@ -177,6 +227,8 @@ impl Units {
             blocked: raw.blocked_while_upgrading.iter().filter_map(|id| object.get(id).copied()).collect(),
             stores,
             units,
+            kind,
+            cost,
             planets,
             index,
         })
@@ -385,6 +437,8 @@ mod tests {
             blocked: vec![0, 1],
             stores: vec![Store { object: Some(2), capacity_per_level: 10, members: vec![2, 3] }],
             units: vec![unit(1, [10.0, 0.0, 0.0], None, None), unit(2, [10.0, 0.0, 0.0], Some(1), None), unit(3, [1.0, 0.0, 0.0], None, Some((0, 1))), unit(4, [1.0, 0.0, 0.0], None, Some((0, 2)))],
+            kind: vec![UnitKind::MilitaryShip; 4],
+            cost: vec![None; 3],
             planets: vec![(vec![0; 4], vec![true; 4])],
             index: (1..=4).map(|id| (id, id as usize - 1)).collect(),
         };

@@ -30,9 +30,10 @@ class ExportAiUnitsCatalogueAction
 
     /**
      * @param  array<int, PlanetService>  $planets  real planets in order, each a start state; the first is copied as the probe
+     * @param  int  $scoreLevels  Highest level of each object the highscore's cumulative cost is tabulated at
      * @return array<string, mixed>
      */
-    public function handle(array $planets, int $gridLevel): array
+    public function handle(array $planets, int $gridLevel, int $scoreLevels = 40): array
     {
         $units = array_values(ObjectService::getUnitObjects());
         $stations = array_values([...ObjectService::getBuildingObjects(), ...ObjectService::getStationObjects()]);
@@ -79,8 +80,61 @@ class ExportAiUnitsCatalogueAction
                 // A unit the host counts in the planet's production or energy couples the shipyard to the economy.
                 'moves_production' => $production[$unit->id],
             ], $units),
+            // The host's highscore (HighscoreService) as tables. They ride here because a score is computed from a
+            // `World` and a world holds this catalogue, not the economy's: the four scores are the simulator's way of
+            // saying what an account is worth, and they must be the host's own numbers to the point.
+            'score' => [
+                'levels' => $scoreLevels,
+                'objects' => $this->scoreObjects([...$stations, ...$research], $scoreLevels),
+                'kinds' => $this->scoreKinds(),
+            ],
             'planets' => $exported,
         ];
+    }
+
+    /**
+     * What the host counts for a building, a station or a research at every level: the cost of all levels up to it, as
+     * `PlanetService::getPlanetScore` and `PlayerService::getResearchScore` add it up.
+     *
+     * @param  list<GameObject>  $objects
+     * @return list<array<string, mixed>>
+     */
+    private function scoreObjects(array $objects, int $levels): array
+    {
+        return array_map(fn (GameObject $object): array => [
+            'id' => $object->id,
+            'research' => $object->type === GameObjectType::Research,
+            'cumulative' => array_map(fn (int $level): array => $this->cost(ObjectService::getObjectCumulativeCost($object->machine_name, $level)), range(1, $levels)),
+        ], $objects);
+    }
+
+    /**
+     * Which of the host's three unit lists each unit comes from: the highscore gives a military ship all of its price to
+     * the military score, a civil ship half to the military and half to the economy, and a defence all to both.
+     *
+     * @return array<int, string>
+     */
+    private function scoreKinds(): array
+    {
+        $kinds = [];
+        $lists = [
+            'military_ship' => ObjectService::getMilitaryShipObjects(),
+            'civil_ship' => ObjectService::getCivilShipObjects(),
+            'defense' => ObjectService::getDefenseObjects(),
+        ];
+        foreach ($lists as $kind => $of) {
+            foreach ($of as $unit) {
+                $kinds[$unit->id] = $kind;
+            }
+        }
+
+        return $kinds;
+    }
+
+    /** @return list<float> metal, crystal, deuterium; the host's cumulative cost carries no energy */
+    private function cost(Resources $resources): array
+    {
+        return [$resources->metal->get(), $resources->crystal->get(), $resources->deuterium->get()];
     }
 
     /**
