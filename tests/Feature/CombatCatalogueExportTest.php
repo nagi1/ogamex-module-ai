@@ -2,11 +2,21 @@
 
 use Modules\AI\Actions\ExportAiCombatCatalogueAction;
 use OGame\GameMissions\EspionageMission;
+use OGame\GameMissions\MissileMission;
+use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\Factories\GameMissionFactory;
+use OGame\GameMissions\ExpeditionMission;
+use OGame\Models\FleetMission;
+use OGame\Services\CharacterClassService;
+use OGame\Services\FleetMissionService;
+use OGame\Services\MessageService;
+use OGame\Services\SettingsService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlayerService;
+use ReflectionMethod;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -112,4 +122,84 @@ test('the mission block names, by id, the units and research the host\'s mission
         ->and($missions['harvesters'])->toHaveCount(16)
         ->and($missions['harvesters']['3'])->toBe($id(RecycleMission::getHarvesterMachineNameForPosition(3)))
         ->and($missions['harvesters']['16'])->toBe($id(RecycleMission::getHarvesterMachineNameForPosition(16)));
+});
+
+test('the strike block names, by id, what the missile and moon-destruction missions read', function (): void {
+    $player = $this->planetService->getPlayer();
+    $strike = app(ExportAiCombatCatalogueAction::class)->handle($player, 4)['strike'];
+    $id = static fn (string $name): int => ObjectService::getObjectByMachineName($name)->id;
+
+    expect($strike['missile'])->toBe($id('interplanetary_missile'))
+        ->and($strike['interceptor'])->toBe($id('anti_ballistic_missile'))
+        ->and($strike['weapon_research'])->toBe($id('weapon_technology'))
+        ->and($strike['armour_research'])->toBe($id('armor_technology'))
+        ->and($strike['range_research'])->toBe($id('impulse_drive'))
+        ->and($strike['moon_destroyer'])->toBe($id(MoonDestructionMission::getRequiredShipMachineNames()[0]))
+        ->and(array_column($strike['defences'], 'id'))->toBe(array_map(static fn (UnitObject $d): int => $d->id, array_values(ObjectService::getDefenseObjects())));
+
+    foreach ($strike['defences'] as $row) {
+        $defense = ObjectService::getUnitObjectById($row['id']);
+        expect($row['structure'])->toBe($defense->properties->structural_integrity->rawValue)
+            ->and($row['cost'])->toEqual($defense->price->resources->metal->get() + $defense->price->resources->crystal->get());
+    }
+
+    // The range per impulse level is the host's own answer, and the priority codes are its own decoding.
+    foreach ($strike['range_by_level'] as $level => $range) {
+        combatCatalogueSetResearch($player, ['impulse_drive' => $level]);
+        expect($range)->toBe($player->getMissileRange());
+    }
+    $decode = new ReflectionMethod(MissileMission::class, 'decodePriority');
+    foreach ($strike['priorities'] as $code => $mode) {
+        $name = $decode->invoke(app(MissileMission::class), $code);
+        expect($mode)->toBe(in_array($name, ['cheapest', 'expensive'], true) ? $name : $id($name));
+    }
+});
+
+test('the strike constants are the ones the host\'s missile and moon-destruction formulas use', function (): void {
+    $player = $this->planetService->getPlayer();
+    $strike = app(ExportAiCombatCatalogueAction::class)->handle($player, 4)['strike'];
+    $missile = ObjectService::getUnitObjectByMachineName('interplanetary_missile');
+
+    // A missile's attack is the per-missile damage, raised by the weapon bonus a level.
+    combatCatalogueSetResearch($player, []);
+    $plain = $missile->properties->attack->calculate($player)->totalValue;
+    combatCatalogueSetResearch($player, ['weapon_technology' => 1]);
+    expect($plain)->toBe($strike['damage']['per_missile'])
+        ->and($missile->properties->attack->calculate($player)->totalValue)->toBe((int) round($plain * (1 + $strike['damage']['weapon_bonus'])));
+
+    $mission = app(MoonDestructionMission::class);
+    $destroy = new ReflectionMethod(MoonDestructionMission::class, 'calculateMoonDestructionChance');
+    $lose = new ReflectionMethod(MoonDestructionMission::class, 'calculateDeathstarLossChance');
+    foreach ([[3392, 3], [8944, 20], [100, 1], [30000, 5]] as [$diameter, $ships]) {
+        $constants = $strike['moon_destruction'];
+        expect($destroy->invoke($mission, $diameter, $ships))->toEqual(max(0, min(100, ($constants['chance_base'] - sqrt($diameter)) * sqrt($ships))))
+            ->and($lose->invoke($mission, $diameter))->toEqual(max(0, min(100, sqrt($diameter) / $constants['loss_divisor'])));
+    }
+    expect($strike['flight'])->toBe(['base_seconds' => 30, 'seconds_per_system' => 60]);
+});
+
+test('the expedition block holds the host\'s weights, class multipliers and the ships and enemies it names, by id', function (): void {
+    $player = $this->planetService->getPlayer();
+    $expedition = app(ExportAiCombatCatalogueAction::class)->handle($player, 1)['expedition'];
+    $settings = app(SettingsService::class);
+    $classes = app(CharacterClassService::class);
+    $id = static fn (string $name): int => ObjectService::getObjectByMachineName($name)->id;
+
+    $mission = new ReflectionMethod(ExpeditionMission::class, 'getOutcomeWeights');
+    $fleet = new FleetMission();
+    $fleet->user_id = $player->getId();
+    $hosts = $mission->invoke(app(GameMissionFactory::class)->getMissionById(15, ['fleetMissionService' => app()->makeWith(FleetMissionService::class, ['player' => $player]), 'messageService' => app(MessageService::class)]), $fleet);
+
+    expect($expedition['outcome_weights'])->toBe(array_map(static fn (string $name, float $weight): array => [$name, $weight], array_keys($hosts), array_values($hosts)))
+        ->and($expedition['class_resource_multiplier'])->toEqual($classes->getExpeditionResourceMultiplier($player->getUser(), $settings->economySpeed()))
+        ->and($expedition['fleet_speed_peaceful'])->toBe($settings->fleetSpeedPeaceful())
+        ->and($expedition['reward_multiplier'])->toBe(['resources' => $settings->expeditionRewardMultiplierResources(), 'ships' => $settings->expeditionRewardMultiplierShips(), 'dark_matter' => $settings->expeditionRewardMultiplierDarkMatter()])
+        ->and($expedition['ship_levels'][0])->toBe([$id('small_cargo'), $id('light_fighter'), $id('espionage_probe')])
+        ->and($expedition['ship_levels'])->toHaveCount(10)
+        ->and($expedition['ship_needs'])->toBe([(string) $id('pathfinder') => 4, (string) $id('reaper') => 9])
+        ->and($expedition['find_doubler'])->toBe($id('pathfinder'))
+        ->and($expedition['fight']['tech_research'])->toBe([$id('weapon_technology'), $id('shielding_technology'), $id('armor_technology')])
+        ->and($expedition['fight']['npc']['kinds']['pirate']['sizes'][0][2])->toBe($id('light_fighter'))
+        ->and($expedition['fight']['npc']['kinds']['alien']['pool'][0])->toBe([1, $id('heavy_fighter')])
+        ->and($expedition['fight']['npc']['player_tiers'][(string) $id('destroyer')])->toBe(3);
 });
