@@ -92,14 +92,17 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | W8 | Moons, phalanx, jump gate, missiles, expeditions, ACS, moon destruction | one host case set each | open, after W7 |
 | W9 | Self-play training on the world: one small model per decision (next-steps §1), initialised by cloning the scripted players, then RL with a KL anchor to the clone | next-steps gates 1–4; a PHP closed loop as the final check only | open, after W5 and W7 |
 
-## 5. Agents in flight
+## 5. Agents in flight (Sonnet, 25 Oct; each owns separate files)
 
-| Agent task | Row | Files it owns | Started |
-| --- | --- | --- | --- |
-| Economy: satellites and crawlers | W1 | `economy.rs` (production code), `ExportAiEconomyCatalogueAction.php`, `EconomyCatalogueExportTest.php`, minimal edits to `units.rs` | 25 Oct |
+| Agent task | Row | Files it owns |
+| --- | --- | --- |
+| Scripted players: miner, raider, fleet saver | W7 | `players.rs` |
+| Colonisation, several planets per account, deploy | W6 | `world.rs`, economy export (additive) |
+| Expedition outcomes, replayed against `more-mission-cases-u1.json` | W8 | `expedition.rs` |
+| Missiles and moon destruction, replayed against the same file | W8 | `strike.rs`, combat export (additive) |
 
-Agents commit nothing; the lead commits by file name. If an agent's session is gone, re-run its row from the
-description above. The work so far is in the working tree, so check `git status` first.
+When the last two finish, the lead integrates them into `world.rs` as missions (after W6 settles the planet model).
+Agents commit nothing; the lead commits by file name. Check `git status` before starting anything.
 
 ## 6. Log (newest last)
 
@@ -121,3 +124,5 @@ description above. The work so far is in the working tree, so check `git status`
 - The depth of an espionage report uses the probes sent, not those that survived. A report is written even when
   every probe dies.
 - The defender's wreck field is created even when no ship was lost (41 of 357 attacks).
+| 25 Oct | `7ce3e6e` | W4 done: espionage 344 and recycle 351 cases exact; attacks and transports still exact |
+| 25 Oct | `6187ad5` | Second referee `ai:rl-more-mission-cases`: colonise, expedition, missile, moon destruction (1 200 cases) |
