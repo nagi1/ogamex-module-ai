@@ -38,6 +38,7 @@ use Modules\AI\Console\Commands\ReplayAiRlUnitOrders;
 use Modules\AI\Console\Commands\GenerateAiRlBattleCases;
 use Modules\AI\Console\Commands\GenerateAiRlFleetCases;
 use Modules\AI\Console\Commands\GenerateAiRlMissionCases;
+use Modules\AI\Console\Commands\GenerateAiRlMoreMissionCases;
 use Modules\AI\Console\Commands\ExportAiTextReadings;
 use Modules\AI\Console\Commands\JudgeAiWorld;
 use Modules\AI\Console\Commands\EvalAiComposer;
@@ -181,6 +182,7 @@ class AIServiceProvider extends ModuleServiceProvider
         GenerateAiRlBattleCases::class,
         GenerateAiRlFleetCases::class,
         GenerateAiRlMissionCases::class,
+        GenerateAiRlMoreMissionCases::class,
         ReplayAiRlSchedule::class,
         WriteAiHumanTexts::class,
         WriteAiSocialVoices::class,
