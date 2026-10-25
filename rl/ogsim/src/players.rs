@@ -284,7 +284,7 @@ impl Miner {
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize) -> Option<usize> {
         let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
         let pick = match w.decision_kind(a) {
-            Decision::Build => cat.baseline(planet, queue, Baseline::Player, &mut self.rng),
+            Decision::Build => self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)),
             Decision::Idle => None,
         };
         let overflow = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
@@ -292,6 +292,42 @@ impl Miner {
             self.order_ships(w, cat, a);
         }
         pick
+    }
+
+    /// A resource the planet neither makes nor holds: a player mines while short (gate 3), and nothing here names a mine
+    /// — a production row that adds to that resource says which one (gate 1). Without this nothing that costs deuterium
+    /// is ever reachable on a fresh planet, ships and the shipyard included.
+    fn short(&self, w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+        let planet = &w.games[a].planet;
+        (0..3).find(|&r| planet.res[r] <= 0.0 && planet.rate[r] <= 0.0).and_then(|r| {
+            (0..cat.objects.len()).find(|&k| {
+                cat.objects[k].queue == w.games[a].queue
+                    && w.legal(cat, a, k)
+                    && cat.production_row(planet, k, planet.levels[k] as usize).is_some_and(|row| row[r] > 0.0)
+            })
+        })
+    }
+
+
+    /// What to build so the ships this account wants become buildable: the first unmet requirement of a wanted ship, of
+    /// what that requirement needs, and so on, that this queue can start now. A player builds the prerequisite before the
+    /// thing it unlocks, across queues and up the chain (gate 3), and nothing here knows which object that is — the
+    /// requirement lists say so (gate 1).
+    fn unlock(&self, w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+        let levels = &w.games[a].planet.levels;
+        let mut need: Vec<(usize, u32)> = self.order_plans(w, cat, a).into_iter()
+            .flat_map(|(u, _)| w.rules[a].units.units[u].requires.iter().copied())
+            .filter_map(|(k, level)| Some((k?, level)))
+            .collect();
+        let mut at = 0;
+        while at < need.len() && need.len() < 256 {
+            let k = need[at].0;
+            at += 1;
+            need.extend(cat.objects[k].requires.iter().filter_map(|&(need_k, need_level)| Some((need_k?, need_level))));
+        }
+        need.into_iter().find_map(|(k, level)| {
+            (levels[k] < level && cat.objects[k].queue == w.games[a].queue && w.legal(cat, a, k)).then_some(k)
+        })
     }
 
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize) {
@@ -574,6 +610,48 @@ mod tests {
         let moved = weighted(loot) + l.fuel + weighted(l.recycled) + l.lost;
         assert!((v - q).abs() <= moved + 0.03 * q, "seed {seed}: world value {v:.0} vs quiet {q:.0}: gap {:.0} is more than raids moved ({moved:.0})", (v - q).abs());
         Some((ok, failed, l.recalls))
+    }
+
+    /// A world of accounts with nothing on the shelf: what a run starts from.
+    fn bare(seed: u64) -> Option<(Catalogue, World)> {
+        let mut cat = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")).ok()?;
+        cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
+        let rules = Arc::new(Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")).ok()?);
+        let configs: Vec<usize> = (0..ACCOUNTS).collect();
+        let mut world = World::new(&cat, &configs, HOURS, 0.0, seed);
+        world.enable_idle_logins(&cat);
+        let coords = (0..ACCOUNTS).map(|a| Coord { galaxy: 1, system: 10 + 2 * a as i64, position: 4 + (a % 8) as i64 }).collect();
+        world.arm(vec![Arc::clone(&rules); ACCOUNTS], coords);
+        Some((cat, world))
+    }
+
+    /// Without a fleet there is no fleet play at all, so a fresh account must open the way to ships: what the rule picks at
+    /// its build logins is what its wanted ships require, and once that is built the yard can order.
+    #[test]
+    fn a_fresh_account_opens_the_way_to_ships() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        let mut miner = Raider::new(1).miner;
+        assert!(!miner.order_plans(&world, &cat, 0).is_empty(), "the raider wants no ships at all");
+        // A fresh planet makes no deuterium, so nothing that costs it is reachable: the rule must mine it first.
+        assert_eq!(world.games[0].planet.rate[2], 0.0, "the start already makes deuterium");
+        let mut steps = 0;
+        while steps < 6_000 {
+            let Some(a) = world.next_decision(&cat) else { break };
+            if a != 0 {
+                world.wait(&cat, a);
+                steps += 1;
+                continue;
+            }
+            match miner.act(&mut world, &cat, a) {
+                Some(k) => world.commit(&cat, a, k),
+                None => world.wait(&cat, a),
+            }
+            steps += 1;
+            if !world.yards[0].orders.is_empty() || world.yards[0].counts.iter().any(|&n| n > 0) { break }
+        }
+        assert!(world.games[0].planet.rate[2] > 0.0, "the rule never mined deuterium: {:?}", world.games[0].planet.levels);
+        assert!(world.yards[0].counts.iter().any(|&n| n > 0) || !world.yards[0].orders.is_empty(),
+            "{steps} decisions, deuterium flowing and still no ship ordered: {:?}", world.games[0].planet.levels);
     }
 
     #[test]
