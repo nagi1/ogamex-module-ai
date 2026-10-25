@@ -46,6 +46,12 @@ if 'economy_vs_rule_mean' in last:
     print(f"  fleet vs the teacher          : x{1 + last['fleet_vs_rule_mean']:,.0f}"
           f" ({1 - last['accounts_with_less_fleet']:.0%} of accounts hold more)")
 print(f"  worst account                 : {last['worst_account']:+.2%}")
+# A run that stopped moving minutes ago is at a fixed point; say so, instead of letting a flat
+# number read as "still learning".
+settled = next((r["update"] for r in rows
+                if abs(r["value_vs_rule_mean"] - last["value_vs_rule_mean"]) < 1e-9), last["update"])
+print(f"  settled at update             : {settled} of {last['update']}"
+      f"{' (the last stretch changed nothing)' if settled < last['update'] else ''}")
 verdict = "PASS" if last["value_vs_rule_mean"] > 0 and last["ci95_world_bootstrap"][0] > 0 else "FAIL"
 print(f"  verdict                       : {verdict} (needs value > 0 and its whole CI above 0)")
 sys.exit(0 if verdict == "PASS" else 1)

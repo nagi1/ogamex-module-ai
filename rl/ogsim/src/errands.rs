@@ -22,10 +22,10 @@ pub const STATE_NAMES: [&str; 12] = [
 ];
 
 /// What one candidate adds: the account's columns, then these.
-pub const CAND_NAMES: [&str; 12] = [
+pub const CAND_NAMES: [&str; 13] = [
     "distance", "flight_hours", "fuel_over_stock", "expected_loot", "loot_over_fuel",
     "target_ratio", "report_age_hours", "target_inactive", "field", "field_over_capacity",
-    "target_stock", "attack_in_hours",
+    "target_stock", "attack_in_hours", "order_share",
 ];
 
 pub const STATE_DIM: usize = STATE_NAMES.len();
@@ -56,19 +56,46 @@ impl Kind {
     }
 }
 
-/// One thing a login may do. A fleet errand names the slot it flies at; an order names the unit it builds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// How much of the missing count an order asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Size {
+    /// The whole want, which is what the scripted rule orders and often more than the stock pays for.
+    Want,
+    /// Only what the stock pays for now, which is what a player orders when resources are short.
+    Now,
+}
+
+/// One thing a login may do. A fleet errand names the slot it flies at; an order names the unit it builds and how much
+/// of it to ask for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Errand {
     pub kind: Kind,
     pub target: Option<usize>,
     /// The catalogue index of the unit an order builds.
     pub unit: Option<usize>,
+    pub size: Size,
 }
 
 impl Errand {
     fn at(kind: Kind, target: usize) -> Errand {
-        Errand { kind, target: Some(target), unit: None }
+        Errand { kind, target: Some(target), unit: None, size: Size::Want }
     }
+}
+
+/// The most of units-index `unit` this login could actually order: the host's own cap (`max_amount`: requirements, owned
+/// limit, storage), the yard's own table, and what the stock pays for, up to the missing count. The host charges the
+/// whole order or nothing, so anything above this is refused and the login is spent on nothing.
+fn orderable(w: &World, cat: &Catalogue, a: usize, unit: usize, missing: i64) -> i64 {
+    let rules = &w.rules[a];
+    let Some(u) = rules.units.units.get(unit) else { return 0 };
+    let upgrading = w.games[a].pending.iter().find(|&&(_, k)| cat.objects[k].queue == 0).map(|&(_, k)| k);
+    if !w.yards[a].allowed.get(unit).copied().unwrap_or(false) || upgrading.is_some_and(|k| rules.units.blocked.contains(&k)) {
+        return 0;
+    }
+    let cap = rules.units.max_amount(&w.yards[a], &w.games[a].planet, unit) as i64;
+    let res = w.games[a].planet.res;
+    let by_stock = (0..3).filter(|&r| u.price[r] > 0.0).fold(i64::MAX, |m, r| m.min((res[r] / u.price[r]).floor() as i64));
+    missing.min(cap).min(by_stock).max(0)
 }
 
 /// The teacher is the scripted raider's own economy rule, so an `order` candidate is the amount it would order.
@@ -101,7 +128,7 @@ pub const TEACHER_ORDER: [Kind; 7] = [Kind::Save, Kind::Recall, Kind::Recycle, K
 
 /// Every errand this login may choose, `wait` first (row 0: the exporters, the metrics and the PHP encoder assume it).
 pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
-    let mut out = vec![Errand { kind: Kind::Wait, target: None, unit: None }];
+    let mut out = vec![Errand { kind: Kind::Wait, target: None, unit: None, size: Size::Want }];
     if w.account_of(a) == a {
         if let Some(kit) = Kit::of(w, cat, a) {
             let now = w.games[a].t;
@@ -122,8 +149,13 @@ pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
             }
         }
         if matches!(w.decision_kind(a), Decision::Idle) {
-            for (unit, _) in teacher().order_plans(w, cat, a) {
-                out.push(Errand { kind: Kind::Order, target: None, unit: Some(unit) });
+            for (unit, missing) in teacher().order_plans(w, cat, a) {
+                out.push(Errand { kind: Kind::Order, target: None, unit: Some(unit), size: Size::Want });
+                // A player with a short stock orders what it can pay for instead of spending the login on a refusal.
+                let now = orderable(w, cat, a, unit, missing);
+                if now > 0 && now < missing {
+                    out.push(Errand { kind: Kind::Order, target: None, unit: Some(unit), size: Size::Now });
+                }
             }
         }
         if incoming(w, a).is_some_and(|lands| save_plan(w, cat, a, lands - w.games[a].t).is_some()) {
@@ -141,7 +173,7 @@ pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
 /// `TEACHER_ORDER`. `wait` when the login has nothing better to do.
 pub fn teacher_choice(w: &mut World, cat: &Catalogue, a: usize) -> Errand {
     let offered = candidates(w, cat, a);
-    TEACHER_ORDER.iter().find_map(|&kind| offered.iter().copied().find(|e| e.kind == kind)).unwrap_or(Errand { kind: Kind::Wait, target: None, unit: None })
+    TEACHER_ORDER.iter().find_map(|&kind| offered.iter().copied().find(|e| e.kind == kind)).unwrap_or(Errand { kind: Kind::Wait, target: None, unit: None, size: Size::Want })
 }
 
 /// What the errand does to the world, through the world's own calls, so a refusal is the host's refusal.
@@ -174,8 +206,10 @@ pub fn apply(w: &mut World, cat: &Catalogue, a: usize, errand: Errand) -> Result
         }
         Kind::Order => {
             let unit = errand.unit.ok_or("no unit to order")?;
-            let amount = teacher().order_plans(w, cat, a).into_iter().find(|&(u, _)| u == unit).map_or(0, |(_, n)| n);
-            if amount == 0 { return Err("nothing to order") }
+            let missing = teacher().order_plans(w, cat, a).into_iter().find(|&(u, _)| u == unit).map_or(0, |(_, n)| n);
+            if missing == 0 { return Err("nothing to order") }
+            let amount = match errand.size { Size::Want => missing, Size::Now => orderable(w, cat, a, unit, missing) };
+            if amount <= 0 { return Err("nothing the stock pays for") }
             w.order_units(cat, a, unit, amount as u64);
             Ok(())
         }
@@ -219,6 +253,14 @@ pub fn account_features(w: &World, cat: &Catalogue, a: usize) -> [f32; STATE_DIM
 pub fn candidate_features(w: &mut World, cat: &Catalogue, a: usize, errand: Errand) -> [f32; CAND_DIM] {
     let mut f = [0.0; CAND_DIM];
     f[CAND_NAMES.len() + errand.kind.column()] = 1.0;
+    if errand.kind == Kind::Order {
+        // Two orders of the same unit differ only in this: the share of the want the login asks for.
+        let missing = teacher().order_plans(w, cat, a).into_iter().find(|&(u, _)| Some(u) == errand.unit).map_or(0, |(_, n)| n);
+        f[12] = match errand.size {
+            Size::Want => 1.0,
+            Size::Now => ratio(orderable(w, cat, a, errand.unit.unwrap_or(0), missing) as f64, missing as f64),
+        };
+    }
     let now = w.games[a].t;
     let target = errand.target.unwrap_or(a);
     let inactive = w.inactive(cat, target, now);
@@ -348,6 +390,27 @@ mod tests {
         for kind in [Kind::Spy, Kind::Raid, Kind::Order] {
             assert!(kinds.contains(&kind), "{kind:?} was never offered: {kinds:?}");
         }
+    }
+
+    /// The order size is a real choice, not a duplicate row: with a stock that cannot pay for the whole want, the staged
+    /// order queues the units the stock pays for, and it is fewer than the want.
+    #[test]
+    fn a_short_stock_orders_only_what_it_pays_for() {
+        let mut cases = 0;
+        for seed in 1..=4u64 {
+            let Some(_) = drive(seed, |w, cat, a, offered| {
+                let Some(now) = offered.iter().copied().find(|e| e.kind == Kind::Order && e.size == Size::Now) else { return };
+                let want = offered.iter().copied().find(|e| e.kind == Kind::Order && e.size == Size::Want && e.unit == now.unit).expect("the whole want is offered beside the staged order");
+                let missing = teacher().order_plans(w, cat, a).into_iter().find(|&(u, _)| Some(u) == now.unit).map_or(0, |(_, n)| n);
+                assert_eq!(want.unit, now.unit, "both sizes are offered for the same unit");
+                apply(w, cat, a, now).expect("the world offered the staged order");
+                let queued: u64 = w.yards[a].orders.iter().map(|o| o.amount - o.done).sum();
+                assert!(queued > 0, "the staged order queued nothing");
+                assert!((queued as i64) < missing, "the staged order asked for {queued} of {missing}, so it is not a smaller choice");
+                cases += 1;
+            }) else { continue };
+        }
+        assert!(cases > 0, "no login ever offered a staged order");
     }
 
     /// A raid errand is the raider's own raid: the fleet reaches the target and comes home with loot.
