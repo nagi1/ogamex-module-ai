@@ -2,7 +2,10 @@
 
 namespace Modules\AI\Actions;
 
+use Closure;
 use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
+use OGame\GameConstants\UniverseConstants;
+use OGame\GameMissions\ColonisationMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\GameObjects\Models\UnitObject;
@@ -10,6 +13,7 @@ use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\SettingsService;
+use ReflectionClass;
 use RuntimeException;
 
 /**
@@ -51,9 +55,11 @@ class ExportAiEconomyCatalogueAction
 
     /**
      * @param  list<PlanetService>  $planets  real planets, each becomes one start state of the simulator
+     * @param  list<array{planet: int, position: int, temp_max: int, fields: int}>  $sites  colonies to tabulate: the donor planet's
+     *                                                                                         id (its owner's class and officers carry over), the slot, and the temperature and size the host drew for it
      * @return array<string, mixed>
      */
-    public function handle(array $planets, int $maxLevel, int $unitGrid = self::UNIT_GRID): array
+    public function handle(array $planets, int $maxLevel, int $unitGrid = self::UNIT_GRID, array $sites = []): array
     {
         $units = array_values(ObjectService::getUnitObjects());
         // Every other table is the host's answer with no unit on the planet; the units are put back at the end.
@@ -74,6 +80,14 @@ class ExportAiEconomyCatalogueAction
             'unit_production' => array_map(fn (UnitObject $unit): array => $this->tabulated($planet, $unit, $counts[$unit->id]) ? $this->unitProduction($planet, $unit, $objects, $everything, $maxLevel, $unitGrid) : self::noUnitProduction($unit), $movers),
         ], $planets, $held);
         $probes = $this->unitProbes($planets, $objects, $research, $movers, $maxLevel, $unitGrid);
+        // Catalogue v4, additive: a colony is a planet of its own owner at another slot and temperature, so it is
+        // tabulated by asking the host about the donor planet moved there. Its entry follows the home planets, with a
+        // negative planet id so no mission case can name it.
+        $colonies = [];
+        foreach (array_values($sites) as $n => $site) {
+            $colonies[] = $this->site($planets, $site, -($n + 1), $objects, $everything, $research, $movers, $maxLevel, $unitGrid);
+        }
+        $colonisation = $this->colonisation($planets, $sites, count($exported), $maxLevel);
         foreach ($planets as $index => $planet) {
             $this->putUnits($planet, $held[$index]);
         }
@@ -93,8 +107,87 @@ class ExportAiEconomyCatalogueAction
             // Combinations of levels and unit counts with the host's own answer, so the simulator's composition of the
             // per-level and per-count tables is checked against the host and not against itself.
             'unit_probes' => $probes,
-            'planets' => $exported,
+            'planets' => [...$exported, ...$colonies],
+            'colonisation' => $colonisation,
         ];
+    }
+
+    /**
+     * What colonising needs besides the mission itself: the ship and the research the mission class declares, the
+     * host's planet limit per research level, the research each slot needs, and where each tabulated site sits.
+     *
+     * @param  list<PlanetService>  $planets
+     * @param  list<array{planet: int, position: int, temp_max: int, fields: int}>  $sites
+     * @return array<string, mixed>
+     */
+    private function colonisation(array $planets, array $sites, int $firstSite, int $maxLevel): array
+    {
+        $class = new ReflectionClass(ColonisationMission::class);
+        $researchName = (string) array_key_first($class->getStaticPropertyValue('requiredResearch'));
+        $research = ObjectService::getResearchObjectByMachineName($researchName);
+        $ship = ObjectService::getUnitObjectByMachineName((string) $class->getStaticPropertyValue('requiredShipMachineNames')[0]);
+        $player = $planets[0]->getPlayer();
+        $saved = $player->getResearchLevel($research->machine_name);
+        $maxPlanets = [];
+        $positionLevels = [];
+        for ($level = 0; $level <= $maxLevel; $level++) {
+            $player->setResearchLevel($research->machine_name, $level, false);
+            $maxPlanets[] = $player->getMaxPlanetAmount();
+            for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
+                if (! isset($positionLevels[$position]) && $player->canColonizePosition($position)) {
+                    $positionLevels[$position] = $level;
+                }
+            }
+        }
+        $player->setResearchLevel($research->machine_name, $saved, false);
+
+        return [
+            'research' => $research->id,
+            'ship' => $ship->id,
+            'max_planets' => $maxPlanets,
+            'position_levels' => $positionLevels,
+            'sites' => array_map(static fn (array $site, int $n): array => [
+                'config' => $firstSite + $n,
+                'donor' => $site['planet'],
+                'position' => $site['position'],
+                'temp_max' => $site['temp_max'],
+                'fields' => $site['fields'],
+            ], array_values($sites), array_keys(array_values($sites))),
+        ];
+    }
+
+    /**
+     * One colony as a planet entry: the donor planet moved to the slot, its temperature and size, no building and the
+     * stock a new colony starts with, and everything else (research, class, officers) the owner's.
+     *
+     * @param  list<PlanetService>  $planets
+     * @param  array{planet: int, position: int, temp_max: int, fields: int}  $site
+     * @param  list<GameObject>  $objects
+     * @param  list<GameObject>  $everything
+     * @param  list<GameObject>  $research
+     * @param  list<UnitObject>  $movers
+     * @return array<string, mixed>
+     */
+    private function site(array $planets, array $site, int $planetId, array $objects, array $everything, array $research, array $movers, int $maxLevel, int $unitGrid): array
+    {
+        $donor = current(array_filter($planets, static fn (PlanetService $planet): bool => $planet->getPlanetId() === $site['planet']));
+        if ($donor === false) {
+            throw new RuntimeException("No planet {$site['planet']} to tabulate a colony from.");
+        }
+        $model = Closure::bind(fn (): object => $this->planet, $donor, PlanetService::class)();
+        $columns = ['planet', 'temp_max', 'temp_min', 'field_max', 'metal', 'crystal', 'deuterium'];
+        $kept = $model->only($columns);
+        $model->forceFill(['planet' => $site['position'], 'temp_max' => $site['temp_max'], 'temp_min' => $site['temp_max'] - 40, 'field_max' => $site['fields'], 'metal' => 500, 'crystal' => 500, 'deuterium' => 0]);
+        try {
+            $entry = $this->withLevels($donor, $objects, [], fn (): array => $this->planet($donor, $objects, $everything, $research, $maxLevel) + [
+                'unit_counts' => array_map(static fn (): int => 0, $movers),
+                'unit_production' => array_map(fn (UnitObject $unit): array => $this->tabulated($donor, $unit, 0) ? $this->unitProduction($donor, $unit, $objects, $everything, $maxLevel, $unitGrid) : self::noUnitProduction($unit), $movers),
+            ]);
+        } finally {
+            $model->forceFill($kept);
+        }
+
+        return ['planet_id' => $planetId] + $entry;
     }
 
     /** @return list<GameObject> every building and station the host lets a planet queue */

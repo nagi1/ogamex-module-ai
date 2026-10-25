@@ -140,6 +140,7 @@ pub struct Object {
     pub build_seconds_grid: Vec<Vec<f64>>,
 }
 
+#[derive(Clone)]
 pub struct PlanetConfig {
     /// The host's planet id, which the mission cases address planets by.
     pub planet_id: i64,
@@ -162,6 +163,7 @@ pub struct PlanetConfig {
 /// One unit's production tables on one planet, every row indexed by the count the host puts to use: the held count,
 /// capped by `usable` (the sum of an object's level times its number) when the host bounds it. A count past a table
 /// reads its edge, which is outside what the host answered (the export's unit grid).
+#[derive(Clone)]
 pub struct UnitProduction {
     pub usable: Option<Vec<(usize, u64)>>,
     /// The unit's own row as a producer, [count].

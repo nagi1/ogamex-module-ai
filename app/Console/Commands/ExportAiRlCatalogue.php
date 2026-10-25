@@ -20,7 +20,8 @@ use OGame\Factories\PlayerServiceFactory;
 #[Signature('ai:rl-catalogue
     {universe : A SQLite file made by ai:rl-universe}
     {out : The JSON file to write}
-    {--max-level=40 : Highest level tabulated per object}')]
+    {--max-level=40 : Highest level tabulated per object}
+    {--sites= : A JSON list of colonies to tabulate, each {planet, position, temp_max, fields}}')]
 class ExportAiRlCatalogue extends Command
 {
     use OpensRlUniverse;
@@ -33,7 +34,8 @@ class ExportAiRlCatalogue extends Command
             ->map(static fn (int $playerId) => app(PlayerServiceFactory::class)->make($playerId, true)->planets->first())
             ->all();
 
-        $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle($planets, max(1, (int) $this->option('max-level')));
+        $sites = $this->option('sites') ? json_decode((string) file_get_contents((string) $this->option('sites')), true, 512, JSON_THROW_ON_ERROR) : [];
+        $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle($planets, max(1, (int) $this->option('max-level')), ExportAiEconomyCatalogueAction::UNIT_GRID, $sites);
         file_put_contents((string) $this->argument('out'), json_encode($catalogue, JSON_THROW_ON_ERROR));
 
         $this->info(sprintf('RL-CATALOGUE: %s, %d object(s), %d time modifier(s), %d planet(s)', $this->argument('out'), count($catalogue['objects']), count($catalogue['time_modifiers']), count($catalogue['planets'])));

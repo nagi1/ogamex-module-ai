@@ -240,3 +240,36 @@ test('the units that move production are tabulated by count and put back where t
             ->and($table['energy'] === [] || count($table['energy']) > 1)->toBeTrue();
     }
 });
+
+test('a colony is tabulated as the donor planet moved to its slot, and the planet is left where it was', function (): void {
+    $planet = $this->planetService;
+    $position = $planet->getPlanetCoordinates()->position;
+    $temperature = $planet->getPlanetTempMax();
+    $fields = $planet->getPlanetFieldMax();
+    $other = $position === 8 ? 9 : 8;
+    $site = ['planet' => $planet->getPlanetId(), 'position' => $other, 'temp_max' => 31, 'fields' => 123];
+
+    $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$planet], 3, 8, [$site]);
+
+    $colonisation = $catalogue['colonisation'];
+    expect(count($catalogue['planets']))->toBe(2)
+        ->and($colonisation['ship'])->toBe(ObjectService::getUnitObjectByMachineName('colony_ship')->id)
+        ->and($colonisation['research'])->toBe(ObjectService::getResearchObjectByMachineName('astrophysics')->id)
+        ->and($colonisation['max_planets'])->toHaveCount(4)
+        ->and($colonisation['max_planets'][0])->toBe(1)
+        ->and($colonisation['sites'])->toBe([['config' => 1, 'donor' => $planet->getPlanetId(), 'position' => $other, 'temp_max' => 31, 'fields' => 123]]);
+
+    $colony = $catalogue['planets'][1];
+    expect($colony['planet_id'])->toBeLessThan(0)
+        ->and($colony['position'])->toBe($other)
+        ->and($colony['temperature'])->toBe(31 - 20)
+        ->and($colony['field_max'])->toBe(123)
+        ->and($colony['resources'])->toEqual([500, 500, 0])
+        ->and(array_sum(array_intersect_key($colony['levels'], array_flip(array_column($catalogue['objects'], 'id')))))->toBe(0);
+
+    // The donor is untouched.
+    expect($planet->getPlanetCoordinates()->position)->toBe($position)
+        ->and($planet->getPlanetTempMax())->toBe($temperature)
+        ->and($planet->getPlanetFieldMax())->toBe($fields)
+        ->and($catalogue['planets'][0]['position'])->toBe($position);
+});
