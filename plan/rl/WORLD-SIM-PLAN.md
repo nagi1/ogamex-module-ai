@@ -53,8 +53,13 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
   true infinity and any per-account clock (the login times) must be seeded at the start: a login schedule that walks
   forward from second zero spends a million steps reaching 2026.
 - **One catalogue, one character class.** The fleet settings and the combat tables bake in the class of the player they
-  were exported for (fuel multiplier, loot share), so a fight between two classes needs one catalogue per side, which is
-  not built yet.
+  were exported for (fuel multiplier, loot share), so a fight between two classes needs one catalogue per side. The world
+  now keeps one `Rules` per account (`World::rules`), which closes this.
+- **The host stores a resource at 14 significant digits, not at full double precision.** Laravel binds a float as the
+  string PHP's `precision` ini (14) produces, so every save rounds the value and every later read sees the rounded one.
+  313.3333333333333 metal became 313.33333333333, and 0.75 of it then looted 234 instead of 235 — the last failing attack
+  case. `economy::as_stored` reproduces the rounding; use it at **every** write of a stock or a cargo (accrual, dispatch,
+  arrival, landing, loot) and nowhere else. Do not "fix" it by widening precision: the host is the referee.
 
 ## 3. Design of the world (what a new agent must know before touching `world.rs`)
 
@@ -79,7 +84,7 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | --- | --- | --- | --- |
 | W1 | Units that change production (solar satellites, crawlers) counted by the economy, read from host tables | Rust test exact against host production on level patterns and unit counts its tables are not tabulated at (`economy::tests::composes_the_unit_tables_as_the_host_does`); the same test fails if no probe holds a unit | **done** `97b6854` |
 | W2 | Host mission cases: `ai:rl-mission-cases {universe} {out}` for transport, deploy, espionage, attack and recycle through the host's real dispatch and processing, with writes rolled back | Pest `MissionCasesExportTest`; `storage/rl/ogsim/mission-cases-u1.json` (~2 000 cases) | **done** `fc4f464`: 2 000 cases, 1 751 accepted; every attack seed replays the host fight |
-| W3 | World parity against W2: each case replayed in `world.rs` gives the host's times, fuel, stock, ships, debris and moon (battles: settle given the host's survivors, as `combat.rs` tests) | Rust test over every case | **transports done** `97b6854`: 171 flows and 20 refusals equal the host (`world::tests::mission_parity`). Attacks need three rules the world lacks: a fight between two character classes (one catalogue bakes in one), an attack that carries resources in its hold, and the loot cap that follows from the survivors; each is measured by running `OGSIM_MISSION=attack cargo test --release mission_parity` |
+| W3 | World parity against W2: each case replayed in `world.rs` gives the host's times, fuel, stock, ships, debris and moon (battles: settle given the host's survivors, as `combat.rs` tests) | Rust test over every case | **done**: transports 171 + 20 refusals, attacks 357 + 30 refusals equal to the host (`OGSIM_MISSION=attack cargo test --release mission_parity`): one `Rules` per account (two classes), cargo in the hold, the survivors' loot cap, and the host's 14-digit stock rounding (`economy::as_stored`) |
 | W4 | Espionage (probes, the report's sections, counter-espionage), recycle (debris, recycler capacity read from host data), and deploy as a mission rule, in `world.rs` | W3's cases for those missions, plus W3's attack gaps above | open |
 | W5 | Python binding `VecWorld`: N worlds of M accounts, `controlled` slots decide through the model (same features as `VecEnv`), the rest play the player rule; each decision gets a ticket and its reward (value change until that account decides again, plus the bonus at the end) comes back from `step` by ticket | smoke run plus measurement | **done** (economy decisions): 110 k account-hours/s and ~10 k controlled decisions/s per core, about 25 µs per decision, mostly the world itself, not Python. Fleet and shipyard decisions come with W7/W9. Note: `Game::value` counts buildings and stock, not ships, so a policy that buys ships needs ships at price in the value first |
 | W6 | Colonisation and multiple planets per account: an account owns several economies, research is shared across them and done at one lab, and deploy works between own planets | W2 cases for colonise and deploy; research equal on every planet | open |
@@ -92,7 +97,6 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | Agent task | Row | Files it owns | Started |
 | --- | --- | --- | --- |
 | Economy: satellites and crawlers | W1 | `economy.rs` (production code), `ExportAiEconomyCatalogueAction.php`, `EconomyCatalogueExportTest.php`, minimal edits to `units.rs` | 25 Oct |
-| World parity plus espionage, recycle and deploy | W3, W4 | `world.rs`, `rl/ogsim/tests/` | 25 Oct |
 
 Agents commit nothing; the lead commits by file name. If an agent's session is gone, re-run its row from the
 description above. The work so far is in the working tree, so check `git status` first.

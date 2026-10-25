@@ -6,18 +6,19 @@
 //! API for `world`:
 //!
 //! * `CombatCatalogue::load(path)` / `from_value(json)`: the combat catalogue, valued for one account (its class
-//!   bonuses, loot percentage and universe rules apply to both sides). An optional `non_combatants` list (unit ids the
-//!   host leaves out of a planet's defence; `ai:rl-battle-cases` writes it by asking the host) is dropped from defenders.
+//!   bonuses, loot percentage and universe rules live in the file, and `ai:rl-combat-catalogue --player=<id>` writes
+//!   one file per class). An optional `non_combatants` list (unit ids the host leaves out of a planet's defence;
+//!   `ai:rl-battle-cases` writes it by asking the host) is dropped from defenders.
 //! * `Battle { attacker, attacker_research, attacker_cargo, defender, defender_research, defender_stock,
 //!   defender_engineer, moon_exists, seed }`: fleets are `[(unit id, amount)]` (the defender is the planet's ships
 //!   and defences), research is levels by research id (missing is 0, at most the catalogue's max level),
 //!   `attacker_cargo` what the fleet already carries, `defender_stock` the planet's metal, crystal and deuterium.
-//! * `fight(&catalogue, &battle) -> Outcome`: the whole battle, reproducible from `seed`. `Outcome` holds `rounds`,
-//!   `winner` (`BattleReport`'s rule: no round is an attacker win, both standing a draw, both gone a defender win),
-//!   survivors, losses, `repaired` defences (back on the planet, not lost), `loot` (taken from the planet),
-//!   `debris` (into the field), `moon_chance` in percent, `moon_created`, and both sides' losses at build price.
-//!   The planet keeps `defender_left + repaired`; the fleet flies home with `attacker_left`, `attacker_cargo` scaled by
-//!   its surviving capacity, plus `loot`.
+//! * `fight(&attacker, &defender, &battle) -> Outcome`: the whole battle, reproducible from `seed`. A fight takes both
+//!   players' catalogues, because the host values each side with its own player's class; they must be of one universe.
+//!   `Outcome` holds `rounds`, `winner` (`BattleReport`'s rule: no round is an attacker win, both standing a draw, both
+//!   gone a defender win), survivors, losses, `repaired` defences (back on the planet, not lost), `loot` (taken from
+//!   the planet), `cargo` (what the surviving fleet flies home with), `debris` (into the field), `moon_chance` in
+//!   percent, `moon_created`, and both sides' losses at build price. The planet keeps `defender_left + repaired`.
 //! * Pieces, for parity and for callers that bring their own result: `engine_input` (the JSON
 //!   `RustBattleEngine::prepareBattleInput` builds), `run_engine`, `roll_repairs`, `settle` (the arithmetic after the
 //!   engine, exact against the host given the same survivors, repairs and moon roll).
@@ -62,6 +63,13 @@ pub struct CombatRules {
     pub debris_deuterium: bool,
     pub defense_repair_rate: f64,
     pub maximum_moon_chance: f64,
+    /// `CharacterClassService::getReaperDebrisCollectionPercentage`: what a surviving debris collector hauls in, in
+    /// percent; catalogues written before this rule existed collect nothing.
+    #[serde(default)]
+    pub reaper_debris_percentage: f64,
+    /// The unit the host lets haul debris in after a fight, by host id (`AttackMission::processArrival`).
+    #[serde(default)]
+    pub debris_collector: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -85,6 +93,7 @@ pub struct CombatCatalogue {
     pub rules: CombatRules,
     units: HashMap<u32, Unit>,
     non_combatants: HashSet<u32>,
+    debris_collector: Option<u32>,
 }
 
 pub type Units = BTreeMap<u32, i64>;
@@ -92,7 +101,9 @@ pub type Units = BTreeMap<u32, i64>;
 pub struct Battle<'a> {
     pub attacker: &'a [(u32, i64)],
     pub attacker_research: &'a HashMap<u32, u32>,
-    pub attacker_cargo: [i64; 3],
+    /// What the fleet carries into the fight, half fuel included; a fractional deuterium survives to the same decimals
+    /// the host's `Resources` does.
+    pub attacker_cargo: [f64; 3],
     pub defender: &'a [(u32, i64)],
     pub defender_research: &'a HashMap<u32, u32>,
     pub defender_stock: [f64; 3],
@@ -126,7 +137,13 @@ pub struct Outcome {
     pub defender_lost: Units,
     pub repaired: Units,
     pub loot: [i64; 3],
+    /// What the surviving fleet flies home with: the cargo it held, plus the loot and the debris it hauled in, capped
+    /// by the surviving capacity.
+    pub cargo: [i64; 3],
+    /// What goes into the debris field (the fight's debris less what both sides' collectors hauled out).
     pub debris: [i64; 3],
+    /// What the defender's own collectors put back on the planet (fractional, as the host adds it).
+    pub salvage: [f64; 3],
     pub moon_chance: i64,
     pub moon_created: bool,
     pub attacker_loss: [i64; 3],
@@ -149,7 +166,7 @@ impl CombatCatalogue {
                 (u.id, Unit { defense: u.kind == "defense", price: u.price, rapidfire, properties: u.properties })
             })
             .collect();
-        Ok(CombatCatalogue { max_level: raw.max_level, rules: raw.rules, units, non_combatants: raw.non_combatants.into_iter().collect() })
+        Ok(CombatCatalogue { max_level: raw.max_level, debris_collector: raw.rules.debris_collector, rules: raw.rules, units, non_combatants: raw.non_combatants.into_iter().collect() })
     }
 
     fn unit(&self, id: u32) -> &Unit {
@@ -225,13 +242,14 @@ pub fn defender_units(catalogue: &CombatCatalogue, battle: &Battle) -> Units {
     units_of(battle.defender, &catalogue.non_combatants)
 }
 
-/// RustBattleEngine::prepareBattleInput: one fleet a side, each valued at its owner's research, hull = floor(SI / 10).
-pub fn engine_input(catalogue: &CombatCatalogue, battle: &Battle) -> Value {
-    let attacker = units_of(battle.attacker, &HashSet::new());
-    let defender = defender_units(catalogue, battle);
+/// RustBattleEngine::prepareBattleInput: one fleet a side, each valued at its owner's research and class, hull =
+/// floor(SI / 10). Each side reads its own catalogue: the class changes weapon, shield and hull levels and speeds.
+pub fn engine_input(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle) -> Value {
+    let fleet = units_of(battle.attacker, &HashSet::new());
+    let planet = defender_units(defender, battle);
     json!({
-        "attacker_fleets": [catalogue.fleet_json(1, 1, &attacker, battle.attacker_research)],
-        "defender_fleets": [catalogue.fleet_json(0, 2, &defender, battle.defender_research)],
+        "attacker_fleets": [attacker.fleet_json(1, 1, &fleet, battle.attacker_research)],
+        "defender_fleets": [defender.fleet_json(0, 2, &planet, battle.defender_research)],
         "seed": battle.seed,
     })
 }
@@ -271,6 +289,16 @@ pub fn run_engine(input: &Value) -> EngineResult {
         Some(last) => EngineResult { rounds: output.rounds.len() as u32, attacker_left: counts(&last.attacker_ships), defender_left: counts(&last.defender_ships) },
         None => EngineResult { rounds: 0, attacker_left: side("attacker_fleets"), defender_left: side("defender_fleets") },
     }
+}
+
+/// A fight the host already settled: the engine's survivors, the defences it repaired and the roll it made for a moon
+/// (1..=100). `ai:rl-mission-cases` records these, so a replay needs none of the host's dice; the arithmetic around the
+/// fight (loot, debris, cargo home) is still the world's own.
+#[derive(Clone, Debug)]
+pub struct Recorded {
+    pub engine: EngineResult,
+    pub repaired: Units,
+    pub moon_roll: i64,
 }
 
 /// splitmix64: the simulator's own stream for the host's post-battle dice (repairs, moon), seeded from the fight.
@@ -345,11 +373,12 @@ fn distribute_loot(loot: [f64; 3], capacity: i64) -> [f64; 3] {
     taken
 }
 
-/// Everything after the engine, as BattleEngine::simulateBattle applies it for one attacking fleet.
-pub fn settle(catalogue: &CombatCatalogue, battle: &Battle, engine: EngineResult, repaired: Units, moon_roll: i64) -> Outcome {
-    let rules = &catalogue.rules;
+/// Everything after the engine, as `BattleEngine::simulateBattle` and `AttackMission::processArrival` apply it for one
+/// attacking fleet. `attacker` values that fleet's side, `defender` the planet's; the universe rules in both are equal.
+pub fn settle(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle, engine: EngineResult, repaired: Units, moon_roll: i64) -> Outcome {
+    let rules = &attacker.rules;
     let attacker_start = units_of(battle.attacker, &HashSet::new());
-    let defender_start = defender_units(catalogue, battle);
+    let defender_start = defender_units(defender, battle);
     let attacker_lost = minus(&attacker_start, &engine.attacker_left);
     let defender_lost = minus(&defender_start, &engine.defender_left);
 
@@ -360,60 +389,98 @@ pub fn settle(catalogue: &CombatCatalogue, battle: &Battle, engine: EngineResult
         _ => Winner::Defender,
     };
 
-    let loot = if total(&engine.defender_left) == 0 { loot(catalogue, battle, &attacker_start, &engine.attacker_left) } else { [0; 3] };
+    // The host loots only a defender wiped out to the last unit, and the cargo a fleet held survives at the same rate
+    // as its cargo capacity (BattleEngine::distributeResources).
+    let (capacity, carried) = surviving(attacker, battle, &attacker_start, &engine.attacker_left);
+    let loot = if total(&engine.defender_left) == 0 { loot(attacker, battle, &attacker_start, capacity, carried) } else { [0; 3] };
 
     // Debris: the build price of what is gone for good, ships and defences at their own share (calculateDebris).
     let mut gone = attacker_lost.clone();
     for (&id, &n) in &minus(&defender_lost, &repaired) {
         *gone.entry(id).or_insert(0) += n;
     }
-    let mut debris = [0i64; 3];
+    let mut gross = [0i64; 3];
     for (&id, &n) in &gone {
-        let unit = catalogue.unit(id);
+        let unit = attacker.unit(id);
         let share = if unit.defense { rules.debris_defense_percentage } else { rules.debris_ships_percentage };
         if share <= 0.0 {
             continue;
         }
         for r in 0..if rules.debris_deuterium { 3 } else { 2 } {
-            debris[r] += ((unit.price[r] * n as f64) * (share / 100.0)).floor() as i64;
+            gross[r] += ((unit.price[r] * n as f64) * (share / 100.0)).floor() as i64;
         }
     }
+    // The moon is rolled on the fight's debris, before anyone hauls any of it away (BattleEngine::simulateBattle).
+    let moon_chance = if battle.moon_exists { 0 } else { (((gross[0] + gross[1] + gross[2]) as f64 / 100_000.0).floor()).min(rules.maximum_moon_chance) as i64 };
 
-    let moon_chance = if battle.moon_exists { 0 } else { (((debris[0] + debris[1] + debris[2]) as f64 / 100_000.0).floor()).min(rules.maximum_moon_chance) as i64 };
+    // AttackMission::processArrival: surviving collectors haul a share of the field in, first the attacker's (capped by
+    // the room its fleet has left), then the defender's, whose share lands back on the planet. The shares stay
+    // fractional like the host's, and are truncated only where the host stores a whole number.
+    let gross = gross.map(|r| r as f64);
+    let free = (capacity - carried[0] - carried[1] - carried[2] - loot[0] - loot[1] - loot[2]).max(0);
+    let hauled = capped(collected(attacker, battle, &engine.attacker_left, battle.attacker_research, gross), free);
+    let left = [gross[0] - hauled[0], gross[1] - hauled[1], gross[2] - hauled[2]];
+    let salvage = collected(defender, battle, &engine.defender_left, battle.defender_research, left);
+    let debris = [left[0] - salvage[0], left[1] - salvage[1], left[2] - salvage[2]].map(|r| r as i64);
+
+    // The cargo the fleet held, the loot and what its collectors hauled fly home together (startReturn).
+    let cargo = capped([carried[0] as f64 + loot[0] as f64 + hauled[0], carried[1] as f64 + loot[1] as f64 + hauled[1], carried[2] as f64 + loot[2] as f64 + hauled[2]], capacity).map(|r| r as i64);
 
     Outcome {
         rounds: engine.rounds,
         winner,
-        attacker_loss: catalogue.price_of(&attacker_lost),
-        defender_loss: catalogue.price_of(&defender_lost),
+        attacker_loss: attacker.price_of(&attacker_lost),
+        defender_loss: attacker.price_of(&defender_lost),
         attacker_left: engine.attacker_left,
         defender_left: engine.defender_left,
         attacker_lost,
         defender_lost,
         repaired,
         loot,
+        cargo,
         debris,
+        salvage,
         moon_chance,
         moon_created: !battle.moon_exists && moon_roll <= moon_chance,
     }
 }
 
+/// What one side's surviving collectors haul out of a debris field: the host's share of each resource (a whole number),
+/// cut to what the collectors can carry (AttackMission::processArrival).
+fn collected(catalogue: &CombatCatalogue, battle: &Battle, survivors: &Units, research: &HashMap<u32, u32>, debris: [f64; 3]) -> [f64; 3] {
+    let Some(id) = catalogue.debris_collector else { return [0.0; 3] };
+    let count = survivors.get(&id).copied().unwrap_or(0);
+    let share = catalogue.rules.reaper_debris_percentage;
+    if count <= 0 || share <= 0.0 {
+        return [0.0; 3];
+    }
+    let wanted = debris.map(|r| ((r * (share / 100.0)) as i64) as f64);
+    capped(wanted, catalogue.cell(&catalogue.unit(id).properties.capacity, research) * count)
+}
+
+/// Cut what is meant for a hold to what the hold holds (LootService::distributeLoot).
+fn capped(values: [f64; 3], capacity: i64) -> [f64; 3] {
+    if values[0] + values[1] + values[2] <= capacity as f64 {
+        return values;
+    }
+    distribute_loot(values, capacity)
+}
+
+/// The cargo capacity left after a fight, and the cargo the fleet held that came back with it
+/// (BattleEngine::distributeResources: carried resources survive at the same rate as cargo capacity).
+fn surviving(catalogue: &CombatCatalogue, battle: &Battle, start: &Units, left: &Units) -> (i64, [i64; 3]) {
+    let original = catalogue.capacity(start, battle.attacker_research);
+    let capacity = catalogue.capacity(left, battle.attacker_research);
+    let rate = if original > 0 { capacity as f64 / original as f64 } else { 0.0 };
+    (capacity, battle.attacker_cargo.map(|c| (c * rate) as i64))
+}
+
 /// The plunder of a won fight: `loot%` of the stock, cut to the starting capacity (calculateLootCapacityConstrained),
-/// then to the surviving capacity less the carried cargo that survived with it (distributeResources).
-fn loot(catalogue: &CombatCatalogue, battle: &Battle, start: &Units, left: &Units) -> [i64; 3] {
+/// then each resource, in the host's order, to the room the surviving cargo left (distributeLootResource, one fleet).
+fn loot(catalogue: &CombatCatalogue, battle: &Battle, start: &Units, capacity: i64, carried: [i64; 3]) -> [i64; 3] {
     let share = catalogue.rules.loot_percentage / 100.0;
     let wanted = distribute_loot(battle.defender_stock.map(|r| r.max(0.0) * share), catalogue.capacity(start, battle.attacker_research));
-    if total(left) == 0 {
-        return [0; 3];
-    }
-    let original = catalogue.capacity(start, battle.attacker_research);
-    let surviving = catalogue.capacity(left, battle.attacker_research);
-    let rate = if original > 0 { surviving as f64 / original as f64 } else { 0.0 };
-    let carried: i64 = battle.attacker_cargo.iter().map(|&c| ((c as f64 * rate) as i64).max(0)).sum();
-    if surviving <= 0 || wanted[0] + wanted[1] + wanted[2] + 0.0 <= 0.0 {
-        return [0; 3];
-    }
-    let mut room = ((surviving as f64 - carried as f64) as i64).max(0);
+    let mut room = (capacity - carried[0] - carried[1] - carried[2]).max(0);
     wanted.map(|r| {
         let take = (r as i64).clamp(0, room);
         room -= take;
@@ -422,13 +489,13 @@ fn loot(catalogue: &CombatCatalogue, battle: &Battle, start: &Units, left: &Unit
 }
 
 /// A whole battle: the host engine, the repair dice, the settling and the moon roll, all from `battle.seed`.
-pub fn fight(catalogue: &CombatCatalogue, battle: &Battle) -> Outcome {
-    let engine = run_engine(&engine_input(catalogue, battle));
+pub fn fight(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle) -> Outcome {
+    let engine = run_engine(&engine_input(attacker, defender, battle));
     let mut dice = Dice::new(battle.seed);
-    let defender_lost = minus(&defender_units(catalogue, battle), &engine.defender_left);
-    let repaired = roll_repairs(catalogue, &defender_lost, battle.defender_engineer, &mut dice);
+    let defender_lost = minus(&defender_units(defender, battle), &engine.defender_left);
+    let repaired = roll_repairs(defender, &defender_lost, battle.defender_engineer, &mut dice);
     let moon_roll = dice.percent();
-    settle(catalogue, battle, engine, repaired, moon_roll)
+    settle(attacker, defender, battle, engine, repaired, moon_roll)
 }
 
 #[cfg(test)]
@@ -440,7 +507,7 @@ mod tests {
         research: HashMap<String, u32>,
         units: Value,
         #[serde(default)]
-        cargo: [i64; 3],
+        cargo: [f64; 3],
         #[serde(default)]
         resources: [f64; 3],
         #[serde(default)]
@@ -549,7 +616,7 @@ mod tests {
         let (catalogue, cases) = load();
         for (i, case) in cases.iter().enumerate() {
             let o = owned(case);
-            let ours = engine_input(&catalogue, &battle(case, &o, case.seed));
+            let ours = engine_input(&catalogue, &catalogue, &battle(case, &o, case.seed));
             for key in ["attacker_fleets", "defender_fleets"] {
                 assert_eq!(engine_side(&ours, key), engine_side(&case.host_input, key), "case {i} {key}");
             }
@@ -567,7 +634,7 @@ mod tests {
             let b = battle(case, &o, case.seed);
             let r = &case.result;
             let engine = EngineResult { rounds: r.rounds, attacker_left: units(&r.attacker_left), defender_left: units(&r.defender_left) };
-            let out = settle(&catalogue, &b, engine, units(&r.repaired), 101);
+            let out = settle(&catalogue, &catalogue, &b, engine, units(&r.repaired), 101);
             let winner = match out.winner {
                 Winner::Attacker => "attacker",
                 Winner::Defender => "defender",
@@ -623,7 +690,7 @@ mod tests {
             let host = measures(r.rounds, &r.winner, triple(r.attacker_resource_loss), triple(r.defender_resource_loss), triple(r.loot), triple(r.debris), r.moon_chance, units(&r.repaired).values().sum::<i64>() as f64, defence_lost(&units(&r.defender_lost)));
             let mut mean = vec![0.0; names.len()];
             for k in 0..SEEDS {
-                let out = fight(&catalogue, &battle(case, &o, case.seed.wrapping_mul(0x9E37_79B9).wrapping_add(k)));
+                let out = fight(&catalogue, &catalogue, &battle(case, &o, case.seed.wrapping_mul(0x9E37_79B9).wrapping_add(k)));
                 let winner = match out.winner {
                     Winner::Attacker => "attacker",
                     Winner::Defender => "defender",

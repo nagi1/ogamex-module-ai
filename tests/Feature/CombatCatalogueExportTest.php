@@ -1,6 +1,8 @@
 <?php
 
 use Modules\AI\Actions\ExportAiCombatCatalogueAction;
+use OGame\GameMissions\EspionageMission;
+use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\Services\ObjectService;
@@ -99,4 +101,15 @@ test('exporting leaves the player\'s research as it found it', function (): void
 
     expect(array_map(static fn (GameObject $r): int => $player->getResearchLevel($r->machine_name), ObjectService::getResearchObjects()))->toBe($before)
         ->and(array_values($catalogue['research']))->toBe($before);
+});
+
+test('the mission block names, by id, the units and research the host\'s missions read', function (): void {
+    $missions = app(ExportAiCombatCatalogueAction::class)->handle($this->planetService->getPlayer(), 1)['missions'];
+    $id = static fn (string $name): int => ObjectService::getObjectByMachineName($name)->id;
+
+    expect($missions['espionage_units'])->toBe(array_map($id, EspionageMission::getRequiredShipMachineNames()))
+        ->and($missions['espionage_research'])->toBe($id('espionage_technology'))
+        ->and($missions['harvesters'])->toHaveCount(16)
+        ->and($missions['harvesters']['3'])->toBe($id(RecycleMission::getHarvesterMachineNameForPosition(3)))
+        ->and($missions['harvesters']['16'])->toBe($id(RecycleMission::getHarvesterMachineNameForPosition(16)));
 });

@@ -74,6 +74,9 @@ class GenerateAiRlMissionCases extends Command
 
             return self::FAILURE;
         }
+        // Shortest round-trip form: the default precision would round a fractional stock, and a stock a hair off an
+        // integer changes the truncation of a loot share by one.
+        ini_set('serialize_precision', '-1');
         file_put_contents((string) $this->argument('out'), json_encode($cases, JSON_THROW_ON_ERROR));
 
         $accepted = count(array_filter($cases['cases'], static fn (array $case): bool => $case['dispatch']['accepted']));

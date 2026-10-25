@@ -274,6 +274,14 @@ fn weighted(values: [f64; 3]) -> f64 {
     (0..3).map(|r| WEIGHTS[r] * values[r]).sum()
 }
 
+/// A resource amount as the database keeps it: Laravel binds a float as a string, and PHP writes that string at
+/// `precision = 14`, so the value is rounded to 14 significant digits on every save and re-read from the rounded
+/// text. A stock a hair under a loot threshold lands on the other side of it otherwise (mission case 563: the host
+/// looted 234 metal where the full double looted 235).
+pub(crate) fn as_stored(value: f64) -> f64 {
+    format!("{value:.13e}").parse().unwrap_or(value)
+}
+
 pub fn next_random(state: &mut u64) -> u64 {
     *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
     let mut z = *state;
@@ -473,7 +481,7 @@ impl Catalogue {
         let hours = seconds / 3600.0;
         for r in 0..3 {
             if planet.res[r] < planet.cap[r] {
-                planet.res[r] += (planet.rate[r] * hours).min(planet.cap[r] - planet.res[r]).max(-planet.res[r]);
+                planet.res[r] = as_stored(planet.res[r] + (planet.rate[r] * hours).min(planet.cap[r] - planet.res[r]).max(-planet.res[r]));
             }
         }
     }

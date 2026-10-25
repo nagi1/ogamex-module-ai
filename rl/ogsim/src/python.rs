@@ -246,7 +246,7 @@ impl VecWorld {
                 system: 1 + (next_random(&mut self.rng) % systems) as i64,
                 position: 4 + (next_random(&mut self.rng) % 9) as i64,
             }).collect();
-            world.arm(Arc::clone(rules), coords);
+            world.arm(vec![Arc::clone(rules); accounts], coords);
         }
         world
     }

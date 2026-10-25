@@ -2,6 +2,8 @@
 
 namespace Modules\AI\Actions;
 
+use OGame\GameMissions\EspionageMission;
+use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\Services\CharacterClassService;
@@ -20,7 +22,10 @@ class ExportAiCombatCatalogueAction
     public const VERSION = 1;
 
     /** The properties the engines and the fleet dispatch read through `calculate($player)`. */
-    private const CALCULATED = ['structural_integrity', 'shield', 'attack', 'capacity', 'speed'];
+    private const CALCULATED = ['structural_integrity', 'shield', 'attack', 'capacity', 'speed', 'fuel_capacity'];
+
+    /** Every slot a fleet can target in a system; the last is deep space (expedition debris). */
+    private const POSITIONS = 16;
 
     /**
      * @param  PlayerService  $player  the owner whose class bonuses apply; its research levels are restored unsaved
@@ -47,8 +52,34 @@ class ExportAiCombatCatalogueAction
                 'maximum_moon_chance' => $settings->maximumMoonChance(),
                 'fleet_speed_war' => $settings->fleetSpeedWar(),
                 'deuterium_consumption' => $settings->deuteriumConsumption() * $classes->getDeuteriumConsumptionMultiplier($player->getUser()),
+                'reaper_debris_percentage' => (int) ($classes->getReaperDebrisCollectionPercentage($player->getUser()) * 100),
+                // ponytail: the host names the unit that hauls debris in by machine name only (AttackMission); if it ever
+                // grows a query for "which unit collects debris", ask that instead of the name.
+                'debris_collector' => ObjectService::getShipObjectByMachineName('reaper')->id,
             ],
             'units' => array_map(fn (UnitObject $unit): array => $this->unit($unit, $player, $research, $maxLevel), ObjectService::getUnitObjects()),
+            'missions' => $this->missions(),
+        ];
+    }
+
+    /**
+     * The units and research the mission classes read, by id: the ships an espionage fleet needs, the research
+     * whose levels decide counter-espionage and the report's depth, and the ship that harvests debris at each slot.
+     *
+     * @return array<string, mixed>
+     */
+    private function missions(): array
+    {
+        $harvesters = [];
+        for ($position = 1; $position <= self::POSITIONS; $position++) {
+            $harvesters[(string) $position] = ObjectService::getUnitObjectByMachineName(RecycleMission::getHarvesterMachineNameForPosition($position))->id;
+        }
+
+        return [
+            'espionage_units' => array_map(static fn (string $name): int => ObjectService::getUnitObjectByMachineName($name)->id, EspionageMission::getRequiredShipMachineNames()),
+            // EspionageMission reads this research by name and exposes no accessor for it.
+            'espionage_research' => ObjectService::getResearchObjectByMachineName('espionage_technology')->id,
+            'harvesters' => $harvesters,
         ];
     }
 

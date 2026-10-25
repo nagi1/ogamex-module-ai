@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::combat::{self, Battle, CombatCatalogue};
-use crate::economy::{next_random, Catalogue, Game};
+use crate::economy::{as_stored, next_random, Catalogue, Game};
 use crate::fleet::{self, Coord, FleetCatalogue, FleetSettings, SystemState};
 use crate::units::{Shipyard, Units};
 
@@ -64,10 +64,14 @@ pub struct World {
     pub games: Vec<Game>,
     /// The second each account's clock moves next, kept beside the games so choosing the next one reads no catalogue.
     next: Vec<f64>,
-    rules: Option<Arc<Rules>>,
+    /// One per account, in account order: the tables of that account's character class.
+    pub rules: Vec<Arc<Rules>>,
     pub coords: Vec<Coord>,
     pub yards: Vec<Shipyard>,
     pub fleets: Vec<Fleet>,
+    /// A fight the host already settled, applied by the next attack instead of a fresh roll: the host's dice (PHP's
+    /// `mt_rand` after the battle) cannot be repeated here, so the referee hands over what they produced.
+    pub recorded: Option<combat::Recorded>,
     /// Debris over each planet, and whether it has a moon.
     pub debris: Vec<[i64; 3]>,
     pub moons: Vec<bool>,
@@ -83,15 +87,17 @@ impl World {
             .collect();
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, next, rules: None, coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), debris: vec![[0; 3]; n], moons: vec![false; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, debris: vec![[0; 3]; n], moons: vec![false; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
-    /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can fly.
-    pub fn arm(&mut self, rules: Arc<Rules>, coords: Vec<Coord>) {
+    /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
+    /// fly. One `Rules` per account: that account's character class decides its speeds, capacity, fuel and loot share.
+    pub fn arm(&mut self, rules: Vec<Arc<Rules>>, coords: Vec<Coord>) {
         assert_eq!(coords.len(), self.games.len(), "one coordinate per account");
-        self.yards = self.games.iter().map(|g| rules.units.shipyard(g.planet.config)).collect();
+        assert_eq!(rules.len(), self.games.len(), "one rules per account");
+        self.yards = rules.iter().zip(&self.games).map(|(r, g)| r.units.shipyard(g.planet.config)).collect();
         self.coords = coords;
-        self.rules = Some(rules);
+        self.rules = rules;
     }
 
     /// The world's clock: the earliest second any account or fleet moves next.
@@ -132,7 +138,7 @@ impl World {
 
     /// What the deciding queue may start: the economy's rule, and no upgrade the running shipyard forbids (UnitQueueService).
     pub fn legal(&self, cat: &Catalogue, a: usize, k: usize) -> bool {
-        cat.queue_legal(&self.games[a], k) && !self.rules.as_ref().is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
+        cat.queue_legal(&self.games[a], k) && !self.rules.get(a).is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
     }
 
     /// Account a's research levels by host id, as the fleet and combat tables read them.
@@ -144,7 +150,7 @@ impl World {
     fn catch_up(&mut self, cat: &Catalogue, p: usize, t: f64) {
         if t <= self.games[p].t { return }
         cat.advance_to(&mut self.games[p], t, true);
-        if let Some(rules) = &self.rules {
+        if let Some(rules) = self.rules.get(p) {
             rules.units.advance(&mut self.yards[p], t as i64);
         }
         self.sync_units(cat, p);
@@ -153,7 +159,7 @@ impl World {
     /// The economy reads production from the units on the planet while the shipyard owns the counts, so the shipyard's
     /// are copied into the planet by host id whenever they may have changed; nothing else writes `planet.units`.
     fn sync_units(&mut self, cat: &Catalogue, a: usize) {
-        let Some(rules) = &self.rules else { return };
+        let Some(rules) = self.rules.get(a) else { return };
         let counts = &self.yards[a].counts;
         let planet = &mut self.games[a].planet;
         for (u, &id) in cat.units.iter().enumerate() {
@@ -164,7 +170,7 @@ impl World {
 
     /// Account a, while it decides, orders `amount` of unit u (units index) in its shipyard; the amount the host would queue.
     pub fn order_units(&mut self, cat: &Catalogue, a: usize, u: usize, amount: u64) -> u64 {
-        let rules = Arc::clone(self.rules.as_ref().expect("an armed world"));
+        let rules = Arc::clone(&self.rules[a]);
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
         let upgrading = self.games[a].pending.iter().find(|&&(_, k)| cat.objects[k].queue == 0).map(|&(_, k)| k);
@@ -177,11 +183,10 @@ impl World {
     /// Account a, while it decides, sends ships (host unit id, amount) with cargo to planet `target` at `speed`
     /// (the host's 0.5..10 steps). Pays ships, cargo and fuel from the planet now; refused as the host would refuse it.
     pub fn dispatch(&mut self, cat: &Catalogue, a: usize, target: usize, mission: Mission, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64) -> Result<(), &'static str> {
-        let rules = Arc::clone(self.rules.as_ref().expect("an armed world"));
+        let rules = Arc::clone(&self.rules[a]);
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
         if target == a { return Err("own planet") }
-        if mission == Mission::Attack && cargo.iter().any(|&c| c > 0.0) { return Err("an attack carries no cargo") }
         let research = self.research(cat, a);
         let mut sent = Vec::new();
         for &(id, amount) in ships.iter().filter(|s| s.1 > 0) {
@@ -202,8 +207,8 @@ impl World {
             self.yards[a].counts[rules.units.index(id as i64).unwrap()] -= amount as u64;
         }
         let planet = &mut self.games[a].planet;
-        for r in 0..3 { planet.res[r] -= cargo[r] }
-        planet.res[2] -= fuel;
+        for r in 0..3 { planet.res[r] = as_stored(planet.res[r] - cargo[r]) }
+        planet.res[2] = as_stored(planet.res[2] - fuel);
         self.fleets.push(Fleet { owner: a, target, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight, returning: false });
         self.next[a] = cat.peek(&mut self.games[a]);
         Ok(())
@@ -223,7 +228,7 @@ impl World {
             Mission::Transport => {
                 let mut cargo = std::mem::take(&mut self.fleets[f].cargo);
                 cargo[2] += self.fleets[f].fuel / 2.0;
-                for r in 0..3 { self.games[target].planet.res[r] += cargo[r] }
+                for r in 0..3 { self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + cargo[r]) }
             }
             Mission::Attack => self.attack(cat, f),
         }
@@ -235,29 +240,33 @@ impl World {
     }
 
     fn land(&mut self, cat: &Catalogue, p: usize, at: f64, ships: &[(u32, i64)], cargo: [f64; 3]) {
-        let rules = Arc::clone(self.rules.as_ref().expect("an armed world"));
+        let rules = Arc::clone(&self.rules[p]);
         self.catch_up(cat, p, at);
         for &(id, amount) in ships {
             self.yards[p].counts[rules.units.index(id as i64).unwrap()] += amount as u64;
         }
-        for r in 0..3 { self.games[p].planet.res[r] += cargo[r] }
+        for r in 0..3 { self.games[p].planet.res[r] = as_stored(self.games[p].planet.res[r] + cargo[r]) }
         self.next[p] = cat.peek(&mut self.games[p]);
     }
 
     /// AttackMission: the host's battle on the target's ships and defence, then repairs, loot, debris and the moon roll.
     fn attack(&mut self, cat: &Catalogue, f: usize) {
-        let rules = Arc::clone(self.rules.as_ref().expect("an armed world"));
         let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
-        let defender: Vec<(u32, i64)> = rules.units.units.iter().zip(&self.yards[target].counts)
+        let (attacker_rules, defender_rules) = (Arc::clone(&self.rules[owner]), Arc::clone(&self.rules[target]));
+        let defender: Vec<(u32, i64)> = defender_rules.units.units.iter().zip(&self.yards[target].counts)
             .filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
         let (attacker_research, defender_research) = (self.research(cat, owner), self.research(cat, target));
         // The world's current seed is the fight's, then it draws the next one, so a recorded fight is replayable.
         let seed = self.rng;
         self.rng = next_random(&mut self.rng);
+        // The fleet enters the fight with its cargo and the half fuel the host hands back inside it
+        // (FleetMissionService::getResources): the fuel refund is destructible cargo like the rest.
+        let mut cargo = self.fleets[f].cargo;
+        cargo[2] += self.fleets[f].fuel / 2.0;
         let battle = Battle {
             attacker: &self.fleets[f].ships,
             attacker_research: &attacker_research,
-            attacker_cargo: [0; 3],
+            attacker_cargo: cargo,
             defender: &defender,
             defender_research: &defender_research,
             defender_stock: self.games[target].planet.res,
@@ -265,22 +274,25 @@ impl World {
             moon_exists: self.moons[target],
             seed,
         };
-        let fought = combat::defender_units(&rules.combat, &battle);
-        let outcome = combat::fight(&rules.combat, &battle);
-        for (u, unit) in rules.units.units.iter().enumerate() {
+        let fought = combat::defender_units(&defender_rules.combat, &battle);
+        let outcome = match self.recorded.take() {
+            Some(fight) => combat::settle(&attacker_rules.combat, &defender_rules.combat, &battle, fight.engine, fight.repaired, fight.moon_roll),
+            None => combat::fight(&attacker_rules.combat, &defender_rules.combat, &battle),
+        };
+        for (u, unit) in defender_rules.units.units.iter().enumerate() {
             let id = unit.id as u32;
             if fought.contains_key(&id) {
                 self.yards[target].counts[u] = (outcome.defender_left.get(&id).copied().unwrap_or(0) + outcome.repaired.get(&id).copied().unwrap_or(0)) as u64;
             }
         }
         for r in 0..3 {
-            self.games[target].planet.res[r] -= outcome.loot[r] as f64;
+            self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
+            self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
             self.debris[target][r] += outcome.debris[r];
         }
         self.moons[target] |= outcome.moon_created;
         self.fleets[f].ships = outcome.attacker_left.into_iter().collect();
-        self.fleets[f].cargo = outcome.loot.map(|r| r as f64);
-        self.fleets[f].cargo[2] += self.fleets[f].fuel / 2.0;
+        self.fleets[f].cargo = outcome.cargo.map(|r| r as f64);
     }
 }
 
@@ -337,7 +349,7 @@ mod tests {
         let coords = vec![Coord { galaxy: 1, system: 10, position: 4 }, Coord { galaxy: 1, system: 14, position: 8 }];
         let mut worlds = (0..2).map(|_| {
             let mut w = World::new(&cat, &[0, 1], hours, 0.0, 3);
-            w.arm(Arc::clone(&rules), coords.clone());
+            w.arm(vec![Arc::clone(&rules); 2], coords.clone());
             w
         });
         let (a, b) = (worlds.next().unwrap(), worlds.next().unwrap());
@@ -351,7 +363,7 @@ mod tests {
     }
 
     fn give(w: &mut World, a: usize, id: u32, amount: u64) {
-        let u = w.rules.as_ref().unwrap().units.index(id as i64).unwrap();
+        let u = w.rules[a].units.index(id as i64).unwrap();
         w.yards[a].counts[u] = amount;
     }
 
@@ -471,7 +483,18 @@ mod tests {
         struct Again { departure: f64, arrival: f64 }
 
         #[derive(Deserialize)]
-        struct BattleAnswer { seed: u64 }
+        struct BattleAnswer { seed: u64, #[serde(default)] report: Option<Report> }
+
+        /// The host's own fight: its survivors, the defences it repaired, and whether its moon roll made a moon.
+        #[derive(Deserialize)]
+        struct Report {
+            rounds: u32,
+            attacker_left: serde_json::Value,
+            defender_left: serde_json::Value,
+            repaired: serde_json::Value,
+            moon_chance: i64,
+            moon_created: bool,
+        }
 
         #[derive(Deserialize)]
         struct Back { time: f64, origin_after: Option<State> }
@@ -519,8 +542,15 @@ mod tests {
             map.iter().filter(|(_, &n)| n > 0).map(|(id, &n)| (id.parse().unwrap(), n)).collect()
         }
 
+        /// A unit map straight from the case file, where PHP writes an empty one as `[]`.
+        fn counted(value: &serde_json::Value) -> combat::Units {
+            value.as_object().map_or_else(combat::Units::new, |m| {
+                m.iter().filter_map(|(id, n)| Some((id.parse().ok()?, n.as_i64()?))).filter(|&(_, n)| n > 0).collect()
+            })
+        }
+
         fn holds(w: &World, a: usize) -> HashMap<String, i64> {
-            let units = &w.rules.as_ref().unwrap().units;
+            let units = &w.rules[a].units;
             units.units.iter().zip(&w.yards[a].counts).filter(|(_, &n)| n > 0)
                 .map(|(u, &n)| (u.id.to_string(), n as i64)).collect()
         }
@@ -546,85 +576,115 @@ mod tests {
             let cases: Cases = serde_json::from_str(&text).expect("mission cases");
             let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")) else { return eprintln!("no u1 catalogue; skipped") };
             cat.login_gaps = vec![1800.0];
-            let (mut flown, mut refused, mut mixed) = (0usize, 0usize, 0usize);
+            let (mut flown, mut refused) = (0usize, 0usize);
             let limit: usize = std::env::var("OGSIM_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(usize::MAX);
-            // Transports are the missions the world plays end to end today. An attack also needs the host's rules for a
-            // hold of resources and for two character classes in one fight, which it does not model yet (W4), so the
-            // attack cases are run with OGSIM_MISSION=attack while that is built.
+            // Transports are the mission the world plays end to end today; an attack runs with OGSIM_MISSION=attack.
             let only = std::env::var("OGSIM_MISSION").unwrap_or_else(|_| "transport".into());
             let played = cases.cases.iter().enumerate().take(limit).filter(|(_, c)| c.mission == only);
+            // Every case runs, and a case that differs is reported rather than stopping the run: one pass must name all
+            // the host's answers the world still gets wrong.
+            let mut wrong: Vec<String> = Vec::new();
             for (index, case) in played {
                 if index % 50 == 0 { eprintln!("case {index}...") }
-                let (Some(target), Some(target_player)) = (&case.input.target, &case.input.target_player) else { continue };
-                // One catalogue bakes in one character class, so a fight between two classes cannot be set up yet; and the
-                // host flies an attack that carries resources, which the world refuses (W4).
-                if case.input.origin_player.class != target_player.class
-                    || (case.mission == "attack" && case.input.cargo.iter().any(|&c| c > 0.0)) { mixed += 1; continue }
-                let Some(rules) = rules_for(&cat, case.input.origin_player.class) else { continue };
-                // The catalogue holds the AI home planets; a case on any other planet cannot be set up and is skipped.
-                let (Some(origin_config), Some(target_config)) = (config_of(&cat, case.input.origin.id), config_of(&cat, target.id)) else { continue };
-                let mut world = World::new(&cat, &[origin_config, target_config], 1e6, 0.0, 1);
-                world.arm(rules, vec![coords(&case.input.origin), coords(target)]);
-                for (a, player) in [(0, &case.input.origin_player), (1, target_player)] {
-                    for (id, &level) in &player.research {
-                        let k = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
-                        world.games[a].planet.levels[k] = level;
-                    }
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| play_case(&cat, case, index))) {
+                    Ok(Some(true)) => flown += 1,
+                    Ok(Some(false)) => refused += 1,
+                    Ok(None) => {}
+                    Err(failure) => wrong.push(said(failure.as_ref())),
                 }
-                for (a, planet) in [(0, &case.input.origin), (1, target)] {
-                    let mut held = planet.ships.clone();
-                    held.extend(planet.defence.clone());
-                    for (id, amount) in units_of(&held) {
-                        let u = world.rules.as_ref().unwrap().units.index(id as i64).expect("a unit in the catalogue");
-                        world.yards[a].counts[u] = amount as u64;
-                    }
-                    world.games[a].planet.res = planet.resources;
-                    world.games[a].t = case.dispatch.departure.unwrap_or(0.0);
-                    // The login clock walks second by second from its last entry, so it starts where the case does.
-                    world.games[a].login_times = vec![world.games[a].t];
-                    cat.refresh(&mut world.games[a].planet);
-                }
-                let mission = if case.mission == "attack" { Mission::Attack } else { Mission::Transport };
-                let before = world.games[0].planet.res;
-                let flew = world.dispatch(&cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed);
-                if !case.dispatch.accepted {
-                    refused += 1;
-                    assert!(flew.is_err(), "case {index}: the host refused this mission and the world flew it");
-                    continue;
-                }
-                flew.unwrap_or_else(|e| panic!("case {index}: the host flew this mission and the world refused it: {e}"));
-                flown += 1;
-                let (departure, arrival, host_fuel) = (
-                    case.dispatch.departure.expect("a departure on an accepted mission"),
-                    case.dispatch.arrival.expect("an arrival on an accepted mission"),
-                    case.dispatch.fuel.expect("fuel on an accepted mission"),
-                );
-                assert_eq!(world.games[0].t, departure, "case {index}: departure");
-                assert_eq!(world.fleets[0].arrive, arrival, "case {index}: arrival");
-                let fuel = before[2] - case.input.cargo[2] - world.games[0].planet.res[2];
-                assert!((fuel - host_fuel).abs() < 1e-6, "case {index}: fuel {fuel} host {host_fuel}");
-                stock(case.dispatch.origin_after.as_ref(), &world, 0, index, "after dispatch");
-                let Some(arrival) = &case.arrival else { continue };
-                if let Some(battle) = &arrival.battle {
-                    world.rng = battle.seed;
-                }
-                run_until(&cat, &mut world, arrival.time);
-                stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
-                if let Some(debris) = arrival.debris_after {
-                    assert_eq!(world.debris[1], debris, "case {index}: debris at arrival");
-                }
-                if let Some(moon) = &arrival.moon {
-                    assert_eq!(world.moons[1], moon.as_bool().unwrap_or(!moon.is_null()), "case {index}: moon at arrival");
-                }
-                let Some(back) = &case.arrival.as_ref().and_then(|a| a.return_mission.as_ref()) else { continue };
-                let home = world.fleets.iter().find(|f| f.owner == 0).expect("the fleet comes home");
-                assert_eq!((home.arrive, home.home), (back.departure, back.arrival), "case {index}: the flight home");
-                let Some(done) = &case.back else { continue };
-                run_until(&cat, &mut world, done.time);
-                stock(done.origin_after.as_ref(), &world, 0, index, "back home");
             }
-            eprintln!("mission parity: {flown} mission(s) flown as the host flew them, {refused} refused as the host refused them, {mixed} outside what one catalogue models");
+            eprintln!("mission parity: {flown} mission(s) flown as the host flew them, {refused} refused as the host refused them, {} differ", wrong.len());
             assert!(flown > 0, "no mission was flown");
+            assert!(wrong.is_empty(), "the world plays these missions differently from the host:\n{}", wrong.join("\n"));
+        }
+
+        /// The first line of a failing case's panic.
+        fn said(failure: &(dyn std::any::Any + Send)) -> String {
+            failure.downcast_ref::<String>().and_then(|s| s.lines().next()).map(str::to_string)
+                .or_else(|| failure.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "panicked".into())
+        }
+
+        /// One case end to end: `Some(true)` when the host flew it and the world did too, `Some(false)` when both refused
+        /// it, `None` when it cannot be set up from the catalogue (another planet, another mission).
+        fn play_case(cat: &Catalogue, case: &Case, index: usize) -> Option<bool> {
+            let (target, target_player) = (case.input.target.as_ref()?, case.input.target_player.as_ref()?);
+            // Each side fights with its own player's class, so each side gets its own tables.
+            let attacker_rules = rules_for(cat, case.input.origin_player.class)?;
+            let defender_rules = rules_for(cat, target_player.class)?;
+            // The catalogue holds the AI home planets; a case on any other planet cannot be set up and is skipped.
+            let (origin_config, target_config) = (config_of(cat, case.input.origin.id)?, config_of(cat, target.id)?);
+            let mut world = World::new(cat, &[origin_config, target_config], 1e6, 0.0, 1);
+            world.arm(vec![attacker_rules, defender_rules], vec![coords(&case.input.origin), coords(target)]);
+            for (a, player) in [(0, &case.input.origin_player), (1, target_player)] {
+                for (id, &level) in &player.research {
+                    let k = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
+                    world.games[a].planet.levels[k] = level;
+                }
+            }
+            for (a, planet) in [(0, &case.input.origin), (1, target)] {
+                let mut held = planet.ships.clone();
+                held.extend(planet.defence.clone());
+                for (id, amount) in units_of(&held) {
+                    let u = world.rules[a].units.index(id as i64).expect("a unit in the catalogue");
+                    world.yards[a].counts[u] = amount as u64;
+                }
+                world.games[a].planet.res = planet.resources;
+                world.games[a].t = case.dispatch.departure.unwrap_or(0.0);
+                // The login clock walks second by second from its last entry, so it starts where the case does.
+                world.games[a].login_times = vec![world.games[a].t];
+                cat.refresh(&mut world.games[a].planet);
+            }
+            let mission = if case.mission == "attack" { Mission::Attack } else { Mission::Transport };
+            let before = world.games[0].planet.res;
+            let flew = world.dispatch(cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed);
+            if !case.dispatch.accepted {
+                assert!(flew.is_err(), "case {index}: the host refused this mission and the world flew it");
+                return Some(false);
+            }
+            flew.unwrap_or_else(|e| panic!("case {index}: the host flew this mission and the world refused it: {e}"));
+            let (departure, arrival, host_fuel) = (
+                case.dispatch.departure.expect("a departure on an accepted mission"),
+                case.dispatch.arrival.expect("an arrival on an accepted mission"),
+                case.dispatch.fuel.expect("fuel on an accepted mission"),
+            );
+            assert_eq!(world.games[0].t, departure, "case {index}: departure");
+            assert_eq!(world.fleets[0].arrive, arrival, "case {index}: arrival");
+            let fuel = before[2] - case.input.cargo[2] - world.games[0].planet.res[2];
+            assert!((fuel - host_fuel).abs() < 1e-6, "case {index}: fuel {fuel} host {host_fuel}");
+            stock(case.dispatch.origin_after.as_ref(), &world, 0, index, "after dispatch");
+            let Some(arrival) = &case.arrival else { return Some(true) };
+            if let Some(battle) = &arrival.battle {
+                world.rng = battle.seed;
+                // The host fought with PHP's dice after the battle too, so the referee hands its fight over rather than
+                // ask the world to roll the same numbers again.
+                if let Some(report) = &battle.report {
+                    world.recorded = Some(combat::Recorded {
+                        engine: combat::EngineResult {
+                            rounds: report.rounds,
+                            attacker_left: counted(&report.attacker_left),
+                            defender_left: counted(&report.defender_left),
+                        },
+                        repaired: counted(&report.repaired),
+                        moon_roll: if report.moon_created { report.moon_chance } else { report.moon_chance + 1 },
+                    });
+                }
+            }
+            run_until(cat, &mut world, arrival.time);
+            stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
+            if let Some(debris) = arrival.debris_after {
+                assert_eq!(world.debris[1], debris, "case {index}: debris at arrival");
+            }
+            if let Some(moon) = &arrival.moon {
+                assert_eq!(world.moons[1], moon.as_bool().unwrap_or(!moon.is_null()), "case {index}: moon at arrival");
+            }
+            let Some(back) = case.arrival.as_ref().and_then(|a| a.return_mission.as_ref()) else { return Some(true) };
+            let home = world.fleets.iter().find(|f| f.owner == 0).expect("the fleet comes home");
+            assert_eq!((home.arrive, home.home), (back.departure, back.arrival), "case {index}: the flight home");
+            let Some(done) = &case.back else { return Some(true) };
+            run_until(cat, &mut world, done.time);
+            stock(done.origin_after.as_ref(), &world, 0, index, "back home");
+            Some(true)
         }
     }
 }
