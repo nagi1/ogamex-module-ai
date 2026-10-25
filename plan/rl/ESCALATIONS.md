@@ -52,3 +52,26 @@ compared with that pool.
 **Question:** should the buckets be refined near the season length (…`[256,512)`, `[512,1024)`, `[1024,∞)`), or
 should `growth` be compared against a fitted age curve (score ∝ speed-days^α) per band instead of a bucket?
 This is a §4 matching-rule decision, so it is the planner's.
+
+## 26 Oct — N4/N5 — the first reading exists, three of its four measures are the stub
+
+**Measured** (N3a seasons, 3 seeds × 64 accounts × 60 days at speed 8; `hds.py`):
+
+- HDS **0.773** over 4 measures (planets, moons, galaxies, alliance) — the score shares and growth are
+  excluded because N3a writes `score_source: "stub"`, and comparing a made-up split against real players
+  would invent a distance.
+- Turing AUC **0.912** (pooled by cell 0.882). Giveaways: **planets** (48 % of account-measures out of band),
+  alliance, moons.
+- Hard constraints: 44 weekly windows with under 18 hours touched, 1 013 dark periods ≥ 6 h, 0 actions
+  under 10 s.
+- 3 of 9 cells have **no real counterpart**: every-10th-day snapshots (days 10-50) land at 80-400 speed-days,
+  and the published universes populate only `32-64` and `256+`. So growth is only scored on the last day.
+
+**Questions:**
+1. The every-10th-day growth snapshots (192 of 576 account-rows) are unscorable against real data. Do we drop
+   them, or does N2 need finer buckets (see the third N2 escalation)?
+2. §4 says "a dark period shorter than 6 h" is a hard constraint with 0 violations. Read literally, an account
+   must never be dark 6 h — which no sleeping human satisfies (our scripted players are dark ≥ 6 h 1 013
+   times). What is the intended rule? `hds.py` currently reports it and gates only on the two exact
+   constraints (login hours, 10 s actions).
+3. The reading is counts-only until N1 lands. Is that acceptable for N5's D-answers, or does N5 wait for N1?

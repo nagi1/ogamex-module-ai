@@ -470,7 +470,7 @@ resumes at N7, and then every training run ends with an L1 reading.
 | N1 | C | claimed | copilot:lane-c 26 Oct |  |  |
 | N2 | B | done | copilot 26 Oct | ee160aa | real-bands.json: 21 cells (19 usable), pooled table = §2 on all 24 p10/p50/p90; n differs -3/-9/-25 (ESCALATIONS) |
 | N3a | A | done | copilot:lane-a 26 Oct | ee160aa | season.rs: 3 seeds x 64 accounts x 60 days at speed 8 in 1.32-1.43 s, 3 840 §9.1 lines each, schema exact |
-| N4 | B | done | copilot 26 Oct | (pending) | self-test PASSED (HDS 0.862, continuous 0.840, AUC 0.549); fake 60-day file compared; first real reading in §8 |
+| N4 | B | done | copilot 26 Oct | 5c00238 | self-test PASSED (HDS 0.862, continuous 0.840, AUC 0.549); fake 60-day file compared; first real reading in §8 |
 | N5 | A | claimed | copilot 26 Oct | | L1 ran: §8 row 1 is the reading (counts only, stub scores). D1-D5 answers pending |
 | N6a-e | A | blocked on N5 (order set by the planner from N5) | | | |
 | N3b | A | open after N3a | | | |
