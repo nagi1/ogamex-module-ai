@@ -33,6 +33,8 @@ use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\ExportAiRlCatalogue;
 use Modules\AI\Console\Commands\ExportAiRlCombatCatalogue;
 use Modules\AI\Console\Commands\ExportAiRlFleetSettings;
+use Modules\AI\Console\Commands\ExportAiRlUnitsCatalogue;
+use Modules\AI\Console\Commands\ReplayAiRlUnitOrders;
 use Modules\AI\Console\Commands\GenerateAiRlBattleCases;
 use Modules\AI\Console\Commands\GenerateAiRlFleetCases;
 use Modules\AI\Console\Commands\ExportAiTextReadings;
@@ -173,6 +175,8 @@ class AIServiceProvider extends ModuleServiceProvider
         ExportAiRlCatalogue::class,
         ExportAiRlCombatCatalogue::class,
         ExportAiRlFleetSettings::class,
+        ExportAiRlUnitsCatalogue::class,
+        ReplayAiRlUnitOrders::class,
         GenerateAiRlBattleCases::class,
         GenerateAiRlFleetCases::class,
         ReplayAiRlSchedule::class,
