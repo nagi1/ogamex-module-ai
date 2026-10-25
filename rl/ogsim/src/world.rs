@@ -292,7 +292,7 @@ impl World {
     /// Fleet f fights `defender` (host unit id, amount) on its target with `cargo` in its hold, as the host's engine and
     /// settling do, or applies the fight the referee recorded. The defender's units that fought are set to what stood
     /// plus what was repaired, the debris lands in the field, and the fleet keeps its survivors.
-    fn fight(&mut self, cat: &Catalogue, f: usize, defender: &[(u32, i64)], cargo: [f64; 3]) -> combat::Outcome {
+    fn fight(&mut self, cat: &Catalogue, f: usize, defender: &[(u32, i64)], cargo: [f64; 3], plunder: bool) -> combat::Outcome {
         let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
         let (attacker_rules, defender_rules) = (Arc::clone(&self.rules[owner]), Arc::clone(&self.rules[target]));
         let (attacker_research, defender_research) = (self.research(cat, owner), self.research(cat, target));
@@ -312,8 +312,8 @@ impl World {
         };
         let fought = combat::defender_units(&defender_rules.combat, &battle);
         let outcome = match self.recorded.take() {
-            Some(fight) => combat::settle(&attacker_rules.combat, &defender_rules.combat, &battle, fight.engine, fight.repaired, fight.moon_roll),
-            None => combat::fight(&attacker_rules.combat, &defender_rules.combat, &battle),
+            Some(fight) => combat::settle_in(&attacker_rules.combat, &defender_rules.combat, &battle, fight.engine, fight.repaired, fight.moon_roll, plunder),
+            None => combat::fight_in(&attacker_rules.combat, &defender_rules.combat, &battle, plunder),
         };
         for (u, unit) in defender_rules.units.units.iter().enumerate() {
             let id = unit.id as u32;
@@ -344,7 +344,7 @@ impl World {
         // (FleetMissionService::getResources): the fuel refund is destructible cargo like the rest.
         let mut cargo = self.fleets[f].cargo;
         cargo[2] += self.fleets[f].fuel / 2.0;
-        let outcome = self.fight(cat, f, &defender, cargo);
+        let outcome = self.fight(cat, f, &defender, cargo, true);
         for r in 0..3 {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
@@ -373,7 +373,8 @@ impl World {
             None => 0,
         };
         if chance >= 100 || (chance > 0 && roll <= chance) {
-            self.fight(cat, f, &ships, [0.0; 3]);
+            // Only an attack loots and lets collectors haul the field (AttackMission), so here nothing leaves it.
+            self.fight(cat, f, &ships, [0.0; 3], false);
         }
         // The depth counts the probes sent, not the ones that survived (EspionageMission::createEspionageReport).
         let left = (probes - (guard - spy).max(0).pow(2)).max(0);
@@ -395,7 +396,8 @@ impl World {
             research: reveals(7, 4).then(|| levels(1)),
         };
         self.reports.push(report);
-        self.fleets[f].cargo[2] += self.fleets[f].fuel / 2.0;
+        // The return flight's cargo is an integer column, so an odd fuel loses its half unit.
+        self.fleets[f].cargo[2] += (self.fleets[f].fuel / 2.0).floor();
     }
 
     /// RecycleMission: the slot's harvester ships alone carry, the field is shared out as loot is, and the harvest flies
@@ -407,8 +409,9 @@ impl World {
         let capacity = self.rules[owner].combat.capacity(&[(harvester, count)].into_iter().collect(), &self.research(cat, owner));
         let harvested = combat::distribute_loot(self.debris[target].map(|r| r as f64), capacity);
         for r in 0..3 {
-            self.debris[target][r] -= harvested[r] as i64;
-            self.fleets[f].cargo[r] += harvested[r];
+            // The harvest is fractional when the hold cuts it; the field keeps a whole number below what is left.
+            self.debris[target][r] = (self.debris[target][r] as f64 - harvested[r]).floor() as i64;
+            self.fleets[f].cargo[r] += harvested[r].floor();
         }
     }
 }
@@ -565,6 +568,8 @@ mod tests {
             units: HashMap<String, i64>,
             cargo: [f64; 3],
             speed: f64,
+            #[serde(default)] target_coordinates: Option<[i64; 3]>,
+            #[serde(default)] debris_before: Option<[i64; 3]>,
         }
 
         #[derive(Deserialize)]
@@ -594,10 +599,25 @@ mod tests {
             #[serde(default)] moon: Option<serde_json::Value>,
             return_mission: Option<Again>,
             #[serde(default)] battle: Option<BattleAnswer>,
+            #[serde(default)] espionage: Option<Spy>,
+        }
+
+        /// The host's espionage report and, when the probes were met by a fight, that fight (the same shape as an attack's).
+        #[derive(Deserialize)]
+        struct Spy {
+            counter_espionage_chance: i64,
+            roll: Option<i64>,
+            counter_battle: bool,
+            battle_seed: Option<u64>,
+            sections: Vec<String>,
+            resources: Vec<i64>,
+            debris: Option<[i64; 3]>,
+            revealed: HashMap<String, HashMap<String, i64>>,
+            #[serde(default)] battle: Option<Report>,
         }
 
         #[derive(Deserialize)]
-        struct Again { departure: f64, arrival: f64 }
+        struct Again { departure: f64, arrival: f64, #[serde(default)] cargo: Option<[i64; 3]> }
 
         #[derive(Deserialize)]
         struct BattleAnswer { seed: u64, #[serde(default)] report: Option<Report> }
@@ -722,17 +742,73 @@ mod tests {
                 .unwrap_or_else(|| "panicked".into())
         }
 
+        fn recorded(report: &Report) -> combat::Recorded {
+            combat::Recorded {
+                engine: combat::EngineResult {
+                    rounds: report.rounds,
+                    attacker_left: counted(&report.attacker_left),
+                    defender_left: counted(&report.defender_left),
+                },
+                repaired: counted(&report.repaired),
+                moon_roll: if report.moon_created { report.moon_chance } else { report.moon_chance + 1 },
+            }
+        }
+
+        /// The report the world wrote for the spying account against the host's: chance, the sections the probes reached,
+        /// what each shows, the resources and the debris seen, and whether the probes lived.
+        fn spied(cat: &Catalogue, spy: &Spy, world: &World, index: usize) {
+            let report = world.reports.last().unwrap_or_else(|| panic!("case {index}: the world wrote no report"));
+            assert_eq!(report.counter_chance, spy.counter_espionage_chance, "case {index}: counter-espionage chance");
+            let mut sections: Vec<&str> = [("ships", report.ships.is_some()), ("defence", report.defence.is_some()), ("buildings", report.buildings.is_some()), ("research", report.research.is_some())]
+                .into_iter().filter(|s| s.1).map(|s| s.0).collect();
+            let mut host: Vec<&str> = spy.sections.iter().map(String::as_str).collect();
+            sections.sort_unstable();
+            host.sort_unstable();
+            assert_eq!(sections, host, "case {index}: sections revealed");
+            assert_eq!(report.resources.to_vec(), spy.resources[..3].to_vec(), "case {index}: resources seen");
+            assert_eq!(report.debris, spy.debris, "case {index}: debris seen");
+            let units = |counts: &Option<Vec<u64>>| counts.as_ref().map(|c| {
+                world.rules[report.target].units.units.iter().zip(c).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id.to_string(), n as i64)).collect::<HashMap<_, _>>()
+            });
+            // The host keys buildings by machine name, so only the units and research it shows by id are compared.
+            assert_eq!(units(&report.ships), spy.revealed.get("ships").cloned(), "case {index}: ships seen");
+            assert_eq!(units(&report.defence), spy.revealed.get("defence").cloned(), "case {index}: defence seen");
+            let research = report.research.as_ref().map(|levels| {
+                cat.objects.iter().zip(levels).filter(|(o, &l)| o.queue == 1 && l > 0).map(|(o, &l)| (o.id.to_string(), l as i64)).collect::<HashMap<_, _>>()
+            });
+            assert_eq!(research, spy.revealed.get("research").cloned(), "case {index}: research seen");
+        }
+
         /// One case end to end: `Some(true)` when the host flew it and the world did too, `Some(false)` when both refused
         /// it, `None` when it cannot be set up from the catalogue (another planet, another mission).
         fn play_case(cat: &Catalogue, case: &Case, index: usize) -> Option<bool> {
-            let (target, target_player) = (case.input.target.as_ref()?, case.input.target_player.as_ref()?);
+            // A recycler flies to a debris field, not a planet: the world needs some planet under the field, so any other
+            // account of the catalogue stands in for it, at the field's coordinates and with the sender's class.
+            let recycling = case.mission == "recycle";
+            // Nothing at the coordinates to spy on: the world has no planet to send to, and the host refused it too.
+            if case.input.target.is_none() && !recycling && !case.dispatch.accepted {
+                return Some(false);
+            }
+            let stand_in;
+            let (target, target_player) = if recycling {
+                let at = case.input.target_coordinates?;
+                stand_in = PlanetState { id: -1, coordinates: at, resources: [0.0; 3], ships: HashMap::new(), defence: HashMap::new() };
+                (&stand_in, &case.input.origin_player)
+            } else {
+                (case.input.target.as_ref()?, case.input.target_player.as_ref()?)
+            };
             // Each side fights with its own player's class, so each side gets its own tables.
             let attacker_rules = rules_for(cat, case.input.origin_player.class)?;
             let defender_rules = rules_for(cat, target_player.class)?;
             // The catalogue holds the AI home planets; a case on any other planet cannot be set up and is skipped.
-            let (origin_config, target_config) = (config_of(cat, case.input.origin.id)?, config_of(cat, target.id)?);
+            let origin_config = config_of(cat, case.input.origin.id)?;
+            let target_config = if recycling { (0..cat.planets.len()).find(|&c| c != origin_config)? } else { config_of(cat, target.id)? };
             let mut world = World::new(cat, &[origin_config, target_config], 1e6, 0.0, 1);
             world.arm(vec![attacker_rules, defender_rules], vec![coords(&case.input.origin), coords(target)]);
+            if let Some(debris) = case.input.debris_before {
+                world.debris[1] = debris;
+                world.fields[1] = true;
+            }
             for (a, player) in [(0, &case.input.origin_player), (1, target_player)] {
                 for (id, &level) in &player.research {
                     let k = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
@@ -752,7 +828,12 @@ mod tests {
                 world.games[a].login_times = vec![world.games[a].t];
                 cat.refresh(&mut world.games[a].planet);
             }
-            let mission = if case.mission == "attack" { Mission::Attack } else { Mission::Transport };
+            let mission = match case.mission.as_str() {
+                "attack" => Mission::Attack,
+                "espionage" => Mission::Espionage,
+                "recycle" => Mission::Recycle,
+                _ => Mission::Transport,
+            };
             let before = world.games[0].planet.res;
             let flew = world.dispatch(cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed);
             if !case.dispatch.accepted {
@@ -776,18 +857,24 @@ mod tests {
                 // The host fought with PHP's dice after the battle too, so the referee hands its fight over rather than
                 // ask the world to roll the same numbers again.
                 if let Some(report) = &battle.report {
-                    world.recorded = Some(combat::Recorded {
-                        engine: combat::EngineResult {
-                            rounds: report.rounds,
-                            attacker_left: counted(&report.attacker_left),
-                            defender_left: counted(&report.defender_left),
-                        },
-                        repaired: counted(&report.repaired),
-                        moon_roll: if report.moon_created { report.moon_chance } else { report.moon_chance + 1 },
-                    });
+                    world.recorded = Some(recorded(report));
+                }
+            }
+            if let Some(spy) = &arrival.espionage {
+                // The host's roll and fight are handed over as an attack's fight is.
+                world.recorded_roll = spy.roll;
+                world.rng = spy.battle_seed.unwrap_or(0);
+                if let Some(report) = &spy.battle {
+                    world.recorded = Some(recorded(report));
                 }
             }
             run_until(cat, &mut world, arrival.time);
+            if let Some(spy) = &arrival.espionage {
+                spied(cat, spy, &world, index);
+            }
+            if let (Some(back), true) = (arrival.return_mission.as_ref().and_then(|b| b.cargo), case.mission != "attack") {
+                assert_eq!(world.fleets[0].cargo.map(|r| r as i64), back, "case {index}: the cargo flying home");
+            }
             stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
             if let Some(debris) = arrival.debris_after {
                 assert_eq!(world.debris[1], debris, "case {index}: debris at arrival");

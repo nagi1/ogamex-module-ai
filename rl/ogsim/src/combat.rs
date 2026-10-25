@@ -395,6 +395,12 @@ pub fn distribute_loot(loot: [f64; 3], capacity: i64) -> [f64; 3] {
 /// Everything after the engine, as `BattleEngine::simulateBattle` and `AttackMission::processArrival` apply it for one
 /// attacking fleet. `attacker` values that fleet's side, `defender` the planet's; the universe rules in both are equal.
 pub fn settle(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle, engine: EngineResult, repaired: Units, moon_roll: i64) -> Outcome {
+    settle_in(attacker, defender, battle, engine, repaired, moon_roll, true)
+}
+
+/// `settle`, where `plunder` says whether this is an attack: only `AttackMission` loots and lets collectors haul the
+/// debris, so a counter-espionage fight (`plunder` false) leaves all of its debris in the field and takes no loot.
+pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle, engine: EngineResult, repaired: Units, moon_roll: i64, plunder: bool) -> Outcome {
     let rules = &attacker.rules;
     let attacker_start = units_of(battle.attacker, &HashSet::new());
     let defender_start = defender_units(defender, battle);
@@ -411,7 +417,7 @@ pub fn settle(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &B
     // The host loots only a defender wiped out to the last unit, and the cargo a fleet held survives at the same rate
     // as its cargo capacity (BattleEngine::distributeResources).
     let (capacity, carried) = surviving(attacker, battle, &attacker_start, &engine.attacker_left);
-    let loot = if total(&engine.defender_left) == 0 { loot(attacker, battle, &attacker_start, capacity, carried) } else { [0; 3] };
+    let loot = if plunder && total(&engine.defender_left) == 0 { loot(attacker, battle, &attacker_start, capacity, carried) } else { [0; 3] };
 
     // Debris: the build price of what is gone for good, ships and defences at their own share (calculateDebris).
     let mut gone = attacker_lost.clone();
@@ -437,9 +443,9 @@ pub fn settle(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &B
     // fractional like the host's, and are truncated only where the host stores a whole number.
     let gross = gross.map(|r| r as f64);
     let free = (capacity - carried[0] - carried[1] - carried[2] - loot[0] - loot[1] - loot[2]).max(0);
-    let hauled = capped(collected(attacker, battle, &engine.attacker_left, battle.attacker_research, gross), free);
+    let hauled = if plunder { capped(collected(attacker, battle, &engine.attacker_left, battle.attacker_research, gross), free) } else { [0.0; 3] };
     let left = [gross[0] - hauled[0], gross[1] - hauled[1], gross[2] - hauled[2]];
-    let salvage = collected(defender, battle, &engine.defender_left, battle.defender_research, left);
+    let salvage = if plunder { collected(defender, battle, &engine.defender_left, battle.defender_research, left) } else { [0.0; 3] };
     let debris = [left[0] - salvage[0], left[1] - salvage[1], left[2] - salvage[2]].map(|r| r as i64);
 
     // The cargo the fleet held, the loot and what its collectors hauled fly home together (startReturn).
@@ -509,12 +515,17 @@ fn loot(catalogue: &CombatCatalogue, battle: &Battle, start: &Units, capacity: i
 
 /// A whole battle: the host engine, the repair dice, the settling and the moon roll, all from `battle.seed`.
 pub fn fight(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle) -> Outcome {
+    fight_in(attacker, defender, battle, true)
+}
+
+/// `fight`, settled as `settle_in` does.
+pub fn fight_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle, plunder: bool) -> Outcome {
     let engine = run_engine(&engine_input(attacker, defender, battle));
     let mut dice = Dice::new(battle.seed);
     let defender_lost = minus(&defender_units(defender, battle), &engine.defender_left);
     let repaired = roll_repairs(defender, &defender_lost, battle.defender_engineer, &mut dice);
     let moon_roll = dice.percent();
-    settle(attacker, defender, battle, engine, repaired, moon_roll)
+    settle_in(attacker, defender, battle, engine, repaired, moon_roll, plunder)
 }
 
 #[cfg(test)]
