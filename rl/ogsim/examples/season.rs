@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use ogsim::fleet::Coord;
 use ogsim::players::{account_value, FleetSaver, Ledger, Miner, Player, Raider};
+use ogsim::score::{self, Score};
 use ogsim::world::{Event, EventKind, Mission, Rules, World};
 use ogsim::{next_random, Catalogue, WEIGHTS};
 use serde_json::json;
@@ -210,10 +211,9 @@ impl<W: Write> Season<'_, W> {
             let inactive = self.world.inactive(self.cat, a, at);
             let value = account_value(self.world, a);
             let economy = self.world.games[self.world.account_of(a)].value();
-            let research = research_value(self.world, self.cat, a);
-            let military = value - economy;
-            // A stub split of `account_value` by kind until N1 lands the host's own four scores.
-            let (total, research, military) = (value.round() as i64, research.round() as i64, military.round() as i64);
+            // The host's own four scores (row N1: `score::of` equals HighscoreService on 600 drawn accounts,
+            // 0 differ to the integer). Every band in the plan is written in this score, so the line says so.
+            let score = score::of(self.world, a);
             let planets = self.world.planets_of(a);
             let galaxies: BTreeSet<i64> = planets.iter().map(|&s| self.world.coords[s].galaxy).collect();
             let moons = planets.iter().filter(|&&s| self.world.moons[s]).count();
@@ -227,8 +227,9 @@ impl<W: Write> Season<'_, W> {
                 "persona": PERSONAS[self.roles[a]].0,
                 "controlled": false,
                 "inactive": inactive,
-                "score_source": "stub",
-                "score": { "total": total, "economy": total - research - military, "research": research, "military": military },
+                "score_source": "host",
+                "score": { "total": score.total, "economy": score.economy, "research": score.research,
+                           "military": score.military },
                 "planets": planets.len(),
                 "moons": moons,
                 "galaxies": galaxies.len(),

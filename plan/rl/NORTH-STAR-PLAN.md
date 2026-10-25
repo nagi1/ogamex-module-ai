@@ -392,7 +392,32 @@ scripted victim. Do it only after N8 passes.
 
 | Date | Row | HDS | AUC | Top giveaways | Floors |
 | --- | --- | --- | --- | --- | --- |
+| 26 Oct | N5 first reading: N3a seasons with the **host's own scores** (N1), 3 seeds × 64 accounts × 60 d at speed 8 | **0.686** over 8 measures | **0.990** (pooled 0.919) | planets (48 % out of band), res_share (68 %), alliance, mil_share (52 %), growth (20 %) | value floor n/a (rules-only season); hard constraints: 44 weekly login-hour gaps, 0 actions under 10 s, 1 013 dark periods (definition escalated) |
 | 26 Oct | N4 on N3a seasons (3 seeds, 64 accounts, 60 d, speed 8; **stub scores, so counts only**) | **0.773** over 4 measures | **0.912** (pooled 0.882) | planets (48% out of band), alliance, moons | 0 value floor (no teacher run in a rules-only season); hard constraints: 44 weekly login-hour gaps, 0 actions under 10 s, 1 013 dark periods (definition escalated) |
+
+### N5 diagnosis (26 Oct, implementer's read; the planner orders N6 from it)
+
+Read from the same three seasons: `storage/rl/ogsim/runs/n3a-season/host-{1,2,3}.jsonl`.
+
+- **D1 planets — ours 1 against the real 16 / 10 / 2 (top10 / mid / bottom p50).** Every top10 and mid
+  account-measure is out of band (in-band 0.00), bottom is 1.00 because real bottom players also hold one
+  planet. Measured, not guessed: `planets` is the top giveaway (48 % of all account-measures out of band).
+- **D2 moons — ours 0 everywhere.** In band only in the bottom cells, where the real p90 is also 0; 0.00 in
+  `mid|256+` and both top10 cells.
+- **D3 growth — ours p50 135-249 `total` against the real 46 709 (top10, 128-256) and 138 909 (top10, 256+).**
+  So at day 60 our best accounts are **187x to 1 029x below the real median of their band**, worse than the
+  0.21x recorded at 7.3 speed-days: the gap widens with age, which is what a cap on objects looks like.
+- **D4 military share — ours p50 0.003 against the real 0.058 / 0.16 / 0.066.** Out of band on 52 % of
+  account-measures, and `res_share` is the second giveaway (68 % out of band, in-band 0.00 for mid and top10):
+  the scripted players put everything into research and nothing into ships, the opposite of a real top player
+  (who spends 0.058 military and 0.208 research).
+- **D5 reach at day 60 — 1 planet, 0 moons, 1 galaxy, 0 alliances on every account.** Colonise, expedition,
+  missiles, moon shots and recycling never happen: `events_today` totals them at 0 for all 3 × 64 accounts.
+  Late-game objects are unreachable because nothing before them is ever built.
+
+The giveaway order (planets → research share → alliance → military share → growth) is the plan's expected
+order, so N6a (colonise) is first on the planner's list and N6d (persona mix, the military/research split) is
+much more urgent than the plan's ordering suggests.
 
 ## 9. Schemas (fixed so the lanes do not block each other)
 
