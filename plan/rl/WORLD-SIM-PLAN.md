@@ -19,7 +19,7 @@ bottom, takes the first open row in §4, and updates §4 and §6 when it is done
 | Battles, repairs, loot, debris, moon chance | `src/combat.rs` | `ai:rl-battle-cases`, `ai:rl-combat-catalogue` | the host's own Rust engine is linked (not ported); settling is exact; ~82 µs a fight |
 | World: many accounts on one clock, fleets as events, nine missions, several planets an account | `src/world.rs` | `ai:rl-mission-cases`, `ai:rl-more-mission-cases` | exact on every mission the host records (W3, W4, W6, W8): 0 differ over 3 200 cases |
 | Scripted players: miner, raider, fleet saver; their sizing | `src/players.rs` | the world's own | 12 accounts x 10 days over 8 seeds; `players::tests` |
-| Errand choice: what a login does with its fleet | `src/errands.rs` | none (candidates are the players' own sizing) | candidates, features (`STATE_NAMES`/`CAND_NAMES` + kind one-hot) and exact masks; `errands::tests` |
+| Errand choice: what a login does with its fleet | `src/errands.rs`, `python.rs` (kind 2), `ogrl/train_world.py --queue 2` | none (candidates are the players' own sizing) | candidates, features (`STATE_NAMES`/`CAND_NAMES` + kind one-hot), exact masks, and the trainer: 2.5 M errand rows and 38 updates in a 2-minute smoke run |
 | Python bindings for the economy (`VecEnv`) | `src/python.rs` | the economy's | used by `rl/ogrl/train_ppo.py`; the world binding is `VecWorld` (W5); errands are not bound yet |
 
 Run everything with `cd rl/ogsim && cargo test --release` (28 tests; tests that need a catalogue under
@@ -134,3 +134,4 @@ Agents commit nothing; the lead commits by file name. Check `git status` before 
 | 25 Oct | (this commit) | W6 done: several planets per account, colonise and deploy exact |
 | 25 Oct | (this commit) | W7b, W8 integration: events, recall, idle logins, inactive flag; expedition, missiles and moon destruction flown by the world, nine mission parities at 0 differ; players pass over 8 seeds |
 | 25 Oct | (this commit) | W10 sim side: `errands.rs` (7 kinds, derived features, exact masks), built on the players\' own sizing (`raid_plan`, `harvest_plan`, `save_plan`, `order_plans`) so the teacher and the candidates cannot drift apart |
+| 25 Oct | (this commit) | W10 training side: `VecWorld(errands=True)` hands out kind 2 (errand rows on the same one-row-per-world stream, `wait` at row 0, padded to 32), rewards in `account_value` (ships at price and what flies); `train_world.py --queue 2` runs it: 2-minute smoke, 2.5 M errand rows, 38 updates, 120 k account-hours/s |

@@ -68,7 +68,7 @@ from .econ import bootstrap_ci
 from .model import CandidateScorer, parameter_count
 
 DATA = Path(__file__).resolve().parents[4] / "storage/rl/ogsim"
-KIND_NAMES = {0: "building", 1: "research"}
+KIND_NAMES = {0: "building", 1: "research", 2: "errand"}
 # Columns of the shared per-actor statistics table.
 ST = {n: i for i, n in enumerate(("decisions", "shipped", "finished", "sim_hours", "wait_s", "env_s", "model_s", "book_s", "loop_s", "ctl_sum", "ctl_n", "rule_sum", "rule_n", "reward_abs"))}
 
@@ -90,7 +90,10 @@ def load_world(args, seed: int, n_worlds: int, catalogue: str | None = None) -> 
     cat = catalogue or args.catalogue
     gaps = json.loads(Path(args.login_gaps).read_text())
     controlled = [True] * args.controlled + [False] * (args.accounts - args.controlled)
-    return ogsim.VecWorld(cat, list(range(ogsim.VecEnv.planet_count(cat))), n_worlds, controlled, horizon_hours=args.horizon, seed=seed, login_gaps=gaps)
+    return ogsim.VecWorld(cat, list(range(ogsim.VecEnv.planet_count(cat))), n_worlds, controlled,
+                          horizon_hours=args.horizon, seed=seed, login_gaps=gaps,
+                          units=args.units, fleet_settings=args.fleet_settings, combat=args.combat,
+                          errands=args.queue == 2)
 
 
 def observe(env: "ogsim.VecWorld", dims: tuple[int, int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -551,9 +554,12 @@ def evaluator(args, dims, stop, final_event) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ogrl.train_world")
-    ap.add_argument("--queue", type=int, default=0, choices=(0, 1), help="0 decides buildings, 1 research (the other queue plays the player rule); this is the decision kind id")
-    ap.add_argument("--catalogue", help="default: plain-train.json for queue 0, research-train.json for queue 1")
-    ap.add_argument("--eval-catalogue", help="held-out planets; default plain-eval.json / research-eval.json")
+    ap.add_argument("--queue", type=int, default=0, choices=(0, 1, 2), help="0 decides buildings, 1 research, 2 errands (the fleet side of a login); the other decisions play the player rule; this is the decision kind id")
+    ap.add_argument("--catalogue", help="default: plain-train.json for queue 0, research-train.json for queue 1, units-parity/econ-u1.json for errands")
+    ap.add_argument("--eval-catalogue", help="held-out planets; default plain-eval.json / research-eval.json / the training catalogue for errands")
+    ap.add_argument("--units", default=str(DATA / "units-parity/units-u1.json"), help="the host's ship and defence tables; errands need them and the fleet exports")
+    ap.add_argument("--fleet-settings", default=str(DATA / "fleet-settings-u1.json"))
+    ap.add_argument("--combat", default=str(DATA / "combat-u1.json"))
     ap.add_argument("--login-gaps", default=str(DATA / "login-gaps.json"))
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=1)
@@ -591,9 +597,11 @@ def main(argv: list[str] | None = None) -> None:
     args.parent = os.getpid()
     if args.smoke:
         args.minutes, args.horizon, args.eval_worlds = 2.0, 24.0, min(args.eval_worlds, 16)
-    name = ("plain", "research")[args.queue]
-    args.catalogue = args.catalogue or str(DATA / f"{name}-train.json")
-    args.eval_catalogue = args.eval_catalogue or str(DATA / f"{name}-eval.json")
+    name = KIND_NAMES[args.queue]
+    defaults = {0: ("plain-train.json", "plain-eval.json"), 1: ("research-train.json", "research-eval.json"), 2: ("units-parity/econ-u1.json", "units-parity/econ-u1.json")}
+    train_catalogue, eval_catalogue = defaults[args.queue]
+    args.catalogue = args.catalogue or str(DATA / train_catalogue)
+    args.eval_catalogue = args.eval_catalogue or str(DATA / eval_catalogue)
     args.slots = args.slots or 3 * args.actors
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -603,13 +611,13 @@ def main(argv: list[str] | None = None) -> None:
 
     probe = load_world(args, args.seed, 1)
     dims = probe.dims()
-    names = dict(zip(("state", "candidate"), ogsim.VecEnv.feature_names()))
+    names = dict(zip(("state", "candidate"), probe.feature_names()))
     del probe
     norm, scale = calibrate(args, dims)
     model = CandidateScorer(dims[0], dims[2], args.width)
     model.set_normalisation(*(torch.as_tensor(x, dtype=torch.float32) for x in norm))
     shared = {k: v.detach().clone().share_memory_() for k, v in model.state_dict().items()}
-    print(f"ogsim world PPO: {parameter_count(model):,} parameters, queue {args.queue}, {args.actors} actors x {args.worlds} worlds x {args.accounts} accounts ({args.controlled} controlled), "
+    print(f"ogsim world PPO: {parameter_count(model):,} parameters, kind {args.queue} ({name}), {args.actors} actors x {args.worlds} worlds x {args.accounts} accounts ({args.controlled} controlled), "
           f"horizon {args.horizon:g} h, learner {args.device}, evaluator {args.eval_device}", flush=True)
 
     ctx = mp.get_context("spawn")

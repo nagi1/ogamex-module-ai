@@ -1,8 +1,9 @@
 //! Python side of ogsim: many games stepped in one call, arrays handed over as raw bytes (numpy.frombuffer).
 
 use crate::fleet::Coord;
+use crate::players::{self, Ledger, Player};
 use crate::world::{Rules, World};
-use crate::{next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
+use crate::{errands, next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -232,9 +233,23 @@ struct VecWorld {
     tickets: u64,
     closed: Vec<Closed>,
     finished: Vec<Finished>,
+    /// Errand mode: a controlled account decides what its fleet does at a login (kind 2) instead of which object to
+    /// build, and every account's economy and ships are played by the scripted player rule.
+    errands: bool,
+    /// Per world and account, the scripted player that plays the rest of the login.
+    players: Vec<Vec<Player>>,
+    ledgers: Vec<Vec<Ledger>>,
+    /// Per world, the errands the deciding account was offered (row 0 is always `wait`).
+    offered: Vec<Vec<errands::Errand>>,
 }
 
 impl VecWorld {
+    /// The deciding account's value: the economy's in the economy mode, everything it owns (ships at price, stock, what
+    /// flies) in the errand mode, where a raid or a lost fleet has to show up in the reward.
+    fn value(&self, w: usize, a: usize) -> f64 {
+        if self.errands { players::account_value(&self.worlds[w], a) } else { self.worlds[w].games[a].value() }
+    }
+
     fn fresh_world(&mut self) -> World {
         let accounts = self.controlled.len();
         let configs: Vec<usize> = (0..accounts).map(|_| self.planets[(next_random(&mut self.rng) % self.planets.len() as u64) as usize]).collect();
@@ -247,8 +262,36 @@ impl VecWorld {
                 position: 4 + (next_random(&mut self.rng) % 9) as i64,
             }).collect();
             world.arm(vec![Arc::clone(rules); accounts], coords);
+            // Errands live at the login, which an account with nothing left to build must still get.
+            if self.errands { world.enable_idle_logins(&self.catalogue); }
         }
+        let seed = next_random(&mut self.rng);
+        let players = (0..accounts).map(|a| {
+            let s = seed.wrapping_add(a as u64);
+            match (self.controlled[a], self.errands, a % 3) {
+                // A controlled account's errands are the model's; the rule only plays its economy and its ships.
+                (true, _, _) => Player::Miner(players::Miner::new(s)),
+                (false, false, _) => Player::Miner(players::Miner::new(s)),
+                (false, true, 0) => Player::Raider(players::Raider::new(s)),
+                (false, true, 1) => Player::Saver(players::FleetSaver::new(s)),
+                (false, true, _) => Player::Miner(players::Miner::new(s)),
+            }
+        }).collect();
+        self.players.push(players);
+        self.ledgers.push((0..accounts).map(|_| Ledger::default()).collect());
         world
+    }
+
+    /// Plays the rest of a login for account a: its economy queue and its ship orders, as the scripted player rule does.
+    fn play_rest(&mut self, w: usize, cat: &Catalogue, a: usize) {
+        let (worlds, players, ledgers) = (&mut self.worlds, &mut self.players, &mut self.ledgers);
+        let player = &mut players[w][a];
+        let ledger = &mut ledgers[w][a];
+        let world = &mut worlds[w];
+        match player.act(world, cat, a, ledger) {
+            Some(k) => world.commit(cat, a, k),
+            None => world.wait(cat, a),
+        }
     }
 
     /// Runs world w until a controlled account decides, closing that account's previous transition; a finished world
@@ -258,31 +301,30 @@ impl VecWorld {
         loop {
             let Some(a) = self.worlds[w].next_decision(&cat) else {
                 for a in 0..self.controlled.len() {
-                    let g = &self.worlds[w].games[a];
                     if let Some((ticket, before)) = self.open[w][a].take() {
-                        self.closed.push((ticket, (g.value() - before + g.bonus_hours * g.effective_rate()) as f32, 1));
+                        let bonus = self.worlds[w].games[a].bonus_hours * self.worlds[w].games[a].effective_rate();
+                        let value = self.value(w, a);
+                        self.closed.push((ticket, (value - before + bonus) as f32, 1));
                     }
+                    let g = &self.worlds[w].games[a];
                     self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid));
                 }
                 self.worlds[w] = self.fresh_world();
                 continue;
             };
             if !self.controlled[a] {
-                let mut rng = self.rng;
-                let game = &self.worlds[w].games[a];
-                match cat.baseline(&game.planet, game.queue, Baseline::Player, &mut rng).filter(|&k| self.worlds[w].legal(&cat, a, k)) {
-                    Some(k) => self.worlds[w].commit(&cat, a, k),
-                    None => self.worlds[w].wait(&cat, a),
-                }
-                self.rng = next_random(&mut rng);
+                self.play_rest(w, &cat, a);
                 continue;
             }
-            let value = self.worlds[w].games[a].value();
+            let value = self.value(w, a);
             if let Some((ticket, before)) = self.open[w][a].take() {
                 self.closed.push((ticket, (value - before) as f32, 0));
             }
             self.tickets += 1;
             self.deciding[w] = (a, self.tickets);
+            if self.errands {
+                self.offered[w] = errands::candidates(&mut self.worlds[w], &cat, a);
+            }
             return;
         }
     }
@@ -293,8 +335,8 @@ impl VecWorld {
     /// `controlled[a]` says whether account slot a of every world is the caller's; the rest play the player rule.
     /// With `units`, `fleet_settings` and `combat` (the host exports) the worlds are armed: ships, defence and fleets.
     #[new]
-    #[pyo3(signature = (catalogue, planets, n_worlds, controlled, horizon_hours=240.0, bonus_hours=24.0, seed=0, login_gaps=None, units=None, fleet_settings=None, combat=None))]
-    fn new(catalogue: &str, planets: Vec<usize>, n_worlds: usize, controlled: Vec<bool>, horizon_hours: f64, bonus_hours: f64, seed: u64, login_gaps: Option<Vec<f64>>, units: Option<&str>, fleet_settings: Option<&str>, combat: Option<&str>) -> PyResult<Self> {
+    #[pyo3(signature = (catalogue, planets, n_worlds, controlled, horizon_hours=240.0, bonus_hours=24.0, seed=0, login_gaps=None, units=None, fleet_settings=None, combat=None, errands=false))]
+    fn new(catalogue: &str, planets: Vec<usize>, n_worlds: usize, controlled: Vec<bool>, horizon_hours: f64, bonus_hours: f64, seed: u64, login_gaps: Option<Vec<f64>>, units: Option<&str>, fleet_settings: Option<&str>, combat: Option<&str>, errands: bool) -> PyResult<Self> {
         let mut loaded = Catalogue::load(catalogue).map_err(PyValueError::new_err)?;
         loaded.login_gaps = login_gaps.unwrap_or_default();
         if loaded.login_gaps.is_empty() {
@@ -309,7 +351,10 @@ impl VecWorld {
             _ => return Err(PyValueError::new_err("units, fleet_settings and combat come together")),
         };
         let accounts = controlled.len();
-        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new() };
+        if errands && rules.is_none() {
+            return Err(PyValueError::new_err("errands need the units, fleet_settings and combat exports: nothing can fly without them"));
+        }
+        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds] };
         env.worlds = (0..n_worlds).map(|_| env.fresh_world()).collect();
         for w in 0..n_worlds {
             env.advance(w);
@@ -317,18 +362,27 @@ impl VecWorld {
         Ok(env)
     }
 
-    /// (state width, candidates per choice, candidate width), as VecEnv, so the same models read both.
+    /// (state width, candidates per choice, candidate width), as VecEnv, so the same models read both. In the errand
+    /// mode the candidates are the errands a login may take, padded to the width the trainers agree on.
     fn dims(&self) -> (usize, usize, usize) {
+        if self.errands { return (errands::STATE_DIM, errands::MAX_CANDIDATES, errands::CAND_DIM) }
         (STATE_DIM, self.catalogue.objects.len(), CAND_DIM)
     }
 
-    /// Per world: (deciding account, its queue, ticket).
+    /// The feature names of the decision this world hands out, in column order.
+    fn feature_names(&self) -> (Vec<&'static str>, Vec<&'static str>) {
+        if self.errands { return (errands::STATE_NAMES.to_vec(), errands::CAND_NAMES.to_vec()) }
+        (STATE_NAMES.to_vec(), CAND_NAMES.to_vec())
+    }
+
+    /// Per world: (deciding account, the decision kind, ticket). Kind 2 is an errand.
     fn decisions(&self) -> Vec<(usize, usize, u64)> {
-        self.deciding.iter().enumerate().map(|(w, &(a, t))| (a, self.worlds[w].games[a].queue, t)).collect()
+        self.deciding.iter().enumerate().map(|(w, &(a, t))| (a, if self.errands { 2 } else { self.worlds[w].games[a].queue }, t)).collect()
     }
 
     /// The deciding account's planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]).
-    fn observe<'py>(&self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
+    fn observe<'py>(&mut self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
+        if self.errands { return self.observe_errands(py) }
         let (n, k) = (self.worlds.len(), self.catalogue.objects.len());
         let mut state = vec![0f32; n * STATE_DIM];
         let mut cands = vec![0f32; n * k * CAND_DIM];
@@ -346,6 +400,25 @@ impl VecWorld {
         (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
     }
 
+    /// The errand rows: the same three arrays, one row per offered errand (row 0 is `wait`), unused rows illegal.
+    fn observe_errands<'py>(&mut self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
+        let (n, k) = (self.worlds.len(), errands::MAX_CANDIDATES);
+        let mut state = vec![0f32; n * errands::STATE_DIM];
+        let mut cands = vec![0f32; n * k * errands::CAND_DIM];
+        let mut legal = vec![0u8; n * k];
+        let cat = Arc::clone(&self.catalogue);
+        for w in 0..n {
+            let a = self.deciding[w].0;
+            state[w * errands::STATE_DIM..(w + 1) * errands::STATE_DIM].copy_from_slice(&errands::account_features(&self.worlds[w], &cat, a));
+            for (j, errand) in self.offered[w].iter().enumerate() {
+                let at = (w * k + j) * errands::CAND_DIM;
+                cands[at..at + errands::CAND_DIM].copy_from_slice(&errands::candidate_features(&mut self.worlds[w], &cat, a, *errand));
+                legal[w * k + j] = 1;
+            }
+        }
+        (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
+    }
+
     /// One answer per world for its deciding account: an object index, or -2 to let the login pass. An illegal answer
     /// is counted and replaced by the first legal row. Returns the transitions closed since the last call.
     fn step(&mut self, actions: Vec<i64>) -> PyResult<Vec<Closed>> {
@@ -355,8 +428,18 @@ impl VecWorld {
         let cat = Arc::clone(&self.catalogue);
         for (w, &action) in actions.iter().enumerate() {
             let (a, ticket) = self.deciding[w];
+            self.open[w][a] = Some((ticket, self.value(w, a)));
+            if self.errands {
+                let errand = usize::try_from(action).ok().and_then(|i| self.offered[w].get(i).copied());
+                match errand {
+                    Some(e) => { if errands::apply(&mut self.worlds[w], &cat, a, e).is_err() { self.worlds[w].games[a].invalid += 1 } }
+                    None => {}
+                }
+                self.play_rest(w, &cat, a);
+                self.advance(w);
+                continue;
+            }
             let world = &mut self.worlds[w];
-            self.open[w][a] = Some((ticket, world.games[a].value()));
             if action == -2 {
                 world.wait(&cat, a);
             } else {
@@ -374,8 +457,16 @@ impl VecWorld {
         Ok(std::mem::take(&mut self.closed))
     }
 
-    /// The player rule's answer for every world's deciding account (-2 when it has none).
+    /// The player rule's answer for every world's deciding account (-2 when it has none). In the errand mode, the row of
+    /// the errand the scripted mix would take (row 0 is `wait`), which is the behaviour-cloning label.
     fn baseline(&mut self) -> Vec<i64> {
+        if self.errands {
+            let cat = Arc::clone(&self.catalogue);
+            return self.deciding.iter().enumerate().map(|(w, &(a, _))| {
+                let teacher = errands::teacher_choice(&mut self.worlds[w], &cat, a);
+                self.offered[w].iter().position(|e| *e == teacher).map_or(0, |i| i as i64)
+            }).collect();
+        }
         let cat = Arc::clone(&self.catalogue);
         let mut rng = self.rng;
         let picks = self.worlds.iter().zip(&self.deciding).map(|(world, &(a, _))| {

@@ -92,8 +92,16 @@ fn last_attack(w: &World, a: usize) -> Option<&Event> {
 }
 
 /// Every errand this login may choose, the last one always `wait`.
+/// The most candidates one login is offered: the width the trainers and the PHP encoder agree on (`MAX_ROWS = 32`).
+pub const MAX_CANDIDATES: usize = 32;
+
+/// The teacher's priority: the first of these a login can take is what the scripted mix would do, and therefore the
+/// label behaviour cloning learns. `wait` is last, so a login with nothing to do is labelled `wait`.
+pub const TEACHER_ORDER: [Kind; 7] = [Kind::Save, Kind::Recall, Kind::Recycle, Kind::Raid, Kind::Spy, Kind::Order, Kind::Wait];
+
+/// Every errand this login may choose, `wait` first (row 0: the exporters, the metrics and the PHP encoder assume it).
 pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
-    let mut out = Vec::new();
+    let mut out = vec![Errand { kind: Kind::Wait, target: None, unit: None }];
     if w.account_of(a) == a {
         if let Some(kit) = Kit::of(w, cat, a) {
             let now = w.games[a].t;
@@ -116,8 +124,15 @@ pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
             out.push(Errand::at(Kind::Recall, a));
         }
     }
-    out.push(Errand { kind: Kind::Wait, target: None, unit: None });
+    out.truncate(MAX_CANDIDATES);
     out
+}
+
+/// The errand the scripted mix would take here (the behaviour-cloning label): the first candidate in
+/// `TEACHER_ORDER`. `wait` when the login has nothing better to do.
+pub fn teacher_choice(w: &mut World, cat: &Catalogue, a: usize) -> Errand {
+    let offered = candidates(w, cat, a);
+    TEACHER_ORDER.iter().find_map(|&kind| offered.iter().copied().find(|e| e.kind == kind)).unwrap_or(Errand { kind: Kind::Wait, target: None, unit: None })
 }
 
 /// What the errand does to the world, through the world's own calls, so a refusal is the host's refusal.
@@ -310,7 +325,7 @@ mod tests {
         let (mut accepted, mut kinds) = (0usize, HashSet::new());
         for seed in 1..=4u64 {
             let Some(_) = drive(seed, |w, cat, a, offered| {
-                assert_eq!(offered.last().map(|e| e.kind), Some(Kind::Wait), "wait is always offered, last");
+                assert_eq!(offered.first().map(|e| e.kind), Some(Kind::Wait), "wait is row 0, as the exporters read it");
                 let fleet = offered.iter().copied().filter(|e| e.kind != Kind::Wait).count();
                 if fleet == 0 { return }
                 // One errand a login, in rotation, so one login does not empty the shelf the next candidate needs.
