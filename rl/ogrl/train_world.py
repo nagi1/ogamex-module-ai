@@ -297,7 +297,7 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
 
 # ------------------------------------------------------------------------------------------------- learner
 
-def ppo_update(model, optimizer, batch: dict, args, device: str) -> dict[str, float]:
+def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None) -> dict[str, float]:
     """The loss of train_ppo.py: clipped ratio, 0.5 MSE value, entropy over legal rows, per-minibatch advantage normalisation."""
     n = batch["adv"].shape[0]
     kls, clips, vlosses, ents = [], [], [], []
@@ -317,6 +317,11 @@ def ppo_update(model, optimizer, batch: dict, args, device: str) -> dict[str, fl
             p = dist.probs
             entropy = -(p * torch.where(mask, p.clamp_min(1e-12).log(), torch.zeros_like(p))).sum(1).mean()
             loss = policy_loss + args.vf * value_loss - args.ent * entropy
+            if anchor is not None:
+                # KL(pi || pi_cloned): the policy may leave the behaviour-cloned teacher, but pays for how far.
+                with torch.no_grad():
+                    ref_logits, _ = anchor(batch["state"][idx], batch["cands"][idx], mask)
+                loss = loss + args.kl_anchor * (logp - Categorical(logits=ref_logits).log_prob(batch["action"][idx])).mean()
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
@@ -377,6 +382,12 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
     s_dim, k, c_dim = dims
     gpus = GpuMonitor(int(device.split(':')[1]) if device.startswith('cuda') else 99, args.gpu_util_cap, args.gpu_temp_cap)
     model.to(device).train()
+    anchor = None
+    if args.init and args.kl_anchor > 0:
+        saved = torch.load(args.init, map_location="cpu", weights_only=False)
+        anchor = CandidateScorer(saved["state_dim"], saved["cand_dim"], saved["width"]).to(device).eval()
+        anchor.load_state_dict(saved["model"])
+        anchor.requires_grad_(False)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, eps=1e-5)
     out = Path(args.out)
     log = open(out / "learner.jsonl", "w")
@@ -435,7 +446,7 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
         wait_total += time.time() - clock
         clock = time.time()
         gpus.wait_if_hot()
-        recent = ppo_update(model, optimizer, {name: tensor[:filled] for name, tensor in gpu.items()}, args, device)
+        recent = ppo_update(model, optimizer, {name: tensor[:filled] for name, tensor in gpu.items()}, args, device, anchor)
         busy_total += time.time() - clock
         updates += 1
         rows_total += filled
@@ -578,6 +589,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ogrl.train_world")
     ap.add_argument("--queue", type=int, default=0, choices=(0, 1, 2), help="0 decides buildings, 1 research, 2 errands (the fleet side of a login); the other decisions play the player rule; this is the decision kind id")
     ap.add_argument("--init", help="start from a checkpoint (a behaviour-cloned warm start, eg runs/bc-errand.pt)")
+    ap.add_argument("--kl-anchor", type=float, default=0.0, help="penalty on leaving the --init policy (KL per row); 0 disables")
     ap.add_argument("--catalogue", help="default: plain-train.json for queue 0, research-train.json for queue 1, units-parity/econ-u1.json for errands")
     ap.add_argument("--eval-catalogue", help="held-out planets; default plain-eval.json / research-eval.json / the training catalogue for errands")
     ap.add_argument("--units", default=str(DATA / "units-parity/units-u1.json"), help="the host's ship and defence tables; errands need them and the fleet exports")
