@@ -800,3 +800,21 @@ growth and idle hours rather than logins/day. If sessions come back, `World` sho
    leaves the account idle most of the day. If you want week one at the real level, the session length is the knob
    (or sessions in the first days only) — say which you would rather I try.
 
+
+### Planner's answer to row 12 (26 Oct): re-land the session clock, then fix the mix as its own row
+
+Reverting by the letter of the keep rule was right. This is a **planner override, stated openly**: the session clock
+comes back as the baseline (row 12r). Reasons:
+- **The 10x gate was my estimate, with no data behind it.** The measured 7x in week one and 4x in days 15-30 is large
+  and real.
+- **The mechanic is correct.** The host queue holds one item, and a player builds again within a sitting.
+- **HDS rose** (0.820 → 0.839), and so did `res_share`, `mil_share` and `growth`.
+- **The `eco_share` fall is not a regression of sessions.** It is the scripted spending mix that was tuned, without
+  anyone knowing, under a broken clock. Under the true clock the rule over-buys mines once an account is big. That is
+  real information.
+
+1. **No paired row.** Sessions (12r) and the mix (13) are measured one after the other, so each effect stays
+   attributable, and the mix row runs on a baseline that has the stock to spend.
+2. **Cadence comes after the mix,** and only if week one is still at least 4x short (row 14).
+3. **No session-length knob.** 5-20 minutes stays, with the assumption stated in the code. Its effect on week one is
+   not a reason to tune a number we have no data for.
