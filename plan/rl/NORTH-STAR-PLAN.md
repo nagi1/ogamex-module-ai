@@ -513,3 +513,61 @@ resumes at N7, and then every training run ends with an L1 reading.
 
 Status words: `open`, `claimed`, `done`, `blocked on X`, `stopped: <reason>` (time box or a stop condition hit;
 see `ESCALATIONS.md`).
+
+## 14. Assessment with the skills (planner, 26 Oct; `rl-diagnostics`, `statistical-analysis`)
+
+Measured from the code and logs (`train_world.py`, `runs/w14a/learner.jsonl`, `runs/loop/ppo.log`, `runs/bh-s*.log`,
+`next-steps.md` §4), not recalled.
+
+| Check (skill section) | Finding | Verdict |
+| --- | --- | --- |
+| PPO health, errand (§2) | Over the whole 15-minute w14a run: KL 0.0000-0.0012, clip 0.000-0.019, entropy 0.07-0.33 from the first update (the BC warm start is almost deterministic). Value loss rises from 1.8 to 3-7 on rewards normalised to O(1). | The policy barely moves (healthy KL is 0.005-0.03), and the value net cannot explain the return, so the advantages are mostly noise. Consistent with §3: a small errand effect inside a reward that is 98% economy. More learner knobs cannot fix it. |
+| PPO health, building (§2) | Ends at KL 0.0000 and clip 0.00. The three seeds end at +44%, +59% and +63%. | Converged to different fixed points per seed. The spread between seeds (19 points) is larger than many effects we chased. |
+| Implementation details (§2) | Present: masked softmax, entropy over legal rows, per-minibatch advantage normalisation, grad clip 0.5, a std floor of 1e-2, reward scale. **Missing: (a)** the horizon end is a true terminal (`done` gives a bootstrap of 0) while **no state feature says how much time is left**, so the last hours look like any other to the policy. The building kind is softened by the production bonus; the errand kind is not. The real game has no horizon. **(b)** No explained-variance log in `train_world`. | Fix both (N0a). They are cheap and they are correctness, not tuning. |
+| Training metric (§5) | `ctl_vs_rule_cumulative` reads +27% while the paired evaluation reads +1.9%. The code names it `unpaired`: controlled and rule slots are different accounts. | It cannot select checkpoints. The rule "pick by the training metric" was therefore never really followed. Make it paired, or drop it (N0a). |
+| Statistical power (§5, `statistical-analysis`) | The errand evaluation's 95% CI half-width is about 2% (64 worlds), so SE is about 1% and the **minimum detectable effect at 80% power is about 2.8%**. W13, W14, W16 and the 8-configuration sweep chased differences of 0.05-0.2%, with 1 seed each (about 0.4 expected false "wins" in the sweep). | Those experiments could never have shown anything. From now on every verdict prints its MDE, and a row whose expected effect is below the MDE needs more worlds before it runs. Report the IQM with a stratified bootstrap beside the mean. |
+| Headroom (§1.2) | Measured for building (best of 2048 orders: +17%). **Never measured for errands, nor for the human distance.** | Measure before any errand RL resumes. The north-star version is N5's first reading. |
+| Sim to PHP transfer | Building: sim +44..+63% over the rule, but in PHP twin worlds the mean is +9.7% while the **median is 0.99 and the geometric mean 1.008**. On the IQM that is parity. The teacher replays at the same value in both (137k against 129k); **the policy's transfer was never audited.** | This is the largest unexplained number in the project. If simulator gains do not survive PHP, every simulator result is suspect. Audit it now (N0b), before N7 trains on simulator rewards again. |
+| North star (§4 of the plan) | Never measured. Indirectly: growth 0.21x the real median, 1 planet against 2-16, 0 moons, 4 of 9 missions played. | The distance is dominated by teacher and menu coverage, not by the learner. N2-N6 come before more RL. |
+
+**Course correction, in priority order:**
+1. Stop all learner tuning. This is already §7, and the numbers above show why.
+2. N0a and N0b (below), in parallel with N1, N2 and N3a.
+3. Build the yardstick (N2, N4) and the season (N3a). Then the first reading (N5).
+4. Close the coverage gaps in the teacher (N6). Only then use RL again, with the band constraint (N7), a
+   time-aware state, a paired training metric and verdicts that print the MDE.
+
+### N0a Trainer correctness (Lane A, time box half a day)
+
+- **Files:** `rl/ogsim/src/python.rs` (one owner), `rl/ogrl/train_world.py`.
+- **Steps:**
+  1. Add `hours_left / horizon` as a state column for every kind, **or** treat the horizon end as a truncation that
+     bootstraps from V (choose truncation: the real game has no end). Record the choice in the commit.
+  2. Log explained variance per update: `1 - Var(R - V) / Var(R)`.
+  3. Replace the unpaired training metric with a paired one: for each controlled account, its twin in an identical
+     rule-played world. If that is too costly, delete the metric and select the checkpoint by the training return.
+  4. The evaluation and the loop verdict print the IQM with its stratified bootstrap CI and the MDE (2.8 × SE).
+- **Done when:** a 5-minute errand loop prints EV, IQM and MDE; on the old settings the verdict is unchanged within
+  the MDE (the fix must not move the result by itself); `cargo test` is green.
+- **Stop when:** EV stays below 0.3 after the fix. Report it: then the reward is too noisy for this kind (expected), and
+  that waits for N7.
+
+### N0b Sim-to-PHP transfer audit (Lane C, time box 1 day)
+
+- **Why:** the building model's simulator gain (+44..+63%) does not show in PHP (median 0.99). Until we know why, no
+  simulator result can be trusted as a prediction.
+- **Inputs:** `storage/rl/m5-eval7/{teacher,policy}` (16 seeds, recorded choices and login times).
+- **Steps:**
+  1. For each policy-run learner account, replay its recorded PHP choices in the simulator at its recorded login times,
+     as the teacher fidelity check did (137k against 129k). Do the same for its control account from the teacher run.
+  2. Compute three ratios per pair:
+     - the PHP ratio (learner value / control value);
+     - the replayed simulator ratio (the same choices, the simulator's value);
+     - the simulator-policy ratio (the model choosing live in the simulator from the same starts and login times).
+  3. Locate the loss. If the PHP and replayed ratios differ, the simulator mis-values the same choices: a fidelity gap,
+     so find the mechanic. If replayed equals PHP but differs from the simulator-policy ratio, the model chooses
+     differently in PHP: an input or serving gap (features, the candidate menu, timing). That leads to N9.
+- **Done when:** one table of the three ratios (IQM, 95% CI) and one sentence naming which gap it is, with the first
+  concrete cause.
+- **Stop when:** the replay cannot reproduce the teacher's value within 10%. Report it, because then the fidelity check
+  itself has regressed.
