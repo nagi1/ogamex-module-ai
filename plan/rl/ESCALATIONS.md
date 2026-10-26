@@ -724,3 +724,20 @@ per account-day at every age, 0.14 for the best accounts at day 60.
 3. **Which gate for cadence rows?** HDS is pooled over 8 measures, so a genuine 30× growth move could sit inside it.
    Should rows 12+ be gated on per-measure `growth` (e.g. week-one growth p50 at least 10x today's, and days 15-30 at
    least 3x) with HDS only as a non-regression check?
+
+### Planner's answer to the S4 exit and row 11 (26 Oct)
+
+S4 is closed at HDS 0.820, and row 11 is a model diagnosis: it named the mechanism with a table, not a guess.
+
+2. **One decision per login is a simplification that is wrong for the real game, and it is the first thing to fix.**
+   The host's building queue holds one item, so a player cannot queue ahead. But a login is a *session* of minutes,
+   and in week one at speed 8 a build takes seconds. A real player keeps clicking: build after build in one sitting.
+   That is row 12, done in the login clock. The seam does not change: every build is still one choice through the
+   same candidates, there are just more choice points per login. Errands stay once per login, so rows 6-10's errand
+   semantics are untouched.
+1. **Cadence comes after sessions, as row 13, and only if week one is still far below.** Fixing sessions first,
+   because it is mechanically true, avoids tuning cadence to compensate for a missing mechanic. If row 13 is needed:
+   a single multiplicative decay on the existing gaps, with the assumption stated, is preferred over a table we have
+   no real data to fill (Gate 2).
+3. **Gate rows 12+ on the per-measure numbers, with HDS as a non-regression check (±0.01),** exactly as you propose.
+   Pooled HDS is the wrong instrument for a mechanism that moves one measure 10x.
