@@ -681,3 +681,46 @@ the suite is 34/34 and S4 ships at the numbers already measured (HDS 0.820, mil_
 
 **Re-apply row 10c with this line, run the full suite (34/34) and the three seasons, fill in the row, and commit.
 Then go to row 11.**
+
+## 26 Oct — S4 exit met: row 10c ships the military share, row 11 names the early-growth mechanism
+
+**Row 10c kept.** HDS **0.820** (per seed 0.817 / 0.824 / 0.820, spread 0.007; row 8 was 0.752), AUC 0.988,
+34/34 tests with every assertion intact. `mil_share` in band **0.482 → 0.850**, `res_share` 0.440 → 0.577,
+`eco_share` 0.828 → 0.867, growth 0.800 → 0.803. Giveaways now: alliance 0.083, moons 0.070, res_share 0.069,
+galaxies 0.055, growth 0.052 — `mil_share` has left the list.
+
+The change exposed two real bugs, both fixed: `raid_plan` offered raids whose fuel the stock could not pay (mask
+offering an action the world refuses), and `Ledger::lost` counted only the attacker's losses. The staged-order test
+now measures what its own order queued, by that unit's queue before and after the apply — your strictest form.
+
+**Row 11 kept as a diagnosis.** 11 520 account-days, three 60-day seasons:
+
+| age (days) | logins/day | build h/day | idle h/day | full logins | growth p50 | real mid p50 | ratio |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1-7 | 12.4 | 0.1 | **23.9** | **58%** | 1 | 50 | 0.03 |
+| 8-14 | 14.1 | 2.6 | 21.4 | 46% | 6 | - | - |
+| 15-30 | 23.7 | 9.6 | 14.4 | 27% | 46 | 1 842 | 0.03 |
+| 31-60 | 28.0 | 12.9 | 11.1 | 18% | 167 | 4 343 | 0.04 |
+
+The three best accounts at day 60 (318 592 / 315 844 / 302 123) held 464-2 097 points at day 8.
+
+**Mechanism named:** one decision per login against second-long builds. In week one the queue is busy 0.1 h of 24 and
+58% of logins find a store already at 80% or more — the resources are there and cannot be spent. Login cadence alone
+(12.4/day) is not the whole story, and neither is the build order: the world gives a login one commitment, and a
+throwaway build leaves the rest of the gap unused. The deficit is not only early — 0.03-0.04 of the real mid median
+per account-day at every age, 0.14 for the best accounts at day 60.
+
+**Questions (gate 3 — I stop here until you answer):**
+
+1. **Row 12 = a T row on login cadence?** The login table is age-blind; a real player is most active at a universe's
+   start. My proposal: draw the gaps from an age-decayed mixture — days 1-7 median gap ~10-15 min, decaying to the
+   measured table (median 48 min, mean 2.2 h) by day 14 — one parameter, one row, gated on per-measure `growth` and
+   HDS not regressing beyond 0.01. Do you want the decay as a table per age band (harder to fake, more data) or as a
+   single multiplicative decay on the existing draws (simpler, and I can state the assumption in the row)?
+2. **The one-decision-per-login mechanic.** Is that a deliberate simplification of the login world (in which case the
+   cadence row must compensate for it), or should a later row let one login commit as many builds as it can pay for —
+   which is what a real player does in the first hour and would change the errand seam every row since row 6 was
+   measured against? If it is deliberate, I will say so in the row and stop chasing it.
+3. **Which gate for cadence rows?** HDS is pooled over 8 measures, so a genuine 30× growth move could sit inside it.
+   Should rows 12+ be gated on per-measure `growth` (e.g. week-one growth p50 at least 10x today's, and days 15-30 at
+   least 3x) with HDS only as a non-regression check?
