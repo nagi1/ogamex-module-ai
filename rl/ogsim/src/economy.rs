@@ -645,7 +645,7 @@ impl Catalogue {
         game.t = until;
     }
 
-    /// The first login at or after `x` (strictly after with `later`); with no gap table the account is always there.
+/// The first login at or after `x` (strictly after with `later`); with no gap table the account is always there.
 /// The shortest gap between two actions the host does not flag (`HostDetector`: under ten seconds reads as a script).
 
 /// The first second at or after `t` outside the account's night: a player sleeps, and the host flags a dark period under

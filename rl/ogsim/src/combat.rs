@@ -190,12 +190,14 @@ impl CombatCatalogue {
         self.units.get(&id).unwrap_or_else(|| panic!("unit {id} is not in the combat catalogue"))
     }
 
-    /// The table cell for these levels, the first `by` research varying slowest (ExportAiCombatCatalogueAction).
+    /// The table cell for these levels, the first `by` research varying slowest (ExportAiCombatCatalogueAction). A level
+    /// past the export's grid reads the edge cell, the way the economy's unit grids do: a season can research a
+    /// technology further than the combat export tabulates (row 24 C found shields at 21 against a grid of 0-20), and a
+    /// fight is still a fight there.
     fn cell(&self, table: &RawTable, research: &HashMap<u32, u32>) -> i64 {
         let index = table.by.iter().fold(0usize, |index, r| {
             let level = research.get(r).copied().unwrap_or(0);
-            assert!(level <= self.max_level, "research {r} at {level} is past the combat catalogue's max level {}", self.max_level);
-            index * (self.max_level as usize + 1) + level as usize
+            index * (self.max_level as usize + 1) + (level.min(self.max_level)) as usize
         });
         table.values[index]
     }
@@ -637,6 +639,16 @@ mod tests {
                 })
                 .collect()
         })
+    }
+
+    /// Row 24: a research level past the export's own grid reads the edge cell instead of panicking - an account that
+    /// researched shields further than the combat catalogue tabulates still fights (row 24 C's expeditions found it).
+    #[test]
+    fn a_level_past_the_grid_reads_its_edge() {
+        let (cat, _) = load();
+        let grid = RawTable { by: vec![111], values: (0..=cat.max_level as i64).collect() };
+        let edge = cat.cell(&grid, &HashMap::from([(111_u32, cat.max_level)]));
+        assert_eq!(cat.cell(&grid, &HashMap::from([(111_u32, cat.max_level + 7)])), edge, "a level past the grid did not read its edge");
     }
 
     fn load() -> (CombatCatalogue, Vec<Case>) {
