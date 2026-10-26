@@ -134,7 +134,8 @@ Rules for the ladder:
 ## 6. Work rows (N-rows)
 
 Each row gives: goal, why, files (the implementer owns only these), steps, **done when**, **stop when** and a time box.
-Lanes A/B/C can run in parallel. Within a lane, one agent at a time.
+**One agent works on this plan at a time (owner rule, 26 Oct): no subagents, no parallel agents.** Lanes are an
+ordering aid only: rows are done one after another, and only long CPU jobs run in the background.
 
 ### Lane B (Python, data and metrics): start now, no dependencies
 
@@ -360,6 +361,11 @@ scripted victim. Do it only after N8 passes.
 
 ## 7. Rules every implementer follows
 
+0. **Skills, not memory.** Load `rl-diagnostics` (PPO health, headroom, saturation, statistics), `scikit-learn` and
+   `statistical-analysis` from `Modules/AI/.claude/skills` when the row touches training, evaluation or numbers. A claim
+   with no skill, code or measurement behind it is marked "unverified".
+0. **One agent only.** Never start subagents, forks or a second session. Background processes (season, training, cargo) are
+   fine; parallel editors are not.
 1. **Before writing code**, write two lines in your report: the §4 measure your row moves, and its current value (from
    the latest L1 run).
 2. **Measure, then change.** A gap is diagnosed with a direct measurement before any fix (memory

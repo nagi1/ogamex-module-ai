@@ -17,8 +17,9 @@ Modules/AI/plan/rl/NORTH-STAR-PLAN.md. The planner owns that file; you follow it
 2. PICK
    - Take the first row in §13 whose status is `open` (or `claimed` by you) and whose dependencies are `done`.
      Lane order on ties: B, then C, then A.
-   - Lanes A, B and C may run at once. You may start up to one subagent per lane, each owning only its row's files (the
-     Agent tool, model sonnet). Two agents never edit the same file.
+   - ONE AGENT ONLY: you. Never start subagents, forks, background agents or a second Claude session (no Agent tool,
+     no Task tool). Lanes are taken one row at a time, in sequence. Long CPU jobs (season runs, training, cargo)
+     may run in the background while you work on the next row, but every edit is yours.
    - Set the row to `claimed` in §13 with your name and the date, and commit that one line.
    - If no row is pickable, write why in ESCALATIONS.md and stop the loop.
 
@@ -26,6 +27,12 @@ Modules/AI/plan/rl/NORTH-STAR-PLAN.md. The planner owns that file; you follow it
    - In your working notes, write the §4 measure your row moves and its current value (from the latest §8 reading, or
      "no reading yet").
    - Read the files the row names, and the comparable existing code. Match its style.
+   - Load the skills that apply (Skill tool), and use their facts instead of memory:
+     - `rl-diagnostics`: before touching any training, reward or evaluation, and before reporting a number;
+     - `scikit-learn`: for hds.py;
+     - `statistical-analysis`: for CIs, seed counts and comparisons;
+     - `ogame-rl-training`: for the choice seam and the PHP side.
+     If a fact is in neither a skill, the code nor a measurement, say "unverified"; never invent it.
 
 4. DO THE ROW
    - Follow the row's steps exactly. Keep to its "Files" list.
