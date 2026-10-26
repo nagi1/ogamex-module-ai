@@ -741,3 +741,62 @@ S4 is closed at HDS 0.820, and row 11 is a model diagnosis: it named the mechani
    no real data to fill (Gate 2).
 3. **Gate rows 12+ on the per-measure numbers, with HDS as a non-regression check (±0.01),** exactly as you propose.
    Pooled HDS is the wrong instrument for a mechanism that moves one measure 10x.
+
+## 26 Oct — row 12 (S5) measured and reverted: the session clock works, its spending mix does not
+
+Row 12 as written is in `RL-FLOW.md` line 109; the code is reverted (`cargo test --release` 35/35, tree back to row
+11's commit) and the evidence is kept in `storage/rl/ogsim/runs/flow/e12/` (three seasons + scorecard).
+
+**What the session clock did.** Each login opens a 5-20 minute session; inside it the account returns the moment a
+queue frees, never closer than the host's 10 s floor to its own last action.
+
+| age (days) | growth p50 row 11 | growth p50 row 12 | × | idle h/day | build h/day |
+| --- | --- | --- | --- | --- | --- |
+| 1-7 | 1 | **7** | 7.0 | 22.5 | 1.5 |
+| 8-14 | 6 | 64 | 10.7 | 17.1 | 6.9 |
+| 15-30 | 45 | 180 | 4.0 | 13.8 | 10.2 |
+| 31-60 | 164 | 305 | 1.9 | 16.4 | 7.6 |
+
+Best three accounts at day 8: **8 688 / 7 238 / 7 151** points, against row 11's 464-2 097 and your real mid target of
+1.6-3.2k. HDS **0.820 → 0.839** (+0.019), AUC 0.988 → 0.993, the 10 s floor **0 violations** at season scale
+(`action_under_10s 0`), the other hard constraints unchanged (dark periods 1 013 vs 1 011, logins under 18 h 43 vs 43).
+
+**Why it is reverted.** `eco_share` 0.867 → **0.677**, under its 0.80 gate, and the loss is exactly where real
+accounts stop buying mines:
+
+| cell | row 10c | row 12 |
+| --- | --- | --- |
+| top10 the bottom 128-256 | 0.78 | **0.00** |
+| top10 256+ | 0.63 | **0.00** |
+| mid the bottom 128-256 | 0.98 | **0.15** |
+| mid 256+ | 1.00 | 0.76 |
+| bottom the bottom 128-256 | 0.89 | 0.98 |
+| bottom 256+ | 0.75 | 0.88 |
+
+A session lets the account place every build it can pay for, and the rule's menu is economy-heavy, so a big account
+becomes a bigger mine instead of turning its stock into fleet and defence. `res_share` (0.577 → 0.852) and `growth`
+(0.803 → 0.840) moved the other way, which is what made this close: the change is not noise, it is spent in the wrong
+proportion.
+
+**Two real bugs it exposed, both fixed on the way** (and both needed for three world tests to pass with unchanged
+assertions): a login that was due now was pushed past the 10 s floor and skipped, so account 0's clock jumped six
+1 800 s gaps to 10 800; and a session woke a colony's research queue, letting a colony decide the account's research.
+The fixes have nothing to hold up once the clock is reverted.
+
+**Measurement caveat:** under sessions the season's `logins` field counts decisions, not logins, so the row quotes
+growth and idle hours rather than logins/day. If sessions come back, `World` should count logins from `login_times`.
+
+**Questions:**
+
+1. **Re-land sessions with the mix they need — row 12b?** One change in `players.rs` (the same file row 10 used for
+   `military_share`): make the economy share follow the real band as the account grows, so a large account stops buying
+   mines once its `eco_share` is at the band's top and spends on fleet and defence instead. Gate the pair on
+   `eco_share` and `growth` both holding, and keep or revert them together. I would rather not land sessions alone
+   again, and I would rather not spend a row on the mix alone either: the mix only bites when there is stock to spend.
+2. **Or is the login cadence row (S5's own `Next`) the better first step?** Denser early logins move week one, which is
+   still 4-7× short, without touching the spending mix; but row 11 said the queue is idle because one sitting cannot
+   spend, and cadence alone cannot fix that.
+3. **The 7× against your 10×.** Week one rose 7× where the hypothesis predicted 10×: a session of 5-20 minutes still
+   leaves the account idle most of the day. If you want week one at the real level, the session length is the knob
+   (or sessions in the first days only) — say which you would rather I try.
+
