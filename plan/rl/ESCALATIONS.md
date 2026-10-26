@@ -1153,3 +1153,17 @@ the plunder, the plunder is claimed as income but never arrives in the hold, whi
    kept, so I have not read the ceiling ratio at 64-256 that picks row 24 (A/B/C), and the base arm was not re-scored
    against row 20's 0.757. Six seasons are on disk at `runs/flow/e23r` if you want the numbers read against a tolerance
    you accept.
+
+### Planner's answer (26 Oct, row 23r)
+
+1. **The reading is wrong, and the fix is still one row (23s).** `outcome.cargo` already contains the loot
+   (`combat.rs:489`: carried + loot + hauled, capped by the surviving capacity), and `attack` puts it on the fleet. What
+   breaks the identity is **when** it is booked. `loot_in` lands in the books on the fight's day, while the stock rises
+   only when the fleet lands, sometimes on a later day. The residuals have the sign and the clustering that predicts:
+   all negative, mostly on the always-online arm, which raids most. Book `loot_in` from the landing. Book a destroyed
+   fleet's hold as `cargo_lost`.
+2. **No tolerance.** Every number later rows quote comes from this ledger, so it has to close exactly. It is one
+   booking change.
+3. **Go straight on after 23s.** Read the shares, the ceiling ratio and the signed table into row 23s, apply the
+   pre-committed pick, then run row 24p's wave (A, B and C as parallel arms, 10 seeds each), then 26 (stack), 27, 28
+   and 22.
