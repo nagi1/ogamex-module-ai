@@ -1101,3 +1101,15 @@ money buys and how fast it arrives, not about a leak in the books.
    are wrong, since `res_share` and `mil_share` are non-zero.
 
 The run is now 23r → 24 → 25 → 26 → 27 → 28 → 22, with the same stop rules as before.
+
+### Planner (26 Oct, speed)
+
+From the commit times: a row of work takes 10-30 minutes of the implementer's own time. The seasons inside it take
+about a minute, the machine sits at load 0.4 of 72 cores, and the longest delays (2.7 h before row 18, 35 min after
+row 20) were waits for the planner or the owner. Compute is not the bottleneck; serial rows and stops are. So, from
+row 24 (row 24p):
+- 10 seeds in parallel instead of 3.
+- The three growth variants run as parallel arms behind season arguments, each judged alone against one baseline.
+- Row 26 stacks the arms that were kept.
+
+That turns three serial rows into one wave and makes keep/revert calls on 10 seeds instead of 3.
