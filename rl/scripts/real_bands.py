@@ -3,7 +3,9 @@
 
 North-star plan N2 (plan/rl/NORTH-STAR-PLAN.md §6). Reads the PUB snapshots (the highscore of 267 real
 universes) and the OStats hourly curves, and writes `storage/rl/ogsim/real-bands.json` in the §9.2 schema:
-per cell (rank band x speed-days bucket) the p10/p50/p90 of every measure, a raw sample for the classifier,
+per scored cell (rank band x the universe's age in real days, speed 8 only) the p10/p50/p90 of every
+measure and a raw sample for the classifier, the speed-days buckets of the other speeds apart (printed,
+not scored),
 the activity band from OStats, and the planet-position histogram.
 
 Nothing here names a game object: it is a read of published player data, so gate 1 does not bite.
@@ -28,6 +30,10 @@ MEASURES = ["growth", "eco_share", "res_share", "mil_share", "planets", "moons",
 BANDS = ("top10", "mid", "bottom")
 BUCKETS = [(0, 8), (8, 16), (16, 32), (32, 64), (64, 128), (128, 256), (256, math.inf)]
 BUCKET_NAMES = ["0-8", "8-16", "16-32", "32-64", "64-128", "128-256", "256+"]
+# A scored bucket is the published universe's own age in real days, not speed-days: no speed-8 universe
+# is 8-90 days old (band_audit, row 18), so the speed-day buckets mixed weeks-old worlds with 2-year ones.
+AGE_BUCKETS = [(0, 15), (64, 129), (128, 257), (256, 513), (512, math.inf)]
+AGE_NAMES = ["0-14", "64-128", "128-256", "256-512", "512+"]
 SCORE_TYPES = {"total": 0, "eco_share": 1, "res_share": 2, "mil_share": 3}
 MIN_CELL = 30
 SAMPLE_MAX = 2000
@@ -74,6 +80,14 @@ def bucket_of(speed_days: float) -> str:
         if low <= speed_days < high:
             return name
     return BUCKET_NAMES[-1]
+
+
+def age_bucket_of(age_days: float) -> str | None:
+    """The universe's age bucket; None in the 14-64 day gap, where no published speed-8 universe exists."""
+    for (low, high), name in zip(AGE_BUCKETS, AGE_NAMES):
+        if low <= age_days < high:
+            return name
+    return None
 
 
 def epoch(iso: str) -> float:
@@ -233,6 +247,7 @@ def build(src: Path) -> dict:
     slots = [0] * (POSITIONS + 1)
     dropped = {"no_alliance_universes": 0, "status": collections.Counter()}
     pooled: dict[str, list[list[float]]] = collections.defaultdict(list)
+    speed_days_cells: dict[str, list[list[float]]] = collections.defaultdict(list)
     universes = 0
     for directory in sorted((src).glob("PUB-*/normalized")):
         universe = universe_of(directory)
@@ -246,17 +261,20 @@ def build(src: Path) -> dict:
         owned, universe_slots = planets_of(directory)
         for position, count in enumerate(universe_slots):
             slots[position] += count
+        age_bucket = age_bucket_of(universe["speed_days"] / universe["speed"])
         for band, bucket, vector in account_measures(directory, universe, status, allied, scores, ranked, owned):
-            samples[f"{band}|{bucket}"].append(vector)
             pooled[band].append(vector)
-            if universe["speed"] == 8:
-                samples[f"speed8|{band}|{bucket}"].append(vector)
+            if universe["speed"] != 8 or age_bucket is None:
+                speed_days_cells[f"{band}|{bucket}"].append(vector)
+                continue
+            samples[f"{band}|{age_bucket}"].append(vector)
     return {
         "version": 1,
         "made": dt.date.today().isoformat(),
         "measures": MEASURES,
         "universes": universes,
         "cells": cells_from(samples),
+        "speed_days": cells_from(speed_days_cells),
         "pooled": cells_from(pooled),
         "activity": activity_bands(src),
         "positions": [round(count / max(sum(slots), 1), 6) for count in slots[1:]],
@@ -291,6 +309,8 @@ def main() -> None:
     usable = [k for k, v in bands["cells"].items() if v["n"] >= MIN_CELL]
     thin = [k for k, v in bands["cells"].items() if v["n"] < MIN_CELL]
     print(f"cells: {len(bands['cells'])} ({len(usable)} usable, {len(thin)} under n={MIN_CELL})")
+    print("scored: the universe-age buckets at speed 8. Not scored, the speed-days buckets the other"
+          " speeds keep: " + ", ".join(f"{key} n {cell['n']}" for key, cell in bands["speed_days"].items()))
     print_table(bands["pooled"])
     print("activity (share of hours with score growth):",
           {b: (v["p50"], v["n"]) for b, v in bands["activity"].items() if b in BANDS})

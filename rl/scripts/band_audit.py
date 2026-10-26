@@ -56,7 +56,7 @@ def universes_of(src: Path) -> list[dict]:
 
 def print_cells(bands: dict, universes: list[dict]) -> None:
     """One block per cell: the universes behind it, biggest first, against the cell's recorded n."""
-    recorded = bands["cells"]
+    recorded = bands.get("speed_days", bands["cells"])  # the speed-days table: the audit buckets in speed-days
     for bucket in rb.BUCKET_NAMES:
         for band in rb.BANDS:
             key = f"{band}|{bucket}"

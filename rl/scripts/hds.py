@@ -37,7 +37,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold, StratifiedKFold
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from real_bands import MEASURES, band_of, bucket_of  # noqa: E402  (same definitions as the target file)
+from real_bands import MEASURES, MIN_CELL, age_bucket_of, band_of, bucket_of  # noqa: E402  (same file)
 
 DEFAULT_BANDS = Path(__file__).resolve().parents[4] / "storage/rl/ogsim/real-bands.json"
 GROWTH_EVERY = 10          # the growth measure is read every tenth day (§4)
@@ -95,7 +95,12 @@ def measures_of(row: dict, world_size: int, rank: int) -> tuple[str, dict[str, f
         "galaxies": float(row["galaxies"]),
         "alliance": 1.0 if row["alliance"] else 0.0,
     }
-    return f"{band_of(rank / max(world_size, 1))}|{bucket_of(speed_days)}", vector
+    # A season runs at speed 8, so its line is placed by its own age in days against universes of that age.
+    # Days 15-63 have no published speed-8 universe at all (row 18): they are listed and not scored.
+    bucket = bucket_of(speed_days)
+    if row["world_speed"] == 8:
+        bucket = age_bucket_of(float(row["day"])) or "no-age-15-63"
+    return f"{band_of(rank / max(world_size, 1))}|{bucket}", vector
 
 
 def score_rows(rows: list[dict]) -> tuple[dict[str, list[dict]], list[str]]:
@@ -212,7 +217,7 @@ def report(cells: dict[str, list[dict]], bands: dict, label: str, save: Path | N
         accounts = cells[cell]
         real = real_vectors(bands, cell)
         real_cell = bands["cells"].get(cell)
-        if not real or real_cell is None:
+        if not real or real_cell is None or real_cell["n"] < MIN_CELL:
             unmatched.append((cell, len(accounts)))
             continue
         in_band = collections.Counter()
@@ -235,7 +240,7 @@ def report(cells: dict[str, list[dict]], bands: dict, label: str, save: Path | N
         row = f"{cell:22}{len(accounts):>6}{ours_p50:>12,.0f}{real_cell['p50']['growth']:>12,.0f}  "
         print(row + " ".join(f"{m[:6]}={in_band[m] / len(accounts):.2f}" for m in measures))
     if unmatched:
-        print("no real counterpart (age bucket or band the published universes do not populate): "
+        print("not scored (no published universe of that age and band, or its n is under 30): "
               + ", ".join(f"{c} ({n})" for c, n in unmatched))
     hds = inside / max(pairs, 1)
     auc = float(np.average(per_cell_auc, weights=per_cell_weight)) if per_cell_auc else float("nan")
