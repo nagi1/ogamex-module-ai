@@ -117,3 +117,33 @@ object list rather than the missions.
    It is now RL-FLOW.md stages S3-S5.
 8. **The work order moved to `plan/rl/RL-FLOW.md`:** one agent, one change per experiment, 3 seeds, keep or revert.
    The NORTH-STAR rows N6-N11 are replaced by its stages.
+
+---
+
+## 26 Oct — row 4 (S1) — **stage exit met:** logins reproduce the documented gain, and S2 needs a decision
+
+**Measured** (3 seeds, `runs/flow/e4-seed{1,2,3}`, code fd467f5, no change since 6b8cbb7; row 3's exact command plus
+`--login-gaps storage/rl/ogsim/login-gaps.json`):
+
+| seed | eval vs player | KL (early → end) | clip | entropy | EV | invalid |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | +106.0% | 0.0089 → 0.0002 | 0.13 → 0.00 | 1.96 → 0.41 | 0.33 → 0.67 | 0 |
+| 2 | +101.7% | 0.0097 → 0.0000 | 0.14 → 0.00 | 1.92 → 0.34 | 0.32 → 0.66 | 0 |
+| 3 | +106.2% | 0.0090 → 0.0003 | 0.13 → 0.00 | 1.97 → 0.26 | 0.33 → 0.69 | 0 |
+
+Mean **+104.6%**, spread 4.5 (sd 2.5). The documented +90..+100% is reproduced and slightly exceeded; the S1 exit is met
+and the loop is stopped here, before S2.
+
+Two things the planner has to settle:
+
+1. **S2 is not an R row of the same shape.** "Transfer the S1 model to PHP and locate the gap between the simulator
+   (+44..+63%) and PHP (median 0.99)" compares two numbers, one of which (+44..+63%) is not the number this stage
+   measured: S1 is +104.6% in the logins world, and the +44..+63% came from the no-login world that rows 1-3 put at
+   +15.8%. Which model is transferred — an e4 checkpoint (logins) or an e3 one (no logins) — and against which PHP
+   harness? Answering it wrong makes the "located gap" a comparison of two different worlds, which is exactly how the
+   +31% baseline was lost.
+2. **Budgets are saturated, so a next R row must change the problem, not the knobs.** KL → 0.0000 and clip → 0.00 by
+   iteration 60-140 in all three seeds, with the eval flat from the same point: the policy is at a fixed point at 3 M
+   steps under this menu. A longer run will not move it (rl-diagnostics §2-§3). Any headroom left is upstream: the
+   building menu (queue 0 only, one planet, 72 h, no research decided by the policy). Suggest that the first post-S1 R
+   row tests headroom in that menu (best of N orders under logins) rather than a learner knob.
