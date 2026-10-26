@@ -18,7 +18,9 @@ Each iteration does exactly ONE experiment:
    roughly how much), the command and the keep rule. Commit that row.
 4. Make the one change. At most about 50 readable lines. A Rust change comes with a test. Use rl/ogrl/train_ppo.py;
    never extend train_world.py.
-5. Run 3 seeds (background processes, the same fixed evaluation). R rows: the trainer's eval line. T rows: season.rs
+5. If any file under Modules/AI/rl/ogsim/src is newer than the installed ogsim wheel, rebuild first:
+   `cd Modules/AI/rl/ogsim && ../../../../.venv-rl/bin/maturin develop --release` (the wheel went stale once). Then
+   run 3 seeds (background processes, the same fixed evaluation). R rows: the trainer's eval line. T rows: season.rs
    with 3 seeds, then rl/scripts/hds.py.
 6. Fill in the row: the per-seed results, the mean and spread, and the health (KL / clip / entropy / EV / invalid). The
    run is broken, not a result, if invalid > 0, EV < 0 at the end, or KL is 0 from the very first update.

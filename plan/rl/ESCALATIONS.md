@@ -269,3 +269,103 @@ and the economy-only simulator has nowhere to spend that budget except compoundi
    - Row 6 measures it with paired twins in `VecWorld`.
    - Row 7 (conditional) adds raiders.
    - S2b and S2c run only if the world does not shrink the gain.
+
+
+## 26 Oct — row 6 (S2a, the world) — **check 3 fails: the controlled arm never holds a ship, and at 72 h nobody does**
+
+**Measured** (`rl/ogrl/transfer.py --world`, 64 paired worlds x 12 accounts, the first 6 controlled, code f1000b27;
+the whole run 27 s):
+
+| check or measure | result |
+| --- | --- |
+| 1 dims: world (17, 32, 13) against e4 (17, 13) | ok |
+| 2 one seed, byte-identical first observation | ok |
+| 3 ships on controlled / rule-played accounts | **0% / 0% — FAIL** |
+| G_w account value (e4/rule - 1) | **+0.564** [+0.538, +0.590], median +0.554, n 384 |
+| economy value | **+0.564** [+0.538, +0.590] — identical, by construction |
+| fleet value | -1.000 on all 384 accounts |
+
+**Cause 1: at the stage's horizon the world has no fleet at all.** Horizon sweep, two seeds, 12 accounts, fleet at
+the end:
+
+| horizon | rule-played slots | controlled slots |
+| --- | --- | --- |
+| 72 h | 0 on all 6 | 0 on all 6 |
+| 240 h | 1.5k-106.5k | 0 on all 6 |
+| 720 h | 136.5k-451.5k | 0 on all 6 |
+
+`Miner::act` orders ships only when its economy pick is None or a store is >= 80% full, and a 72 h speed-8 growth
+phase reaches neither.
+
+**Cause 2: the controlled slots can never hold a ship, at any horizon.** `Player::act` is called only from
+`VecWorld::play_rest`, and `advance` calls `play_rest` only for accounts with `controlled[a] == false`; a controlled
+account's `step` commits the caller's economy object and returns. In both arms the controlled accounts' `account_value`
+therefore equals their economy value, so the row's measure — account value with ships at price — is undefined for
+exactly the six accounts it is measured on.
+
+**A third thing, which is not row 6's fault but decides how to read later numbers.** The installed `ogsim` wheel was
+stale: `take_finished` returned 5-tuples with no fleet column and `units`/`fleet_settings`/`combat` were ignored (the
+probe gave the same 239 693 value with and without the rules). I rebuilt it from the repo's own source
+(`maturin develop --release`, 40.9 s, `Modules/AI/rl/ogsim`) and re-ran every check on the new build. Nothing under
+`Modules/AI` is tracked (`.gitignore:33`), so the rebuild has no commit either.
+
+**The planet sample moves this number further than the hypothesis band.** Same model, same rule, both arms, economy
+value only:
+
+| sample | planets | e4/rule - 1 |
+| --- | --- | --- |
+| row 4, plain starts with logins (eval.json) | 192 | +104.6% |
+| row 5 context, M5 universes | 192 | +144% |
+| this row, units-parity | 24 | +56% |
+
+An 88-point swing on the same model. A row cannot claim "the world shrank the gain" while the sample is not held
+fixed, and row 6's band ("below +50%") sits inside that swing.
+
+**Questions:**
+
+1. **Ships on controlled accounts need a Rust change.** Choose: (a) in `VecWorld::step`, after committing the
+   caller's economy object, run that account's ship rule (`Miner::order_ships` is already `pub(crate)`), one call
+   plus a test — a row 6b; (b) split `Miner::act` so the caller's pick is passed in; (c) leave it, and state that the
+   world's economy is the economy simulator, so row 6 adds nothing and S2a closes on the economy numbers. Row 6
+   forbids Rust changes, so the choice is yours.
+2. **Horizon.** At the stage's 72 h no account has a ship, so even after (a) the yard cannot matter. Move S2a to
+   240 h (a world costs 0.1 s, so 64 pairs are still under a minute), or keep 72 h and leave the yard out of scope?
+3. **Which planet sample is the stage's fixed evaluation?** +104.6% (row 4, 192 plain), +144% (row 5, 192 M5) and +56% (24) are the same
+   model and rule. Name the sample S2 measures on, and say whether row 4's +104.6% is re-stated on it.
+4. **If you take (c), what is G_w?** +56% on the units-parity planets is a real economy number in a 12-account world
+   with rule-played opponents and identical login schedules. Is "the world adds nothing over row 5, and the economy
+   gain is sample-dependent" an acceptable S2a result, or does S2a need the fleet arm before it can close?
+
+### Planner's answer to row 6 (26 Oct): S2 closes with the gap named; go to S3
+
+Row 6 is decisive, just not in the direction it was set up for. Three measured facts:
+- in the simulator at 72 h, no account has a ship;
+- a controlled account never runs its yard rule;
+- the same model against the same rule reads +56%, +104.6% or +144% depending only on the planet sample.
+
+So the economy simulator's building gain is neither like-for-like with a PHP account (which spends 56% of its decisions
+on the yard and on errands) nor stable across samples. Chasing a sharper simulator proxy for PHP would be the circling
+we stopped.
+
+1. **(c), for now.** Row 6 adds nothing over row 5, and S2a closes on that. Option (a), the yard rule run for
+   controlled accounts, one call plus a test, becomes the **first row of S6**. That is where the building model is
+   retrained in the world, and it will need it then.
+2. **Horizon.** S2 is closed, so nothing is chosen for it. T rows use the 60-day season. From S6 on, R rows in the world
+   use **240 h** at least: below that no fleet exists.
+3. **The fixed sample.** Economy-simulator R rows keep `eval.json` (192 plain starts, row 4: +104.6%). Any other sample is
+   reported as context and never compared with it. World R rows from S6 on use `econ-u1` with world seeds 1-64,
+   fixed, named in the row.
+4. **The S2 result, as named gaps:**
+   - **(i) A scope gap.** A PHP account's budget goes 56% to the yard and errands, which the economy simulator does not
+     model, and its scripted rule builds no ship in 72 h.
+   - **(ii) A sample gap.** The gain spans 56-144% across planet samples.
+
+   **Consequence, now a standing rule: no building gain measured in the economy simulator is quoted as a
+   real-game gain.** Every R row from S6 on is trained and judged in the world, and each stage exit there ends with a
+   PHP closed loop (L4). S2b and S2c are folded into S6's exit.
+
+**Also, the stale wheel:** some earlier runs used an `ogsim` build older than the source. Rows 1-4 used `VecEnv` only,
+which that stale build served correctly (the economy parity tests pass on the source). Their numbers stand, but
+nothing proves the build matched. From now on the loop rebuilds before any run (LOOP-PROMPT).
+
+**Next: row 7 (the S3 control), then row 8 (colonise).**
