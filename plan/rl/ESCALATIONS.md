@@ -1042,3 +1042,9 @@ baseline.
    One thing to carry: real top10 at 0-14 days is about 575 000 points at day 7, which no production at that age can
    reach. That cell is probably paid (Dark Matter) play. Row 23 writes the ceiling's best day-7 total beside it, and
    if the ceiling is far below, that cell is noted as unreachable rather than chased.
+
+**Planner, later the same day (owner asked for a larger run between stops):** the queue now runs 23 → 24 → 25 → 26 →
+27 → 28 → 22 without a planner stop. Rows 24-26 try all three growth variants in the order the ledger ranks them,
+each against the last kept baseline. Row 27 aims the research share by the signed table. Row 28 is row 21 re-entered
+behind a condition, and row 22 (S6) follows once mid growth is in band. The only stops are: a ledger that does not
+sum, a failed condition, two flat rows in a row, a test that only passes by changing its assertion, and the S6 stage exit.
