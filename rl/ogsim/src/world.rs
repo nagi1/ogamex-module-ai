@@ -431,6 +431,13 @@ impl World {
     fn step_account(&mut self, cat: &Catalogue, a: usize) -> bool {
         let deciding = cat.tick(&mut self.games[a]);
         self.share_research(cat, a);
+        // Research is the account's and only its capital decides it (`share_research`): a colony's research queue that a
+        // session woke goes back to sleep instead of letting the colony spend the account's next research (row 12).
+        if deciding && self.account[a] != a && self.games[a].queue == 1 {
+            self.games[a].free[1] = crate::economy::NEVER;
+            self.next[a] = cat.peek(&mut self.games[a]);
+            return false;
+        }
         self.next[a] = cat.peek(&mut self.games[a]);
         deciding
     }

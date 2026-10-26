@@ -36,7 +36,7 @@ fn awake(game: &Game, t: f64) -> f64 {
     let day = (t / DAY).floor();
     if resume > hour { day * DAY + resume * 3600.0 } else { (day + 1.0) * DAY + resume * 3600.0 }
 }
-const NEVER: f64 = f64::INFINITY;
+pub(crate) const NEVER: f64 = f64::INFINITY;
 
 #[derive(Deserialize)]
 struct RawCatalogue {
@@ -247,6 +247,10 @@ pub struct Game {
     /// The account's logins so far (ascending) and the generator that draws the next gap.
     pub login_times: Vec<f64>,
     pub login_rng: u64,
+    /// The second the current login's session ends, and the second of the account's last action: inside a session the
+    /// account comes back as soon as a queue frees, but never closer than the host's floor to its own last action.
+    pub session_end: f64,
+    pub last_action: f64,
     /// When the player sleeps: the hour of day the dark window starts and how many hours it lasts (drawn per account, so
     /// two accounts do not share a night). A player logs in outside it or not at all.
     pub sleep_start: f64,
@@ -382,7 +386,7 @@ impl Catalogue {
         let mut seed = login_seed | 1;
         let sleep_start = (next_random(&mut seed) % 24) as f64;
         let sleep_hours = 6.0 + (next_random(&mut seed) % 3) as f64;
-        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, sleep_start, sleep_hours, pending: Vec::new(), history: Vec::new(), trace: None }
+        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, sleep_hours, pending: Vec::new(), history: Vec::new(), trace: None }
     }
 
     /// The host's production row of object k at `level` under the planet's research levels and units, if k produces
@@ -609,6 +613,15 @@ impl Catalogue {
         game.login_times[at]
     }
 
+    /// The session a login opens: uniform 5 to 20 minutes. An assumption, not a measurement - the host's own activity
+    /// logs are not in the bands this project holds - but the only way a player places several builds in one sitting,
+    /// since the host's building queue holds one item (row 12).
+    fn open_session(&self, game: &mut Game) {
+        let mut seed = game.login_rng ^ game.t.to_bits();
+        let minutes = 5.0 + (next_random(&mut seed) % 16) as f64;
+        game.session_end = game.t + minutes * 60.0;
+    }
+
     fn finish(&self, game: &mut Game) {
         self.advance_to(game, game.horizon, false);
         game.done = true;
@@ -634,7 +647,14 @@ impl Catalogue {
                 // `NEVER` is a queue the host has nothing left to decide on (`tick` set it: no legal object and
                 // nothing building), so it has no next event; reading a login time for it would spin the clock.
                 None if game.free[q] == NEVER => continue,
-                None => self.login(game, game.free[q].max(game.t), false),
+                None => {
+                    // A login is a session, not an instant (row 12): inside it the account returns the moment a queue
+                    // frees, and never sooner than the host's floor after its own last action. A login that is already
+                    // due decides now - that is what opens the session - and one beyond the session waits for the next.
+                    let free = game.free[q];
+                    let back = free.max(game.last_action + MIN_GAP);
+                    if free <= game.t || back < game.session_end { back.max(game.t) } else { self.login(game, back, false) }
+                }
             };
             if when < best.0 { best = (when, Some(q)) }
         }
@@ -681,6 +701,10 @@ impl Catalogue {
             self.start(game, q, k);
             return false;
         }
+        // Landing on a login opens a session; landing inside one keeps it, so a build that ends brings the account back.
+        if game.t >= game.session_end {
+            self.open_session(game);
+        }
         game.queue = q;
         if (0..self.objects.len()).any(|k| self.queue_legal(game, k)) {
             return true;
@@ -699,6 +723,7 @@ impl Catalogue {
         for r in 0..3 { game.planet.res[r] -= price[r] }
         game.invested += weighted(price);
         let start = game.t;
+        game.last_action = start;
         let end = start + self.build_seconds(&game.planet, k);
         game.history.push((start, k, end, stock));
         let at = game.pending.partition_point(|p| p.0 <= end);
@@ -739,7 +764,10 @@ impl Catalogue {
     pub fn decide(&self, game: &mut Game, pick: Option<usize>) {
         let queue = game.queue;
         match pick {
-            Some(k) if self.login_gaps.is_empty() || self.wait_seconds(&game.planet, k) <= 0.0 => game.commit[queue] = Some(k),
+            Some(k) if self.login_gaps.is_empty() || self.wait_seconds(&game.planet, k) <= 0.0 => {
+                game.commit[queue] = Some(k);
+                game.last_action = game.t;
+            }
             _ => game.free[queue] = self.login(game, game.t, true),
         }
     }
@@ -897,5 +925,32 @@ mod tests {
             held.units.iter().any(|&n| n > 0) && zero.is_some_and(|zero| zero.answer != held.answer)
         });
         assert!(differs, "no probe showed a unit changing its planet's production");
+    }
+
+    /// A login is a session, not an instant (row 12). On the first day a build takes seconds, so one login must place
+    /// several of them; no queue may start two builds closer together than the host's floor after the account's own
+    /// last action, and the session itself must open at a login.
+    #[test]
+    fn a_login_is_a_session_not_an_instant() {
+        let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1.json", env!("CARGO_MANIFEST_DIR"));
+        let Ok(mut cat) = Catalogue::load(&path) else { return eprintln!("no u1 catalogue; skipped") };
+        cat.login_gaps = vec![7_200.0]; // logins two hours apart: everything inside the first 20 minutes is one session
+        let mut game = cat.new_game(0, 6.0, 0.0, 7);
+        let mut pick = 7u64;
+        while !game.done {
+            match cat.baseline(&game.planet, game.queue, Baseline::Player, &mut pick) {
+                Some(k) => { cat.step(&mut game, k); }
+                None => cat.wait_turn(&mut game),
+            }
+        }
+        let starts: Vec<f64> = game.history.iter().map(|h| h.0).collect();
+        // The session is opened by the first login, which need not be at t=0, so the window starts at the first build.
+        let first = *starts.first().expect("the account built something");
+        let inside = starts.iter().filter(|&&s| s < first + 1_200.0).count();
+        assert!(inside >= 2, "one login should place several seconds-long builds, not {inside}: {starts:?}");
+        assert!(game.login_times.iter().any(|&t| (t - first).abs() < 1e-9), "the first build starts at a login: {first} in {:?}", game.login_times);
+        for pair in starts.windows(2) {
+            assert!(pair[1] - pair[0] >= MIN_GAP - 1e-6, "builds {} s apart, under the host's floor: {pair:?}", pair[1] - pair[0]);
+        }
     }
 }

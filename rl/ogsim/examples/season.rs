@@ -265,9 +265,12 @@ impl<W: Write> Season<'_, W> {
         let d = ((t / DAY) as usize).min(self.days - 1);
         let planet = &self.world.games[slot].planet;
         let full = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
+        // A session places several decisions per login, so a login is a decision whose second is in the login record
+        // (row 12r): counting decisions here would read 57 "logins" a day where the account logged in twelve times.
+        let login = self.world.games[slot].login_times.iter().any(|&x| (x - t).abs() < 1e-6);
         let tally = &mut self.per_day[d][a];
-        tally.logins += 1;
-        tally.full_logins += u32::from(full);
+        tally.logins += u32::from(login);
+        tally.full_logins += u32::from(full && login);
     }
 
     /// The account's logins during day `d`, as seconds of the day: the world's own login record, read forward once.
