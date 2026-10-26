@@ -877,3 +877,64 @@ So the next rows follow the scorecard's giveaway order, which no longer leads wi
 `alliance` (0.091), `galaxies` (0.078), `mil_share`, `growth`, `moons`. That is rows 15 (alliances), 16 (galaxy
 spread) and 17 (moons, a diagnosis first). Login cadence and the size gap come back after them, as their own rows.
 Your question 3 (sizing wants off the score) is answered **no**: row 14 shows it does not pay.
+
+## 26 Oct — rows 15-17 (S5): alliance kept, galaxy spread reverted, moons diagnosed
+
+### Row 15 (alliances) — kept
+
+`alliance` in-band **0.906 → 0.956** and it left the giveaways (it was #1 at 0.085; the top five are now moons,
+eco_share, growth, res_share, galaxies). The top10 cells left 0.00 as asked: 0.49 at 256+, 0.57 at the bottom
+128-256, and mid 128-256 0.62. HDS 0.837 → 0.845; per seed 0.846 / 0.850 / 0.840 against 0.840 / 0.834 / 0.836;
+AUC 0.994 → 0.991; no measure's in-band share fell. Membership is drawn as an assumption (p 0.65, join day
+exponential mean 5 after day 3) and a quitter never joins, which is why the day-60 member share is 0.50 and not 0.65:
+half the cohort quits at a median of day 10. Real top10 are 1.0 in every bucket, so if you want that cell exactly we
+need to stop killing half the cohort or let a quitter have joined before it left.
+
+*The HDS gain is marginal: means +0.008 with seed spreads of 0.006 and 0.010, so the ranges touch at 0.840. The
+decisive evidence is the targeted measure and that nothing else fell.*
+
+### Row 16 (galaxy spread) — reverted
+
+The mechanism works - a day-60 account's galaxies go from a p50 of **1 to 3** with its 5 planets unchanged - and the
+measure gets worse: `galaxies` in-band **1.000 → 0.942**, HDS 0.845 → 0.837, AUC 0.991 → 0.992. The spread is the real
+**top10** shape and the wrong shape for our accounts, which are small: real accounts hold several galaxies only once
+they are big enough for one galaxy to run out of room. Our colony count is uniform - 5 planets at day 60 for every
+account, because the colonisation table caps it and every account reaches that research level - so `galaxies` had no
+size signal to follow.
+
+### Row 17 (moons) — the table, and what it says
+
+Three fresh seasons (`runs/flow/e17`, 60 days, 64 accounts, 11 520 account-days), with append-only counters in
+`world::Event` and the season's `events_today`:
+
+| band | fights | fights that rolled | moons made | accounts with a moon at day 60 |
+| --- | --- | --- | --- | --- |
+| top10 | 1 003 | 0 | 0 | 0/18 |
+| mid | 3 220 | 0 | 0 | 0/75 |
+| bottom | 5 750 | 0 | 0 | 0/99 |
+| pooled | 9 973 | 0 | 0 | 0/192 |
+
+Moon destruction sent: 0. No fight in three seasons cleared the host's 100 000-debris threshold, so no roll was ever
+made. The fights are not merely small, they are empty: lost value per fight p50 **0**, p99 6 750, max 77 500 (≈ 23 250
+debris, 4x short of the threshold), and half the fights destroy nothing because the target holds no fleet. Day-60
+fleet value p50 is 10 988 875 - the fleets exist, they are never home when a raid lands, and raiders fly cargo ships
+that nobody shoots at.
+
+**Questions:**
+
+1. **What should the moon-shot row change: the fights, or the size?** A moon is a consequence of two fleets meeting
+   and dying. Three candidate levers, all in `players.rs` and none naming an object: (a) a saver's save that *can*
+   fail - it already can, but a saver never gets caught because raiders only hit undefended fleets; (b) raiders that
+   target the fleets they can see (spy first, then hit the one with ships), which is what a professional does and is
+   also the missing `spy_sent` behaviour in the tally; (c) size, since even a perfect fight needs ~333 000 of destroyed
+   ships and our best account holds 21M *value* (≈ 20k points) against a real mid of 138 909.
+2. **Is a deliberate debris trade in scope?** Two accounts raiding each other's ships to farm debris is a real
+   technique, and it is the only way a small account makes a moon. It needs two personas to cooperate, which the
+   season has no notion of. If you want it, it is a row of its own.
+3. **Should row 18 be the size gap?** Both `eco_share` (row 13) and `moons` (row 17) reduce to the same fact: the
+   account is two orders of magnitude too small, so it cannot fill the shapes real accounts fill. Growth is 0.840
+   in-band and the mid cells are 4x behind. My read is that `mil_share` and `growth` should come before any more mix
+   measure, and that the cadence row is the cheapest growth lever left (week one is still the largest gap).
+
+No further row is started: rows 15, 16 and 17 are done and row 18 needs your pick.
+
