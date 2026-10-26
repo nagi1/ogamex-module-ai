@@ -147,3 +147,45 @@ Two things the planner has to settle:
    steps under this menu. A longer run will not move it (rl-diagnostics §2-§3). Any headroom left is upstream: the
    building menu (queue 0 only, one planet, 72 h, no research decided by the policy). Suggest that the first post-S1 R
    row tests headroom in that menu (best of N orders under logins) rather than a learner knob.
+
+### Planner's answer to row 4 (26 Oct)
+
+**The finding behind all three answers.** The +104.6% and PHP's parity (median 0.99) are measured against **different
+yardsticks**:
+- in the simulator, the model is compared with the simulator's *player rule*, on catalogue planets;
+- in PHP, it is compared with the *PHP planner* (the teacher), in full-cognition worlds.
+
+The M5 note already says the player rule is weak under logins. So the first hypothesis for the "transfer gap" is that
+there is no transfer gap at all, only a weak yardstick. That can be measured in the simulator alone, in minutes, from
+data we already have. Measure that before any PHP run.
+
+1. **S2's transfer scope.**
+   - (a) **The checkpoint is e4 (logins).** PHP accounts act only at logins, and M5's served model (`build-model4`) was a
+     logins-world model too. Take the seed with the best *training* metric (the last "train vs player" line), never the
+     eval.
+   - (b) **The harness, first with no PHP run:** M5's recordings `storage/rl/m5-eval7/teacher/choices-7101..7116.jsonl`
+     (16 universes, 72 h, 12 accounts). Their start states come from
+     `php artisan ai:rl-catalogue storage/rl/m5-eval7/universes/universe-<i>.sqlite <out>` (read-only). A PHP closed
+     loop is run only if row 5 says the gap is real (row 7 below): `MODEL_FLAG=--build-model PHP=php ACCOUNTS=12 bash
+     Modules/AI/rl/scripts/closed_loop.sh <e4 onnx> storage/rl/s2-e4 7101 16 3 14 0.5`, from the repo root, with
+     `battle_engine=php` as in M5.
+   - (c) **The like-for-like simulator number is SIM_T**: e4 deciding live in the simulator, divided by the PHP teacher's
+     own recorded building choices replayed in the simulator, minus 1. Both run on the same 16 universes' start planets,
+     at the same recorded login times, for 72 h. **Not** +104.6%, which is against the player rule.
+   - (d) **S2's keep rule, as named gaps:**
+     - the **yardstick gap** Y = player rule replayed / teacher replayed − 1, both in the simulator;
+     - the **fidelity gap** F = the median over accounts of |teacher replayed in the simulator / the teacher's recorded
+       PHP value − 1|. It must be ≤ 10%, or the replay is broken;
+     - the **transfer gap** G = SIM_T − the PHP ratio (M5: about 0, median 0.99).
+
+     S2 exits when the largest of these is named with its IQM and 95% CI.
+2. **The first post-S1 R row is neither a knob nor a headroom test.**
+   - No knob: row 4 is a fixed point (KL → 0, eval flat), as `rl-diagnostics` §2 says.
+   - No headroom test now: headroom "against the player rule" is meaningless while that rule may be the weak part, and
+     the building order is not on the north-star giveaway list (planets, shares, moons).
+   - Headroom comes back at S6, against the replayed teacher.
+3. **S1 stays the simulator baseline,** at +104.6% ± 2.2 against the player rule, in the logins world. **S2 stays next,
+   re-scoped:** S2a (row 5, simulator only), then, only if row 5 says so, S2b (row 6, the serving gate for e4) and S2c
+   (row 7, the PHP closed loop). The order after S2 is unchanged (S3 colonise).
+
+**The row to take verbatim: RL-FLOW §4 row 5.**
