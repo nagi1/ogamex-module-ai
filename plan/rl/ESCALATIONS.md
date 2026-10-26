@@ -554,3 +554,65 @@ Exactly the right call: a gain that breaks invariants is not kept. The effect is
 3. **The targets stay 0.06 / 0.20 / 0.30.** The gate passed by a wide margin, and tuning a number that already passes
    would be knob-turning. If a later reading shows `mil_share` piling up at a band edge, that is its own row with its
    own measurement.
+
+
+## 26 Oct — row 10b (S4, the military share with its contracts) — **the row's fix deletes another test's premise; stopped at its escape clause**
+
+**What was applied** (all three items of the row): row 10's `military_share` unchanged; `Ledger`'s `lost` counting
+`target_lost` as well as `ships_lost`; the login order changed in the errand harness so the scripted yard order is
+placed before the menu is built. Then `cargo test --release`.
+
+| run | outcome |
+| --- | --- |
+| row 10 as written | 31 pass, 3 fail |
+| + both sides' losses in the ledger | 31 pass, 3 fail (ten-day gap accounted 4.31M -> **5.31M** of 11.48M) |
+| + yard order before the menu | 32 pass, 2 fail; the offer/refusal test passes |
+| + a fuel check in `raid_plan` | 32 pass, 2 fail |
+| after the revert | **33/33** |
+
+**Three measured facts, each from a trace rather than an inference:**
+
+1. **The offered-then-refused raid was never about ordering.** `raid_plan` builds a fleet and checks only that the
+   ships are on the shelf. Trace of the refusal: `a=0 t=378000 mission=Attack cargo=[0,0,0] fuel=102
+   stock=[83809, 38668, 92.8]` — the menu offered a raid whose fuel the account could not pay, at the same login it
+   then refused. The menu was built twice at that second, once at 418.8 deuterium and once at 92.8, so the yard order
+   does widen the window; but no ordering makes an offer valid when the plan ignores fuel. One line in `raid_plan`
+   (`fuel <= stock[2]`, plus the tanks' capacity) makes the test pass **without** touching the order.
+2. **"The yard spends first" cannot coexist with the `Order` errand.** That errand *is* the yard order, offered to
+   the model: `candidates` builds `Kind::Order` from `teacher().order_plans` when the queue is idle. Ordering first
+   leaves `order_plans` with nothing missing, so `a_short_stock_orders_only_what_it_pays_for` fails with *no login
+   ever offered a staged order* — the menu loses an action the seam exists to offer.
+3. **The ten-day conservation test is now mis-calibrated, not broken.** `|world - quiet| <= moved + 3% of quiet` with
+   defence in both worlds: the hostile world rebuilds what raids destroy, so its compounding diverges from the quiet
+   twin by more than 3% of a larger base. Counting the defender's losses is correct and necessary (+1.0M), and 6.2M
+   still sits outside `moved`. That is a tolerance question about compounding, and it needs a number from the planner,
+   not a bigger allowance invented here.
+
+**Questions:**
+
+1. **Row 10c, written to ship?** Keep the yard order where it is, add the fuel check to `raid_plan` (one line), keep
+   both sides' losses in the ledger (verified: +1.0M), and change the ten-day allowance from `3%` to what? The
+   measured residual is 6.2M against a 51.4M quiet world (12%); a compounding-aware allowance would be `moved +
+   k%` with k around 15, or the comparison could be made on *economy value only*, which is what raids actually move.
+   Your call, because it sets the test's meaning.
+2. **Or re-home the `Order` errand?** If the yard order really should come first, the `Order` errand has to become
+   "order *beyond* the login's own yard pass", which is a different candidate menu and a different S7 row. Neither
+   option is free; say which.
+3. **Defence stays?** Nothing here changes row 10's result (HDS 0.820, mil_share 0.850) — the effect is not in
+   question, only the two contract lines and one tolerance.
+
+### Planner's answer to row 10b (26 Oct)
+
+My 10b prescription was wrong, and your traces show why: the refusal was a `raid_plan` that ignored fuel, and
+"yard first" would delete the `Order` errand the seam exists to offer. Row **10c** is written from your findings.
+
+1. **10c, yes:** the login order stays; add the fuel check (a real bug: the host refuses that dispatch); keep both sides'
+   losses in the ledger. Trace test 2's "7 of 4" with defence in the wants, and fix the staging cap if that is the
+   cause, never the assertion.
+2. **The ten-day tolerance: no k.** That assertion's premise is that a raided world and its quiet twin differ only by
+   what raids moved. That stops being true as soon as accounts rebuild what raids destroy, because the rebuild competes
+   with mines and the difference compounds. Exact conservation is already proven where compounding is excluded:
+   `world::tests`, two accounts that never build, against a quiet twin. So the twin line becomes a printed diagnostic
+   in the ten-day test. Its behavioural asserts (raids, saves that succeed and fail, recalls) stay. A larger
+   allowance would only be a number invented to pass.
+3. **The `Order` errand stays where it is.** Defence stays (row 10's result is not in question).
