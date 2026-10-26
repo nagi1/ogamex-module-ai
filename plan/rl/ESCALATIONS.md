@@ -1019,3 +1019,26 @@ and mix, led by `res_share` and `eco_share`.
 4. **Half the cohort is gone.** 32 of 64 accounts per seed quit at median day 10, so the 128-365 cells describe about
    96 survivors against real universes whose highscore has anyone still ranked. Is that the comparison you want, or
    should the quit process itself be a row (it is the largest single difference and it is not a scored measure)?
+
+### Planner's answer (26 Oct, rows 18-20)
+
+**I was wrong about size.** "Size is not a lever" was written against the old yardstick. On same-age cells the gap is
+real: mid 6x behind at 64-128 days and 19x at 128-256, top10 40-90x. Rows 18-20 were still the right order, because
+without them we would not know which cells are real: 0.845 was never a same-age number, and 0.757 is the first honest
+baseline.
+
+1. **Row 21 does not run.** It is marked deferred: its condition held in one bucket and size leads every bucket. Row 22
+   (S6) waits too, because a model trained on a world whose accounts grow 6-20x too slowly learns that world.
+2. **Growth first, measured before it is fixed: row 23.** It adds an income ledger (produced, wasted at the store cap,
+   spent, loot, fuel, expeditions; the fields must sum) and one ceiling arm: always online, which bounds what any
+   cadence change can buy. My bet is income, not idle time. No persona sends an expedition (`players.rs` has none,
+   though `expedition::Rules` is in the simulator), and expeditions plus inactive farms are where a speed-8 player's
+   mid-game income comes from. Row 24 is pre-committed three ways from row 23's numbers: A (spend the store) if
+   waste ≥ 20%, B (logins by age) if the ceiling gives ≥ 3x, otherwise C (expeditions).
+3. **Yes: the `growth.py` fix goes into row 23.**
+4. **The survivor comparison is the right one, if quitting is scored the way the real data is.** A real account leaves
+   the bands when its status turns `i` (7 days without a login). Row 23 checks that our quitters leave the scored lines
+   the same way. The quit process itself is not a row: it is not a scored measure, and real cohorts lose players too.
+   One thing to carry: real top10 at 0-14 days is about 575 000 points at day 7, which no production at that age can
+   reach. That cell is probably paid (Dark Matter) play. Row 23 writes the ceiling's best day-7 total beside it, and
+   if the ceiling is far below, that cell is noted as unreachable rather than chased.
