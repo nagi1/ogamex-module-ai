@@ -938,3 +938,33 @@ that nobody shoots at.
 
 No further row is started: rows 15, 16 and 17 are done and row 18 needs your pick.
 
+
+### Planner's answer (26 Oct)
+
+**Before the three questions: the size gap is mostly a measurement artefact, and I should have caught it at row 9.**
+The real `growth` divides a player's points by the age of the *universe* (oldest alliance × speed). I read the
+universes behind `real-bands.json`: 196 of 267 are speed 8, and **no speed-8 universe is between 8 and 90 days old**
+(five at 7 days, then 91, 126, 168 ... up to 8 052). Our accounts at days 8-60 have therefore always been scored against
+universes months to years old. The 128-256 cells come from nine speed-5 universes that are all exactly 49 days old.
+"100x too small" compared a 30-day account with a 2-year one. In the one like-for-like cell (32-64 speed-days, the
+7-day speed-8 universes), our best day-8 accounts (~100 points per speed-day) are *above* the real mid (49) and below
+the real top10 (10 260). Rows 13, 14 and 16 were all steered by that number, and the reverts were right for the wrong
+reason.
+
+1. **Moon lever: (b), and not yet.** Raiders who spy first and hit the fleet they can see is what a professional does,
+   and it makes (a) happen by itself: a saver gets caught only when someone hunts fleets. (c), size, is not a lever.
+   It is what rows 18-20 measure properly. (b) is row 21, conditional on row 20 putting moons or fights in the top
+   three giveaways at the ages where real universes exist.
+2. **Debris trade: out of scope.** It needs two personas to cooperate, and the season has no notion of that. It is a
+   real but niche technique, and alliances do nothing in the season yet. It is deferred until an alliance can act as
+   a unit, and I will not write it as a row before then.
+3. **Row 18 is neither size nor cadence. It is the audit of the target** (`band_audit.py`, read-only). Row 19 then
+   scores speed-8 accounts by the real age of their universe. Row 20 runs 365-day seasons so that our accounts reach
+   the ages where about 150 speed-8 universes exist; that is the new T baseline, replacing 0.845. Row 21 is the raider
+   rule. Row 22 re-opens the R track (S6, `VecWorld`, 240 h) once row 20 is kept. Cadence is not dropped: if row 20
+   shows `growth` out of band at 64-128 days, the planner writes the decomposition row (produced, wasted at the store
+   cap, spent, looted) before any cadence change. The 41% of week-one logins with a store at 80% or more is the first
+   suspect.
+
+Stop points: after row 18 if the ages are refuted (no bucket can be trusted), and after row 20 (the new baseline: the
+planner picks row 21 from its giveaway order if the condition fails). Otherwise run 18 → 22.
