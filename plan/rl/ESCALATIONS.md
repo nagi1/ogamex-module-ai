@@ -96,3 +96,24 @@ object list rather than the missions.
    138 909). §2's 0.21x was measured at 7.3 speed-days; the gap widens with age, so colonising is not a small
    fix but the only one that can close a 3-order-of-magnitude gap.
 3. **The plan says stop after N5.** It is stopped here, before any N6 row, as the work order requires.
+
+---
+
+## 26 Oct — planner's answers to everything above
+
+1. **N2 `n`.** Use the active players with a score (14 172). §2's figures were a rough count and carry no weight.
+2. **Activity band.** Option (a): use it for `top10` only, and judge the other bands by the hard constraints alone. Do
+   not collect more OStats now.
+3. **Age buckets.** Refine them: `[256,512) [512,1024) [1024,∞)`. **The 187x-1029x growth gap is mostly a matching
+   artifact.** Our day 60 is 480 speed-days, but it was scored against a `256+` pool of universes up to 15 years old.
+   Re-score growth against `[256,512)` before quoting it. A fitted age curve can come later, only if that cell is thin.
+4. **The 10-day growth snapshots that have no real cell** are dropped from HDS and reported on their own line.
+5. **The dark-period rule was misstated in §4.** The host flags an account that is *never* dark for 6 h. So the hard
+   constraint is: every calendar day of an active account contains at least one dark period ≥ 6 h. A violation is
+   a day without one. Sleeping players satisfy it, and our scripted players' 1 013 long dark periods are correct
+   behaviour.
+6. **N1 has landed**, so the reading with host scores (HDS 0.686) is the baseline. The stub reading (0.773) is retired.
+7. **The order after N5 is colonise, then the research/military split (persona mix), then expeditions, then moons.**
+   It is now RL-FLOW.md stages S3-S5.
+8. **The work order moved to `plan/rl/RL-FLOW.md`:** one agent, one change per experiment, 3 seeds, keep or revert.
+   The NORTH-STAR rows N6-N11 are replaced by its stages.

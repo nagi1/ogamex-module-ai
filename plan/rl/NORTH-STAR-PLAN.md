@@ -1,5 +1,7 @@
 # North-star plan: from "beats our own rule" to "plays like a human" (26 October 2026)
 
+**26 Oct: the work order is now [RL-FLOW.md](RL-FLOW.md) (one agent, one change per experiment). This file is the background: diagnosis (§1), the human-distance measure (§4), readings (§8), assessment (§14).**
+
 Owner of this file: the planner (Opus). Implementers (Sonnet, DeepSeek) take **one row of §6 at a time** and follow it
 literally. This file overrides the work order in `WORLD-SIM-PLAN.md` §4. That file stays the record of the simulator
 and its parity (W1-W16). Binding as always: `Modules/AI/AGENTS.md` (three gates), `.github/skills/ogame-rl-training/SKILL.md`.
