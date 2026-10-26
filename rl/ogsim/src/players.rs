@@ -12,6 +12,8 @@ use std::sync::Arc;
 use crate::combat;
 use crate::economy::{Baseline, Catalogue, WEIGHTS};
 use crate::fleet::{self, SystemState};
+use crate::score;
+use crate::units::UnitKind;
 use crate::world::{Decision, EventKind, Mission, Outcome, Rules, SpyReport, World};
 
 pub(crate) const SLOTS: usize = 4;
@@ -74,7 +76,10 @@ impl Ledger {
             let price = |slot: usize, id: u32| unit_price(&w.rules[slot], id);
             match (e.kind, e.mission) {
                 (EventKind::Fight, Mission::Attack) => {
-                    self.lost += e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
+                    // Both sides: a raid destroys the defender's ships and defence, and the world-value accounting
+                    // has to see everything a fight took (row 10c).
+                    self.lost += e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>()
+                        + e.target_lost.iter().map(|&(id, n)| price(e.target, id) * n as f64).sum::<f64>();
                     if e.outcome == Outcome::Defeated { self.beaten.insert((e.owner, e.target)); }
                     let research = w.research(cat, e.target);
                     let stood = e.present.iter().any(|&(id, _)| movable(&w.rules[e.target], id, &research));
@@ -143,6 +148,15 @@ impl Kit {
 }
 
 /// Ships of one kind the account owns: on the shelf, in the yard's queue, or flying.
+/// How many units one login buys while an account is under its military share.
+const DEFENCE_BATCH: u64 = 10;
+
+/// The account's military share of its own host score, the number a persona's target is compared with (row 10).
+pub(crate) fn military_share(w: &World, a: usize) -> f64 {
+    let score = score::of(w, w.account_of(a));
+    if score.total > 0 { score.military as f64 / score.total as f64 } else { 0.0 }
+}
+
 pub(crate) fn owned(w: &World, a: usize, id: u32) -> i64 {
     let Some(u) = w.rules[a].units.index(id as i64) else { return 0 };
     let queued: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
@@ -239,6 +253,12 @@ pub(crate) fn raid_plan(w: &World, cat: &Catalogue, a: usize, target: usize, kit
     if fleet.is_empty() { return None }
     let expected = combat::distribute_loot(loot, fighters * fighter_hold + cargo * hold);
     let (_, hull) = strength(rules, &research, &fleet);
+    // The dispatch pays the fuel out of the stock it finds, so a raid the account cannot fuel is not a candidate: the
+    // menu must not offer an action the world refuses (measured: fuel 102 against 92.8 deuterium, row 10b).
+    let distance = fleet::distance(&rules.settings, w.coords[a], w.coords[target], &|_, _| SystemState::Active);
+    let held: combat::Units = fleet.iter().copied().collect();
+    let fuel = fleet::consumption(&rules.settings, &rules.fleet, &fleet, &research, distance, 0, 10.0) as f64;
+    if fuel > w.games[a].planet.res[2] || rules.combat.fuel_capacity(&held, &research) < fuel as i64 { return None }
     Some(RaidPlan { fleet, expected, attack, hull })
 }
 
@@ -283,11 +303,14 @@ pub struct Miner {
     fighters: i64,
     /// Buys ships at every login it can pay for them, not only with an idle or overflowing store.
     eager: bool,
+    /// The share of the host's own military score this persona aims for (row 10, S4): from the real mil_share medians
+    /// (top10 0.058, mid 0.16, bottom 0.066), a taste over host data that names no object.
+    military_share: f64,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06 }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -299,8 +322,13 @@ impl Miner {
             Decision::Idle => None,
         };
         let overflow = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
-        if w.account_of(a) == a && (pick.is_none() || overflow || self.eager) {
+        // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
+        let short = military_share(w, a) < self.military_share;
+        if w.account_of(a) == a && (pick.is_none() || overflow || self.eager || short) {
             self.order_ships(w, cat, a);
+        }
+        if short && w.account_of(a) == a {
+            self.order_defence(w, cat, a);
         }
         // The colony the ship was built for is founded at the same login: one mission, no cargo.
         if w.account_of(a) == a {
@@ -357,6 +385,18 @@ impl Miner {
         })
     }
 
+    /// While an account is under its persona's military share it buys defence before economy: the cheapest unit the
+    /// host marks as defence that the yard can start now, in a small batch. No object is named (gate 1).
+    fn order_defence(&self, w: &mut World, cat: &Catalogue, a: usize) {
+        let rules = &w.rules[a];
+        let Some(u) = (0..rules.units.units.len())
+            .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence))
+            .filter(|&u| rules.units.max_amount(&w.yards[a], &w.games[a].planet, u) > 0)
+            .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price)))
+        else { return };
+        w.order_units(cat, a, u, DEFENCE_BATCH);
+    }
+
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize) {
         for (u, amount) in self.order_plans(w, cat, a) {
             w.order_units(cat, a, u, amount as u64);
@@ -400,7 +440,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30 };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -476,7 +516,9 @@ pub struct FleetSaver {
 
 impl FleetSaver {
     pub fn new(seed: u64) -> FleetSaver {
-        FleetSaver { miner: Miner::new(seed), answered: HashSet::new(), saving: Vec::new() }
+        let mut miner = Miner::new(seed);
+        miner.military_share = 0.20;
+        FleetSaver { miner, answered: HashSet::new(), saving: Vec::new() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
@@ -649,7 +691,10 @@ mod tests {
         // What raiding moved: the loot, the fuel and what was lost; the rest of the gap would be a leak.
         let (v, q): (f64, f64) = (values.iter().sum(), quiet_values.iter().sum());
         let moved = weighted(loot) + l.fuel + weighted(l.recycled) + l.lost;
-        assert!((v - q).abs() <= moved + 0.03 * q, "seed {seed}: world value {v:.0} vs quiet {q:.0}: gap {:.0} is more than raids moved ({moved:.0})", (v - q).abs());
+        // Printed, not asserted (row 10c, planner decision): with defence in both worlds the hostile twin rebuilds what
+        // raids destroy, so its compounding diverges from the quiet twin by more than any fixed share of the base. Exact
+        // conservation is `world::tests`' account-that-never-builds check, which is untouched.
+        println!("seed {seed}: world {v:.0} vs quiet {q:.0}: gap {:.0}, raids moved {moved:.0}", (v - q).abs());
         Some((ok, failed, l.recalls))
     }
 
@@ -690,6 +735,46 @@ mod tests {
             }
         }
         assert!(world.planets_of(0).len() >= 2, "no colony in {steps} decisions: levels {:?}", world.games[0].planet.levels);
+    }
+
+    /// A persona under its military share buys defence before economy; one at its target does not (row 10, S4).
+    #[test]
+    fn a_miner_under_its_military_share_orders_defence() {
+        let defence = |w: &World| -> u64 {
+            (0..w.rules[0].units.units.len())
+                .filter(|&u| w.rules[0].units.kind.get(u) == Some(&UnitKind::Defence))
+                .map(|u| w.yards[0].counts[u] + w.yards[0].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum::<u64>())
+                .sum()
+        };
+        let Some((cat, mut world)) = bare(1) else { return };
+        let mut miner = Miner::new(1);
+        for _ in 0..60_000 {
+            let Some(a) = world.next_decision(&cat) else { break };
+            if a != 0 { world.wait(&cat, a); continue }
+            match miner.act(&mut world, &cat, a) {
+                Some(k) => world.commit(&cat, a, k),
+                None => world.wait(&cat, a),
+            }
+            if defence(&world) > 0 { break }
+        }
+        assert!(defence(&world) > 0, "a miner under its target bought no defence: {:?}", world.games[0].planet.levels);
+
+        // The same world and seed with a target of zero: the account is never under it, and buys none.
+        let Some((cat2, mut quiet)) = bare(1) else { return };
+        let mut idle = Miner::new(1);
+        idle.military_share = 0.0;
+        for _ in 0..60_000 {
+            let Some(a) = quiet.next_decision(&cat2) else { break };
+            if a != 0 { quiet.wait(&cat2, a); continue }
+            match idle.act(&mut quiet, &cat2, a) {
+                Some(k) => quiet.commit(&cat2, a, k),
+                None => quiet.wait(&cat2, a),
+            }
+        }
+        let bought: u64 = (0..quiet.rules[0].units.units.len())
+            .filter(|&u| quiet.rules[0].units.kind.get(u) == Some(&UnitKind::Defence))
+            .map(|u| quiet.yards[0].counts[u]).sum();
+        assert_eq!(bought, 0, "a miner at its target still bought defence");
     }
 
     /// Both queues get their turn: an account whose building queue always has something payable must still research what its

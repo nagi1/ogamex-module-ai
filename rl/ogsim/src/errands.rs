@@ -403,8 +403,14 @@ mod tests {
                 let want = offered.iter().copied().find(|e| e.kind == Kind::Order && e.size == Size::Want && e.unit == now.unit).expect("the whole want is offered beside the staged order");
                 let missing = teacher().order_plans(w, cat, a).into_iter().find(|&(u, _)| Some(u) == now.unit).map_or(0, |(_, n)| n);
                 assert_eq!(want.unit, now.unit, "both sizes are offered for the same unit");
+                // What this order queued, not what the yard holds: the login's own yard pass may have left units of
+                // another kind in the queue, and then the whole-queue count measures someone else's work (row 10c).
+                let queue_of = |w: &World| -> u64 {
+                    w.yards[a].orders.iter().filter(|o| Some(o.unit) == now.unit).map(|o| o.amount - o.done).sum()
+                };
+                let before = queue_of(w);
                 apply(w, cat, a, now).expect("the world offered the staged order");
-                let queued: u64 = w.yards[a].orders.iter().map(|o| o.amount - o.done).sum();
+                let queued = queue_of(w).saturating_sub(before);
                 assert!(queued > 0, "the staged order queued nothing");
                 assert!((queued as i64) < missing, "the staged order asked for {queued} of {missing}, so it is not a smaller choice");
                 cases += 1;
