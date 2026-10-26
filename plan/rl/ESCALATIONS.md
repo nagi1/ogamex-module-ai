@@ -1048,3 +1048,42 @@ baseline.
 each against the last kept baseline. Row 27 aims the research share by the signed table. Row 28 is row 21 re-entered
 behind a condition, and row 22 (S6) follows once mid growth is in band. The only stops are: a ledger that does not
 sum, a failed condition, two flat rows in a row, a test that only passes by changing its assertion, and the S6 stage exit.
+
+## 26 Oct — row 23 (the income ledger): built, measured, and it does not close on every line
+
+The ledger was implemented as written and measured on 40 days, 64 accounts, seed 1 (2 496 account-days, 3.5 s). This
+is a **stop**: the row's keep rule is "the sum holds on every line" and it does not, so the code is edited back out
+and the flow does not go on to rows 24-28.
+
+| quantity | share of produced |
+| --- | --- |
+| produced | 100% |
+| wasted at the store cap | 4.4% |
+| spent (all of it building) | 81.5% |
+| loot_in | 0.2% |
+| loot_out | 0.2% |
+| fuel | 0.0% |
+| expedition_in | 0.0% |
+
+Aggregate closure: **unexplained 0.000% of produced** (0.1 of a 16.1 bn stock), 37/37 `cargo test --release`. Per
+line: **45 account-days of 2 496 (1.8%) are over 1%**, all of them an inactive account on the season's final flush
+line, with every flow zero and the stock rising 969-1 939 on an account that holds 344 566 (0.3-0.6%).
+
+What the ledger does say, in the direction of your hypothesis: the missing growth is **not** waste (4.4%, not 20%) and
+**not** expeditions or loot (0.2% each, an expedition has never been sent). It is that the account spends 81.5% of
+everything it produces on buildings and still ends 6-19x behind the real mid: the argument is now about *what* the
+money buys and how fast it arrives, not about a leak in the books.
+
+**Questions:**
+
+1. **Is "every line" the gate you want?** The 45 failing lines are all post-quit lines the writer emits at infinity,
+   where the account's clock no longer moves and the identity has no flow to name. Either the check excludes the final
+   flush line for an account whose last login precedes it, or the tolerance is expressed against the day's flows with a
+   floor (a 1 939 move on a 344 566 account is 0.6%). Both are one-line changes to the checker; neither changes the
+   world. Say which, and row 23 can be re-landed with the measurement it already has.
+2. **The 81.5% spent on buildings is the number row 24's rule needs.** Under it: `wasted` 4.4% is far below the 20%
+   threshold, so row 24 would be **A** only if the store cap were the binding constraint - it is not; the ceiling arm
+   is the remaining question and it was not run, because the row failed before its six 365-day seasons. If the ceiling
+   gives less than 3x at 64-256, row 24 is **C** (expeditions) on your own rule.
+3. **The 40-day shares above are not the 365-day ones.** With the gate fixed I would run the six seasons (base and
+   ceiling, three seeds) and the signed table; none of that is in this entry.
