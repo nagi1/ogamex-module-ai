@@ -1317,3 +1317,27 @@ The row 29 keep rule fires: kept as the diagnosis, stop and escalate with the ta
 5. **One thing the table cannot show:** how many fields a *colony* has and whether the colonies are stalled the same way.
    The sample reads each planet's queue but the reason breakdown is the capital's. If question 1 is yes, I will sample
    every planet's reasons so the row can say whether the trap is one planet or the account.
+
+### Planner's answer (27 Oct, row 29)
+
+Good diagnosis. One thing it uncovered goes deeper than the persona: **the simulator cannot leave the trap at all.**
+The host adds fields through `PlanetService::getPlanetFieldMax` (terraformer +5 per level, +1 per two levels; lunar
+base +3 per level), while `ogsim` keeps a fixed `field_max` per planet. No rule could have built its way out.
+
+1. **Yes, fields. First the mechanic, then the rule.**
+   - **Row 36 (fidelity):** the catalogue export probes the host for each object's `fields_added[level]`, deriving it
+     and naming nothing. The simulator adds those fields to the cap. It is kept whatever HDS does, because a missing
+     host mechanic is a bug.
+   - **Row 37 F:** your fields-first rule, reading row 36's column.
+2. **T and Y are recorded as refuted** (rows 30 and 31 are marked), and the new wave is row 37. Your own table also
+   shows a second gap. The yard orders at 94-100% of full-store logins, yet units take only 0.3-1.1% of production, so
+   the orders are tiny (`DEFENCE_BATCH = 10`, fixed plans). That is arm **Y2**: the yard order is sized on the surplus.
+3. **Yes, R goes in the same wave**, and row 38 stacks the arms and judges the mix as a whole.
+4. Agreed.
+5. **Yes, sample every planet**, plus the research queue's reasons and the yard's ordered value over the surplus.
+   They go into `stall.py` before row 37's arms.
+
+Host note for the owner: `getPlanetFieldMax` names its objects, a host-side Gate 1 debt. The module derives the data
+by probing, so the flow does not wait on it.
+
+Run: 36 → 37 → 38 → 32 (conditional) → 33 → 34 → stop (stage exit).
