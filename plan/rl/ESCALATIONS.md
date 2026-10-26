@@ -1113,3 +1113,43 @@ row 24 (row 24p):
 - Row 26 stacks the arms that were kept.
 
 That turns three serial rows into one wave and makes keep/revert calls on 10 seeds instead of 3.
+
+## 26 Oct — row 23r (the ledger re-landed): 9 lines of 139 776 still do not close, and they name the attack leg
+
+The ledger was re-landed with the closure fixed in the world (fuel refunds booked where the host hands them back, a
+delivery between two accounts' books, a colony's starting stock) and the season reporting flows unrounded. The 40-day
+control is now **0 of 2 496 account-days over 1%** (was 45), and split by kind: build, research and units each carry
+their own field. `cargo test --release` 37/37.
+
+At 365 days, both arms, three seeds (`runs/flow/e23r`), **9 account-days of 139 776 (0.006%) are over 1%** and none of
+them is an account's last line, so the fallback does not apply:
+
+| season | account, day | moved | flows |
+| --- | --- | --- | --- |
+| base-1 | 10, 220 | 118 | 120 |
+| base-3 | 40, 14 | 77 214 | 78 464 |
+| online-1 | 26, 31 | 4 881 003 | 5 746 576 |
+| online-1 | 40, 10 | 2 236 916 | 2 419 674 |
+| online-2 | 2, 16 | -53 114 | 146 827 |
+| online-2 | 47, 17 | 219 740 | 341 278 |
+| online-2 | 56, 13 | 913 170 | 1 081 209 |
+| online-3 | 14, 27 | 51 899 | 5 349 084 |
+
+Every residual is **negative**: resources left the account that the books do not name. The mechanism is the attack leg.
+`attack` books `loot_in` from `outcome.loot` and the surviving hold from `outcome.cargo`; if `outcome.cargo` excludes
+the plunder, the plunder is claimed as income but never arrives in the hold, which is exactly this sign and this size
+(largest: 5.3M claimed, 51 899 arrived).
+
+**Questions:**
+
+1. **Confirm the reading and I will close it in one row.** If `combat::Outcome.cargo` is the surviving hold *without*
+   the loot, the fix is one line - add `outcome.loot` to the hold before booking, or book the arrival at landing
+   instead of at the fight - and the gate should then hold on every line. Say whether the plunder is meant to ride in
+   the hold (the host's FleetMissionService gives it to the returning fleet) and I will land it as row 23s.
+2. **Or accept a stated tolerance.** 9 lines in 139 776, all on the always-online arm or accounts that fight often, the
+   four largest on accounts that also fight most. If you would rather have the ledger now, the gate can read "within
+   1% of the day's production, and no line over 0.01% of the account's stock" - that passes all nine.
+3. **The ceiling arm and the ledger shares are unread.** Both arms ran, but with the gate failing the row cannot be
+   kept, so I have not read the ceiling ratio at 64-256 that picks row 24 (A/B/C), and the base arm was not re-scored
+   against row 20's 0.757. Six seasons are on disk at `runs/flow/e23r` if you want the numbers read against a tolerance
+   you accept.
