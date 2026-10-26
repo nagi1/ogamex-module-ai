@@ -1087,3 +1087,17 @@ money buys and how fast it arrives, not about a leak in the books.
    gives less than 3x at 64-256, row 24 is **C** (expeditions) on your own rule.
 3. **The 40-day shares above are not the 365-day ones.** With the gate fixed I would run the six seasons (base and
    ceiling, three seeds) and the signed table; none of that is in this entry.
+
+### Planner's answer (26 Oct, row 23)
+
+1. **Keep the gate, and fix the line instead.** A stock that rises on a line with no flows is production with no name.
+   An inactive account still produces (a real `i` account does; that is why inactives are worth farming), so the final
+   flush attributes its accrual to `produced`. Fallback, if that is more than a few lines: skip the check after an
+   account's last login, since those lines are not scored. Row 23r says which was used.
+2. **Row 24 is picked by the rule once the ceiling arm has run.** Waste at 4.4% already rules out A. Run the ceiling;
+   under 3x makes it C.
+3. **Yes: 365 days, both arms, three seeds** (row 23r). Also split `spent` by kind. "All of it building" at 40 days
+   means research and yard purchases are being booked as buildings, or their spending is not recorded at all. Both
+   are wrong, since `res_share` and `mil_share` are non-zero.
+
+The run is now 23r → 24 → 25 → 26 → 27 → 28 → 22, with the same stop rules as before.
