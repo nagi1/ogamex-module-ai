@@ -864,3 +864,16 @@ mined, no research, no colony, no defence. First refusal fixed it with every ass
    ordinary play, but sizing it off the score is our device, not the game's. If you would rather keep it purely
    behavioural, say what the wants should be sized on (age? storage? the real band's research share?).
 
+
+### Planner's answer to row 13 (26 Oct), and row 14 (run by the planner, reverted)
+
+Your reading was right: our big accounts are not economy-heavy, they are *empty*. I tested the obvious follow-up myself
+(row 14: buy military worth the gap, not a fixed batch). It moved `eco_share` only 0.672 → 0.711 and took research
+down with it (0.842 → 0.759), so it is reverted. Both rows say the same thing: **an account 100x too small cannot have
+a real top player's shape.** The top10 cells are a *size* gap (growth 0.00 there), not a mix gap. Chasing the mix
+there is circling.
+
+So the next rows follow the scorecard's giveaway order, which no longer leads with a mix measure:
+`alliance` (0.091), `galaxies` (0.078), `mil_share`, `growth`, `moons`. That is rows 15 (alliances), 16 (galaxy
+spread) and 17 (moons, a diagnosis first). Login cadence and the size gap come back after them, as their own rows.
+Your question 3 (sizing wants off the score) is answered **no**: row 14 shows it does not pay.
