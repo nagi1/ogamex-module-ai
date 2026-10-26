@@ -1259,3 +1259,61 @@ Asked by the owner for root causes and a fix. They are written as RL-FLOW.md §0
 - **Row 32** no longer stops; it goes on to 33.
 
 The run is now 29 → 30 → 31 → 32 → 33 → 34, and the stage exit after 34.
+
+## 27 Oct — row 29 (the stall diagnosis): the account runs out of fields, so neither T nor Y runs, and the flow stops
+
+Row 23s's ledger said the account stops spending (building 7.8% of production at 129-256 days, 0.3% at 257-365, with
+78-96% thrown away). Row 29 asked why, on the same ledger, with its arms decided in advance. Three seeds, 365 days,
+70 080 account-days (`runs/flow/e29`), the season writing a `stall` sample per line and `rl/scripts/stall.py` printing it
+by age.
+
+| age (days) | planet-hours the building queue is queued | planet-days with > 24 h left | next build (median) | build modifier level | "no want" | objects `ok` | objects "no fields" |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1-30 | 1% | 0% | 0.9 h | 0 | 1% | 14 | 0 |
+| 31-60 | 2% | 0% | 4.7 h | 1 | 19% | 14 | 0 |
+| 61-120 | 1% | 0% | 2.6 h | 2 | 33% | 11 | 0 |
+| 121-180 | 0% | 0% | 1.4 h | 2 | 43% | **1** | **13** |
+| 181-250 | 0% | 0% | 1.4 h | 2 | 47% | 1 | 13 |
+| 251-365 | 0% | 0% | 1.3 h | 2 | 50% | **0** | 13 |
+
+And the yard, at the logins that found a store at 80% or more: **ordered 94-100%**, "share target met" **0%** at every
+age, "nothing payable" 6% in week one and 0% after.
+
+**Both of row 29's hypotheses are refuted, and the table names the real cap:**
+
+- **T (the time chain) is not the problem.** No build ever holds the queue for a day: the building queue is queued on 0-2%
+  of planet-hours, the next build takes 1-5 hours, it is paid for immediately (wait 0.0 h after week one), and the build
+  time modifiers are already at level 2 in the median planet by day 61. Robotics and nanites are being raised; there is
+  simply no multi-day build for them to shorten.
+- **Y (the yard ceiling) is not the problem.** Row 10's `military_share` never shows as a ceiling: at every login that
+  finds a store at 80% or more the yard *does* order (94-100%, and 100% after day 31). The surplus already goes to ships
+  and defence; there is nothing for a floor to fix.
+- **The planet runs out of fields.** From day 121 the capital has **13 of its ~17 building-queue objects blocked by "no
+  fields"** and only one or zero that can start at all, and by day 251 **nothing** is legal. That is the 78-96% of
+  production the ledger throws away: not slow builds, not a capped yard, but a planet with no room to build.
+- **And the one object that fixes it is invisible to the player rule.** The object that adds fields produces nothing and
+  stores nothing, so `Baseline::Payback` never ranks it and `Baseline::Player`'s store branch never sees it - the rule that
+  plays the account cannot choose it, and the account therefore never leaves the trap it is in.
+
+Row 29's pre-committed pick lists no arm (T 0% against 40%, Y 0% against 40%), so **rows 30, 31, 32 and 22 do not run**.
+The row 29 keep rule fires: kept as the diagnosis, stop and escalate with the table.
+
+**Questions:**
+
+1. **The next row is fields, not time and not the yard - do you agree?** The shape I would write: when a planet holds no
+   legal object because its fields are full, the persona's wants put the object that adds fields first (read from the host:
+   the building-queue object whose `consumes_field` is false and whose next level raises the planet's `field_max`), and it
+   does so *before* the store overflows. Gate 3 is easy to name - every OGame player builds terraformers when their planet
+   fills up - and it names no object (gate 1), since the catalogue's own `field_max`/`consumes_field` columns say which
+   object it is. Expected: `ok` objects at day 251 stops being 0 and the waste after day 120 falls from 78-96%.
+2. **Does this change row 30's arms, or replace them?** T and Y as written both have no problem to solve. I can run the
+   fields row as row 30 with the same 10-seed wave (one arm, plus R if you still want the mix measured alongside), or
+   write a new row 30 and leave T and Y in the log as refuted with their numbers.
+3. **R (row 27) is still the only arm with a real growth effect (mid p50 126 → 231) and it broke `eco_share` alone.**
+   With fields unblocked, buildings get a place to go again, so the mix may behave differently - do you want R in the same
+   wave as the fields arm (two arms, one baseline) so the interaction is measured, rather than R alone against a
+   blocked world?
+4. **`planets` (my last question 3): row 27's fall has gone with the revert, so nothing to do.**
+5. **One thing the table cannot show:** how many fields a *colony* has and whether the colonies are stalled the same way.
+   The sample reads each planet's queue but the reason breakdown is the capital's. If question 1 is yes, I will sample
+   every planet's reasons so the row can say whether the trap is one planet or the account.

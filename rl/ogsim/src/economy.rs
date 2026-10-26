@@ -580,11 +580,18 @@ impl Catalogue {
 
     /// What BuildingQueueService::add accepts, plus a price the planet can ever pay at today's stores and rates.
     pub fn legal(&self, planet: &Planet, k: usize) -> bool {
+        self.stall_of(planet, k) == "ok"
+    }
+
+    /// Row 29: why object k cannot start on this planet, in `legal`'s own terms - the diagnosis reads this instead of
+    /// asking the same four questions twice.
+    pub fn stall_of(&self, planet: &Planet, k: usize) -> &'static str {
         let o = &self.objects[k];
-        (planet.levels[k] as usize) < o.price.len()
-            && self.requirements_met(&planet.levels, k)
-            && !(o.consumes_field && self.fields_used(planet) >= self.planets[planet.config].field_max)
-            && self.wait_seconds(planet, k) < NEVER
+        if planet.levels[k] as usize >= o.price.len() { return "max level" }
+        if !self.requirements_met(&planet.levels, k) { return "needs" }
+        if o.consumes_field && self.fields_used(planet) >= self.planets[planet.config].field_max { return "no fields" }
+        if self.wait_seconds(planet, k) >= NEVER { return "never affordable" }
+        "ok"
     }
 
     /// Plays the player rule for every queue but `controlled` until the controlled queue decides again (or the game ends);

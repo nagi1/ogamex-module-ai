@@ -20,9 +20,9 @@ use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
 use ogsim::fleet::Coord;
-use ogsim::players::{account_value, FleetSaver, Ledger, Miner, Player, Raider};
+use ogsim::players::{account_value, FleetSaver, Ledger, Miner, Player, Raider, YardStall};
 use ogsim::score::{self, Score};
-use ogsim::economy::Books;
+use ogsim::economy::{Baseline, Books};
 use ogsim::world::{Colonisation, Event, EventKind, Mission, Rules, World};
 use ogsim::{next_random, Catalogue, WEIGHTS};
 use serde_json::json;
@@ -263,6 +263,8 @@ impl<W: Write> Season<'_, W> {
             let logins = self.logins_today(a, d);
             let busy = self.world.busy_seconds(a, at - DAY, at);
             let tally = &self.per_day[d][a];
+            // Row 29: what holds each queue of this account's planets, in hours, and the host's time modifiers for them.
+            let stall = self.stall(a, &planets);
             // Row 23: the day's flows are the difference of two samples of the same second, so a line whose events
             // all fell inside it closes by construction and one the world moved without booking a flow does not.
             let books = self.world.books(a);
@@ -308,9 +310,49 @@ impl<W: Write> Season<'_, W> {
             "cargo_lost": flows["cargo_lost"],
             "stock": stock,
             "unexplained": unexplained,
+            // Row 29: where a queue is stuck - hours a build holds it, hours it holds nothing, and the modifier levels.
+            "stall": stall,
             });
             writeln!(self.out, "{line}").expect("write the season line");
         }
+    }
+
+    /// Row 29: per account-day, the building queue's hours blocked by a build (capped at a day) against its idle hours,
+    /// the levels of the host's own time modifiers for both queues, and what the player rule would build next with its
+    /// time, its wait and whether it is legal.
+    fn stall(&self, a: usize, planets: &[usize]) -> serde_json::Value {
+        let (mut blocked, mut idle, mut long) = (0.0, 0.0, 0_u32);
+        for &slot in planets {
+            let (now, pending) = (self.world.games[slot].t, &self.world.games[slot].pending);
+            let left: f64 = pending.iter().filter(|&&(_, k)| self.cat.objects[k].queue == 0)
+                .map(|&(end, _)| (end - now).max(0.0) / 3600.0).fold(0.0, f64::max);
+            blocked += left.min(24.0);
+            idle += 24.0 - left.min(24.0);
+            long += u32::from(left > 24.0);
+        }
+        let planet = &self.world.games[a].planet;
+        let levels = |queue: usize| -> Vec<(i64, u32)> {
+            self.cat.modifiers[queue].iter().map(|&(k, _)| (self.cat.objects[k].id, planet.levels[k])).collect()
+        };
+        let mut rng = self.seed ^ (self.midnight.to_bits());
+        let next = self.cat.baseline(planet, 0, Baseline::Player, &mut rng);
+        let hours = |seconds: f64| if seconds >= 1e9 { serde_json::Value::Null } else { json!(seconds / 3600.0) };
+        // Row 29: why the building queue's objects cannot start, counted - the reason the queue has nothing to hold.
+        let mut reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
+        for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 0) {
+            *reasons.entry(self.cat.stall_of(planet, k)).or_default() += 1;
+        }
+        json!({
+            "blocked_hours": blocked,
+            "buildings": reasons,
+            "idle_hours": idle,
+            "long_builds": long,
+            "mod_build": levels(0),
+            "mod_research": levels(1),
+            "next_id": next.map(|k| self.cat.objects[k].id),
+            "next_seconds": next.map(|k| self.cat.build_seconds(planet, k)).map(|s| s / 3600.0),
+            "next_wait": next.map(|k| self.cat.wait_seconds(planet, k)).map_or(serde_json::Value::Null, hours),
+        })
     }
 
     /// Counts this login for the account's day, and whether a store stood at 80% or more (row 11).
@@ -322,9 +364,16 @@ impl<W: Write> Season<'_, W> {
         // A session places several decisions per login, so a login is a decision whose second is in the login record
         // (row 12r): counting decisions here would read 57 "logins" a day where the account logged in twelve times.
         let login = self.world.games[slot].login_times.iter().any(|&x| (x - t).abs() < 1e-6);
+        // Row 29: at a login that finds a store full, why the yard did or did not spend it.
+        let yard = full && login;
+        let stall = match yard {
+            true => Some(self.players[a].yard_stall(&*self.world, self.cat, slot)),
+            false => None,
+        };
         let tally = &mut self.per_day[d][a];
         tally.logins += u32::from(login);
         tally.full_logins += u32::from(full && login);
+        tally.full_yard[stall.unwrap_or(YardStall::Order) as usize] += u32::from(yard);
     }
 
     /// The account's logins during day `d`, as seconds of the day: the world's own login record, read forward once.
@@ -426,6 +475,8 @@ struct Tally {
     moon_made: u32,
     ships_lost_value: f64,
     loot_value: f64,
+    /// Row 29: at the logins that found a store at 80% or more, what the yard said - ordered, share met, nothing payable.
+    full_yard: [u32; 3],
 }
 
 impl Tally {
@@ -433,6 +484,7 @@ impl Tally {
         json!({
             "logins": self.logins,
             "full_logins": self.full_logins,
+            "full_yard": { "order": self.full_yard[0], "share_met": self.full_yard[1], "nothing_payable": self.full_yard[2] },
             "spy_sent": self.spy_sent,
             "raid_sent": self.raid_sent,
             "raid_received": self.raid_received,

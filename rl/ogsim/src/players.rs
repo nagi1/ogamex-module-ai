@@ -343,6 +343,23 @@ impl Miner {
         pick
     }
 
+    /// Row 29: why this login's yard order did or did not happen, asked of the same rule `act` uses: under its military
+    /// share the persona buys, over it and with a store overflowing it still buys, and over it with a store that is not
+    /// overflowing it buys nothing at all - the share stands as a ceiling while the surplus sits in the store.
+    fn yard_stall(&self, w: &World, cat: &Catalogue, a: usize) -> YardStall {
+        if military_share(w, a) < self.military_share { return YardStall::Order }
+        let planet = &w.games[a].planet;
+        let overflow = (0..3).any(|r| planet.cap[r] > 0.0 && planet.res[r] >= 0.8 * planet.cap[r]);
+        if !overflow && !self.eager { return YardStall::ShareMet }
+        let payable = |u: usize| w.rules[a].units.max_amount(&w.yards[a], planet, u) > 0;
+        let ships = self.order_plans(w, cat, a).into_iter().any(|(u, _)| payable(u));
+        let defence = (0..w.rules[a].units.units.len()).any(|u| w.rules[a].units.kind.get(u) == Some(&UnitKind::Defence) && payable(u));
+        match ships || defence {
+            true => YardStall::Order,
+            false => YardStall::NothingPayable,
+        }
+    }
+
     /// A resource the planet neither makes nor holds: a player mines while short (gate 3), and nothing here names a mine
     /// — a production row that adds to that resource says which one (gate 1). Without this nothing that costs deuterium
     /// is ever reachable on a fresh planet, ships and the shipyard included.
@@ -579,6 +596,24 @@ impl Player {
             Player::Saver(p) => p.act(w, cat, a, ledger),
         }
     }
+
+    /// Row 29: why the yard does or does not order at this login, in the persona's own terms.
+    pub fn yard_stall(&self, w: &World, cat: &Catalogue, a: usize) -> YardStall {
+        match self {
+            Player::Miner(p) => p.yard_stall(w, cat, a),
+            Player::Raider(p) => p.miner.yard_stall(w, cat, a),
+            Player::Saver(p) => p.miner.yard_stall(w, cat, a),
+        }
+    }
+}
+
+/// Row 29: what stops a login's yard order. `ShareMet` is row 10's `military_share` standing as a ceiling - the account
+/// holds its share, so it buys nothing however full the store is; `NothingPayable` is a want the stock cannot pay for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum YardStall {
+    Order,
+    ShareMet,
+    NothingPayable,
 }
 
 #[cfg(test)]
