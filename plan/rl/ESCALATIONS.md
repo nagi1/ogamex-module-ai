@@ -496,3 +496,61 @@ for any future merge: merge from the full vectors only.
 3. **Row 10 (S4) is judged on the pooled bands, as you say,** and it goes before the growth diagnosis because the
    scorecard ranks `mil_share` as the top giveaway (importance 0.18). Growth is third (0.13), after alliance. Rows
    follow the measure's order, not the planner's hunch. Row 10 is written.
+
+
+## 26 Oct — row 10 (S4, the military share) — **the effect is real (HDS 0.752 -> 0.820) and three contracts break; reverted**
+
+**Measured** (S4 applied, `cargo build --release`, three seasons, `hds.py`; then reverted):
+
+| measure | row 8 | row 10 (S4) | delta |
+| --- | --- | --- | --- |
+| HDS | 0.752 | **0.820** | +0.068 |
+| mil_share in-band | 0.482 | **0.850** | +0.368 |
+| res_share | 0.440 | 0.578 | +0.139 |
+| eco_share | 0.828 | 0.867 | +0.039 |
+| growth | 0.800 | 0.802 | +0.002 |
+| planets | 0.889 | 0.884 | -0.004 |
+| AUC | 0.986 | 0.986 | 0 |
+
+Every numeric gate in the row passes (mil_share >= 0.65, res_share >= 0.40, HDS > 0.755).
+
+**But `cargo test --release` fails three of 34**, all from one root — the scripted Miner buys defence while under its
+military share:
+
+1. `errands::tests::every_offered_errand_is_one_the_world_accepts` — *seed 2: the world offered `Errand { kind: Raid,
+   target: Some(2), unit: None, size: Want }` and refused it: not enough resources*. The defence order spends between
+   the offer and the dispatch, so the mask offers an action the world then rejects.
+2. `errands::tests::a_short_stock_orders_only_what_it_pays_for` — *the staged order asked for 7 of 4*: the plan the
+   test compares against (`teacher().order_plans`) changed underneath it because defence joined the wants.
+3. `players::tests::miners_raiders_and_savers_play_ten_days` — *world value 39 922 878 against quiet 51 407 557: gap
+   11 484 679 is more than raids moved (4 312 295)*. Defence destroyed in raids is not in what the ledger counts.
+
+After the revert: 33/33 pass, and the season numbers above are the only record of S4 (they are not a baseline).
+
+**Questions:**
+
+1. **Ship S4 with the contract fixes, or separately?** The minimum set: compute the errand offer after the yard order
+   (or restrict defence to economy-mode accounts), and count defence destroyed in `Ledger`'s `moved`. Two or three
+   lines in `errands.rs`/`players.rs`. Does that become row 10b (S4b) — "defence, done properly" — or do you prefer to
+   ship S4 ships-only for the Miner and leave defence to the errand stage?
+2. **Does the same hole exist in the season output?** `events_today.ships_lost_value` is booked from `ships_lost` in
+   the event log; if defence losses are missing there too, then every season HDS is slightly optimistic on military
+   share and pessimistic on economy. Worth a line in row 11's diagnosis or its own row?
+3. **Targets.** Defence did not starve research at all (res_share rose 0.44 -> 0.578), so the 0.06 / 0.20 / 0.30 split
+   is not binding; mil_share landed at 0.85 in-band, well past the 0.65 gate. Keep the targets as written, or lower
+   them so accounts do not overshoot into band-edge territory?
+
+### Planner's answer to row 10 (26 Oct)
+
+Exactly the right call: a gain that breaks invariants is not kept. The effect is large and clean (HDS 0.752 → 0.820,
+`mil_share` 0.48 → 0.85), so it comes back with its contracts as **row 10b**.
+
+1. **Ship it with the fixes, in one row (10b).** They are not a second change. They are the same change done
+   correctly. The fix is the *order of events* at a login: the yard spends first, then the errand menu is built on what
+   is left. That is also what a player does: queue the yard, then look at what they can still afford to send. The tests'
+   assertions stay as they are. Defence stays in, because it is the Miner's military (Gate 3: a miner turtles a little).
+2. **The season output:** count defence destroyed in `ships_lost_value` within row 10b. HDS itself is not biased by it:
+   the shares come from `score::of` (what stands), not from the event counts. Only the loss counter was wrong.
+3. **The targets stay 0.06 / 0.20 / 0.30.** The gate passed by a wide margin, and tuning a number that already passes
+   would be knob-turning. If a later reading shows `mil_share` piling up at a band edge, that is its own row with its
+   own measurement.
