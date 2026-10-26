@@ -333,6 +333,14 @@ fn record(day: &mut [Tally], e: &Event, w: &World, roles: &[usize]) {
         .map_or(0.0, |u| weighted(w.rules[slot].units.units[u].price));
     // A colony slot fights, raids and colonises for its account: every tally is per account.
     let (owner, target) = (w.account_of(e.owner), w.account_of(e.target));
+    // Row 17: a fight is booked to the account that fought it, and so is the moon roll the host made on its debris -
+    // `moon_chance` is zero when the debris is under the host's threshold or a moon already stands, so a non-zero
+    // chance is exactly "this fight rolled for a moon".
+    if e.kind == EventKind::Fight {
+        day[owner].fights += 1;
+        day[owner].moon_rolls += u32::from(e.moon_chance > 0);
+        day[owner].moon_made += u32::from(e.moon_created);
+    }
     match (e.mission, e.kind) {
         (Mission::Attack, EventKind::Fight) => {
             let lost = e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
@@ -379,6 +387,11 @@ struct Tally {
     colonise: u32,
     missile: u32,
     moon_shot: u32,
+    /// Row 17: every fight, those of them whose debris cleared the host's moon threshold (a roll was made), and the
+    /// moons the rolls made. `moon_shot` above is moon *destruction*, a different thing.
+    fights: u32,
+    moon_rolls: u32,
+    moon_made: u32,
     ships_lost_value: f64,
     loot_value: f64,
 }
@@ -398,6 +411,9 @@ impl Tally {
             "colonise": self.colonise,
             "missile": self.missile,
             "moon_shot": self.moon_shot,
+            "fights": self.fights,
+            "moon_rolls": self.moon_rolls,
+            "moon_made": self.moon_made,
             "ships_lost_value": self.ships_lost_value,
             "loot_value": self.loot_value,
         })

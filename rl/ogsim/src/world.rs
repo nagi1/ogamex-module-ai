@@ -128,6 +128,10 @@ pub struct Event {
     pub gained: [f64; 3],
     /// Debris a fight left over the target.
     pub debris: [i64; 3],
+    /// The moon chance the host rolled against, and whether that roll made a moon (row 17). Zero when the debris was
+    /// under the host's threshold or a moon already stood - so a non-zero chance is exactly "this fight rolled".
+    pub moon_chance: i64,
+    pub moon_created: bool,
     pub outcome: Outcome,
 }
 
@@ -714,7 +718,7 @@ impl World {
 
     /// Appends an event about `fleet`; `fill` sets the fields that differ from an empty event.
     fn log(&mut self, kind: EventKind, time: f64, fleet: &Fleet, outcome: Outcome, fill: impl FnOnce(&mut Event)) {
-        let mut event = Event { kind, time, mission: fleet.mission, owner: fleet.owner, target: fleet.target, departed: fleet.departed, ships_lost: Vec::new(), target_lost: Vec::new(), present: Vec::new(), gained: [0.0; 3], debris: [0; 3], outcome };
+        let mut event = Event { kind, time, mission: fleet.mission, owner: fleet.owner, target: fleet.target, departed: fleet.departed, ships_lost: Vec::new(), target_lost: Vec::new(), present: Vec::new(), gained: [0.0; 3], debris: [0; 3], moon_chance: 0, moon_created: false, outcome };
         fill(&mut event);
         self.events.push(event);
     }
@@ -920,6 +924,8 @@ impl World {
             e.present = present;
             e.gained = outcome.loot.map(|r| r as f64);
             e.debris = outcome.debris;
+            e.moon_chance = outcome.moon_chance;
+            e.moon_created = outcome.moon_created;
         });
         outcome
     }
