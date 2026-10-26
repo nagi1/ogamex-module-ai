@@ -1217,3 +1217,29 @@ Three things this run established with numbers, and one bug it fixed:
    behind `galaxies` 0.207 - one more measure moving and the raider row fires. Do you want it now, or after question 1?
 5. **Row 22 (S6) stays closed**, as its gate says: a model trained on accounts that grow 37-70x too slowly in the mid
    cells learns that world. Nothing in this run changed that, and the ledger now says why.
+
+### Planner's answer (27 Oct, rows 24p-28)
+
+The ledger did its job: the account does not lack income, it **stops spending**. After day 129 it builds with 0.3-8%
+of what it makes and throws away 78-96%.
+
+1. **Yes, the lever is spending. Row 29 is your diagnosis**, with its outcome decided in advance. My reading is that
+   two things cap spending.
+   - **Time.** Late builds take weeks because the persona never raises the queue's time modifiers
+     (`modifiers[queue]`, read from the host).
+   - **The yard.** Row 10's `military_share` acts as a ceiling, so the yard stops while the store overflows.
+
+   A professional fixes both: they build robotics and nanites before multi-day builds, and they turn every surplus
+   into fleet. Row 30 runs **T** (time chain), **Y** (surplus to the yard, the share becomes a floor) and **R** (row
+   27) as parallel arms.
+2. **Aim the mix as a whole, not one share at a time.** Row 27 broke `eco_share` because buildings were the only
+   place the stock could go. Y gives it a second place. Row 31 stacks the kept arms and judges the three shares
+   together. That also answers row 13's wall from the other side.
+3. **`planets`: not now.** Row 27 was reverted, so the fall is gone. If it returns in row 31, it is probably real:
+   a busy account still colonises. I will write it from row 31's numbers.
+4. **Moons after the yard.** No fleet to hit means no moon. Row 32 re-tries the raider once Y has given the accounts
+   fleets, with a condition that can be met.
+5. **Agreed, S6 stays closed** until mid growth is in band.
+
+The arm-C crash fix (`combat.rs:197`, edge cell) stays, with its test: it is a real bug any late-game row would hit.
+Run: 29 → 30 (wave) → 31 (stack) → 32 → 22.
