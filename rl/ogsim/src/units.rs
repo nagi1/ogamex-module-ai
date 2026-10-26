@@ -22,7 +22,7 @@
 //! - `Shipyard::next_landing()` is the second the next unit lands (for the world's event queue); `Shipyard::busy()`
 //!   is true while an order is unfinished, and `Units::blocks_upgrade(&yard, k)` says that economy object k may not
 //!   start upgrading now.
-use crate::economy::{Catalogue as Economy, Planet};
+use crate::economy::{weighted, Catalogue as Economy, Planet};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -302,6 +302,8 @@ impl Units {
         for r in 0..3 {
             planet.res[r] -= total[r];
         }
+        // Row 23: a yard order is its own flow, so an account spending on ships and defence is visible as such.
+        planet.books.spent_units += weighted(total);
         let each = self.seconds(planet, u);
         let start = yard.orders.last().map_or(now, |o| o.end);
         yard.orders.push(Order { unit: u, amount, done: 0, start, end: start + each * amount as i64, each });
@@ -348,7 +350,7 @@ mod tests {
         let planet_id = run["planet_id"].as_i64().unwrap();
         let config = econ["planets"].as_array().unwrap().iter().position(|p| p["planet_id"].as_i64() == Some(planet_id)).unwrap();
         let setup = &run["setup"];
-        let mut planet = Planet { config, levels: economy.planets[config].levels.clone(), res: [0.0; 3], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new() };
+        let mut planet = Planet { config, levels: economy.planets[config].levels.clone(), res: [0.0; 3], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new(), books: Default::default() };
         for (k, o) in economy.objects.iter().enumerate() {
             if let Some(level) = setup["levels"][o.id.to_string()].as_u64() {
                 planet.levels[k] = level as u32;
@@ -442,7 +444,7 @@ mod tests {
             planets: vec![(vec![0; 4], vec![true; 4])],
             index: (1..=4).map(|id| (id, id as usize - 1)).collect(),
         };
-        let planet = Planet { config: 0, levels: vec![1, 0, 1], res: [1000.0, 0.0, 0.0], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new() };
+        let planet = Planet { config: 0, levels: vec![1, 0, 1], res: [1000.0, 0.0, 0.0], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new(), books: Default::default() };
         (units, planet)
     }
 

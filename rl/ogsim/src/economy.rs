@@ -215,6 +215,52 @@ pub struct Probe {
     pub answer: [f64; 6],
 }
 
+/// Row 23: where a planet's stock went, cumulatively and in metal-equivalent at the score weights. Every field is
+/// booked at the second the host moves the resources, so a day's line can reconcile the measured stock against them
+/// (the season writes the difference of two samples, so a line with no event reads zero on both sides).
+#[derive(Clone, Copy, Default)]
+pub struct Books {
+    pub produced: f64,
+    /// Production the store could not hold.
+    pub wasted: f64,
+    pub spent_build: f64,
+    pub spent_research: f64,
+    pub spent_units: f64,
+    /// Deuterium paid at dispatch, less the half the host hands back inside the hold.
+    pub fuel: f64,
+    pub loot_in: f64,
+    pub loot_out: f64,
+    pub expedition_in: f64,
+    /// Cargo destroyed with a fleet in flight (row 23s).
+    pub cargo_lost: f64,
+}
+
+impl Books {
+    /// The stock this books says the account should have gained.
+    pub fn net(&self) -> f64 {
+        self.produced - self.wasted - self.spent_build - self.spent_research - self.spent_units - self.fuel
+            + self.loot_in - self.loot_out + self.expedition_in - self.cargo_lost
+    }
+
+    pub fn add(&mut self, other: &Books) {
+        self.produced += other.produced;
+        self.wasted += other.wasted;
+        self.spent_build += other.spent_build;
+        self.spent_research += other.spent_research;
+        self.spent_units += other.spent_units;
+        self.fuel += other.fuel;
+        self.loot_in += other.loot_in;
+        self.loot_out += other.loot_out;
+        self.expedition_in += other.expedition_in;
+        self.cargo_lost += other.cargo_lost;
+    }
+
+    /// Books resources at the host's score weights.
+    pub fn book(&mut self, field: &mut f64, resources: [f64; 3]) {
+        *field += weighted(resources);
+    }
+}
+
 #[derive(Clone)]
 pub struct Planet {
     pub config: usize,
@@ -227,6 +273,8 @@ pub struct Planet {
     pub factor: f64,
     /// Units held, per `Catalogue::units`; a missing entry is none held. Call `refresh` after changing it.
     pub units: Vec<u64>,
+    /// Row 23: the planet's own books, carried by the planet so a colony's are its owner's once summed.
+    pub books: Books,
 }
 
 #[derive(Clone)]
@@ -293,7 +341,7 @@ fn signed_log(value: f64) -> f32 {
     (if value < 0.0 { -(-value).ln_1p() } else { value.ln_1p() }) as f32
 }
 
-fn weighted(values: [f64; 3]) -> f64 {
+pub(crate) fn weighted(values: [f64; 3]) -> f64 {
     (0..3).map(|r| WEIGHTS[r] * values[r]).sum()
 }
 
@@ -380,7 +428,7 @@ impl Catalogue {
     /// A game at second zero whose clock has not moved yet, for a world that moves it with `tick`.
     pub fn new_paused_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
         let c = &self.planets[config];
-        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone() };
+        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default() };
         self.refresh(&mut planet);
         // A night between six and eight hours (the host flags a dark period under six), starting at a drawn hour.
         let mut seed = login_seed | 1;
@@ -507,9 +555,15 @@ impl Catalogue {
     pub(crate) fn accrue(&self, planet: &mut Planet, seconds: f64) {
         let hours = seconds / 3600.0;
         for r in 0..3 {
-            if planet.res[r] < planet.cap[r] {
-                planet.res[r] = as_stored(planet.res[r] + (planet.rate[r] * hours).min(planet.cap[r] - planet.res[r]).max(-planet.res[r]));
+            let before = planet.res[r];
+            if before < planet.cap[r] {
+                planet.res[r] = as_stored(before + (planet.rate[r] * hours).min(planet.cap[r] - before).max(-before));
             }
+            // Row 23: the rate's output is booked whether or not the store took it, and what it spilled is `wasted`.
+            let ideal = planet.rate[r] * hours;
+            let gained = planet.res[r] - before;
+            planet.books.produced += WEIGHTS[r] * ideal;
+            planet.books.wasted += WEIGHTS[r] * (ideal - gained);
         }
     }
 
@@ -721,6 +775,9 @@ impl Catalogue {
         let stock = game.planet.res;
         let price = self.objects[k].price[game.planet.levels[k] as usize];
         for r in 0..3 { game.planet.res[r] -= price[r] }
+        // Row 23: a building and a research are paid out of the stock, each in its own field.
+        let paid = weighted(price);
+        match q { 0 => game.planet.books.spent_build += paid, _ => game.planet.books.spent_research += paid }
         game.invested += weighted(price);
         let start = game.t;
         game.last_action = start;

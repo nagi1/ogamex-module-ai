@@ -22,6 +22,7 @@ use std::sync::Arc;
 use ogsim::fleet::Coord;
 use ogsim::players::{account_value, FleetSaver, Ledger, Miner, Player, Raider};
 use ogsim::score::{self, Score};
+use ogsim::economy::Books;
 use ogsim::world::{Colonisation, Event, EventKind, Mission, Rules, World};
 use ogsim::{next_random, Catalogue, WEIGHTS};
 use serde_json::json;
@@ -57,6 +58,11 @@ fn main() {
         .and_then(|text| serde_json::from_str::<Vec<f64>>(&text).ok())
         .filter(|gaps| !gaps.is_empty())
         .unwrap_or_else(|| vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0]);
+    // Row 23's ceiling arm: no gaps at all is the economy's own "always there" path, so it bounds what any cadence
+    // change can buy. Quitting, personas and everything else stay as they are.
+    if std::env::args().any(|arg| arg == "always-online") {
+        cat.login_gaps.clear();
+    }
     let rules = Arc::new(Rules::load(&cat,
         &format!("{data}/units-parity/units-u1.json"),
         &format!("{data}/fleet-settings-u1.json"),
@@ -122,6 +128,8 @@ fn main() {
         std::fs::create_dir_all(dir).expect("the output directory");
     }
     let out = BufWriter::new(File::create(&out_path).expect("the output file"));
+    // Row 23: the books and the stock at the last line written, so a day is the difference of two samples.
+    let since: Vec<(Books, f64)> = (0..accounts).map(|a| (world.books(a), world.stock(a))).collect();
     let mut season = Season {
         world: &mut world,
         cat: &cat,
@@ -130,6 +138,7 @@ fn main() {
         ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
         out,
         per_day: vec![vec![Tally::default(); accounts]; days],
+        since,
         login_at: vec![0; accounts],
         alliance_at,
         read: 0,
@@ -209,6 +218,8 @@ struct Season<'a, W: Write> {
     out: W,
     /// Per day and account, what the world played that day.
     per_day: Vec<Vec<Tally>>,
+    /// Per account, its books and its stock at the last line written (row 23).
+    since: Vec<(Books, f64)>,
     /// Per account, how far its login record has been read for the days already written.
     login_at: Vec<usize>,
     /// Per account, the second it joined an alliance (row 15), or `None` if it never did.
@@ -252,6 +263,14 @@ impl<W: Write> Season<'_, W> {
             let logins = self.logins_today(a, d);
             let busy = self.world.busy_seconds(a, at - DAY, at);
             let tally = &self.per_day[d][a];
+            // Row 23: the day's flows are the difference of two samples of the same second, so a line whose events
+            // all fell inside it closes by construction and one the world moved without booking a flow does not.
+            let books = self.world.books(a);
+            let stock = self.world.stock(a);
+            let (before, was) = self.since[a];
+            let flows = flows_of(&before, &books);
+            let unexplained = (stock - was) - (books.net() - before.net());
+            self.since[a] = (books, stock);
             let line = json!({
                 "seed": self.seed,
                 "world_speed": self.cat.speed as i64,
@@ -276,6 +295,19 @@ impl<W: Write> Season<'_, W> {
             "logins": tally.logins,
             "full_logins": tally.full_logins,
             "events_today": tally.json(),
+            // Row 23's income ledger, in metal-equivalent at the host's score weights, and the stock it reconciles.
+            "produced": flows["produced"],
+            "wasted": flows["wasted"],
+            "spent_build": flows["spent_build"],
+            "spent_research": flows["spent_research"],
+            "spent_units": flows["spent_units"],
+            "fuel": flows["fuel"],
+            "loot_in": flows["loot_in"],
+            "loot_out": flows["loot_out"],
+            "expedition_in": flows["expedition_in"],
+            "cargo_lost": flows["cargo_lost"],
+            "stock": stock,
+            "unexplained": unexplained,
             });
             writeln!(self.out, "{line}").expect("write the season line");
         }
@@ -418,6 +450,22 @@ impl Tally {
             "loot_value": self.loot_value,
         })
     }
+}
+
+/// Row 23: what one account-day booked, as the difference between two samples of the same books.
+fn flows_of(before: &Books, now: &Books) -> serde_json::Value {
+    json!({
+        "produced": now.produced - before.produced,
+        "wasted": now.wasted - before.wasted,
+        "spent_build": now.spent_build - before.spent_build,
+        "spent_research": now.spent_research - before.spent_research,
+        "spent_units": now.spent_units - before.spent_units,
+        "fuel": now.fuel - before.fuel,
+        "loot_in": now.loot_in - before.loot_in,
+        "loot_out": now.loot_out - before.loot_out,
+        "expedition_in": now.expedition_in - before.expedition_in,
+        "cargo_lost": now.cargo_lost - before.cargo_lost,
+    })
 }
 
 fn weighted(resources: [f64; 3]) -> f64 {

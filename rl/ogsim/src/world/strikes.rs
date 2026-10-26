@@ -145,12 +145,22 @@ impl World {
         let resources = found.resources.map(|r| r as f64);
         self.log(EventKind::Arrival, at, &fleet, Outcome::Found(found.kind), |e| { e.gained = resources; e.ships_lost = lost });
         if home.is_empty() {
+            // Row 23s: a black hole takes the fleet and the hold with it, so the hold is an outflow of its own.
+            self.games[a].planet.books.cargo_lost += weighted(self.fleets[f].cargo);
             self.fleets.swap_remove(f);
             return self.log(EventKind::Lost, at, &fleet, Outcome::Defeated, |_| {});
         }
         let back = &mut self.fleets[f];
         back.ships = home.into_iter().collect();
-        back.cargo = found.cargo_home(carried).map(|r| r as f64);
+        // Row 23: the find (or the hold a lost expedition took) is the difference the hold itself moved by.
+        let carried_home = found.cargo_home(carried).map(|r| r as f64);
+        let (found_home, held) = (weighted(carried_home), weighted(back.cargo));
+        if found_home >= held {
+            self.games[a].planet.books.expedition_in += found_home - held;
+        } else {
+            self.games[a].planet.books.cargo_lost += held - found_home;
+        }
+        back.cargo = carried_home;
         back.fuel = 0.0;
         back.arrive = at;
         back.holding = 0.0;

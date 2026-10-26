@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::combat::{self, Battle, CombatCatalogue};
-use crate::economy::{as_stored, next_random, Catalogue, Game, PlanetConfig};
+use crate::economy::{as_stored, next_random, weighted, Books, Catalogue, Game, PlanetConfig};
 use crate::expedition;
 use crate::fleet::{self, Coord, FleetCatalogue, FleetSettings, SystemState};
 use crate::strike::{self, StrikeRules};
@@ -327,7 +327,7 @@ pub struct World {
     /// An idle login's clock and stock as they were before the account was caught up to it, until it does something:
     /// a login that changes nothing leaves the economy exactly as it was (floating-point accrual in finer steps is not
     /// the same number).
-    idle_stash: Vec<Option<(f64, [f64; 3])>>,
+    idle_stash: Vec<Option<(f64, [f64; 3], Books)>>,
     rng: u64,
 }
 
@@ -375,7 +375,9 @@ impl World {
                 continue;
             }
             if self.idle_next[a] < self.next[a] {
-                self.idle_stash[a] = Some((self.games[a].t, self.games[a].planet.res));
+                // An idle login that decides nothing is rolled back below, so the books are stashed with the stock
+                // (row 23: production booked for a clock that is then rewound would over-claim the day).
+                self.idle_stash[a] = Some((self.games[a].t, self.games[a].planet.res, self.games[a].planet.books));
                 self.catch_up(cat, a, self.idle_next[a]);
                 self.next[a] = cat.peek(&mut self.games[a]);
                 self.idle_now[a] = true;
@@ -456,6 +458,25 @@ impl World {
         std::iter::once(capital).chain(self.colonies[capital].iter().copied()).collect()
     }
 
+    /// Row 23: the account's books, summed over the planets it holds (a colony's are its owner's).
+    pub fn books(&self, capital: usize) -> Books {
+        let mut books = Books::default();
+        for slot in self.planets_of(capital) {
+            books.add(&self.games[slot].planet.books);
+        }
+        books
+    }
+
+    /// Row 23: the stock those books reconcile - every planet's stores plus the cargo flying, which the fleet took out
+    /// of its planet at dispatch and delivers when it lands. A sample is only comparable with another taken at the same
+    /// second, which is how the season reads them.
+    pub fn stock(&self, capital: usize) -> f64 {
+        let planets = self.planets_of(capital);
+        let stored: f64 = planets.iter().map(|&slot| weighted(self.games[slot].planet.res)).sum();
+        let flying: f64 = self.fleets.iter().filter(|fleet| planets.contains(&fleet.owner)).map(|fleet| weighted(fleet.cargo)).sum();
+        stored + flying
+    }
+
     /// Research is the account's: a level that landed on the capital's lab is copied to its other planets at that
     /// second, so their production, requirements and fleets read it. Their research queue never runs.
     fn share_research(&mut self, cat: &Catalogue, capital: usize) {
@@ -482,6 +503,8 @@ impl World {
         let home = &self.games[capital];
         let mut game = cat.new_paused_game(config, home.horizon / 3600.0, home.bonus_hours, home.login_rng);
         game.t = at;
+        // Row 23: a colony comes up with the host's starting stock, the only inflow its first line has to name.
+        game.planet.books.produced += weighted(game.planet.res);
         game.free = [at, f64::INFINITY];
         // The planet logs in with its account: same past logins and the same generator for the next ones.
         game.login_times = home.login_times.clone();
@@ -527,9 +550,10 @@ impl World {
     pub fn wait(&mut self, cat: &Catalogue, a: usize) {
         if self.idle_now[a] {
             self.idle_now[a] = false;
-            if let Some((t, res)) = self.idle_stash[a].take() {
+            if let Some((t, res, books)) = self.idle_stash[a].take() {
                 self.games[a].t = t;
                 self.games[a].planet.res = res;
+                self.games[a].planet.books = books;
             }
             self.pass_login(cat, a, self.idle_next[a]);
             self.next[a] = cat.peek(&mut self.games[a]);
@@ -667,6 +691,8 @@ impl World {
         let planet = &mut self.games[a].planet;
         for r in 0..3 { planet.res[r] = as_stored(planet.res[r] - cargo[r]) }
         planet.res[2] = as_stored(planet.res[2] - fuel);
+        // Row 23: the fuel is burnt at dispatch; the cargo is still the account's, in the hold, until it lands.
+        planet.books.fuel += weighted([0.0, 0.0, fuel]);
         let holding = fleet::holding_seconds(hold_hours) as f64;
         self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy });
         self.next[a] = cat.peek(&mut self.games[a]);
@@ -689,7 +715,7 @@ impl World {
             Mission::Missile => return self.missile_strikes(cat, f),
             _ => {}
         }
-        let target = self.fleets[f].target;
+        let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
         self.catch_up(cat, target, at);
         let mut outcome = Outcome::Done;
         let mut gained = [0.0; 3];
@@ -697,8 +723,16 @@ impl World {
             Mission::Deploy | Mission::Colonise | Mission::Expedition | Mission::Missile => unreachable!("handled above"),
             Mission::Transport => {
                 let mut cargo = std::mem::take(&mut self.fleets[f].cargo);
-                cargo[2] += self.fleets[f].fuel / 2.0;
+                let refund = self.fleets[f].fuel / 2.0;
+                cargo[2] += refund;
                 for r in 0..3 { self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + cargo[r]) }
+                // Row 23: the half fuel comes back into the hold, and goods handed to another player leave these books
+                // (the same resources arrive in that account's, so loot_out is what left here, refund included there).
+                self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, refund]);
+                if self.account[target] != self.account[owner] {
+                    self.games[owner].planet.books.loot_out += weighted(cargo);
+                    self.games[target].planet.books.loot_in += weighted(cargo);
+                }
                 gained = cargo;
             }
             Mission::Attack => self.attack(cat, f),
@@ -711,6 +745,8 @@ impl World {
         self.next[target] = cat.peek(&mut self.games[target]);
         self.fleets[f].returning = true;
         if self.fleets[f].ships.is_empty() {
+            // Row 23s: a fleet lost in battle takes the cargo it still held with it, as an outflow of its own.
+            self.games[owner].planet.books.cargo_lost += weighted(self.fleets[f].cargo);
             self.fleets.swap_remove(f);
             self.log(EventKind::Lost, at, &fleet, Outcome::Defeated, |_| {});
         }
@@ -733,6 +769,8 @@ impl World {
         if fleet.returning { return Err("already returning") }
         if fleet.mission == Mission::Missile { return Err("missiles cannot be recalled") }
         if now > fleet.arrive { return Err("already arrived") }
+        // Row 23: the recall hands half the fuel back into the hold, where the stock counts it again.
+        self.games[fleet.owner].planet.books.fuel -= weighted([0.0, 0.0, (fleet.fuel / 2.0).floor()]);
         fleet.cargo[2] += (fleet.fuel / 2.0).floor();
         fleet.fuel = 0.0;
         fleet.holding = 0.0;
@@ -759,6 +797,8 @@ impl World {
     fn deploy(&mut self, cat: &Catalogue, f: usize) {
         let fleet = self.fleets.swap_remove(f);
         let mut cargo = fleet.cargo;
+        // Row 23: half the fuel lands with the ships, so the fuel line pays only the half that was burnt.
+        self.games[fleet.owner].planet.books.fuel -= weighted([0.0, 0.0, fleet.fuel / 2.0]);
         cargo[2] += fleet.fuel / 2.0;
         self.land(cat, fleet.target, fleet.arrive, &fleet.ships, cargo);
         self.log(EventKind::Arrival, fleet.arrive, &fleet, Outcome::Done, |e| e.gained = cargo);
@@ -818,6 +858,7 @@ impl World {
             self.free_slot(to) && self.planets_of(capital).len() < t.max_planets(level)
         }).and_then(|t| self.pick_site(cat, capital, t, to.position));
         let Some(site) = site else {
+            self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, (self.fleets[f].fuel / 2.0).floor()]);
             self.fleets[f].cargo[2] += (self.fleets[f].fuel / 2.0).floor();
             self.fleets[f].fuel = 0.0;
             self.fleets[f].returning = true;
@@ -828,6 +869,9 @@ impl World {
         };
         let slot = self.add_planet(cat, owner, site.config, to, at);
         let mut brought = self.fleets[f].cargo;
+        // Row 23: the fleet's half fuel lands on the colony with the cargo it carried (`add_planet` books the stock
+        // the host gives a colony; the cargo was already the account's, flying).
+        self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, self.fleets[f].fuel / 2.0]);
         brought[2] += self.fleets[f].fuel / 2.0;
         for r in 0..3 { self.games[slot].planet.res[r] = as_stored(self.games[slot].planet.res[r] + brought[r]) }
         self.next[slot] = cat.peek(&mut self.games[slot]);
@@ -946,14 +990,29 @@ impl World {
         // The fleet enters the fight with its cargo and the half fuel the host hands back inside it
         // (FleetMissionService::getResources): the fuel refund is destructible cargo like the rest.
         let mut cargo = self.fleets[f].cargo;
-        cargo[2] += self.fleets[f].fuel / 2.0;
+        let refund = self.fleets[f].fuel / 2.0;
+        cargo[2] += refund;
+        let held = weighted(cargo);
         let outcome = self.fight(cat, f, &defender, cargo, true);
         for r in 0..3 {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
         }
         if outcome.moon_created && !self.moons[target] { self.raise_moon(target, outcome.debris.iter().sum()) }
+        let owner = self.fleets[f].owner;
         self.fleets[f].cargo = outcome.cargo.map(|r| r as f64);
+        // Row 23s: the hold is the account's stock while the fleet flies, so the plunder (and what the collectors
+        // hauled) is booked when the hold takes it, at the second of the fight, and the cargo the fight destroyed with
+        // the ships is booked as its own outflow. Booking the loot at the fight is what makes a raid whose hold grows
+        // on one day and lands on the next reconcile: the stock rose here, under the hold, not at the landing.
+        let held_now = weighted(self.fleets[f].cargo);
+        let books = &mut self.games[owner].planet.books;
+        books.fuel -= weighted([0.0, 0.0, refund]);
+        if held_now >= held { books.loot_in += held_now - held } else { books.cargo_lost += held - held_now }
+        // The target paid the loot out of its stores and hauled its collectors' share of the field back onto it.
+        let target_books = &mut self.games[target].planet.books;
+        target_books.loot_out += weighted(outcome.loot.map(|r| r as f64));
+        target_books.loot_in += weighted(outcome.salvage);
     }
 
     /// A moon comes up over `target`, sized as the host sizes it: a random 10..20 plus the debris of the fight, rooted.
@@ -1008,6 +1067,7 @@ impl World {
         };
         self.reports.push(report);
         // The return flight's cargo is an integer column, so an odd fuel loses its half unit.
+        self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, (self.fleets[f].fuel / 2.0).floor()]);
         self.fleets[f].cargo[2] += (self.fleets[f].fuel / 2.0).floor();
     }
 
@@ -1024,6 +1084,8 @@ impl World {
             self.debris[target][r] = (self.debris[target][r] as f64 - harvested[r]).floor() as i64;
             self.fleets[f].cargo[r] += harvested[r].floor();
         }
+        // Row 23: the harvest is stock that came out of the field into the hold.
+        self.games[owner].planet.books.loot_in += weighted(harvested.map(f64::floor));
         harvested.map(f64::floor)
     }
 }
@@ -1226,6 +1288,45 @@ mod tests {
         assert!(lost.iter().sum::<f64>() > 0.0, "nothing looted");
         for r in 0..3 { assert!((lost[r] - won[r]).abs() < 1e-6, "resource {r}: lost {} won {}", lost[r], won[r]) }
         assert_eq!(raided.yards[0].counts, quiet.yards[0].counts, "no defence, no losses");
+    }
+
+    /// Row 23: a day's books close against the stock the world measured, and the plunder is booked where the hold takes
+    /// it - at the fight, while the fleet is still out - and not a second time when it lands (row 23s).
+    #[test]
+    fn a_days_books_satisfy_the_sum() {
+        let Some((cat, mut world, _quiet)) = pair(72.0) else { return eprintln!("no u1 catalogues; skipped") };
+        give(&mut world, 0, 202, 20);
+        world.games[0].planet.res = [50_000.0, 20_000.0, 20_000.0];
+        world.games[1].planet.res = [30_000.0, 20_000.0, 10_000.0];
+        // The identity a season's line states: the stock the world moved, and every flow the books booked for it.
+        let closes = |world: &World, seen: (Books, f64), label: &str| {
+            let (now, moved) = (world.books(0), world.stock(0));
+            let (booked, delta) = (now.net() - seen.0.net(), moved - seen.1);
+            assert!((delta - booked).abs() < 1e-6 * delta.abs().max(1.0), "{label}: the stock moved {delta} and the books {booked}");
+            (now, moved)
+        };
+        let mut rng = 11u64;
+        let (mut books, mut stock) = (world.books(0), world.stock(0));
+        assert_eq!(world.next_decision(&cat), Some(0), "the raider decides first");
+        world.dispatch(&cat, 0, 1, Mission::Attack, &[(202, 20)], [1_000.0, 1_000.0, 0.0], 10.0).expect("the raid flies");
+        let mut fought = false;
+        while let Some(a) = world.next_decision(&cat) {
+            if !fought && world.events.iter().any(|e| e.kind == EventKind::Fight && e.mission == Mission::Attack) {
+                fought = true;
+                let seen = closes(&world, (books, stock), "the raid");
+                assert!(seen.0.loot_in > books.loot_in, "the fight booked no plunder");
+                (books, stock) = seen;
+            }
+            match cat.baseline(&world.games[a].planet, world.games[a].queue, Baseline::Player, &mut rng) {
+                Some(k) => world.commit(&cat, a, k),
+                None => world.wait(&cat, a),
+            }
+        }
+        assert!(fought, "the raid never fought");
+        let home = closes(&world, (books, stock), "the flight home");
+        assert_eq!(home.0.loot_in, books.loot_in, "the landing booked the plunder a second time");
+        assert_eq!(home.0.cargo_lost, 0.0, "the raider lost cargo without a fight");
+        assert!(home.1 > 0.0, "the account ended with nothing");
     }
 
     /// A recall turns the fleet home from where it is (`GameMission::cancel`): it leaves now, takes the time already
