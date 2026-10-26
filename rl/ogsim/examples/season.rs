@@ -33,6 +33,10 @@ const RAIDER: usize = 1;
 const SAVER: usize = 2;
 /// An account that stops playing draws its quit day from an exponential with this mean, in days.
 const QUIT_MEAN_DAYS: f64 = 15.0;
+/// Row 15: the alliance join day is drawn five days after the third (exponential). 65% and the mean are assumptions -
+/// the bands say only that 65% of real active players are in an alliance (p10 24%, p90 77%) - so they are stated here.
+const ALLIANCE_SHARE: u64 = 65;
+const ALLIANCE_MEAN_DAYS: f64 = 5.0;
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -90,6 +94,21 @@ fn main() {
         quit[a] = Some(-u.ln() * QUIT_MEAN_DAYS * DAY);
     }
 
+    // Row 15: an account still playing at day 3 joins an alliance, at a drawn day; a quitter never joins. Membership
+    // is the season's data, not a world mechanic (the world has no alliances).
+    let mut alliance_at: Vec<Option<f64>> = vec![None; accounts];
+    for a in 0..accounts {
+        let quits = quit[a].unwrap_or(f64::INFINITY);
+        if quits <= 3.0 * DAY || next_random(&mut rng) % 100 >= ALLIANCE_SHARE {
+            continue;
+        }
+        let u = ((next_random(&mut rng) >> 11) as f64 + 0.5) / (1u64 << 53) as f64;
+        let join = 3.0 * DAY + -u.ln() * ALLIANCE_MEAN_DAYS * DAY;
+        if join < quits {
+            alliance_at[a] = Some(join);
+        }
+    }
+
     let players: Vec<Player> = (0..accounts).map(|a| {
         let s = seed.wrapping_mul(100).wrapping_add(a as u64);
         match roles[a] {
@@ -112,6 +131,7 @@ fn main() {
         out,
         per_day: vec![vec![Tally::default(); accounts]; days],
         login_at: vec![0; accounts],
+        alliance_at,
         read: 0,
         midnight: DAY,
         days,
@@ -191,6 +211,8 @@ struct Season<'a, W: Write> {
     per_day: Vec<Vec<Tally>>,
     /// Per account, how far its login record has been read for the days already written.
     login_at: Vec<usize>,
+    /// Per account, the second it joined an alliance (row 15), or `None` if it never did.
+    alliance_at: Vec<Option<f64>>,
     /// How many events of the world's log have been read.
     read: usize,
     /// The next midnight no line has been written for.
@@ -244,7 +266,7 @@ impl<W: Write> Season<'_, W> {
                 "planets": planets.len(),
                 "moons": moons,
                 "galaxies": galaxies.len(),
-                "alliance": false,
+                "alliance": self.alliance_at[a].is_some_and(|join| at >= join),
                 "value": value,
                 "fleet_value": value - economy,
                 "logins_today": logins,
