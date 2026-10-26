@@ -189,3 +189,83 @@ data we already have. Measure that before any PHP run.
    (row 7, the PHP closed loop). The order after S2 is unchanged (S3 colonise).
 
 **The row to take verbatim: RL-FLOW §4 row 5.**
+
+
+## 26 Oct — row 5 (S2a) — **F is 41%, so the comparator is broken; and the premise is refuted in the opposite direction**
+
+**Measured** (`rl/ogrl/transfer.py`, 192 accounts over M5's 16 universes x 12, code as of this row; no learner, so
+no PPO health):
+
+| measure | IQM | 95% CI | median |
+| --- | --- | --- | --- |
+| Y yardstick (rule / teacher replay - 1) | **+0.542** | [+0.501, +0.584] | +0.549 |
+| SIM_T transfer (e4 / teacher replay - 1) | **+1.267** | [+1.187, +1.348] | +1.289 |
+| F fidelity \|teacher replay / PHP - 1\| | **+0.413** | [+0.377, +0.454] | +0.409 |
+
+Replay repair: 26 of 5 698 recorded building choices refused (0.46%, gate <= 1%), 186 decisions after the recording
+ended (3.3%). F is one-sided: T/PHP is 1.26-1.58 interquartile, above PHP by >10% on 86.5% of accounts, inside 10%
+on 11.5%, below by >10% on 2.1%; by universe the F IQM runs 0.27-0.58, so it is systematic, not noise. On the clean
+subset (>= 20 recorded choices and a last decision >= 66 h, n=111) F is still 0.31, T/PHP median 1.34.
+
+**Three causes, each checked:**
+
+1. **The replay's world is richer than PHP's, and mines compound.** The replay spends nothing on the fleet, defence
+   and errands the PHP account did (3 367 yard and 1 907 errand choices of 13 050 recorded, 56%), so that budget goes
+   into mines, which raise production for the rest of the 72 h. PHP's value *does* count the fleet at price
+   (`getPlanetScore` sums buildings, stations and units; untouched by this row), but a fleet does not compound.
+   A building-only replay against a whole-account value cannot close this.
+2. **`value` is the value at the last decision, not at the end of the run.** Three accounts record a single decision
+   and a value of 1 000 (their start), so a 72 h replay is compared with day 0 (ratios 8.4x and 23.8x). Filtering to
+   accounts whose last decision is >= 66 h (142 of 192) moves F from 0.41 to 0.35.
+3. **The replay is handicap in the login world.** In universe 7101, 25 of 352 replayed choices (7%) were legal but
+   unaffordable at that login, so `decide` let the login pass with no build, while the rule arm always picks
+   something affordable. Part of Y is that handicap, not the teacher's order.
+
+**The premise behind S2a is refuted in the direction measured.** Y = +0.54 with all 93.8% of accounts positive: the
+simulator's player rule ends **above** the replayed teacher, so "the player rule is the weak yardstick" is false in
+this world, and the S1 gain is not a yardstick artifact on this evidence. The like-for-like number that survives is
+the within-world one: **e4 over the rule, IQM +1.44** (median 1.41, p10-p90 1.19-1.86), against row 4's +104.6% in the plain-start
+world. It is smaller here but the same direction, and both arms play identical worlds and login times.
+
+**Worst accounts** (F, for the record): `7102/9`, `7102/12`, `7116/11` (one recorded choice, PHP value = 1 000,
+T/PHP 23.79); `7103/3` (2 choices, 8.40); `7110/13` (8 choices, 4.33); `7103/7` (9 choices, 4.31).
+
+**Questions — S2a cannot be kept as written, and each answer changes the next row:**
+
+1. **What is the comparator?** A building-only replay in the economy simulator cannot reproduce a whole-account PHP
+   value, because the fleet/errand budget becomes compounding mines. Choose one: (a) accept it and compare on the
+   *building* part of PHP's value only (planet score without units) — one line in `transfer.py`, F then measures the
+   replay, not the world; (b) replay yard and errand choices too, which needs the world simulator (`World`/`VecWorld`)
+   and is a different, much larger row; (c) drop F and judge S2 on the yardstick alone, accepting that Y is measured
+   against a handicap.
+2. **Is the recorded `value` the right comparator value at all?** It is the value at the last decision; 3 of 192
+   accounts never decided again. Do we add an end-of-run value to the recorder (a PHP change of a few lines, and a
+   new recording for row 6), or filter to accounts whose last decision is >= 66 h and accept F 0.35?
+3. **Does S2 continue?** If the yardstick premise is false and e4 is still +44% over the rule within this world,
+   the reading is "the gain is real in the simulator, of unknown size in PHP", which is what S2b (the serving gate)
+   was for. Row 5 says S2b/S2c run only if S2a says the gap is real; S2a's F gate failed, but not in a way that says
+   the model is bad — it says the *replay* is not comparable. Say whether the next row is S2b on the e4 checkpoint
+   (logins world), a fixed S2a per answer 1, or S3.
+
+### Planner's answer to row 5 (26 Oct)
+
+Row 5 was a good measurement, and it refuted my premise: the player rule is not the weak yardstick (Y +54%). It also
+showed *why* the replay cannot be the comparator. A PHP account spends 56% of its decisions on the yard and on errands,
+and the economy-only simulator has nowhere to spend that budget except compounding mines.
+
+1. **Comparator: none of (a)-(c). The replay comparator is retired.**
+   - (a) compares the building part, but the replay's mines are still inflated by the budget it never spent on ships,
+     so F would only look smaller.
+   - (b) is a large row, and the world simulator answers the same question more cheaply.
+   - Y from row 5 is not interpretable, because the replay is handicapped (unaffordable logins). Do not quote it.
+   - `transfer.py` stays, as the record of row 5.
+2. **The recorded `value`:** do not change PHP now. Any later use of these recordings filters to accounts whose last
+   decision is at 66 h or later. An end-of-run value in the recorder waits until a stage needs a new PHP recording
+   (S2c).
+3. **S2 continues in the simulator, one step closer to PHP: the world (row 6).** The hypothesis that row 5 points at is
+   that the economy-only simulator is the wrong world. A building-only gain of +100-140% does not survive when the
+   same budget must also buy ships and survive raids. That fits PHP's parity, and it is the same conclusion as the
+   north-star reading: the account is the unit, not the build queue.
+   - Row 6 measures it with paired twins in `VecWorld`.
+   - Row 7 (conditional) adds raiders.
+   - S2b and S2c run only if the world does not shrink the gain.
