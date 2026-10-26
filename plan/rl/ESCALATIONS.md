@@ -818,3 +818,49 @@ comes back as the baseline (row 12r). Reasons:
 2. **Cadence comes after the mix,** and only if week one is still at least 4x short (row 14).
 3. **No session-length knob.** 5-20 minutes stays, with the assumption stated in the code. Its effect on week one is
    not a reason to tune a number we have no data for.
+
+## 26 Oct — row 13 (S5) reverted, and row 12's diagnosis was upside down
+
+Row 13 as written is in `RL-FLOW.md`; the code is reverted (`cargo test --release` 36/36) and the evidence is in
+`storage/rl/ogsim/runs/flow/e13/`.
+
+**What it measured.** `economy_share_max` per persona (Miner 0.75, Raider 0.55, FleetSaver 0.65) with the yard given
+first refusal above the cap. `eco_share` in-band **0.672 → 0.683** against the ≥ 0.80 the hypothesis needed; HDS
+0.837 → 0.834; `res_share` 0.842 → 0.811; growth unchanged. The top cells did not move at all.
+
+**Why it could not work, and what the number actually says.** Our p50 `eco_share` against the real cell's
+p10 / p50 / p90:
+
+| cell | row 10c | row 12r | row 13 | real p10 | real p50 | real p90 |
+| --- | --- | --- | --- | --- | --- | --- |
+| top10 256+ | 0.717 | 0.902 | 0.905 | 0.273 | 0.504 | 0.741 |
+| top10 the bottom 128-256 | 0.597 | 0.869 | 0.866 | 0.287 | 0.502 | 0.685 |
+| mid the bottom 128-256 | 0.532 | 0.826 | 0.814 | 0.348 | 0.546 | 0.769 |
+| mid 256+ | 0.697 | 0.783 | 0.781 | 0.344 | 0.612 | 0.863 |
+| bottom 256+ | 0.700 | 0.750 | 0.742 | 0.330 | 0.642 | 0.994 |
+
+We are **above** the band in the top and mid cells, not below: an account holding 0.90 economy is one whose score is
+almost all buildings. Real top accounts hold 0.50 economy, 0.22 research, 0.05 military — their total is 100x ours
+(138 909 against 1 173 per speed-day), and the mass in that total is fleet and research. Our accounts cannot dilute
+their buildings because they own nothing else: the personas' wants are a fixed tiny kit (1 probe, a few cargo ships,
+harvesters, fighters) that a grown account already has, so above the cap the yard has nothing to start and the login
+builds anyway. The session clock (row 12) made this worse, not better: more stock, the same tiny wants, so more mines.
+
+**A real mechanism found on the way** (kept only as knowledge, since the row is reverted): a bare ratio cap freezes
+accounts. A young planet scores 0 until a few levels clear the host's 1 000-point floor and then it scores ~1.0
+economy, so a cap that drops the building pick left four persona tests stuck at `[3, 2, 0, 3]` — deuterium never
+mined, no research, no colony, no defence. First refusal fixed it with every assertion unchanged.
+
+**Questions:**
+
+1. **Row 14 = widen the wants, scaled to the account's own score?** One change in `players.rs`: a persona's fleet and
+   research programme grow with its score (e.g. keep a unit stock worth a share of the total, and keep research at the
+   real top band's ~0.22 share) instead of a fixed count. That is the only lever that can dilute buildings, it is the
+   same seam rows 10 and 13 used, and it names no object (the catalogue says what can be built). It also gives the
+   session clock's spending somewhere to go, which is why row 12 showed the mix drift in the first place.
+2. **Or the cadence row first?** Week one is still 4x off the real mid and the session left 22.5 idle hours a day, so
+   cadence moves growth; it would not touch `eco_share`, which is the failing measure.
+3. **Gate 3 reading.** "A professional player grows a fleet worth a share of his account and keeps researching" is
+   ordinary play, but sizing it off the score is our device, not the game's. If you would rather keep it purely
+   behavioural, say what the wants should be sized on (age? storage? the real band's research share?).
+
