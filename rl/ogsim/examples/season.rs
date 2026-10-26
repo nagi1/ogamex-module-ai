@@ -136,6 +136,7 @@ fn main() {
             season.world.wait(season.cat, a);
             continue;
         }
+        season.touch(owner, a);
         match season.players[owner].act(&mut *season.world, season.cat, a, &mut season.ledgers[owner]) {
             Some(k) => season.world.commit(season.cat, a, k),
             None => season.world.wait(season.cat, a),
@@ -227,6 +228,7 @@ impl<W: Write> Season<'_, W> {
             let galaxies: BTreeSet<i64> = planets.iter().map(|&s| self.world.coords[s].galaxy).collect();
             let moons = planets.iter().filter(|&&s| self.world.moons[s]).count();
             let logins = self.logins_today(a, d);
+            let busy = self.world.busy_seconds(a, at - DAY, at);
             let tally = &self.per_day[d][a];
             let line = json!({
                 "seed": self.seed,
@@ -246,10 +248,26 @@ impl<W: Write> Season<'_, W> {
                 "value": value,
                 "fleet_value": value - economy,
                 "logins_today": logins,
-                "events_today": tally.json(),
+                // Row 11: where the day went, so the growth gap can be attributed instead of guessed.
+            "build_hours": (busy / 3600.0 * 1000.0).round() / 1000.0,
+            "idle_hours": (((DAY - busy) / 3600.0) * 1000.0).round() / 1000.0,
+            "logins": tally.logins,
+            "full_logins": tally.full_logins,
+            "events_today": tally.json(),
             });
             writeln!(self.out, "{line}").expect("write the season line");
         }
+    }
+
+    /// Counts this login for the account's day, and whether a store stood at 80% or more (row 11).
+    fn touch(&mut self, a: usize, slot: usize) {
+        let t = self.world.games[slot].t;
+        let d = ((t / DAY) as usize).min(self.days - 1);
+        let planet = &self.world.games[slot].planet;
+        let full = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
+        let tally = &mut self.per_day[d][a];
+        tally.logins += 1;
+        tally.full_logins += u32::from(full);
     }
 
     /// The account's logins during day `d`, as seconds of the day: the world's own login record, read forward once.
@@ -323,6 +341,9 @@ fn record(day: &mut [Tally], e: &Event, w: &World, roles: &[usize]) {
 /// One account's day, in the `events_today` fields of §9.1.
 #[derive(Default, Clone)]
 struct Tally {
+    /// Logins this day, and of those how many found a store at 80% or more (row 11).
+    logins: u32,
+    full_logins: u32,
     spy_sent: u32,
     raid_sent: u32,
     raid_received: u32,
@@ -340,6 +361,8 @@ struct Tally {
 impl Tally {
     fn json(&self) -> serde_json::Value {
         json!({
+            "logins": self.logins,
+            "full_logins": self.full_logins,
             "spy_sent": self.spy_sent,
             "raid_sent": self.raid_sent,
             "raid_received": self.raid_received,

@@ -533,6 +533,13 @@ impl World {
         !self.idle_now[a] && cat.queue_legal(&self.games[a], k) && !self.rules.get(a).is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
     }
 
+    /// Seconds of `from..to` during which the account's building queue was busy, summed over its planets and capped
+    /// at the window: what a "how much of the day was the queue working" measure needs (row 11).
+    pub fn busy_seconds(&self, account: usize, from: f64, to: f64) -> f64 {
+        if to <= from { return 0.0 }
+        self.planets_of(account).iter().flat_map(|&s| self.games[s].history.iter()).map(|h| (h.2.min(to) - h.0.max(from)).max(0.0)).sum::<f64>().min(to - from)
+    }
+
     /// Account a's research levels by host id, as the fleet and combat tables read them.
     pub fn research(&self, cat: &Catalogue, a: usize) -> HashMap<u32, u32> {
         cat.objects.iter().zip(&self.games[a].planet.levels).filter(|(o, _)| o.queue == 1).map(|(o, &l)| (o.id as u32, l)).collect()
@@ -1068,6 +1075,32 @@ mod tests {
     }
 
     const DATA: &str = "../../../../storage/rl/ogsim";
+
+    /// `busy_seconds` reads exactly the builds the account's own history holds: no more than the window, none when the
+    /// window is empty, and the same total when the window covers every build (row 11).
+    #[test]
+    fn busy_seconds_reads_the_accounts_own_history() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
+        let mut world = World::new(&cat, &[0], 240.0, 0.0, 3);
+        world.enable_idle_logins(&cat);
+        let mut game = cat.new_game(0, 240.0, 0.0, 3);
+        while !game.done {
+            match cat.baseline(&game.planet, game.queue, Baseline::Player, &mut 3) {
+                Some(k) => { cat.step(&mut game, k); }
+                None => cat.wait_turn(&mut game),
+            }
+        }
+        world.games[0] = game;
+        let &(start, _, finish, _) = world.games[0].history.first().expect("something was built");
+        let span = finish - start;
+        let covered = world.busy_seconds(0, start, finish);
+        assert!((covered - span).abs() < 1e-6, "a window holding one build reads {covered}, the build lasted {span}");
+        let half = world.busy_seconds(0, start, start + span / 2.0);
+        assert!((half - span / 2.0).abs() < 1e-6, "half the build in half the window: {half} of {span}");
+        assert_eq!(world.busy_seconds(0, 10.0, 10.0), 0.0, "an empty window is zero");
+        assert!(world.busy_seconds(0, 0.0, 1e9) <= 1e9, "the cap never exceeds the window");
+    }
 
     /// Two accounts on u1 that never build: every difference from a quiet twin world is what the fleet moved.
     fn pair(hours: f64) -> Option<(Catalogue, World, World)> {
