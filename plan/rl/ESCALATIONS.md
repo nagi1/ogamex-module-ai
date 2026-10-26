@@ -1167,3 +1167,53 @@ the plunder, the plunder is claimed as income but never arrives in the hold, whi
 3. **Go straight on after 23s.** Read the shares, the ceiling ratio and the signed table into row 23s, apply the
    pre-committed pick, then run row 24p's wave (A, B and C as parallel arms, 10 seeds each), then 26 (stack), 27, 28
    and 22.
+
+## 26 Oct — row 23s kept, rows 24p-27 measured and reverted, row 28's condition fails: the flow stops
+
+The ledger closes and everything the growth rows tried came out flat or zero-sum, so the run stops at row 28's condition
+with row 22 (S6) not run. Rows, in the order they ran, on the ten-seed speed rule (10 seasons in parallel, 26 processes
+at most, one 10-seed baseline at `runs/flow/e24p` used by every arm):
+
+| row | what changed | result (10 seeds unless said) | keep rule | decision |
+| --- | --- | --- | --- | --- |
+| **23s** | the income ledger books loot where the hold takes it, and a lost hold as `cargo_lost` | **0 of 140 160 account-days over 1%** (both arms, 3 seeds, 365 days); worst residual 8e-6 on a 343M day; base HDS **0.757 = row 20 to the digit** | every line closes, base = row 20 | **kept** (`5d2f8e7`) |
+| **24 A** | a login with a store at 80%+ buys the storage for it | HDS **0.754**, growth in-band 0.486 against 0.469, mid growth p50 240 → 247 | +0.10 growth in one bucket, HDS beyond the spread | **reverted** |
+| **24 B** | the login gap scaled 0.5 → 1.0 by day 30 | HDS **0.757**, growth in-band 0.479, mid p50 240 → 242 | as above | **reverted** |
+| **24 C** | raiders and savers keep an expedition out; miners never | HDS **0.751**, growth in-band 0.467, 221 534 arrivals, `expedition_in` 0.17% of produced | as above | **reverted** |
+| **25, 26** | the second variant, then the stack | **not run**: row 24p made all three one wave and row 24 kept none, so there is nothing to stack | - | folded / stopped |
+| **27** | `research_share` per persona (real p50 `res_share` at 128-256: 0.106 / 0.113 / 0.132), the lab waits above it | **`res_share` in-band 0.22 → 1.00 at 128-256 and 0.26 → 1.00 at 256-512, out-of-band 54% → 11%; mid growth p50 126 → 231 (+83%)**; but **`eco_share` 0.79 → 0.00** and it becomes the top giveaway; HDS 0.752 → 0.750 | res_share +0.10, **eco_share no worse than −0.02**, HDS beyond the spread | **reverted on its own guard** |
+| **28** | raiders spy first and hit the fleet they can see (row 21 re-entered) | condition: growth in-band mid 64-256 = **0.00 / 0.34**, and `moons` is **fourth** in the giveaways (res_share 0.246, eco_share 0.233, galaxies 0.207, moons 0.183) | condition | **not run** |
+| **22** | S6, the model retrained on the new world | waits on row 28 | gate | **not run** |
+
+Three things this run established with numbers, and one bug it fixed:
+
+1. **The account's ceiling is its queue, not its income or its cadence.** The ledger says it wastes **80.6%** of what it
+   produces over the year (23.5% in week one, 38.2% at 31-60, 95.7% at 257-365) while spending **8.4%** on buildings,
+   and the always-online ceiling is only **2.0x** what the real cadence gives. A fuller cadence (B), a bigger store (A)
+   and another income stream (C) each move growth p50 by 0.8-2.9% and none reaches the 0.10 in-band the row asks for.
+2. **Storage is already the player rule.** `Baseline::Player` buys the store object when a store is about to overflow
+   (`economy.rs:923`), which is why A changed one cell by 0.03 and nothing else. The 80% threshold adds nothing.
+3. **Research was crowding out the mines, and the mix is zero-sum.** Row 27's target cut research spending at the real
+   share and nearly doubled mid-band growth (126 → 231 p50) while leaving `eco_share` at 0.00 in band - the stock went
+   to buildings, and `eco_share` was already +0.24 above the real p50 before the change.
+4. **A crash, fixed:** arm C panicked 9 of 10 seeds at `combat.rs:197` - a season researches shields past the combat
+   export's grid and the cell lookup asserted. It now reads the edge cell, as the economy's grids already do, with its own
+   test; the base arm is byte-identical after the fix. Any later expedition or late-game row would have hit this.
+
+**Questions:**
+
+1. **The growth lever is a spending one, not an income one - is that the row you want?** Waste at 80.6% with `spent_build`
+   at 8.4% says the account cannot *place* what it makes: its queue runs out of legal objects (or affordable ones) and the
+   store absorbs the rest. Rows 24 A-C all added supply or time; none of them added a place to spend. The next row I would
+   write is "what is left to build at day 120, and what stops it" - a diagnosis on the same ledger, no behaviour change.
+2. **A mix row that fixes `res_share` without breaking `eco_share` needs both shares in one target, not one share.** Row 27
+   moved `res_share` clean out of the giveaways (0.246 → 0.073) and doubled growth, then handed first place to `eco_share`
+   (0.233 → 0.182, out-of-band 28% → 58%). Do you want a row that aims both shares at once (one target per persona, the
+   other side absorbing), or is doubling mid-band growth worth keeping even with `eco_share` out of band for a stage?
+   Row 13 hit the same wall from the other side.
+3. **`planets` fell from 0.93 to 0.30 in the mid 128-256 cell under row 27** - bigger accounts stop colonising the way the
+   band expects. Is that a real behaviour to chase (a colonisation cadence row) or an artefact of the cell being rank-based?
+4. **Row 28's second branch: `moons` is fourth, not third.** Its own condition needs top three, and `moons` is only 0.183
+   behind `galaxies` 0.207 - one more measure moving and the raider row fires. Do you want it now, or after question 1?
+5. **Row 22 (S6) stays closed**, as its gate says: a model trained on accounts that grow 37-70x too slowly in the mid
+   cells learns that world. Nothing in this run changed that, and the ledger now says why.
