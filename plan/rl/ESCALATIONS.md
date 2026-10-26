@@ -436,3 +436,63 @@ S3's colonise row is kept: HDS 0.686 → 0.752, planets in band 0.516 → 0.889.
    - Gate 3: a raider keeps a fleet, a miner keeps a little defence.
 
    Row 10 is written after row 9's numbers, so its bands are the corrected ones.
+
+
+## 26 Oct — row 9 (S3, the bucket split) — **reverted: thin where our seasons live, and the top10 gap is not a matching artifact**
+
+**Measured** (`real_bands.py` two-line split + `hds.py` fallback, then the tree restored; code as of this row):
+
+| reading | pooled bands (row 8 state) | split bands |
+| --- | --- | --- |
+| self-test | **PASSED**, continuous HDS 0.836, AUC 0.543 | **FAILED**, continuous HDS 0.839, AUC **0.551** |
+| `256-512` n (bottom / mid / top10) | — | **15 / 22 / 8** |
+| row 8 re-scored | 0.752 (AUC 0.986) | **0.752** (AUC 0.986) |
+| row 7 re-scored | 0.686 (AUC 0.991) | **0.686** (AUC 0.991) |
+| top10 real growth p50 | 138 909 | 138 909 |
+
+**What it means.** The split is correct in principle and unusable at this season length: every line a 60-day season
+writes is day x 8 = 480 speed-days, which is inside `256-512`, where the published universes hold 8-22 players. The
+prescribed fallback then returns the merged `256+` cell, which reproduces the pooled target to the digit, so HDS and
+AUC move not at all. The hypothesis (HDS changes by more than the spread, the top10 gap shrinks by an order of
+magnitude) is refuted: the gap is 302x before and after.
+
+**Two findings worth keeping:**
+
+1. **A fallback built from capped samples is wrong.** `real_bands` stores `sample` as the *first* `SAMPLE_MAX` (2 000)
+   rows, not a random draw, so merging three buckets' samples re-weights them. Doing that read `top10|256-512` growth
+   p50 as 84 175 against the true 138 909 and recorded row 8 at HDS **0.777** — a number that would have entered the
+   log as a correction. The merged cell must be computed from the full vectors inside `real_bands.cells_from`.
+2. **The self-test pays for the finer grid.** With the split (plus the merged cells and the self-test's own
+   `MIN_CELL`), the AUC moves 0.543 -> 0.551, over the 0.55 bar by 0.001. I did not isolate which of the three
+   changes carries it, and the row was reverted rather than kept on a 0.001 margin.
+
+**Questions:**
+
+1. **When does the split pay?** At speed 8 the next bucket starts at 512 speed-days = day 64. `512-1024` holds 88
+   (top10) / 293 (mid) / 199 (bottom) players and `1024+` holds thousands. Re-order the split as part of the
+   120-day-season row (which your answer to row 8 already contemplates for the planets cap), or keep it now and raise
+   the self-test bar to 0.56? The plan's own `AUC_TARGET` is the only thing between the two.
+2. **Should top10 be judged at 60 days at all?** Its real growth p50 is 138 909 against our 460 — a 302x distance in
+   score, and its planets median is 16 against our cap of 6. If the answer is no, say what replaces it as the
+   late-game check, because the north star needs one.
+3. **Row 10 (S4) was written "after row 9's numbers, so its bands are the corrected ones".** Row 9 is reverted, so S4
+   will be judged on the pooled `256+` bands. Confirm that, or write row 10 for the finer grid once a longer season
+   can reach it.
+
+### Planner's answer to row 9 (26 Oct)
+
+Reverting was right. The sample-cap finding (merged capped samples re-weight cells) is a real trap. Keep it in mind
+for any future merge: merge from the full vectors only.
+
+1. **The split waits.** It comes back in the same row as a 120-day season (day 64 onward lands in `512-1024`, which
+   has enough players). The self-test bar stays at 0.55; do not raise it.
+2. **Keep top10, and the gap is real: it starts in the first week.** Measured by the planner on `e8/season-1`: the best
+   three accounts hold **169-520 points at day 8** (64 speed-days), against real players at 32-64 speed-days with
+   growth medians of **50/speed-day for mid** (about 1.6-3.2k points) and **10 320 for top10**. Our best are already
+   **3-6x below the real *mid* median** in week one, and they close nothing later (about 270-300k points at day 60).
+   Part of the top10 distance is what OGameX does not model (lifeforms, Dark Matter, officers). The mid distance in
+   week one is ours. That makes early growth a diagnosis row (row 11): how much of each day each queue sits idle,
+   hours on full storage, logins per day by account age. Real players are most active at a universe's start.
+3. **Row 10 (S4) is judged on the pooled bands, as you say,** and it goes before the growth diagnosis because the
+   scorecard ranks `mil_share` as the top giveaway (importance 0.18). Growth is third (0.13), after alliance. Rows
+   follow the measure's order, not the planner's hunch. Row 10 is written.
