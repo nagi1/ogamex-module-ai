@@ -616,3 +616,68 @@ My 10b prescription was wrong, and your traces show why: the refusal was a `raid
    in the ten-day test. Its behavioural asserts (raids, saves that succeed and fail, recalls) stay. A larger
    allowance would only be a number invented to pass.
 3. **The `Order` errand stays where it is.** Defence stays (row 10's result is not in question).
+
+
+## 26 Oct — row 10c (S4, corrected) — **two repairs pass, the third needs one line of an assertion; stopped**
+
+**Applied:** row 10's `military_share` unchanged; `raid_plan` refuses a raid whose fuel the stock cannot pay (plus the
+tanks' capacity); `Ledger::lost` counts `ships_lost` + `target_lost`; `miners_raiders_and_savers_play_ten_days`'s
+twin-value line printed instead of asserted (the row's planner decision).
+
+| test | without the repairs | with them |
+| --- | --- | --- |
+| `every_offered_errand_is_one_the_world_accepts` | FAIL (raid offered, refused) | **pass** (fuel check) |
+| `miners_raiders_and_savers_play_ten_days` | FAIL (gap 11.5M vs moved 4.3M) | **pass** (diagnostic, moved 5.3M printed) |
+| `a_short_stock_orders_only_what_it_pays_for` | FAIL (7 of 4) | **FAIL** (7 of 4) |
+| the other 31 | pass | pass |
+
+**The trace, exactly as the row asked for it:**
+
+```
+STAGE a=3 t=812400 unit=13 missing=4 staged=3 queue=4
+APPLY a=3 t=812400 unit=13 size=Now missing=4 amount=3 queue=4
+```
+
+The staged quantity is 3 against a want of 4 — correctly capped by the stock. The assertion then sums the **whole
+yard queue** (`w.yards[a].orders`, every unit) and compares it with **this unit's** want: 4 units already queued by
+the login's defence pass plus the 3 staged = 7 > 4. There is no cap to fix; the two quantities are different
+things.
+
+**Two staging variants, both worse:**
+
+1. Offer `Order` candidates only into an idle yard → the test fails with *no login ever offered a staged order*, and
+   the seam loses a candidate it exists to offer.
+2. Buy defence only at building logins (an idle login's yard action is the `Order` errand's) → 32 pass, 2 fail: the
+   offer test breaks again, because at an idle login nothing spends before the menu and the earlier mismatch returns.
+
+**The one-line fix, which needs your word:** in `errands::tests::a_short_stock_orders_only_what_it_pays_for`, sum
+only the staged unit's orders,
+
+```rust
+let queued: u64 = w.yards[a].orders.iter().filter(|o| Some(o.unit) == now.unit).map(|o| o.amount - o.done).sum();
+```
+
+which is what the assertion says it measures ("the staged order queues fewer of that unit than the want"). With it,
+the suite is 34/34 and S4 ships at the numbers already measured (HDS 0.820, mil_share 0.850, res_share 0.578).
+
+**Questions:**
+
+1. **Authorise the one-line change,** as row 10d or as a footnote to 10c? The alternative is to leave S4 unshipped,
+   which buys nothing: the effect is measured, the other two repairs are proven, and this is a counting bug in a test
+   helper line, not in the world.
+2. **If you prefer no test edits at all,** the only remaining route is to keep the yard queue empty at idle logins
+   by construction — i.e. move all yard ordering out of `act` and into the `Order` errand, which re-homes the ship
+   orders the eras of rows 6-8 rely on. Say if that is worth a stage row; I would not spend one on it.
+
+### Planner's answer to row 10c (26 Oct): authorised, and S4 ships
+
+1. **Authorised, as part of 10c (no new row).** I checked `errands.rs:407`. The assertions are about *the staged
+   order* ("the staged order queued nothing", "asked for {queued} of {missing}"), but the line sums the whole yard
+   queue. That was equivalent only while nothing else could be in the queue at that moment. Fixing it restores the
+   test's meaning; it does not loosen it. Prefer the strictest form: measure what **this** order queued, as the queue
+   of `now.unit` after the apply minus the same before it. That stays correct even if the defence pass ever queues the
+   same unit. If the before/after form is awkward, your unit filter is accepted. Put one comment line on why.
+2. **No re-homing of yard orders.** Not worth a stage.
+
+**Re-apply row 10c with this line, run the full suite (34/34) and the three seasons, fill in the row, and commit.
+Then go to row 11.**
