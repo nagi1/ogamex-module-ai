@@ -968,3 +968,54 @@ reason.
 
 Stop points: after row 18 if the ages are refuted (no bucket can be trusted), and after row 20 (the new baseline: the
 planner picks row 21 from its giveaway order if the condition fails). Otherwise run 18 → 22.
+
+## 26 Oct — rows 18-19-20: the yardstick is now the universe's own age, and the 365-day baseline is 0.757
+
+**Row 18 (audit, kept).** `rl/scripts/band_audit.py` (read-only, 120 lines) over all 267 aged universes: the 196
+speed-8 universes are five at **7 real days** and then 91 to 8 515 - **nothing is 8-90 days old**, so there is no
+64-128 speed-day cell and no 8-16 one, the 128-256 cells are nine speed-5 universes all exactly **49 days** old, and
+256+ is a median of **532 days**. The age estimate (oldest standing alliance) is exact: against OSTATS `opened` the
+ratio is 1.00 (1.00-1.01) on the 19 young universes and 1.00 on the nine speed-5 ones, median 1.000 over 264 matched.
+The one like-for-like cell was 32-64 at 7 days: real growth p50 **10 260 / 50.0 / 0.1** for top10 / mid / bottom.
+
+**Row 19 (kept, measurement).** Scored cells are now the speed-8 universes by their own age in real days (0-14,
+64-128, 128-256, 256-512, 512+); other speeds keep speed-days in a printed `speed_days` table. Self-test passes
+(HDS 0.856, continuous 0.832, AUC 0.535). Re-scoring e15 unchanged gives **HDS 0.637**, not 0.845, and the two
+scorecards share **no scored cell**: our day 10 had no real counterpart before, and days 20-60 have none of our ages
+now. So 0.845 was never a same-age comparison; 0.637 was the first one, and under it `mid at 0-14` is in band on 7 of
+8 measures while `top10 at 0-14` is in band on none.
+
+**Row 20 (kept: the new T baseline).** Three 365-day seasons, 64 accounts, `u1-colonies`, seeds 1-3 (11.9 s each):
+
+| age bucket | HDS | growth in band | our p50 growth, top10 / mid / bottom | real p50 | giveaway order |
+| --- | --- | --- | --- | --- | --- |
+| 0-14 | 0.637 | 0.42 | 142 / 86 / 25 | 10 260 / 49 / 0 | growth, res_share, eco_share |
+| 64-128 | 0.787 | 0.55 | 1 778 / 469 / 7 | 74 557 / 2 876 / 84 | growth, eco_share, res_share, mil_share |
+| 128-256 | 0.709 | 0.37 | 1 338 / 453 / 4 | 116 840 / 8 656 / 181 | res_share, growth, eco_share, mil_share |
+| 256-512 | 0.803 | 0.58 | 847 / 374 / 2 | 132 248 / 3 657 / 74 | res_share, eco_share, **moons**, growth |
+| 512+ | no row | - | - | - | a season is 365 days |
+
+Pooled **HDS 0.757**, AUC 0.995. `cargo test --release` 36/36 unchanged, no NaN or negative value at day 365. Day
+365: 96 of 192 accounts have quit, planets 1-8 (median 5.5), **0 moons and 1 galaxy on all 192**, totals p50 213 580.
+Moons over a whole year: **38 456 fights, 0 rolls, 0 moons**, 0 destructions sent. Giveaways at every age are size
+and mix, led by `res_share` and `eco_share`.
+
+### Questions
+
+1. **Does row 21 run?** Its condition - "moons, mil_share or fights in the top three giveaways of 128-365" - holds at
+   **256-512 only** (moons 0.192, third, ahead of growth 0.170) and fails at 128-256 (moons not in the top five, and
+   `moons` in band 0.52 there). `mil_share` never reaches the top three and `fights` is not a scored measure. If you
+   want the year to be the unit, row 21 runs; if 128-256 must lead, the spy-first raider is not the top giveaway and
+   you should pick row 21 from `res_share`/`eco_share` instead.
+2. **The top10 cells are a size gap, not a shape gap, and they now dominate the giveaway order.** At 128-256 real
+   top10 hold 11-14 planets and 10-14 moons; ours hold 1-8 planets and 0 moons, with growth 1 338 against 116 840
+   (87x). Capping or re-aiming spending cannot close that; only growth can. Is row 21 (raider targeting) really the
+   next row, or should the growth decomposition come first - the store-at-cap reading (41% of week-one logins) with
+   the session clock's spend path? Your answer to row 17's question 3 was "size is not a lever", but every bucket now
+   says size is the top giveaway.
+3. **`growth.py`'s real-mid column is stale by construction** (it keys speed-days into an age-bucketed table). Row
+   20 was "data only, no code", so I left it; the one-line fix is `age_bucket_of(row["day"])` in `real_p50`. Say if you
+   want it folded into the next row, since any row that quotes that column will otherwise quote the wrong cell.
+4. **Half the cohort is gone.** 32 of 64 accounts per seed quit at median day 10, so the 128-365 cells describe about
+   96 survivors against real universes whose highscore has anyone still ranked. Is that the comparison you want, or
+   should the quit process itself be a row (it is the largest single difference and it is not a scored measure)?
