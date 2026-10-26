@@ -22,7 +22,7 @@ use std::sync::Arc;
 use ogsim::fleet::Coord;
 use ogsim::players::{account_value, FleetSaver, Ledger, Miner, Player, Raider};
 use ogsim::score::{self, Score};
-use ogsim::world::{Event, EventKind, Mission, Rules, World};
+use ogsim::world::{Colonisation, Event, EventKind, Mission, Rules, World};
 use ogsim::{next_random, Catalogue, WEIGHTS};
 use serde_json::json;
 
@@ -58,8 +58,11 @@ fn main() {
         &format!("{data}/fleet-settings-u1.json"),
         &format!("{data}/combat-u1.json")).expect("the units, fleet and combat exports"));
 
-    let configs: Vec<usize> = (0..accounts).map(|a| a % cat.planets.len()).collect();
+    // One shipyard table per home planet: a colony site has none, so a season starts its accounts on homes.
+    let configs: Vec<usize> = (0..accounts).map(|a| a % rules.units.planets.len()).collect();
     let mut world = World::new(&cat, &configs, days as f64 * 24.0, 0.0, seed);
+    // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
+    world.colonisation = Colonisation::load(&econ).ok().map(Arc::new);
     // A fully built account still logs in, to raid or to save its fleet.
     world.enable_idle_logins(&cat);
     // Three galaxies, a system each, wide apart: a raider has neighbours to fly at and a saver has somewhere to be away.
@@ -119,19 +122,21 @@ fn main() {
     let start = std::time::Instant::now();
     let mut gone = vec![false; accounts];
     while let Some(a) = season.world.next_decision(season.cat) {
+        // A colony slot decides too; its player, quit day and ledger are its account's.
+        let owner = season.world.account_of(a);
         let t = season.world.games[a].t;
         season.flush(t);
-        if let Some(q) = quit[a] {
-            if !gone[a] && t >= q {
-                retire(season.world, a, q);
-                gone[a] = true;
+        if let Some(q) = quit[owner] {
+            if !gone[owner] && t >= q {
+                retire(season.world, owner, q);
+                gone[owner] = true;
             }
         }
-        if gone[a] {
+        if gone[owner] {
             season.world.wait(season.cat, a);
             continue;
         }
-        match season.players[a].act(&mut *season.world, season.cat, a, &mut season.ledgers[a]) {
+        match season.players[owner].act(&mut *season.world, season.cat, a, &mut season.ledgers[owner]) {
             Some(k) => season.world.commit(season.cat, a, k),
             None => season.world.wait(season.cat, a),
         }
@@ -160,13 +165,16 @@ fn main() {
 /// The account's owner stopped coming at `quit`: the login record ends there, which is what `World::inactive` reads, and
 /// its clock stops, so nothing of it is decided afterwards.
 fn retire(w: &mut World, a: usize, quit: f64) {
-    let end = quit.max(w.games[a].t);
-    let game = &mut w.games[a];
-    game.horizon = end;
-    game.login_times.retain(|&t| t <= end);
-    if game.login_times.is_empty() { game.login_times.push(end) }
-    // A login no clock reaches: the record has no entry after the quit day, and `Catalogue::login` draws none.
-    game.login_times.push(f64::INFINITY);
+    // Every planet the account holds stops with it, colonies included.
+    for slot in w.planets_of(a) {
+        let end = quit.max(w.games[slot].t);
+        let game = &mut w.games[slot];
+        game.horizon = end;
+        game.login_times.retain(|&t| t <= end);
+        if game.login_times.is_empty() { game.login_times.push(end) }
+        // A login no clock reaches: the record has no entry after the quit day, and `Catalogue::login` draws none.
+        game.login_times.push(f64::INFINITY);
+    }
 }
 
 /// A season's output: the world, the day's buckets still filling, and the lines written so far.
@@ -206,15 +214,16 @@ impl<W: Write> Season<'_, W> {
     /// One line per account for the day `d` (0-based; the line says `d + 1`), as §9.1 of the plan fixes it.
     fn write_day(&mut self, d: usize) {
         let at = (d + 1) as f64 * DAY;
-        for a in 0..self.world.games.len() {
+        for a in 0..self.roles.len() {
             // Inactive is the world's own flag (last login more than seven days ago), not the quit day we drew.
             let inactive = self.world.inactive(self.cat, a, at);
-            let value = account_value(self.world, a);
-            let economy = self.world.games[self.world.account_of(a)].value();
+            // An account's value is every planet it holds, as `score::of` already sums it.
+            let planets = self.world.planets_of(a);
+            let value: f64 = planets.iter().map(|&s| account_value(self.world, s)).sum();
+            let economy: f64 = planets.iter().map(|&s| self.world.games[s].value()).sum();
             // The host's own four scores (row N1: `score::of` equals HighscoreService on 600 drawn accounts,
             // 0 differ to the integer). Every band in the plan is written in this score, so the line says so.
             let score = score::of(self.world, a);
-            let planets = self.world.planets_of(a);
             let galaxies: BTreeSet<i64> = planets.iter().map(|&s| self.world.coords[s].galaxy).collect();
             let moons = planets.iter().filter(|&&s| self.world.moons[s]).count();
             let logins = self.logins_today(a, d);
@@ -279,32 +288,34 @@ fn scan(w: &World, read: &mut usize, roles: &[usize], per_day: &mut [Vec<Tally>]
 fn record(day: &mut [Tally], e: &Event, w: &World, roles: &[usize]) {
     let price = |slot: usize, id: u32| w.rules[slot].units.index(id as i64)
         .map_or(0.0, |u| weighted(w.rules[slot].units.units[u].price));
+    // A colony slot fights, raids and colonises for its account: every tally is per account.
+    let (owner, target) = (w.account_of(e.owner), w.account_of(e.target));
     match (e.mission, e.kind) {
         (Mission::Attack, EventKind::Fight) => {
             let lost = e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
-            day[e.owner].raid_sent += 1;
-            day[e.owner].loot_value += weighted(e.gained);
-            day[e.owner].ships_lost_value += lost;
+            day[owner].raid_sent += 1;
+            day[owner].loot_value += weighted(e.gained);
+            day[owner].ships_lost_value += lost;
             let lost = e.target_lost.iter().map(|&(id, n)| price(e.target, id) * n as f64).sum::<f64>();
-            day[e.target].raid_received += 1;
-            day[e.target].ships_lost_value += lost;
+            day[target].raid_received += 1;
+            day[target].ships_lost_value += lost;
             // The log names the ships standing at home when the fight began: a saver's fleet was out (a save held) or it
             // was still there (the save came too late). An account that owns no fleet also reads empty; the ledger's own
             // dispatch-time check (`Raid::target_had_fleet`) is the upgrade once a season reads saves as a measure.
             // ponytail: a fleet-less account counts as a held save; raise it with the ledger's `target_had_fleet`.
-            if roles[e.target] == SAVER {
+            if roles[target] == SAVER {
                 match e.present.is_empty() {
-                    true => day[e.target].save_ok += 1,
-                    false => day[e.target].save_late += 1,
+                    true => day[target].save_ok += 1,
+                    false => day[target].save_late += 1,
                 }
             }
         }
-        (Mission::Espionage, EventKind::Arrival) => day[e.owner].spy_sent += 1,
-        (Mission::Recycle, EventKind::Arrival) => day[e.owner].recycle += 1,
-        (Mission::Expedition, EventKind::Arrival) => day[e.owner].expedition += 1,
-        (Mission::Colonise, EventKind::Arrival) => day[e.owner].colonise += 1,
-        (Mission::Missile, EventKind::Arrival) => day[e.owner].missile += 1,
-        (Mission::MoonDestroy, EventKind::Arrival) => day[e.owner].moon_shot += 1,
+        (Mission::Espionage, EventKind::Arrival) => day[owner].spy_sent += 1,
+        (Mission::Recycle, EventKind::Arrival) => day[owner].recycle += 1,
+        (Mission::Expedition, EventKind::Arrival) => day[owner].expedition += 1,
+        (Mission::Colonise, EventKind::Arrival) => day[owner].colonise += 1,
+        (Mission::Missile, EventKind::Arrival) => day[owner].missile += 1,
+        (Mission::MoonDestroy, EventKind::Arrival) => day[owner].moon_shot += 1,
         _ => {}
     }
 }

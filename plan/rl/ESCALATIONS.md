@@ -369,3 +369,70 @@ which that stale build served correctly (the economy parity tests pass on the so
 nothing proves the build matched. From now on the loop rebuilds before any run (LOOP-PROMPT).
 
 **Next: row 7 (the S3 control), then row 8 (colonise).**
+
+
+## 26 Oct — row 8 (S3, colonise) — **stage exit met: planets 0.516 -> 0.889, HDS 0.686 -> 0.752; S4 needs a decision**
+
+**Measured** (3 seeds x 64 accounts x 60 days at speed 8 on `u1-colonies`, code as of this row, `runs/flow/e8`):
+
+| reading | row 7 (control) | row 8 (colonise) |
+| --- | --- | --- |
+| HDS, per seed | 0.685 / 0.689 / 0.683 | **0.754 / 0.751 / 0.751** |
+| HDS pooled | 0.686 | **0.752** |
+| Turing AUC | 0.990 | 0.986 |
+| violations | 1 057 | 1 055 |
+| planets, in-band share | 0.516 | **0.889** |
+| res_share | 0.316 | 0.440 |
+| eco_share | 0.794 | 0.828 |
+| mil_share | 0.484 | 0.482 |
+| growth / moons / galaxies / alliance | 0.799 / 0.672 / 1.000 / 0.906 | 0.800 / 0.672 / 1.000 / 0.906 |
+
+Colonising fires 203-213 times a season; the final day has 30-33 of 64 accounts on six planets and 21-23 still on one.
+
+**What shipped** (5 files, about 70 lines, one test):
+`World::colony_site` (room from `max_planets` at the account's astrophysics, the free slot's position level, a site the
+home world's tables carry, home galaxy and system first); `Miner::order_plans` wants one colony ship while a site is in
+reach; `Miner::unlock` wants the host's colonisation research (the ship's own requirements do not include it, so
+without this no site is ever in range); `Miner::act` founds the colony at the same login; the season enables the tables
+it never loaded and now writes and tallies per account rather than per slot (it panicked on the first colony slot).
+No object is named in code: the ship and the research ids come from the catalogue's colonisation block.
+
+**The first reading failed the row's own guard, and that is recorded rather than hidden.** With `colony_site` scanning
+from galaxy 1 for everybody, accounts living in galaxies 2-3 held planets in two galaxies, `galaxies` for
+bottom|128-256 fell 1.00 -> 0.87 and HDS read 0.740. Preferring the home galaxy and system — what a player does, gate
+3 — gives `galaxies` 1.000 and HDS 0.752. Both runs are in `runs/flow/e8`; only the second is the measurement.
+
+**Three questions before S4:**
+
+1. **top10 `planets` is still 0.00 and colonising cannot fix it.** Our best accounts end at a score p50 of 460 against
+   top10's 138 909, so the top10 cell is a score band we never enter; its planets measure (16 median) is unreachable at
+   60 days if the score is 300x short. Do we (a) keep scoring top10 planets, (b) judge planets only in the bands the
+   season can reach (bottom, mid) and say so, or (c) treat "reaching top10 at all" as its own later stage?
+2. **The horizon caps planets at 6.** `max_planets` reaches 6 around astrophysics 9, and 60 days at speed 8 gets no
+   further, while real mid accounts hold a median of 10 and top10 of 16. Extend the season (days), raise the starting
+   astrophysics, or accept 6 for now and record the cap?
+3. **S4 next, as the order says: the research/military split.** Note what colonising already did to it: res_share
+   0.316 -> 0.440 (+0.124) because colonies need research, while **mil_share did not move at all** (0.484 -> 0.482) and
+   is now the second giveaway (52% out of band). S4 as written targets both shares; if it is doctrine data, say whether
+   it may also touch what the scripted players *build* (a fleet share), or only the research/yard mix, because the
+   military half cannot move from research alone.
+
+### Planner's answer to row 8 (26 Oct)
+
+S3's colonise row is kept: HDS 0.686 → 0.752, planets in band 0.516 → 0.889. The 33 Rust tests pass on this tree
+(checked by the planner before committing). Recording the failed first reading and fixing it the way a player plays
+(home galaxy first) was right.
+
+1. **top10 planets: (a), keep scoring it, but fix the yardstick first.** The "300x short" is against the pooled
+   real `256+` bucket, which spans universes up to 15 years old. My answer of 26 Oct (refine the buckets) was never
+   applied. That is row 9. Re-judge top10 after it. Hiding a band whose number looks bad would be the slop we stopped.
+2. **The cap of 6 planets is accepted for now and recorded.** After row 9, if planets are still out of band in the
+   cells our seasons reach, a later S3 row tests a longer season (120 days) as its one change.
+3. **S4 may change what the scripted players build, not only research.** The military half cannot move from research.
+   - The one change: a per-persona **target share of spending that goes to the yard** (ships and defence), as one
+     number in each persona's constructor. That is taste over host data (Gate 1: it names no object), set from the
+     real `mil_share` medians per band.
+   - Hypothesis: `mil_share` moves into band without `res_share` falling back.
+   - Gate 3: a raider keeps a fleet, a miner keeps a little defence.
+
+   Row 10 is written after row 9's numbers, so its bands are the corrected ones.

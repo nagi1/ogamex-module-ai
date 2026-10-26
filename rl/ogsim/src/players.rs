@@ -302,6 +302,16 @@ impl Miner {
         if w.account_of(a) == a && (pick.is_none() || overflow || self.eager) {
             self.order_ships(w, cat, a);
         }
+        // The colony the ship was built for is founded at the same login: one mission, no cargo.
+        if w.account_of(a) == a {
+            if let (Some(to), Some(ship)) = (w.colony_site(cat, a), w.colonisation.as_ref().map(|t| t.ship)) {
+                if let Some(u) = w.rules[a].units.index(ship as i64) {
+                    if w.yards[a].counts[u] > 0 {
+                        let _ = w.colonise(cat, a, to, &[(ship, 1)], [0.0; 3], 1.0);
+                    }
+                }
+            }
+        }
         pick
     }
 
@@ -336,6 +346,12 @@ impl Miner {
             at += 1;
             need.extend(cat.objects[k].requires.iter().filter_map(|&(need_k, need_level)| Some((need_k?, need_level))));
         }
+        // A colony needs the host's colonisation research before any site is in range; the catalogue names it (gate 1).
+        if let Some(t) = w.colonisation.as_ref() {
+            if let Some(k) = cat.objects.iter().position(|o| o.id == t.research) {
+                need.push((k, t.position_levels.values().copied().min().unwrap_or(0)));
+            }
+        }
         need.into_iter().find_map(|(k, level)| {
             (levels[k] < level && cat.objects[k].queue == w.games[a].queue && w.legal(cat, a, k)).then_some(k)
         })
@@ -356,11 +372,18 @@ impl Miner {
         let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
         let stock: f64 = w.games[a].planet.res.iter().sum();
         let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
-        wants.into_iter().filter_map(|(id, want)| {
+        let mut plans: Vec<(usize, i64)> = wants.into_iter().filter_map(|(id, want)| {
             let missing = want - owned(w, a, id);
             let u = rules.units.index(id as i64)?;
             (missing > 0).then_some((u, missing))
-        }).collect()
+        }).collect();
+        // A player takes a new planet as soon as the host allows it: one colony ship, whose id the catalogue gives.
+        if let Some(ship) = w.colonisation.as_ref().and_then(|t| w.colony_site(cat, a).map(|_| t.ship)) {
+            if let Some(u) = rules.units.index(ship as i64) {
+                if owned(w, a, ship) < 1 { plans.push((u, 1)) }
+            }
+        }
+        plans
     }
 }
 
@@ -641,6 +664,32 @@ mod tests {
         let coords = (0..ACCOUNTS).map(|a| Coord { galaxy: 1, system: 10 + 2 * a as i64, position: 4 + (a % 8) as i64 }).collect();
         world.arm(vec![Arc::clone(&rules); ACCOUNTS], coords);
         Some((cat, world))
+    }
+
+    /// A scripted account founds a second planet as soon as the host allows it: room from `max_planets`, the
+    /// colonisation research, one colony ship, one mission (row 8, S3).
+    #[test]
+    fn a_miner_founds_a_second_planet() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no colonies catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return };
+        let Ok(table) = crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return };
+        let mut world = World::new(&cat, &[0], HOURS * 4.0, 0.0, 5);
+        world.enable_idle_logins(&cat);
+        world.colonisation = Some(Arc::new(table));
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 1, system: 10, position: 4 }]);
+        let mut miner = Miner::new(5);
+        let mut steps = 0;
+        while steps < 400_000 {
+            let Some(a) = world.next_decision(&cat) else { break };
+            steps += 1;
+            if a != 0 { world.wait(&cat, a); continue }
+            match miner.act(&mut world, &cat, a) {
+                Some(k) => world.commit(&cat, a, k),
+                None => world.wait(&cat, a),
+            }
+        }
+        assert!(world.planets_of(0).len() >= 2, "no colony in {steps} decisions: levels {:?}", world.games[0].planet.levels);
     }
 
     /// Both queues get their turn: an account whose building queue always has something payable must still research what its

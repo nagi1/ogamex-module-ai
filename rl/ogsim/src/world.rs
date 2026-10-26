@@ -761,6 +761,32 @@ impl World {
         Ok(())
     }
 
+    /// Where a scripted account founds its next colony: the first free slot whose position its own astrophysics
+    /// reaches, on a donor the host's tables carry a site for. The limit is the host's `max_planets`; no object is
+    /// named here, the catalogue's colonisation block supplies every number.
+    pub fn colony_site(&self, cat: &Catalogue, a: usize) -> Option<Coord> {
+        let table = self.colonisation.as_ref()?;
+        let capital = self.account_of(a);
+        let level = self.research(cat, a).get(&(table.research as u32)).copied().unwrap_or(0);
+        if self.planets_of(capital).len() >= table.max_planets(level) { return None }
+        let donor = cat.planets[self.games[capital].planet.config].planet_id;
+        let settings = &self.rules.get(a)?.settings;
+        let home = self.coords[capital];
+        // A player colonises next door before anywhere else: the home galaxy and system first, then outward.
+        let near = |count: i64, at: i64| std::iter::once(at).chain((1..=count).filter(move |&x| x != at));
+        for position in 4..=15 {
+            if table.position_levels.get(&position).copied().unwrap_or(u32::MAX) > level { continue }
+            if !table.sites.iter().any(|s| s.donor == donor && s.position == position) { continue }
+            for galaxy in near(settings.number_of_galaxies as i64, home.galaxy) {
+                for system in near(settings.number_of_systems as i64, home.system) {
+                    let to = Coord { galaxy, system, position };
+                    if self.free_slot(to) { return Some(to) }
+                }
+            }
+        }
+        None
+    }
+
     /// ColonisationMission::processArrival: the slot still free and the planet limit not reached, a planet comes up
     /// with the fleet's cargo and half its fuel on top of the colony stock and the ship is spent; anything else cancels
     /// the mission and the whole fleet turns home with its cargo.
