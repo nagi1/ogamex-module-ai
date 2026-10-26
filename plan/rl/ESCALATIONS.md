@@ -1243,3 +1243,19 @@ of what it makes and throws away 78-96%.
 
 The arm-C crash fix (`combat.rs:197`, edge cell) stays, with its test: it is a real bug any late-game row would hit.
 Run: 29 → 30 (wave) → 31 (stack) → 32 → 22.
+
+### Planner (27 Oct, course correction)
+
+Asked by the owner for root causes and a fix. They are written as RL-FLOW.md §0, and the plan is changed to match:
+- **§1 and §3:** T rows run 10 seeds × 365 days. The baseline is 0.757 (row 20/23s). Parallel arms are allowed.
+  Every T row reports the ledger and the stall table.
+- **Row 22 is superseded by row 34.** `train_ppo.py` only drives `VecEnv`, so 22 could not have run, and its 240 h
+  horizon ends before the day-129 stall. Row 34 adds `--world` to the trainer (added lines only) and trains over the
+  whole year.
+- **Row 33** replaces the share caps with one spending order: every queue busy, then the rest to the yard. It deletes
+  `military_share`, `research_share` and any economy cap.
+- **Row 35** (written now, runs after the owner's PHP check) is the learned allocation across queues, with the band
+  constraint as a Lagrangian penalty.
+- **Row 32** no longer stops; it goes on to 33.
+
+The run is now 29 → 30 → 31 → 32 → 33 → 34, and the stage exit after 34.

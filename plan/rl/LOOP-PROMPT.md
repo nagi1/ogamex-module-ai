@@ -10,18 +10,23 @@ and decisions already taken are in plan/rl/ESCALATIONS.md.
 ONE AGENT ONLY. Never start subagents, forks, background agents or a second session. Long runs (training, seasons,
 cargo) may run as background processes. Never use pkill -f.
 
-Each iteration does exactly ONE experiment:
+Each iteration does exactly ONE row. A row makes one change, or runs several one-change arms side by side, each
+behind its own season argument (off by default) and each judged alone against the same baseline. RL-FLOW.md §0 holds
+the rules learned up to 27 Oct; read it first.
 1. Read RL-FLOW.md §1-§3 and the last rows of §4. Run git status and git log -5. If your own runs are still going
    (ps -eo pid,etime,cmd | grep -E "train_ppo|season|cargo" | grep -v grep), wait for them; never start a duplicate.
-2. Pick the next experiment: the "Next:" in the last §4 row, or the current stage's first open step.
+2. Pick the next row: the lowest-numbered §4 row whose result columns are empty and that is not marked deferred,
+   superseded or waits. Each row says in its keep rule what follows each result; follow that without asking.
 3. Write the §4 row BEFORE running anything: the stage, the ONE change, the hypothesis (which number, which direction,
    roughly how much), the command and the keep rule. Commit that row.
 4. Make the one change. At most about 50 readable lines. A Rust change comes with a test. Use rl/ogrl/train_ppo.py;
    never extend train_world.py.
 5. If any file under Modules/AI/rl/ogsim/src is newer than the installed ogsim wheel, rebuild first:
    `cd Modules/AI/rl/ogsim && ../../../../.venv-rl/bin/maturin develop --release` (the wheel went stale once). Then
-   run 3 seeds (background processes, the same fixed evaluation). R rows: the trainer's eval line. T rows: season.rs
-   with 3 seeds, then rl/scripts/hds.py.
+   run the seeds as background processes, at most 26 at once, never pinned. T rows: season.rs, 10 seeds × 365 days,
+   then rl/scripts/hds.py, growth.py, the ledger shares by age and (from row 29) stall.py. R rows: 3 training seeds,
+   the trainer's eval line, then the paired-twin evaluation the row names. GPU on cuda:1 with
+   CUDA_DEVICE_ORDER=PCI_BUS_ID.
 6. Fill in the row: the per-seed results, the mean and spread, and the health (KL / clip / entropy / EV / invalid). The
    run is broken, not a result, if invalid > 0, EV < 0 at the end, or KL is 0 from the very first update.
 7. Decide: keep, or revert (undo the change in git). There is no "keep anyway". Write the "Next:" in the row.
@@ -35,8 +40,9 @@ Load skills instead of recalling: rl-diagnostics (health, headroom, statistics) 
 when you compare numbers. A claim that no code, measurement or skill supports is written as "unverified".
 
 Stop the loop and append to plan/rl/ESCALATIONS.md when:
-- a stage exit is met, because the planner confirms before the next stage;
-- two experiments in a row do not move the number;
-- a result contradicts the plan;
+- a stage exit is met (the planner, or the owner's PHP closed loop, confirms before the next stage);
+- a row's own keep rule says stop, or its result falls outside every branch the row pre-commits;
+- two rows in a row do not move their numbers beyond the spread;
+- a test can pass only by changing its assertion, or a ledger line stops closing;
 - the next step needs a decision that RL-FLOW.md does not make.
 ```
