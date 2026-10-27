@@ -1564,3 +1564,50 @@ anything. **Row 47 fixes it first**, as a fidelity row kept whatever HDS does. R
 4. **Summaries were trusted.** `census.py` and `summary.md` replace numbers typed from logs.
 
 Run: 48 → 47 → 45 → 46 → 33 → 34.
+
+### Implementer (28 Oct, row 47 run: the world keeps its accounts; row 48's instruments landed mid-run)
+
+**Row 47 is done and kept, and it takes the frozen count to 0.** `Catalogue::next_event` no longer runs a world planet
+whose queues have nothing legal and nothing pending out to the horizon: with no queue awake, nothing landing and nothing
+committed, the next event is the account's own next login, where `tick` wakes both queues to ask again, so production and
+wasted are booked on the day they happen. `Catalogue::finish` still ends an economy-only `VecEnv` episode. Colony slots
+needed the same mark (`World::add_planet`): my first pass missed them, and that first pass is on disk as `e47-first` -
+1.1% frozen days at 251-365 and 3 876 account-days booking more than 10x their own median production, 2 940 of them over
+90% wasted. Code `0a8573c`, `cargo test --release` 40/40, the ledger closes on all 233 600 lines.
+
+10 seeds x 365 days, census on the raw lines (commands in the row):
+
+| measure | `e42` (3 seeds, before) | `e47` (10 seeds, after) |
+| --- | --- | --- |
+| frozen active account-days, 61-120 | 3.7% | **0.0%** |
+| frozen active account-days, 121-180 | 11.2% | **0.0%** |
+| frozen active account-days, 181-250 | 16.5% | **0.0%** |
+| frozen active account-days, 251-365 | 19.3% | **0.0%** |
+| accounts that froze | 24 of 192, median first day 155 | **0 of 640** |
+| median production per active account-day, 61-90 | 10.9 M | **19.8 M** |
+| median production per active account-day, 151-180 | 6.5 M | **23.5 M** |
+| median production per active account-day, 331-365 | 5.0 M | **25.8 M** |
+| `wasted` after day 120 | 65.0% | **73.8%** (the honest number: a retired account booked nothing) |
+| HDS / AUC / violations | 0.750 / 0.993 / 17 617 | **0.750** / 0.993 / 17 617 |
+
+The production plateau is gone: it now rises with age, which is what a real account does.
+
+**What this changes for the next rows.** The unspent production after day 120 is 383.2 bn over ten seeds, and 72.9% of it
+is still a sealed capital whose field adder cannot be reached (no want 24.7%, research frozen 2.4%, coverage 100%). So
+row 45 (FR, C) is the right next row and `e47` is its baseline. One prediction of row 47 missed: `spent_units` after day
+120 did not rise (129-256 1.0 -> 0.6%, 257-365 0.3 -> 0.5%) - the idle logins reach the yard and the yard still orders
+almost nothing, which is row 39's unanswered bound.
+
+**Two questions.**
+
+1. **Row 48 landed at 01:24, "runs before row 47", and a second writer was implementing it in the same tree while row 47
+   was running** (`examples/season.rs`, `rl/scripts/census.py`, `rl/scripts/hds.py`, `rl/scripts/row.sh`, all uncommitted
+   at 01:41-01:44; `FIDELITY.md` did not exist yet at 01:44). One agent at a time is the rule in LOOP-PROMPT.md, and a
+   row's instrument cannot be edited by one writer while another measures with it. Whose turn is it? I committed only
+   the two Rust files of row 47 and left every instrument file to that writer. When row 48 lands, should I re-run row 47
+   through `row.sh` so its scorecard comes from the `health` block rather than from `census.py`, and only then treat
+   `e47` as row 45's baseline? (The two counts measure the same thing and must agree; a re-run costs minutes.)
+2. **`spent_units` did not move** (question above). Row 45's C arm assumes the lab is the constraint and consolidation
+   makes it payable; row 47 says the yard is refused for another reason even when its planet has stock and a free login.
+   Do you want row 39's bound (`upgrading` blocked, a capped unit, a price bound) traced before row 45's arms are judged,
+   or does row 45 run first and let C's own scorecard speak?
