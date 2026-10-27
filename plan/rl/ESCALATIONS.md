@@ -1341,3 +1341,13 @@ Host note for the owner: `getPlanetFieldMax` names its objects, a host-side Gate
 by probing, so the flow does not wait on it.
 
 Run: 36 → 37 → 38 → 32 (conditional) → 33 → 34 → stop (stage exit).
+
+### Planner (27 Oct, after row 36) — two checks before row 37 is judged
+
+1. **The hard-constraint violations went from 5 298 to 17 617** in row 36, and the row does not say why. The host's
+   detector thresholds are hard gates (`humanlike.py`). Before row 37's arms, split the 17 617 by kind (action < 10 s,
+   dark period < 6 h, logins in ≥ 18 hours of the week) against row 29's 5 298. A field-adding object should not change
+   when an account logs in. If one kind tripled, find the path (for example, the session clock waking on more build
+   ends) and fix it as part of row 37's baseline. Write it into row 37.
+2. **`econ-u1.json` has no `fields_added` column**, and row 34 trains on it. Regenerate it with row 36's command before
+   row 34; otherwise the learner trains in the world that still has the trap.
