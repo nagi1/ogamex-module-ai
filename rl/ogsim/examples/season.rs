@@ -337,14 +337,29 @@ impl<W: Write> Season<'_, W> {
         let mut rng = self.seed ^ (self.midnight.to_bits());
         let next = self.cat.baseline(planet, 0, Baseline::Player, &mut rng);
         let hours = |seconds: f64| if seconds >= 1e9 { serde_json::Value::Null } else { json!(seconds / 3600.0) };
-        // Row 29: why the building queue's objects cannot start, counted - the reason the queue has nothing to hold.
+        // Row 29, extended by row 37: why each queue's objects cannot start, counted for **every** planet the account
+        // holds (the building queue) and for the account's lab, which is the capital's; and the stock above two hours of
+        // each planet's own production, which is the surplus a yard order is meant to spend.
         let mut reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
-        for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 0) {
-            *reasons.entry(self.cat.stall_of(planet, k)).or_default() += 1;
+        let mut research_reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
+        for &slot in planets {
+            for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 0) {
+                *reasons.entry(self.cat.stall_of(&self.world.games[slot].planet, k)).or_default() += 1;
+            }
         }
+        for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 1) {
+            *research_reasons.entry(self.cat.stall_of(planet, k)).or_default() += 1;
+        }
+        let surplus: f64 = planets.iter().map(|&slot| {
+            let planet = &self.world.games[slot].planet;
+            let reserve: f64 = (0..3).map(|r| WEIGHTS[r] * planet.rate[r].max(0.0) * 2.0).sum();
+            (weighted(planet.res) - reserve).max(0.0)
+        }).sum();
         json!({
             "blocked_hours": blocked,
             "buildings": reasons,
+            "research": research_reasons,
+            "surplus": surplus,
             "idle_hours": idle,
             "long_builds": long,
             "mod_build": levels(0),

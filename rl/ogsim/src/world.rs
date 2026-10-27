@@ -34,6 +34,7 @@ const NEVER: f64 = f64::INFINITY;
 pub const INACTIVE_SECONDS: f64 = 7.0 * 86_400.0;
 
 
+
 /// The host's tables for everything past the economy, read once and shared by every world.
 pub struct Rules {
     pub units: Units,

@@ -1351,3 +1351,52 @@ Run: 36 → 37 → 38 → 32 (conditional) → 33 → 34 → stop (stage exit).
    ends) and fix it as part of row 37's baseline. Write it into row 37.
 2. **`econ-u1.json` has no `fields_added` column**, and row 34 trains on it. Regenerate it with row 36's command before
    row 34; otherwise the learner trains in the world that still has the trap.
+
+## 27 Oct — row 37 (F / Y2 / R): no arm reaches its gate, and the trap has moved to the colonies
+
+Two checks first, both answered.
+
+1. **The violations did not triple; the seed count did.** The same three seeds on both worlds give **5 298** on each,
+   kind by kind: `action_under_10s` 0, `dark_period_6h` 5 250, `login_hours_under_18` 48. Row 36 ran ten seeds, and
+   17 617 = 5 298 x 10/3 (per seed 1 762 against 1 766). A field-adding object cannot move login timing, and it did not.
+2. **`econ-u1.json` now carries the column**: `php -d memory_limit=4G artisan ai:rl-catalogue
+   storage/rl/ogsim/units-parity/u1.sqlite storage/rl/ogsim/units-parity/econ-u1.json --max-level=40` (24 planets, no
+   sites). Every other field is identical to the previous file, no planet's bare `field_max` moved, and
+   `cargo test --release` 39/39 - so row 34's training world will not be the one with the trap.
+
+Row 37's wave (10 seeds each, one baseline, the default season checked line for line against row 36's - **0 of 23 360
+lines differ outside the new samples**):
+
+| arm | HDS | `wasted` after day 120 (base 75.1%) | the number its gate names | decision |
+| --- | --- | --- | --- | --- |
+| **F**, fields first | 0.749 | **68.1%** (-7.0 points) | the gate asks for **-20** | reverted |
+| **Y2**, the yard spends the surplus | 0.752 | 74.8% (-0.3) | `spent_units` stays **0.6%** of production; the gate asks for -20 | reverted |
+| **R**, row 27 again | 0.750 | 74.0% | `res_share` in-band **0.45 -> 0.87** at 128-256 (gate met), but growth in-band **0.47 -> 0.43** against +0.10 | reverted |
+
+**What the new census (per planet, the lab, the surplus) added, and it is the important part:**
+
+- **The capital is clear and the colonies are sealed.** After row 36 the capital's "no fields" is 0 at every age, but the
+  objects blocked by "no fields" summed over the account run **6 / 14 / 28 / 39 / 52 / 52 per account-day** by age band,
+  and the account's `ok` objects fall **25 -> 12**. The colonies' sites are 100-200 fields and they fill up; the capital
+  has room because its fields now grow. F fires on a planet with one free field, which is why it bought 7 points of waste
+  and not 20: **a colony that is already sealed cannot start the object that adds fields at all**, and it takes time for
+  each new colony to reach the same wall.
+- **The yard's ceiling is its store room, not the stock.** Y2 sized the order on the surplus and `spent_units` did not
+  move from 0.6% of production: `UnitQueueService`'s `max_amount` caps the batch by the shipyard's store room
+  (`u1`'s units each occupy a slot), so more stock cannot buy more units until the store is bigger. The yard orders at
+  100% of full-store logins already (row 29), so nothing about the *decision* was ever the problem.
+- **R's mix trade is the same one row 27 measured**, and now with the same consequence: `res_share` goes clean out of the
+  giveaways (0.45 -> 0.87 in band) and `eco_share` pays for it (0.71 -> 0.42), and growth does not rise.
+
+**Questions:**
+
+1. **The next row is colonies, not the capital.** My reading: F needs to fire *before* a colony is sealed (one free field
+   is already too late for a colony whose site is small), and the rule that decides what a colony builds is the same
+   player rule on every planet - so the row I would write is "a planet that will seal within its next few builds takes the
+   field-adding object first", with the reserve sized from the site's own field count, measured on `ok` objects and
+   `wasted` after day 120. Is that the row, or do you want the **store-room** chain first (the unit store that caps the
+   yard), since Y2 showed the yard cannot spend without it?
+2. **Row 38 cannot stack anything** (no arm kept), so it does not run. If question 1's row is kept, does 38 then stack it
+   with R (whose only failure is the mix, which 38 would judge as a whole)?
+3. **The two checks are done and committed**; row 34's world now has the column, so it does not need a re-run of row 36's
+   export.
