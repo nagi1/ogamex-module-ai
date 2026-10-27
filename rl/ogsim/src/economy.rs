@@ -77,6 +77,9 @@ struct RawObject {
     price: Vec<[f64; 3]>,
     build_seconds: Vec<f64>,
     build_seconds_grid: Vec<Vec<f64>>,
+    /// Row 36: planet fields this object adds per level, probed from the host; a catalogue without the column adds none.
+    #[serde(default)]
+    fields_added: Vec<u32>,
 }
 
 #[derive(Deserialize)]
@@ -151,6 +154,9 @@ pub struct Object {
     pub build_seconds: Vec<f64>,
     /// The host's own build time per level for every combination of modifier levels up to `time_grid_level`.
     pub build_seconds_grid: Vec<Vec<f64>>,
+    /// Row 36: the planet fields this object adds at each level, per the host's `getPlanetFieldMax`; empty when the
+    /// catalogue predates the column, which adds nothing.
+    pub fields_added: Vec<u32>,
 }
 
 #[derive(Clone)]
@@ -377,6 +383,7 @@ impl Catalogue {
             price: o.price.clone(),
             build_seconds: o.build_seconds.clone(),
             build_seconds_grid: o.build_seconds_grid.clone(),
+            fields_added: o.fields_added.clone(),
         }).collect();
         let modifiers_of = |rows: &Vec<RawModifier>| -> Vec<(usize, Vec<f64>)> { rows.iter().filter_map(|m| index.get(&m.id).map(|&i| (i, m.divisor.clone()))).collect() };
         let modifiers = [modifiers_of(&raw.time_modifiers), modifiers_of(&raw.time_modifiers_research)];
@@ -567,6 +574,15 @@ impl Catalogue {
         }
     }
 
+    /// Row 36: the fields this planet has - its own plus what its buildings add, which is what the host counts
+    /// (`PlanetService::getPlanetFieldMax`). A catalogue without `fields_added` adds nothing, so old tables read as before.
+    pub fn field_cap(&self, planet: &Planet) -> u32 {
+        let base = self.planets[planet.config].field_max;
+        self.objects.iter().zip(&planet.levels).fold(base, |cap, (object, &level)| {
+            cap + object.fields_added.get(level as usize).copied().unwrap_or(0)
+        })
+    }
+
     pub fn fields_used(&self, planet: &Planet) -> u32 {
         self.objects.iter().zip(&planet.levels).filter(|(o, _)| o.consumes_field).map(|(_, l)| *l).sum()
     }
@@ -589,7 +605,7 @@ impl Catalogue {
         let o = &self.objects[k];
         if planet.levels[k] as usize >= o.price.len() { return "max level" }
         if !self.requirements_met(&planet.levels, k) { return "needs" }
-        if o.consumes_field && self.fields_used(planet) >= self.planets[planet.config].field_max { return "no fields" }
+        if o.consumes_field && self.fields_used(planet) >= self.field_cap(planet) { return "no fields" }
         if self.wait_seconds(planet, k) >= NEVER { return "never affordable" }
         "ok"
     }
@@ -989,6 +1005,26 @@ mod tests {
             held.units.iter().any(|&n| n > 0) && zero.is_some_and(|zero| zero.answer != held.answer)
         });
         assert!(differs, "no probe showed a unit changing its planet's production");
+    }
+
+    /// Row 36: a planet's field cap is the host's own count - its fields plus what its buildings add, read from the table
+    /// the export probed rather than from a number the simulator keeps. The bare planet's cap is its own fields, and one
+    /// and two levels of the object that adds the most raise it by exactly the table's values.
+    #[test]
+    fn a_field_adding_object_raises_the_planets_field_cap() {
+        let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1-colonies.json", env!("CARGO_MANIFEST_DIR"));
+        let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no colonies catalogue; skipped") };
+        let base = cat.planets[0].field_max;
+        let mut planet = cat.new_paused_game(0, 1.0, 0.0, 0).planet;
+        assert_eq!(cat.field_cap(&planet), base, "a bare planet's cap is not its own fields");
+        let (k, added) = cat.objects.iter().enumerate()
+            .map(|(k, o)| (k, o.fields_added.get(2).copied().unwrap_or(0)))
+            .max_by_key(|&(_, added)| added).expect("a building object");
+        assert!(added > 0, "the catalogue carries no fields_added column");
+        planet.levels[k] = 1;
+        assert_eq!(cat.field_cap(&planet), base + cat.objects[k].fields_added[1], "one level of the field-adding object");
+        planet.levels[k] = 2;
+        assert_eq!(cat.field_cap(&planet), base + added, "two levels of the field-adding object");
     }
 
     /// A login is a session, not an instant (row 12). On the first day a build takes seconds, so one login must place

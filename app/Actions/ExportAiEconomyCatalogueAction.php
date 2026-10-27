@@ -54,6 +54,14 @@ class ExportAiEconomyCatalogueAction
     private const PROBE_STEPS = [0, 1, 3, 7, 11];
 
     /**
+     * Row 36: the fields each object adds per level, probed once. What an object adds does not depend on which planet is
+     * asked (the table is subtracted from that planet's own base), so one probe serves every planet entry.
+     *
+     * @var array<int, list<int>>|null
+     */
+    private ?array $fieldsAdded = null;
+
+    /**
      * @param  list<PlanetService>  $planets  real planets, each becomes one start state of the simulator
      * @param  list<array{planet: int, position: int, temp_max: int, fields: int}>  $sites  colonies to tabulate: the donor planet's
      *                                                                                         id (its owner's class and officers carry over), the slot, and the temperature and size the host drew for it
@@ -217,10 +225,16 @@ class ExportAiEconomyCatalogueAction
             }
         });
 
+        // Row 36: how many planet fields this object adds at each level, derived by asking the host - its level is set on
+        // the unsaved planet model and `getPlanetFieldMax` is read before and after. No object is named here (Gate 1).
+        $this->fieldsAdded ??= $this->probeFields($planet, $objects, $maxLevel);
+        $fields = $this->fieldsAdded[$object->id] ?? [];
+
         return [
             'id' => $object->id,
             'machine_name' => $object->machine_name,
             'consumes_field' => $object->type !== GameObjectType::Research && $object->consumesPlanetField,
+            'fields_added' => $fields,
             // How many objects name this one as a requirement, counted by the encoder the model is served through.
             'unlocks' => app(EconomyChoiceEncoder::class)->unlocks()[$object->machine_name] ?? 0,
             'requirements' => array_map(static fn ($requirement): array => [
@@ -231,6 +245,31 @@ class ExportAiEconomyCatalogueAction
             'build_seconds' => $seconds,
             'build_seconds_grid' => $grid,
         ];
+    }
+
+    /**
+     * Row 36: what each object adds to a planet's fields at each level 0..maxLevel, by asking the host: the object's level
+     * is set on the unsaved planet model and `getPlanetFieldMax` is read against the same planet with nothing built.
+     *
+     * @param  list<GameObject>  $objects
+     * @return array<int, list<int>>
+     */
+    private function probeFields(PlanetService $planet, array $objects, int $maxLevel): array
+    {
+        return $this->withLevels($planet, $objects, [], function () use ($planet, $objects, $maxLevel): array {
+            $base = $planet->getPlanetFieldMax();
+            $added = [];
+            foreach ($objects as $object) {
+                $added[$object->id] = [];
+                for ($level = 0; $level <= $maxLevel; $level++) {
+                    $this->setLevel($planet, $object, $level);
+                    $added[$object->id][] = $planet->getPlanetFieldMax() - $base;
+                }
+                $this->setLevel($planet, $object, 0);
+            }
+
+            return $added;
+        });
     }
 
     /**
@@ -362,7 +401,9 @@ class ExportAiEconomyCatalogueAction
             'planet_id' => $planet->getPlanetId(),
             'position' => $planet->getPlanetCoordinates()->position,
             'temperature' => $planet->getPlanetTempAvg(),
-            'field_max' => $planet->getPlanetFieldMax(),
+            // Row 36: the planet's own fields with nothing built on it, so the per-object `fields_added` column adds up to
+            // the host's number; on a fresh planet this is the same value `getPlanetFieldMax` answers.
+            'field_max' => $this->withLevels($planet, $objects, [], static fn (): int => $planet->getPlanetFieldMax()),
             'basic_income' => [$income->metal->get(), $income->crystal->get(), $income->deuterium->get(), $income->energy->get()],
             'resources' => [$resources->metal->get(), $resources->crystal->get(), $resources->deuterium->get()],
             'levels' => array_combine(array_map('strval', $exported), array_map(static fn (GameObject $object): int => $planet->getObjectLevel($object->machine_name), $objects))

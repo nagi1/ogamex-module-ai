@@ -65,6 +65,35 @@ test('every object that shortens build time is found by asking the host, and the
     expect($row['build_seconds_grid'][4][0])->toBe($this->planetService->getBuildingConstructionTime('metal_mine'));
 });
 
+test('every field-adding object is found by asking the host, and the base is the planet with nothing built', function (): void {
+    $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$this->planetService], 6);
+    $exported = array_column($catalogue['objects'], null, 'id');
+    $adders = 0;
+
+    foreach (catalogueTestObjects() as $object) {
+        if (! ObjectService::objectValidPlanetType($object->machine_name, $this->planetService)) {
+            continue;
+        }
+        $before = $this->planetService->getObjectLevel($object->machine_name);
+        $this->planetService->setObjectLevel($object->id, 0, false);
+        $bare = $this->planetService->getPlanetFieldMax();
+        $this->planetService->setObjectLevel($object->id, 2, false);
+        $raised = $this->planetService->getPlanetFieldMax() - $bare;
+        $this->planetService->setObjectLevel($object->id, $before, false);
+
+        expect($exported[$object->id]['fields_added'][2] ?? 0)->toBe($raised, $object->machine_name);
+        $adders += $raised > 0 ? 1 : 0;
+    }
+
+    // The table has to be checkable: at least one object on a real planet adds fields, and the planet's own entry is the
+    // fields it has with nothing built on it, which is what the simulator adds the column to.
+    expect($adders)->toBeGreaterThan(0, 'no object adds a field on this planet, so the probe cannot be checked');
+    foreach (catalogueTestObjects() as $object) {
+        $this->planetService->setObjectLevel($object->id, 0, false);
+    }
+    expect($catalogue['planets'][0]['field_max'])->toBe($this->planetService->getPlanetFieldMax());
+});
+
 test('exporting leaves the planet\'s levels unchanged and saves nothing', function (): void {
     $before = Planet::query()->findOrFail($this->planetService->getPlanetId())->toArray();
     $levels = array_map(fn (GameObject $o): int => $this->planetService->getObjectLevel($o->machine_name), catalogueTestObjects());
