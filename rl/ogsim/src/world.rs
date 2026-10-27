@@ -340,6 +340,8 @@ impl World {
         let mut games: Vec<Game> = configs.iter().enumerate()
             .map(|(a, &c)| cat.new_paused_game(c, horizon_hours, bonus_hours, seed.wrapping_add(a as u64)))
             .collect();
+        // Row 47: a world does not retire an account that has nothing to build (`Catalogue::next_event` reads this).
+        for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
         World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::new(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
@@ -505,6 +507,8 @@ impl World {
         let home = &self.games[capital];
         let mut game = cat.new_paused_game(config, home.horizon / 3600.0, home.bonus_hours, home.login_rng);
         game.t = at;
+        // Row 47: a colony is played by the world like any other slot, so it is not finished for having nothing to build.
+        game.in_world = true;
         // Row 23: a colony comes up with the host's starting stock, the only inflow its first line has to name.
         game.planet.books.produced += weighted(game.planet.res);
         game.free = [at, f64::INFINITY];
@@ -1152,6 +1156,50 @@ mod tests {
     }
 
     const DATA: &str = "../../../../storage/rl/ogsim";
+
+    /// Row 47: a world planet with nothing legal and nothing pending is not finished. It sleeps to the account's next
+    /// login, books what it produced there, and keeps deciding, so the account stays in the world to its horizon.
+    #[test]
+    fn a_world_planet_with_nothing_to_build_keeps_logging_in() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
+        let mut world = World::new(&cat, &[0], 10.0 * 24.0, 0.0, 5);
+        world.enable_idle_logins(&cat);
+        // Every object at the top of its own table: nothing legal, nothing pending, nothing committed. That is the state
+        // the economy used to read as the end of the account's season.
+        world.games[0].planet.levels = cat.objects.iter().map(|o| o.price.len() as u32).collect();
+        cat.refresh(&mut world.games[0].planet);
+        // A colony slot is a game the world creates after `World::new`, and in the season it was the slot that still ran
+        // its clock out to the horizon, so it is covered here too.
+        let rules = Arc::new(Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"),
+            &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")).expect("the units, fleet and combat exports"));
+        world.arm(vec![Arc::clone(&rules)], vec![Coord { galaxy: 1, system: 10, position: 4 }]);
+        let colony = world.add_planet(&cat, 0, 0, Coord { galaxy: 1, system: 10, position: 5 }, 0.0);
+        world.games[colony].planet.levels = cat.objects.iter().map(|o| o.price.len() as u32).collect();
+        cat.refresh(&mut world.games[colony].planet);
+        let start = world.games[0].planet.res;
+        let (mut logins, mut last) = (0, 0.0);
+        while let Some(a) = world.next_decision(&cat) {
+            assert_eq!(world.account_of(a), 0, "one account");
+            for slot in [0, colony] {
+                assert!(!world.games[slot].done, "slot {slot} was retired at second {}", world.games[slot].t);
+            }
+            assert!(world.games[0].t >= last, "the clock went back: {} after {last}", world.games[0].t);
+            last = world.games[0].t;
+            logins += u32::from(world.decision_kind(a) == Decision::Idle);
+            assert!(logins < 10_000, "the world spins on an account with nothing to build");
+            world.wait(&cat, a);
+        }
+        let game = &world.games[0];
+        assert!(logins > 20, "the capital was left without idle logins: {logins}");
+        assert!(game.t >= 5.0 * 24.0 * 3600.0, "the account's clock stopped at {}", game.t);
+        assert!(game.planet.res[0] > start[0], "nothing was produced between the logins");
+        assert!(game.planet.res[0] <= game.planet.cap[0] + 1e-6, "production ran past the store cap");
+        assert!(game.planet.books.produced > 0.0, "no production was booked");
+        let colony = &world.games[1];
+        assert!(colony.planet.books.produced > 0.0, "the colony booked no production");
+        assert!(colony.t >= game.t - 1.0, "the colony's clock stopped at {} against the capital's {}", colony.t, game.t);
+    }
 
     /// `busy_seconds` reads exactly the builds the account's own history holds: no more than the window, none when the
     /// window is empty, and the same total when the window covers every build (row 11).

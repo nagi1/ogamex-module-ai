@@ -296,6 +296,10 @@ pub struct Game {
     pub queue: usize,
     /// The second each queue is free again; NEVER once it has nothing left to do.
     pub free: [f64; 2],
+    /// Row 47: this game is played by a `World`, which never retires an account that has nothing to build - its queues
+    /// sleep to the account's next login and ask again there. The economy-only `VecEnv` leaves it false, so
+    /// `Catalogue::finish` still ends an episode at the horizon.
+    pub in_world: bool,
     /// The object each queue has decided on and is saving up for; it starts the moment the stock covers its price.
     pub commit: [Option<usize>; 2],
     /// The account's logins so far (ascending) and the generator that draws the next gap.
@@ -441,7 +445,7 @@ impl Catalogue {
         let mut seed = login_seed | 1;
         let sleep_start = (next_random(&mut seed) % 24) as f64;
         let sleep_hours = 6.0 + (next_random(&mut seed) % 3) as f64;
-        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, sleep_hours, pending: Vec::new(), history: Vec::new(), trace: None }
+        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, in_world: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, sleep_hours, pending: Vec::new(), history: Vec::new(), trace: None }
     }
 
     /// The host's production row of object k at `level` under the planet's research levels and units, if k produces
@@ -747,6 +751,15 @@ impl Catalogue {
                 }
             };
             if when < best.0 { best = (when, Some(q)) }
+        }
+        // Row 47: in a world an account is not retired for having nothing to build. With both queues asleep, nothing
+        // landing and nothing committed, the next event is the account's own next login: `tick` moves the clock there
+        // and wakes the queues to ask again (stock, research and fields may have moved since), so production and waste
+        // are booked on the day they happen instead of at once at the horizon. The horizon still ends the game; the
+        // economy-only `VecEnv` keeps `finish`, where a finished game is the end of an episode.
+        if game.in_world && best.1.is_none() && game.commit.iter().all(|k| k.is_none())
+            && game.pending.is_empty() && !self.login_gaps.is_empty() {
+            return (self.login(game, game.t + MIN_GAP, false), None);
         }
         // A landing build changes rates and stores, so a plan made before it is re-timed after it.
         match game.pending.first() {
