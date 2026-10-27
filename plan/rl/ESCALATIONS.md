@@ -1446,3 +1446,68 @@ lines (80% sealed), and row 37's store-cap explanation is contradicted by the co
    which is what the learner is for.
 
 Implementer: in row 42, say why `stall.py` reported 0.
+
+## 27 Oct — rows 42-43: the census names the dead end exactly, and a lookahead teacher cannot price it
+
+**Row 42 (kept).** `census.py` replaces `stall.py` and reads the season's new per-planet sample (used/cap/sealed, the
+reason each building object cannot start with the first missing prerequisite and the first unaffordable resource, the
+lab's reasons on the planet that pays, and the yard's surplus against `max_amount`'s own capacity). Three seeds, 365
+days, 4.2 min each; the script runs in 6.7 s.
+
+| age (days) | planets with anything legal | sealed by fields | lab spent 0 | lab never affordable | yard below surplus | yard capacity is the bound |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1-30 | 89 % | 17 % | 26 % | 5 % | 67 % | 53 % |
+| 31-60 | 50 % | 59 % | 33 % | 38 % | 100 % | 69 % |
+| 61-120 | 27 % | 77 % | 71 % | 75 % | 100 % | 47 % |
+| 121-180 | 20 % | 83 % | 88 % | 83 % | 100 % | 40 % |
+| 181-250 | 14 % | 91 % | 94 % | 85 % | 100 % | 39 % |
+| 251-365 | 6 % | 96 % | 96 % | 91 % | 100 % | 36 % |
+
+Attribution of 135.3 bn of unspent production after day 120: **capital sealed with the field adder unreachable 76.9 %,
+"no want" 21.3 %, research frozen 1.9 %, yard 0.0 %, unexplained 0 %** (coverage 100 % against the 90 % gate).
+
+**Reachability, the number the planner asked for:** of **145 236** sealed planet-days the object that adds fields is
+startable on **0 %**; blocked by a missing prerequisite on **79 %** - **object 15 (the nano factory) on 73 %**, object 113
+on 6 % - and by its own price on **21 %**. The dead end is exact and structural: the terraformer (object 33, +5 fields at
+level 1) requires object 15, which **itself consumes a field**, costs 1.6 M metal-equivalent and 75 hours of building.
+So the chain that would unfreeze a planet needs a free field, which is the thing the planet has run out of. It is
+enterable only *before* the seal, and nothing in a payback-ranked rule ever enters it.
+
+**Why `stall.py` said "no fields 0" while the raw lines said 80 %:** line 71 of the old script took the **median** of the
+per-account-day reason counts over **every** line of the age band. Most lines belong to accounts that quit in the first
+fortnight (`quit_day_median` 8.7) and whose frozen planets block nothing, so the median landed on the quitters' `ok 11 /
+no fields 0`. The share over *active* account-days was 80 % all along. My row 36 prose quoted the medians; the raw lines
+were right. `census.py` reports shares over active days and per-planet counts, never a median over everything.
+
+**Row 43 (not kept - the run stops).** A `Baseline::Lookahead { days }` teacher rolled every legal candidate forward
+with the Player rule on a copy of the planet (bounded to the 8 cheapest candidates x 12 builds) and took the one with
+the most metal-equivalent produced plus in store. Ten seeds x 365 days against the same ten-seed baseline:
+
+| arm | produced | ratio | per seed | wasted > 120 (base 75.1 %) | sealed | seconds |
+| --- | --- | --- | --- | --- | --- | --- |
+| base | 3 121.25 bn | - | 273-363 bn | 75.1 % | 72.3 % | 15 |
+| lookahead 7 days | 3 021.58 bn | **0.97x** | 0.93-1.01 | 70.0 % | 71.0 % | 262 |
+| lookahead 30 days | 3 091.07 bn | **0.99x** | 0.97-1.01 | 69.1 % | 70.8 % | 347 |
+
+The gate was 1.3x. The probes agree at every horizon (7 days 0.82x, 120 days 0.93x, 365 days 0.97x), so this is not a
+horizon that needs to be longer. **The mechanism is the finding: the roll is played by the Player rule itself. When a
+roll reaches the seal that rule returns nothing and the roll stops, so every candidate's future is the same sealed
+planet and the lookahead can only re-rank what the one-step rule was going to do anyway. A value estimate over a policy
+cannot price an action that policy never takes.** Rolled out and reverted; the default season is byte-identical to row
+42's after the revert, 39/39 tests.
+
+**Questions:**
+
+1. **The rule is what is wrong, not the horizon.** The census says the chain must start while fields are free, so the
+   teacher needs a *reserve* rule (keep N fields, and when the planet is within N of its cap build the field chain
+   first, prerequisite before the thing it unlocks) - a one-step rule with a lookahead horizon is not the mechanism that
+   finds it. Shall I write that row (fields reserved from the planet's own `field_max`/`consumes_field` data, no object
+   named), or do you want the *world* checked first: **real OGame colonies get a fraction of the capital's fields, and
+   ours get 100-200-field sites that seal in a fortnight. Is the colony site size right?**
+2. **The lab is priced above the store cap on 91 % of days** (`never affordable`, rising with age): research above
+   roughly level 12-20 costs more of one resource than the store can hold, so no waiting ever pays for it. That is either
+   a world bug in the store table or a real OGame mechanic I have modelled without its relief (the host's own store
+   buildings at high levels). Rows 27/37's "research share" work cannot fix it; it needs a world row. Which comes first,
+   this or the fields?
+3. **Row 32/33/34 did not run** (the stack needs a kept arm, and there is no teacher to imitate). If question 1's row is
+   kept, does 33 (one spending order) then follow directly, skipping 32's raider condition?

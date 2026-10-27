@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""The dead-end census (row 42 of plan/rl/RL-FLOW.md): every queue, every planet, from the raw season lines.
+
+`stall.py` is replaced by this. It prints, by age band over the **active** account-days:
+  1. the building queue, per planet-day: how many planets have anything legal, how many are sealed by fields, and - when
+     nothing is legal - which reason dominates;
+  2. the lab, on the planet that pays for it;
+  3. the yard: how often it spends less than the surplus, and whether its own capacity is the bound;
+  4. the attribution: the share of the day's unspent production each reason explains, so a row can say how much of the
+     waste is named;
+  5. the reachability table: of the sealed planets, how many can still start the object that adds fields.
+
+    .venv-rl/bin/python Modules/AI/rl/scripts/census.py storage/rl/ogsim/runs/flow/e42/*.jsonl
+
+Nothing here reads a row's prose; every number comes from the lines the season wrote.
+"""
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import statistics
+from pathlib import Path
+
+AGES = ((1, 30), (31, 60), (61, 120), (121, 180), (181, 250), (251, 365))
+BUILD_REASONS = ("no fields", "needs", "never affordable", "max level")
+TOTALS = ("produced", "wasted", "spent_build", "spent_research", "spent_units")
+
+
+def median(values: list[float]) -> float:
+    return statistics.median(values) if values else float("nan")
+
+
+def dominant(reasons: dict[str, int]) -> str:
+    """The reason that blocks this planet, by how many of its objects it blocks."""
+    blocked = {k: v for k, v in reasons.items() if k in BUILD_REASONS and v}
+    return max(blocked, key=lambda k: blocked[k]) if blocked else ("ok" if reasons.get("ok") else "nothing")
+
+
+def load(paths: list[str]) -> list[dict]:
+    rows = []
+    for pattern in paths:
+        for path in sorted(glob.glob(pattern)):
+            rows += [json.loads(line) for line in open(path) if line.strip()]
+    return rows
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("season", nargs="+", help="season JSONL files or globs")
+    args = parser.parse_args()
+    rows = load(args.season)
+    if not rows or "planets" not in rows[0].get("stall", {}):
+        print("no census sample in these lines (a season from row 42 on writes one)")
+        return 1
+    active = [r for r in rows if not r["inactive"]]
+    print(f"{len(rows):,} account-days, {len(active):,} active; "
+          f"{sum(len(r['stall']['planets']) for r in active):,} planet-days active\n")
+
+    print("1. the building queue, per planet-day, over active account-days")
+    print(f"{'age (days)':>10} {'planet-days':>12} {'legal':>7} {'sealed':>7} {'used/cap':>9} "
+          + " ".join(f"{name[:9]:>9}" for name in BUILD_REASONS))
+    for low, high in AGES:
+        part = [p for r in active if low <= r["day"] <= high for p in r["stall"]["planets"]]
+        if not part:
+            continue
+        legal = sum(1 for p in part if p["reasons"].get("ok")) / len(part)
+        sealed = sum(1 for p in part if p["sealed"]) / len(part)
+        ratio = median([p["used"] / max(p["cap"], 1) for p in part])
+        shares = [sum(1 for p in part if p["reasons"].get(name)) / len(part) for name in BUILD_REASONS]
+        print(f"{low:>4}-{high:<5} {len(part):>12,} {legal:>7.0%} {sealed:>7.0%} {ratio:>9.2f} "
+              + " ".join(f"{share:>9.0%}" for share in shares))
+
+    print("\n2. the lab, per active account-day")
+    print(f"{'age (days)':>10} {'days':>8} {'spent 0':>8} {'no legal':>9} {'needs':>7} {'never affordable':>17}")
+    for low, high in AGES:
+        part = [r for r in active if low <= r["day"] <= high and r["stall"].get("lab")]
+        if not part:
+            continue
+        print(f"{low:>4}-{high:<5} {len(part):>8,} "
+              f"{sum(1 for r in part if r['spent_research'] == 0) / len(part):>8.0%} "
+              f"{sum(1 for r in part if not r['stall']['lab']['reasons'].get('ok')) / len(part):>9.0%} "
+              f"{sum(1 for r in part if r['stall']['lab']['reasons'].get('needs')) / len(part):>7.0%} "
+              f"{sum(1 for r in part if r['stall']['lab']['reasons'].get('never affordable')) / len(part):>17.0%}")
+
+    print("\n3. the yard, per active account-day: spend against the surplus")
+    print(f"{'age (days)':>10} {'days':>8} {'spent < surplus':>16} {'capacity < surplus':>19} {'ordered/surplus':>16}")
+    for low, high in AGES:
+        part = [r for r in active if low <= r["day"] <= high]
+        if not part:
+            continue
+        under = [r for r in part if r["spent_units"] < r["stall"]["surplus"]]
+        bound = [r for r in under if r["stall"]["yard_capacity"] < r["stall"]["surplus"]]
+        ratio = median([r["spent_units"] / r["stall"]["surplus"] for r in part if r["stall"]["surplus"] > 0])
+        print(f"{low:>4}-{high:<5} {len(part):>8,} {len(under) / len(part):>16.0%} "
+              f"{(len(bound) / max(len(under), 1)):>19.0%} {ratio:>16.2f}")
+
+    # 4. the attribution: what each reason explains, in weight of production, after day 120.
+    def reason_of(row: dict) -> str:
+        planets = row["stall"]["planets"]
+        capital = next((p for p in planets if p["capital"]), None)
+        if capital and capital["sealed"] and not capital["reasons"].get("ok"):
+            return "sealed capital, adder unreachable" if not capital["adder_legal"] else "sealed capital, adder legal"
+        if row["spent_build"] == 0 and capital and not capital["reasons"].get("ok"):
+            return "buildings blocked: " + dominant(capital["reasons"])
+        if row["spent_build"] == 0:
+            return "buildings: no want"
+        if row["spent_research"] == 0:
+            return "research frozen"
+        if row["spent_units"] < row["stall"]["surplus"]:
+            return "yard capacity" if row["stall"]["yard_capacity"] < row["stall"]["surplus"] else "yard plan"
+        return "unexplained"
+
+    late = [r for r in active if r["day"] > 120]
+    buckets: dict[str, float] = {}
+    for row in late:
+        unspent = row["produced"] - row["wasted"] - row["spent_build"] - row["spent_research"] - row["spent_units"]
+        name = reason_of(row)
+        buckets[name] = buckets.get(name, 0.0) + max(unspent, 0.0)
+    total = sum(buckets.values()) or 1.0
+    print(f"\n4. what the day's unspent production is attributed to, after day 120 ({total / 1e9:.1f} bn metal-equivalent):")
+    for name, value in sorted(buckets.items(), key=lambda kv: -kv[1]):
+        print(f"   {name:38} {value / total:6.1%}")
+    print(f"   {'named (coverage)':38} {1 - buckets.get('unexplained', 0.0) / total:6.1%}")
+
+    print("\n5. the reachability table: planets sealed by fields, after day 120")
+    sealed = [p for r in late for p in r["stall"]["planets"] if p["sealed"]]
+    if sealed:
+        reachable = sum(1 for p in sealed if p["adder_legal"])
+        chained = [p for p in sealed if not p["adder_legal"] and p["adder_needs"] is not None]
+        print(f"   {len(sealed):,} sealed planet-days: the field adder is startable on {reachable / len(sealed):.0%}, "
+              f"blocked by a missing prerequisite on {len(chained) / len(sealed):.0%}, "
+              f"and by its own price on {sum(1 for p in sealed if not p['adder_legal'] and p['adder_needs'] is None) / len(sealed):.0%}")
+        missing: dict[int, int] = {}
+        for planet in chained:
+            missing[planet["adder_needs"]] = missing.get(planet["adder_needs"], 0) + 1
+        print("   the prerequisites the adder is missing: "
+              + ", ".join(f"object {k} on {v / len(sealed):.0%}"
+                          for k, v in sorted(missing.items(), key=lambda kv: -kv[1])[:4]))
+    else:
+        print("   no planet is sealed by fields after day 120")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

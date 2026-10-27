@@ -355,11 +355,68 @@ impl<W: Write> Season<'_, W> {
             let reserve: f64 = (0..3).map(|r| WEIGHTS[r] * planet.rate[r].max(0.0) * 2.0).sum();
             (weighted(planet.res) - reserve).max(0.0)
         }).sum();
+        // Row 42: the census proper - every planet on its own line (used and added fields, the reasons its building objects
+        // cannot start, the first missing prerequisite and the first resource its price cannot fit), the lab on the planet
+        // that pays for it, and the yard's own bound: what the surplus is worth against what the yard could start at all.
+        let census: Vec<serde_json::Value> = planets.iter().map(|&slot| {
+            let planet = &self.world.games[slot].planet;
+            let mut planet_reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
+            let (mut needs, mut unaffordable) = (serde_json::Value::Null, serde_json::Value::Null);
+            for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 0) {
+                let reason = self.cat.stall_of(planet, k);
+                *planet_reasons.entry(reason).or_default() += 1;
+                if reason == "needs" && needs.is_null() { needs = json!(self.cat.needs_first(planet, k)); }
+                if reason == "never affordable" && unaffordable.is_null() { unaffordable = json!(self.cat.unaffordable_first(planet, k)); }
+            }
+            let used = self.cat.fields_used(planet);
+            let cap = self.cat.field_cap(planet);
+            // Row 42: is the object that adds fields itself startable here, and if not, what is the first thing its own
+            // chain is missing - the reachability table's whole question. Found by its data (it adds fields at its next
+            // level), never by name.
+            let adder = (0..self.cat.objects.len())
+                .find(|&k| self.cat.objects[k].fields_added.get(planet.levels[k] as usize + 1).copied().unwrap_or(0) > 0);
+            let (adder_legal, adder_needs) = match adder {
+                Some(k) => (self.world.legal(self.cat, slot, k), json!(self.cat.needs_first(planet, k))),
+                None => (false, serde_json::Value::Null),
+            };
+            json!({
+                "slot": slot,
+                "capital": slot == a,
+                "used": used,
+                "cap": cap,
+                "sealed": used >= cap,
+                "reasons": planet_reasons,
+                "needs_first": needs,
+                "unaffordable_first": unaffordable,
+                "adder_legal": adder_legal,
+                "adder_needs": adder_needs,
+            })
+        }).collect();
+        let lab = planets.iter().find(|&&slot| slot == a).map(|&slot| {
+            let planet = &self.world.games[slot].planet;
+            let mut lab_reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
+            let mut needs = serde_json::Value::Null;
+            let mut unaffordable = serde_json::Value::Null;
+            for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 1) {
+                let reason = self.cat.stall_of(planet, k);
+                *lab_reasons.entry(reason).or_default() += 1;
+                if reason == "needs" && needs.is_null() { needs = json!(self.cat.needs_first(planet, k)); }
+                if reason == "never affordable" && unaffordable.is_null() { unaffordable = json!(self.cat.unaffordable_first(planet, k)); }
+            }
+            json!({ "reasons": lab_reasons, "needs_first": needs, "unaffordable_first": unaffordable })
+        }).map_or(serde_json::Value::Null, |lab| lab);
+        let units = &self.world.rules[a].units;
+        let yard_capacity: f64 = (0..units.units.len())
+            .map(|u| units.max_amount(&self.world.yards[a], planet, u) as f64 * weighted(units.units[u].price))
+            .sum();
         json!({
             "blocked_hours": blocked,
             "buildings": reasons,
             "research": research_reasons,
             "surplus": surplus,
+            "planets": census,
+            "lab": lab,
+            "yard_capacity": yard_capacity,
             "idle_hours": idle,
             "long_builds": long,
             "mod_build": levels(0),

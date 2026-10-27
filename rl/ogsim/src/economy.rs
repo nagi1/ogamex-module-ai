@@ -574,6 +574,19 @@ impl Catalogue {
         }
     }
 
+    /// Row 42: the first unmet prerequisite of object k, as its host id - the census names what blocks a `needs`.
+    pub fn needs_first(&self, planet: &Planet, k: usize) -> Option<i64> {
+        self.objects[k].requires.iter().filter(|(target, level)| target.map_or(*level != 0, |i| planet.levels[i] < *level))
+            .find_map(|(target, _)| target.map(|i| self.objects[i].id))
+    }
+
+    /// Row 42: the first resource whose price for object k is above this planet's store cap - the reason a price can
+    /// never be paid, which the census names by the resource's index.
+    pub fn unaffordable_first(&self, planet: &Planet, k: usize) -> Option<usize> {
+        let price = self.objects[k].price[planet.levels[k] as usize];
+        (0..3).find(|&r| price[r] > planet.cap[r])
+    }
+
     /// Row 36: the fields this planet has - its own plus what its buildings add, which is what the host counts
     /// (`PlanetService::getPlanetFieldMax`). A catalogue without `fields_added` adds nothing, so old tables read as before.
     pub fn field_cap(&self, planet: &Planet) -> u32 {
