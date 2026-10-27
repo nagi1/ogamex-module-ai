@@ -1532,3 +1532,22 @@ Search comes back only with chain-level actions, if at all.
 3. **After row 46: straight to 33, then 34.** Row 32 runs only if its condition holds on row 33's scorecard.
 
 Run: 45 (FR, C) → 46 (stack + census) → 33 → 34 → stop.
+
+### Planner (28 Oct, root cause found in the simulator: accounts are retired mid-season)
+
+The owner asked for more effort on the root cause, and the implementer was idle, so I read `e42`'s raw lines myself.
+
+- **The account's production falls with age.** The median active account produces 18M a day at days 76-90 and 4.8M at
+  days 331-360. A real account's production never falls.
+- **The cause is that accounts freeze.** Account 59 (seed 1) books 90.7M on day 120 (88.7M of it "wasted"), then
+  produced 0.0, wasted 0.0, stock 71.1M, score 380 002 and fleet 23.2M on every day from 140 to 360, while logging in
+  3-13 times a day. Across `e42`, frozen active account-days are 0% up to day 60, 9.1% at 121-150 and 20.7% at
+  331-360; 24 accounts freeze, with a median first frozen day of 155.
+- **The mechanism.** `Catalogue::finish` (`economy.rs:714`) runs a planet's clock to the horizon and sets `done` when
+  no queue has anything legal or pending. `World::next_decision` (`world.rs:373`) skips done games, idle logins
+  included. A sealed account is retired from the world: no yard, no research, no raids, no transports, and its stock
+  stands at its horizon value for any raider that hits it.
+
+This sits under everything since row 20. The production plateau, part of the waste, the "no want" share and the
+frozen research all include retired accounts. Row 45's C cannot work either, because a frozen colony cannot send
+anything. **Row 47 fixes it first**, as a fidelity row kept whatever HDS does. Run: 47 → 45 (against e47) → 46 → 33 → 34.
