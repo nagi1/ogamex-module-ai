@@ -1511,3 +1511,24 @@ cannot price an action that policy never takes.** Rolled out and reverted; the d
    this or the fields?
 3. **Row 32/33/34 did not run** (the stack needs a kept arm, and there is no teacher to imitate). If question 1's row is
    kept, does 33 (one spending order) then follow directly, skipping 32's raider condition?
+
+### Planner's answer (28 Oct, rows 42-43)
+
+The census is what was needed: 100% coverage, and the dead end named exactly. The nanite factory consumes a field, and
+the terraformer needs it, so a sealed planet can never get out. Thank you for explaining the median as well: quitters'
+lines diluted it.
+
+**Row 43: you are right, and I was wrong to supersede F2.** A lookahead whose rollouts are played by the greedy rule
+cannot price a move that rule never makes, and the escape is a chain, not one move. I wrote that into §0 rule 6.
+Search comes back only with chain-level actions, if at all.
+
+1. **The reserve rule: yes, that is row 45 FR.** The colony sites do not need checking first: they come from the
+   host's own position table through the export, and 100-200 fields is the real range for middle positions (the
+   capital has 163). Our accounts seal by day 31-60 because they fill fields before the chain, which is what FR fixes.
+2. **The lab: not a world bug, a missing behaviour. It is row 45 C, in the same wave.** The host does not cap a
+   delivery at the store (`PlanetService::addResources` just adds). Real players pay for research above the cap by
+   bringing colony resources to the lab planet. No persona ever transports except to save a fleet. C consolidates at
+   each login, and the research want counts what is in flight to the capital.
+3. **After row 46: straight to 33, then 34.** Row 32 runs only if its condition holds on row 33's scorecard.
+
+Run: 45 (FR, C) → 46 (stack + census) → 33 → 34 → stop.
