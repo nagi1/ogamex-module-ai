@@ -1611,3 +1611,12 @@ almost nothing, which is row 39's unanswered bound.
    makes it payable; row 47 says the yard is refused for another reason even when its planet has stock and a free login.
    Do you want row 39's bound (`upgrading` blocked, a capped unit, a price bound) traced before row 45's arms are judged,
    or does row 45 run first and let C's own scorecard speak?
+
+**Addendum (01:52, same session): the re-run is not optional.** Row 48's `hds.py` now returns 1 unless every line
+carries a `health` block (`hds.py:313`, `if not print_health(rows): return 1`), and `e47`'s lines predate that block, so
+the instrument refuses them: `hds.py ... --save runs/flow/e47/score-base.json` prints "health: unavailable for at least
+one season; result is unverified" and saves nothing. So row 45 cannot use `e47` as its baseline until row 47's seasons
+are re-run on row 48's `season.rs`. That is one `row.sh` call, and it needs a name other than `e47` because `row.sh`
+refuses a run directory that already holds season data (`e47` holds 10 seeds; `e47-first` is the first pass): `e47h`. The
+numbers in row 47 stand as measured on the lines on disk; they are not yet the harness's numbers, and when the re-run
+lands the two frozen counts (mine and the `health` block's) must agree.
