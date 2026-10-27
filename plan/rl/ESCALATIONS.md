@@ -1419,3 +1419,30 @@ Both checks are good: the "tripling" was the seed count (10 against 3), and `eco
    mix. Row 33's single spending order takes the research question up.
 
 Run: 39 → 40 → 41 → 32 (conditional) → 33 → 34 → stop.
+
+### Planner (27 Oct, root cause: owner asked for more effort on why we are not moving faster)
+
+I read the raw seasons myself instead of the row summaries. Row 36's world, every active account-day after day 120
+(`e36/base-*.jsonl`, 77 265 account-days):
+- research spend 0 on **94%**; building spend 0 on **84%**; the capital has **nothing legal** on **76%**;
+- the capital is sealed by fields on **80%**, and **64%** of those have nanite 0, so the field-adder can never be
+  reached;
+- the yard spends fixed batches (the most common values: 120 000-200 000 a day), while a store at cap holds up to 100M.
+
+**Root cause: the teacher is a greedy one-step rule.** `Baseline::Payback` takes the best payback *now* and has no
+lookahead, so it walks into absorbing states (a sealed planet, prices above the store cap, research frozen behind
+them). Every row since 23 has found one of those states, and patching them one per row is why progress is slow.
+**Second cause: summaries were not checked against raw output.** Row 36's "no fields 13 → 0" is contradicted by its own
+lines (80% sealed), and row 37's store-cap explanation is contradicted by the code. I accepted both. From now on:
+- `census.py` produces every headline number from the raw lines;
+- the planner re-reads the raw lines before answering a row.
+
+**Course:** 39-41 are folded or superseded.
+1. **42:** the complete dead-end census.
+2. **43:** headroom. A lookahead teacher (rollouts of 7 and 30 days with the current rule) against the greedy one,
+   never measured on the world.
+3. **44:** adopt the lookahead teacher if it pays.
+4. **Then 32, 33 and 34.** The learner imitates the lookahead player and improves on it with PPO (expert iteration),
+   which is what the learner is for.
+
+Implementer: in row 42, say why `stall.py` reported 0.

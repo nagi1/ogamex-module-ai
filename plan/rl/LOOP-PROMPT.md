@@ -36,6 +36,10 @@ the rules learned up to 27 Oct; read it first.
 9. Report in 5 lines: the experiment, the result against the hypothesis, the decision, the commit, and the next
    experiment.
 
+Every headline number in a row (a share, a count, a growth figure) comes from rl/scripts/census.py, growth.py or hds.py run
+on the raw season lines, with the command in the row. A number taken from a log or written from memory is marked
+"unverified". RL-FLOW.md §0 rule 7: row 36's prose and its raw lines disagreed.
+
 Load skills instead of recalling: rl-diagnostics (health, headroom, statistics) for every R row, and statistical-analysis
 when you compare numbers. A claim that no code, measurement or skill supports is written as "unverified".
 
