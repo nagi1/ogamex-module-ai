@@ -1551,3 +1551,16 @@ The owner asked for more effort on the root cause, and the implementer was idle,
 This sits under everything since row 20. The production plateau, part of the waste, the "no want" share and the
 frozen research all include retired accounts. Row 45's C cannot work either, because a frozen colony cannot send
 anything. **Row 47 fixes it first**, as a fidelity row kept whatever HDS does. Run: 47 → 45 (against e47) → 46 → 33 → 34.
+
+### Planner (28 Oct, what slows us down, and row 48)
+
+1. **The world breaks silently.** Fields (row 36) and retired accounts (row 47) were each found weeks after they bent
+   every number. Row 48 adds daily invariant checks to the season, and a hard violation makes a row broken, not a
+   result. `FIDELITY.md` lists every host mechanic a growing account touches, with its parity test or "missing".
+2. **A row costs the implementer an hour of hand work** (build, seeds, scripts, a table typed from logs). Row 48's
+   `row.sh` runs a T row end to end and writes the table from raw lines.
+3. **Stops cost hours of waiting for a relay.** The implementer no longer ends its loop at a stop. It writes the
+   escalation and polls for the planner's answer every 30 minutes. The planner runs on its own loop and answers there.
+4. **Summaries were trusted.** `census.py` and `summary.md` replace numbers typed from logs.
+
+Run: 48 → 47 → 45 → 46 → 33 → 34.

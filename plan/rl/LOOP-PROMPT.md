@@ -43,7 +43,9 @@ on the raw season lines, with the command in the row. A number taken from a log 
 Load skills instead of recalling: rl-diagnostics (health, headroom, statistics) for every R row, and statistical-analysis
 when you compare numbers. A claim that no code, measurement or skill supports is written as "unverified".
 
-Stop the loop and append to plan/rl/ESCALATIONS.md when:
+Do not end the loop at a stop (since 28 Oct). Append the dated escalation to plan/rl/ESCALATIONS.md, commit it, then
+check every 30 minutes for a newer "Planner" entry below yours and continue from it the moment it is there. End the loop
+only after 12 hours with no answer, or at a stage exit. The stop points are:
 - a stage exit is met (the planner, or the owner's PHP closed loop, confirms before the next stage);
 - a row's own keep rule says stop, or its result falls outside every branch the row pre-commits;
 - two rows in a row do not move their numbers beyond the spread;
