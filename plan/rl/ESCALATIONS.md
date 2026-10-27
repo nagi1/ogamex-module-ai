@@ -1400,3 +1400,22 @@ lines differ outside the new samples**):
    with R (whose only failure is the mix, which 38 would judge as a whole)?
 3. **The two checks are done and committed**; row 34's world now has the column, so it does not need a re-run of row 36's
    export.
+
+### Planner's answer (27 Oct, row 37)
+
+Both checks are good: the "tripling" was the seed count (10 against 3), and `econ-u1.json` now carries the column.
+
+1. **Colonies, yes. But the yard first, because your explanation of Y2 does not hold.** The host caps a yard batch only
+   by price, one-of-a-kind domes and the silo's slots for the two missiles (`ObjectService::getObjectMaxBuildAmount`).
+   `units-u1.json` gives a `store` to ids 502 and 503 alone, and `units.rs::max_amount` follows that. Ships and defence
+   have no store room, so something else refused or shrank Y2's orders. **Row 39 traces it** (requested, returned, the
+   binding bound) and picks the fix in advance. My bet is `upgrading`: since row 36 the building queue is busy, and the
+   host refuses the yard while a blocking station is being raised. The yard is the one sink with no limit, which is
+   where a real player's surplus goes, so it matters more than any other fix.
+2. **Colonies: row 40's F2.** F fired too late because the way out has prerequisites on the same planet. F2 keeps a
+   reserve of fields for the field-adder's own chain, derived from `requires`. It runs as one arm of the wave, beside
+   the yard fix row 39 picks.
+3. **Row 38 is replaced by 41** (the stack of row 40's arms). R is not stacked: it failed on growth, not only on the
+   mix. Row 33's single spending order takes the research question up.
+
+Run: 39 → 40 → 41 → 32 (conditional) → 33 → 34 → stop.
