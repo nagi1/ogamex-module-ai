@@ -308,6 +308,8 @@ pub struct Miner {
     military_share: f64,
     /// Row 45 C: brings each colony's surplus home at every login, with cargo ships stationed on the colonies.
     pub consolidate: bool,
+    /// Row 33: what the queues do not need goes to the yard at every login, in the persona's taste.
+    pub yard: bool,
     /// Row 45 FR: keeps the fields a planet's field-adding chain still needs, and builds that chain when they run out.
     pub reserve: bool,
     /// The cargo ships the colonies lacked at the last consolidation: the yard's want grows by them.
@@ -316,7 +318,7 @@ pub struct Miner {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, colony_cargo: 0 }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0 }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -338,6 +340,9 @@ impl Miner {
         }
         if short && w.account_of(a) == a {
             self.order_defence(w, cat, a);
+        }
+        if self.yard && w.account_of(a) == a {
+            self.spend_surplus(w, cat, a, pick);
         }
         // The colony the ship was built for is founded at the same login: one mission, no cargo.
         if w.account_of(a) == a {
@@ -449,6 +454,35 @@ impl Miner {
         }
     }
 
+    /// Row 33: one spending order instead of share caps. The building queue's pick, any build a queue is saving for and
+    /// two hours of production stay; the rest buys the persona's hull - the fighter a raider or saver flies, the cheapest
+    /// defence for a miner - as many as it pays for (gate 3: a player does not sit on a full store; gate 1: `Kit` and
+    /// the host's unit kinds say which unit, nothing is named).
+    fn spend_surplus(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
+        let game = &w.games[a];
+        let mut keep: [f64; 3] = std::array::from_fn(|r| 2.0 * game.planet.rate[r].max(0.0));
+        for k in game.commit.iter().flatten().chain(pick.iter()) {
+            let price = cat.objects[*k].price[game.planet.levels[*k] as usize];
+            for r in 0..3 { keep[r] += price[r] }
+        }
+        let rules = &w.rules[a];
+        let unit = match self.fighters > 0 {
+            true => Kit::of(w, cat, a).and_then(|kit| rules.units.index(kit.fighter as i64)),
+            false => (0..rules.units.units.len())
+                .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence))
+                .filter(|&u| rules.units.max_amount(&w.yards[a], &game.planet, u) > 0)
+                .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price))),
+        };
+        let Some(u) = unit else { return };
+        let price = rules.units.units[u].price;
+        let amount = (0..3).filter(|&r| price[r] > 0.0)
+            .map(|r| ((game.planet.res[r] - keep[r]).max(0.0) / price[r]).floor())
+            .fold(f64::INFINITY, f64::min);
+        if amount.is_finite() && amount >= 1.0 {
+            w.order_units(cat, a, u, amount as u64);
+        }
+    }
+
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize) {
         for (u, amount) in self.order_plans(w, cat, a) {
             w.order_units(cat, a, u, amount as u64);
@@ -554,7 +588,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, colony_cargo: 0 };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0 };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -873,6 +907,24 @@ mod tests {
         let pick = field_reserve(&world, &cat, 0).expect("the reserve binds").expect("a chain object is startable");
         assert!(chain.iter().any(|c| c.0 == pick), "object {pick} is off the chain");
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
+    }
+
+    /// Row 33: a capital spends what its queues do not need on its persona's unit and keeps two hours of production.
+    #[test]
+    fn a_capital_spends_its_surplus_in_the_yard() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let planet = &mut world.games[0].planet;
+        planet.levels = cat.objects.iter().map(|o| (o.price.len() as u32 - 1).min(12)).collect();
+        cat.refresh(planet);
+        planet.res = [5e7, 5e7, 5e7];
+        let keep: Vec<f64> = (0..3).map(|r| 2.0 * world.games[0].planet.rate[r].max(0.0)).collect();
+        let mut miner = Miner::new(5);
+        miner.yard = true;
+        miner.spend_surplus(&mut world, &cat, 0, None);
+        assert!(!world.yards[0].orders.is_empty(), "nothing was ordered");
+        let res = world.games[0].planet.res;
+        assert!((0..3).all(|r| res[r] + 1e-6 >= keep[r]), "the reserve was spent: {res:?} against {keep:?}");
+        assert!((0..3).any(|r| res[r] < 1e7), "most of the surplus is still in the store: {res:?}");
     }
 
     /// Row 45 C: a colony whose store is filling sends what it holds above half its cap home in the cargo ships stationed on it, and

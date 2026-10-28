@@ -126,12 +126,15 @@ fn main() {
     // Row 45 arm C: every persona brings its colonies' surplus home at each login.
     // Row 45 arm FR: every persona keeps its planets' last fields for the field-adding chain.
     // Row 46: the stack of both.
-    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack");
-    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack");
+    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack");
+    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack");
+    // Row 33: the spending order, alone and on the kept stack.
+    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
         miner.reserve = reserve;
+        miner.yard = yard;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
