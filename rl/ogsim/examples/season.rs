@@ -73,7 +73,12 @@ fn main() {
     let mut world = World::new(&cat, &configs, days as f64 * 24.0, 0.0, seed);
     // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
     world.colonisation = Colonisation::load(&econ).ok().map(Arc::new);
-    world.spread = std::env::args().any(|arg| arg == "spread");
+    // Row 66: how many galaxies each account colonises in, 1 to 7 alike - an assumption, as the alliance draw is: the
+    // bands say real mid accounts hold 1 / 3 / 6 galaxies at p10 / p50 / p90. Its own stream leaves the other draws as they were.
+    if std::env::args().any(|arg| arg == "reach") {
+        let mut draw = seed ^ 0x5eed_6a1a;
+        world.reach = (0..world.games.len()).map(|_| 1 + (next_random(&mut draw) % 7) as u32).collect();
+    }
     let moon_shots = std::env::args().any(|arg| arg == "moonstack");
     // A fully built account still logs in, to raid or to save its fleet.
     world.enable_idle_logins(&cat);
@@ -128,10 +133,10 @@ fn main() {
     // Row 45 arm C: every persona brings its colonies' surplus home at each login.
     // Row 45 arm FR: every persona keeps its planets' last fields for the field-adding chain.
     // Row 46: the stack of both.
-    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack" || arg == "moonstack" || arg == "spread");
-    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "moonstack" || arg == "spread");
+    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack" || arg == "moonstack");
+    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "moonstack");
     // Row 33: the spending order, alone and on the kept stack.
-    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "moonstack" || arg == "spread");
+    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "moonstack");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;

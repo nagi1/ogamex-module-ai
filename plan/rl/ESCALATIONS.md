@@ -1837,3 +1837,15 @@ reproduce the real galaxy pattern. Read the real galaxies-by-cell bands before t
 
 **Memory under the cap:** w36 PPO (32 actors) holds ~35 GB steady; an 8-worker eval beside it pushed the slice past
 MemoryHigh and stalled PPO 9 minutes (no OOM, WSL stayed up). Evals beside PPO run on 4 workers.
+
+**w36 eval, update 120 (32 worlds)**: mean +29% but CI [-10%, +103%] and only 31% of accounts better than the rule: a
+few huge accounts carry the mean. No gain yet; later checkpoints decide.
+
+**Row 66 galaxy reach.** Real mid accounts hold 1 / 3 / 6 galaxies (p10/p50/p90) and ours all held 1; `spread` (e67)
+made them all hold 3. Each account now draws a reach of 1-7 galaxies (season data, an assumption like the alliance
+draw), and within it fills a galaxy to three planets before opening the next, the ratio of the real bands (bottom 4
+planets in 1 galaxy, mid 10 in 3, top 13 in 6). `spread` is deleted.
+- e68 (reach, least held first): galaxies importance 0.23 -> 0.06 but bottom accounts overshot (out-of-band 21%), HDS 0.762.
+- e69 (reach, fill first; 10 seeds, health PASS): **HDS 0.786** (e66 0.775), AUC 0.991, galaxies out-of-band 3%,
+  in-band 1.00 in every bottom and mid cell. Kept: arm `moonstack reach`.
+Top giveaways now: moons 0.20, res_share 0.16 (48% out of band), eco_share 0.14, galaxies 0.10, growth 0.09.

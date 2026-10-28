@@ -983,6 +983,31 @@ mod tests {
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
     }
 
+    /// Row 66: a capital with a reach of one colonises in its home galaxy; with a wider reach its next colony goes to the
+    /// least held galaxy within it, nearest first.
+    #[test]
+    fn a_wider_reach_spreads_colonies_over_galaxies() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 3600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        let table = Arc::new(crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")).expect("a colonisation table"));
+        let k = cat.objects.iter().position(|o| o.id == table.research).expect("the colonisation research");
+        world.games[0].planet.levels[k] = 10;
+        world.colonisation = Some(table);
+        assert_eq!(world.colony_site(&cat, 0).expect("a site").galaxy, 3, "a reach of one stays home");
+        world.reach = vec![3];
+        // The home galaxy fills to three planets (the capital among them) before the nearest neighbour opens.
+        let mut taken = Vec::new();
+        for system in 0..4 {
+            let to = world.colony_site(&cat, 0).expect("a site");
+            taken.push(to.galaxy);
+            world.add_planet(&cat, 0, 0, Coord { system: to.system + 200 + system, ..to }, 0.0);
+        }
+        assert_eq!(taken, vec![3, 3, 4, 4], "a galaxy fills before the next one opens");
+    }
+
     /// Row 64: an alliance member holding the fighters shoots a moon at a mate whose guns can take them down, sized to the
     /// host's maximum moon chance; one shot at a time per planet, and a mate without the guns is not shot at.
     #[test]

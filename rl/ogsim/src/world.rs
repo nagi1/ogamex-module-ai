@@ -270,6 +270,9 @@ impl Fleet {
     }
 }
 
+/// Row 66: planets a player holds in a galaxy before it colonises the next one within its reach (`colony_site`).
+const PLANETS_PER_GALAXY: usize = 3;
+
 pub struct World {
     pub games: Vec<Game>,
     /// Per slot, the capital slot of its account; every slot is its own account until a colony joins one.
@@ -278,8 +281,9 @@ pub struct World {
     colonies: Vec<Vec<usize>>,
     /// The host's colonisation tables; colonising is refused without them.
     pub colonisation: Option<Arc<Colonisation>>,
-    /// Row 63 arm: colonies spread over the home galaxy and its neighbours (`colony_site`).
-    pub spread: bool,
+    /// Row 66: per capital, how many galaxies, nearest first, its player colonises in (`colony_site`); empty or 1 keeps
+    /// every colony in the home galaxy. Players differ in how far they spread, so the season draws it per account.
+    pub reach: Vec<u32>,
     /// Coordinates taken by planets outside the world (another player's colony), where nobody may colonise.
     pub taken: Vec<Coord>,
     /// The host's draw for the next colony, (temperature max, fields), handed over by the referee as `recorded` is;
@@ -346,7 +350,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::new(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], spread: false, rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::new(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -876,17 +880,17 @@ impl World {
         let home = self.coords[capital];
         // A player colonises next door before anywhere else: the home galaxy and system first, then outward.
         let near = |count: i64, at: i64| std::iter::once(at).chain((1..=count).filter(move |&x| x != at));
-        // Row 63 arm: a player spreads colonies over the home galaxy and its two neighbours, the least held first.
-        let galaxies: Vec<i64> = match self.spread {
-            false => near(settings.number_of_galaxies as i64, home.galaxy).collect(),
-            true => {
-                let count = settings.number_of_galaxies as i64;
-                let mut g: Vec<i64> = [0, -1, 1].iter().map(|d| (home.galaxy - 1 + d).rem_euclid(count) + 1).collect();
-                let held = |x: i64| self.planets_of(capital).iter().filter(|&&p| self.coords[p].galaxy == x).count();
-                g.sort_by_key(|&x| held(x));
-                g
-            }
-        };
+        // Row 66: within its reach (the home galaxy, then outward by distance) a player fills a galaxy before opening the
+        // next: about three planets each in the real bands (bottom 4 planets in 1 galaxy, mid 10 in 3, top 13 in 6).
+        let count = settings.number_of_galaxies as i64;
+        let reach = self.reach.get(capital).copied().unwrap_or(1).max(1) as usize;
+        let mut galaxies: Vec<i64> = Vec::new();
+        for g in (0..count).flat_map(|d| [d, -d]).map(|d| (home.galaxy - 1 + d).rem_euclid(count) + 1) {
+            if !galaxies.contains(&g) { galaxies.push(g) }
+        }
+        let held = |x: i64| self.planets_of(capital).iter().filter(|&&p| self.coords[p].galaxy == x).count();
+        let within = reach.min(galaxies.len());
+        galaxies[..within].sort_by_key(|&x| held(x) >= PLANETS_PER_GALAXY);
         for position in 4..=15 {
             if table.position_levels.get(&position).copied().unwrap_or(u32::MAX) > level { continue }
             if !table.sites.iter().any(|s| s.donor == donor && s.position == position) { continue }
