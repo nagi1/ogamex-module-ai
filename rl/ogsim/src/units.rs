@@ -251,7 +251,7 @@ impl Units {
         self.units[u].seconds[cell]
     }
 
-    fn requirements_met(&self, planet: &Planet, u: usize) -> bool {
+    pub fn requirements_met(&self, planet: &Planet, u: usize) -> bool {
         self.units[u].requires.iter().all(|&(k, level)| k.map_or(level == 0, |k| planet.levels[k] >= level))
     }
 

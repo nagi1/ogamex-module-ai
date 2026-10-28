@@ -521,36 +521,64 @@ impl Miner {
     }
 }
 
-/// Row 64: a moon shot for an alliance mate, the way players make moons: fighters whose debris reaches the host's maximum
-/// moon chance, sent at the nearest mate's planet that has no moon and guns to shoot them all down in three rounds (the
-/// moon forms at the receiver). The sizing reads the host's combat rules and the kit's hull, nothing named (gate 1).
-/// Short of fighters, the shooter orders them from what its queues do not need. Returns whether a shot left.
-pub fn moon_shot(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) -> bool, ledger: &mut Ledger) -> bool {
-    let Some(kit) = Kit::of(w, cat, a) else { return false };
-    let rules = Arc::clone(&w.rules[a]);
+/// Row 64: the moon shot a planet of account a would receive or send: the kit's fighters whose debris reaches the host's
+/// maximum moon chance, and their hull. The sizing reads the host's combat rules and the kit, nothing named (gate 1).
+fn shot_size(w: &World, cat: &Catalogue, a: usize) -> Option<(u32, i64, f64)> {
+    let kit = Kit::of(w, cat, a)?;
+    let rules = &w.rules[a];
     let debris = &rules.combat.rules;
-    let Some(u) = rules.units.index(kit.fighter as i64) else { return false };
-    let price = rules.units.units[u].price;
+    let price = rules.units.units[rules.units.index(kit.fighter as i64)?].price;
     let each: f64 = (0..if debris.debris_deuterium { 3 } else { 2 }).map(|r| (price[r] * debris.debris_ships_percentage / 100.0).floor()).sum();
-    if each <= 0.0 || debris.maximum_moon_chance <= 0.0 { return false }
+    if each <= 0.0 || debris.maximum_moon_chance <= 0.0 { return None }
     let n = (debris.maximum_moon_chance * 100_000.0 / each).ceil() as i64;
-    let (_, hull) = strength(&rules, &w.research(cat, a), &[(kit.fighter, n)]);
-    let receives = |p: usize| {
-        let guns = stack(&w.rules[p], &w.yards[p].counts);
-        !w.moons[p] && !w.fleets.iter().any(|f| f.target == p && f.mission == Mission::Attack && !f.returning)
-            && strength(&w.rules[p], &w.research(cat, p), &guns).0 * 3.0 >= hull
-    };
-    let Some(target) = others_by_distance(w, a).into_iter().filter(|&b| mate(b)).flat_map(|b| w.planets_of(b)).find(|&p| receives(p)) else { return false };
-    if on_shelf(w, a, kit.fighter) >= n {
-        return send(w, cat, a, target, Mission::Attack, &[(kit.fighter, n)], 10.0, ledger).is_ok();
-    }
-    let missing = n - owned(w, a, kit.fighter);
-    if missing <= 0 || yard_blocks_reserve(w, cat, a) { return false }
+    Some((kit.fighter, n, strength(rules, &w.research(cat, a), &[(kit.fighter, n)]).1))
+}
+
+/// Attack per round of everything on planet p that fights.
+fn guns(w: &World, cat: &Catalogue, p: usize) -> f64 {
+    strength(&w.rules[p], &w.research(cat, p), &stack(&w.rules[p], &w.yards[p].counts)).0
+}
+
+/// What planet a keeps from the yard: the builds it saves for and two hours of production.
+fn kept(w: &World, cat: &Catalogue, a: usize) -> [f64; 3] {
     let mut keep = saving(w, cat, a, None);
     for r in 0..3 { keep[r] += 2.0 * w.games[a].planet.rate[r].max(0.0) }
-    let amount = within(w, a, u, missing as u64, keep);
+    keep
+}
+
+/// Row 64: a moon shot for an alliance mate, the way players make moons: the shot `shot_size` gives, sent at the nearest
+/// mate's planet that has no moon and guns to shoot it all down in three rounds (the moon forms at the receiver). Short
+/// of fighters, the shooter orders them from what its queues do not need. Returns whether a shot left.
+pub fn moon_shot(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) -> bool, ledger: &mut Ledger) -> bool {
+    let Some((fighter, n, hull)) = shot_size(w, cat, a) else { return false };
+    let receives = |p: usize| !w.moons[p] && !w.fleets.iter().any(|f| f.target == p && f.mission == Mission::Attack && !f.returning) && guns(w, cat, p) * 3.0 >= hull;
+    let Some(target) = others_by_distance(w, a).into_iter().filter(|&b| mate(b)).flat_map(|b| w.planets_of(b)).find(|&p| receives(p)) else { return false };
+    if on_shelf(w, a, fighter) >= n {
+        return send(w, cat, a, target, Mission::Attack, &[(fighter, n)], 10.0, ledger).is_ok();
+    }
+    let missing = n - owned(w, a, fighter);
+    let Some(u) = w.rules[a].units.index(fighter as i64) else { return false };
+    if missing <= 0 || yard_blocks_reserve(w, cat, a) { return false }
+    let amount = within(w, a, u, missing as u64, kept(w, cat, a));
     if amount > 0 { w.order_units(cat, a, u, amount); }
     false
+}
+
+/// Row 67: an alliance member readies its first planet with no moon to receive a mate's shot: the cheapest defence the
+/// host has, enough to down the shot in three rounds, paid from that planet's own stock above what it keeps.
+pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize) {
+    let Some((_, _, hull)) = shot_size(w, cat, a) else { return };
+    let Some(p) = w.planets_of(a).into_iter().find(|&p| !w.moons[p] && guns(w, cat, p) * 3.0 < hull) else { return };
+    let rules = Arc::clone(&w.rules[p]);
+    let Some(u) = (0..rules.units.units.len())
+        .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence) && rules.units.requirements_met(&w.games[p].planet, u))
+        .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price)))
+    else { return };
+    let each = strength(&rules, &w.research(cat, p), &[(rules.units.units[u].id as u32, 1)]).0;
+    if each <= 0.0 { return }
+    let missing = ((hull / 3.0 - guns(w, cat, p)) / each).ceil().max(0.0) as u64;
+    let amount = within(w, p, u, missing, kept(w, cat, p));
+    if amount > 0 { w.order_units(cat, p, u, amount); }
 }
 
 const RESEARCH_LEAD: u32 = 3;

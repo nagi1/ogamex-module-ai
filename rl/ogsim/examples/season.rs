@@ -23,6 +23,7 @@ use ogsim::fleet::Coord;
 use ogsim::players::{self, account_value, FleetSaver, Ledger, Miner, Player, Raider, YardStall};
 use ogsim::score::{self, Score};
 use ogsim::economy::{Baseline, Books};
+use ogsim::units::UnitKind;
 use ogsim::world::{Colonisation, Event, EventKind, Mission, Rules, World};
 use ogsim::{next_random, Catalogue, WEIGHTS};
 use serde_json::json;
@@ -204,6 +205,7 @@ fn main() {
         if moon_shots && a == owner && season.alliance_at[owner].is_some_and(|join| t >= join) {
             let alliance_at = &season.alliance_at;
             players::moon_shot(&mut *season.world, season.cat, a, |b| alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut season.ledgers[owner]);
+            players::ready_for_moon(&mut *season.world, season.cat, a);
         }
         match pick {
             Some(k) => season.world.commit(season.cat, a, k),
@@ -488,9 +490,14 @@ impl<W: Write> Season<'_, W> {
                 Some(k) => (self.world.legal(self.cat, slot, k), json!(self.cat.needs_first(planet, k))),
                 None => (false, serde_json::Value::Null),
             };
+            // Row 67: whether this planet can build defence at all and how much it holds - a moon shot needs guns there.
+            let units = &self.world.rules[slot].units;
+            let defence: Vec<usize> = (0..units.units.len()).filter(|&u| units.kind.get(u) == Some(&UnitKind::Defence)).collect();
             json!({
                 "slot": slot,
                 "capital": slot == a,
+                "defence_buildable": defence.iter().any(|&u| units.requirements_met(planet, u)),
+                "defence_held": defence.iter().map(|&u| self.world.yards[slot].counts[u]).sum::<u64>(),
                 "used": used,
                 "cap": cap,
                 "sealed": used >= cap,

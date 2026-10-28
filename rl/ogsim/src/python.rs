@@ -463,7 +463,7 @@ impl VecWorld {
     /// mode the candidates are the errands a login may take, padded to the width the trainers agree on.
     fn dims(&self) -> (usize, usize, usize) {
         if self.errands { return (errands::STATE_DIM, errands::MAX_CANDIDATES, errands::CAND_DIM) }
-        (STATE_DIM, self.catalogue.objects.len(), CAND_DIM)
+        (STATE_DIM, self.catalogue.objects.len() + usize::from(self.season), CAND_DIM)
     }
 
     /// The feature names of the decision this world hands out, in column order.
@@ -480,7 +480,10 @@ impl VecWorld {
     /// The deciding account's planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]).
     fn observe<'py>(&mut self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
         if self.errands { return self.observe_errands(py) }
-        let (n, k) = (self.worlds.len(), self.catalogue.objects.len());
+        // Season mode adds a last row, always legal, that lets the login pass: the persona waits at half its decisions
+        // (field reserve, saving for a build), and a menu without it trained a model that sealed its planets (row 68).
+        let (n, objects) = (self.worlds.len(), self.catalogue.objects.len());
+        let k = objects + usize::from(self.season);
         let mut state = vec![0f32; n * STATE_DIM];
         let mut cands = vec![0f32; n * k * CAND_DIM];
         let mut legal = vec![0u8; n * k];
@@ -488,11 +491,12 @@ impl VecWorld {
             let a = self.deciding[w].0;
             let planet = &world.games[a].planet;
             self.catalogue.state_features(planet, &mut state[w * STATE_DIM..(w + 1) * STATE_DIM]);
-            for j in 0..k {
+            for j in 0..objects {
                 let at = (w * k + j) * CAND_DIM;
                 self.catalogue.candidate_features(planet, j, &mut cands[at..at + CAND_DIM]);
                 legal[w * k + j] = u8::from(world.legal(&self.catalogue, a, j));
             }
+            if self.season { legal[w * k + objects] = 1 }
         }
         (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
     }
@@ -538,7 +542,7 @@ impl VecWorld {
                 continue;
             }
             let world = &mut self.worlds[w];
-            if action == -2 {
+            if action == -2 || (self.season && action == cat.objects.len() as i64) {
                 world.wait(&cat, a);
             } else {
                 let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && world.legal(&cat, a, k));
@@ -560,7 +564,7 @@ impl VecWorld {
         Ok(std::mem::take(&mut self.closed))
     }
 
-    /// The player rule's answer for every world's deciding account (-2 when it has none). In the errand mode, the row of
+    /// The player rule's answer for every world's deciding account (-2 when it has none; in season mode the wait row). In the errand mode, the row of
     /// the errand the scripted mix would take (row 0 is `wait`), which is the behaviour-cloning label.
     fn baseline(&mut self) -> Vec<i64> {
         if self.errands {
@@ -576,7 +580,7 @@ impl VecWorld {
             return self.deciding.iter().enumerate().map(|(w, &(a, _))| {
                 let owner = self.worlds[w].account_of(a);
                 let world = &self.worlds[w];
-                self.players[w][owner].miner().pick(world, &cat, a).filter(|&k| world.legal(&cat, a, k)).map_or(-2, |k| k as i64)
+                self.players[w][owner].miner().pick(world, &cat, a).filter(|&k| world.legal(&cat, a, k)).map_or(cat.objects.len() as i64, |k| k as i64)
             }).collect();
         }
         let mut rng = self.rng;

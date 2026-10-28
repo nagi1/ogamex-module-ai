@@ -1849,3 +1849,18 @@ planets in 1 galaxy, mid 10 in 3, top 13 in 6). `spread` is deleted.
 - e69 (reach, fill first; 10 seeds, health PASS): **HDS 0.786** (e66 0.775), AUC 0.991, galaxies out-of-band 3%,
   in-band 1.00 in every bottom and mid cell. Kept: arm `moonstack reach`.
 Top giveaways now: moons 0.20, res_share 0.16 (48% out of band), eco_share 0.14, galaxies 0.10, growth 0.09.
+
+**Row 67 colonies ready for moon shots, e70b (10 seeds, health PASS).** Colonies could build defence (requirements met)
+but held none, so only capitals received shots and every account stopped at 1 moon. An alliance member now buys the
+cheapest host defence on its first moonless planet, enough to down a shot in three rounds, from that planet's stock
+above what it keeps. Moons per account at day 256: p50 1 -> 6 (real mid p50 5, p90 12). HDS 0.778 (e69 0.786, near
+the ~0.01 arm noise); moons leave the giveaway list (importance 0.20 -> under 0.085); cost: mid 128-256 growth in-band
+0.81 -> 0.68 (the guns use colony stock that shipped home). Kept; the growth cost is the next thing to read. Giveaways
+now res_share 0.17 (52% out of band), eco_share 0.15, planets 0.11, mil_share 0.10.
+
+**Row 68: the learned build had no wait.** w36 collapsed like w34 (update 360 -80%, 700 -92%, 0% of accounts better).
+Direct measurement on one eval world: the persona waits at 11,042 of 20,331 decisions (field reserve, saving for a
+build); checkpoint 700 waited at none and built where the persona waited 1,213 times, value 1.49e9 against 8.22e9.
+`VecWorld::observe` offered only objects (greedy argmax always builds) and BC dropped every wait row. Season mode now
+adds a last row, always legal, that lets the login pass; the persona's wait is that row, so BC learns it. Checked: the
+persona played through the wait row reproduces its value exactly (8,223,344,280, 11,042 waits). w37 retrains on it.
