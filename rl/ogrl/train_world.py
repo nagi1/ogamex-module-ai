@@ -115,10 +115,10 @@ def gae(rewards: np.ndarray, values: np.ndarray, bootstrap: float, gamma: float,
 
 def calibrate(args, dims) -> tuple[tuple[np.ndarray, ...], float]:
     """Feature mean/spread from states the player rule and random legal play visit, and the reward scale (RMS over whole games)."""
-    env = load_world(args, args.seed + 7, 64)
+    env = load_world(args, args.seed + 7, args.calibrate_worlds)
     rng = np.random.default_rng(args.seed)
     states, cands, rewards, finished_games, step = [], [], [], 0, 0
-    while finished_games < 64 and step < 30000:
+    while finished_games < args.calibrate_worlds and step < 30000:
         d = env.decisions()
         s, c, m = observe(env, dims)
         keep = np.array([q == args.queue for _, q, _ in d]) & m.any(1)
@@ -628,6 +628,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--gpu-temp-cap", type=float, default=75.0, help="learner sleeps while its card is above this temperature (C)")
     ap.add_argument("--eval-worlds", type=int, default=64)
     ap.add_argument("--no-eval", action="store_true")
+    ap.add_argument("--calibrate-worlds", type=int, default=64, help="worlds played to the end for the feature and reward scales; one process, so a year-long season wants fewer")
     ap.add_argument("--season", action="store_true", help="row 34: the world the season measures (colonies, idle logins, the persona mix with the field reserve and consolidation); default catalogue econ-u1-colonies.json, horizon 8760 h")
     args = ap.parse_args(argv)
     args.parent = os.getpid()

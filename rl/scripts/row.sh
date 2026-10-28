@@ -38,15 +38,17 @@ for arm in "${arms[@]}"; do
         [[ $arm == base ]] || args=("$arm")
         "$season" "$data" 365 64 "$seed" "$catalogue" "$out/$arm-$seed.jsonl" "${args[@]}" >"$out/$arm-$seed.log" &
         pids+=("$!")
-        if ((${#pids[@]} == 26)); then
+        # Up to 60 seasons at once: the owner's budget is 90% of the 72 threads (cpu-cap rule, 25 Oct).
+        if ((${#pids[@]} == ${ROW_JOBS:-60})); then
             for pid in "${pids[@]}"; do wait "$pid"; done
             pids=()
         fi
     done
 done
 for pid in "${pids[@]}"; do wait "$pid"; done
-for arm in "${arms[@]}"; do
-    files=("$out/$arm-"*.jsonl)
+score_arm() {
+    local arm=$1
+    local files=("$out/$arm-"*.jsonl)
     if ! "$python" "$module/rl/scripts/census.py" "${files[@]}" >"$out/$arm-census.txt" 2>&1; then
         grep -Eq 'health: .*BROKEN|health: (unavailable|incomplete)' "$out/$arm-census.txt" || { cat "$out/$arm-census.txt" >&2; exit 1; }
     fi
@@ -54,7 +56,14 @@ for arm in "${arms[@]}"; do
     if ! "$python" "$module/rl/scripts/hds.py" "${files[@]}" --baseline "$baseline" --save "$out/$arm-score.json" >"$out/$arm-hds.txt" 2>&1; then
         grep -Eq 'health: .*BROKEN|health: (unavailable|incomplete)|verdict:' "$out/$arm-hds.txt" || { cat "$out/$arm-hds.txt" >&2; exit 1; }
     fi
+}
+# The arms are scored in parallel, each in its own subshell; any failing arm fails the row.
+pids=()
+for arm in "${arms[@]}"; do
+    score_arm "$arm" &
+    pids+=("$!")
 done
+for pid in "${pids[@]}"; do wait "$pid" || exit 1; done
 "$python" - "$out" "${arms[@]}" <<'PY'
 import json, pathlib, statistics, sys
 out = pathlib.Path(sys.argv[1])

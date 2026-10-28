@@ -875,20 +875,21 @@ mod tests {
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
     }
 
-    /// Row 45 C: a colony above two hours of its production sends the surplus home in the cargo ships stationed on it, and
+    /// Row 45 C: a colony whose store is filling sends what it holds above half its cap home in the cargo ships stationed on it, and
     /// the delivery lands whole, above the capital's store (the host does not cap it).
     #[test]
     fn a_colony_sends_its_surplus_to_the_capital() {
         let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
         let kit = Kit::of(&world, &cat, 0).expect("a cargo ship");
         let colony = world.add_planet(&cat, 0, 0, Coord { galaxy: 1, system: 10, position: 9 }, 0.0);
-        world.games[colony].planet.res = [2e6, 1e6, 5e5];
+        let cap = world.games[colony].planet.cap;
+        world.games[colony].planet.res = [cap[0] + 2e6, cap[1], 0.3 * cap[2]];
         assert!(world.set_units(&cat, colony, kit.cargo, 5000), "the colony holds cargo ships");
         let before = world.games[0].planet.res[0];
         assert_eq!(world.consolidate(&cat, colony, kit.cargo), 0, "the stationed ships carry the whole surplus");
         let sent = world.fleets.iter().find(|f| f.owner == colony && f.target == 0 && f.mission == Mission::Transport).expect("a transport home");
         let carried = sent.cargo;
-        assert!(carried[0] > 1.9e6, "the metal surplus is loaded: {carried:?}");
+        assert!(carried[0] > 0.5 * cap[0] + 1.9e6 && carried[1] > 0.49 * cap[1], "the part above half the cap is loaded: {carried:?}");
         while world.fleets.iter().any(|f| f.owner == colony && !f.returning) {
             let Some(a) = world.next_decision(&cat) else { break };
             world.wait(&cat, a);

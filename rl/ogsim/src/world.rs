@@ -650,9 +650,11 @@ impl World {
         self.launch(cat, a, None, to, Mission::Colonise, ships, cargo, speed, 0)
     }
 
-    /// Row 45 C: at its account's login a colony sends home what it holds above two hours of its own production, in the
-    /// ships of `cargo_ship` stationed on it; the host does not cap a delivery at the store, so a price above the
-    /// capital's cap becomes payable. Returns how many more of those ships the whole surplus needed.
+    /// Row 45 C: at its account's login a colony whose store is filling (a resource at 80% of its cap) sends home what it
+    /// holds above half the cap, in the ships of `cargo_ship` stationed on it: production it would spill goes home, and its
+    /// own builds keep their budget (row 46b: emptying it to two hours of production froze its mines from day 60). The
+    /// host does not cap a delivery at the store, so a price above the capital's cap becomes payable. Returns how many
+    /// more of those ships the surplus needed.
     pub fn consolidate(&mut self, cat: &Catalogue, colony: usize, cargo_ship: u32) -> i64 {
         let capital = self.account[colony];
         self.catch_up(cat, colony, self.games[capital].t);
@@ -660,7 +662,8 @@ impl World {
         let rules = Arc::clone(&self.rules[colony]);
         let research = self.research(cat, colony);
         let planet = &self.games[colony].planet;
-        let mut load: [f64; 3] = std::array::from_fn(|r| (planet.res[r] - 2.0 * planet.rate[r].max(0.0)).max(0.0).floor());
+        if !(0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]) { return 0 }
+        let mut load: [f64; 3] = std::array::from_fn(|r| (planet.res[r] - 0.5 * planet.cap[r]).max(0.0).floor());
         let hold = rules.combat.capacity(&[(cargo_ship, 1)].into_iter().collect(), &research).max(1) as f64;
         let need = (load.iter().sum::<f64>() / hold).ceil() as i64;
         let shelf = rules.units.index(cargo_ship as i64).map_or(0, |u| self.yards[colony].counts[u] as i64);
