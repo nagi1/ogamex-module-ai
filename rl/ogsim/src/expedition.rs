@@ -36,7 +36,7 @@
 use crate::combat::{self, Battle, CombatCatalogue, EngineResult, Units};
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashMap;
+use crate::HashMap;
 
 /// A source of the host's integer draws: `int(min, max)` is `Randomizer::getInt`, both ends included.
 pub trait Draws {
@@ -813,7 +813,7 @@ mod tests {
             return eprintln!("the combat catalogue has no expedition block; regenerate it (ai:rl-combat-catalogue) or set OGSIM_EXPEDITION_DATA; skipped");
         }
         let cases: Cases = serde_json::from_str(&text).expect("more-mission cases");
-        let mut catalogues = HashMap::new();
+        let mut catalogues = HashMap::default();
         let (mut matched, mut total) = (0usize, 0usize);
         let mut by_kind: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         let mut reasons: Vec<String> = Vec::new();

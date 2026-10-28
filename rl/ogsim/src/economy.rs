@@ -1,6 +1,6 @@
 //! One planet's economy: production, stores, the building and research queues and the logins that refill them.
 use serde::Deserialize;
-use std::collections::HashMap;
+use crate::HashMap;
 
 
 /// Metal-equivalent weights of the closed-loop value (plan/rl/reward-design.md §2), so the simulator and the PHP

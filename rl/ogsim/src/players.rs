@@ -6,7 +6,7 @@
 //! probes and harvesters are what the mission tables name. No object is named; targets are the nearest accounts by
 //! coordinate, the inactive ones first. Results are read from the world's event log.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::combat;
@@ -342,11 +342,17 @@ pub struct Miner {
     pub factory: bool,
     /// Row 79 arm: the lab's research from surplus stops at the real players' research share (`RESEARCH_SHARE`).
     pub balance: bool,
+    /// Row 83 arm: a planet's energy comes from a production unit when it pays more energy per resource than any
+    /// building (`energy_unit`), and the build pick no longer spends fields on energy while those units are coming.
+    pub satellites: bool,
+    /// Row 84 arm: every expedition takes the host's find doubler when the account's class may build it, with the hold
+    /// for the doubled find (`expedition_cargo`).
+    pub doubler: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -364,6 +370,9 @@ impl Miner {
         if self.feed && w.account_of(a) == a {
             feed_colonies(w, cat, a, pick);
         }
+        if self.satellites {
+            power_by_units(w, cat, a);
+        }
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
         // Row 65: a capital waiting on a building the busy yard blocks lets the yard run dry so the building can start.
@@ -380,7 +389,7 @@ impl Miner {
             self.spend_surplus(w, cat, a, pick);
         }
         if self.expeditions && w.account_of(a) == a {
-            expedition_trips(w, cat, a);
+            expedition_trips(w, cat, a, self.doubler);
         }
         // The colony the ship was built for is founded at the same login: one mission, no cargo.
         if w.account_of(a) == a {
@@ -401,7 +410,11 @@ impl Miner {
         if let Some(chain) = self.reserve.then(|| field_reserve(w, cat, a)).flatten() {
             return chain;
         }
-        let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
+        let queue = w.games[a].queue;
+        // Units already cover the shortfall (or are on order): the pick reads the planet as powered and builds producers.
+        let powered = (self.satellites && w.games[a].planet.factor < 1.0 && energy_unit(w, cat, a).is_some())
+            .then(|| Planet { factor: 1.0, ..w.games[a].planet.clone() });
+        let planet = powered.as_ref().unwrap_or(&w.games[a].planet);
         let fallback = match self.lab && queue == 1 {
             true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .filter(|&k| spare(w, cat, a, k) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
@@ -556,8 +569,9 @@ impl Miner {
         let research = w.research(cat, a);
         let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
         let stock: f64 = w.games[a].planet.res.iter().sum();
-        let trips = if self.expeditions { expedition_cargo(w, cat, a).map_or(0, |(n, slots)| n * slots as i64) } else { 0 };
-        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo + trips), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
+        let (trips, slots) = if self.expeditions { expedition_cargo(w, cat, a, self.doubler).map_or((0, 0), |(n, slots)| (n * slots as i64, slots as i64)) } else { (0, 0) };
+        let doubler = doubler_of(w, a, self.doubler).map_or((kit.probe, 0), |id| (id, slots));
+        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo + trips), (kit.harvester, self.harvesters), (kit.fighter, self.fighters), doubler];
         let mut plans: Vec<(usize, i64)> = wants.into_iter().filter_map(|(id, want)| {
             let missing = want - owned(w, a, id);
             let u = rules.units.index(id as i64)?;
@@ -636,7 +650,7 @@ pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize) {
 /// N6b: the cargo ships one expedition takes and the account's expedition slots: a hold for the largest plain find of
 /// the host's bracket at the world's rank-1 score (class and reward multipliers included), and the host's slot limit
 /// at the account's research level. `None` before the account may fly one. Read from the host's tables (gate 1).
-fn expedition_cargo(w: &World, cat: &Catalogue, a: usize) -> Option<(i64, usize)> {
+fn expedition_cargo(w: &World, cat: &Catalogue, a: usize, doubled: bool) -> Option<(i64, usize)> {
     let rules = &w.rules[a];
     let table = rules.expedition.as_ref()?;
     let colonisation = w.colonisation.as_ref()?;
@@ -644,7 +658,8 @@ fn expedition_cargo(w: &World, cat: &Catalogue, a: usize) -> Option<(i64, usize)
     let slots = colonisation.max_expeditions(research.get(&(colonisation.research as u32)).copied().unwrap_or(0))?;
     if slots == 0 { return None }
     let largest = table.find_brackets.iter().find(|(below, _)| w.rank1_points < *below).or(table.find_brackets.last())?.1;
-    let find = largest as f64 * table.class_resource_multiplier * table.reward_multiplier.resources;
+    let twice = if doubler_of(w, a, doubled).is_some() { 2.0 } else { 1.0 };
+    let find = twice * largest as f64 * table.class_resource_multiplier * table.reward_multiplier.resources;
     let kit = Kit::of(w, cat, a)?;
     let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
     Some(((find / hold as f64).ceil() as i64, slots))
@@ -652,14 +667,25 @@ fn expedition_cargo(w: &World, cat: &Catalogue, a: usize) -> Option<(i64, usize)
 
 /// N6b: a player sends an expedition from its capital whenever a slot is free (gate 3): cargo ships for the largest
 /// find, to deep space in its own system, held an hour. The world refuses past the host's slot limit or without fuel.
-fn expedition_trips(w: &mut World, cat: &Catalogue, a: usize) {
-    let Some((n, slots)) = expedition_cargo(w, cat, a) else { return };
+fn expedition_trips(w: &mut World, cat: &Catalogue, a: usize, doubled: bool) {
+    let Some((n, slots)) = expedition_cargo(w, cat, a, doubled) else { return };
     let Some(kit) = Kit::of(w, cat, a) else { return };
     let deep = Coord { position: 16, ..w.coords[a] };
+    let doubler = doubler_of(w, a, doubled);
     for _ in 0..slots {
         let ships = n.min(on_shelf(w, a, kit.cargo));
-        if ships < 1 || w.expedition(cat, a, deep, &[(kit.cargo, ships)], [0.0; 3], 10.0, 1).is_err() { return }
+        let mut fleet = vec![(kit.cargo, ships)];
+        fleet.extend(doubler.filter(|&id| on_shelf(w, a, id) > 0).map(|id| (id, 1)));
+        if ships < 1 || w.expedition(cat, a, deep, &fleet, [0.0; 3], 10.0, 1).is_err() { return }
     }
+}
+
+/// Row 84: the ship whose presence doubles an expedition's find, when the arm is on and the account's class may build
+/// it (the host's expedition table names it by id; nothing here does, gate 1).
+fn doubler_of(w: &World, a: usize, on: bool) -> Option<u32> {
+    let id = w.rules[a].expedition.as_ref()?.find_doubler;
+    let u = w.rules[a].units.index(id as i64)?;
+    (on && w.yards[a].allowed[u]).then_some(id)
 }
 
 const RESEARCH_LEAD: u32 = 3;
@@ -749,6 +775,46 @@ fn spare(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 }
 
 /// How many of unit u, up to `amount`, planet a pays for while keeping `keep` in its store.
+/// Row 83: the production unit that pays the most energy per resource on planet a, with the energy one more adds, when
+/// it beats every energy building the planet can start (gate 3: a grown planet runs on satellites and keeps its fields
+/// for mines; gate 1: the catalogue's production units and the yard's prices say which, nothing is named).
+fn energy_unit(w: &World, cat: &Catalogue, a: usize) -> Option<(usize, f64)> {
+    let planet = &w.games[a].planet;
+    let rules = &w.rules[a];
+    let config = &cat.planets[planet.config];
+    let spare = |p: &Planet| p.energy_max - p.energy_used;
+    let building = (0..cat.objects.len())
+        .filter(|&k| cat.objects[k].queue == 0 && cat.legal(planet, k))
+        .filter_map(|k| {
+            let mut next = planet.clone();
+            next.levels[k] += 1;
+            cat.refresh(&mut next);
+            let gain = spare(&next) - spare(planet);
+            (gain > 0.0).then(|| weighted(cat.objects[k].price[planet.levels[k] as usize]) / gain)
+        })
+        .fold(f64::INFINITY, f64::min);
+    (0..cat.units.len()).filter_map(|e| {
+        let own = config.unit_production[e].own.as_ref()?;
+        let held = planet.units.get(e).copied().unwrap_or(0) as usize;
+        let each = own[(held + 1).min(own.len() - 1)][3] - own[held.min(own.len() - 1)][3];
+        let u = rules.units.index(cat.units[e])?;
+        let per_energy = weighted(rules.units.units[u].price) / each;
+        (each > 0.0 && per_energy < building && w.yards[a].allowed[u] && rules.units.requirements_met(planet, u)).then_some((u, each, per_energy))
+    }).min_by(|x, y| x.2.total_cmp(&y.2)).map(|(u, each, _)| (u, each))
+}
+
+/// Row 83: orders the energy unit for the planet's shortfall and a tenth more headroom (the next mine level's draw),
+/// less what the yard already has on order, paid around the queue's committed builds.
+fn power_by_units(w: &mut World, cat: &Catalogue, a: usize) {
+    let Some((u, each)) = energy_unit(w, cat, a) else { return };
+    let planet = &w.games[a].planet;
+    let coming: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
+    let short = 1.1 * planet.energy_used - planet.energy_max - coming as f64 * each;
+    if short <= 0.0 { return }
+    let amount = within(w, a, u, (short / each).ceil() as u64, saving(w, cat, a, None));
+    if amount > 0 { w.order_units(cat, a, u, amount); }
+}
+
 fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
     let price = w.rules[a].units.units[u].price;
     let res = w.games[a].planet.res;
@@ -839,8 +905,8 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false };
-        Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false };
+        Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
@@ -917,7 +983,7 @@ impl FleetSaver {
     pub fn new(seed: u64) -> FleetSaver {
         let mut miner = Miner::new(seed);
         miner.military_share = 0.20;
-        FleetSaver { miner, answered: HashSet::new(), saving: Vec::new() }
+        FleetSaver { miner, answered: HashSet::default(), saving: Vec::new() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
@@ -1359,14 +1425,79 @@ mod tests {
         let kit = Kit::of(&world, &cat, 0).expect("a cargo hull");
         assert!(world.set_units(&cat, 0, kit.cargo, 10_000), "cargo ships to send");
         world.games[0].planet.res = [1e7; 3];
-        let (n, slots) = expedition_cargo(&world, &cat, 0).expect("an expedition is possible");
+        let (n, slots) = expedition_cargo(&world, &cat, 0, false).expect("an expedition is possible");
         assert_eq!(slots, 1);
-        expedition_trips(&mut world, &cat, 0);
+        expedition_trips(&mut world, &cat, 0, false);
         let out: Vec<_> = world.fleets.iter().filter(|f| f.mission == Mission::Expedition).collect();
         assert_eq!(out.len(), 1, "one slot, one expedition");
         assert_eq!(out[0].ships, vec![(kit.cargo, n)], "the hold for the largest find");
-        expedition_trips(&mut world, &cat, 0);
+        expedition_trips(&mut world, &cat, 0, false);
         assert_eq!(world.fleets.iter().filter(|f| f.mission == Mission::Expedition).count(), 1, "no second trip while the slot is taken");
+    }
+
+    /// Row 84: with the arm on, an account whose class may build the find doubler sends one with every expedition and
+    /// a hold for the doubled find; an account whose class may not is unchanged.
+    #[test]
+    fn an_expedition_takes_the_find_doubler_and_a_hold_for_the_doubled_find() {
+        let Ok(cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1-class3.json")) else { return eprintln!("no rules; skipped") };
+        let Some(doubler) = rules.expedition.as_ref().map(|t| t.find_doubler) else { return eprintln!("no expedition tables; skipped") };
+        let u = rules.units.index(doubler as i64).expect("the doubler is a unit");
+        let Some(config) = (0..rules.units.planets.len()).find(|&c| rules.units.shipyard(c).allowed[u]) else { return eprintln!("no class builds the doubler; skipped") };
+        let mut world = World::new(&cat, &[config], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        let mut table = crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")).expect("a colonisation table");
+        table.max_expeditions = vec![0, 1, 1, 1, 2];
+        let k = cat.objects.iter().position(|o| o.id == table.research).expect("the colonisation research");
+        world.games[0].planet.levels[k] = 1;
+        world.colonisation = Some(Arc::new(table));
+        let kit = Kit::of(&world, &cat, 0).expect("a cargo hull");
+        assert!(world.set_units(&cat, 0, kit.cargo, 10_000), "cargo ships to send");
+        assert!(world.set_units(&cat, 0, doubler, 1), "a doubler to send");
+        world.games[0].planet.res = [1e7; 3];
+        let (plain, _) = expedition_cargo(&world, &cat, 0, false).expect("an expedition is possible");
+        let (doubled, _) = expedition_cargo(&world, &cat, 0, true).expect("an expedition is possible");
+        assert!(doubled >= 2 * plain - 1 && doubled <= 2 * plain, "twice the hold: {plain} -> {doubled}");
+        expedition_trips(&mut world, &cat, 0, true);
+        let out: Vec<_> = world.fleets.iter().filter(|f| f.mission == Mission::Expedition).collect();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].ships, vec![(kit.cargo, doubled), (doubler, 1)], "the cargo and the doubler fly together");
+    }
+
+    /// Row 83: a grown planet short of energy, where a production unit pays more energy per resource than any building,
+    /// orders those units for the shortfall and builds a producer meanwhile instead of an energy building.
+    #[test]
+    fn a_grown_planet_short_of_energy_orders_units_and_builds_a_producer() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 3600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        // Every building at 20 except the energy ones, which lag: the planet is short and its next solar level is dear.
+        let energy: Vec<usize> = (0..cat.objects.len()).filter(|&k| {
+            let mut next = world.games[0].planet.clone();
+            next.levels[k] += 1;
+            cat.refresh(&mut next);
+            next.energy_max > world.games[0].planet.energy_max
+        }).collect();
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 0) {
+            world.games[0].planet.levels[k] = if energy.contains(&k) { 16 } else { 22 };
+        }
+        world.games[0].planet.res = [1e9; 3];
+        cat.refresh(&mut world.games[0].planet);
+        assert!(world.games[0].planet.factor < 1.0, "the planet is short of energy");
+        let Some((u, each)) = energy_unit(&world, &cat, 0) else { return eprintln!("no production unit beats the buildings here; skipped") };
+        let mut miner = Miner::new(5);
+        miner.satellites = true;
+        let pick = miner.pick(&world, &cat, 0).expect("a build");
+        assert!(!energy.contains(&pick), "a producer, not an energy building, while the units come");
+        power_by_units(&mut world, &cat, 0);
+        let ordered: u64 = world.yards[0].orders.iter().filter(|o| o.unit == u).map(|o| o.amount).sum();
+        let planet = &world.games[0].planet;
+        assert!(ordered as f64 * each >= planet.energy_used - planet.energy_max, "the order covers the shortfall");
+        power_by_units(&mut world, &cat, 0);
+        let again: u64 = world.yards[0].orders.iter().filter(|o| o.unit == u).map(|o| o.amount).sum();
+        assert_eq!(again, ordered, "units on order count: no second order");
     }
 
     /// Row 64: an alliance member holding the fighters shoots a moon at a mate whose guns can take them down, sized to the

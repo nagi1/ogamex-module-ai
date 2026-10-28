@@ -114,6 +114,9 @@ def score_rows(rows: list[dict]) -> tuple[dict[str, list[dict]], list[str]]:
         ordered = sorted(day_rows, key=lambda r: -r["score"]["total"])
         size = len(ordered)
         for rank, row in enumerate(ordered, start=1):
+            # As real_bands.py: an inactive account holds its rank but is never in a band's sample.
+            if row["inactive"]:
+                continue
             cell, vector = measures_of(row, size, rank)
             cells[cell].append({"account": f'{row["seed"]}/{row["account"]}/{row["day"]}', "vector": vector,
                                 "seed": row["seed"], "persona": row.get("persona", "?")})

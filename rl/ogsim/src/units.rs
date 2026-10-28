@@ -24,7 +24,7 @@
 //!   start upgrading now.
 use crate::economy::{weighted, Catalogue as Economy, Planet};
 use serde::Deserialize;
-use std::collections::HashMap;
+use crate::HashMap;
 
 #[derive(Deserialize)]
 struct RawCatalogue {

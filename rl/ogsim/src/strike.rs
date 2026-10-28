@@ -402,7 +402,7 @@ pub fn resolve_moon_destruction(rules: &StrikeRules, attacker: &CombatCatalogue,
 mod tests {
     use super::*;
     use crate::combat::{CombatCatalogue, Units};
-    use std::collections::HashMap;
+    use crate::HashMap;
 
     const DATA: &str = "../../../../storage/rl/ogsim";
 

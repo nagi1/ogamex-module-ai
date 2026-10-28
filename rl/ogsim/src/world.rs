@@ -14,7 +14,7 @@
 //! the capital's lab and every level that lands there is copied to the account's other planets at that second
 //! (`share_research`), and the other planets never decide the research queue. Missions run slot to slot.
 
-use std::collections::HashMap;
+use crate::HashMap;
 use std::sync::Arc;
 
 use crate::combat::{self, Battle, CombatCatalogue};
@@ -358,7 +358,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::new(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -1616,7 +1616,7 @@ mod tests {
         use super::super::*;
         use super::DATA;
         use serde::Deserialize;
-        use std::collections::HashMap;
+        use crate::HashMap;
 
         #[derive(Deserialize)]
         struct Cases { cases: Vec<Case> }
@@ -1942,7 +1942,7 @@ mod tests {
             let stand_in;
             let (target, target_player) = if recycling {
                 let at = case.input.target_coordinates?;
-                stand_in = PlanetState { id: -1, coordinates: at, resources: [0.0; 3], ships: HashMap::new(), defence: HashMap::new() };
+                stand_in = PlanetState { id: -1, coordinates: at, resources: [0.0; 3], ships: HashMap::default(), defence: HashMap::default() };
                 (&stand_in, &case.input.origin_player)
             } else {
                 (case.input.target.as_ref()?, case.input.target_player.as_ref()?)

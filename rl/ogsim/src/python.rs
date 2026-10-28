@@ -7,7 +7,7 @@ use crate::{errands, next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAME
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use std::collections::HashMap;
+use crate::HashMap;
 use std::sync::Arc;
 
 /// A finished game: (planet config, final value, final effective rate per hour, decisions, invalid actions).
@@ -448,7 +448,7 @@ impl VecWorld {
         if (errands || season) && rules.is_none() {
             return Err(PyValueError::new_err("errands need the units, fleet_settings and combat exports: nothing can fly without them"));
         }
-        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds], during: Vec::new(), credited: Vec::new(), sent: HashMap::new(), read: Vec::new(), season, queue, colonisation: None };
+        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds], during: Vec::new(), credited: Vec::new(), sent: HashMap::default(), read: Vec::new(), season, queue, colonisation: None };
         if season {
             env.colonisation = Some(Arc::new(Colonisation::load(catalogue).map_err(PyValueError::new_err)?));
         }

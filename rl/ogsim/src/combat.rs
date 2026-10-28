@@ -27,7 +27,8 @@
 //! pickup, wreck fields. A fight costs one engine call (JSON in and out, ~10 µs for tens of units) plus the settling.
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
+use crate::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 
 #[derive(Deserialize)]
@@ -303,7 +304,7 @@ pub fn defender_units(catalogue: &CombatCatalogue, battle: &Battle) -> Units {
 /// RustBattleEngine::prepareBattleInput: one fleet a side, each valued at its owner's research and class, hull =
 /// floor(SI / 10). Each side reads its own catalogue: the class changes weapon, shield and hull levels and speeds.
 pub fn engine_input(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle) -> Value {
-    let fleet = units_of(battle.attacker, &HashSet::new());
+    let fleet = units_of(battle.attacker, &HashSet::default());
     let planet = defender_units(defender, battle);
     json!({
         "attacker_fleets": [attacker.fleet_json(1, 1, &fleet, battle.attacker_research)],
@@ -441,7 +442,7 @@ pub fn settle(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &B
 /// debris, so a counter-espionage fight (`plunder` false) leaves all of its debris in the field and takes no loot.
 pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle, engine: EngineResult, repaired: Units, moon_roll: i64, plunder: bool) -> Outcome {
     let rules = &attacker.rules;
-    let attacker_start = units_of(battle.attacker, &HashSet::new());
+    let attacker_start = units_of(battle.attacker, &HashSet::default());
     let defender_start = defender_units(defender, battle);
     let attacker_lost = minus(&attacker_start, &engine.attacker_left);
     let defender_lost = minus(&defender_start, &engine.defender_left);
@@ -647,8 +648,8 @@ mod tests {
     fn a_level_past_the_grid_reads_its_edge() {
         let (cat, _) = load();
         let grid = RawTable { by: vec![111], values: (0..=cat.max_level as i64).collect() };
-        let edge = cat.cell(&grid, &HashMap::from([(111_u32, cat.max_level)]));
-        assert_eq!(cat.cell(&grid, &HashMap::from([(111_u32, cat.max_level + 7)])), edge, "a level past the grid did not read its edge");
+        let edge = cat.cell(&grid, &HashMap::from_iter([(111_u32, cat.max_level)]));
+        assert_eq!(cat.cell(&grid, &HashMap::from_iter([(111_u32, cat.max_level + 7)])), edge, "a level past the grid did not read its edge");
     }
 
     fn load() -> (CombatCatalogue, Vec<Case>) {
@@ -746,7 +747,7 @@ mod tests {
             let o = owned(case);
             let b = battle(case, &o, 0);
             let value = |p: [i64; 3]| (p[0] + p[1] + p[2]) as f64;
-            let attacker_value = value(catalogue.price_of(&units_of(b.attacker, &HashSet::new()))).max(1.0);
+            let attacker_value = value(catalogue.price_of(&units_of(b.attacker, &HashSet::default()))).max(1.0);
             let defender_value = value(catalogue.price_of(&defender_units(&catalogue, &b))).max(1.0);
             let lootable = (b.defender_stock.iter().map(|r| r.max(0.0)).sum::<f64>() * catalogue.rules.loot_percentage / 100.0).max(1.0);
             let defence_lost = |lost: &Units| lost.iter().filter(|(id, _)| catalogue.unit(**id).defense).map(|(_, n)| *n).sum::<i64>() as f64;

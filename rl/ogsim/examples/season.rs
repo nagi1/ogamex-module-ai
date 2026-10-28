@@ -169,6 +169,8 @@ fn main() {
     let factory = std::env::args().any(|arg| arg == "factory");
     // Row 79: research from surplus only under the real research share.
     let balance = std::env::args().any(|arg| arg == "balance");
+    let satellites = std::env::args().any(|arg| arg == "satellites");
+    let doubler = std::env::args().any(|arg| arg == "doubler");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -182,6 +184,8 @@ fn main() {
         miner.feed = feed;
         miner.factory = factory;
         miner.balance = balance;
+        miner.satellites = satellites;
+        miner.doubler = doubler;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -252,6 +256,20 @@ fn main() {
         }
     }
     season.flush(f64::INFINITY);
+    // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
+    if std::env::args().any(|arg| arg == "levels") {
+        let planets: Vec<_> = (0..accounts).map(|a| {
+            let slots: Vec<_> = season.world.planets_of(a).into_iter().map(|slot| {
+                let planet = &season.world.games[slot].planet;
+                let levels: serde_json::Map<String, serde_json::Value> = season.cat.objects.iter().zip(&planet.levels)
+                    .filter(|(_, &l)| l > 0).map(|(o, &l)| (o.id.to_string(), json!(l))).collect();
+                json!({"fields": season.cat.fields_used(planet), "cap": season.cat.field_cap(planet), "rate": planet.rate,
+                       "position": season.cat.planets[planet.config].position, "levels": levels})
+            }).collect();
+            json!({"account": a, "inactive": gone[a], "total": score::of(&*season.world, a).total, "planets": slots})
+        }).collect();
+        std::fs::write(format!("{out_path}.levels.json"), serde_json::to_string(&planets).expect("levels json")).expect("write the levels");
+    }
     let lines = season.lines;
     let frozen_days = season.frozen_days;
     let bad_stock = season.bad_stock;
@@ -380,7 +398,9 @@ impl<W: Write> Season<'_, W> {
             let unexplained = (stock - was) - (books.net() - before.net());
             self.since[a] = (books, stock);
             let fleet = value - economy;
-            let frozen = frozen_day(self.previous[a], inactive, tally.logins, books.produced - before.produced, stock, score.total, fleet);
+            // The day an account quits, its last login is the quit itself (`retire`), where it no longer acts.
+            let quits_today = (at - DAY..at).contains(&self.world.games[a].horizon);
+            let frozen = !quits_today && frozen_day(self.previous[a], inactive, tally.logins, books.produced - before.produced, stock, score.total, fleet);
             if frozen {
                 self.frozen_days += 1;
             }

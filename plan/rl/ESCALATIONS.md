@@ -2157,3 +2157,84 @@ which is already above ours. Not kept (patch out of the tree).
 **What it says.** Moons and alliances are now coupled through one costly habit. The next row is the moon shot's cost:
 how much fleet a shot loses against what real players pay for a moon (the debris needed for the host's maximum moon
 chance), and whether recruited accounts should first reach the fleet a shot needs from their military share.
+
+## 29 Oct — the yardstick audit, and rows 83-86: the top's income; doubler and satellites kept
+
+**Why an audit.** Twenty arms moved HDS while the per-cell Turing AUC sat at 0.99 throughout. `rl/scripts/
+yardstick_audit.py` (new) asked three questions of e79d.
+
+| question | answer |
+| --- | --- |
+| Can the 0.6 target be reached? (one real universe against the rest of its cell) | yes: AUC 0.46-0.56 in the 64-256-day cells, 0.76 at 256-512; the real cells are one population |
+| Is the age of a real universe right? (alliance estimate vs OStats `opened`) | yes in every scored bucket; it drifts only in some 512+ universes |
+| Is world size the gap? | no: the scored speed-8 universes rank 50-240 players (p50 66-88), ours 64 |
+| One snapshot per account instead of every tenth day? | same AUC (0.95-1.00): sampling is not the gap |
+| Lifeform points in the real totals? | 0-24% of a total: not a 10x |
+| What separates us, one measure at a time? | growth alone gives AUC 0.74-0.85 in mid and 0.975-1.0 in top10; moons 0.92-0.94 in top10 |
+
+**The gap is the top's income, and the spread.** Growth ours/real at p50: top10 0.10-0.11 (0.01 at 0-14 days), mid
+0.23-0.68. A real top account holds 8-9x our building points per planet and 10x our research; ~85% of a real top
+score at 200 days cannot come from mines, i.e. from expeditions at a high rank-1 bracket.
+
+**A yardstick bug fixed.** `real_bands.py` samples only active players (status ""), counting the rest in the ranks;
+`hds.py` sampled our quitters too, so our bottom cells were 88-95% inactive accounts. `hds.py` now ranks every account
+and samples the active ones. Rescored e79d: HDS 0.841, pooled AUC 0.899 (was 0.855 / 0.850 on the old sampling).
+
+**Diagnosis (season `levels` dump, new: every planet's fields, rate and levels on the last day).** Every planet of a
+top account sits at its field cap minus one, mines 33/27/28 on a colony of ~240 fields, with solar 31, stores 14/13/12,
+lab 13 and shipyard 13 on every colony. Two causes:
+* energy comes only from buildings: the production units (`Catalogue::units`, the host counts their energy) were never
+  bought, though past a solar level of ~11 a unit pays 10-200x more energy per resource and takes no field;
+* the expedition fleet is cargo only: the host's find doubler (the expedition table's `find_doubler`) never flies,
+  though every real expedition player sends one and it doubles the find cap.
+
+| arm on e79d (10 seeds x 365 days), active-only scorer | HDS | pooled AUC | growth ours/real top10 64-128 / 128-256 / 256-512 | mid 64-128 / 128-256 / 256-512 | result |
+| --- | --- | --- | --- | --- | --- |
+| e79d (baseline) | 0.841 | 0.899 | 0.11 / 0.10 / 0.10 | 0.45 / 0.23 / 0.68 | |
+| sens8: every class's expedition find x economy speed (data only) | - | - | 0.14 / 0.11 / 0.11 | - / 0.87 / 2.51 | not the lever: lifts the mid past real, the top stays |
+| e83b `satellites` | 0.845 | - | 0.15 / 0.11 / 0.11 | 0.66 / 0.31 / 0.88 | mid closer |
+| e84a `doubler` | 0.847 | 0.902 | 0.22 / 0.19 / 0.20 | 0.48 / 0.25 / 0.74 | top doubled; top10 256-512 growth in band 0.00 -> 0.76 |
+| **e84b `satellites doubler`** | **0.848** | **0.888** | **0.25 / 0.20 / 0.21** | **0.70 / 0.33 / 0.94** | **kept** |
+| e85b/e87a + `useful` (a visit with no useful building to pay saves for one) | 0.716 / 0.735 | 0.943 / 0.939 | 0.19 / 0.20 / 0.25 | 0.88 / 0.53 / 1.87 | not kept |
+| e86a `attrition` (stayers quit too, mean 300 days) | 0.769 | 0.877 | 0.06 / 0.05 / 0.05 | 0.43 / 0.21 / 0.54 | not kept |
+
+**Row 83 `satellites`: kept.** A planet orders the production unit that pays the most energy per resource when it beats
+every energy building it can start, for its shortfall and a tenth more, less what is on order; while those come the
+build pick reads the planet as powered (`energy_unit`, `power_by_units`). Late colonies drop solar 31 -> 28 alone; with
+the doubler the top accounts reach the same mines on fewer energy fields.
+
+**Row 84 `doubler`: kept.** An account whose class may build the find doubler sends one with every expedition and
+sizes the hold for the doubled find (`doubler_of`, `expedition_cargo`). Gate 3: every expedition player does this.
+The rule `getExpeditionResourceMultiplier` (x economy speed only for the Discoverer) stays as the host has it: the sens8
+data arm showed the other reading would inflate the mid, not the top.
+
+**Row 85 `useful`: not kept** (patch `row-85-useful.patch`, out of the tree). The real waste it found is the player
+rule's last resort: with nothing useful payable at a visit it builds the cheapest legal object, a solar, lab or shipyard
+level. Saving instead gives real-looking planets (mines 39-40/32/33, lab and shipyard 3-4, solar 12 with satellites),
+but mid eco_share leaves the band (in band 0.87 -> 0.16-0.22): real mid players keep the waste. A top-only version is a
+candidate.
+
+**Row 86 `attrition`: not kept.** Real speed-8 worlds hold 82% inactive or vacation accounts at 256-512 days, and those
+hold most mid ranks (mid: 18% active, 63% vacation). Stopping our stayers at a steady rate takes the strong accounts out
+of the active top sample and halves top growth. The mid structure stays a known gap.
+
+**Health fix.** The day an account quits, its last login is the quit itself, where it no longer acts: that day is no
+longer counted as frozen (a late quitter with full stores tripped it).
+
+**Determinism fixed.** The first reruns of the kept build disagreed with e84b's own seed 1 from day 2. The cause was
+std's `HashMap`, keyed at random per process: a map iterated into a float sum or a tie-break played one seed two ways in
+some processes. The sim now hashes with a fixed key (`ogsim::HashMap` / `HashSet`); eight copies of one seed run in
+parallel under load are byte-identical. Every number above came from the old hashing and moves slightly; the clean pair:
+
+| clean rerun (fixed hashing, 10 seeds x 365 days) | HDS | pooled AUC | growth ours/real top10 64-128 / 128-256 / 256-512 | mid 64-128 / 128-256 / 256-512 |
+| --- | --- | --- | --- | --- |
+| e88a baseline (e79d's arms) | 0.841 | 0.891 | 0.12 / 0.10 / 0.10 | 0.48 / 0.24 / 0.69 |
+| **e88b + `satellites doubler`** | **0.849** | **0.894** | **0.26 / 0.21 / 0.21** | **0.70 / 0.32 / 0.94** |
+
+The top's growth doubles and the mid closes on real; the pooled AUC holds (moons take growth's place as the giveaway).
+
+**Baseline:** `moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler`.
+
+**Gap now.** Giveaways: moons 0.177 (top10 moons in band 0.00-0.08), growth 0.144 (top 0.20-0.25 of real), planets
+0.129, alliance 0.115. Next: the top's moons (row 82's coupling of moons and alliances), then the rank-1 bracket loop
+that lets a real top account's expeditions compound.

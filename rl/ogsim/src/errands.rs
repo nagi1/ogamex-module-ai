@@ -317,7 +317,7 @@ mod tests {
     use super::*;
     use crate::players::{FleetSaver, Ledger, Player};
     use crate::world::{EventKind, Rules};
-    use std::collections::HashSet;
+    use crate::HashSet;
     use std::sync::Arc;
 
     const DATA: &str = "../../../../storage/rl/ogsim";
@@ -373,7 +373,7 @@ mod tests {
     /// actions the game rejects.
     #[test]
     fn every_offered_errand_is_one_the_world_accepts() {
-        let (mut accepted, mut kinds) = (0usize, HashSet::new());
+        let (mut accepted, mut kinds) = (0usize, HashSet::default());
         for seed in 1..=4u64 {
             let Some(_) = drive(seed, |w, cat, a, offered| {
                 assert_eq!(offered.first().map(|e| e.kind), Some(Kind::Wait), "wait is row 0, as the exporters read it");

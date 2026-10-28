@@ -128,7 +128,7 @@ mod tests {
     use crate::fleet::Coord;
     use crate::world::{Fleet, Mission, Rules};
     use serde::Deserialize;
-    use std::collections::HashMap;
+    use crate::HashMap;
     use std::sync::Arc;
 
     /// Where `ai:rl-score-cases` (score-cases-u1.json) sits beside the u1 catalogues.

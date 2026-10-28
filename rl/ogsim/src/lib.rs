@@ -6,6 +6,11 @@
 //! (`updateResourcesUntil`), and a producer that burns deuterium giving no energy on a planet that has run dry
 //! (`updateResourceProductionStatsInner`).
 
+/// Hashing with a fixed key: std's `RandomState` keys every process differently, and a map iterated into a float sum or a
+/// tie-break then plays one seed two ways (29 Oct: some reruns of a season diverged on day 2). Every map here uses these.
+pub type HashMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<std::collections::hash_map::DefaultHasher>>;
+pub type HashSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<std::collections::hash_map::DefaultHasher>>;
+
 pub mod economy;
 /// Shipyard: ships and defence built on a planet (world sim, plan/rl/world-sim-spec.md).
 pub mod units;

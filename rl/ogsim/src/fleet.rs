@@ -18,7 +18,7 @@
 //!   deuterium taken at dispatch, holding fuel and the class and universe multipliers included.
 //! * `holding_seconds(hours) -> i64`: expeditions and ACS defend hold for real time, untouched by any fleet speed.
 use serde::Deserialize;
-use std::collections::HashMap;
+use crate::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Coord {
