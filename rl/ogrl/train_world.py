@@ -93,7 +93,7 @@ def load_world(args, seed: int, n_worlds: int, catalogue: str | None = None) -> 
     return ogsim.VecWorld(cat, list(range(ogsim.VecEnv.planet_count(cat))), n_worlds, controlled,
                           horizon_hours=args.horizon, seed=seed, login_gaps=gaps,
                           units=args.units, fleet_settings=args.fleet_settings, combat=args.combat,
-                          errands=args.queue == 2)
+                          errands=args.queue == 2, season=args.season, queue=args.queue)
 
 
 def observe(env: "ogsim.VecWorld", dims: tuple[int, int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -628,15 +628,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--gpu-temp-cap", type=float, default=75.0, help="learner sleeps while its card is above this temperature (C)")
     ap.add_argument("--eval-worlds", type=int, default=64)
     ap.add_argument("--no-eval", action="store_true")
+    ap.add_argument("--season", action="store_true", help="row 34: the world the season measures (colonies, idle logins, the persona mix with the field reserve and consolidation); default catalogue econ-u1-colonies.json, horizon 8760 h")
     args = ap.parse_args(argv)
     args.parent = os.getpid()
     if args.horizon <= 0.0:
-        args.horizon = 240.0 if args.queue == 2 else 72.0
+        args.horizon = 8760.0 if args.season else 240.0 if args.queue == 2 else 72.0
     if args.smoke:
         args.minutes, args.horizon, args.eval_worlds = 2.0, 24.0, min(args.eval_worlds, 16)
     name = KIND_NAMES[args.queue]
     defaults = {0: ("plain-train.json", "plain-eval.json"), 1: ("research-train.json", "research-eval.json"), 2: ("units-parity/econ-u1.json", "units-parity/econ-u1.json")}
-    train_catalogue, eval_catalogue = defaults[args.queue]
+    train_catalogue, eval_catalogue = ("units-parity/econ-u1-colonies.json",) * 2 if args.season else defaults[args.queue]
     args.catalogue = args.catalogue or str(DATA / train_catalogue)
     args.eval_catalogue = args.eval_catalogue or str(DATA / eval_catalogue)
     args.slots = args.slots or 3 * args.actors

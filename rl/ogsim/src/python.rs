@@ -2,7 +2,7 @@
 
 use crate::fleet::Coord;
 use crate::players::{self, Ledger, Player};
-use crate::world::{Rules, World};
+use crate::world::{Colonisation, Decision, Rules, World};
 use crate::{errands, next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -255,13 +255,19 @@ struct VecWorld {
     sent: HashMap<(usize, usize, u64), u64>,
     /// How many events of each world's log have been attributed.
     read: Vec<usize>,
+    /// Season mode (row 34): the world `examples/season.rs` measures - colonies, idle logins, the persona mix with the
+    /// kept field reserve and consolidation - where a controlled account's `queue` builds are the model's and the
+    /// persona plays everything else of the login around them.
+    season: bool,
+    queue: usize,
+    colonisation: Option<Arc<Colonisation>>,
 }
 
 impl VecWorld {
     /// The deciding account's value: the economy's in the economy mode, everything it owns (ships at price, stock, what
     /// flies) in the errand mode, where a raid or a lost fleet has to show up in the reward.
     fn value(&self, w: usize, a: usize) -> f64 {
-        if self.errands { players::account_value(&self.worlds[w], a) } else { self.worlds[w].games[a].value() }
+        if self.errands || self.season { players::account_value(&self.worlds[w], a) } else { self.worlds[w].games[a].value() }
     }
 
     fn fresh_world(&mut self) -> World {
@@ -277,12 +283,14 @@ impl VecWorld {
             }).collect();
             world.arm(vec![Arc::clone(rules); accounts], coords);
             // Errands live at the login, which an account with nothing left to build must still get.
-            if self.errands { world.enable_idle_logins(&self.catalogue); }
+            if self.errands || self.season { world.enable_idle_logins(&self.catalogue); }
         }
+        world.colonisation = self.colonisation.clone();
         let seed = next_random(&mut self.rng);
-        let players = (0..accounts).map(|a| {
+        let mixed = self.errands || self.season;
+        let mut players: Vec<Player> = (0..accounts).map(|a| {
             let s = seed.wrapping_add(a as u64);
-            match (self.controlled[a], self.errands, a % 3) {
+            match (self.controlled[a], mixed, a % 3) {
                 // A controlled account's errands are the model's; the rule only plays its economy and its ships.
                 (true, _, _) => Player::Miner(players::Miner::new(s)),
                 (false, false, _) => Player::Miner(players::Miner::new(s)),
@@ -291,6 +299,15 @@ impl VecWorld {
                 (false, true, _) => Player::Miner(players::Miner::new(s)),
             }
         }).collect();
+        for player in players.iter_mut().filter(|_| self.season) {
+            let miner = match player {
+                Player::Miner(m) => m,
+                Player::Raider(r) => &mut r.miner,
+                Player::Saver(s) => &mut s.miner,
+            };
+            miner.reserve = true;
+            miner.consolidate = true;
+        }
         self.during.push(vec![0.0; accounts]);
         self.credited.push(vec![0.0; accounts]);
         self.read.push(0);
@@ -302,8 +319,10 @@ impl VecWorld {
     /// Plays the rest of a login for account a: its economy queue and its ship orders, as the scripted player rule does.
     fn play_rest(&mut self, w: usize, cat: &Catalogue, a: usize) {
         let (worlds, players, ledgers) = (&mut self.worlds, &mut self.players, &mut self.ledgers);
-        let player = &mut players[w][a];
-        let ledger = &mut ledgers[w][a];
+        // A colony slot decides with its account's player and ledger.
+        let owner = worlds[w].account_of(a);
+        let player = &mut players[w][owner];
+        let ledger = &mut ledgers[w][owner];
         let world = &mut worlds[w];
         match player.act(world, cat, a, ledger) {
             Some(k) => world.commit(cat, a, k),
@@ -351,6 +370,13 @@ impl VecWorld {
         }
     }
 
+    /// Whether slot a's decision is the caller's: a controlled capital's, and in season mode only a build in `queue`.
+    fn model_decides(&self, w: usize, a: usize) -> bool {
+        let world = &self.worlds[w];
+        self.controlled.get(a).copied().unwrap_or(false)
+            && (!self.season || (world.decision_kind(a) == Decision::Build && world.games[a].queue == self.queue))
+    }
+
     fn advance(&mut self, w: usize) {
         let cat = Arc::clone(&self.catalogue);
         loop {
@@ -374,7 +400,7 @@ impl VecWorld {
                 self.read[w] = 0;
                 continue;
             };
-            if !self.controlled[a] {
+            if !self.model_decides(w, a) {
                 self.play_rest(w, &cat, a);
                 continue;
             }
@@ -400,8 +426,9 @@ impl VecWorld {
     /// `controlled[a]` says whether account slot a of every world is the caller's; the rest play the player rule.
     /// With `units`, `fleet_settings` and `combat` (the host exports) the worlds are armed: ships, defence and fleets.
     #[new]
-    #[pyo3(signature = (catalogue, planets, n_worlds, controlled, horizon_hours=240.0, bonus_hours=24.0, seed=0, login_gaps=None, units=None, fleet_settings=None, combat=None, errands=false))]
-    fn new(catalogue: &str, planets: Vec<usize>, n_worlds: usize, controlled: Vec<bool>, horizon_hours: f64, bonus_hours: f64, seed: u64, login_gaps: Option<Vec<f64>>, units: Option<&str>, fleet_settings: Option<&str>, combat: Option<&str>, errands: bool) -> PyResult<Self> {
+    #[pyo3(signature = (catalogue, planets, n_worlds, controlled, horizon_hours=240.0, bonus_hours=24.0, seed=0, login_gaps=None, units=None, fleet_settings=None, combat=None, errands=false, season=false, queue=0))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(catalogue: &str, planets: Vec<usize>, n_worlds: usize, controlled: Vec<bool>, horizon_hours: f64, bonus_hours: f64, seed: u64, login_gaps: Option<Vec<f64>>, units: Option<&str>, fleet_settings: Option<&str>, combat: Option<&str>, errands: bool, season: bool, queue: usize) -> PyResult<Self> {
         let mut loaded = Catalogue::load(catalogue).map_err(PyValueError::new_err)?;
         loaded.login_gaps = login_gaps.unwrap_or_default();
         if loaded.login_gaps.is_empty() {
@@ -415,11 +442,19 @@ impl VecWorld {
             (None, None, None) => None,
             _ => return Err(PyValueError::new_err("units, fleet_settings and combat come together")),
         };
+        // A colony site has no shipyard table, so the season starts every account on a home planet (as `season.rs`).
+        let planets: Vec<usize> = match (&rules, season) {
+            (Some(r), true) => planets.into_iter().filter(|&p| p < r.units.planets.len()).collect(),
+            _ => planets,
+        };
         let accounts = controlled.len();
-        if errands && rules.is_none() {
+        if (errands || season) && rules.is_none() {
             return Err(PyValueError::new_err("errands need the units, fleet_settings and combat exports: nothing can fly without them"));
         }
-        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds], during: Vec::new(), credited: Vec::new(), sent: HashMap::new(), read: Vec::new() };
+        let mut env = VecWorld { catalogue: Arc::new(loaded), rules, worlds: Vec::new(), deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds], controlled, planets, horizon_hours, bonus_hours, rng: seed, tickets: 0, closed: Vec::new(), finished: Vec::new(), errands, players: Vec::new(), ledgers: Vec::new(), offered: vec![Vec::new(); n_worlds], during: Vec::new(), credited: Vec::new(), sent: HashMap::new(), read: Vec::new(), season, queue, colonisation: None };
+        if season {
+            env.colonisation = Some(Arc::new(Colonisation::load(catalogue).map_err(PyValueError::new_err)?));
+        }
         env.worlds = (0..n_worlds).map(|_| env.fresh_world()).collect();
         for w in 0..n_worlds {
             env.advance(w);
@@ -504,6 +539,10 @@ impl VecWorld {
                 self.play_rest(w, &cat, a);
                 self.advance(w);
                 continue;
+            }
+            if self.season {
+                // The persona plays the rest of the login (yard, colonies, consolidation) and its own pick is dropped.
+                let _ = self.players[w][a].act(&mut self.worlds[w], &cat, a, &mut self.ledgers[w][a]);
             }
             let world = &mut self.worlds[w];
             if action == -2 {
