@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::combat;
-use crate::economy::{Baseline, Catalogue, WEIGHTS};
+use crate::economy::{Baseline, Catalogue, Planet, WEIGHTS};
 use crate::fleet::{self, SystemState};
 use crate::score;
 use crate::units::UnitKind;
@@ -306,11 +306,17 @@ pub struct Miner {
     /// The share of the host's own military score this persona aims for (row 10, S4): from the real mil_share medians
     /// (top10 0.058, mid 0.16, bottom 0.066), a taste over host data that names no object.
     military_share: f64,
+    /// Row 45 C: brings each colony's surplus home at every login, with cargo ships stationed on the colonies.
+    pub consolidate: bool,
+    /// Row 45 FR: keeps the fields a planet's field-adding chain still needs, and builds that chain when they run out.
+    pub reserve: bool,
+    /// The cargo ships the colonies lacked at the last consolidation: the yard's want grows by them.
+    colony_cargo: i64,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06 }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, colony_cargo: 0 }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -318,13 +324,19 @@ impl Miner {
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize) -> Option<usize> {
         let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
         let pick = match w.decision_kind(a) {
-            Decision::Build => self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)),
+            Decision::Build => match self.reserve.then(|| field_reserve(w, cat, a)).flatten() {
+                Some(chain) => chain,
+                None => self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)),
+            },
             Decision::Idle => None,
         };
         let overflow = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
+        if self.consolidate && w.account_of(a) == a {
+            self.bring_home(w, cat, a);
+        }
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
-        if w.account_of(a) == a && (pick.is_none() || overflow || self.eager || short) {
+        if w.account_of(a) == a && (pick.is_none() || overflow || self.eager || short || self.colony_cargo > 0) {
             self.order_ships(w, cat, a);
         }
         if short && w.account_of(a) == a {
@@ -414,6 +426,22 @@ impl Miner {
         w.order_units(cat, a, u, DEFENCE_BATCH);
     }
 
+    /// A player brings colony resources home to pay for research and the big builds (gate 3): each colony sends its
+    /// surplus with the cargo ships stationed there, and the capital sends spare cargo ships to a colony short of them.
+    fn bring_home(&mut self, w: &mut World, cat: &Catalogue, a: usize) {
+        let Some(kit) = Kit::of(w, cat, a) else { return };
+        self.colony_cargo = 0;
+        for colony in w.planets_of(a).into_iter().skip(1) {
+            let missing = w.consolidate(cat, colony, kit.cargo);
+            let spare = missing.min(on_shelf(w, a, kit.cargo));
+            if spare > 0 && w.dispatch(cat, a, colony, Mission::Deploy, &[(kit.cargo, spare)], [0.0; 3], 10.0).is_ok() {
+                self.colony_cargo += missing - spare;
+                continue;
+            }
+            self.colony_cargo += missing.max(0);
+        }
+    }
+
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize) {
         for (u, amount) in self.order_plans(w, cat, a) {
             w.order_units(cat, a, u, amount as u64);
@@ -428,7 +456,7 @@ impl Miner {
         let research = w.research(cat, a);
         let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
         let stock: f64 = w.games[a].planet.res.iter().sum();
-        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
+        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
         let mut plans: Vec<(usize, i64)> = wants.into_iter().filter_map(|(id, want)| {
             let missing = want - owned(w, a, id);
             let u = rules.units.index(id as i64)?;
@@ -441,6 +469,63 @@ impl Miner {
             }
         }
         plans
+    }
+}
+
+/// A planet's field-adding chain: the next level of the cheapest object that adds fields, and every unmet requirement
+/// under it, prerequisites first (gate 1: `fields_added` and `requires` say which objects, nothing is named). Returns
+/// the chain and the fields its unbuilt levels still consume.
+fn field_chain(cat: &Catalogue, planet: &Planet) -> Option<(Vec<(usize, u32)>, u32)> {
+    let adds = |k: usize, l: usize| cat.objects[k].fields_added.get(l).copied().unwrap_or(0);
+    let adder = (0..cat.objects.len())
+        .filter(|&k| adds(k, planet.levels[k] as usize + 1) > adds(k, planet.levels[k] as usize))
+        .min_by(|&x, &y| weighted(cat.objects[x].price[planet.levels[x] as usize]).total_cmp(&weighted(cat.objects[y].price[planet.levels[y] as usize])))?;
+    let mut chain = vec![(adder, planet.levels[adder] + 1)];
+    let mut at = 0;
+    while at < chain.len() && chain.len() < 256 {
+        let k = chain[at].0;
+        at += 1;
+        for &(need, level) in &cat.objects[k].requires {
+            let Some(need) = need else { continue };
+            if planet.levels[need] >= level { continue }
+            match chain.iter_mut().find(|c| c.0 == need) {
+                Some(c) => c.1 = c.1.max(level),
+                None => chain.push((need, level)),
+            }
+        }
+    }
+    chain.reverse();
+    let fields = chain.iter().filter(|&&(k, _)| cat.objects[k].consumes_field).map(|&(k, l)| l - planet.levels[k]).sum();
+    Some((chain, fields))
+}
+
+/// Row 45 FR: a player keeps a planet's last fields for the field-adding chain (gate 3). When a planet's free fields are
+/// down to what its chain still consumes, its building queue builds the chain's next startable object (or waits for
+/// one), and the capital's research queue researches the chain of whichever of its planets is short. None leaves the
+/// pick to the ordinary rule.
+fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> {
+    let queue = w.games[a].queue;
+    let short = |slot: usize| {
+        let planet = &w.games[slot].planet;
+        let (chain, fields) = field_chain(cat, planet)?;
+        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= fields).then_some(chain)
+    };
+    let slots = match queue {
+        0 => vec![a],
+        _ => w.planets_of(w.account_of(a)),
+    };
+    let chains: Vec<Vec<(usize, u32)>> = slots.into_iter().filter_map(short).collect();
+    if chains.is_empty() { return None }
+    let levels = &w.games[a].planet.levels;
+    let next = chains.iter().flatten()
+        .find(|&&(k, level)| levels[k] < level && cat.objects[k].queue == queue && w.legal(cat, a, k))
+        .map(|&(k, _)| k);
+    // The research queue keeps its own rule when no chain needs research now; the building queue waits rather than
+    // spend a reserved field.
+    match (queue, next) {
+        (0, _) => Some(next),
+        (_, Some(k)) => Some(Some(k)),
+        _ => None,
     }
 }
 
@@ -457,7 +542,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30 };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, colony_cargo: 0 };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -744,6 +829,52 @@ mod tests {
         let coords = (0..ACCOUNTS).map(|a| Coord { galaxy: 1, system: 10 + 2 * a as i64, position: 4 + (a % 8) as i64 }).collect();
         world.arm(vec![Arc::clone(&rules); ACCOUNTS], coords);
         Some((cat, world))
+    }
+
+    /// Row 45 FR: a planet whose free fields are down to what its field-adding chain still consumes builds that chain,
+    /// prerequisite first, and spends no reserved field on anything else; with fields to spare the ordinary rule picks.
+    #[test]
+    fn a_planet_at_its_field_reserve_builds_the_field_adding_chain() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        world.games[0].queue = 0;
+        assert!(field_reserve(&world, &cat, 0).is_none(), "a fresh planet has fields to spare");
+        let (chain, fields) = field_chain(&cat, &world.games[0].planet).expect("an object that adds fields");
+        let planet = &mut world.games[0].planet;
+        let mut free = cat.field_cap(planet) - cat.fields_used(planet) - fields;
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].consumes_field && cat.objects[k].queue == 0 && !chain.iter().any(|c| c.0 == k)) {
+            let room = (cat.objects[k].price.len() as u32 - 1).saturating_sub(planet.levels[k]).min(free);
+            planet.levels[k] += room;
+            free -= room;
+        }
+        assert_eq!(free, 0, "the catalogue cannot fill the planet off the chain");
+        cat.refresh(planet);
+        planet.res = [1e12; 3];
+        let pick = field_reserve(&world, &cat, 0).expect("the reserve binds").expect("a chain object is startable");
+        assert!(chain.iter().any(|c| c.0 == pick), "object {pick} is off the chain");
+        assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
+    }
+
+    /// Row 45 C: a colony above two hours of its production sends the surplus home in the cargo ships stationed on it, and
+    /// the delivery lands whole, above the capital's store (the host does not cap it).
+    #[test]
+    fn a_colony_sends_its_surplus_to_the_capital() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let kit = Kit::of(&world, &cat, 0).expect("a cargo ship");
+        let colony = world.add_planet(&cat, 0, 0, Coord { galaxy: 1, system: 10, position: 9 }, 0.0);
+        world.games[colony].planet.res = [2e6, 1e6, 5e5];
+        assert!(world.set_units(&cat, colony, kit.cargo, 5000), "the colony holds cargo ships");
+        let before = world.games[0].planet.res[0];
+        assert_eq!(world.consolidate(&cat, colony, kit.cargo), 0, "the stationed ships carry the whole surplus");
+        let sent = world.fleets.iter().find(|f| f.owner == colony && f.target == 0 && f.mission == Mission::Transport).expect("a transport home");
+        let carried = sent.cargo;
+        assert!(carried[0] > 1.9e6, "the metal surplus is loaded: {carried:?}");
+        while world.fleets.iter().any(|f| f.owner == colony && !f.returning) {
+            let Some(a) = world.next_decision(&cat) else { break };
+            world.wait(&cat, a);
+        }
+        let capital = &world.games[0].planet;
+        assert!(capital.res[0] >= before + carried[0], "the delivery landed whole: {} after {before}", capital.res[0]);
+        assert!(capital.res[0] > capital.cap[0], "and above the store cap");
     }
 
     /// A scripted account founds a second planet as soon as the host allows it: room from `max_planets`, the

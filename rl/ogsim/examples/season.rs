@@ -115,7 +115,7 @@ fn main() {
         }
     }
 
-    let players: Vec<Player> = (0..accounts).map(|a| {
+    let mut players: Vec<Player> = (0..accounts).map(|a| {
         let s = seed.wrapping_mul(100).wrapping_add(a as u64);
         match roles[a] {
             RAIDER => Player::Raider(Raider::new(s)),
@@ -123,6 +123,20 @@ fn main() {
             _ => Player::Miner(Miner::new(s)),
         }
     }).collect();
+    // Row 45 arm C: every persona brings its colonies' surplus home at each login.
+    // Row 45 arm FR: every persona keeps its planets' last fields for the field-adding chain.
+    // Row 46: the stack of both.
+    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack");
+    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack");
+    for player in &mut players {
+        let miner = match player {
+            Player::Miner(m) => m,
+            Player::Raider(r) => &mut r.miner,
+            Player::Saver(s) => &mut s.miner,
+        };
+        miner.consolidate = consolidate;
+        miner.reserve = reserve;
+    }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -140,6 +154,7 @@ fn main() {
         per_day: vec![vec![Tally::default(); accounts]; days],
         since,
         login_at: vec![0; accounts],
+        counted_login: vec![f64::NEG_INFINITY; accounts],
         alliance_at,
         read: 0,
         midnight: DAY,
@@ -243,6 +258,8 @@ struct Season<'a, W: Write> {
     since: Vec<(Books, f64)>,
     /// Per account, how far its login record has been read for the days already written.
     login_at: Vec<usize>,
+    /// The last login second counted per account: every planet may decide at it, and it is one login.
+    counted_login: Vec<f64>,
     /// Per account, the second it joined an alliance (row 15), or `None` if it never did.
     alliance_at: Vec<Option<f64>>,
     /// How many events of the world's log have been read.
@@ -515,7 +532,9 @@ impl<W: Write> Season<'_, W> {
         let full = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
         // A session places several decisions per login, so a login is a decision whose second is in the login record
         // (row 12r): counting decisions here would read 57 "logins" a day where the account logged in twelve times.
-        let login = self.world.games[slot].login_times.iter().any(|&x| (x - t).abs() < 1e-6);
+        // The world's clock never goes back, so one remembered second per account counts each login once.
+        let login = self.world.games[slot].login_times.iter().any(|&x| (x - t).abs() < 1e-6) && t != self.counted_login[a];
+        if login { self.counted_login[a] = t }
         // Row 29: at a login that finds a store full, why the yard did or did not spend it.
         let yard = full && login;
         let stall = match yard {
@@ -556,8 +575,9 @@ fn snapshot_time(until: f64, midnight: f64) -> f64 {
 }
 
 fn excess_after(current: f64, previous: f64, delivered: f64) -> (f64, bool) {
+    // Stock is stored to 14 significant digits (`as_stored`), so a large excess carries rounding a fixed epsilon refuses.
     let allowed = previous + delivered;
-    (current.min(allowed), current > allowed + 1e-6)
+    (current.min(allowed), current > allowed + 1e-6 + 1e-9 * allowed)
 }
 
 #[cfg(test)]
@@ -588,6 +608,12 @@ mod health_tests {
         let (excess, bad) = excess_after(0.0, excess, 0.0);
         assert!(!bad);
         assert!(excess_after(10.0, excess, 0.0).1);
+    }
+
+    #[test]
+    fn rounding_of_a_large_excess_is_not_a_violation() {
+        assert!(!excess_after(95_771_162.000_01, 84_639_043.0, 11_132_119.0).1);
+        assert!(excess_after(95_771_163.0, 84_639_043.0, 11_132_119.0).1);
     }
 }
 
