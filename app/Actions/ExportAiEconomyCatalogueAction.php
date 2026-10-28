@@ -122,7 +122,8 @@ class ExportAiEconomyCatalogueAction
 
     /**
      * What colonising needs besides the mission itself: the ship and the research the mission class declares, the
-     * host's planet limit per research level, the research each slot needs, and where each tabulated site sits.
+     * host's planet and expedition limits per research level, the research each slot needs, and where each tabulated
+     * site sits.
      *
      * @param  list<PlanetService>  $planets
      * @param  list<array{planet: int, position: int, temp_max: int, fields: int}>  $sites
@@ -137,10 +138,12 @@ class ExportAiEconomyCatalogueAction
         $player = $planets[0]->getPlayer();
         $saved = $player->getResearchLevel($research->machine_name);
         $maxPlanets = [];
+        $maxExpeditions = [];
         $positionLevels = [];
         for ($level = 0; $level <= $maxLevel; $level++) {
             $player->setResearchLevel($research->machine_name, $level, false);
             $maxPlanets[] = $player->getMaxPlanetAmount();
+            $maxExpeditions[] = $player->getExpeditionSlotsMax();
             for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
                 if (! isset($positionLevels[$position]) && $player->canColonizePosition($position)) {
                     $positionLevels[$position] = $level;
@@ -153,6 +156,8 @@ class ExportAiEconomyCatalogueAction
             'research' => $research->id,
             'ship' => $ship->id,
             'max_planets' => $maxPlanets,
+            // The host's expedition limit at each level of the same research (ExpeditionMission refuses beyond it).
+            'max_expeditions' => $maxExpeditions,
             'position_levels' => $positionLevels,
             'sites' => array_map(static fn (array $site, int $n): array => [
                 'config' => $firstSite + $n,

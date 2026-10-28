@@ -1869,3 +1869,21 @@ persona played through the wait row reproduces its value exactly (8,223,344,280,
 an hour old. Raids fell 2,168 -> 683 per raider by day 200 and loot with them, but losses stayed exactly 2.19e8: the
 losses are the moon shots (row 64, ~6.7M of fighters each, mostly fired by raiders since they hold fighters), not
 stale-report raids. HDS 0.777 against 0.778. Reverted.
+
+**w37 (wait row, full-season BC): BC fixed, PPO still collapses.** BC at 800k rows over whole seasons (one world per
+collector; 400k rows from 5,000-step collectors covered only the first quarter of a season): top-1 91.7%. The BC
+policy plays within 9% of the persona on the probe world (7.47e9 against 8.22e9) and waits where the persona waits
+99.3% of the time. PPO from it (lr 5e-5, ent 0.003): paired eval at 120 -10% (2% of accounts better), at 360 -91%.
+Probe of checkpoint 360: value 2.29e8; it never waits and asks for the metal mine at 16,789 decisions where the persona
+builds the solar plant: no energy, the mine never starts, the same pick returns all season. The policy can see energy
+(`pl_energy_*`, `energy_delta`). Over the run entropy rose 0.06 -> 0.87 at KL ~5e-4 per update: a drift towards
+uniform, not a sharp collapse - advantages that carry little of the build's effect (the account value also moves with
+moon shots, raids, the yard) leave the entropy bonus and the noise to flatten the policy, and greedy play then follows
+small biases. w38a/b test the existing KL anchor to the BC policy (0.1) with the entropy bonus at 0.003 and at 0.
+
+**Expedition slots (part of N6b).** The host refuses an expedition beyond `getExpeditionSlotsMax()` (floor of the root
+of astrophysics, plus settings and class bonuses); the world checked no slot limit. The economy export now writes
+`colonisation.max_expeditions` per research level from the host's own method (EconomyCatalogueExportTest covers it).
+Our accounts send 0 expeditions; at our top account's score an expedition's resource find is worth ~1M on average,
+against ~20M/day produced by a mid account at day 200 - the largest income source the world does not use. Real mid
+growth is ~6x ours (8,656 against 1,404 at 128-256 days), the top 10% ~45x.

@@ -286,6 +286,8 @@ test('a colony is tabulated as the donor planet moved to its slot, and the plane
         ->and($colonisation['research'])->toBe(ObjectService::getResearchObjectByMachineName('astrophysics')->id)
         ->and($colonisation['max_planets'])->toHaveCount(4)
         ->and($colonisation['max_planets'][0])->toBe(1)
+        ->and($colonisation['max_expeditions'])->toHaveCount(4)
+        ->and($colonisation['max_expeditions'][1])->toBe($colonisation['max_expeditions'][0] + 1)
         ->and($colonisation['sites'])->toBe([['config' => 1, 'donor' => $planet->getPlanetId(), 'position' => $other, 'temp_max' => 31, 'fields' => 123]]);
 
     $colony = $catalogue['planets'][1];
