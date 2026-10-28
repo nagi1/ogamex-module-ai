@@ -2118,3 +2118,26 @@ growth -20% (the research levels were score; the stock they took now sits unspen
 
 **Gap now.** Giveaways: eco_share 0.164 (25% out), mil_share 0.136 (5% out), planets 0.128, growth 0.120 (30% out).
 The surplus the lab no longer spends is the growth lever: real players turn it into economy, ours leave it in the store.
+
+## 28 Oct — rows 80-81: the late building queues; nothing kept
+
+**Diagnosis (seed 1, day 200, e79d's arms).** After day 128 mid accounts hold 1.3-3.3B in stock (top10 4.9-11.6B),
+spend ~31M of ~58M a day and waste 4-6M a day to full stores. At day 200 almost every planet's building queue is idle
+all day at exactly one field under its cap: the field reserve (row 45 FR) holds the last field for the terraformer,
+whose deuterium price doubles a level (819M at level 14) and outgrows the planet's tank; colonies have stores of ~1M
+(consolidation empties them before they ever overflow, the player rule's trigger for a store) and cannot pay it at all.
+Every building level takes a field, so a full planet grows only through the terraformer: real players hit the same
+wall, and their late growth comes from more planets, moons, fleet and research.
+
+| arm on e79d (10 seeds x 365 days) | HDS | pooled AUC | mid p50 64-128 / 128-256 / 256-512 | result |
+| --- | --- | --- | --- | --- |
+| e79d (baseline) | 0.855 | 0.850 | 1,284 / 1,991 / 2,484 | |
+| e80a `speedup` (factory by time saved per price) | 0.853 | 0.864 | 1,267 / 2,024 / 2,567 | no effect: the queues are idle, not slow |
+| e81a `stores` (the store that holds a capped step's price joins the chain; and a capped producer's store) | 0.833 | 0.856 | 1,143 / 1,767 / 2,087 | worse: a longer chain binds the reserve earlier |
+| e81c `feedchain` (capital pays a colony's field step; no consolidation from it) | 0.850 | 0.864 | 1,104 / 1,501 / 1,655 | worse: unconsolidated colonies waste 20-37M a day |
+
+All three removed (patch kept out of the tree). Baseline unchanged: e79d.
+
+**Next.** The late game is the gap: top10 growth ~10x under real, moons in band 0.0-0.3 at the top, and late accounts
+whose planets are full. Rows to write: moons (lunar base fields) and the late fleet as the late growth path, measured
+against the real top10 bands; and row 76 (energy prices) for the terraformer's real energy requirement.
