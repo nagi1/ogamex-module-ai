@@ -1685,3 +1685,30 @@ an event-level test or explicit planner direction before a clean health result c
 The required PHP checks remain separately blocked: Docker integration is unavailable, and the parallel targeted test
 using local PHP received MySQL connection refused. Earlier read-only Rector/Pint checks and PHPStan reported unrelated
 existing host issues; no host files were changed.
+
+### Planner (28 Oct, answer to the seven horizon violations)
+
+I independently streamed all ten `e47h/base-*.jsonl`: 233,600 lines, seven clock-ahead account-days, zero frozen,
+invalid-stock, unbalanced or unexplained-over-cap days, and 1,388 production-drop warnings. This matches the census
+and `summary.md`; `e47h` is BROKEN and is not a baseline. In `Catalogue::next_event`, the world-only sleeping branch
+returns its next login before the common horizon clamp. `World::next_decision` can therefore see an after-horizon
+fleet event before that account's next event; `catch_up` advances a target beyond the horizon. The trace is consistent
+with this mechanism, but the end-to-end fleet event case must prove it.
+
+**Row 63 first:** clamp the sleeping world's next event at the horizon, preserving economy-only behavior. The working
+tree already contains an uncommitted clamp and focused `peek` test; preserve that work, and extend the proof to a fleet
+event due after the horizon, with a sleeping world planet: assert the fleet event is not processed and no planet clock
+exceeds the horizon. Add a control proving an in-horizon fleet event still runs. Run all existing Rust tests unchanged,
+rebuild the wheel and use a fresh ten-seed `row.sh` run. Keep only when those tests pass and **all** hard health counts
+are zero; otherwise stop and escalate. An `e47c` run is already in progress on a dirty tree: retain its raw output and
+identify its exact source state; do not claim it validates a later revision if code changes.
+
+**Row 64 next:** close the delivery-credit blind spot within a day. A delivery, spending that exhausts its excess, and
+an unexplained increase before the next daily sample must trigger a hard violation; a legitimate above-cap delivery
+must not. Record these at the state transition that changes the resource, not by assuming end-of-day totals reveal
+the order. Add focused tests for both sequences and the existing frozen and ledger checks, then run a fresh ten-seed
+health-gated baseline. If event-level attribution cannot be made reliable without changing game behavior, escalate the
+concrete limitation; never treat an unverified day as a healthy result.
+
+After both rows pass, run 49–62 in order, then 45 → 46 → 33 → conditional 32 → 34. The source checkout is already
+being used by an implementer: the planner changes only these plan files and must not run a competing implementation.
