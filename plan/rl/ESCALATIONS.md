@@ -1952,3 +1952,29 @@ nothing, so the Payback rule takes the cheapest research, levelling every techno
 colonisation research only up to the first colony position. Under the arm, a capital whose planets fill every slot the
 research allows wants the next level that adds a slot first (`max_planets` from the host; no object named). Test:
 `a_player_with_every_slot_taken_researches_the_next_slot_first` (fails with the rule off). e73 = e72 + colonies.
+
+**e73 (colonies, lab waits for the slot): HDS 0.786, not kept.** Planets +1 at every age, but the lab saved for a
+research whose price grows 1.75x a level: research share fell to 0.02-0.06 at the top (real 0.11-0.13) and the unspent
+went to economy (top eco_share 0.91 against 0.45).
+
+**e73b (the slot only when payable now): health BROKEN, one line** - seed 10, a saver's day 27, 5,916 unexplained =
+2,958 deuterium at weight 2. Traced step by step (stock minus books after every decision): the jump sits in `wait` at
+an idle login where the saver had recalled its fleet save. The idle login's rollback restored the stashed books,
+dropping the recall's fuel-refund booking while the fuel stayed in the hold. Every other action at a login already
+cleared the stash; `recall` now does too (f46c59a, test `a_recall_at_an_idle_login_keeps_the_books_balanced`, fails
+without the fix). Latent before; the new timing exposed it.
+
+**On the fixed binary (10 seeds each):**
+
+| arm | HDS | pooled AUC | mid p50 score 64-128 / 128-256 / 256-512 | top10 p50 128-256 / 256-512 | health |
+| --- | --- | --- | --- | --- | --- |
+| e72f (e72 rerun) | 0.800 | 0.910 | 1,366 / 2,106 / 2,605 | 3,516 / 4,574 | PASS |
+| **e73c (+ colonies)** | 0.802 | 0.901 | 1,479 / 2,255 / 2,742 | 3,767 / 4,932 | PASS |
+
+**Kept**, on growth rather than HDS: the HDS difference is inside noise, but growth is +5-8% in every mid and top10
+cell, planets in band move up, the pooled AUC falls, and nothing moves out of band. It is a nameable habit (gate 3).
+Baseline from here: e73c = `moonstack reach expedition colonies`.
+
+**Where the gap is now.** res_share (49% out of band) is still the top giveaway: mid research share is 0.21-0.23
+against a real 0.11. The next row looks at why the lab's cheapest-first rule over-researches against real players, who
+research for what they build next (prerequisites, production, slots) and leave the rest.

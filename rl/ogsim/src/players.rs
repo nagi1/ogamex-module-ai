@@ -316,11 +316,13 @@ pub struct Miner {
     colony_cargo: i64,
     /// N6b arm: at each capital login the account fills its free expedition slots (`expedition_trips`).
     pub expeditions: bool,
+    /// Row 70 arm: with every planet slot taken, the next research level that adds a slot comes before other research.
+    pub colonies_first: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -426,6 +428,14 @@ impl Miner {
         if let Some(t) = w.colonisation.as_ref() {
             if let Some(k) = cat.objects.iter().position(|o| o.id == t.research) {
                 need.push((k, t.position_levels.values().copied().min().unwrap_or(0)));
+                let held = w.planets_of(w.account_of(a)).len();
+                if self.colonies_first && held >= t.max_planets(levels[k]) && cat.wait_seconds(&w.games[a].planet, k) == 0.0 {
+                    // A colonising player researches the next slot whenever the slots are full and it can pay for it; it
+                    // does not stop the lab to save for it (e73: saving starved every other research, gate 3).
+                    if let Some(next) = (levels[k] + 1..t.max_planets.len() as u32).find(|&l| t.max_planets(l) > held) {
+                        need.push((k, next));
+                    }
+                }
             }
         }
         need.into_iter().find_map(|(k, level)| {
@@ -725,7 +735,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -1069,6 +1079,40 @@ mod tests {
             world.add_planet(&cat, 0, 0, Coord { system: to.system + 200 + system, ..to }, 0.0);
         }
         assert_eq!(taken, vec![3, 3, 4, 4], "a galaxy fills before the next one opens");
+    }
+
+    /// Row 70: with every planet slot taken, a colonising player's lab takes the next level that adds a slot; with a slot
+    /// still free, or without the arm, the research waits its turn.
+    #[test]
+    fn a_player_with_every_slot_taken_researches_the_next_slot_first() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 3600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        let table = Arc::new(crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")).expect("a colonisation table"));
+        let k = cat.objects.iter().position(|o| o.id == table.research).expect("the colonisation research");
+        // Everything else well past any requirement, so only the slot rule can name the research.
+        for (j, level) in world.games[0].planet.levels.iter_mut().enumerate() {
+            if j != k { *level = (*level).max(12) }
+        }
+        let level = (0..table.max_planets.len() as u32).find(|&l| table.max_planets(l) == 2).expect("a level with two planets");
+        world.games[0].planet.levels[k] = level;
+        world.games[0].planet.res = [1e12; 3];
+        world.games[0].queue = cat.objects[k].queue;
+        world.colonisation = Some(table);
+        cat.refresh(&mut world.games[0].planet);
+        assert!(world.legal(&cat, 0, k), "the research can start");
+        let mut miner = Miner::new(1);
+        miner.colonies_first = true;
+        assert_eq!(miner.unlock(&world, &cat, 0), None, "a slot is still free");
+        world.add_planet(&cat, 0, 0, Coord { galaxy: 3, system: 101, position: 8 }, 0.0);
+        assert_eq!(miner.unlock(&world, &cat, 0), Some(k), "every slot taken: the next slot first");
+        world.games[0].planet.res = [0.0; 3];
+        assert_eq!(miner.unlock(&world, &cat, 0), None, "the lab does not wait to save for it");
+        world.games[0].planet.res = [1e12; 3];
+        miner.colonies_first = false;
+        assert_eq!(miner.unlock(&world, &cat, 0), None, "without the arm the research waits its turn");
     }
 
     /// N6b: the world refuses an expedition beyond the host's slot limit at the account's research level, counting the

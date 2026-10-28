@@ -140,12 +140,15 @@ fn main() {
     let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "moonstack");
     // N6b: every persona fills its expedition slots.
     let expeditions = std::env::args().any(|arg| arg == "expedition");
+    // Row 70: the next planet slot is the research priority once the slots are full.
+    let colonies_first = std::env::args().any(|arg| arg == "colonies");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
         miner.reserve = reserve;
         miner.yard = yard;
         miner.expeditions = expeditions;
+        miner.colonies_first = colonies_first;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
