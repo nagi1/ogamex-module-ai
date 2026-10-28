@@ -151,6 +151,16 @@ impl Kit {
 /// How many units one login buys while an account is under its military share.
 const DEFENCE_BATCH: u64 = 10;
 
+/// The research share of real players' host score: the median of every rank band and age in the real bands is 0.11-0.13
+/// (`real-bands.json`); a taste over host data that names no object, as `military_share` is.
+const RESEARCH_SHARE: f64 = 0.12;
+
+/// The account's research share of its own host score.
+pub(crate) fn research_share(w: &World, a: usize) -> f64 {
+    let score = score::of(w, w.account_of(a));
+    if score.total > 0 { score.research as f64 / score.total as f64 } else { 0.0 }
+}
+
 /// The account's military share of its own host score, the number a persona's target is compared with (row 10).
 pub(crate) fn military_share(w: &World, a: usize) -> f64 {
     let score = score::of(w, w.account_of(a));
@@ -330,11 +340,13 @@ pub struct Miner {
     pub feed: bool,
     /// Row 77 arm: a planet waiting on time rather than resources builds the factory that shortens its building queue.
     pub factory: bool,
+    /// Row 79 arm: the lab's research from surplus stops at the real players' research share (`RESEARCH_SHARE`).
+    pub balance: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -391,7 +403,8 @@ impl Miner {
         }
         let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
         let fallback = match self.lab && queue == 1 {
-            true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng).filter(|&k| spare(w, cat, a, k))),
+            true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
+                .filter(|&k| spare(w, cat, a, k) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
             false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k)),
         };
@@ -691,10 +704,7 @@ fn feed_colonies(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) 
     let hold = w.rules[a].combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &w.research(cat, a)).max(1) as f64;
     let keep = saving(w, cat, a, pick);
     for colony in w.planets_of(a).into_iter().skip(1) {
-        let planet = &w.games[colony].planet;
-        let Some(next) = w.games[colony].commit[0].or_else(|| cat.baseline(planet, 0, Baseline::Player, &mut 0)) else { continue };
-        let price = cat.objects[next].price[planet.levels[next] as usize];
-        let lack: [f64; 3] = std::array::from_fn(|r| (price[r] - planet.res[r]).max(0.0).ceil());
+        let lack = colony_lack(w, cat, colony);
         let total: f64 = lack.iter().sum();
         let home = w.games[a].planet.res;
         if total <= 0.0 || (0..3).any(|r| home[r] - keep[r] < lack[r]) { continue }
@@ -702,6 +712,14 @@ fn feed_colonies(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) 
         if ships > on_shelf(w, a, kit.cargo) { continue }
         let _ = w.dispatch(cat, a, colony, Mission::Transport, &[(kit.cargo, ships)], lack, 10.0);
     }
+}
+
+/// What a colony's next building (the one it saves for, else the player rule's) lacks in its store.
+fn colony_lack(w: &World, cat: &Catalogue, colony: usize) -> [f64; 3] {
+    let planet = &w.games[colony].planet;
+    let Some(next) = w.games[colony].commit[0].or_else(|| cat.baseline(planet, 0, Baseline::Player, &mut 0)) else { return [0.0; 3] };
+    let price = cat.objects[next].price[planet.levels[next] as usize];
+    std::array::from_fn(|r| (price[r] - planet.res[r]).max(0.0).ceil())
 }
 
 /// Row 72: the research a player works towards when nothing else is wanted, saving for it if need be: what raises the
@@ -821,7 +839,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -1256,6 +1274,16 @@ mod tests {
         world.games[0].planet.res = [1e12; 3];
         let k = time_bound(&world, &cat, 0, next).expect("a factory");
         assert!(cat.modifiers[0].iter().any(|&(m, _)| m == k), "the pick is not a time modifier of the building queue");
+    }
+
+    /// Row 79: the research share reads the host score's split, so more research levels raise it past the real share.
+    #[test]
+    fn research_levels_raise_the_research_share() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        let before = research_share(&world, 0);
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1) { world.games[0].planet.levels[k] = 12 }
+        cat.refresh(&mut world.games[0].planet);
+        assert!(research_share(&world, 0) > before.max(RESEARCH_SHARE), "research levels did not raise the share: {before}");
     }
 
     /// Row 74: every home config carries its owner's class, as the production rows were made with it.

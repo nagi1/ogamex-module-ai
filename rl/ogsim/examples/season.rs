@@ -167,6 +167,8 @@ fn main() {
     let feed = std::env::args().any(|arg| arg == "feed");
     // Row 77: a planet waiting on time builds the factory that shortens its queue.
     let factory = std::env::args().any(|arg| arg == "factory");
+    // Row 79: research from surplus only under the real research share.
+    let balance = std::env::args().any(|arg| arg == "balance");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -179,6 +181,7 @@ fn main() {
         miner.cap = cap;
         miner.feed = feed;
         miner.factory = factory;
+        miner.balance = balance;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {

@@ -2084,3 +2084,37 @@ by its own production. Baseline: `moonstack reach expedition colonies ships cap 
 
 **Gap now.** Mid research share from day 128 is still 0.33-0.45 (real 0.11-0.12) with economy 0.32-0.45 (real 0.56).
 Top10 growth is ~10x under real (12,231 against 116,840 at 128-256).
+
+## 28 Oct — rows 78-79: the lab's surplus research was the research giveaway; `balance` kept (HDS 0.855)
+
+**Diagnosis (seed 1, day 250, e78a's arms).** Mid accounts hold every research at 15-20 (weapons and armour 19,
+combustion 18, laser 20) with astrophysics at 18: about 3.7M research points of a 9.4M total. Counted by completed
+levels, not by decisions (a purpose pick repeats at every login while the lab saves, a spare pick starts at once),
+the spender is the lab's "anything else from what the next building leaves" path: a rich capital passes that test
+at almost every login.
+
+| arm (10 seeds x 365 days) | HDS | pooled AUC | mid p50 64-128 / 128-256 / 256-512 | top10 p50 64-128 / 128-256 / 256-512 | health |
+| --- | --- | --- | --- | --- | --- |
+| e78a (baseline) | 0.814 | 0.869 | 1,598 / 2,557 / 3,201 | 10,122 / 12,231 / 13,769 | PASS |
+| e79a `grow` (spare also keeps the colonies' lacks; partial feeding) | 0.812 | 0.875 | 1,578 / 2,578 / 3,201 | 10,364 / 12,497 / 14,140 | PASS |
+| e79b `focus` (no research from surplus at all) | - | - | - | - | BROKEN (8 frozen days) |
+| **e79d `balance`** | **0.855** | **0.850** | 1,284 / 1,991 / 2,484 | 8,545 / 11,615 / 12,862 | PASS |
+| e79e `grow balance` | 0.851 | 0.860 | 1,258 / 1,928 / 2,419 | 8,804 / 11,624 / 12,908 | PASS |
+
+**Row 78 `grow`: no effect, removed.** The surplus research is not taken from the colonies; they lacked cargo ships
+and time, not the capital's stock.
+
+**Row 79 `focus`: BROKEN, not kept.** Research share fell to 0.00-0.03 and eight account-days froze: single-planet
+accounts whose purpose research was not yet legal (the colonisation research's prerequisites unmet) never researched,
+filled their stores and stopped. A latent stall worth remembering: an account that buys nothing at full stores freezes.
+
+**Row 79 `balance`: kept.** The lab's surplus research runs only while the account's research share is under 0.12, the
+median of the real bands at every rank and age (a taste over host data, as `military_share` is); prerequisites,
+production and colonisation research are not capped. res_share leaves the giveaways (in band mid 128-512: 0.21-0.30 ->
+0.53-0.71), mid eco_share in band 0.50-0.54 -> 0.75-0.96, HDS 0.814 -> 0.855, pooled AUC 0.869 -> 0.850. Cost: mid
+growth -20% (the research levels were score; the stock they took now sits unspent) - growth in band 0.81-0.97.
+
+**Baseline:** `moonstack reach expedition colonies ships cap lab classes feed factory balance`.
+
+**Gap now.** Giveaways: eco_share 0.164 (25% out), mil_share 0.136 (5% out), planets 0.128, growth 0.120 (30% out).
+The surplus the lab no longer spends is the growth lever: real players turn it into economy, ours leave it in the store.
