@@ -1928,3 +1928,27 @@ the persona's (BC reproduces it at 91.7%). The work moves to what HDS reads: the
 planets, mil_share) and the growth gap, measured by 10-seed season rows. A learner comes back only with a reward that
 the account's own decision controls (for example the production it builds, which a raid cannot take) and a fresh
 headroom test under that reward showing best-of-N above the untouched accounts' spread.
+
+## 28 Oct — e72: expeditions kept (HDS 0.779 -> 0.799), and row 70 (colonies first) in measurement
+
+The full host export timed out (40 min, no output: the site scan is the slow part). The slot table alone came from the
+host's own `getExpeditionSlotsMax()` per colonisation-research level, as the export computes it: floor(sqrt(level)), 41
+levels, the length of `max_planets`. Merged into `econ-u1-colonies.json` (the previous file kept as
+`econ-u1-colonies.pre-slots.json`); 51/51 tests.
+
+| arm (10 seeds x 365 days, one binary) | HDS | AUC / pooled | eco_share out | mid 128-256 growth in-band, p50 | health |
+| --- | --- | --- | --- | --- | --- |
+| e72c control (moonstack reach) | 0.779 | 0.991 / 0.915 | 37% | 0.68, 1,409 | PASS |
+| **e72 (+ expedition)** | **0.799** | 0.989 / 0.899 | 30% | **0.94, 2,107** | PASS |
+
+About 7 expeditions per account per day. Kept: the best HDS so far (e69 0.786). The control matches e70b byte for byte
+on 8 of 10 seeds; seeds 8 and 10 differ from day 1, because e70's binary was built at 16:43, before row 67's commit
+(16:50), not because of this change (the control sends no expedition, and only expeditions read `rank1_points`). From
+here the baseline is e72.
+
+**Row 70 (arm `colonies`).** e72's planets stop at 7-8 where real players hold 10 (mid) to 13-14 (top10), while its
+research share is about twice the real one (0.21 against 0.11 for mid). Cause: research produces nothing and stores
+nothing, so the Payback rule takes the cheapest research, levelling every technology evenly; the persona wanted the
+colonisation research only up to the first colony position. Under the arm, a capital whose planets fill every slot the
+research allows wants the next level that adds a slot first (`max_planets` from the host; no object named). Test:
+`a_player_with_every_slot_taken_researches_the_next_slot_first` (fails with the rule off). e73 = e72 + colonies.
