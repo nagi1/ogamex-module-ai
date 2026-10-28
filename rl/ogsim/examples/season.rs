@@ -101,6 +101,21 @@ fn main() {
     shuffle(&mut roles, &mut rng);
     let mut order: Vec<usize> = (0..accounts).collect();
     shuffle(&mut order, &mut rng);
+    // Row 74: an account flies with its own character class's rules - the class its home's production rows were made
+    // with (the host owner's) - from the host's export of that class; without the arm every account flies the first's.
+    if std::env::args().any(|arg| arg == "classes") {
+        let class_rules = |file: &str| Arc::new(Rules::load(&cat,
+            &format!("{data}/units-parity/units-u1.json"),
+            &format!("{data}/fleet-settings-u1.json"),
+            &format!("{data}/{file}")).expect("a class's combat export"));
+        let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules("combat-u1-class2.json")), (3, class_rules("combat-u1-class3.json"))];
+        for a in 0..accounts {
+            let class = cat.planets[configs[a]].character_class;
+            if let Some((_, r)) = by_class.iter().find(|(c, _)| Some(*c) == class) {
+                world.rules[a] = Arc::clone(r);
+            }
+        }
+    }
     // Half the accounts stop playing, each at its own quit day: a quitter's last login is the day it leaves.
     let mut quit: Vec<Option<f64>> = vec![None; accounts];
     for &a in &order[..accounts / 2] {
@@ -142,6 +157,14 @@ fn main() {
     let expeditions = std::env::args().any(|arg| arg == "expedition");
     // Row 70: the next planet slot is the research priority once the slots are full.
     let colonies_first = std::env::args().any(|arg| arg == "colonies");
+    // Row 71: the military share in ships.
+    let ships = std::env::args().any(|arg| arg == "ships");
+    // Row 72: research with no purpose only from what the next building leaves.
+    let lab = std::env::args().any(|arg| arg == "lab");
+    // Row 73: the surplus buys military only under the share.
+    let cap = std::env::args().any(|arg| arg == "cap");
+    // Row 75: the capital feeds its colonies' next buildings.
+    let feed = std::env::args().any(|arg| arg == "feed");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -149,6 +172,10 @@ fn main() {
         miner.yard = yard;
         miner.expeditions = expeditions;
         miner.colonies_first = colonies_first;
+        miner.ships = ships;
+        miner.lab = lab;
+        miner.cap = cap;
+        miner.feed = feed;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {

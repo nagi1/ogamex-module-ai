@@ -1992,3 +1992,74 @@ score is ships. That one habit lifts eco_share and mil_share together.
 2. **Row 72 (the lab researches for a purpose).** The lab takes prerequisites of what the account wants, production
    research, and the slot research (row 70); it spends only what the building queue's waiting pick does not need, and
    otherwise idles. Proof: res_share in-band, no growth loss, against row 71's result.
+
+## 28 Oct — rows 71-75: military in ships, the lab with a purpose, every account its own class, colonies fed
+
+All arms are 10 seeds x 365 days on one binary per row, scored by `hds.py` against e47c's base; health PASS on every run.
+
+| arm (on e73c = `moonstack reach expedition colonies`) | HDS | pooled AUC | mid p50 64-128 / 128-256 / 256-512 | top10 p50 128-256 / 256-512 | top10 planets in band |
+| --- | --- | --- | --- | --- | --- |
+| e73c (baseline) | 0.802 | 0.901 | 1,479 / 2,255 / 2,742 | 3,767 / 4,932 | 0.00 |
+| e74 `ships` | 0.797 | 0.841 | 1,526 / 2,180 / 2,436 | 3,913 / 4,988 | 0.00 |
+| e75 `ships lab(spare only)` | 0.729 | 0.912 | 398 / 1,376 / 1,924 | 3,179 / 4,203 | 0.00 |
+| e75b `ships lab(spare only) cap` | 0.797 | 0.853 | 1,371 / 2,232 / 2,781 | 3,866 / 4,712 | 0.01 |
+| e76d `ships cap` | 0.791 | 0.895 | 1,671 / 2,450 / 2,901 | 3,856 / 4,675 | 0.01 |
+| e76a `ships cap lab` | 0.795 | 0.863 | 1,422 / 2,279 / 2,842 | 3,837 / 4,603 | 0.01 |
+| e77a `classes` | 0.805 | 0.893 | 1,780 / 2,580 / 3,000 | 11,509 / 13,849 | 0.00 |
+| e77b `ships cap lab classes` | **0.813** | **0.884** | 1,739 / 2,631 / 3,138 | 7,473 / 8,266 | 0.77 |
+| e77d `classes feed` | 0.806 | 0.895 | 1,857 / 2,667 / 3,105 | 11,657 / 14,036 | 0.01 |
+| **e77c `ships cap lab classes feed`** | 0.811 | 0.884 | 1,835 / 2,744 / 3,286 | 7,542 / 8,395 | 0.78 |
+
+(e76b/e76c drew the class per persona and are superseded by e77's host classes.)
+
+**Row 71 `ships`.** Under its military share the persona buys the kit's fighter (the cheapest movable shooter it can
+build, `Kit`), defence only while no ship can be built; a raider's surplus hull is unchanged. Defence counted in both
+economy and military; ships count once, so the shares' overlap fell and the pooled AUC with it (0.901 -> 0.841). But mid
+military stayed far over real (0.55 median against 0.17 at 256-512): row 33's surplus spending pours every surplus into
+the military hull.
+
+**Row 73 `cap`.** The surplus goes to the military only while the account is under its share. Mid mil_share in band
+0.43-0.87 -> 0.95-1.00. Alone with ships it left the surplus to the lab's cheapest-first research.
+
+**Row 72 `lab`.** Root cause of the research over-spend: the "build what the visit pays" rule makes the lab buy whatever
+cheap research is payable at the login (weapons, shields and armour at 13 by day 60) instead of saving for the research
+that compounds. The first version (anything not unlocked only from what the next building leaves, e75) starved research
+outright and cost a third of mid growth; reverted. The kept version: with nothing to unlock, the lab works towards
+the cheapest research that raises the planet's output (by the host's production tables) or the colonisation research,
+saving for it if need be; anything else is paid only from what the next building leaves (`purpose`, `spare`). With
+classes it puts the top 10% in the planet band (0.00 -> 0.77): astrophysics was the limit on top accounts' planets
+(6-7 against a real 11-14).
+
+**Row 74 `classes`: every account flew the first account's class.** The economy catalogue's home configs are the host
+players' own planets, with their production made at the owner's class (24 homes: 11 Collector, 10 General, 3
+Discoverer; crystal 220 against 176 at level 1 shows the Collector's +25%), but every account got player 3's
+(Collector) combat and expedition rules. The export now writes `character_class` per planet (the owner's, a colony
+site its donor's; `EconomyCatalogueExportTest`), merged into `econ-u1-colonies.json` from `u1.sqlite`, and the season
+gives an account its home's class rules (`combat-u1-class2.json` General, `-class3.json` Discoverer, whose expedition
+finds are 1.5 x economy speed = 12x). Top10 growth 3x (3,767 -> 11,509) and mid +10-20% with no share moving out of
+band. The real top 10% are still ~10x ours (116,840 at 128-256): the gap is now a multiple, not a factor of 30.
+
+**Row 75 `feed`.** Traced per planet (seed 1, days 20-60): colonies build in minutes at speed 8 and then wait hours
+for resources (a colony waited 8.6 h for its robotics), while the capital held a 9.7M surplus only its own lab and
+yard could spend. At a capital login, a colony that cannot pay its next building gets what it lacks by transport, from
+what the capital does not save for. +4-6% mid growth in both pairings (e77c/e77b, e77d/e77a), HDS within noise.
+
+**Kept: e77c = `moonstack reach expedition colonies ships cap lab classes feed`.** Giveaways now: eco_share 0.196
+(35% out), mil_share 0.154 (8% out), res_share 0.125 (51% out), growth 0.112 (27% out), planets 0.059.
+
+**Where the gap is.** Mid accounts from day 128 put 0.38-0.45 of their score in research (real 0.11) and 0.34-0.42 in
+economy (real 0.56); their military is in band. With mines in the 30s both queues are bound by time, not by stock, and
+the research queue takes the larger part. Our planets hold nanite 2-3 on the capital and 0 on colonies at day 60.
+
+**Parity, found on the way (row 76).** The economy export drops energy prices: graviton costs 300,000 energy (factor 2)
+in the host and `ObjectService::getObjectMaxBuildAmount` requires free energy for it (total production for the
+terraformer and space dock), but the simulator sees a price of 0 and 1 second, so graviton reaches level 40. No score
+effect (its price is energy only); the terraformer's energy requirement is the case that matters. Fix: export the
+energy column and check it in `Catalogue::legal`.
+
+**Next rows.**
+1. **Row 77 (`factory`, time-bound building queue).** A planet whose stock covers its next building several times over
+   is waiting on time, not resources: it builds the cheapest host time modifier for its building queue (the robotics
+   and nanite factories, found by asking the host, gate 1). Proof: mid eco_share in band up and res_share in band up,
+   no growth loss, 10 seeds against e77c.
+2. Row 76 (energy prices), host parity.

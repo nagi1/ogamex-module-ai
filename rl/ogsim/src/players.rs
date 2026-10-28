@@ -318,11 +318,21 @@ pub struct Miner {
     pub expeditions: bool,
     /// Row 70 arm: with every planet slot taken, the next research level that adds a slot comes before other research.
     pub colonies_first: bool,
+    /// Row 71 arm: the military share is met with the kit's fighter, as a player's military score is ships; defence only
+    /// while the yard cannot build one yet.
+    pub ships: bool,
+    /// Row 72 arm: with nothing to unlock, the lab works towards production and colonisation research; anything else is
+    /// paid only from what the next building leaves.
+    pub lab: bool,
+    /// Row 73 arm: the yard's surplus spending stops at the persona's military share.
+    pub cap: bool,
+    /// Row 75 arm: the capital sends a colony what its next building lacks, from what the capital does not need.
+    pub feed: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -337,6 +347,9 @@ impl Miner {
         if self.consolidate && w.account_of(a) == a {
             self.bring_home(w, cat, a);
         }
+        if self.feed && w.account_of(a) == a {
+            feed_colonies(w, cat, a, pick);
+        }
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
         // Row 65: a capital waiting on a building the busy yard blocks lets the yard run dry so the building can start.
@@ -347,7 +360,9 @@ impl Miner {
         if short && orders {
             self.order_defence(w, cat, a, pick);
         }
-        if self.yard && orders {
+        // Row 73 arm: the surplus goes to the military only while the account is under its share (real mid accounts hold
+        // a military share near 0.2; spending every surplus on it held 0.5, e74).
+        if self.yard && orders && (short || !self.cap) {
             self.spend_surplus(w, cat, a, pick);
         }
         if self.expeditions && w.account_of(a) == a {
@@ -373,7 +388,11 @@ impl Miner {
             return chain;
         }
         let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
-        self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng))
+        let fallback = match self.lab && queue == 1 {
+            true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng).filter(|&k| spare(w, cat, a, k))),
+            false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng),
+        };
+        self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| fallback)
     }
 
     /// Row 29: why this login's yard order did or did not happen, asked of the same rule `act` uses: under its military
@@ -443,18 +462,25 @@ impl Miner {
         })
     }
 
-    /// While an account is under its persona's military share it buys defence before economy: the cheapest unit the
-    /// host marks as defence that the yard can start now, in a small batch. No object is named (gate 1).
+    /// While an account is under its persona's military share it buys its military hull before economy, in a small batch.
     fn order_defence(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
         let keep = saving(w, cat, a, pick);
-        let rules = &w.rules[a];
-        let Some(u) = (0..rules.units.units.len())
-            .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence))
-            .filter(|&u| rules.units.max_amount(&w.yards[a], &w.games[a].planet, u) > 0)
-            .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price)))
-        else { return };
+        let Some(u) = self.hull(w, cat, a, self.ships) else { return };
         let amount = within(w, a, u, DEFENCE_BATCH, keep);
         if amount > 0 { w.order_units(cat, a, u, amount); }
+    }
+
+    /// The unit the persona buys for military: the kit's fighter when `fighter` and the yard can start one (a raider's
+    /// always), else the cheapest unit the host marks as defence that the yard can start now. No object is named (gate 1).
+    fn hull(&self, w: &World, cat: &Catalogue, a: usize, fighter: bool) -> Option<usize> {
+        let rules = &w.rules[a];
+        let buildable = |u: usize| rules.units.max_amount(&w.yards[a], &w.games[a].planet, u) > 0;
+        let ship = fighter.then(|| Kit::of(w, cat, a)).flatten().and_then(|kit| rules.units.index(kit.fighter as i64));
+        if let Some(u) = ship.filter(|&u| buildable(u) || self.fighters > 0) { return Some(u) }
+        (0..rules.units.units.len())
+            .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence))
+            .filter(|&u| buildable(u))
+            .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price)))
     }
 
     /// A player brings colony resources home to pay for research and the big builds (gate 3): each colony sends its
@@ -487,13 +513,7 @@ impl Miner {
         for (u, amount) in self.order_plans(w, cat, a) {
             for r in 0..3 { keep[r] += rules.units.units[u].price[r] * amount as f64 }
         }
-        let unit = match self.fighters > 0 {
-            true => Kit::of(w, cat, a).and_then(|kit| rules.units.index(kit.fighter as i64)),
-            false => (0..rules.units.units.len())
-                .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence))
-                .filter(|&u| rules.units.max_amount(&w.yards[a], &game.planet, u) > 0)
-                .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price))),
-        };
+        let unit = self.hull(w, cat, a, self.fighters > 0 || self.ships);
         let Some(u) = unit else { return };
         let price = rules.units.units[u].price;
         let amount = (0..3).filter(|&r| price[r] > 0.0)
@@ -644,6 +664,53 @@ fn saving(w: &World, cat: &Catalogue, a: usize, pick: Option<usize>) -> [f64; 3]
     keep
 }
 
+/// Row 75: a player builds its colonies up with the capital's surplus (gate 3): a colony that cannot pay its next
+/// building (the one it saves for, else the player rule's) gets what it lacks by transport, when the capital holds that
+/// beyond what it saves for itself and has the cargo ships at home.
+fn feed_colonies(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
+    let Some(kit) = Kit::of(w, cat, a) else { return };
+    let hold = w.rules[a].combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &w.research(cat, a)).max(1) as f64;
+    let keep = saving(w, cat, a, pick);
+    for colony in w.planets_of(a).into_iter().skip(1) {
+        let planet = &w.games[colony].planet;
+        let Some(next) = w.games[colony].commit[0].or_else(|| cat.baseline(planet, 0, Baseline::Player, &mut 0)) else { continue };
+        let price = cat.objects[next].price[planet.levels[next] as usize];
+        let lack: [f64; 3] = std::array::from_fn(|r| (price[r] - planet.res[r]).max(0.0).ceil());
+        let total: f64 = lack.iter().sum();
+        let home = w.games[a].planet.res;
+        if total <= 0.0 || (0..3).any(|r| home[r] - keep[r] < lack[r]) { continue }
+        let ships = (total / hold).ceil() as i64;
+        if ships > on_shelf(w, a, kit.cargo) { continue }
+        let _ = w.dispatch(cat, a, colony, Mission::Transport, &[(kit.cargo, ships)], lack, 10.0);
+    }
+}
+
+/// Row 72: the research a player works towards when nothing else is wanted, saving for it if need be: what raises the
+/// planet's output and the colonisation research (planets and expedition slots), the cheapest first. Found by the host's
+/// production and colonisation tables, nothing named (gate 1).
+fn purpose(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+    let planet = &w.games[a].planet;
+    let output = |p: &Planet| weighted(cat.production(p, true).0);
+    let now = output(planet);
+    let colonise = w.colonisation.as_ref().map(|t| t.research);
+    let raises = |k: usize| { let mut next = planet.clone(); next.levels[k] += 1; cat.refresh(&mut next); output(&next) > now };
+    let price = |k: usize| weighted(cat.objects[k].price[planet.levels[k] as usize]);
+    (0..cat.objects.len())
+        .filter(|&k| cat.objects[k].queue == 1 && w.legal(cat, a, k))
+        .filter(|&k| Some(cat.objects[k].id) == colonise || raises(k))
+        .min_by(|&x, &y| price(x).total_cmp(&price(y)))
+}
+
+/// Whether planet a pays for research k and still holds the price of its next building (the one it saves for, else the
+/// player rule's): a player feeds the mines first and researches from the rest (row 72, gate 3).
+fn spare(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
+    let planet = &w.games[a].planet;
+    let next = w.games[a].commit[0].or_else(|| cat.baseline(planet, 0, Baseline::Player, &mut 0));
+    let keep = next.map_or([0.0; 3], |b| cat.objects[b].price[planet.levels[b] as usize]);
+    let price = cat.objects[k].price[planet.levels[k] as usize];
+    (0..3).all(|r| planet.res[r] - keep[r] >= price[r])
+}
+
 /// How many of unit u, up to `amount`, planet a pays for while keeping `keep` in its store.
 fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
     let price = w.rules[a].units.units[u].price;
@@ -735,7 +802,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -1115,6 +1182,79 @@ mod tests {
         assert_eq!(miner.unlock(&world, &cat, 0), None, "without the arm the research waits its turn");
     }
 
+    /// Row 72: the lab's research without a purpose is paid only when the next building's price stays in the store.
+    #[test]
+    fn research_without_a_purpose_leaves_the_next_buildings_price() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        // A grown planet, so the lab stands and research is legal.
+        for level in world.games[0].planet.levels.iter_mut() { *level = (*level).max(5) }
+        cat.refresh(&mut world.games[0].planet);
+        let research = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1 && cat.legal(&world.games[0].planet, k)).expect("a research");
+        let planet = &world.games[0].planet;
+        let price = |k: usize| cat.objects[k].price[planet.levels[k] as usize];
+        let building = cat.baseline(planet, 0, Baseline::Player, &mut 0).expect("a building");
+        let (r, b) = (price(research), price(building));
+        world.games[0].planet.res = r;
+        assert!(!spare(&world, &cat, 0, research), "research took the next building's price");
+        world.games[0].planet.res = [r[0] + b[0], r[1] + b[1], r[2] + b[2]];
+        assert!(spare(&world, &cat, 0, research), "research refused with both prices in the store");
+    }
+
+    /// Row 75: a colony that cannot pay its next building gets what it lacks from a rich capital; a poor capital sends
+    /// nothing.
+    #[test]
+    fn a_rich_capital_feeds_a_colonys_next_building() {
+        let Ok(cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let rules = Arc::new(rules);
+        let setup = |rich: bool| {
+            let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+            world.arm(vec![Arc::clone(&rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+            let colony = world.add_planet(&cat, 0, 0, Coord { galaxy: 3, system: 101, position: 8 }, 0.0);
+            world.games[colony].planet.res = [0.0; 3];
+            world.games[0].planet.res = if rich { [1e9; 3] } else { [0.0; 3] };
+            let kit = Kit::of(&world, &cat, 0).expect("a kit");
+            let u = world.rules[0].units.index(kit.cargo as i64).expect("the cargo ship");
+            world.yards[0].counts[u] = 100;
+            feed_colonies(&mut world, &cat, 0, None);
+            world.fleets.iter().filter(|f| f.owner == 0 && f.target == colony && f.mission == Mission::Transport).map(|f| f.cargo.iter().sum::<f64>()).sum::<f64>()
+        };
+        assert!(setup(true) > 0.0, "a rich capital sent its colony nothing");
+        assert_eq!(setup(false), 0.0, "a poor capital sent its colony resources");
+    }
+
+    /// Row 74: every home config carries its owner's class, as the production rows were made with it.
+    #[test]
+    fn a_home_config_carries_its_owners_class() {
+        let Ok(cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        let classes: HashSet<Option<u32>> = cat.planets.iter().filter(|c| c.planet_id > 0).map(|c| c.character_class).collect();
+        assert!(!classes.contains(&None), "a home without its owner's class");
+        assert!(classes.len() > 1, "every home has the same class: {classes:?}");
+    }
+
+    /// Row 72: the lab's purpose is the cheapest research that raises output or is the colonisation research; a cheaper
+    /// research that does neither (a combat technology) is passed over.
+    #[test]
+    fn the_lab_works_towards_output_and_colonies() {
+        let Ok(cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        world.colonisation = crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")).ok().map(Arc::new);
+        for level in world.games[0].planet.levels.iter_mut() { *level = (*level).max(12) }
+        world.games[0].queue = 1;
+        cat.refresh(&mut world.games[0].planet);
+        let planet = world.games[0].planet.clone();
+        let output = |p: &Planet| weighted(cat.production(p, true).0);
+        let raises = |k: usize| { let mut next = planet.clone(); next.levels[k] += 1; cat.refresh(&mut next); output(&next) > output(&planet) };
+        let colonise = world.colonisation.as_ref().map(|t| t.research);
+        let price = |k: usize| weighted(cat.objects[k].price[planet.levels[k] as usize]);
+        let k = purpose(&world, &cat, 0).expect("a research with a purpose");
+        assert!(raises(k) || Some(cat.objects[k].id) == colonise, "the purpose neither raises output nor colonises");
+        let passed = (0..cat.objects.len()).filter(|&j| cat.objects[j].queue == 1 && world.legal(&cat, 0, j) && price(j) < price(k)).count();
+        assert!(passed > 0, "no cheaper research was passed over, so the test shows nothing");
+    }
+
     /// N6b: the world refuses an expedition beyond the host's slot limit at the account's research level, counting the
     /// account's expeditions still out (the way home included); without a slot table it sets no limit.
     #[test]
@@ -1362,6 +1502,37 @@ mod tests {
             .filter(|&u| quiet.rules[0].units.kind.get(u) == Some(&UnitKind::Defence))
             .map(|u| quiet.yards[0].counts[u]).sum();
         assert_eq!(bought, 0, "a miner at its target still bought defence");
+    }
+
+    /// Row 71: with the ships arm a miner under its military share buys military ships, which the host scores as military
+    /// only; without it a miner never holds one.
+    #[test]
+    fn a_miner_with_the_ships_arm_meets_its_share_with_ships() {
+        let military = |w: &World| -> u64 {
+            (0..w.rules[0].units.units.len())
+                .filter(|&u| w.rules[0].units.kind.get(u) == Some(&UnitKind::MilitaryShip))
+                .map(|u| w.yards[0].counts[u] + w.yards[0].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum::<u64>())
+                .sum()
+        };
+        let play = |ships: bool| -> u64 {
+            let Some((cat, mut world)) = bare(1) else { return u64::MAX };
+            let mut miner = Miner::new(1);
+            miner.ships = ships;
+            for _ in 0..60_000 {
+                let Some(a) = world.next_decision(&cat) else { break };
+                if a != 0 { world.wait(&cat, a); continue }
+                match miner.act(&mut world, &cat, a) {
+                    Some(k) => world.commit(&cat, a, k),
+                    None => world.wait(&cat, a),
+                }
+                if military(&world) > 0 { break }
+            }
+            military(&world)
+        };
+        let (with, without) = (play(true), play(false));
+        if with == u64::MAX { return }
+        assert!(with > 0, "a miner with the ships arm bought no military ship");
+        assert_eq!(without, 0, "a miner without the arm bought military ships");
     }
 
     /// Both queues get their turn: an account whose building queue always has something payable must still research what its

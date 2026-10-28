@@ -406,6 +406,9 @@ class ExportAiEconomyCatalogueAction
             'planet_id' => $planet->getPlanetId(),
             'position' => $planet->getPlanetCoordinates()->position,
             'temperature' => $planet->getPlanetTempAvg(),
+            // Row 74: the owner's character class (the host enum value, null for none), which the production rows are made
+            // with; the simulator gives the account the same class's fleet and expedition rules.
+            'character_class' => $planet->getPlayer()?->getUser()->character_class,
             // Row 36: the planet's own fields with nothing built on it, so the per-object `fields_added` column adds up to
             // the host's number; on a fresh planet this is the same value `getPlanetFieldMax` answers.
             'field_max' => $this->withLevels($planet, $objects, [], static fn (): int => $planet->getPlanetFieldMax()),

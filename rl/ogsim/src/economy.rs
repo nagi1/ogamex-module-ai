@@ -100,6 +100,8 @@ struct RawPlanet {
     planet_id: i64,
     position: f64,
     temperature: f64,
+    #[serde(default)]
+    character_class: Option<u32>,
     field_max: u32,
     basic_income: [f64; 4],
     resources: [f64; 3],
@@ -165,6 +167,8 @@ pub struct PlanetConfig {
     pub planet_id: i64,
     pub position: f64,
     pub temperature: f64,
+    /// The owner's character class (the host enum value) the production rows were made with; None for none.
+    pub character_class: Option<u32>,
     pub field_max: u32,
     pub basic: [f64; 4],
     pub resources: [f64; 3],
@@ -395,6 +399,7 @@ impl Catalogue {
             planet_id: p.planet_id,
             position: p.position,
             temperature: p.temperature,
+            character_class: p.character_class,
             field_max: p.field_max,
             basic: p.basic_income,
             resources: p.resources,

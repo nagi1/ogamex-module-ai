@@ -3,6 +3,7 @@
 use Modules\AI\Actions\ExportAiEconomyCatalogueAction;
 use Modules\AI\Actions\ReplayAiEconomyScheduleAction;
 use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
+use OGame\Enums\CharacterClass;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
@@ -303,4 +304,15 @@ test('a colony is tabulated as the donor planet moved to its slot, and the plane
         ->and($planet->getPlanetTempMax())->toBe($temperature)
         ->and($planet->getPlanetFieldMax())->toBe($fields)
         ->and($catalogue['planets'][0]['position'])->toBe($position);
+});
+
+test('every planet carries its owner\'s character class, a colony its donor\'s', function (): void {
+    $planet = $this->planetService;
+    $user = $planet->getPlayer()->getUser();
+    $user->character_class = CharacterClass::DISCOVERER->value;
+    $site = ['planet' => $planet->getPlanetId(), 'position' => $planet->getPlanetCoordinates()->position === 8 ? 9 : 8, 'temp_max' => 31, 'fields' => 123];
+
+    $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$planet], 3, 8, [$site]);
+
+    expect(array_column($catalogue['planets'], 'character_class'))->toBe([CharacterClass::DISCOVERER->value, CharacterClass::DISCOVERER->value]);
 });
