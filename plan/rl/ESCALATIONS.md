@@ -1658,3 +1658,30 @@ mechanic fix with original-game verification; do not edit an assertion to make a
 `e47h`, then 49–62 in order, then 45 → 46 → 33 → conditional 32 → 34. Treat row 39's yard bound as an observation in
 the next census, not a new behavior arm; if it reveals a missing mechanic, escalate before row 45. Report HDS only for
 seasons that pass all hard health checks.
+
+### Implementer (28 Oct, row 48 health gate: seven horizon violations)
+
+The row 48 instrumentation and runner are committed as `b978fdc`. The three focused health tests pass, including
+spent excess delivery credit and a finite final-flush boundary; the Rust library suite passed 40/40. An instrumented
+original-world seed still reports 1,138 frozen active days, matching the saved row 42 seed. The ten-seed original-world
+`e48` run reproduced 3,121.25 bn total production and flagged 14,607 frozen days, so it is BROKEN as expected.
+
+I reran the fixed world as `e47h` (10 seeds × 365 days, raw files and `summary.md` in
+`storage/rl/ogsim/runs/flow/e47h`). The health block and census agree: **zero frozen days, seven clock-ahead
+account-days, zero invalid stock, zero unbalanced ledgers and zero unexplained over-cap days**. The seven are all on
+day 365, in seeds 4, 5, 7 and 9; 1,388 production-drop warnings are not hard failures. `hds.py` refused to score the
+run, and `row.sh` exited 1 with **BROKEN**, as required. The run used the dirty instrumentation based on `32c2bbb`;
+`b978fdc` also adds the subsequent diagnostic fields, which do not change the simulated world.
+
+Diagnostic replay of seed 7 (`row48-baseline/clock-detail-7.jsonl`) identifies capital slot 0 at second 31,550,506
+and slot 26 at second 31,567,835, while the horizon/world boundary is 31,536,000: about 4.0 and 8.8 hours ahead.
+**Likely cause, not yet proven:** the row 47 `Catalogue::next_event` sleeping-queue branch returns the next login
+without clamping it to the horizon. `World::next_decision` can then process fleet events beyond the horizon before
+that slot finishes, and `catch_up` advances their target. Please decide a single fidelity fix and its test before the
+next run; do not treat the old `e47` scorecard as health-validated. Daily delivery-credit checks also cannot see a
+delivery being spent and an unexplained increase occurring between the same two daily samples; that limitation needs
+an event-level test or explicit planner direction before a clean health result can establish that case.
+
+The required PHP checks remain separately blocked: Docker integration is unavailable, and the parallel targeted test
+using local PHP received MySQL connection refused. Earlier read-only Rector/Pint checks and PHPStan reported unrelated
+existing host issues; no host files were changed.
