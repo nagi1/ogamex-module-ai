@@ -73,6 +73,7 @@ fn main() {
     let mut world = World::new(&cat, &configs, days as f64 * 24.0, 0.0, seed);
     // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
     world.colonisation = Colonisation::load(&econ).ok().map(Arc::new);
+    world.spread = std::env::args().any(|arg| arg == "spread");
     // A fully built account still logs in, to raid or to save its fleet.
     world.enable_idle_logins(&cat);
     // Three galaxies, a system each, wide apart: a raider has neighbours to fly at and a saver has somewhere to be away.
@@ -126,10 +127,10 @@ fn main() {
     // Row 45 arm C: every persona brings its colonies' surplus home at each login.
     // Row 45 arm FR: every persona keeps its planets' last fields for the field-adding chain.
     // Row 46: the stack of both.
-    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack");
-    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack");
+    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack" || arg == "spread");
+    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "spread");
     // Row 33: the spending order, alone and on the kept stack.
-    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack");
+    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "spread");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;

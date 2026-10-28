@@ -466,6 +466,11 @@ impl Miner {
             for r in 0..3 { keep[r] += price[r] }
         }
         let rules = &w.rules[a];
+        // The ships the persona already plans (the colony ship among them) are paid before the surplus (row 63: without
+        // this the yard spent the colony ship's price and accounts held 6 planets instead of 8).
+        for (u, amount) in self.order_plans(w, cat, a) {
+            for r in 0..3 { keep[r] += rules.units.units[u].price[r] * amount as f64 }
+        }
         let unit = match self.fighters > 0 {
             true => Kit::of(w, cat, a).and_then(|kit| rules.units.index(kit.fighter as i64)),
             false => (0..rules.units.units.len())
