@@ -2141,3 +2141,19 @@ All three removed (patch kept out of the tree). Baseline unchanged: e79d.
 **Next.** The late game is the gap: top10 growth ~10x under real, moons in band 0.0-0.3 at the top, and late accounts
 whose planets are full. Rows to write: moons (lunar base fields) and the late fleet as the late growth path, measured
 against the real top10 bands; and row 76 (energy prices) for the terraformer's real energy requirement.
+
+## 29 Oct — row 82 (recruit): moons follow alliance membership; mixed, not kept
+
+**Diagnosis (e79d).** Moons are bimodal: an alliance member holds ~11 (mates shoot moons for each other, row 64), an
+account outside holds 0. Membership is a season-start draw (65%) that ignores strength, so only 46-53% of our top 10%
+are members, against every real top-10% account (`real-bands.json` alliance p10 = 1).
+
+**e82a `recruit`** (an active account in its world's top tenth by score joins an alliance at the day's end): HDS 0.855
+-> 0.863, top10 alliance in band 0.46-0.53 -> 1.00, top10 moons in band 0.25-0.29 -> 0.38-0.49. But pooled AUC 0.850 ->
+0.869 (noise ~0.005) and growth becomes the first giveaway (0.172): the recruits start shooting moons, which spends
+fighters, and growth falls 21-23% in the 64-128 cells (top10 8,545 -> 6,598; mid 1,284 -> 1,016) - away from real,
+which is already above ours. Not kept (patch out of the tree).
+
+**What it says.** Moons and alliances are now coupled through one costly habit. The next row is the moon shot's cost:
+how much fleet a shot loses against what real players pay for a moon (the debris needed for the host's maximum moon
+chance), and whether recruited accounts should first reach the fleet a shot needs from their military share.
