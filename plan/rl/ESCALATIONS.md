@@ -2063,3 +2063,24 @@ energy column and check it in `Catalogue::legal`.
    and nanite factories, found by asking the host, gate 1). Proof: mid eco_share in band up and res_share in band up,
    no growth loss, 10 seeds against e77c.
 2. Row 76 (energy prices), host parity.
+
+## 28 Oct — row 77 (factory): kept, e78a is the baseline (HDS 0.814, pooled AUC 0.869)
+
+| arm (10 seeds x 365 days) | HDS | pooled AUC | mid p50 64-128 / 128-256 / 256-512 | top10 p50 64-128 / 128-256 / 256-512 |
+| --- | --- | --- | --- | --- |
+| e78n (e77c rerun, same binary as e78a) | 0.810 | 0.889 | 1,827 / 2,752 / 3,272 | 6,415 / 7,546 / 8,369 |
+| **e78a `factory` (stock covers the next building 3x)** | **0.814** | **0.869** | 1,598 / 2,557 / 3,201 | 10,122 / 12,231 / 13,769 |
+| e78b `factory` (build time longer than the production that pays it) | 0.810 | 0.875 | 1,835 / 2,747 / 3,283 | 6,384 / 7,584 / 8,462 |
+
+**Noise.** e78n against e77c (same seeds and arms, rebuilt binary) differs by 0.001 HDS, 0.005 pooled AUC and under 1%
+growth per cell: a season is deterministic per seed, so differences between arms on the same seeds are effects.
+
+**Kept: e78a.** A planet whose stock covers its next building three times over waits on its queue, not its stock, and
+builds the cheapest host time modifier for its building queue it can start now. Top10 growth +60% (7,546 -> 12,231 at
+128-256), top10 res_share and mil_share move into band (top10 256-512 mil 0.45 -> 1.00 in band), pooled AUC 0.889 ->
+0.869, HDS 0.810 -> 0.814. Cost: mid growth -3% to -13% (still 0.87-1.00 in band; ours were already under the real
+median). e78b's parameter-free trigger hardly fires: a rich planet's store is filled by expeditions and transports, not
+by its own production. Baseline: `moonstack reach expedition colonies ships cap lab classes feed factory`.
+
+**Gap now.** Mid research share from day 128 is still 0.33-0.45 (real 0.11-0.12) with economy 0.32-0.45 (real 0.56).
+Top10 growth is ~10x under real (12,231 against 116,840 at 128-256).

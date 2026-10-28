@@ -165,6 +165,8 @@ fn main() {
     let cap = std::env::args().any(|arg| arg == "cap");
     // Row 75: the capital feeds its colonies' next buildings.
     let feed = std::env::args().any(|arg| arg == "feed");
+    // Row 77: a planet waiting on time builds the factory that shortens its queue.
+    let factory = std::env::args().any(|arg| arg == "factory");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -176,6 +178,7 @@ fn main() {
         miner.lab = lab;
         miner.cap = cap;
         miner.feed = feed;
+        miner.factory = factory;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {

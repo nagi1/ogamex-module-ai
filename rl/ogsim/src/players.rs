@@ -328,11 +328,13 @@ pub struct Miner {
     pub cap: bool,
     /// Row 75 arm: the capital sends a colony what its next building lacks, from what the capital does not need.
     pub feed: bool,
+    /// Row 77 arm: a planet waiting on time rather than resources builds the factory that shortens its building queue.
+    pub factory: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -390,7 +392,8 @@ impl Miner {
         let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
         let fallback = match self.lab && queue == 1 {
             true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng).filter(|&k| spare(w, cat, a, k))),
-            false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng),
+            false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
+                .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k)),
         };
         self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| fallback)
     }
@@ -664,6 +667,22 @@ fn saving(w: &World, cat: &Catalogue, a: usize, pick: Option<usize>) -> [f64; 3]
     keep
 }
 
+/// How many times over a planet's stock must cover its next building before the queue, not the stock, is what it waits
+/// on (e78b: comparing build time with the planet's own production rarely fired, since expeditions and transports, not
+/// production, fill a rich planet's store).
+const TIME_BOUND_STOCK: f64 = 3.0;
+
+/// Row 77: a planet whose stock covers its next building several times over waits on its queue's time: a player then
+/// builds the cheapest of the host's time modifiers for that queue it can start now (gate 3; found by asking, gate 1).
+fn time_bound(w: &World, cat: &Catalogue, a: usize, next: usize) -> Option<usize> {
+    let planet = &w.games[a].planet;
+    let price = |k: usize| weighted(cat.objects[k].price[planet.levels[k] as usize]);
+    if weighted(planet.res) < TIME_BOUND_STOCK * price(next) { return None }
+    cat.modifiers[0].iter().map(|&(k, _)| k)
+        .filter(|&k| w.legal(cat, a, k) && cat.wait_seconds(planet, k) == 0.0)
+        .min_by(|&x, &y| price(x).total_cmp(&price(y)))
+}
+
 /// Row 75: a player builds its colonies up with the capital's surplus (gate 3): a colony that cannot pay its next
 /// building (the one it saves for, else the player rule's) gets what it lacks by transport, when the capital holds that
 /// beyond what it saves for itself and has the cargo ships at home.
@@ -802,7 +821,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -1221,6 +1240,22 @@ mod tests {
         };
         assert!(setup(true) > 0.0, "a rich capital sent its colony nothing");
         assert_eq!(setup(false), 0.0, "a poor capital sent its colony resources");
+    }
+
+    /// Row 77: a planet whose stock covers its next building many times over builds a host time modifier; one that just
+    /// covers it builds the building.
+    #[test]
+    fn a_planet_waiting_on_time_builds_a_factory() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        for level in world.games[0].planet.levels.iter_mut() { *level = (*level).max(5) }
+        world.games[0].queue = 0;
+        cat.refresh(&mut world.games[0].planet);
+        let next = cat.baseline(&world.games[0].planet, 0, Baseline::Player, &mut 0).expect("a building");
+        world.games[0].planet.res = cat.objects[next].price[world.games[0].planet.levels[next] as usize];
+        assert_eq!(time_bound(&world, &cat, 0, next), None, "a planet short of stock built a factory");
+        world.games[0].planet.res = [1e12; 3];
+        let k = time_bound(&world, &cat, 0, next).expect("a factory");
+        assert!(cat.modifiers[0].iter().any(|&(m, _)| m == k), "the pick is not a time modifier of the building queue");
     }
 
     /// Row 74: every home config carries its owner's class, as the production rows were made with it.
