@@ -335,13 +335,15 @@ impl Miner {
         }
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
-        if w.account_of(a) == a && (pick.is_none() || overflow || self.eager || short || self.colony_cargo > 0) {
+        // Row 65: a capital waiting on a building the busy yard blocks lets the yard run dry so the building can start.
+        let orders = w.account_of(a) == a && !(self.reserve && yard_blocks_reserve(w, cat, a));
+        if orders && (pick.is_none() || overflow || self.eager || short || self.colony_cargo > 0) {
             self.order_ships(w, cat, a, pick);
         }
-        if short && w.account_of(a) == a {
+        if short && orders {
             self.order_defence(w, cat, a, pick);
         }
-        if self.yard && w.account_of(a) == a {
+        if self.yard && orders {
             self.spend_surplus(w, cat, a, pick);
         }
         // The colony the ship was built for is founded at the same login: one mission, no cargo.
@@ -544,6 +546,15 @@ fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
     (0..3).filter(|&r| price[r] > 0.0)
         .map(|r| ((res[r] - keep[r]).max(0.0) / price[r]).floor() as u64)
         .fold(amount, u64::min)
+}
+
+/// Whether planet a's field reserve binds on a building the host refuses while the yard is busy (the shipyard or the
+/// nanite factory under the terraformer): with the yard never idle the building queue waited the whole season (row 65).
+fn yard_blocks_reserve(w: &World, cat: &Catalogue, a: usize) -> bool {
+    let planet = &w.games[a].planet;
+    let Some((chain, fields)) = field_chain(cat, planet) else { return false };
+    if cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) > fields { return false }
+    chain.iter().any(|&(k, level)| planet.levels[k] < level && cat.objects[k].queue == 0 && cat.legal(planet, k) && w.rules[a].units.blocked.contains(&k))
 }
 
 /// A planet's field-adding chain: the next level of the cheapest object that adds fields, and every unmet requirement
@@ -938,6 +949,48 @@ mod tests {
         let pick = field_reserve(&world, &cat, 0).expect("the reserve binds").expect("a chain object is startable");
         assert!(chain.iter().any(|c| c.0 == pick), "object {pick} is off the chain");
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
+    }
+
+    /// Row 65: a capital whose field reserve waits on a building the busy yard blocks orders no more units, so the yard
+    /// runs dry and the building can start.
+    #[test]
+    fn a_reserve_waiting_on_a_yard_blocked_building_stops_the_yard() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        world.games[0].queue = 0;
+        let (chain, fields) = field_chain(&cat, &world.games[0].planet).expect("an object that adds fields");
+        // A yard to keep busy: the blocked buildings off the chain (the shipyard) before the fill takes the fields.
+        for k in world.rules[0].units.blocked.clone().into_iter().filter(|k| !chain.iter().any(|c| c.0 == *k)) {
+            world.games[0].planet.levels[k] = 2;
+        }
+        let planet = &mut world.games[0].planet;
+        let mut free = cat.field_cap(planet) - cat.fields_used(planet) - fields;
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].consumes_field && cat.objects[k].queue == 0 && !chain.iter().any(|c| c.0 == k)) {
+            let room = (cat.objects[k].price.len() as u32 - 1).saturating_sub(planet.levels[k]).min(free);
+            planet.levels[k] += room;
+            free -= room;
+        }
+        cat.refresh(planet);
+        planet.res = [1e12; 3];
+        // The chain's prerequisites built, so the building the yard blocks is the one left to start.
+        let Some(&(blocked, _)) = chain.iter().find(|c| world.rules[0].units.blocked.contains(&c.0)) else { return eprintln!("no yard-blocked building on the chain; skipped") };
+        for &(k, level) in chain.iter().filter(|c| cat.objects[blocked].requires.iter().any(|r| r.0 == Some(c.0))) {
+            world.games[0].planet.levels[k] = world.games[0].planet.levels[k].max(level);
+        }
+        // Research takes no fields: levels that make the yard's units buildable leave the reserve as it was.
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1) {
+            let planet = &mut world.games[0].planet;
+            planet.levels[k] = planet.levels[k].max((cat.objects[k].price.len() as u32 - 1).min(10));
+        }
+        cat.refresh(&mut world.games[0].planet);
+        assert!(cat.legal(&world.games[0].planet, blocked), "the blocked building's prerequisites are met");
+        let unit = (0..world.rules[0].units.units.len()).find(|&u| world.rules[0].units.max_amount(&world.yards[0], &world.games[0].planet, u) > 0).expect("a payable unit");
+        world.order_units(&cat, 0, unit, 1);
+        assert!(yard_blocks_reserve(&world, &cat, 0), "the reserve waits on a yard-blocked building");
+        let before = world.yards[0].orders.len();
+        let mut miner = Miner::new(5);
+        (miner.reserve, miner.yard, miner.eager) = (true, true, true);
+        miner.act(&mut world, &cat, 0);
+        assert_eq!(world.yards[0].orders.len(), before, "the persona kept ordering while its building waited on the yard");
     }
 
     /// Row 34: a build the queue committed and waits to afford keeps its price; the persona's yard orders spend only the
