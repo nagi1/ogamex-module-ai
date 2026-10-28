@@ -1798,3 +1798,16 @@ scratch-built season binary, not `row.sh`, whose `maturin develop` would overwri
 48 actors x 32 worlds x 12 accounts, learner on cuda:1, 365-day horizon, lr 1e-4, ent 0.003, 120 minutes. First 15
 minutes: KL 0.001-0.003, clip 0.01-0.04, entropy 0.16-0.55 (it dipped and recovered), value loss down from 13 to 2-3,
 no invalid actions reported. The paired evaluation against the persona rule is pending.
+
+**Row 34 result: a collapse with a world bug under it.** Paired evaluation of `w34/ppo2` against the persona rule:
+update 120 +9.2%, 240 -57%, 360 -89%. The cause was in the world, not the learner: the persona's yard spent the price
+of the building the model had just committed to, so the build never started and the model re-picked it (object 4,
+13,876 times). Fixed in `94ea363` (the yard keeps every committed price and the pick's price) and `f7e6842` (VecWorld
+commits the model's build before the persona plays). `ogrl/eval_checkpoints.py` now evaluates checkpoints in parallel
+during a run, so a collapse shows within one checkpoint.
+
+**e64 (yardstack with the committed-build reserve, 10 seeds x 365 days, health PASS)**: HDS 0.755 (e33 0.753, base
+0.749), AUC 0.991; mid 128-256 growth in-band 0.67, mil_sh 0.68, eco_sh 0.66, planets 0.69, moons 0.00. Kept as the
+training world. Remaining giveaways: moons (row 64), galaxies, planets.
+
+**Row 35 training (`runs/w35`)**: BC collection now runs on 48 processes (`--procs`); it was one core for 400k rows.

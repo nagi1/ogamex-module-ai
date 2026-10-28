@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,24 @@ from .model import CandidateScorer
 from .econ import bootstrap_ci
 
 DATA = Path(__file__).resolve().parents[4] / "storage/rl/ogsim"
+
+
+def collect_part(job):
+    args, n_rows = job
+    torch.set_num_threads(1)
+    return collect(args, n_rows)
+
+
+def collect_parallel(args):
+    """The worlds split over processes, each with its own seed; the last part's worlds are the held-out tail."""
+    if args.procs <= 1:
+        return collect(args, args.rows)
+    parts = [(argparse.Namespace(**{**vars(args), "seed": args.seed * 1000 + i, "worlds": max(1, args.worlds // args.procs)}),
+              -(-args.rows // args.procs)) for i in range(args.procs)]
+    with ProcessPoolExecutor(max_workers=args.procs) as pool:
+        done = list(pool.map(collect_part, parts))
+    cat = lambda i: np.concatenate([d[i] for d in done])
+    return cat(0), cat(1), cat(2), cat(3), done[0][4]
 
 
 def collect(args, n_rows: int):
@@ -72,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--controlled", type=int, default=4)
     ap.add_argument("--horizon", type=float, default=240.0)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--procs", type=int, default=1, help="collector processes, the worlds split between them")
     ap.add_argument("--device", default="cuda:1" if torch.cuda.device_count() > 1 else ("cuda:0" if torch.cuda.is_available() else "cpu"))
     ap.add_argument("--out", required=True)
     ap.add_argument("--season", action="store_true", help="row 34: clone the persona's build (field reserve and all) in the season world; colonies catalogue, 8760 h")
@@ -80,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         args.catalogue = str(DATA / "units-parity/econ-u1-colonies.json") if args.catalogue == str(DATA / "units-parity/econ-u1.json") else args.catalogue
         args.horizon = 8760.0 if args.horizon == 240.0 else args.horizon
 
-    states, cands, masks, labels, dims = collect(args, args.rows)
+    states, cands, masks, labels, dims = collect_parallel(args)
     s_dim, k, c_dim = dims
     n = len(labels)
     cut = int(n * (1.0 - args.valid))
