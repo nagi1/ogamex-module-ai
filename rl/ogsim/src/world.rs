@@ -515,6 +515,9 @@ impl World {
         // The planet logs in with its account: same past logins and the same generator for the next ones.
         game.login_times = home.login_times.clone();
         game.login_rng = home.login_rng;
+        // And the same night: a colony drawing its own would log in while its account sleeps (69 "logins" a day).
+        game.sleep_start = home.sleep_start;
+        game.sleep_hours = home.sleep_hours;
         for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1) {
             game.planet.levels[k] = home.planet.levels[k];
         }
@@ -1229,6 +1232,24 @@ mod tests {
         let colony = &world.games[1];
         assert!(colony.planet.books.produced > 0.0, "the colony booked no production");
         assert!(colony.t >= game.t - 1.0, "the colony's clock stopped at {} against the capital's {}", colony.t, game.t);
+    }
+
+    /// A colony logs in with its account: the same future logins as the capital, never one of its own.
+    #[test]
+    fn a_colony_logs_in_with_its_account() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
+        let mut world = World::new(&cat, &[0], 30.0 * 24.0, 0.0, 9);
+        let rules = Arc::new(Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"),
+            &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")).expect("the units, fleet and combat exports"));
+        world.arm(vec![rules], vec![Coord { galaxy: 1, system: 10, position: 4 }]);
+        cat.login(&mut world.games[0], 3.0 * 86_400.0, false);
+        let colony = world.add_planet(&cat, 0, 0, Coord { galaxy: 1, system: 10, position: 5 }, 3.0 * 86_400.0);
+        let horizon = 25.0 * 86_400.0;
+        cat.login(&mut world.games[0], horizon, false);
+        cat.login(&mut world.games[colony], horizon, false);
+        let upto = |g: &Game| g.login_times.iter().copied().filter(|&t| t <= horizon).collect::<Vec<f64>>();
+        assert_eq!(upto(&world.games[colony]), upto(&world.games[0]), "the colony's logins left its account's");
     }
 
     /// Row 48: a sleeping world planet's next login may fall after the horizon; its next event is the horizon, or the world

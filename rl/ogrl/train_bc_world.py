@@ -32,7 +32,8 @@ def collect(args, n_rows: int):
     controlled = [True] * args.controlled + [False] * (args.accounts - args.controlled)
     env = ogsim.VecWorld(args.catalogue, list(range(ogsim.VecEnv.planet_count(args.catalogue))), args.worlds, controlled,
                          horizon_hours=args.horizon, seed=args.seed, login_gaps=gaps,
-                         units=args.units, fleet_settings=args.fleet_settings, combat=args.combat, errands=True)
+                         units=args.units, fleet_settings=args.fleet_settings, combat=args.combat, errands=not args.season,
+                         season=args.season, queue=0)
     s_dim, k, c_dim = env.dims()
     states, cands, masks, labels = [], [], [], []
     steps = 0
@@ -43,7 +44,8 @@ def collect(args, n_rows: int):
         cand = np.frombuffer(cand, np.float32).reshape(-1, k, c_dim)
         legal = np.frombuffer(legal, np.uint8).reshape(-1, k)
         label = np.asarray(env.baseline(), dtype=np.int64)
-        live = legal.any(1)
+        # A build decision the persona lets pass (-2) has no row to clone.
+        live = legal.any(1) & (label >= 0)
         states.append(state[live]), cands.append(cand[live]), masks.append(legal[live]), labels.append(label[live])
         env.step(label.tolist())
         steps += 1
@@ -72,7 +74,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--device", default="cuda:1" if torch.cuda.device_count() > 1 else ("cuda:0" if torch.cuda.is_available() else "cpu"))
     ap.add_argument("--out", required=True)
+    ap.add_argument("--season", action="store_true", help="row 34: clone the persona's build (field reserve and all) in the season world; colonies catalogue, 8760 h")
     args = ap.parse_args(argv)
+    if args.season:
+        args.catalogue = str(DATA / "units-parity/econ-u1-colonies.json") if args.catalogue == str(DATA / "units-parity/econ-u1.json") else args.catalogue
+        args.horizon = 8760.0 if args.horizon == 240.0 else args.horizon
 
     states, cands, masks, labels, dims = collect(args, args.rows)
     s_dim, k, c_dim = dims
@@ -113,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"model": {k: v.detach().cpu() for k, v in model.state_dict().items()}, "state_dim": s_dim, "cand_dim": c_dim,
-                "width": args.width, "iteration": 0, "names": {"state": [], "candidate": []}, "queue": 2}, out)
+                "width": args.width, "iteration": 0, "names": {"state": [], "candidate": []}, "queue": 0 if args.season else 2}, out)
     print(f"wrote {out} ({time.time() - started:.0f}s of training); top-1 against the teacher {top1:.1%}")
     print(f"rows {n:,}, candidates {k}, state {s_dim}, candidate {c_dim}")
     return 0

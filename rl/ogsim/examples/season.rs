@@ -129,11 +129,7 @@ fn main() {
     let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack");
     let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack");
     for player in &mut players {
-        let miner = match player {
-            Player::Miner(m) => m,
-            Player::Raider(r) => &mut r.miner,
-            Player::Saver(s) => &mut s.miner,
-        };
+        let miner = player.miner();
         miner.consolidate = consolidate;
         miner.reserve = reserve;
     }

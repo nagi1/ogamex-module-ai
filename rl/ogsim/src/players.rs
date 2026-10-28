@@ -322,14 +322,11 @@ impl Miner {
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
     /// pick), after any ship order. Only a capital orders ships: a colony only builds.
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize) -> Option<usize> {
-        let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
         let pick = match w.decision_kind(a) {
-            Decision::Build => match self.reserve.then(|| field_reserve(w, cat, a)).flatten() {
-                Some(chain) => chain,
-                None => self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)),
-            },
+            Decision::Build => self.pick(w, cat, a),
             Decision::Idle => None,
         };
+        let planet = &w.games[a].planet;
         let overflow = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
         if self.consolidate && w.account_of(a) == a {
             self.bring_home(w, cat, a);
@@ -353,6 +350,16 @@ impl Miner {
             }
         }
         pick
+    }
+
+    /// The persona's build for the deciding queue, with no side effect: the field reserve's chain when it binds, a missing
+    /// resource's producer, a wanted ship's prerequisite, then the player rule. Also the teacher a learner clones.
+    pub fn pick(&mut self, w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+        if let Some(chain) = self.reserve.then(|| field_reserve(w, cat, a)).flatten() {
+            return chain;
+        }
+        let (queue, planet) = (w.games[a].queue, &w.games[a].planet);
+        self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng))
     }
 
     /// Row 29: why this login's yard order did or did not happen, asked of the same rule `act` uses: under its military
@@ -472,6 +479,8 @@ impl Miner {
     }
 }
 
+const RESEARCH_LEAD: u32 = 3;
+
 /// A planet's field-adding chain: the next level of the cheapest object that adds fields, and every unmet requirement
 /// under it, prerequisites first (gate 1: `fields_added` and `requires` say which objects, nothing is named). Returns
 /// the chain and the fields its unbuilt levels still consume.
@@ -505,10 +514,13 @@ fn field_chain(cat: &Catalogue, planet: &Planet) -> Option<(Vec<(usize, u32)>, u
 /// pick to the ordinary rule.
 fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> {
     let queue = w.games[a].queue;
+    // The lab starts the chain while a planet still has RESEARCH_LEAD times its reserve free: research takes weeks, and a
+    // building queue that waits on it at the last fields idles for them (row 46: the stack lost C's growth that way).
+    let lead = if queue == 0 { 1 } else { RESEARCH_LEAD };
     let short = |slot: usize| {
         let planet = &w.games[slot].planet;
         let (chain, fields) = field_chain(cat, planet)?;
-        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= fields).then_some(chain)
+        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= lead * fields).then_some(chain)
     };
     let slots = match queue {
         0 => vec![a],
@@ -672,6 +684,15 @@ pub enum Player {    Miner(Miner),
 }
 
 impl Player {
+    /// The economy every persona shares.
+    pub fn miner(&mut self) -> &mut Miner {
+        match self {
+            Player::Miner(m) => m,
+            Player::Raider(r) => &mut r.miner,
+            Player::Saver(s) => &mut s.miner,
+        }
+    }
+
     /// What the account does at its deciding login: the economy's pick for the queue.
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
         ledger.scan(w, cat);

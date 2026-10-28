@@ -300,11 +300,7 @@ impl VecWorld {
             }
         }).collect();
         for player in players.iter_mut().filter(|_| self.season) {
-            let miner = match player {
-                Player::Miner(m) => m,
-                Player::Raider(r) => &mut r.miner,
-                Player::Saver(s) => &mut s.miner,
-            };
+            let miner = player.miner();
             miner.reserve = true;
             miner.consolidate = true;
         }
@@ -573,6 +569,14 @@ impl VecWorld {
             }).collect();
         }
         let cat = Arc::clone(&self.catalogue);
+        if self.season {
+            // The persona's own build is the teacher: the plain player rule walks into the field dead end (row 42).
+            return self.deciding.iter().enumerate().map(|(w, &(a, _))| {
+                let owner = self.worlds[w].account_of(a);
+                let world = &self.worlds[w];
+                self.players[w][owner].miner().pick(world, &cat, a).filter(|&k| world.legal(&cat, a, k)).map_or(-2, |k| k as i64)
+            }).collect();
+        }
         let mut rng = self.rng;
         let picks = self.worlds.iter().zip(&self.deciding).map(|(world, &(a, _))| {
             let g = &world.games[a];
