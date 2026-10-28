@@ -256,7 +256,7 @@ struct VecWorld {
     /// How many events of each world's log have been attributed.
     read: Vec<usize>,
     /// Season mode (row 34): the world `examples/season.rs` measures - colonies, idle logins, the persona mix with the
-    /// kept field reserve and consolidation - where a controlled account's `queue` builds are the model's and the
+    /// kept field reserve, consolidation and spending order - where a controlled account's `queue` builds are the model's and the
     /// persona plays everything else of the login around them.
     season: bool,
     queue: usize,
@@ -303,6 +303,7 @@ impl VecWorld {
             let miner = player.miner();
             miner.reserve = true;
             miner.consolidate = true;
+            miner.yard = true;
         }
         self.during.push(vec![0.0; accounts]);
         self.credited.push(vec![0.0; accounts]);
