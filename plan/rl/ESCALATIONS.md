@@ -1864,3 +1864,8 @@ build); checkpoint 700 waited at none and built where the persona waited 1,213 t
 `VecWorld::observe` offered only objects (greedy argmax always builds) and BC dropped every wait row. Season mode now
 adds a last row, always legal, that lets the login pass; the persona's wait is that row, so BC learns it. Checked: the
 persona played through the wait row reproduces its value exactly (8,223,344,280, 11,042 waits). w37 retrains on it.
+
+**Row 69, not kept (e71).** Active raiders lost as much fleet as they looted, so raids were limited to spy reports under
+an hour old. Raids fell 2,168 -> 683 per raider by day 200 and loot with them, but losses stayed exactly 2.19e8: the
+losses are the moon shots (row 64, ~6.7M of fighters each, mostly fired by raiders since they hold fighters), not
+stale-report raids. HDS 0.777 against 0.778. Reverted.
