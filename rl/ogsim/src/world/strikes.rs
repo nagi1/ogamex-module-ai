@@ -13,13 +13,19 @@ impl World {
         Ok(())
     }
 
-    /// ExpeditionMission::isMissionPossible and its sanity checks: deep space, astrophysics, and a ship that is not a probe.
+    /// ExpeditionMission::isMissionPossible and its sanity checks: deep space, astrophysics, a free expedition slot, and a
+    /// ship that is not a probe.
     /// The research is the one the colonisation tables name (astrophysics), so an expedition needs those tables too.
     pub(super) fn expeditionable(&self, cat: &Catalogue, a: usize, to: Coord, rules: &Rules, sent: &[(u32, i64)]) -> Result<(), &'static str> {
         if rules.expedition.is_none() { return Err("no expedition tables") }
         if to.position != 16 { return Err("not deep space") }
         let table = self.colonisation.as_ref().ok_or("no astrophysics tables")?;
-        if self.research(cat, a).get(&(table.research as u32)).copied().unwrap_or(0) == 0 { return Err("astrophysics first") }
+        let level = self.research(cat, a).get(&(table.research as u32)).copied().unwrap_or(0);
+        if level == 0 { return Err("astrophysics first") }
+        // ExpeditionMission::startMissionSanityChecks: the account's expeditions out, the way home included, under its slots.
+        let account = self.account[a];
+        let out = self.fleets.iter().filter(|f| f.mission == Mission::Expedition && self.account[f.owner] == account).count();
+        if table.max_expeditions(level).is_some_and(|slots| out >= slots) { return Err("too many expeditions") }
         if sent.iter().all(|(id, _)| rules.combat.missions.espionage_units.contains(id)) { return Err("an expedition needs a ship") }
         Ok(())
     }

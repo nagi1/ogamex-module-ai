@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::combat;
 use crate::economy::{Baseline, Catalogue, Planet, WEIGHTS};
-use crate::fleet::{self, SystemState};
+use crate::fleet::{self, Coord, SystemState};
 use crate::score;
 use crate::units::UnitKind;
 use crate::world::{Decision, EventKind, Mission, Outcome, Rules, SpyReport, World};
@@ -314,11 +314,13 @@ pub struct Miner {
     pub reserve: bool,
     /// The cargo ships the colonies lacked at the last consolidation: the yard's want grows by them.
     colony_cargo: i64,
+    /// N6b arm: at each capital login the account fills its free expedition slots (`expedition_trips`).
+    pub expeditions: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0 }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -345,6 +347,9 @@ impl Miner {
         }
         if self.yard && orders {
             self.spend_surplus(w, cat, a, pick);
+        }
+        if self.expeditions && w.account_of(a) == a {
+            expedition_trips(w, cat, a);
         }
         // The colony the ship was built for is founded at the same login: one mission, no cargo.
         if w.account_of(a) == a {
@@ -505,7 +510,8 @@ impl Miner {
         let research = w.research(cat, a);
         let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
         let stock: f64 = w.games[a].planet.res.iter().sum();
-        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
+        let trips = if self.expeditions { expedition_cargo(w, cat, a).map_or(0, |(n, slots)| n * slots as i64) } else { 0 };
+        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo + trips), (kit.harvester, self.harvesters), (kit.fighter, self.fighters)];
         let mut plans: Vec<(usize, i64)> = wants.into_iter().filter_map(|(id, want)| {
             let missing = want - owned(w, a, id);
             let u = rules.units.index(id as i64)?;
@@ -579,6 +585,35 @@ pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize) {
     let missing = ((hull / 3.0 - guns(w, cat, p)) / each).ceil().max(0.0) as u64;
     let amount = within(w, p, u, missing, kept(w, cat, p));
     if amount > 0 { w.order_units(cat, p, u, amount); }
+}
+
+/// N6b: the cargo ships one expedition takes and the account's expedition slots: a hold for the largest plain find of
+/// the host's bracket at the world's rank-1 score (class and reward multipliers included), and the host's slot limit
+/// at the account's research level. `None` before the account may fly one. Read from the host's tables (gate 1).
+fn expedition_cargo(w: &World, cat: &Catalogue, a: usize) -> Option<(i64, usize)> {
+    let rules = &w.rules[a];
+    let table = rules.expedition.as_ref()?;
+    let colonisation = w.colonisation.as_ref()?;
+    let research = w.research(cat, a);
+    let slots = colonisation.max_expeditions(research.get(&(colonisation.research as u32)).copied().unwrap_or(0))?;
+    if slots == 0 { return None }
+    let largest = table.find_brackets.iter().find(|(below, _)| w.rank1_points < *below).or(table.find_brackets.last())?.1;
+    let find = largest as f64 * table.class_resource_multiplier * table.reward_multiplier.resources;
+    let kit = Kit::of(w, cat, a)?;
+    let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
+    Some(((find / hold as f64).ceil() as i64, slots))
+}
+
+/// N6b: a player sends an expedition from its capital whenever a slot is free (gate 3): cargo ships for the largest
+/// find, to deep space in its own system, held an hour. The world refuses past the host's slot limit or without fuel.
+fn expedition_trips(w: &mut World, cat: &Catalogue, a: usize) {
+    let Some((n, slots)) = expedition_cargo(w, cat, a) else { return };
+    let Some(kit) = Kit::of(w, cat, a) else { return };
+    let deep = Coord { position: 16, ..w.coords[a] };
+    for _ in 0..slots {
+        let ships = n.min(on_shelf(w, a, kit.cargo));
+        if ships < 1 || w.expedition(cat, a, deep, &[(kit.cargo, ships)], [0.0; 3], 10.0, 1).is_err() { return }
+    }
 }
 
 const RESEARCH_LEAD: u32 = 3;
@@ -690,7 +725,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0 };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::new(), hit: HashMap::new() }
     }
 
@@ -1034,6 +1069,57 @@ mod tests {
             world.add_planet(&cat, 0, 0, Coord { system: to.system + 200 + system, ..to }, 0.0);
         }
         assert_eq!(taken, vec![3, 3, 4, 4], "a galaxy fills before the next one opens");
+    }
+
+    /// N6b: the world refuses an expedition beyond the host's slot limit at the account's research level, counting the
+    /// account's expeditions still out (the way home included); without a slot table it sets no limit.
+    #[test]
+    fn an_expedition_beyond_the_slot_limit_is_refused() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 3600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        if rules.expedition.is_none() { return eprintln!("no expedition tables; skipped") }
+        let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        let mut table = crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")).expect("a colonisation table");
+        table.max_expeditions = vec![0, 1, 1, 1, 2];
+        let k = cat.objects.iter().position(|o| o.id == table.research).expect("the colonisation research");
+        world.games[0].planet.levels[k] = 1;
+        world.colonisation = Some(Arc::new(table));
+        let kit = Kit::of(&world, &cat, 0).expect("a cargo hull");
+        assert!(world.set_units(&cat, 0, kit.cargo, 100), "cargo ships to send");
+        world.games[0].planet.res = [1e7; 3];
+        let deep = Coord { galaxy: 3, system: 100, position: 16 };
+        assert!(world.expedition(&cat, 0, deep, &[(kit.cargo, 10)], [0.0; 3], 10.0, 1).is_ok(), "one slot at level 1");
+        assert_eq!(world.expedition(&cat, 0, deep, &[(kit.cargo, 10)], [0.0; 3], 10.0, 1), Err("too many expeditions"));
+    }
+
+    /// N6b: a player fills its expedition slots at a capital login with cargo for the bracket's largest find, and sends
+    /// no more while the slot is taken.
+    #[test]
+    fn a_player_fills_its_expedition_slots_with_cargo_for_the_largest_find() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 3600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        if rules.expedition.is_none() { return eprintln!("no expedition tables; skipped") }
+        let mut world = World::new(&cat, &[0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::new(rules)], vec![Coord { galaxy: 3, system: 100, position: 8 }]);
+        let mut table = crate::world::Colonisation::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")).expect("a colonisation table");
+        table.max_expeditions = vec![0, 1, 1, 1, 2];
+        let k = cat.objects.iter().position(|o| o.id == table.research).expect("the colonisation research");
+        world.games[0].planet.levels[k] = 1;
+        world.colonisation = Some(Arc::new(table));
+        let kit = Kit::of(&world, &cat, 0).expect("a cargo hull");
+        assert!(world.set_units(&cat, 0, kit.cargo, 10_000), "cargo ships to send");
+        world.games[0].planet.res = [1e7; 3];
+        let (n, slots) = expedition_cargo(&world, &cat, 0).expect("an expedition is possible");
+        assert_eq!(slots, 1);
+        expedition_trips(&mut world, &cat, 0);
+        let out: Vec<_> = world.fleets.iter().filter(|f| f.mission == Mission::Expedition).collect();
+        assert_eq!(out.len(), 1, "one slot, one expedition");
+        assert_eq!(out[0].ships, vec![(kit.cargo, n)], "the hold for the largest find");
+        expedition_trips(&mut world, &cat, 0);
+        assert_eq!(world.fleets.iter().filter(|f| f.mission == Mission::Expedition).count(), 1, "no second trip while the slot is taken");
     }
 
     /// Row 64: an alliance member holding the fighters shoots a moon at a mate whose guns can take them down, sized to the

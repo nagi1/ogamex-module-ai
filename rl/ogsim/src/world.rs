@@ -173,6 +173,8 @@ pub struct Colonisation {
     pub research: i64,
     pub ship: u32,
     pub max_planets: Vec<usize>,
+    /// The host's expedition slot limit per level of the same research; empty in an export that predates it (no limit).
+    pub max_expeditions: Vec<usize>,
     pub position_levels: HashMap<i64, u32>,
     pub sites: Vec<Site>,
 }
@@ -190,6 +192,7 @@ impl Colonisation {
             research: int(block, "research")?,
             ship: int(block, "ship")? as u32,
             max_planets: block["max_planets"].as_array().ok_or("colonisation: no max_planets")?.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect(),
+            max_expeditions: block["max_expeditions"].as_array().map_or(Vec::new(), |a| a.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect()),
             position_levels: block["position_levels"].as_object().ok_or("colonisation: no position_levels")?.iter()
                 .filter_map(|(p, l)| Some((p.parse().ok()?, l.as_u64()? as u32))).collect(),
             sites: block["sites"].as_array().ok_or("colonisation: no sites")?.iter().map(|s| Ok(Site {
@@ -205,6 +208,11 @@ impl Colonisation {
     /// The host's planet limit at this research level (the last tabulated level holds beyond the table).
     pub fn max_planets(&self, level: u32) -> usize {
         self.max_planets[(level as usize).min(self.max_planets.len() - 1)]
+    }
+
+    /// The host's expedition slots at a research level, `None` when the export has no table.
+    pub fn max_expeditions(&self, level: u32) -> Option<usize> {
+        self.max_expeditions.get((level as usize).min(self.max_expeditions.len().saturating_sub(1))).copied()
     }
 }
 

@@ -138,11 +138,14 @@ fn main() {
     let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "moonstack");
     // Row 33: the spending order, alone and on the kept stack.
     let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "moonstack");
+    // N6b: every persona fills its expedition slots.
+    let expeditions = std::env::args().any(|arg| arg == "expedition");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
         miner.reserve = reserve;
         miner.yard = yard;
+        miner.expeditions = expeditions;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -304,6 +307,9 @@ impl<W: Write> Season<'_, W> {
             let d = (self.midnight / DAY) as usize - 1;
             scan(self.world, &mut self.read, self.roles, &mut self.per_day, self.days, &mut self.delivered);
             self.write_day(d, snapshot_time(until, self.midnight));
+            // N6b: an expedition's find bracket reads the universe's rank-1 score, which the host's highscore refreshes
+            // daily; the world's own leader stands in for it instead of a fixed number.
+            self.world.rank1_points = (0..self.roles.len()).map(|a| score::of(self.world, a).total).max().unwrap_or(0);
             self.lines += self.world.games.len();
             self.midnight += DAY;
         }

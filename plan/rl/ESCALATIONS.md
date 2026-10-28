@@ -1887,3 +1887,18 @@ of astrophysics, plus settings and class bonuses); the world checked no slot lim
 Our accounts send 0 expeditions; at our top account's score an expedition's resource find is worth ~1M on average,
 against ~20M/day produced by a mid account at day 200 - the largest income source the world does not use. Real mid
 growth is ~6x ours (8,656 against 1,404 at 128-256 days), the top 10% ~45x.
+
+**w38a (KL anchor 0.1 to the w37 BC policy, ent 0.003, 16 actors): -17.6% at update 120** (CI [-21%, -12%], 8% of
+accounts better; the BC start is about -9%), entropy 0.06 -> 0.50 again. Stopped; w38b (anchor, no entropy bonus) was
+stopped for memory before its first checkpoint. Four PPO settings in the season world (w34, w36, w37, w38a) all made
+the BC policy worse. Per rl-diagnostics section 3 the limit is upstream of the learner: before any further PPO run,
+measure the build decision's headroom in the season world (best of N perturbed build orders against the persona on
+fixed seeds). If it is near zero, the season world's build choice is not where a learner adds anything, and training
+moves to the decisions that drive the giveaways.
+
+**Correction to the expedition estimate above:** a resource find is one resource kind, between a tenth of the
+bracket's largest find and all of it, at 35% of outcomes: ~200k per expedition at the world's fixed 1.2M bracket, not
+~1M - worth ~3M/day against ~20M/day of mid production at day 200. Expeditions matter early; they do not explain the
+6x growth gap alone. The world's `rank1_points` was a fixed 100,000; the season now sets it daily from the world's
+leader (the host's highscore refreshes daily). Arm `expedition`: every persona fills its free slots with cargo for the
+bracket's largest find, held an hour in its own system's deep space; it waits on the host slot table in the catalogue.
