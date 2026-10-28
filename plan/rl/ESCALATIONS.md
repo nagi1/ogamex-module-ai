@@ -1978,3 +1978,17 @@ Baseline from here: e73c = `moonstack reach expedition colonies`.
 **Where the gap is now.** res_share (49% out of band) is still the top giveaway: mid research share is 0.21-0.23
 against a real 0.11. The next row looks at why the lab's cheapest-first rule over-researches against real players, who
 research for what they build next (prerequisites, production, slots) and leave the rest.
+
+**Next rows, from e73c's shares by persona (mid and top10 cells).** All three personas over-research alike (res_share
+0.21-0.24 against a real 0.11), so the lab rule is common to them. And the medians of the three shares sum to ~1.36
+for ours against 0.90 for real players. The host counts defences in full in *both* economy and military (`score.rs`,
+HighscoreService), so the excess overlap (~0.4 of total) is defence: the persona meets its military share with the
+cheapest defence (`order_defence` runs first whenever the account is under its share), where a real player's military
+score is ships. That one habit lifts eco_share and mil_share together.
+
+1. **Row 71 (military share in ships).** Under its share, the persona orders from its fleet plan (`order_plans`, the
+   same taste) before defence; defence stays for protection (`ready_for_moon`, raids received). Proof: the shares'
+   overlap falls towards real, and eco_share/mil_share in-band rise, 10 seeds against e73c.
+2. **Row 72 (the lab researches for a purpose).** The lab takes prerequisites of what the account wants, production
+   research, and the slot research (row 70); it spends only what the building queue's waiting pick does not need, and
+   otherwise idles. Proof: res_share in-band, no growth loss, against row 71's result.
