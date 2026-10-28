@@ -38,6 +38,7 @@ from sklearn.model_selection import GroupKFold, StratifiedKFold
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from real_bands import MEASURES, MIN_CELL, age_bucket_of, band_of, bucket_of  # noqa: E402  (same file)
+from census import print_health  # noqa: E402
 
 DEFAULT_BANDS = Path(__file__).resolve().parents[4] / "storage/rl/ogsim/real-bands.json"
 GROWTH_EVERY = 10          # the growth measure is read every tenth day (§4)
@@ -309,6 +310,8 @@ def main() -> int:
         parser.error("give at least one season file, or --self-test")
 
     rows = read_season(args.season)
+    if not print_health(rows):
+        return 1
     counts = violations(rows)
     stub = any(row.get("score_source") == "stub" for row in rows)
     measures = COUNTS if stub else MEASURES

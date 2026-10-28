@@ -23,6 +23,9 @@ import statistics
 from pathlib import Path
 
 AGES = ((1, 30), (31, 60), (61, 120), (121, 180), (181, 250), (251, 365))
+# Row 47: 30-day bands, the width the planner read the production plateau at.
+BANDS = ((1, 30), (31, 60), (61, 90), (91, 120), (121, 150), (151, 180), (181, 210), (211, 240), (241, 270),
+         (271, 300), (301, 330), (331, 365))
 BUILD_REASONS = ("no fields", "needs", "never affordable", "max level")
 TOTALS = ("produced", "wasted", "spent_build", "spent_research", "spent_units")
 
@@ -45,17 +48,81 @@ def load(paths: list[str]) -> list[dict]:
     return rows
 
 
+def print_health(rows: list[dict]) -> bool:
+    """Report instrumented health before interpreting a season's results."""
+    if not rows or any("health" not in row for row in rows):
+        print("health: unavailable for at least one season; result is unverified\n")
+        return False
+    keys = ("frozen", "invalid_stock", "unbalanced", "clock_ahead", "unexplained_over_cap")
+    if any(not all(key in row["health"] for key in (*keys, "production_drop_warning")) for row in rows):
+        print("health: incomplete or mixed instrumentation; result is unverified\n")
+        return False
+    counts = {key: sum(bool(row["health"][key]) for row in rows) for key in keys}
+    warnings = sum(bool(row["health"].get("production_drop_warning")) for row in rows)
+    print(f"health: {counts} -> {'BROKEN' if any(counts.values()) else 'PASS'}\n")
+    print(f"production-drop warnings: {warnings}\n")
+    return not any(counts.values())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("season", nargs="+", help="season JSONL files or globs")
     args = parser.parse_args()
     rows = load(args.season)
+    healthy = print_health(rows)
     if not rows or "planets" not in rows[0].get("stall", {}):
         print("no census sample in these lines (a season from row 42 on writes one)")
         return 1
     active = [r for r in rows if not r["inactive"]]
     print(f"{len(rows):,} account-days, {len(active):,} active; "
           f"{sum(len(r['stall']['planets']) for r in active):,} planet-days active\n")
+
+    # 0. the frozen day (row 47): the account logged in, booked no production, and neither its stock, its score nor its
+    # fleet moved against the day before. A planet the world retired looks exactly like this, and so did every late-game
+    # number before row 47. A quitter is excluded: it is inactive, and inactive is the world's own flag.
+    series: dict[tuple, list[dict]] = {}
+    for row in rows:
+        series.setdefault((row["seed"], row["account"]), []).append(row)
+    frozen = []
+    for account_rows in series.values():
+        account_rows.sort(key=lambda r: r["day"])
+        for before, row in zip(account_rows, account_rows[1:]):
+            if row["inactive"] or row["logins"] == 0:
+                continue
+            still = abs(row["stock"] - before["stock"]) < 1e-6
+            still = still and abs(row["score"]["total"] - before["score"]["total"]) < 1e-6
+            still = still and abs(row["fleet_value"] - before["fleet_value"]) < 1e-6
+            if still and row["produced"] <= 1e-6:
+                row["frozen"] = True
+                frozen.append(row)
+
+    print("0. frozen active account-days: a login day that produced nothing and moved neither stock, score nor fleet")
+    print(f"{'age (days)':>10} {'active days':>12} {'frozen':>8}")
+    for low, high in AGES:
+        part = [r for r in active if low <= r["day"] <= high]
+        if not part:
+            continue
+        print(f"{low:>4}-{high:<5} {len(part):>12,} {sum(1 for r in part if r.get('frozen')) / len(part):>8.1%}")
+    accounts = {}
+    for row in frozen:
+        accounts.setdefault((row["seed"], row["account"]), row["day"])
+    if frozen:
+        print(f"   {len(frozen):,} frozen account-days over {len(accounts):,} accounts of {len(series):,};"
+              f" median first frozen day {median(sorted(accounts.values()))}")
+    else:
+        print("   no account froze")
+    print()
+
+    print("0b. production per active account-day, by 30-day band (a fall with age is an account the world retired)")
+    print(f"{'age (days)':>10} {'days':>8} {'median produced':>16} {'median wasted share':>20}")
+    for low, high in BANDS:
+        part = [r for r in active if low <= r["day"] <= high]
+        if not part:
+            continue
+        share = median([r["wasted"] / r["produced"] for r in part if r["produced"] > 0])
+        print(f"{low:>4}-{high:<5} {len(part):>8,} {median([r['produced'] for r in part]) / 1e6:>14.1f} M "
+              f"{share:>20.1%}")
+    print()
 
     print("1. the building queue, per planet-day, over active account-days")
     print(f"{'age (days)':>10} {'planet-days':>12} {'legal':>7} {'sealed':>7} {'used/cap':>9} "
@@ -139,7 +206,7 @@ def main() -> int:
                           for k, v in sorted(missing.items(), key=lambda kv: -kv[1])[:4]))
     else:
         print("   no planet is sealed by fields after day 120")
-    return 0
+    return 0 if healthy else 1
 
 
 if __name__ == "__main__":

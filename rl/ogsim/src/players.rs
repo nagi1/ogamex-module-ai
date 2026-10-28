@@ -770,6 +770,11 @@ mod tests {
             }
         }
         assert!(world.planets_of(0).len() >= 2, "no colony in {steps} decisions: levels {:?}", world.games[0].planet.levels);
+        assert!(world.events.iter().any(|event| event.mission == crate::world::Mission::Colonise
+            && event.kind == crate::world::EventKind::Arrival
+            && event.outcome == crate::world::Outcome::Done
+            && world.planets_of(0).contains(&event.target) && event.target != 0),
+            "the colonisation delivery does not identify its new planet");
     }
 
     /// A persona under its military share buys defence before economy; one at its target does not (row 10, S4).

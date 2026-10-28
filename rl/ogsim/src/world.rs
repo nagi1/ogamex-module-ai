@@ -892,7 +892,7 @@ impl World {
         if fleet.ships.is_empty() {
             self.fleets.swap_remove(f);
         }
-        self.log(EventKind::Arrival, at, &fleet, Outcome::Done, |e| e.gained = brought);
+        self.log(EventKind::Arrival, at, &fleet, Outcome::Done, |e| { e.target = slot; e.gained = brought; });
     }
 
     /// The tabulated colony the host's draw lands on: the referee's draw when it handed one over, otherwise one of the

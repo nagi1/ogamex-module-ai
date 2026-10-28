@@ -146,6 +146,18 @@ fn main() {
         days,
         seed,
         lines: 0,
+        previous: vec![None; accounts],
+        frozen_days: 0,
+        bad_stock: 0,
+        unbalanced: 0,
+        ahead: 0,
+        production_history: vec![Vec::new(); accounts],
+        previous_factors: vec![Vec::new(); accounts],
+        production_drops: 0,
+        delivered: vec![[0.0; 3]; accounts],
+        excess: vec![[0.0; 3]; accounts],
+        seen_planet: vec![false; accounts],
+        over_cap: 0,
     };
 
     let start = std::time::Instant::now();
@@ -173,6 +185,12 @@ fn main() {
     }
     season.flush(f64::INFINITY);
     let lines = season.lines;
+    let frozen_days = season.frozen_days;
+    let bad_stock = season.bad_stock;
+    let unbalanced = season.unbalanced;
+    let ahead = season.ahead;
+    let production_drops = season.production_drops;
+    let over_cap = season.over_cap;
     let seconds = start.elapsed().as_secs_f64();
     drop(season);
 
@@ -187,6 +205,9 @@ fn main() {
         "quit": quit_days.len(),
         "quit_day_median": median(&quit_days),
         "lines": lines,
+        "health": {"frozen_active_days": frozen_days, "invalid_stock_days": bad_stock,
+                   "unbalanced_days": unbalanced, "clock_ahead_days": ahead,
+                   "production_drop_warnings": production_drops, "unexplained_over_cap_days": over_cap},
         "seconds": seconds,
         "out": out_path,
     }));
@@ -231,6 +252,18 @@ struct Season<'a, W: Write> {
     days: usize,
     seed: u64,
     lines: usize,
+    previous: Vec<Option<(f64, i64, f64)>>,
+    frozen_days: usize,
+    bad_stock: usize,
+    unbalanced: usize,
+    ahead: usize,
+    production_history: Vec<Vec<f64>>,
+    previous_factors: Vec<Vec<(usize, f64)>>,
+    production_drops: usize,
+    delivered: Vec<[f64; 3]>,
+    excess: Vec<[f64; 3]>,
+    seen_planet: Vec<bool>,
+    over_cap: usize,
 }
 
 impl<W: Write> Season<'_, W> {
@@ -238,15 +271,15 @@ impl<W: Write> Season<'_, W> {
     fn flush(&mut self, until: f64) {
         while self.midnight <= until && self.midnight <= self.days as f64 * DAY {
             let d = (self.midnight / DAY) as usize - 1;
-            scan(self.world, &mut self.read, self.roles, &mut self.per_day, self.days);
-            self.write_day(d);
+            scan(self.world, &mut self.read, self.roles, &mut self.per_day, self.days, &mut self.delivered);
+            self.write_day(d, snapshot_time(until, self.midnight));
             self.lines += self.world.games.len();
             self.midnight += DAY;
         }
     }
 
     /// One line per account for the day `d` (0-based; the line says `d + 1`), as §9.1 of the plan fixes it.
-    fn write_day(&mut self, d: usize) {
+    fn write_day(&mut self, d: usize, world_time: f64) {
         let at = (d + 1) as f64 * DAY;
         for a in 0..self.roles.len() {
             // Inactive is the world's own flag (last login more than seven days ago), not the quit day we drew.
@@ -273,6 +306,47 @@ impl<W: Write> Season<'_, W> {
             let flows = flows_of(&before, &books);
             let unexplained = (stock - was) - (books.net() - before.net());
             self.since[a] = (books, stock);
+            let fleet = value - economy;
+            let frozen = frozen_day(self.previous[a], inactive, tally.logins, books.produced - before.produced, stock, score.total, fleet);
+            if frozen {
+                self.frozen_days += 1;
+            }
+            self.previous[a] = Some((stock, score.total, fleet));
+            let invalid_stock = planets.iter().any(|&p| self.world.games[p].planet.res.iter().any(|r| !r.is_finite() || *r < -1e-6));
+            let clock_ahead = planets.iter().any(|&p| self.world.games[p].t > world_time + 1e-6);
+            self.excess.resize(self.world.games.len(), [0.0; 3]);
+            self.seen_planet.resize(self.world.games.len(), false);
+            let unexplained_over_cap = planets.iter().fold(false, |bad, &p| {
+                let planet = &self.world.games[p].planet;
+                let mut invalid = false;
+                for r in 0..3 {
+                    let current = (planet.res[r] - planet.cap[r]).max(0.0);
+                    let initial = if !self.seen_planet[p] { (self.cat.planets[planet.config].resources[r] - planet.cap[r]).max(0.0) } else { 0.0 };
+                    let (next, bad) = excess_after(current, self.excess[p][r], self.delivered.get(p).map_or(0.0, |v| v[r]) + initial);
+                    invalid |= bad;
+                    self.excess[p][r] = next;
+                    if let Some(delivered) = self.delivered.get_mut(p) { delivered[r] = 0.0; }
+                }
+                self.seen_planet[p] = true;
+                bad || invalid
+            });
+            let factors: Vec<(usize, f64)> = planets.iter().map(|&p| (p, self.world.games[p].planet.factor)).collect();
+            let unchanged_energy = self.previous_factors[a].iter().all(|&(slot, factor)| {
+                factors.iter().any(|&(current, now)| current == slot && now >= factor - 1e-6)
+            });
+            let history = &mut self.production_history[a];
+            let production = books.produced - before.produced;
+            let production_drop = !inactive && history.len() == 15 && unchanged_energy
+                && production < median(history) * 0.5;
+            if history.len() == 15 { history.remove(0); }
+            history.push(production);
+            self.previous_factors[a] = factors;
+            self.production_drops += usize::from(production_drop);
+            let unbalanced = !unexplained.is_finite() || unexplained.abs() > 1e-6 * (1.0 + stock.abs() + was.abs() + books.net().abs() + before.net().abs());
+            self.bad_stock += usize::from(invalid_stock);
+            self.unbalanced += usize::from(unbalanced);
+            self.ahead += usize::from(clock_ahead);
+            self.over_cap += usize::from(unexplained_over_cap);
             let line = json!({
                 "seed": self.seed,
                 "world_speed": self.cat.speed as i64,
@@ -280,6 +354,12 @@ impl<W: Write> Season<'_, W> {
                 "account": a,
                 "persona": PERSONAS[self.roles[a]].0,
                 "controlled": false,
+                "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
+                           "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
+                           "production_drop_warning": production_drop},
+                "clock_ahead_detail": planets.iter().filter_map(|&p| {
+                    (self.world.games[p].t > world_time + 1e-6).then_some(json!({"slot": p, "planet_time": self.world.games[p].t, "world_time": world_time, "day_end": at}))
+                }).collect::<Vec<_>>(),
                 "inactive": inactive,
                 "score_source": "host",
                 "score": { "total": score.total, "economy": score.economy, "research": score.research,
@@ -463,6 +543,54 @@ impl<W: Write> Season<'_, W> {
     }
 }
 
+fn frozen_day(previous: Option<(f64, i64, f64)>, inactive: bool, logins: u32, produced: f64,
+              stock: f64, score: i64, fleet: f64) -> bool {
+    previous.is_some_and(|(old_stock, old_score, old_fleet)| {
+        !inactive && logins > 0 && produced <= 1e-6 && (stock - old_stock).abs() < 1e-6
+            && score == old_score && (fleet - old_fleet).abs() < 1e-6
+    })
+}
+
+fn snapshot_time(until: f64, midnight: f64) -> f64 {
+    if until.is_finite() { until } else { midnight }
+}
+
+fn excess_after(current: f64, previous: f64, delivered: f64) -> (f64, bool) {
+    let allowed = previous + delivered;
+    (current.min(allowed), current > allowed + 1e-6)
+}
+
+#[cfg(test)]
+mod health_tests {
+    use super::{excess_after, frozen_day, snapshot_time};
+
+    #[test]
+    fn frozen_day_requires_an_active_login_and_no_economic_change() {
+        let previous = Some((100.0, 42, 10.0));
+        assert!(frozen_day(previous, false, 1, 0.0, 100.0, 42, 10.0));
+        assert!(!frozen_day(previous, true, 1, 0.0, 100.0, 42, 10.0));
+        assert!(!frozen_day(previous, false, 0, 0.0, 100.0, 42, 10.0));
+        assert!(!frozen_day(previous, false, 1, 1.0, 100.0, 42, 10.0));
+        assert!(!frozen_day(previous, false, 1, 0.0, 101.0, 42, 10.0));
+    }
+
+    #[test]
+    fn final_flush_checks_against_the_day_not_infinity() {
+        assert_eq!(snapshot_time(f64::INFINITY, 100.0), 100.0);
+        assert!(101.0 > snapshot_time(f64::INFINITY, 100.0));
+        assert_eq!(snapshot_time(120.0, 100.0), 120.0);
+    }
+
+    #[test]
+    fn delivery_credit_expires_when_the_excess_is_spent() {
+        let (excess, bad) = excess_after(50.0, 0.0, 50.0);
+        assert!(!bad);
+        let (excess, bad) = excess_after(0.0, excess, 0.0);
+        assert!(!bad);
+        assert!(excess_after(10.0, excess, 0.0).1);
+    }
+}
+
 /// What the account paid for its research levels: the stub's research share of `account_value`.
 fn research_value(w: &World, cat: &Catalogue, a: usize) -> f64 {
     let levels = &w.games[w.account_of(a)].planet.levels;
@@ -472,10 +600,19 @@ fn research_value(w: &World, cat: &Catalogue, a: usize) -> f64 {
 }
 
 /// Reads the events the world wrote since the last call into their day and account.
-fn scan(w: &World, read: &mut usize, roles: &[usize], per_day: &mut [Vec<Tally>], days: usize) {
+fn scan(w: &World, read: &mut usize, roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
+    delivered.resize(w.games.len(), [0.0; 3]);
     while *read < w.events.len() {
         let e = &w.events[*read];
         *read += 1;
+        let recipient = match (e.kind, e.mission) {
+            (EventKind::Return, _) => Some(e.owner),
+            (EventKind::Arrival, Mission::Transport | Mission::Deploy | Mission::Colonise) => Some(e.target),
+            _ => None,
+        };
+        if let Some(slot) = recipient.filter(|&slot| slot < delivered.len()) {
+            for r in 0..3 { delivered[slot][r] += e.gained[r].max(0.0); }
+        }
         record(&mut per_day[((e.time / DAY) as usize).min(days - 1)], e, w, roles);
     }
 }
