@@ -57,7 +57,9 @@ score_arm() {
         grep -Eq 'health: .*BROKEN|health: (unavailable|incomplete)|verdict:' "$out/$arm-hds.txt" || { cat "$out/$arm-hds.txt" >&2; exit 1; }
     fi
 }
-# The arms are scored in parallel, each in its own subshell; any failing arm fails the row.
+# The arms are scored in parallel, each in its own subshell; any failing arm fails the row. The classifier in hds.py
+# fits a few thousand rows: on 72 OpenMP threads one scorecard took over 25 minutes of contention, on 4 it takes 77 s.
+export OMP_NUM_THREADS=4
 pids=()
 for arm in "${arms[@]}"; do
     score_arm "$arm" &
