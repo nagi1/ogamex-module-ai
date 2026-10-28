@@ -759,7 +759,7 @@ impl Catalogue {
         // economy-only `VecEnv` keeps `finish`, where a finished game is the end of an episode.
         if game.in_world && best.1.is_none() && game.commit.iter().all(|k| k.is_none())
             && game.pending.is_empty() && !self.login_gaps.is_empty() {
-            return (self.login(game, game.t + MIN_GAP, false), None);
+            return (self.login(game, game.t + MIN_GAP, false).min(game.horizon), None);
         }
         // A landing build changes rates and stores, so a plan made before it is re-timed after it.
         match game.pending.first() {

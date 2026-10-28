@@ -647,6 +647,36 @@ impl World {
         self.launch(cat, a, None, to, Mission::Colonise, ships, cargo, speed, 0)
     }
 
+    /// Row 45 C: at its account's login a colony sends home what it holds above two hours of its own production, in the
+    /// ships of `cargo_ship` stationed on it; the host does not cap a delivery at the store, so a price above the
+    /// capital's cap becomes payable. Returns how many more of those ships the whole surplus needed.
+    pub fn consolidate(&mut self, cat: &Catalogue, colony: usize, cargo_ship: u32) -> i64 {
+        let capital = self.account[colony];
+        self.catch_up(cat, colony, self.games[capital].t);
+        self.next[colony] = cat.peek(&mut self.games[colony]);
+        let rules = Arc::clone(&self.rules[colony]);
+        let research = self.research(cat, colony);
+        let planet = &self.games[colony].planet;
+        let mut load: [f64; 3] = std::array::from_fn(|r| (planet.res[r] - 2.0 * planet.rate[r].max(0.0)).max(0.0).floor());
+        let hold = rules.combat.capacity(&[(cargo_ship, 1)].into_iter().collect(), &research).max(1) as f64;
+        let need = (load.iter().sum::<f64>() / hold).ceil() as i64;
+        let shelf = rules.units.index(cargo_ship as i64).map_or(0, |u| self.yards[colony].counts[u] as i64);
+        // Ships on their way to the colony, or out on its last transport, are the colony's too.
+        let coming: i64 = self.fleets.iter().filter(|f| f.owner == colony || (f.target == colony && f.mission == Mission::Deploy))
+            .flat_map(|f| f.ships.iter()).filter(|s| s.0 == cargo_ship).map(|s| s.1).sum();
+        let ships = need.min(shelf);
+        if ships == 0 { return (need - coming).max(0) }
+        let distance = fleet::distance(&rules.settings, self.coords[colony], self.coords[capital], &|_, _| SystemState::Active);
+        let fuel = fleet::consumption(&rules.settings, &rules.fleet, &[(cargo_ship, ships)], &research, distance, 0, 10.0) as f64;
+        load[2] = (load[2] - fuel).max(0.0);
+        let scale = (ships as f64 * hold / load.iter().sum::<f64>().max(1.0)).min(1.0);
+        for r in &mut load { *r = (*r * scale).floor() }
+        if self.dispatch(cat, colony, capital, Mission::Transport, &[(cargo_ship, ships)], load, 10.0).is_ok() {
+            self.idle_stash[capital] = None;
+        }
+        (need - ships - coming).max(0)
+    }
+
     /// Makes slot `slot` a planet of the account whose capital is `capital` (the referee sets worlds up this way).
     pub fn join_account(&mut self, slot: usize, capital: usize) {
         self.account[slot] = capital;
@@ -1199,6 +1229,22 @@ mod tests {
         let colony = &world.games[1];
         assert!(colony.planet.books.produced > 0.0, "the colony booked no production");
         assert!(colony.t >= game.t - 1.0, "the colony's clock stopped at {} against the capital's {}", colony.t, game.t);
+    }
+
+    /// Row 48: a sleeping world planet's next login may fall after the horizon; its next event is the horizon, or the world
+    /// plays fleets past the season's end and `catch_up` carries their targets' clocks there (seven day-365 violations).
+    #[test]
+    fn a_sleeping_world_planet_never_moves_past_the_horizon() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![21600.0];
+        let mut world = World::new(&cat, &[0], 1.0, 0.0, 5);
+        let game = &mut world.games[0];
+        game.planet.levels = cat.objects.iter().map(|o| o.price.len() as u32).collect();
+        cat.refresh(&mut game.planet);
+        game.free = [NEVER; 2];
+        game.t = game.horizon - 60.0;
+        let horizon = game.horizon;
+        assert!(cat.peek(game) <= horizon, "the next event {} is past the horizon {horizon}", cat.peek(game));
     }
 
     /// `busy_seconds` reads exactly the builds the account's own history holds: no more than the window, none when the
