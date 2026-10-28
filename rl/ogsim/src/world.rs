@@ -825,6 +825,8 @@ impl World {
         if fleet.returning { return Err("already returning") }
         if fleet.mission == Mission::Missile { return Err("missiles cannot be recalled") }
         if now > fleet.arrive { return Err("already arrived") }
+        // The refund is a flow, so an idle login's rollback must not undo it (as every other action at a login).
+        self.idle_stash[a] = None;
         // Row 23: the recall hands half the fuel back into the hold, where the stock counts it again.
         self.games[fleet.owner].planet.books.fuel -= weighted([0.0, 0.0, (fleet.fuel / 2.0).floor()]);
         fleet.cargo[2] += (fleet.fuel / 2.0).floor();
@@ -1472,6 +1474,25 @@ mod tests {
         assert_eq!(home.0.loot_in, books.loot_in, "the landing booked the plunder a second time");
         assert_eq!(home.0.cargo_lost, 0.0, "the raider lost cargo without a fight");
         assert!(home.1 > 0.0, "the account ended with nothing");
+    }
+
+    /// A recall at an idle login is a flow like any other action there: the login's rollback keeps it, so the stock and
+    /// the books still reconcile (e73b: the rollback dropped the refund's booking and left the fuel in the hold).
+    #[test]
+    fn a_recall_at_an_idle_login_keeps_the_books_balanced() {
+        let Some((cat, mut world, _)) = pair(40.0) else { return eprintln!("no u1 catalogues; skipped") };
+        give(&mut world, 0, 202, 10);
+        world.games[0].planet.res = [50_000.0, 20_000.0, 20_000.0];
+        world.next_decision(&cat).unwrap();
+        world.dispatch(&cat, 0, 1, Mission::Transport, &[(202, 10)], [1000.0, 0.0, 0.0], 1.0).unwrap();
+        let gap = |w: &World| w.stock(0) - w.books(0).net();
+        let before = gap(&world);
+        // An idle login of the sender while the fleet is still on its way out.
+        world.idle_stash[0] = Some((world.games[0].t, world.games[0].planet.res, world.games[0].planet.books));
+        world.idle_now[0] = true;
+        world.recall(0, 0).unwrap();
+        world.wait(&cat, 0);
+        assert!((gap(&world) - before).abs() < 1e-6, "stock and books moved apart by {}", gap(&world) - before);
     }
 
     /// A recall turns the fleet home from where it is (`GameMission::cancel`): it leaves now, takes the time already
