@@ -1762,3 +1762,39 @@ persona mix with FR and C, home starts, account-value reward. Only a controlled 
 the persona plays the rest of that login. `train_world.py --season` (8760 h) and `train_bc_world.py --season` exist.
 The BC teacher is the persona's own pick (`Miner::pick`), not `Baseline::Player`, which walks into the field dead end.
 Smoke run: 18.7k decisions/s on 4 actors, learner 10% busy on cuda:1, all plumbing working.
+
+### Planner acting as implementer (28 Oct, later): e46b/e46c, the kept stack, row 33 and the training run
+
+**e46b overturned e46's C result.** With colonies on their account's logins (`d0e2bb2`), C emptied every colony to
+two hours of production at each login, no colony mine was ever payable again, and the account produced 86 bn against
+base's 313 bn. The e46 gain was colonies building while their account slept. C now ships only when a colony store is at
+80% of its cap, and only what is above half the cap (`512db5b`).
+
+**e46c (honest world, 10 seeds x 365 days, health PASS on all four arms):**
+
+| | base | FR | C | stack |
+| --- | --- | --- | --- | --- |
+| HDS / AUC | 0.749 / 0.993 | 0.755 / 0.994 | 0.717 / 0.993 | 0.740 / 0.993 |
+| mid growth in-band 64-128 / 128-256 / 256-512 | 0.33 / 0.01 / 0.48 | 0.54 / 0.04 / 0.67 | 0.90 / 0.69 / 0.98 | 0.88 / 0.65 / 0.90 |
+| mid score p50 128-256 (real 8,656) | 465 | 583 | 1,417 | 1,487 |
+| mid mil_sh / eco_sh in-band 128-256 | 0.92 / 0.77 | 0.92 / 0.71 | 0.24 / 0.44 | 0.37 / 0.59 |
+| wasted share | 68.7% | 61.5% | 15.6% | 12.3% |
+
+**Decision: the stack is the base for row 33, against row 46's mix gate, recorded.** The gate fails (mil_sh and eco_sh
+fall more than 0.02); no single arm passes it either (FR's eco_sh at 64-128 falls 0.17). The stack closes the largest
+gap on the scorecard (mid growth 0.01 -> 0.65 at 128-256, score 3.2x) and its giveaways are the spending shares: for mid
+accounts at 129-256 our p50 minus the real p50 is research +0.19, economy +0.11, military -0.19 (real p50: eco 0.56,
+res 0.11, mil 0.23). That is row 33's subject, so row 33 runs on the stack.
+
+**Row 33 (`74e3995`)**: at each capital login the building pick, any build a queue is saving for and two hours of
+production stay; the rest buys the persona's hull (Kit's fighter, or the cheapest host defence for a miner). No share
+cap. Arms `yard` and `yardstack`, `runs/flow/e33`, against e46c's base and stack.
+
+**Speed.** `row.sh` runs 60 seasons at once and scores arms in parallel on 4 OpenMP threads each: a scorecard was taking
+over 25 minutes on 72 contending threads, and now takes 77 s (`701a991`). While training runs, rows run with the
+scratch-built season binary, not `row.sh`, whose `maturin develop` would overwrite the library the actors have loaded.
+
+**Row 34 training (`runs/w34/ppo2`)**: BC warm start on the stack world (400k persona rows, 88% top-1), then PPO with
+48 actors x 32 worlds x 12 accounts, learner on cuda:1, 365-day horizon, lr 1e-4, ent 0.003, 120 minutes. First 15
+minutes: KL 0.001-0.003, clip 0.01-0.04, entropy 0.16-0.55 (it dipped and recovered), value loss down from 13 to 2-3,
+no invalid actions reported. The paired evaluation against the persona rule is pending.
