@@ -2,7 +2,7 @@
 # Runs a command as a detached unit in rl.slice, capped at 85% of WSL's RAM and CPU: a job that outgrows the cap is
 # killed alone instead of taking WSL down (owner, 28 Oct 2026). Usage: capped.sh NAME LOG COMMAND...
 set -euo pipefail
-name=$1 log=$2
+name=$1 log=$(realpath -m "$2")
 shift 2
 slice=~/.config/systemd/user/rl.slice
 if [ ! -f "$slice" ]; then
