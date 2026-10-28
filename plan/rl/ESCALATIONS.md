@@ -1902,3 +1902,29 @@ bracket's largest find and all of it, at 35% of outcomes: ~200k per expedition a
 6x growth gap alone. The world's `rank1_points` was a fixed 100,000; the season now sets it daily from the world's
 leader (the host's highscore refreshes daily). Arm `expedition`: every persona fills its free slots with cargo for the
 bracket's largest find, held an hour in its own system's deep space; it waits on the host slot table in the catalogue.
+
+## 28 Oct — headroom of the season build decision: the year-end value is chaos, not choice
+
+`ogrl/headroom.py` (rl-diagnostics 1.2) plays each of 8 fixed seeds once with the player rule and 16 times with the rule
+perturbed (on a controlled build decision, with probability eps, a random legal row, wait included), in w37's world
+(12 accounts, 6 controlled, season, 365 days). Value against the rule's game on the same seed:
+
+| eps | mean arm | best of 16 per world | best per account |
+| --- | --- | --- | --- |
+| 0.0002 (a handful of deviations) | -0.2% | +2.7% | +4.1% |
+| 0.001 | -1.3% | +6.6% | +10.5% |
+| 0.02 | -4.5% | +4.7% | +12.2% |
+| 0.1 | -1.3% | +8.5% | +16.5% |
+
+The best of N barely depends on how much the policy changes, so it is selection on noise, not headroom. The control
+settles it: the six **untouched** accounts (never perturbed) move more than the perturbed ones at eps 0.001 - a spread
+across arms of 6.1% of total value (economy 17.6%) against 3.7% for the perturbed six. A few builds by other players
+swing an untouched account's year by more than any build of its own. This is why w34-w38 all drifted: the reward a
+learner sees for a build is dominated by the world's interactions (the raiders and savers that make up the uncontrolled
+half), so PPO fits noise and the BC policy degrades.
+
+**Decision.** No further PPO on the season build decision with year-end value as the reward. The build choice stays
+the persona's (BC reproduces it at 91.7%). The work moves to what HDS reads: the giveaways (res_share, eco_share,
+planets, mil_share) and the growth gap, measured by 10-seed season rows. A learner comes back only with a reward that
+the account's own decision controls (for example the production it builds, which a raid cannot take) and a fresh
+headroom test under that reward showing best-of-N above the untouched accounts' spread.
