@@ -1620,3 +1620,41 @@ are re-run on row 48's `season.rs`. That is one `row.sh` call, and it needs a na
 refuses a run directory that already holds season data (`e47` holds 10 seeds; `e47-first` is the first pass): `e47h`. The
 numbers in row 47 stand as measured on the lines on disk; they are not yet the harness's numbers, and when the re-run
 lands the two frozen counts (mine and the `health` block's) must agree.
+
+### Implementer (28 Oct, row 48 fidelity gaps and baseline)
+
+The original `e09ec0f` world, built in a separate source directory with the new season instrumentation, ran ten
+365-day seeds through `row.sh e48`. `runs/flow/e48/base-census.txt` reports 14,607 frozen active account-days;
+`summary.md` marks the run **BROKEN**. Seed 1 reproduces every saved `e42/base-1.jsonl` line after removing the health
+field and reports the same 1,138 frozen days. Production totals 3,121.25 billion across the ten seeds, the row 43
+baseline figure. The old `e47` seasons lack health fields and must be rerun as `e47h` after the harness is accepted.
+
+`FIDELITY.md` identifies these missing direct host-parity cases: field additions; storage levels; production at a full
+or already overflowing store; delivery above cap; energy/fuel depletion; research production bonuses including plasma;
+class production bonuses; research's paying planet; queue limits and bonuses; the export table limit; colony sites and
+account limits; combat debris and moon settlement; unit production/energy boundaries; and account and colony clocks.
+Some have simulator tests or generic mission replays, but those do not establish the named host parity case. Please
+assign fidelity rows and their order before the next behavior row.
+
+### Planner (28 Oct, row 48 and fidelity order)
+
+I independently streamed all ten `e48/base-*.jsonl`: 233,600 lines, 14,607 frozen active account-days, and
+3,121.25 bn produced, agreeing with `base-census.txt` and `summary.md`. This verifies the frozen-account detector on
+the old world; it does not establish that the remaining detectors are complete. `e47/census.txt` reports no frozen
+days in its ten old-format seasons, but those files carry no health block, so rerun as `e47h` after row 48 is proven.
+
+Finish row 48 before taking the rerun. The present over-cap check adds all deliveries ever recorded for a planet:
+after a delivery is spent, that old credit can still conceal an unrelated over-cap stock. The clock check compares to
+`world_time`, but the final `flush(INFINITY)` cannot detect any ahead clock. Add targeted tests covering both cases,
+plus a legitimate delivery above the cap and an event when no further decision exists; fix the instrumentation until
+they pass. A warning is not a hard violation. Do not mark row 48 kept or score a season healthy until these checks,
+the runner's error handling and the full row 48 requirements are verified. Preserve the existing row 47 code and the
+raw runs. Only one implementer may write this checkout; use the current single writer, with no concurrent sessions.
+
+The checklist's `missing` entries are **missing parity evidence**, not automatically missing mechanics. Rows 49–62
+below are the individual parity investigations, ordered before row 45. Each uses the host as referee and records the
+fixture, command, results and exact mismatch. If the host and simulator disagree, stop and escalate a concrete
+mechanic fix with original-game verification; do not edit an assertion to make a test pass. Finish 48, rerun 47 as
+`e47h`, then 49–62 in order, then 45 → 46 → 33 → conditional 32 → 34. Treat row 39's yard bound as an observation in
+the next census, not a new behavior arm; if it reveals a missing mechanic, escalate before row 45. Report HDS only for
+seasons that pass all hard health checks.
