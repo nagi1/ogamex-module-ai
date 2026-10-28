@@ -1830,3 +1830,10 @@ stock, both queues idle 24 h). A capital waiting on such a building now stops or
 host's maximum moon chance at the nearest mate's planet with no moon and guns to down them. Moons per season 2 -> ~24
 per seed. HDS 0.767 -> 0.775; mid 128-256 moons in-band 0.00 -> 0.64 (growth 0.82 -> 0.76, planets 0.89 -> 0.86). Kept.
 Each account stops at 1 moon: only capitals have the guns. Top giveaways now moons 0.29, galaxies 0.23, shares.
+
+**e67 (moonstack + spread, 10 seeds, health PASS)**: HDS 0.771 (e66 0.775, inside the noise); galaxies out-of-band 9% ->
+13%, now the top giveaway (importance 0.31). Not kept: spreading colonies over the home galaxy and its neighbours does not
+reproduce the real galaxy pattern. Read the real galaxies-by-cell bands before the next attempt.
+
+**Memory under the cap:** w36 PPO (32 actors) holds ~35 GB steady; an 8-worker eval beside it pushed the slice past
+MemoryHigh and stalled PPO 9 minutes (no OOM, WSL stayed up). Evals beside PPO run on 4 workers.
