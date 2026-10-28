@@ -1712,3 +1712,53 @@ concrete limitation; never treat an unverified day as a healthy result.
 
 After both rows pass, run 49–62 in order, then 45 → 46 → 33 → conditional 32 → 34. The source checkout is already
 being used by an implementer: the planner changes only these plan files and must not run a competing implementation.
+
+### Planner acting as implementer (28 Oct, owner direction: "act like the implementer, fix root causes, start training")
+
+The owner asked the planner to drive the rows directly. Everything below is measured with `rl/scripts/row.sh` on
+10 seeds x 365 days; numbers are read from each run's `summary.md`, census, growth and HDS files, and the raw lines.
+
+**Row 48 closed.** The seven day-365 clock-ahead days were the row 47 branch of `Catalogue::next_event` returning
+the next login uncapped; a world then played fleets past the horizon. Capped at the horizon, with a test that fails
+without it (`04bea13`). Baseline **`e47c`**: health PASS on every hard check, HDS 0.748, AUC 0.993. Census after day
+120: 73% of unspent production is "sealed capital, adder unreachable"; 82% of sealed planet-days miss a prerequisite
+(object 15 on 76%); planets reach used/cap 1.00 at days 31-60.
+
+**Rows 49-62 do not block behaviour rows.** They are missing parity *evidence*; the production, storage, energy and
+bonus tables are the host's own exports, and the one rule row 45 C leans on (uncapped delivery) reads the same in
+both (`PlanetService::addResources`, `world.rs` `land`/Transport). They run as a parallel track against the Docker
+host (now up), and a mismatch found there becomes a fidelity row ahead of the next behaviour row.
+
+**Row 45 (`e45`) and row 46 (`e46`).** FR and C are built (`19a4320`), each with its test.
+
+| e46 (10 seeds) | base | FR | C | stack |
+| --- | --- | --- | --- | --- |
+| HDS / AUC | 0.750 / 0.993 | 0.755 / 0.993 | 0.699 / 0.994 | 0.733 / 0.993 |
+| mid growth in-band 64-128 / 128-256 / 256-512 | 0.33 / 0.01 / 0.48 | - | 0.80 / 0.62 / 1.00 | 0.66 / 0.58 / 0.81 |
+| mid score p50 128-256 (real 8,656) | 468 | - | 1,265 | 1,280 |
+| mid res_sh in-band 128-256 | 0.27 | - | 0.00 | 0.08 |
+| wasted share of production | 68% | 61% | 17% | 16% |
+| sealed planet-days after day 120 | 487,586 | 0 | 410,919 | 0 |
+
+C is the growth lever (mid accounts 2.7x the base score at 128-256); FR removes sealing. The keep rule's mix gate
+fails on res_share (research out of band upward), so neither arm is kept as written. Diagnosis: the base was already
++0.15 over the real research share; the capital's buildings stall (FR's queue waits at the last fields for a chain
+whose research had not started; C's capital is sealed), so the delivered stock buys research.
+
+**Three instrument and fidelity defects found on the way, all fixed with tests:**
+1. The over-cap health check used a fixed 1e-6 tolerance; at 1e8 stock the 14-digit storage rounds above it. C's 1,114
+   "unexplained" days were each exactly previous excess + delivery (`19a4320`).
+2. A login second was counted once per deciding planet (`19a4320`).
+3. **A colony drew its own night** at founding, so its logins left the account's and it built while the account slept:
+   69 decision "logins" a day against 8.9 real ones in the stack; `hds.py` reads the capital's record and did not see
+   it. Colonies now copy the night (`d0e2bb2`).
+
+FR's research side now binds at three times the reserve, so the lab starts the chain while fields remain (`d0e2bb2`).
+Rerun as `e46b` (base, C, stack) on the corrected world.
+
+**Row 34 (training) needs no `train_ppo.py` edit.** `ogrl/train_world.py` already runs distributed PPO on
+`VecWorld`. `VecWorld(season=True, queue=0)` (`311fb60`) is the season's world: colonisation tables, idle logins, the
+persona mix with FR and C, home starts, account-value reward. Only a controlled capital's builds reach the model, and
+the persona plays the rest of that login. `train_world.py --season` (8760 h) and `train_bc_world.py --season` exist.
+The BC teacher is the persona's own pick (`Miner::pick`), not `Baseline::Player`, which walks into the field dead end.
+Smoke run: 18.7k decisions/s on 4 actors, learner 10% busy on cuda:1, all plumbing working.
