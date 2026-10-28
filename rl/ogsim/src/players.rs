@@ -521,6 +521,38 @@ impl Miner {
     }
 }
 
+/// Row 64: a moon shot for an alliance mate, the way players make moons: fighters whose debris reaches the host's maximum
+/// moon chance, sent at the nearest mate's planet that has no moon and guns to shoot them all down in three rounds (the
+/// moon forms at the receiver). The sizing reads the host's combat rules and the kit's hull, nothing named (gate 1).
+/// Short of fighters, the shooter orders them from what its queues do not need. Returns whether a shot left.
+pub fn moon_shot(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) -> bool, ledger: &mut Ledger) -> bool {
+    let Some(kit) = Kit::of(w, cat, a) else { return false };
+    let rules = Arc::clone(&w.rules[a]);
+    let debris = &rules.combat.rules;
+    let Some(u) = rules.units.index(kit.fighter as i64) else { return false };
+    let price = rules.units.units[u].price;
+    let each: f64 = (0..if debris.debris_deuterium { 3 } else { 2 }).map(|r| (price[r] * debris.debris_ships_percentage / 100.0).floor()).sum();
+    if each <= 0.0 || debris.maximum_moon_chance <= 0.0 { return false }
+    let n = (debris.maximum_moon_chance * 100_000.0 / each).ceil() as i64;
+    let (_, hull) = strength(&rules, &w.research(cat, a), &[(kit.fighter, n)]);
+    let receives = |p: usize| {
+        let guns = stack(&w.rules[p], &w.yards[p].counts);
+        !w.moons[p] && !w.fleets.iter().any(|f| f.target == p && f.mission == Mission::Attack && !f.returning)
+            && strength(&w.rules[p], &w.research(cat, p), &guns).0 * 3.0 >= hull
+    };
+    let Some(target) = others_by_distance(w, a).into_iter().filter(|&b| mate(b)).flat_map(|b| w.planets_of(b)).find(|&p| receives(p)) else { return false };
+    if on_shelf(w, a, kit.fighter) >= n {
+        return send(w, cat, a, target, Mission::Attack, &[(kit.fighter, n)], 10.0, ledger).is_ok();
+    }
+    let missing = n - owned(w, a, kit.fighter);
+    if missing <= 0 || yard_blocks_reserve(w, cat, a) { return false }
+    let mut keep = saving(w, cat, a, None);
+    for r in 0..3 { keep[r] += 2.0 * w.games[a].planet.rate[r].max(0.0) }
+    let amount = within(w, a, u, missing as u64, keep);
+    if amount > 0 { w.order_units(cat, a, u, amount); }
+    false
+}
+
 const RESEARCH_LEAD: u32 = 3;
 
 /// What planet a is saving for: the builds its queues committed and wait to afford, and this login's pick. A player
@@ -949,6 +981,30 @@ mod tests {
         let pick = field_reserve(&world, &cat, 0).expect("the reserve binds").expect("a chain object is startable");
         assert!(chain.iter().any(|c| c.0 == pick), "object {pick} is off the chain");
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
+    }
+
+    /// Row 64: an alliance member holding the fighters shoots a moon at a mate whose guns can take them down, sized to the
+    /// host's maximum moon chance; one shot at a time per planet, and a mate without the guns is not shot at.
+    #[test]
+    fn a_mate_with_guns_receives_a_moon_shot_sized_to_the_maximum_chance() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let kit = Kit::of(&world, &cat, 0).expect("a fighter hull");
+        let rules = Arc::clone(&world.rules[0]);
+        let gun = (0..rules.units.units.len()).find(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence)).expect("a defence");
+        let mut ledger = Ledger::default();
+        assert!(world.set_units(&cat, 0, kit.fighter, 100_000), "the shooter holds fighters");
+        world.games[0].planet.res = [1e9; 3];
+        assert!(!moon_shot(&mut world, &cat, 0, |b| b == 1, &mut ledger), "a mate without guns would let the fighters land");
+        assert!(world.set_units(&cat, 1, rules.units.units[gun].id as u32, 1_000_000), "the mate holds guns");
+        assert!(moon_shot(&mut world, &cat, 0, |b| b == 1, &mut ledger), "the shot left");
+        let shot = world.fleets.iter().find(|f| f.owner == 0 && f.target == 1 && f.mission == Mission::Attack).expect("an attack on the mate");
+        let price = rules.units.units[rules.units.index(kit.fighter as i64).unwrap()].price;
+        let debris = &rules.combat.rules;
+        let each: f64 = (0..2).map(|r| (price[r] * debris.debris_ships_percentage / 100.0).floor()).sum();
+        let sent = shot.ships.iter().map(|s| s.1).sum::<i64>() as f64;
+        assert!(sent * each >= debris.maximum_moon_chance * 100_000.0 && (sent - 1.0) * each < debris.maximum_moon_chance * 100_000.0, "{sent} fighters");
+        assert!(!moon_shot(&mut world, &cat, 0, |b| b == 1, &mut ledger), "one shot at a time");
+        assert!(!moon_shot(&mut world, &cat, 0, |b| b == 2, &mut ledger), "only a mate is shot at");
     }
 
     /// Row 65: a capital whose field reserve waits on a building the busy yard blocks orders no more units, so the yard

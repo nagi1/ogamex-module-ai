@@ -1811,3 +1811,22 @@ during a run, so a collapse shows within one checkpoint.
 training world. Remaining giveaways: moons (row 64), galaxies, planets.
 
 **Row 35 training (`runs/w35`)**: BC collection now runs on 48 processes (`--procs`); it was one core for 400k rows.
+
+**28 Oct, WSL dropped** when PPO (48 actors), a 16-worker checkpoint eval (~1.1 GB each) and 10 seasons ran out of its
+54 GB. Owner rule: at most 85% of WSL's RAM and CPU. Every job now runs through `rl/scripts/capped.sh` in a systemd
+slice (46 GB, no swap, 61 CPUs); an overrun kills one job, not WSL (`94c39cb`).
+
+**w35 paired eval (64 worlds)**: update 120 +9.0% [3.6, 17.2], 240 +8.6% [2.7, 16.9], 360 +0.0% [-6.1, 8.3]. No collapse
+(w34 fell to -89%), but the gain fades after 240. w36 retrains on the row-65 world at lr 5e-5 with 32 actors.
+
+**Row 65 (`888373e`), e65 (10 seeds, health PASS)**: the host refuses the shipyard and nanite upgrades while the yard is
+busy, and the yard order never let it idle, so a planet whose field chain reached the nanite waited all season (185M in
+stock, both queues idle 24 h). A capital waiting on such a building now stops ordering units. HDS 0.755 -> 0.767; mid
+128-256 growth in-band 0.67 -> 0.82, planets 0.69 -> 0.89.
+
+**Correction:** `dark_period_6h` counts weeks *with* a 6-hour gap (sleep, human) and is not gated; it is not a giveaway.
+
+**Row 64 moon shots, e66 (`moonstack` arm, 10 seeds, health PASS)**: an alliance member shoots fighters sized to the
+host's maximum moon chance at the nearest mate's planet with no moon and guns to down them. Moons per season 2 -> ~24
+per seed. HDS 0.767 -> 0.775; mid 128-256 moons in-band 0.00 -> 0.64 (growth 0.82 -> 0.76, planets 0.89 -> 0.86). Kept.
+Each account stops at 1 moon: only capitals have the guns. Top giveaways now moons 0.29, galaxies 0.23, shares.

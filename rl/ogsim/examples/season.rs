@@ -20,7 +20,7 @@ use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
 use ogsim::fleet::Coord;
-use ogsim::players::{account_value, FleetSaver, Ledger, Miner, Player, Raider, YardStall};
+use ogsim::players::{self, account_value, FleetSaver, Ledger, Miner, Player, Raider, YardStall};
 use ogsim::score::{self, Score};
 use ogsim::economy::{Baseline, Books};
 use ogsim::world::{Colonisation, Event, EventKind, Mission, Rules, World};
@@ -74,6 +74,7 @@ fn main() {
     // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
     world.colonisation = Colonisation::load(&econ).ok().map(Arc::new);
     world.spread = std::env::args().any(|arg| arg == "spread");
+    let moon_shots = std::env::args().any(|arg| arg == "moonstack");
     // A fully built account still logs in, to raid or to save its fleet.
     world.enable_idle_logins(&cat);
     // Three galaxies, a system each, wide apart: a raider has neighbours to fly at and a saver has somewhere to be away.
@@ -127,10 +128,10 @@ fn main() {
     // Row 45 arm C: every persona brings its colonies' surplus home at each login.
     // Row 45 arm FR: every persona keeps its planets' last fields for the field-adding chain.
     // Row 46: the stack of both.
-    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack" || arg == "spread");
-    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "spread");
+    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack" || arg == "moonstack" || arg == "spread");
+    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "moonstack" || arg == "spread");
     // Row 33: the spending order, alone and on the kept stack.
-    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "spread");
+    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "moonstack" || arg == "spread");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -193,7 +194,13 @@ fn main() {
             continue;
         }
         season.touch(owner, a);
-        match season.players[owner].act(&mut *season.world, season.cat, a, &mut season.ledgers[owner]) {
+        let pick = season.players[owner].act(&mut *season.world, season.cat, a, &mut season.ledgers[owner]);
+        // Row 64: alliance members shoot moons for each other at their logins (membership is the season's data).
+        if moon_shots && a == owner && season.alliance_at[owner].is_some_and(|join| t >= join) {
+            let alliance_at = &season.alliance_at;
+            players::moon_shot(&mut *season.world, season.cat, a, |b| alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut season.ledgers[owner]);
+        }
+        match pick {
             Some(k) => season.world.commit(season.cat, a, k),
             None => season.world.wait(season.cat, a),
         }
