@@ -336,10 +336,10 @@ impl Miner {
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
         if w.account_of(a) == a && (pick.is_none() || overflow || self.eager || short || self.colony_cargo > 0) {
-            self.order_ships(w, cat, a);
+            self.order_ships(w, cat, a, pick);
         }
         if short && w.account_of(a) == a {
-            self.order_defence(w, cat, a);
+            self.order_defence(w, cat, a, pick);
         }
         if self.yard && w.account_of(a) == a {
             self.spend_surplus(w, cat, a, pick);
@@ -428,14 +428,16 @@ impl Miner {
 
     /// While an account is under its persona's military share it buys defence before economy: the cheapest unit the
     /// host marks as defence that the yard can start now, in a small batch. No object is named (gate 1).
-    fn order_defence(&self, w: &mut World, cat: &Catalogue, a: usize) {
+    fn order_defence(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
+        let keep = saving(w, cat, a, pick);
         let rules = &w.rules[a];
         let Some(u) = (0..rules.units.units.len())
             .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence))
             .filter(|&u| rules.units.max_amount(&w.yards[a], &w.games[a].planet, u) > 0)
             .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price)))
         else { return };
-        w.order_units(cat, a, u, DEFENCE_BATCH);
+        let amount = within(w, a, u, DEFENCE_BATCH, keep);
+        if amount > 0 { w.order_units(cat, a, u, amount); }
     }
 
     /// A player brings colony resources home to pay for research and the big builds (gate 3): each colony sends its
@@ -460,11 +462,8 @@ impl Miner {
     /// the host's unit kinds say which unit, nothing is named).
     fn spend_surplus(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
         let game = &w.games[a];
-        let mut keep: [f64; 3] = std::array::from_fn(|r| 2.0 * game.planet.rate[r].max(0.0));
-        for k in game.commit.iter().flatten().chain(pick.iter()) {
-            let price = cat.objects[*k].price[game.planet.levels[*k] as usize];
-            for r in 0..3 { keep[r] += price[r] }
-        }
+        let mut keep = saving(w, cat, a, pick);
+        for r in 0..3 { keep[r] += 2.0 * game.planet.rate[r].max(0.0) }
         let rules = &w.rules[a];
         // The ships the persona already plans (the colony ship among them) are paid before the surplus (row 63: without
         // this the yard spent the colony ship's price and accounts held 6 planets instead of 8).
@@ -488,9 +487,11 @@ impl Miner {
         }
     }
 
-    fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize) {
+    fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
+        let keep = saving(w, cat, a, pick);
         for (u, amount) in self.order_plans(w, cat, a) {
-            w.order_units(cat, a, u, amount as u64);
+            let amount = within(w, a, u, amount as u64, keep);
+            if amount > 0 { w.order_units(cat, a, u, amount); }
         }
     }
 
@@ -519,6 +520,31 @@ impl Miner {
 }
 
 const RESEARCH_LEAD: u32 = 3;
+
+/// What planet a is saving for: the builds its queues committed and wait to afford, and this login's pick. A player
+/// saving for a build does not spend that money in the yard (row 34: the persona's ship orders spent a committed build's
+/// price at every login, so the build never started and the learner's queue asked again 13,876 times in one season).
+fn saving(w: &World, cat: &Catalogue, a: usize, pick: Option<usize>) -> [f64; 3] {
+    let game = &w.games[a];
+    let mut keep = [0.0; 3];
+    let mut seen: Vec<usize> = Vec::new();
+    for &k in game.commit.iter().flatten().chain(pick.iter()) {
+        if seen.contains(&k) { continue }
+        seen.push(k);
+        let price = cat.objects[k].price[game.planet.levels[k] as usize];
+        for r in 0..3 { keep[r] += price[r] }
+    }
+    keep
+}
+
+/// How many of unit u, up to `amount`, planet a pays for while keeping `keep` in its store.
+fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
+    let price = w.rules[a].units.units[u].price;
+    let res = w.games[a].planet.res;
+    (0..3).filter(|&r| price[r] > 0.0)
+        .map(|r| ((res[r] - keep[r]).max(0.0) / price[r]).floor() as u64)
+        .fold(amount, u64::min)
+}
 
 /// A planet's field-adding chain: the next level of the cheapest object that adds fields, and every unmet requirement
 /// under it, prerequisites first (gate 1: `fields_added` and `requires` say which objects, nothing is named). Returns
@@ -912,6 +938,25 @@ mod tests {
         let pick = field_reserve(&world, &cat, 0).expect("the reserve binds").expect("a chain object is startable");
         assert!(chain.iter().any(|c| c.0 == pick), "object {pick} is off the chain");
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
+    }
+
+    /// Row 34: a build the queue committed and waits to afford keeps its price; the persona's yard orders spend only the
+    /// rest, so the build starts instead of being re-decided at every login.
+    #[test]
+    fn a_committed_build_keeps_its_price_from_the_yard() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let planet = &mut world.games[0].planet;
+        planet.levels = cat.objects.iter().map(|o| (o.price.len() as u32 - 1).min(12)).collect();
+        cat.refresh(planet);
+        let k = (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 0)
+            .max_by(|&x, &y| weighted(cat.objects[x].price[12]).total_cmp(&weighted(cat.objects[y].price[12]))).unwrap();
+        let price = cat.objects[k].price[world.games[0].planet.levels[k] as usize];
+        world.games[0].planet.res = std::array::from_fn(|r| price[r] + 1000.0);
+        world.games[0].commit[0] = Some(k);
+        let miner = Miner::new(5);
+        miner.order_defence(&mut world, &cat, 0, None);
+        let res = world.games[0].planet.res;
+        assert!((0..3).all(|r| res[r] + 1e-6 >= price[r]), "the yard spent the committed build's price: {res:?} against {price:?}");
     }
 
     /// Row 33: a capital spends what its queues do not need on its persona's unit and keeps two hours of production.

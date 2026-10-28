@@ -536,10 +536,6 @@ impl VecWorld {
                 self.advance(w);
                 continue;
             }
-            if self.season {
-                // The persona plays the rest of the login (yard, colonies, consolidation) and its own pick is dropped.
-                let _ = self.players[w][a].act(&mut self.worlds[w], &cat, a, &mut self.ledgers[w][a]);
-            }
             let world = &mut self.worlds[w];
             if action == -2 {
                 world.wait(&cat, a);
@@ -552,6 +548,11 @@ impl VecWorld {
                     }
                     None => world.wait(&cat, a),
                 }
+            }
+            if self.season {
+                // The model's build is committed first, so the persona playing the rest of the login (yard, colonies,
+                // consolidation) keeps its price; the persona's own pick is dropped.
+                let _ = self.players[w][a].act(&mut self.worlds[w], &cat, a, &mut self.ledgers[w][a]);
             }
             self.advance(w);
         }
