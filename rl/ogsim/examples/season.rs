@@ -39,6 +39,7 @@ const QUIT_MEAN_DAYS: f64 = 15.0;
 /// the bands say only that 65% of real active players are in an alliance (p10 24%, p90 77%) - so they are stated here.
 const ALLIANCE_SHARE: u64 = 65;
 const ALLIANCE_MEAN_DAYS: f64 = 5.0;
+const RECRUIT_DAYS: u32 = 7;
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -81,6 +82,7 @@ fn main() {
         world.reach = (0..world.games.len()).map(|_| 1 + (next_random(&mut draw) % 7) as u32).collect();
     }
     let moon_shots = std::env::args().any(|arg| arg == "moonstack");
+    let moon_feed = std::env::args().any(|arg| arg == "moonfeed");
     // A fully built account still logs in, to raid or to save its fleet.
     world.enable_idle_logins(&cat);
     // Three galaxies, a system each, wide apart: a raider has neighbours to fly at and a saver has somewhere to be away.
@@ -206,6 +208,8 @@ fn main() {
         login_at: vec![0; accounts],
         counted_login: vec![f64::NEG_INFINITY; accounts],
         alliance_at,
+        recruit: std::env::args().any(|arg| arg == "recruit"),
+        top_days: vec![0; accounts],
         read: 0,
         midnight: DAY,
         days,
@@ -248,7 +252,7 @@ fn main() {
         if moon_shots && a == owner && season.alliance_at[owner].is_some_and(|join| t >= join) {
             let alliance_at = &season.alliance_at;
             players::moon_shot(&mut *season.world, season.cat, a, |b| alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut season.ledgers[owner]);
-            players::ready_for_moon(&mut *season.world, season.cat, a);
+            players::ready_for_moon(&mut *season.world, season.cat, a, moon_feed);
         }
         match pick {
             Some(k) => season.world.commit(season.cat, a, k),
@@ -333,6 +337,11 @@ struct Season<'a, W: Write> {
     counted_login: Vec<f64>,
     /// Per account, the second it joined an alliance (row 15), or `None` if it never did.
     alliance_at: Vec<Option<f64>>,
+    /// Row 82: an active account that has held its world's top tenth for `RECRUIT_DAYS` day ends joins an alliance, as
+    /// every real one is in one (a single day's rank is noise early on, and joining on it made the mid 96% allied).
+    recruit: bool,
+    /// Per account, the consecutive day ends it has ended in its world's top tenth.
+    top_days: Vec<u32>,
     /// How many events of the world's log have been read.
     read: usize,
     /// The next midnight no line has been written for.
@@ -364,6 +373,17 @@ impl<W: Write> Season<'_, W> {
             // N6b: an expedition's find bracket reads the universe's rank-1 score, which the host's highscore refreshes
             // daily; the world's own leader stands in for it instead of a fixed number.
             self.world.rank1_points = (0..self.roles.len()).map(|a| score::of(self.world, a).total).max().unwrap_or(0);
+            if self.recruit {
+                let mut ranked: Vec<usize> = (0..self.roles.len()).collect();
+                ranked.sort_by_key(|&a| std::cmp::Reverse(score::of(self.world, a).total));
+                let top = ranked.len().div_ceil(10);
+                for (rank, &a) in ranked.iter().enumerate() {
+                    self.top_days[a] = if rank < top { self.top_days[a] + 1 } else { 0 };
+                    if self.top_days[a] >= RECRUIT_DAYS && self.alliance_at[a].is_none() && !self.world.inactive(self.cat, a, self.midnight) {
+                        self.alliance_at[a] = Some(self.midnight);
+                    }
+                }
+            }
             self.lines += self.world.games.len();
             self.midnight += DAY;
         }

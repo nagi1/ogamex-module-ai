@@ -178,6 +178,9 @@ pub struct Rules {
     pub fleet_speed_peaceful: f64,
     pub reward_multiplier: Reward,
     pub class_resource_multiplier: f64,
+    /// The class's expedition slots on top of the colonisation table's (a Discoverer's two); absent in older exports.
+    #[serde(default)]
+    pub class_slots: usize,
     /// `[weight, multiplier minimum, maximum]`; the first is the plain find and draws no multiplier.
     pub variants: Vec<(i64, i64, i64)>,
     /// `[rank-1 score the bracket stays below, largest metal find]`.

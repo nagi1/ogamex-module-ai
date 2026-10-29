@@ -603,6 +603,14 @@ impl World {
         cat.objects.iter().zip(&self.games[a].planet.levels).filter(|(o, _)| o.queue == 1).map(|(o, &l)| (o.id as u32, l)).collect()
     }
 
+    /// Account a's expedition slots as `PlayerService::getExpeditionSlotsMax` counts them: the colonisation table's at its
+    /// research level plus its class's own. `None` without the tables.
+    pub fn expedition_slots(&self, cat: &Catalogue, a: usize) -> Option<usize> {
+        let table = self.colonisation.as_ref()?;
+        let level = self.research(cat, a).get(&(table.research as u32)).copied().unwrap_or(0);
+        Some(table.max_expeditions(level)? + self.rules[a].expedition.as_ref()?.class_slots)
+    }
+
     /// Brings planet p's stock and shipyard to second t before a fleet touches it; nothing of p's own is due before t.
     fn catch_up(&mut self, cat: &Catalogue, p: usize, t: f64) {
         if t <= self.games[p].t { return }

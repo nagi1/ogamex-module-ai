@@ -161,6 +161,8 @@ class ExportAiCombatCatalogueAction
             'fleet_speed_peaceful' => $settings->fleetSpeedPeaceful(),
             'reward_multiplier' => ['resources' => $settings->expeditionRewardMultiplierResources(), 'ships' => $settings->expeditionRewardMultiplierShips(), 'dark_matter' => $settings->expeditionRewardMultiplierDarkMatter()],
             'class_resource_multiplier' => $classes->getExpeditionResourceMultiplier($user, $settings->economySpeed()),
+            // The class's own expedition slots on top of the colonisation table's research slots (PlayerService::getExpeditionSlotsMax).
+            'class_slots' => $classes->getExpeditionSlotsBonus($user),
             // [weight, multiplier minimum, maximum] for normal, rare and exceptional finds.
             'variants' => [[89, 1, 1], [10, 2, 3], [1, 5, 10]],
             // [rank-1 score the bracket stays below, largest metal find].

@@ -2238,3 +2238,43 @@ The top's growth doubles and the mid closes on real; the pooled AUC holds (moons
 **Gap now.** Giveaways: moons 0.177 (top10 moons in band 0.00-0.08), growth 0.144 (top 0.20-0.25 of real), planets
 0.129, alliance 0.115. Next: the top's moons (row 82's coupling of moons and alliances), then the rank-1 bracket loop
 that lets a real top account's expeditions compound.
+
+## 29 Oct — rows 87-89: the Discoverer's slots (host fidelity), recruit, moonfeed; e91b kept
+
+**Diagnosis (e88b).** Our top tenth is exactly the Discoverers (8 of 64 accounts, class 3: 12x expedition finds). They
+hold 30-54% of their score as unspent stock with every queue busy, fly ~18 expeditions a day, and get one moon (the
+capital's) before the shots stop near day 100.
+
+**Row 87 (fidelity, kept unconditionally).** The host gives a Discoverer two expedition slots on top of astrophysics
+(`PlayerService::getExpeditionSlotsMax`, `CharacterClassService::getExpeditionSlotsBonus`). The economy export built
+the slot table from a Collector, so the sim gave every class the Collector's slots. Now the combat export carries
+`class_slots` per class, the colonisation table leaves the exporting player's class out, and `World::expedition_slots`
+adds them; `combat-u1-class3.json` was patched with `class_slots: 2` (the host's value). The first build planned
+expeditions at astrophysics 0 (the class slots exist before the research) and sat on one planet until day 45 (e89a);
+`expedition_cargo` now waits for the research as `ExpeditionMission::isMissionPossible` does.
+
+**Row 88 `recruit`.** An active account that ends 7 consecutive days in its world's top tenth joins an alliance. On a
+single day's rank (e90b) early noise recruited nearly everyone: mid allied 0.96 against real 0.68-0.77.
+
+**Row 89 `moonfeed`.** A colony receiving a mate's moon shot needs guns, but consolidation keeps its store too small to
+pay them, so after the capital's moon no planet could receive one. The capital now ships the colony the rest of the
+defence's price (`ship_from_home`, shared with `feed_colonies`).
+
+| run (10 seeds x 365 days) | HDS | pooled AUC | top10 growth p50 64-128 / 128-256 / 256-512 | top10 moons mean (real 10.5-12.7) |
+| --- | --- | --- | --- | --- |
+| e88b (previous baseline) | 0.849 | 0.894 | 19.2k / 24.1k / 28.2k | ~1-2 |
+| e90a + class slots | 0.841 | 0.891 | 20.9k / 36.7k / 45.8k | 0.8-2.3 |
+| e90c + slots, recruit (one day), moonfeed | 0.865 | 0.907 | 17.3k / 35.6k / 46.5k | 8.7-10.0 |
+| e91a + slots, recruit (7 days) | 0.858 | 0.880 | - | - |
+| **e91b + slots, recruit (7 days), moonfeed** | **0.867** | **0.881** | **23.4k / 37.1k / 46.1k** | **9.2-10.3** |
+| e91c + slots, moonfeed | 0.842 | 0.903 | - | - |
+
+**Baseline:** `moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler recruit
+moonfeed` (e91b).
+
+**Gap now.** Giveaways: growth 0.175 (top still 0.28-0.35 of real), alliance 0.125, moons 0.120, planets 0.087. The
+moons now overshoot below the top (mid 6.0-7.9 against 3.2-5.9; bottom 1.4-4.1 against 0.4-0.6) and our active bottom
+is 90-96% allied against real 43%. The Discoverers' unspent stock (30-54% of score) is the next income lever.
+
+**Ops.** WSL dropped twice today with the RL slice at 46G: ~13G runs outside it. `rl.slice` is now MemoryMax 32G; three
+arms scoring together peaked at 23G of WSL's 54G.

@@ -25,7 +25,7 @@ impl World {
         // ExpeditionMission::startMissionSanityChecks: the account's expeditions out, the way home included, under its slots.
         let account = self.account[a];
         let out = self.fleets.iter().filter(|f| f.mission == Mission::Expedition && self.account[f.owner] == account).count();
-        if table.max_expeditions(level).is_some_and(|slots| out >= slots) { return Err("too many expeditions") }
+        if self.expedition_slots(cat, a).is_some_and(|slots| out >= slots) { return Err("too many expeditions") }
         if sent.iter().all(|(id, _)| rules.combat.missions.espionage_units.contains(id)) { return Err("an expedition needs a ship") }
         Ok(())
     }

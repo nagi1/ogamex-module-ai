@@ -10,6 +10,7 @@ use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\Resources;
+use OGame\Services\CharacterClassService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\SettingsService;
@@ -143,7 +144,8 @@ class ExportAiEconomyCatalogueAction
         for ($level = 0; $level <= $maxLevel; $level++) {
             $player->setResearchLevel($research->machine_name, $level, false);
             $maxPlanets[] = $player->getMaxPlanetAmount();
-            $maxExpeditions[] = $player->getExpeditionSlotsMax();
+            // Without the exporting player's class slots: each class's combat export carries its own (`class_slots`).
+            $maxExpeditions[] = $player->getExpeditionSlotsMax() - app(CharacterClassService::class)->getExpeditionSlotsBonus($player->getUser());
             for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
                 if (! isset($positionLevels[$position]) && $player->canColonizePosition($position)) {
                     $positionLevels[$position] = $level;

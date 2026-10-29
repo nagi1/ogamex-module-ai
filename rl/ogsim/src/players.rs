@@ -631,8 +631,9 @@ pub fn moon_shot(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) 
 }
 
 /// Row 67: an alliance member readies its first planet with no moon to receive a mate's shot: the cheapest defence the
-/// host has, enough to down the shot in three rounds, paid from that planet's own stock above what it keeps.
-pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize) {
+/// host has, enough to down the shot in three rounds, paid from that planet's own stock above what it keeps. With `fed`
+/// (row 89) the capital ships a colony the rest of the price: consolidation keeps a colony's store too small to pay it.
+pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize, fed: bool) {
     let Some((_, _, hull)) = shot_size(w, cat, a) else { return };
     let Some(p) = w.planets_of(a).into_iter().find(|&p| !w.moons[p] && guns(w, cat, p) * 3.0 < hull) else { return };
     let rules = Arc::clone(&w.rules[p]);
@@ -645,6 +646,12 @@ pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize) {
     let missing = ((hull / 3.0 - guns(w, cat, p)) / each).ceil().max(0.0) as u64;
     let amount = within(w, p, u, missing, kept(w, cat, p));
     if amount > 0 { w.order_units(cat, p, u, amount); }
+    let underway = w.fleets.iter().any(|f| f.owner == a && f.target == p && f.mission == Mission::Transport && !f.returning);
+    if fed && p != a && amount < missing && !underway {
+        let price = rules.units.units[u].price;
+        let lack = std::array::from_fn(|r| (price[r] * (missing - amount) as f64).ceil());
+        ship_from_home(w, cat, a, p, lack, kept(w, cat, a));
+    }
 }
 
 /// N6b: the cargo ships one expedition takes and the account's expedition slots: a hold for the largest plain find of
@@ -653,9 +660,10 @@ pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize) {
 fn expedition_cargo(w: &World, cat: &Catalogue, a: usize, doubled: bool) -> Option<(i64, usize)> {
     let rules = &w.rules[a];
     let table = rules.expedition.as_ref()?;
-    let colonisation = w.colonisation.as_ref()?;
     let research = w.research(cat, a);
-    let slots = colonisation.max_expeditions(research.get(&(colonisation.research as u32)).copied().unwrap_or(0))?;
+    // A class's slots stand before the research does, but no expedition flies without it (ExpeditionMission::isMissionPossible).
+    if research.get(&(w.colonisation.as_ref()?.research as u32)).copied().unwrap_or(0) == 0 { return None }
+    let slots = w.expedition_slots(cat, a)?;
     if slots == 0 { return None }
     let largest = table.find_brackets.iter().find(|(below, _)| w.rank1_points < *below).or(table.find_brackets.last())?.1;
     let twice = if doubler_of(w, a, doubled).is_some() { 2.0 } else { 1.0 };
@@ -726,18 +734,23 @@ fn time_bound(w: &World, cat: &Catalogue, a: usize, next: usize) -> Option<usize
 /// building (the one it saves for, else the player rule's) gets what it lacks by transport, when the capital holds that
 /// beyond what it saves for itself and has the cargo ships at home.
 fn feed_colonies(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
-    let Some(kit) = Kit::of(w, cat, a) else { return };
-    let hold = w.rules[a].combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &w.research(cat, a)).max(1) as f64;
     let keep = saving(w, cat, a, pick);
     for colony in w.planets_of(a).into_iter().skip(1) {
         let lack = colony_lack(w, cat, colony);
-        let total: f64 = lack.iter().sum();
-        let home = w.games[a].planet.res;
-        if total <= 0.0 || (0..3).any(|r| home[r] - keep[r] < lack[r]) { continue }
-        let ships = (total / hold).ceil() as i64;
-        if ships > on_shelf(w, a, kit.cargo) { continue }
-        let _ = w.dispatch(cat, a, colony, Mission::Transport, &[(kit.cargo, ships)], lack, 10.0);
+        ship_from_home(w, cat, a, colony, lack, keep);
     }
+}
+
+/// Capital a sends `lack` to its planet `to` in its cargo hull, when it holds that above `keep` and has the ships.
+fn ship_from_home(w: &mut World, cat: &Catalogue, a: usize, to: usize, lack: [f64; 3], keep: [f64; 3]) -> bool {
+    let Some(kit) = Kit::of(w, cat, a) else { return false };
+    let hold = w.rules[a].combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &w.research(cat, a)).max(1) as f64;
+    let total: f64 = lack.iter().sum();
+    let home = w.games[a].planet.res;
+    if total <= 0.0 || (0..3).any(|r| home[r] - keep[r] < lack[r]) { return false }
+    let ships = (total / hold).ceil() as i64;
+    if ships > on_shelf(w, a, kit.cargo) { return false }
+    w.dispatch(cat, a, to, Mission::Transport, &[(kit.cargo, ships)], lack, 10.0).is_ok()
 }
 
 /// What a colony's next building (the one it saves for, else the player rule's) lacks in its store.
@@ -1460,7 +1473,9 @@ mod tests {
         assert!(doubled >= 2 * plain - 1 && doubled <= 2 * plain, "twice the hold: {plain} -> {doubled}");
         expedition_trips(&mut world, &cat, 0, true);
         let out: Vec<_> = world.fleets.iter().filter(|f| f.mission == Mission::Expedition).collect();
-        assert_eq!(out.len(), 1);
+        // The research's one slot and the class's own: a Discoverer flies three (PlayerService::getExpeditionSlotsMax).
+        let class_slots = world.rules[0].expedition.as_ref().map_or(0, |t| t.class_slots);
+        assert_eq!(out.len(), 1 + class_slots);
         assert_eq!(out[0].ships, vec![(kit.cargo, doubled), (doubler, 1)], "the cargo and the doubler fly together");
     }
 
