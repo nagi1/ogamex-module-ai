@@ -793,7 +793,8 @@ impl Catalogue {
         for q in 0..2 {
             if !self.objects.iter().any(|o| o.queue == q) { continue }
             let when = match game.commit[q] {
-                Some(k) => game.t + self.wait_seconds(&game.planet, k),
+                // A commit the host holds (W14) starts no sooner than the build that blocks it lands.
+                Some(k) => (game.t + self.wait_seconds(&game.planet, k)).max(self.held_until(game, k).unwrap_or(0.0)),
                 // `NEVER` is a queue the host has nothing left to decide on (`tick` set it: no legal object and
                 // nothing building), so it has no next event; reading a login time for it would spin the clock.
                 None if game.free[q] == NEVER => continue,
@@ -853,10 +854,6 @@ impl Catalogue {
         };
         self.advance_to(game, at, true);
         if let Some(k) = game.commit[q] {
-            if let Some(end) = self.held_until(game, k) {
-                self.advance_to(game, end, true);
-                return false;
-            }
             if self.wait_seconds(&game.planet, k) > 0.0 {
                 self.advance_to(game, game.t + 1.0, true);
                 return false;
