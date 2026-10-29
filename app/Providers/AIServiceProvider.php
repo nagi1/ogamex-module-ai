@@ -47,6 +47,7 @@ use Modules\AI\Console\Commands\ProposeAiDoctrine;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
 use Modules\AI\Console\Commands\ReplayAiRlSchedule;
+use Modules\AI\Console\Commands\ReplayAiRlWorldTrace;
 use Modules\AI\Console\Commands\RecordAiScoreSamples;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
@@ -186,6 +187,7 @@ class AIServiceProvider extends ModuleServiceProvider
         GenerateAiRlMoreMissionCases::class,
         RlScoreCasesCommand::class,
         ReplayAiRlSchedule::class,
+        ReplayAiRlWorldTrace::class,
         WriteAiHumanTexts::class,
         WriteAiSocialVoices::class,
     ];

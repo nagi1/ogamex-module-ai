@@ -765,7 +765,20 @@ impl Catalogue {
     }
 
     pub fn queue_legal(&self, game: &Game, k: usize) -> bool {
-        self.objects[k].queue == game.queue && self.legal(&game.planet, k)
+        self.objects[k].queue == game.queue && self.legal(&game.planet, k) && self.held_until(game, k).is_none()
+    }
+
+    /// W14: when the host would let object k start again, if it may not start now. The host refuses to upgrade the object
+    /// that sets research time while a research runs, and to start a research while that object upgrades
+    /// (`BuildingQueueService::start`, `ResearchQueueService::start`); which object that is, the research time modifiers
+    /// say (gate 1), as the yard's own block reads the unit time modifiers.
+    pub fn held_until(&self, game: &Game, k: usize) -> Option<f64> {
+        let lab = |j: usize| self.modifiers[1].iter().any(|&(m, _)| m == j);
+        let blocks = |j: usize| match self.objects[k].queue {
+            0 => lab(k) && self.objects[j].queue == 1,
+            _ => lab(j),
+        };
+        game.pending.iter().filter(|&&(_, j)| blocks(j)).map(|&(end, _)| end).reduce(f64::max)
     }
 
     /// Runs the clock until a queue without a plan has something it can build and must decide (it becomes `game.queue`),
@@ -840,6 +853,10 @@ impl Catalogue {
         };
         self.advance_to(game, at, true);
         if let Some(k) = game.commit[q] {
+            if let Some(end) = self.held_until(game, k) {
+                self.advance_to(game, end, true);
+                return false;
+            }
             if self.wait_seconds(&game.planet, k) > 0.0 {
                 self.advance_to(game, game.t + 1.0, true);
                 return false;
@@ -1106,6 +1123,24 @@ mod tests {
         let mut own = planet.clone();
         own.peers = Default::default();
         assert_eq!(cat.build_seconds(&planet, k), cat.build_seconds(&own, k), "without the network the peers add nothing");
+    }
+
+    /// W14: the host refuses to upgrade the object that sets research time while a research runs, and to start a
+    /// research while that object upgrades; both wait for the other to land.
+    #[test]
+    fn the_lab_and_research_wait_for_each_other() {
+        let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1-colonies.json", env!("CARGO_MANIFEST_DIR"));
+        let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no colonies catalogue; skipped") };
+        let lab = cat.modifiers[1][0].0;
+        let research = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1).expect("a research");
+        let other = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 0 && k != lab).expect("another building");
+        let mut game = cat.new_paused_game(0, 1.0, 0.0, 0);
+        assert_eq!(cat.held_until(&game, lab), None, "nothing runs, nothing waits");
+        game.pending = vec![(500.0, research)];
+        assert_eq!(cat.held_until(&game, lab), Some(500.0), "the lab waits for the research");
+        assert_eq!(cat.held_until(&game, other), None, "another building does not");
+        game.pending = vec![(700.0, lab)];
+        assert_eq!(cat.held_until(&game, research), Some(700.0), "a research waits for the lab");
     }
 
     #[test]

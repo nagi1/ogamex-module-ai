@@ -223,6 +223,23 @@ test('a replayed research step goes through the host research queue and reports 
         ->and($result['final']['levels'][$energy->id])->toBe($level + 1);
 });
 
+test('a replayed yard order reports what the host queued, and nothing while an object that blocks the yard upgrades', function (): void {
+    $shipyard = ObjectService::getObjectByMachineName('shipyard');
+    $launcher = ObjectService::getObjectByMachineName('rocket_launcher');
+    $this->planetService->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 2, true);
+    $this->planetService->setObjectLevel($shipyard->id, 2, true);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 1_000_000));
+    $order = ['start' => 0.0, 'id' => $launcher->id, 'amount' => 3, 'queued' => 3, 'queue' => 'units'];
+
+    $placed = app(ReplayAiEconomyScheduleAction::class)->handle($this->planetService, [$order], 60, yardBlockedBy: [$shipyard->id]);
+    $upgrade = ['start' => 100.0, 'id' => $shipyard->id, 'end' => 200.0, 'stock' => [0, 0, 0]];
+    $refused = app(ReplayAiEconomyScheduleAction::class)->handle($this->planetService, [$upgrade, ['start' => 101.0] + $order], 160, yardBlockedBy: [$shipyard->id]);
+
+    expect($placed['steps'][0]['host_queued'])->toBe(3)
+        ->and($refused['steps'][0]['host_seconds'])->not->toBeNull()
+        ->and($refused['steps'][1]['host_queued'])->toBe(0);
+});
+
 test('a research decision step reports research candidate features with no production columns and the player\'s level', function (): void {
     $names = EconomyChoiceEncoder::candidateNames();
     $column = static fn (string $name): int => array_search($name, $names, true);

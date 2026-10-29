@@ -335,6 +335,8 @@ pub struct World {
     pub events: Vec<Event>,
     /// Dark matter per slot; an account's is the capital's.
     pub dark_matter: Vec<i64>,
+    /// W14: every yard order (slot, second, host unit id, amount asked, amount queued), for the host's replay of the world.
+    pub unit_log: Vec<(usize, f64, u32, u64, u64)>,
     /// Debris over deep space (slot 16) by (galaxy, system); nothing harvests it yet.
     pub deep_space: HashMap<(i64, i64), [i64; 3]>,
     /// The best score in the highscore, which sets what an expedition can find.
@@ -368,7 +370,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], unit_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -413,6 +415,7 @@ impl World {
             }
             let deciding = self.step_account(cat, a);
             if deciding && !self.games[a].done {
+                self.settle_yard(cat, a);
                 self.idle_now[a] = false;
                 self.pass_login(cat, a, self.games[a].t);
                 return Some(a);
@@ -642,6 +645,15 @@ impl World {
         self.share_research(cat, p);
     }
 
+    /// W14: a decision is a page load, and the host's page load hands over the units the yard has finished
+    /// (`PlanetService::update`), so they count from here on, not from the yard's next order.
+    fn settle_yard(&mut self, cat: &Catalogue, a: usize) {
+        let Some(rules) = self.rules.get(a) else { return };
+        let before = self.yards[a].counts.clone();
+        rules.units.advance(&mut self.yards[a], self.games[a].t as i64);
+        if self.yards[a].counts != before { self.sync_units(cat, a) }
+    }
+
     /// A networked capital's lab reads its colonies' levels (`Catalogue::network_labs`); only the capital researches.
     fn sync_peers(&mut self, cat: &Catalogue, a: usize) {
         let Some(network) = cat.research_network else { return };
@@ -670,6 +682,7 @@ impl World {
         self.idle_stash[a] = None;
         let upgrading = self.games[a].pending.iter().find(|&&(_, k)| cat.objects[k].queue == 0).map(|&(_, k)| k);
         let queued = rules.units.order(&mut self.yards[a], &mut self.games[a].planet, u, amount, now as i64, upgrading);
+        self.unit_log.push((a, now, rules.units.units[u].id as u32, amount, queued));
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
         queued
