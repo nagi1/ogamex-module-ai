@@ -175,6 +175,12 @@ pub struct Colonisation {
     pub max_planets: Vec<usize>,
     /// The host's expedition slot limit per level of the same research; empty in an export that predates it (no limit).
     pub max_expeditions: Vec<usize>,
+    /// The research behind the host's fleet limit and the limit per level, without class slots; absent in older exports (no limit).
+    pub fleet_research: Option<u32>,
+    pub max_fleets: Vec<usize>,
+    /// The host's size range per position (`PlanetServiceFactory::planetData` plus the server bonus); absent in older
+    /// exports, where a colony keeps its tabulated site's size.
+    pub field_ranges: HashMap<i64, (u32, u32)>,
     pub position_levels: HashMap<i64, u32>,
     pub sites: Vec<Site>,
 }
@@ -193,6 +199,10 @@ impl Colonisation {
             ship: int(block, "ship")? as u32,
             max_planets: block["max_planets"].as_array().ok_or("colonisation: no max_planets")?.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect(),
             max_expeditions: block["max_expeditions"].as_array().map_or(Vec::new(), |a| a.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect()),
+            fleet_research: block["fleet_research"].as_u64().map(|n| n as u32),
+            max_fleets: block["max_fleets"].as_array().map_or(Vec::new(), |a| a.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect()),
+            field_ranges: block["field_ranges"].as_object().map_or(HashMap::default(), |o| o.iter()
+                .filter_map(|(p, r)| Some((p.parse().ok()?, (r[0].as_u64()? as u32, r[1].as_u64()? as u32)))).collect()),
             position_levels: block["position_levels"].as_object().ok_or("colonisation: no position_levels")?.iter()
                 .filter_map(|(p, l)| Some((p.parse().ok()?, l.as_u64()? as u32))).collect(),
             sites: block["sites"].as_array().ok_or("colonisation: no sites")?.iter().map(|s| Ok(Site {
@@ -377,7 +387,7 @@ impl World {
     }
 
     /// The second slot a's clock moves next: its economy's next event or a login with nothing to build, whichever is first.
-    fn moves_at(&self, a: usize) -> f64 {
+    pub fn moves_at(&self, a: usize) -> f64 {
         self.next[a].min(self.idle_next[a])
     }
 
@@ -453,6 +463,7 @@ impl World {
 
     /// Moves slot a's clock by one event (`Catalogue::tick`) and hands a research that landed to the account's other planets.
     fn step_account(&mut self, cat: &Catalogue, a: usize) -> bool {
+        self.sync_peers(cat, a);
         let deciding = cat.tick(&mut self.games[a]);
         self.share_research(cat, a);
         // Research is the account's and only its capital decides it (`share_research`): a colony's research queue that a
@@ -565,6 +576,7 @@ impl World {
     pub fn commit(&mut self, cat: &Catalogue, a: usize, k: usize) {
         if self.idle_now[a] { return self.wait(cat, a) }
         debug_assert!(self.legal(cat, a, k), "account {a} cannot start object {k} now");
+        self.sync_peers(cat, a);
         cat.decide(&mut self.games[a], Some(k));
         self.next[a] = cat.peek(&mut self.games[a]);
     }
@@ -611,6 +623,14 @@ impl World {
         Some(table.max_expeditions(level)? + self.rules[a].expedition.as_ref()?.class_slots)
     }
 
+    /// Account a's fleet slots as `PlayerService::getFleetSlotsMax` counts them (no officers): the table's at its research
+    /// level plus its class's own. `None` without the table.
+    pub fn fleet_slots(&self, cat: &Catalogue, a: usize) -> Option<usize> {
+        let table = self.colonisation.as_ref()?;
+        let level = self.research(cat, a).get(&table.fleet_research?).copied().unwrap_or(0) as usize;
+        Some(*table.max_fleets.get(level.min(table.max_fleets.len().checked_sub(1)?))? + self.rules[a].combat.rules.class_fleet_slots)
+    }
+
     /// Brings planet p's stock and shipyard to second t before a fleet touches it; nothing of p's own is due before t.
     fn catch_up(&mut self, cat: &Catalogue, p: usize, t: f64) {
         if t <= self.games[p].t { return }
@@ -620,6 +640,14 @@ impl World {
         }
         self.sync_units(cat, p);
         self.share_research(cat, p);
+    }
+
+    /// A networked capital's lab reads its colonies' levels (`Catalogue::network_labs`); only the capital researches.
+    fn sync_peers(&mut self, cat: &Catalogue, a: usize) {
+        let Some(network) = cat.research_network else { return };
+        if self.account[a] != a || self.games[a].planet.levels[network] == 0 { return }
+        let peers: Vec<Vec<u32>> = self.colonies[a].iter().map(|&s| self.games[s].planet.levels.clone()).collect();
+        self.games[a].planet.peers = std::sync::Arc::new(peers);
     }
 
     /// The economy reads production from the units on the planet while the shipyard owns the counts, so the shipyard's
@@ -731,6 +759,9 @@ impl World {
             sent.push((id, amount));
         }
         if sent.is_empty() { return Err("no ships") }
+        // GameMission::startMissionSanityChecks: every fleet of the account still out, missiles aside, holds a slot.
+        let out = self.fleets.iter().filter(|f| f.mission != Mission::Missile && self.account[f.owner] == self.account[a]).count();
+        if self.fleet_slots(cat, a).is_some_and(|slots| out >= slots) { return Err("maximum number of fleets") }
         let sends = |ids: &[u32]| sent.iter().any(|(id, _)| ids.contains(id));
         match mission {
             Mission::Espionage if !sends(&rules.combat.missions.espionage_units) => return Err("no probe"),
@@ -929,6 +960,7 @@ impl World {
         let (owner, to, at) = (self.fleets[f].owner, self.fleets[f].to, self.fleets[f].arrive);
         self.catch_up(cat, owner, at);
         let capital = self.account[owner];
+        let recorded = self.recorded_colony.is_some();
         let table = self.colonisation.clone();
         let site = table.as_ref().filter(|t| {
             let level = self.research(cat, owner).get(&(t.research as u32)).copied().unwrap_or(0);
@@ -945,6 +977,11 @@ impl World {
             return;
         };
         let slot = self.add_planet(cat, owner, site.config, to, at);
+        // The site lends its temperature's tables; the size is the host's own draw for the slot and the owner's class.
+        if let Some(&(low, high)) = table.as_ref().filter(|_| !recorded).and_then(|t| t.field_ranges.get(&to.position)) {
+            let drawn = low + (next_random(&mut self.rng) % (high - low + 1) as u64) as u32;
+            self.games[slot].planet.field_max = (drawn as f64 * self.rules[capital].combat.rules.planet_size_multiplier) as u32;
+        }
         let mut brought = self.fleets[f].cargo;
         // Row 23: the fleet's half fuel lands on the colony with the cargo it carried (`add_planet` books the stock
         // the host gives a colony; the cargo was already the account's, flying).

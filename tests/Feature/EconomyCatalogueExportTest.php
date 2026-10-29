@@ -4,10 +4,15 @@ use Modules\AI\Actions\ExportAiEconomyCatalogueAction;
 use Modules\AI\Actions\ReplayAiEconomyScheduleAction;
 use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
 use OGame\Enums\CharacterClass;
+use OGame\Factories\PlanetServiceFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
+use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
+use OGame\Models\User;
+use OGame\Services\CharacterClassService;
 use OGame\Services\ObjectService;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -315,4 +320,30 @@ test('every planet carries its owner\'s character class, a colony its donor\'s',
     $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$planet], 3, 8, [$site]);
 
     expect(array_column($catalogue['planets'], 'character_class'))->toBe([CharacterClass::DISCOVERER->value, CharacterClass::DISCOVERER->value]);
+});
+
+test('the export carries the host\'s fleet slots, research time per class, colony sizes and research network', function (): void {
+    $planet = $this->planetService;
+    $player = $planet->getPlayer();
+    $user = $player->getUser();
+    $user->character_class = CharacterClass::COLLECTOR->value;
+
+    $catalogue = app(ExportAiEconomyCatalogueAction::class)->handle([$planet], 3, 8, []);
+    $colonisation = $catalogue['colonisation'];
+    $fleetResearch = ObjectService::getObjectById($colonisation['fleet_research']);
+    $slots = [];
+    foreach (range(0, 3) as $level) {
+        $player->setResearchLevel($fleetResearch->machine_name, $level, false);
+        $slots[] = $player->getFleetSlotsMax();
+    }
+    $classes = app(CharacterClassService::class);
+    $multipliers = [];
+    foreach (CharacterClass::cases() as $class) {
+        $multipliers[$class->value] = $classes->getResearchTimeMultiplier((new User())->forceFill(['character_class' => $class->value]));
+    }
+
+    expect($colonisation['max_fleets'])->toBe($slots)
+        ->and($catalogue['research_time_multipliers'])->toBe($multipliers)
+        ->and($colonisation['field_ranges'][8])->toBe(array_map(static fn (int $n): int => $n + app(SettingsService::class)->planetFieldsBonus(), app(PlanetServiceFactory::class)->planetData(8, false)['fields']))
+        ->and(ObjectService::getObjectById($catalogue['research_network'])->type)->toBe(GameObjectType::Research);
 });

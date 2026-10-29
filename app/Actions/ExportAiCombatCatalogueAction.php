@@ -55,6 +55,10 @@ class ExportAiCombatCatalogueAction
                 'maximum_moon_chance' => $settings->maximumMoonChance(),
                 'fleet_speed_war' => $settings->fleetSpeedWar(),
                 'deuterium_consumption' => $settings->deuteriumConsumption() * $classes->getDeuteriumConsumptionMultiplier($player->getUser()),
+                // The class's own fleet slots on top of the economy export's research slots (PlayerService::getFleetSlotsMax).
+                'class_fleet_slots' => $classes->getAdditionalFleetSlots($player->getUser()),
+                // The class's factor on a new colony's drawn size (PlanetServiceFactory::setupPlanetProperties).
+                'planet_size_multiplier' => $classes->getPlanetSizeBonus($player->getUser()),
                 'reaper_debris_percentage' => (int) ($classes->getReaperDebrisCollectionPercentage($player->getUser()) * 100),
                 // ponytail: the host names the unit that hauls debris in by machine name only (AttackMission); if it ever
                 // grows a query for "which unit collects debris", ask that instead of the name.

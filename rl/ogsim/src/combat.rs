@@ -59,6 +59,8 @@ struct RawUnit {
     properties: RawProperties,
 }
 
+fn unit_factor() -> f64 { 1.0 }
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct CombatRules {
     pub loot_percentage: f64,
@@ -67,6 +69,12 @@ pub struct CombatRules {
     pub debris_deuterium: bool,
     pub defense_repair_rate: f64,
     pub maximum_moon_chance: f64,
+    /// `CharacterClassService::getAdditionalFleetSlots`: the class's fleet slots on top of the research's; absent in older exports.
+    #[serde(default)]
+    pub class_fleet_slots: usize,
+    /// `CharacterClassService::getPlanetSizeBonus`: what a new colony's drawn size is multiplied by; 1 in older exports.
+    #[serde(default = "unit_factor")]
+    pub planet_size_multiplier: f64,
     /// `CharacterClassService::getReaperDebrisCollectionPercentage`: what a surviving debris collector hauls in, in
     /// percent; catalogues written before this rule existed collect nothing.
     #[serde(default)]

@@ -350,7 +350,7 @@ mod tests {
         let planet_id = run["planet_id"].as_i64().unwrap();
         let config = econ["planets"].as_array().unwrap().iter().position(|p| p["planet_id"].as_i64() == Some(planet_id)).unwrap();
         let setup = &run["setup"];
-        let mut planet = Planet { config, levels: economy.planets[config].levels.clone(), res: [0.0; 3], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new(), books: Default::default() };
+        let mut planet = Planet { config, levels: economy.planets[config].levels.clone(), res: [0.0; 3], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new(), books: Default::default(), field_max: economy.planets[config].field_max, peers: Default::default() };
         for (k, o) in economy.objects.iter().enumerate() {
             if let Some(level) = setup["levels"][o.id.to_string()].as_u64() {
                 planet.levels[k] = level as u32;
@@ -444,7 +444,7 @@ mod tests {
             planets: vec![(vec![0; 4], vec![true; 4])],
             index: (1..=4).map(|id| (id, id as usize - 1)).collect(),
         };
-        let planet = Planet { config: 0, levels: vec![1, 0, 1], res: [1000.0, 0.0, 0.0], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new(), books: Default::default() };
+        let planet = Planet { config: 0, levels: vec![1, 0, 1], res: [1000.0, 0.0, 0.0], rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: Vec::new(), books: Default::default(), field_max: 0, peers: Default::default() };
         (units, planet)
     }
 

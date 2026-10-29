@@ -39,6 +39,9 @@ const QUIT_MEAN_DAYS: f64 = 15.0;
 /// the bands say only that 65% of real active players are in an alliance (p10 24%, p90 77%) - so they are stated here.
 const ALLIANCE_SHARE: u64 = 65;
 const ALLIANCE_MEAN_DAYS: f64 = 5.0;
+/// Row 92: how much a place in an alliance falls with the highscore rank percentile p (inactives ranked too): an account
+/// with its own draw u joins once u < 1 - slope * p, about 0.96 at the top, 0.76 mid-table, 0.44 below the middle.
+const ALLIANCE_STANDING_SLOPE: f64 = 0.8;
 const RECRUIT_DAYS: u32 = 7;
 
 fn main() {
@@ -106,11 +109,12 @@ fn main() {
     // Row 74: an account flies with its own character class's rules - the class its home's production rows were made
     // with (the host owner's) - from the host's export of that class; without the arm every account flies the first's.
     if std::env::args().any(|arg| arg == "classes") {
-        let class_rules = |file: &str| Arc::new(Rules::load(&cat,
+        // Each class's own fleet settings too: a General flies on half the fuel (`class_consumption_multiplier`).
+        let class_rules = |class: u32| Arc::new(Rules::load(&cat,
             &format!("{data}/units-parity/units-u1.json"),
-            &format!("{data}/fleet-settings-u1.json"),
-            &format!("{data}/{file}")).expect("a class's combat export"));
-        let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules("combat-u1-class2.json")), (3, class_rules("combat-u1-class3.json"))];
+            &format!("{data}/fleet-settings-u1-class{class}.json"),
+            &format!("{data}/combat-u1-class{class}.json")).expect("a class's combat export"));
+        let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules(2)), (3, class_rules(3))];
         for a in 0..accounts {
             let class = cat.planets[configs[a]].character_class;
             if let Some((_, r)) = by_class.iter().find(|(c, _)| Some(*c) == class) {
@@ -128,7 +132,10 @@ fn main() {
     // Row 15: an account still playing at day 3 joins an alliance, at a drawn day; a quitter never joins. Membership
     // is the season's data, not a world mechanic (the world has no alliances).
     let mut alliance_at: Vec<Option<f64>> = vec![None; accounts];
-    for a in 0..accounts {
+    // Row 92 arm: membership follows standing, decided at each day's highscore instead of drawn up front.
+    let standing = std::env::args().any(|arg| arg == "standing")
+        .then(|| (0..accounts).map(|_| ((next_random(&mut rng) >> 11) as f64 + 0.5) / (1u64 << 53) as f64).collect::<Vec<f64>>());
+    for a in (0..accounts).filter(|_| standing.is_none()) {
         let quits = quit[a].unwrap_or(f64::INFINITY);
         if quits <= 3.0 * DAY || next_random(&mut rng) % 100 >= ALLIANCE_SHARE {
             continue;
@@ -173,6 +180,8 @@ fn main() {
     let balance = std::env::args().any(|arg| arg == "balance");
     let satellites = std::env::args().any(|arg| arg == "satellites");
     let doubler = std::env::args().any(|arg| arg == "doubler");
+    // Row 93: buildings only with a purpose on the planet.
+    let useful = std::env::args().any(|arg| arg == "useful");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -188,6 +197,7 @@ fn main() {
         miner.balance = balance;
         miner.satellites = satellites;
         miner.doubler = doubler;
+        miner.useful = useful;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -209,6 +219,7 @@ fn main() {
         counted_login: vec![f64::NEG_INFINITY; accounts],
         alliance_at,
         recruit: std::env::args().any(|arg| arg == "recruit"),
+        standing,
         top_days: vec![0; accounts],
         read: 0,
         midnight: DAY,
@@ -340,6 +351,7 @@ struct Season<'a, W: Write> {
     /// Row 82: an active account that has held its world's top tenth for `RECRUIT_DAYS` day ends joins an alliance, as
     /// every real one is in one (a single day's rank is noise early on, and joining on it made the mid 96% allied).
     recruit: bool,
+    standing: Option<Vec<f64>>,
     /// Per account, the consecutive day ends it has ended in its world's top tenth.
     top_days: Vec<u32>,
     /// How many events of the world's log have been read.
@@ -373,6 +385,17 @@ impl<W: Write> Season<'_, W> {
             // N6b: an expedition's find bracket reads the universe's rank-1 score, which the host's highscore refreshes
             // daily; the world's own leader stands in for it instead of a fixed number.
             self.world.rank1_points = (0..self.roles.len()).map(|a| score::of(self.world, a).total).max().unwrap_or(0);
+            if let Some(draws) = &self.standing {
+                let mut ranked: Vec<usize> = (0..self.roles.len()).collect();
+                ranked.sort_by_key(|&a| std::cmp::Reverse(score::of(self.world, a).total));
+                for (rank, &a) in ranked.iter().enumerate() {
+                    let p = rank as f64 / ranked.len() as f64;
+                    let playing = self.world.games[a].horizon > self.midnight && self.midnight >= 3.0 * DAY;
+                    if playing && self.alliance_at[a].is_none() && draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p {
+                        self.alliance_at[a] = Some(self.midnight);
+                    }
+                }
+            }
             if self.recruit {
                 let mut ranked: Vec<usize> = (0..self.roles.len()).collect();
                 ranked.sort_by_key(|&a| std::cmp::Reverse(score::of(self.world, a).total));
@@ -420,7 +443,9 @@ impl<W: Write> Season<'_, W> {
             let fleet = value - economy;
             // The day an account quits, its last login is the quit itself (`retire`), where it no longer acts.
             let quits_today = (at - DAY..at).contains(&self.world.games[a].horizon);
-            let frozen = !quits_today && frozen_day(self.previous[a], inactive, tally.logins, books.produced - before.produced, stock, score.total, fleet);
+            // A clock behind midnight with nothing due before it is lazy, not stuck: its day is booked at its next event.
+            let lazy = planets.iter().all(|&p| self.world.games[p].t < at && self.world.moves_at(p) > at);
+            let frozen = !quits_today && !lazy && frozen_day(self.previous[a], inactive, tally.logins, books.produced - before.produced, stock, score.total, fleet);
             if frozen {
                 self.frozen_days += 1;
             }

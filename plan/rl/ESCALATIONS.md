@@ -2278,3 +2278,59 @@ is 90-96% allied against real 43%. The Discoverers' unspent stock (30-54% of sco
 
 **Ops.** WSL dropped twice today with the RL slice at 46G: ~13G runs outside it. `rl.slice` is now MemoryMax 32G; three
 arms scoring together peaked at 23G of WSL's 54G.
+
+## 29 Oct — simulator fidelity audit: five host rules the season lacked; e94a is the baseline
+
+Every `CharacterClassService` rule the host applies was checked against what the simulator reads. Six gaps came up:
+five are fixed here, and one is a host gap. Each fix is kept whatever the score does, because a host mechanic the
+simulator lacks is a bug.
+
+- **Fleet slots.** `GameMission` refuses a fleet beyond `PlayerService::getFleetSlotsMax`: computer research + 1, plus 2
+  for a General. The simulator had no fleet limit at all. The economy export now carries `fleet_research` and
+  `max_fleets`: the research is the one holding the host's `MAX_FLEET_SLOTS` calculation, so nothing is named. The
+  combat export carries `class_fleet_slots`, and `World::launch` refuses as the host does, counting missiles out.
+- **Discoverer research time.** `PlanetService::getTechnologyResearchTime` truncates the time by the class factor:
+  0.75 for a Discoverer. The export read every research time on a Collector. It now carries
+  `research_time_multipliers` per class and reads the rows with a class whose factor is 1, and `Catalogue::build_seconds`
+  applies the factor. The probe found that `new User([...])` drops `character_class` because the field is not fillable,
+  so the export uses `forceFill`.
+- **Research network.** `PlanetService::getResearchNetworkLabLevel` adds the n best labs of the account's other planets
+  that meet the research's requirements, where n is the network research level. The simulator had no network.
+  `Planet::peers` now holds the levels of the account's other planets, refreshed at each capital step and commit, and
+  `Catalogue::network_labs` feeds the effective lab level into the research time. Beyond the exported table, the
+  divisor keeps its last step, which is 1 + level for a lab. The host names this research only by machine name, so the
+  export does too, with a ponytail note.
+- **Colony size.** `PlanetServiceFactory` draws a colony's fields uniformly from `planetData(position)`, adds the server
+  bonus, and multiplies by the class factor (1.1 for a Discoverer). The simulator copied the size of one of 123 sampled
+  sites, so the top's 11 colonies were all 152-159 fields at position 5. The export now carries `field_ranges` and the
+  combat export `planet_size_multiplier`. `Planet::field_max` is per planet, and `World::found` draws it. A colony the
+  referee recorded keeps its recorded size, so mission parity holds.
+- **General fuel.** The season loaded the Collector's fleet settings for every class, so a General paid double fuel
+  (`class_consumption_multiplier` 0.5). It now loads `fleet-settings-u1-class{N}.json`.
+- **Host gaps, for the owner.** First, a General's +2 combat levels (`BattleEngine`) only reach the battle report; the
+  unit property services ignore class, so the simulator matches the host. Second, graviton's energy price is never
+  checked by the research queue (the atomic deduction skips energy), so both the host and the simulator research it for
+  free. It costs no resources, so no score moves.
+
+The data was merged from the host's own answers (tinker probes, `.pre-fleets` and `.pre-size` backups kept). The fresh
+full export still dies on the site scan. Tests: `cargo test --release` 64/64, including the new fleet-slot and
+research-network tests; Pest `EconomyCatalogueExportTest` 14/14 (new: every new field against the host) and
+`CombatCatalogueExportTest` 12/12. The season's frozen-day check no longer flags a lazy clock (nothing due before
+midnight): a 1-login day booked its production the next day, e92c.
+
+| run (10 seeds x 365 days) | HDS | pooled AUC | top10 growth mean 64-128 / 128-256 / 256-512 | note |
+| --- | --- | --- | --- | --- |
+| e91b (previous baseline) | 0.867 | 0.881 | 20.2k / 31.3k / 40.2k | |
+| e92a + fleet slots | 0.851 | 0.885 | 17.1k / 26.4k / 34.7k | top planets 10 -> 8 at 64-128 |
+| e92b + Discoverer research time | 0.853 | 0.901 | 18.0k / 27.0k / 34.6k | |
+| e92c + the lab researches fleet slots | 0.711 | 0.905 | 2.1k / 5.4k / 12.2k | starves every economy; deleted |
+| e92d + the lab researches the network | 0.841 | 0.894 | 18.0k / 26.6k / 34.0k | top res_share 0.12-0.13, in band; mid overshoots more; deleted |
+| e93a + colony size draw | 0.871 | 0.893 | 17.7k / 31.8k / 42.8k | top production 69M -> 110M a day |
+| **e94a + General fuel (all fixes)** | **0.873** | **0.895** | | baseline |
+
+**Where the top's income comes from (e93a, top tenth, median day).** Day 200: 93M produced and 457M from expeditions.
+Day 300: 110M produced and 529M from expeditions. Production stays flat after day 200 because 13% of top planets sit at
+the export's level-40 ceiling and the rest are field-bound. The middle's colonies are 80% full at 196 fields with mines
+27/22/21; about 60 fields go to storage (32 levels), shipyard, lab, depot and silo, which the Player rule's store and
+cheapest-affordable branches build. Rows 92 (`standing`: alliance membership by highscore rank, u < 1 - 0.8 p) and 93
+(`useful`: only buildings with a purpose on the planet) are in measurement against e94a.

@@ -4,12 +4,16 @@ namespace Modules\AI\Actions;
 
 use Closure;
 use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
+use OGame\Enums\CharacterClass;
+use OGame\Factories\PlanetServiceFactory;
 use OGame\GameConstants\UniverseConstants;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
+use OGame\GameObjects\Models\Calculations\CalculationType;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\Resources;
+use OGame\Models\User;
 use OGame\Services\CharacterClassService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -101,6 +105,14 @@ class ExportAiEconomyCatalogueAction
             $this->putUnits($planet, $held[$index]);
         }
 
+        $timeMultipliers = $this->researchTimeMultipliers();
+        // Research rows are read with a class that leaves research times alone; the simulator applies each class's factor.
+        $user = $planets[0]->getPlayer()->getUser();
+        $savedClass = $user->character_class;
+        $user->character_class = array_search(1.0, $timeMultipliers, true) ?: throw new RuntimeException('No class leaves research times alone.');
+        $researchRows = array_map(fn (GameObject $object): array => $this->object($object, $planets[0], $everything, $researchModifierIds, $maxLevel), $research);
+        $user->character_class = $savedClass;
+
         return [
             'version' => self::VERSION,
             'economy_speed' => app(SettingsService::class)->economySpeed(),
@@ -109,8 +121,13 @@ class ExportAiEconomyCatalogueAction
             'research_grid_level' => self::RESEARCH_GRID_LEVEL,
             'objects' => array_map(fn (GameObject $object): array => $this->object($object, $planets[0], $everything, $modifierIds, $maxLevel), $objects),
             'time_modifiers' => $modifiers,
-            'research' => array_map(fn (GameObject $object): array => $this->object($object, $planets[0], $everything, $researchModifierIds, $maxLevel), $research),
+            'research' => $researchRows,
             'time_modifiers_research' => $researchModifiers,
+            // Per class (the host enum value): what the class multiplies a research time by, truncated (PlanetService::getTechnologyResearchTime).
+            'research_time_multipliers' => $timeMultipliers,
+            // ponytail: PlanetService::getResearchNetworkLabLevel names the research that pools the labs by machine name
+            // only; if the host grows a calculation for it, ask that instead of the name.
+            'research_network' => ObjectService::getResearchObjectByMachineName('intergalactic_research_network')->id,
             // Catalogue v4: the units whose count moves production; every planet's unit lists follow this order.
             'units' => array_map(static fn (UnitObject $unit): int => $unit->id, $movers),
             // Combinations of levels and unit counts with the host's own answer, so the simulator's composition of the
@@ -119,6 +136,30 @@ class ExportAiEconomyCatalogueAction
             'planets' => [...$exported, ...$colonies],
             'colonisation' => $colonisation,
         ];
+    }
+
+    /** @return array<int, array{int, int}> */
+    private function fieldRanges(): array
+    {
+        $bonus = app(SettingsService::class)->planetFieldsBonus();
+        $ranges = [];
+        for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
+            [$low, $high] = app(PlanetServiceFactory::class)->planetData($position, false)['fields'];
+            $ranges[$position] = [$low + $bonus, $high + $bonus];
+        }
+
+        return $ranges;
+    }
+
+    /** @return array<int, float> */
+    private function researchTimeMultipliers(): array
+    {
+        $multipliers = [];
+        foreach (CharacterClass::cases() as $class) {
+            $multipliers[$class->value] = app(CharacterClassService::class)->getResearchTimeMultiplier((new User())->forceFill(['character_class' => $class->value]));
+        }
+
+        return $multipliers;
     }
 
     /**
@@ -153,6 +194,8 @@ class ExportAiEconomyCatalogueAction
             }
         }
         $player->setResearchLevel($research->machine_name, $saved, false);
+        // The fleet limit's research is whichever object carries the host's fleet-slot calculation, so none is named here.
+        $fleetResearch = array_values(array_filter(ObjectService::getResearchObjects(), static fn (GameObject $object): bool => $object->hasCalculation(CalculationType::MAX_FLEET_SLOTS)))[0];
 
         return [
             'research' => $research->id,
@@ -160,6 +203,11 @@ class ExportAiEconomyCatalogueAction
             'max_planets' => $maxPlanets,
             // The host's expedition limit at each level of the same research (ExpeditionMission refuses beyond it).
             'max_expeditions' => $maxExpeditions,
+            // The host's fleet limit per level of its own research, without class or officer slots (GameMission refuses beyond it).
+            'fleet_research' => $fleetResearch->id,
+            // The host's size range per position for a new colony (PlanetServiceFactory::planetData plus the server bonus).
+            'field_ranges' => $this->fieldRanges(),
+            'max_fleets' => array_map(static fn (int $level): int => $fleetResearch->performCalculation(CalculationType::MAX_FLEET_SLOTS, $level), range(0, $maxLevel)),
             'position_levels' => $positionLevels,
             'sites' => array_map(static fn (array $site, int $n): array => [
                 'config' => $firstSite + $n,

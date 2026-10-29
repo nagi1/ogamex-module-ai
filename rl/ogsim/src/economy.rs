@@ -51,6 +51,12 @@ struct RawCatalogue {
     time_modifiers: Vec<RawModifier>,
     #[serde(default)]
     time_modifiers_research: Vec<RawModifier>,
+    /// Per class (the host enum value as a key), the factor a research time is multiplied by and truncated; absent in older exports.
+    #[serde(default)]
+    research_time_multipliers: HashMap<String, f64>,
+    /// The research that pools the labs of the account's other planets (`getResearchNetworkLabLevel`); absent in older exports.
+    #[serde(default)]
+    research_network: Option<i64>,
     planets: Vec<RawPlanet>,
     /// Catalogue v4: the units whose count moves production; every planet's unit lists follow this order.
     #[serde(default)]
@@ -205,6 +211,10 @@ pub struct Catalogue {
     pub objects: Vec<Object>,
     /// Per queue, the objects whose level divides every build time, with the divisor per level.
     pub modifiers: [Vec<(usize, Vec<f64>)>; 2],
+    /// Per class, the host's research time factor (a Discoverer's 0.75); the tables are made at factor 1.
+    pub research_time_multipliers: HashMap<u32, f64>,
+    /// Object index of the research that adds the best labs of the account's other planets to the researching one.
+    pub research_network: Option<usize>,
     pub planets: Vec<PlanetConfig>,
     /// Host ids of the units that move production; `Planet::units` and the planet tables follow this order.
     pub units: Vec<i64>,
@@ -285,6 +295,10 @@ pub struct Planet {
     pub units: Vec<u64>,
     /// Row 23: the planet's own books, carried by the planet so a colony's are its owner's once summed.
     pub books: Books,
+    /// The planet's own size: its config's, or the host's draw for a colony (`World::found`).
+    pub field_max: u32,
+    /// The levels of the account's other planets, which the research network reads; the world keeps them, empty alone.
+    pub peers: std::sync::Arc<Vec<Vec<u32>>>,
 }
 
 #[derive(Clone)]
@@ -427,7 +441,7 @@ impl Catalogue {
 
         let unit_ids = raw.units.clone();
 
-        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, planets, units: raw.units, probes: raw.unit_probes.iter().map(|p| Probe {
+        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, research_network: raw.research_network.and_then(|id| index.get(&id).copied()), research_time_multipliers: raw.research_time_multipliers.iter().filter_map(|(c, m)| Some((c.parse().ok()?, *m))).collect(), planets, units: raw.units, probes: raw.unit_probes.iter().map(|p| Probe {
             config: p.planet,
             levels: per_object(&p.levels, &index, count).into_iter().map(|l| l.unwrap_or(0)).collect(),
             units: unit_ids.iter().map(|id| p.units.get(&id.to_string()).copied().unwrap_or(0)).collect(),
@@ -444,7 +458,7 @@ impl Catalogue {
     /// A game at second zero whose clock has not moved yet, for a world that moves it with `tick`.
     pub fn new_paused_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
         let c = &self.planets[config];
-        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default() };
+        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default(), field_max: c.field_max, peers: Default::default() };
         self.refresh(&mut planet);
         // A night between six and eight hours (the host flags a dark period under six), starting at a drawn hour.
         let mut seed = login_seed | 1;
@@ -599,7 +613,7 @@ impl Catalogue {
     /// Row 36: the fields this planet has - its own plus what its buildings add, which is what the host counts
     /// (`PlanetService::getPlanetFieldMax`). A catalogue without `fields_added` adds nothing, so old tables read as before.
     pub fn field_cap(&self, planet: &Planet) -> u32 {
-        let base = self.planets[planet.config].field_max;
+        let base = planet.field_max;
         self.objects.iter().zip(&planet.levels).fold(base, |cap, (object, &level)| {
             cap + object.fields_added.get(level as usize).copied().unwrap_or(0)
         })
@@ -609,7 +623,7 @@ impl Catalogue {
         self.objects.iter().zip(&planet.levels).filter(|(o, _)| o.consumes_field).map(|(_, l)| *l).sum()
     }
 
-    fn requirements_met(&self, levels: &[u32], k: usize) -> bool {
+    pub fn requirements_met(&self, levels: &[u32], k: usize) -> bool {
         self.objects[k].requires.iter().all(|(target, level)| match target {
             Some(i) => levels[*i] >= *level,
             None => *level == 0,
@@ -659,22 +673,46 @@ impl Catalogue {
     /// after dividing, so dividing its whole seconds drifts by a second; the divisor is only the fallback beyond
     /// the grid, applied to the time with every station at zero except the object's own level.
     pub fn build_seconds(&self, planet: &Planet, k: usize) -> f64 {
+        let seconds = self.table_seconds(planet, k);
+        if self.objects[k].queue == 0 { return seconds }
+        let factor = self.planets[planet.config].character_class.and_then(|c| self.research_time_multipliers.get(&c)).copied().unwrap_or(1.0);
+        (seconds * factor).floor().max(1.0)
+    }
+
+    fn table_seconds(&self, planet: &Planet, k: usize) -> f64 {
         let level = planet.levels[k] as usize;
         let side = self.time_grid_level + 1;
-        let cell = self.modifiers[self.objects[k].queue].iter().try_fold(0usize, |at, (m, _)| {
-            let l = planet.levels[*m] as usize;
+        let queue = self.objects[k].queue;
+        let pooled = if queue == 1 { self.network_labs(planet, k) } else { 0 };
+        // The research network adds to the first research modifier, the lab the host pools.
+        let level_of = |i: usize, m: usize| (planet.levels[m] + if i == 0 { pooled } else { 0 }) as usize;
+        let cell = self.modifiers[queue].iter().enumerate().try_fold(0usize, |at, (i, (m, _))| {
+            let l = level_of(i, *m);
             (l < side).then(|| at * side + l)
         });
         if let Some(cell) = cell {
             return self.objects[k].build_seconds_grid[level][cell];
         }
         let mut seconds = self.objects[k].build_seconds[planet.levels[k] as usize];
-        for (m, divisor) in &self.modifiers[self.objects[k].queue] {
+        for (i, (m, divisor)) in self.modifiers[queue].iter().enumerate() {
             if *m != k {
-                seconds /= divisor[(planet.levels[*m] as usize).min(divisor.len() - 1)];
+                // A pooled lab outgrows the exported table; the divisor keeps its last step beyond it (1 + level for a lab).
+                let (l, n) = (level_of(i, *m), divisor.len());
+                seconds /= if l < n || n < 2 { divisor[l.min(n - 1)] } else { divisor[n - 1] + (l - (n - 1)) as f64 * (divisor[n - 1] - divisor[n - 2]) };
             }
         }
         seconds.floor().max(1.0)
+    }
+
+    /// PlanetService::getResearchNetworkLabLevel: at network level n, the n best labs of the account's other planets
+    /// that meet research k's requirements.
+    fn network_labs(&self, planet: &Planet, k: usize) -> u32 {
+        let (Some(network), Some(&(lab, _))) = (self.research_network, self.modifiers[1].first()) else { return 0 };
+        let n = planet.levels[network] as usize;
+        if n == 0 { return 0 }
+        let mut labs: Vec<u32> = planet.peers.iter().filter(|p| self.requirements_met(p, k)).map(|p| p[lab]).collect();
+        labs.sort_unstable_by(|x, y| y.cmp(x));
+        labs.into_iter().take(n).sum()
     }
 
     /// Lands every build that ends before `until` (at it too when `landing`; the horizon is a cliff for a build that ends on it), in order, accruing up to each end, then accrues up to `until`.
@@ -939,7 +977,12 @@ impl Catalogue {
     /// The deterministic players the model must beat. Payback is the classic rule: power first when the factor is
     /// short, else the next level that repays its price fastest, a store when no producer fits, else the cheapest.
     pub fn baseline(&self, p: &Planet, queue: usize, kind: Baseline, rng: &mut u64) -> Option<usize> {
-        let mut legal: Vec<usize> = (0..self.objects.len()).filter(|&k| self.objects[k].queue == queue && self.legal(p, k)).collect();
+        self.baseline_among(p, queue, kind, rng, &|_| true)
+    }
+
+    /// `baseline` over the legal objects `keep` admits, so a player can rule some out before the rule chooses.
+    pub fn baseline_among(&self, p: &Planet, queue: usize, kind: Baseline, rng: &mut u64, keep: &dyn Fn(usize) -> bool) -> Option<usize> {
+        let mut legal: Vec<usize> = (0..self.objects.len()).filter(|&k| self.objects[k].queue == queue && self.legal(p, k) && keep(k)).collect();
         // An account that logs in only now and then builds what it can pay at the visit; it never spends a visit on saving up.
         if !self.login_gaps.is_empty() && legal.iter().any(|&k| self.wait_seconds(p, k) == 0.0) {
             legal.retain(|&k| self.wait_seconds(p, k) == 0.0);
@@ -953,7 +996,7 @@ impl Catalogue {
             Baseline::Random => Some(legal[(next_random(rng) % legal.len() as u64) as usize]),
             Baseline::Soonest => min_by(legal.iter().map(|&k| (k, self.wait_seconds(p, k) * 1e6 + cost(k))).collect()),
             Baseline::Player => {
-                let pick = self.baseline(p, queue, Baseline::Payback, rng)?;
+                let pick = self.baseline_among(p, queue, Baseline::Payback, rng, keep)?;
                 let busy_hours = (self.wait_seconds(p, pick) + self.build_seconds(p, pick)) / 3600.0;
                 let overflow = (0..3).filter(|&r| p.res[r] + p.rate[r].max(0.0) * busy_hours >= p.cap[r]).collect::<Vec<_>>();
                 let store = legal.iter().filter_map(|&k| {
@@ -1041,6 +1084,35 @@ mod tests {
     /// Row 36: a planet's field cap is the host's own count - its fields plus what its buildings add, read from the table
     /// the export probed rather than from a number the simulator keeps. The bare planet's cap is its own fields, and one
     /// and two levels of the object that adds the most raise it by exactly the table's values.
+    /// PlanetService::getResearchNetworkLabLevel: at network level n a research is timed as if the lab held its own
+    /// level plus the n best labs of the other planets that meet the research's requirements; a peer that does not
+    /// meet them adds nothing, and without the network the peers add nothing.
+    #[test]
+    fn the_research_network_pools_the_best_labs_of_the_other_planets() {
+        let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1-colonies.json", env!("CARGO_MANIFEST_DIR"));
+        let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no colonies catalogue; skipped") };
+        let Some(network) = cat.research_network else { return eprintln!("no research network in the export; skipped") };
+        let lab = cat.modifiers[1][0].0;
+        let mut planet = cat.new_paused_game(0, 1.0, 0.0, 0).planet;
+        planet.levels.iter_mut().for_each(|l| *l = 10);
+        let k = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1 && k != network).expect("a research");
+        let peer = |lab_level: u32| { let mut levels = planet.levels.clone(); levels[lab] = lab_level; levels };
+        let mut unmet = peer(30);
+        unmet.iter_mut().enumerate().filter(|(i, _)| cat.objects[k].requires.iter().any(|r| r.0 == Some(*i))).for_each(|(_, l)| *l = 0);
+        let any_requirement = cat.objects[k].requires.iter().any(|r| r.0.is_some() && r.1 > 0);
+        planet.peers = std::sync::Arc::new(vec![peer(5), peer(3), peer(8), unmet]);
+        planet.levels[network] = 2;
+        let mut alone = planet.clone();
+        alone.peers = Default::default();
+        // A research with no requirement lets every peer qualify, the unmet one's 30 among them.
+        alone.levels[lab] = 10 + if any_requirement { 8 + 5 } else { 30 + 8 };
+        assert_eq!(cat.build_seconds(&planet, k), cat.build_seconds(&alone, k), "the two best qualifying labs are pooled");
+        planet.levels[network] = 0;
+        let mut own = planet.clone();
+        own.peers = Default::default();
+        assert_eq!(cat.build_seconds(&planet, k), cat.build_seconds(&own, k), "without the network the peers add nothing");
+    }
+
     #[test]
     fn a_field_adding_object_raises_the_planets_field_cap() {
         let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1-colonies.json", env!("CARGO_MANIFEST_DIR"));
