@@ -31,7 +31,8 @@ use Random\Randomizer;
     {--speed=8 : Economy, research and fleet speed}
     {--stage-budget=0 : Resource budget each account has already spent on buildings and research (0 = a fresh account)}
     {--seed=1 : Seed for planet placement, persona seeds and every other draw}
-    {--at=2026-10-05T00:00:00Z : The instant the universe is created at; start ai:sim --from here}')]
+    {--at=2026-10-05T00:00:00Z : The instant the universe is created at; start ai:sim --from here}
+    {--settings= : JSON object of host settings applied after the speeds, e.g. a real universe\'s own}')]
 class CreateAiRlUniverse extends Command
 {
     use OpensRlUniverse;
@@ -56,6 +57,11 @@ class CreateAiRlUniverse extends Command
         $speed = max(1, (int) $this->option('speed'));
         foreach (['economy_speed', 'research_speed', 'fleet_speed', 'fleet_speed_war', 'fleet_speed_peaceful', 'fleet_speed_holding'] as $key) {
             $settings->set($key, $speed);
+        }
+        // A real universe's settings go through the host's own keys, so every export reads them the way the game does.
+        foreach (json_decode((string) ($this->option('settings') ?: '{}'), true, 512, JSON_THROW_ON_ERROR) as $key => $value) {
+            // As text: the host's setter takes string|int, so a fractional value such as 0.5 would truncate to 0.
+            $settings->set((string) $key, (string) $value);
         }
 
         app(CreateNewUser::class)->create(['email' => 'admin-' . $seed . '@rl.invalid', 'password' => 'rl-universe-' . $seed . '-Aa1!']);
