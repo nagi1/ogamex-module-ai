@@ -40,7 +40,7 @@ const QUIT_MEAN_DAYS: f64 = 15.0;
 const ALLIANCE_SHARE: u64 = 65;
 const ALLIANCE_MEAN_DAYS: f64 = 5.0;
 /// Row 92: how much a place in an alliance falls with the highscore rank percentile p (inactives ranked too): an account
-/// with its own draw u joins once u < 1 - slope * p, about 0.96 at the top, 0.76 mid-table, 0.44 below the middle.
+/// with its own draw u is a member while u < 1 - slope * p, about 0.96 at the top, 0.76 mid-table, 0.44 below the middle.
 const ALLIANCE_STANDING_SLOPE: f64 = 0.8;
 const RECRUIT_DAYS: u32 = 7;
 
@@ -180,8 +180,6 @@ fn main() {
     let balance = std::env::args().any(|arg| arg == "balance");
     let satellites = std::env::args().any(|arg| arg == "satellites");
     let doubler = std::env::args().any(|arg| arg == "doubler");
-    // Row 93: buildings only with a purpose on the planet.
-    let useful = std::env::args().any(|arg| arg == "useful");
     for player in &mut players {
         let miner = player.miner();
         miner.consolidate = consolidate;
@@ -197,7 +195,6 @@ fn main() {
         miner.balance = balance;
         miner.satellites = satellites;
         miner.doubler = doubler;
-        miner.useful = useful;
     }
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -390,9 +387,11 @@ impl<W: Write> Season<'_, W> {
                 ranked.sort_by_key(|&a| std::cmp::Reverse(score::of(self.world, a).total));
                 for (rank, &a) in ranked.iter().enumerate() {
                     let p = rank as f64 / ranked.len() as f64;
+                    // Membership follows today's standing both ways: an alliance drops a member that falls away.
                     let playing = self.world.games[a].horizon > self.midnight && self.midnight >= 3.0 * DAY;
-                    if playing && self.alliance_at[a].is_none() && draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p {
-                        self.alliance_at[a] = Some(self.midnight);
+                    let placed = playing && draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p;
+                    if placed != self.alliance_at[a].is_some() {
+                        self.alliance_at[a] = placed.then_some(self.midnight);
                     }
                 }
             }

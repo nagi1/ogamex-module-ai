@@ -2334,3 +2334,27 @@ the export's level-40 ceiling and the rest are field-bound. The middle's colonie
 27/22/21; about 60 fields go to storage (32 levels), shipyard, lab, depot and silo, which the Player rule's store and
 cheapest-affordable branches build. Rows 92 (`standing`: alliance membership by highscore rank, u < 1 - 0.8 p) and 93
 (`useful`: only buildings with a purpose on the planet) are in measurement against e94a.
+
+### Rows 92-93 against e94a
+
+| run | HDS | pooled AUC | note |
+| --- | --- | --- | --- |
+| e94a baseline | 0.873 | 0.895 | |
+| e94b + `standing` (join only) with `recruit` | 0.856 | 0.928 | a join is for good: bottom 1.00 allied |
+| e94c `standing` (join only) for `recruit` | 0.857 | 0.931 | same |
+| **e94e `standing` both ways for `recruit`** | **0.863** | **0.887** | mid allied 0.81-0.84 (real 0.68-0.77), top 0.94-0.98; kept on AUC |
+| e94d + `useful` everywhere | 0.827 | 0.884 | the capital stops raising stores and production stalls at full stores |
+| e94f + `useful` on colonies | 0.799 | 0.929 | a colony saving for a mine reports a large lack, the feed drains the capital, and colonising stops at 2 planets; deleted |
+
+**Row 92 kept (`standing`, both ways):** an account is a member while its own draw u < 1 - 0.8 p, where p is the
+highscore rank percentile with inactives included. Membership is re-read at each day's highscore, so an alliance drops a
+member that falls away. Alliance leaves the giveaways list. The bottom cell stays near 1.0, but it holds few accounts:
+17 active account-days at day 100 over 10 seeds. Every account starts on day 0 and half quit within about 10 days, so
+the active accounts all rank in the upper half; a real universe keeps a stream of late sign-ups at the bottom. That is
+a world-population gap, not a behaviour gap.
+
+**Baseline now:** `moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler
+moonfeed standing` (e94e). Giveaways: growth 0.176, moons 0.081, mil_share 0.074, galaxies 0.057, planets 0.052.
+
+**Row 93 not kept (`useful`).** The colony junk is real (about 60 of 196 fields), but filtering it needs colony feeding
+reworked first: the capital should send a colony at most what it can spare, never its research money.

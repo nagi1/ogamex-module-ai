@@ -623,7 +623,7 @@ impl Catalogue {
         self.objects.iter().zip(&planet.levels).filter(|(o, _)| o.consumes_field).map(|(_, l)| *l).sum()
     }
 
-    pub fn requirements_met(&self, levels: &[u32], k: usize) -> bool {
+    fn requirements_met(&self, levels: &[u32], k: usize) -> bool {
         self.objects[k].requires.iter().all(|(target, level)| match target {
             Some(i) => levels[*i] >= *level,
             None => *level == 0,
@@ -977,12 +977,7 @@ impl Catalogue {
     /// The deterministic players the model must beat. Payback is the classic rule: power first when the factor is
     /// short, else the next level that repays its price fastest, a store when no producer fits, else the cheapest.
     pub fn baseline(&self, p: &Planet, queue: usize, kind: Baseline, rng: &mut u64) -> Option<usize> {
-        self.baseline_among(p, queue, kind, rng, &|_| true)
-    }
-
-    /// `baseline` over the legal objects `keep` admits, so a player can rule some out before the rule chooses.
-    pub fn baseline_among(&self, p: &Planet, queue: usize, kind: Baseline, rng: &mut u64, keep: &dyn Fn(usize) -> bool) -> Option<usize> {
-        let mut legal: Vec<usize> = (0..self.objects.len()).filter(|&k| self.objects[k].queue == queue && self.legal(p, k) && keep(k)).collect();
+        let mut legal: Vec<usize> = (0..self.objects.len()).filter(|&k| self.objects[k].queue == queue && self.legal(p, k)).collect();
         // An account that logs in only now and then builds what it can pay at the visit; it never spends a visit on saving up.
         if !self.login_gaps.is_empty() && legal.iter().any(|&k| self.wait_seconds(p, k) == 0.0) {
             legal.retain(|&k| self.wait_seconds(p, k) == 0.0);
@@ -996,7 +991,7 @@ impl Catalogue {
             Baseline::Random => Some(legal[(next_random(rng) % legal.len() as u64) as usize]),
             Baseline::Soonest => min_by(legal.iter().map(|&k| (k, self.wait_seconds(p, k) * 1e6 + cost(k))).collect()),
             Baseline::Player => {
-                let pick = self.baseline_among(p, queue, Baseline::Payback, rng, keep)?;
+                let pick = self.baseline(p, queue, Baseline::Payback, rng)?;
                 let busy_hours = (self.wait_seconds(p, pick) + self.build_seconds(p, pick)) / 3600.0;
                 let overflow = (0..3).filter(|&r| p.res[r] + p.rate[r].max(0.0) * busy_hours >= p.cap[r]).collect::<Vec<_>>();
                 let store = legal.iter().filter_map(|&k| {

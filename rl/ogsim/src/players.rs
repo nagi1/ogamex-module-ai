@@ -340,8 +340,6 @@ pub struct Miner {
     pub feed: bool,
     /// Row 77 arm: a planet waiting on time rather than resources builds the factory that shortens its building queue.
     pub factory: bool,
-    /// Row 93 arm: a building is chosen only among those with a purpose on this planet (`useful`).
-    pub useful: bool,
     /// Row 79 arm: the lab's research from surplus stops at the real players' research share (`RESEARCH_SHARE`).
     pub balance: bool,
     /// Row 83 arm: a planet's energy comes from a production unit when it pays more energy per resource than any
@@ -354,7 +352,7 @@ pub struct Miner {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, useful: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -420,8 +418,6 @@ impl Miner {
         let fallback = match self.lab && queue == 1 {
             true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .filter(|&k| spare(w, cat, a, k) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
-            false if self.useful => cat.baseline_among(planet, queue, Baseline::Player, &mut self.rng, &|k| useful(w, cat, a, planet, k))
-                .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k)),
             false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k)),
         };
@@ -781,25 +777,6 @@ fn purpose(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
         .min_by(|&x, &y| price(x).total_cmp(&price(y)))
 }
 
-/// Row 93: whether building k serves this planet: it raises production or energy, shortens the queue, adds fields, newly
-/// unlocks a building or a unit, or lifts a store cap a producer's next price is over. A player does not spend a field on
-/// anything else (gate 3); every test reads the catalogue and the yard's requirements, nothing is named (gate 1).
-fn useful(w: &World, cat: &Catalogue, a: usize, planet: &Planet, k: usize) -> bool {
-    let mut next = planet.clone();
-    next.levels[k] += 1;
-    cat.refresh(&mut next);
-    let power = |p: &Planet| p.energy_max - p.energy_used;
-    let units = &w.rules[a].units;
-    let produces = weighted(cat.production(&next, true).0) > weighted(cat.production(planet, true).0) || power(&next) > power(planet);
-    let modifies = cat.modifiers.iter().flatten().any(|(m, _)| *m == k);
-    let adds = cat.field_cap(&next) > cat.field_cap(planet);
-    let unlocks = (0..cat.objects.len()).any(|j| cat.objects[j].queue == 0 && !cat.requirements_met(&planet.levels, j) && cat.requirements_met(&next.levels, j))
-        || (0..units.units.len()).any(|u| !units.requirements_met(planet, u) && units.requirements_met(&next, u));
-    let relieves = (0..cat.objects.len()).filter(|&j| cat.objects[j].queue == 0 && cat.production_row(planet, j, planet.levels[j] as usize).is_some())
-        .any(|j| { let price = cat.objects[j].price[(planet.levels[j] as usize).min(cat.objects[j].price.len() - 1)]; (0..3).any(|r| price[r] > planet.cap[r] && next.cap[r] > planet.cap[r]) });
-    produces || modifies || adds || unlocks || relieves
-}
-
 /// Whether planet a pays for research k and still holds the price of its next building (the one it saves for, else the
 /// player rule's): a player feeds the mines first and researches from the rest (row 72, gate 3).
 fn spare(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
@@ -941,7 +918,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, useful: false };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default() }
     }
 
