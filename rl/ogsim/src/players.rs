@@ -348,11 +348,14 @@ pub struct Miner {
     /// Row 84 arm: every expedition takes the host's find doubler when the account's class may build it, with the hold
     /// for the doubled find (`expedition_cargo`).
     pub doubler: bool,
+    /// Row 94 arm: the idle lab takes its research without keeping the next building's price back (a player keeps the
+    /// lab running; the building waits). Without it the capital's metal never covered both and the lab sat idle for weeks.
+    pub lab_first: bool,
 }
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -417,7 +420,7 @@ impl Miner {
         let planet = powered.as_ref().unwrap_or(&w.games[a].planet);
         let fallback = match self.lab && queue == 1 {
             true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
-                .filter(|&k| spare(w, cat, a, k) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
+                .filter(|&k| (self.lab_first || spare(w, cat, a, k)) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
             false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k)),
         };
@@ -918,7 +921,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default() }
     }
 

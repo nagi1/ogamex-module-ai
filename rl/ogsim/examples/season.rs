@@ -178,6 +178,7 @@ fn main() {
     let factory = std::env::args().any(|arg| arg == "factory");
     // Row 79: research from surplus only under the real research share.
     let balance = std::env::args().any(|arg| arg == "balance");
+    let lab_first = std::env::args().any(|arg| arg == "labfirst");
     let satellites = std::env::args().any(|arg| arg == "satellites");
     let doubler = std::env::args().any(|arg| arg == "doubler");
     for player in &mut players {
@@ -193,6 +194,7 @@ fn main() {
         miner.feed = feed;
         miner.factory = factory;
         miner.balance = balance;
+        miner.lab_first = lab_first;
         miner.satellites = satellites;
         miner.doubler = doubler;
     }
@@ -646,6 +648,17 @@ impl<W: Write> Season<'_, W> {
             "next_id": next.map(|k| self.cat.objects[k].id),
             "next_seconds": next.map(|k| self.cat.build_seconds(planet, k)).map(|s| s / 3600.0),
             "next_wait": next.map(|k| self.cat.wait_seconds(planet, k)).map_or(serde_json::Value::Null, hours),
+            // The lab at the day's end: running (hours left), saving for (object, what its price lacks), or idle.
+            "lab_left": hours((self.world.games[a].free[1] - self.world.games[a].t).max(0.0)),
+            "lab_pending": self.world.games[a].pending.iter().filter(|&&(_, k)| self.cat.objects[k].queue == 1).map(|&(_, k)| self.cat.objects[k].id).collect::<Vec<_>>(),
+            "capital_res": planet.res.iter().map(|r| r.round()).collect::<Vec<f64>>(),
+            "keep": self.world.games[a].commit[0].or_else(|| self.cat.baseline(planet, 0, Baseline::Player, &mut 0))
+                .map(|b| self.cat.objects[b].price[planet.levels[b] as usize].to_vec()),
+            "lab_commit": self.world.games[a].commit[1].map(|k| self.cat.objects[k].id),
+            "lab_lacks": self.world.games[a].commit[1].map(|k| {
+                let price = self.cat.objects[k].price[planet.levels[k] as usize];
+                (0..3).map(|r| (price[r] - planet.res[r]).max(0.0).round()).collect::<Vec<f64>>()
+            }),
         })
     }
 
