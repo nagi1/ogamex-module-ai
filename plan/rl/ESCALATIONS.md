@@ -2358,3 +2358,33 @@ moonfeed standing` (e94e). Giveaways: growth 0.176, moons 0.081, mil_share 0.074
 
 **Row 93 not kept (`useful`).** The colony junk is real (about 60 of 196 fields), but filtering it needs colony feeding
 reworked first: the capital should send a colony at most what it can spare, never its research money.
+
+## 29 Oct — the reference universes' own settings (`real8`); adopted as the world
+
+**Finding.** All 196 speed-8 universes in the real bands (PUB serverData) run settings our universe left at defaults:
+`researchDurationDivisor` 2 (193 of 196), `bonusFields` 25-30 (180), ship debris 60% median with deuterium in it (181),
+`globalDeuteriumSaveFactor` 0.5 (171), fleet speed war 2 / peaceful about 5 / holding about 3, and 6 galaxies. Ours
+had research speed 1, no bonus fields, 30% debris without deuterium, fuel 1, every fleet at 8, and 9 galaxies. Every
+universe also runs **lifeforms** (engine 13.0.1; `lifeformSettings` in every file). OGameX has no lifeforms, and in
+v10+ their points count in the highscore total: the real shares add up to only about 0.84 (economy 0.46, research 0.12,
+military 0.26). This part of the growth gap is a host mechanic, not a module one: flagged for the owner.
+
+`rl/scripts/real_universe.py` rewrites our exports the way the host applies each setting. Research rows are halved, and
+the host divides before it truncates, so floor(floor(x)/2) = floor(x/2). Thirty fields are added to every planet,
+site and size range; the debris, fuel and fleet-speed rules are set per mission's `FleetSpeedType`. The output goes to
+`storage/rl/ogsim/real8`.
+
+| run (10 seeds x 365 days) | HDS | pooled AUC | top score at day 300 (median) | giveaways |
+| --- | --- | --- | --- | --- |
+| e94e (default settings) | 0.863 | 0.887 | 99M | growth 0.176, moons 0.081 |
+| e95b economy settings only (research speed, fields) | 0.810 | 0.929 | 76M | growth 0.144, eco_share 0.127 |
+| **e95a all real settings** | **0.819** | **0.912** | **138M** | growth 0.159, eco_share 0.125 (out of band 40%) |
+| e96a + miner military share 0.12 | 0.815 | 0.932 | | mil_share 0.127 |
+| e96b + miner military share 0.20 | 0.824 | 0.937 | | mil_share 0.156; deleted |
+
+**Decision: `real8` is the world from now on**, scored as e95a, even though pooled AUC moves from 0.887 to 0.912. The
+bands were measured under these settings, so tuning behaviour to them under the defaults was tuning to the wrong world.
+In the right world the middle grows 40% faster (4.5k / 6.3k against 3.1k / 4.1k at 128-256 / 256-512 days), but its
+mix leaves the band: economy 0.71-0.86 (real 0.58), research 0.04-0.12 (0.13), military 0.12-0.17 (0.22-0.26). The
+spending was tuned to the default world. Raising the miner's military share moves the mean but not the shape, and AUC
+gets worse. Next: what the middle spends its surplus on, read per account rather than as a mean.
