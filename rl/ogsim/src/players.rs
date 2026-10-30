@@ -353,6 +353,14 @@ pub struct Miner {
     pub lab_first: bool,
 }
 
+/// W14: a lab on a colony before the account's research network reads it shortens no research, and the host holds the
+/// account's research for as long as it upgrades (`PlayerService::isBuildingObject`): a player does not build it (gate 3).
+/// Which object sets research time and which research is the network, the catalogue says (gate 1).
+fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
+    let capital = w.account_of(a);
+    capital != a && cat.sets_research_time(k) && cat.research_network.is_none_or(|n| w.games[capital].planet.levels[n] == 0)
+}
+
 impl Miner {
     pub fn new(seed: u64) -> Miner {
         Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false }
@@ -422,7 +430,8 @@ impl Miner {
             true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .filter(|&k| (self.lab_first || spare(w, cat, a, k)) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
             false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
-                .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k)),
+                .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k))
+                .filter(|&k| !idle_lab(w, cat, a, k)),
         };
         self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| fallback)
     }
