@@ -337,6 +337,8 @@ pub struct World {
     pub dark_matter: Vec<i64>,
     /// W14: every yard order (slot, second, host unit id, amount asked, amount queued), for the host's replay of the world.
     pub unit_log: Vec<(usize, f64, u32, u64, u64)>,
+    /// Every fleet as it left, with the speed it was sent at (W14: the trace a host replay dispatches).
+    pub launch_log: Vec<(Fleet, f64)>,
     /// Debris over deep space (slot 16) by (galaxy, system); nothing harvests it yet.
     pub deep_space: HashMap<(i64, i64), [i64; 3]>,
     /// The best score in the highscore, which sets what an expedition can find.
@@ -352,10 +354,6 @@ pub struct World {
     idle_next: Vec<f64>,
     /// Whether the account that is deciding now has no build to decide.
     idle_now: Vec<bool>,
-    /// An idle login's clock and stock as they were before the account was caught up to it, until it does something:
-    /// a login that changes nothing leaves the economy exactly as it was (floating-point accrual in finer steps is not
-    /// the same number).
-    idle_stash: Vec<Option<(f64, [f64; 3], Books)>>,
     rng: u64,
 }
 
@@ -370,7 +368,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], unit_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], idle_stash: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -405,16 +403,17 @@ impl World {
                 continue;
             }
             if self.idle_next[a] < self.next[a] {
-                // An idle login that decides nothing is rolled back below, so the books are stashed with the stock
-                // (row 23: production booked for a clock that is then rewound would over-claim the day).
-                self.idle_stash[a] = Some((self.games[a].t, self.games[a].planet.res, self.games[a].planet.books));
+                // W14: an idle login is a page load like any other; it hands over the yard's units and writes the stock.
                 self.catch_up(cat, a, self.idle_next[a]);
+                self.settle_yard(cat, a);
+                self.games[a].planet.settle();
                 self.next[a] = cat.peek(&mut self.games[a]);
                 self.idle_now[a] = true;
                 return Some(a);
             }
             let deciding = self.step_account(cat, a);
             if deciding && !self.games[a].done {
+                self.games[a].planet.settle();
                 self.settle_yard(cat, a);
                 self.idle_now[a] = false;
                 self.pass_login(cat, a, self.games[a].t);
@@ -467,7 +466,17 @@ impl World {
     /// Moves slot a's clock by one event (`Catalogue::tick`) and hands a research that landed to the account's other planets.
     fn step_account(&mut self, cat: &Catalogue, a: usize) -> bool {
         self.sync_peers(cat, a);
+        self.games[a].account_pending = self.account_holds(cat, a);
+        let holds = self.holding(cat, a);
         let deciding = cat.tick(&mut self.games[a]);
+        if self.holding(cat, a) != holds {
+            // A research or a lab started or landed here: the account's other planets may now wait, or not, from another second.
+            for s in self.planets_of(self.account[a]) {
+                if s == a || self.games[s].done { continue }
+                self.games[s].account_pending = self.account_holds(cat, s);
+                self.next[s] = cat.peek(&mut self.games[s]);
+            }
+        }
         self.share_research(cat, a);
         // Research is the account's and only its capital decides it (`share_research`): a colony's research queue that a
         // session woke goes back to sleep instead of letting the colony spend the account's next research (row 12).
@@ -478,6 +487,16 @@ impl World {
         }
         self.next[a] = cat.peek(&mut self.games[a]);
         deciding
+    }
+
+    /// Slot a's builds under way that can hold another planet of its account: researches and the objects that set research time.
+    fn holding(&self, cat: &Catalogue, a: usize) -> Vec<(f64, usize)> {
+        self.games[a].pending.iter().copied().filter(|&(_, k)| cat.objects[k].queue == 1 || cat.sets_research_time(k)).collect()
+    }
+
+    /// What the account's other planets hold that can hold slot a's builds.
+    fn account_holds(&self, cat: &Catalogue, a: usize) -> Vec<(f64, usize)> {
+        self.planets_of(self.account[a]).into_iter().filter(|&s| s != a).flat_map(|s| self.holding(cat, s)).collect()
     }
 
     /// The capital of slot a's account.
@@ -563,7 +582,6 @@ impl World {
         self.dark_matter.push(0);
         self.idle_next.push(NEVER);
         self.idle_now.push(false);
-        self.idle_stash.push(None);
         self.account.push(capital);
         self.colonies.push(Vec::new());
         self.next.push(0.0);
@@ -588,11 +606,6 @@ impl World {
     pub fn wait(&mut self, cat: &Catalogue, a: usize) {
         if self.idle_now[a] {
             self.idle_now[a] = false;
-            if let Some((t, res, books)) = self.idle_stash[a].take() {
-                self.games[a].t = t;
-                self.games[a].planet.res = res;
-                self.games[a].planet.books = books;
-            }
             self.pass_login(cat, a, self.idle_next[a]);
             self.next[a] = cat.peek(&mut self.games[a]);
             return;
@@ -634,13 +647,11 @@ impl World {
         Some(*table.max_fleets.get(level.min(table.max_fleets.len().checked_sub(1)?))? + self.rules[a].combat.rules.class_fleet_slots)
     }
 
-    /// Brings planet p's stock and shipyard to second t before a fleet touches it; nothing of p's own is due before t.
+    /// Brings planet p's stock to second t before a fleet touches it; nothing of p's own is due before t. The yard's
+    /// finished units wait for the planet's next load (`settle_yard`): the host hands them over only there.
     fn catch_up(&mut self, cat: &Catalogue, p: usize, t: f64) {
         if t <= self.games[p].t { return }
         cat.advance_to(&mut self.games[p], t, true);
-        if let Some(rules) = self.rules.get(p) {
-            rules.units.advance(&mut self.yards[p], t as i64);
-        }
         self.sync_units(cat, p);
         self.share_research(cat, p);
     }
@@ -679,9 +690,10 @@ impl World {
         let rules = Arc::clone(&self.rules[a]);
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
-        self.idle_stash[a] = None;
+        self.settle_yard(cat, a);
         let upgrading = self.games[a].pending.iter().find(|&&(_, k)| cat.objects[k].queue == 0).map(|&(_, k)| k);
         let queued = rules.units.order(&mut self.yards[a], &mut self.games[a].planet, u, amount, now as i64, upgrading);
+        self.games[a].planet.settle();
         self.unit_log.push((a, now, rules.units.units[u].id as u32, amount, queued));
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
@@ -741,7 +753,6 @@ impl World {
         let scale = (ships as f64 * hold / load.iter().sum::<f64>().max(1.0)).min(1.0);
         for r in &mut load { *r = (*r * scale).floor() }
         if self.dispatch(cat, colony, capital, Mission::Transport, &[(cargo_ship, ships)], load, 10.0).is_ok() {
-            self.idle_stash[capital] = None;
         }
         (need - ships - coming).max(0)
     }
@@ -758,7 +769,7 @@ impl World {
         let rules = Arc::clone(&self.rules[a]);
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
-        self.idle_stash[a] = None;
+        self.settle_yard(cat, a);
         if target == Some(a) { return Err("own planet") }
         let own = target.is_some_and(|t| self.account[t] == self.account[a]);
         if own && matches!(mission, Mission::Attack | Mission::Espionage | Mission::MoonDestroy) { return Err("own planet") }
@@ -799,10 +810,12 @@ impl World {
         let planet = &mut self.games[a].planet;
         for r in 0..3 { planet.res[r] = as_stored(planet.res[r] - cargo[r]) }
         planet.res[2] = as_stored(planet.res[2] - fuel);
+        planet.settle();
         // Row 23: the fuel is burnt at dispatch; the cargo is still the account's, in the hold, until it lands.
         planet.books.fuel += weighted([0.0, 0.0, fuel]);
         let holding = fleet::holding_seconds(hold_hours) as f64;
         self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy });
+        self.launch_log.push((self.fleets.last().expect("just sent").clone(), speed));
         self.next[a] = cat.peek(&mut self.games[a]);
         Ok(())
     }
@@ -825,6 +838,11 @@ impl World {
         }
         let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
         self.catch_up(cat, target, at);
+        // A fight or a scan loads the target first (`AttackMission`, `EspionageMission`, `MoonDestructionMission`); a delivery does not.
+        if matches!(self.fleets[f].mission, Mission::Attack | Mission::Espionage | Mission::MoonDestroy) {
+            self.settle_yard(cat, target);
+            self.games[target].planet.settle();
+        }
         let mut outcome = Outcome::Done;
         let mut gained = [0.0; 3];
         match self.fleets[f].mission {
@@ -833,7 +851,7 @@ impl World {
                 let mut cargo = std::mem::take(&mut self.fleets[f].cargo);
                 let refund = self.fleets[f].fuel / 2.0;
                 cargo[2] += refund;
-                for r in 0..3 { self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + cargo[r]) }
+                self.games[target].planet.deliver(cargo);
                 // Row 23: the half fuel comes back into the hold, and goods handed to another player leave these books
                 // (the same resources arrive in that account's, so loot_out is what left here, refund included there).
                 self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, refund]);
@@ -878,7 +896,6 @@ impl World {
         if fleet.mission == Mission::Missile { return Err("missiles cannot be recalled") }
         if now > fleet.arrive { return Err("already arrived") }
         // The refund is a flow, so an idle login's rollback must not undo it (as every other action at a login).
-        self.idle_stash[a] = None;
         // Row 23: the recall hands half the fuel back into the hold, where the stock counts it again.
         self.games[fleet.owner].planet.books.fuel -= weighted([0.0, 0.0, (fleet.fuel / 2.0).floor()]);
         fleet.cargo[2] += (fleet.fuel / 2.0).floor();
@@ -896,7 +913,6 @@ impl World {
     /// it (production from satellites and the like) with it. False when the account's yard has no such unit.
     pub fn set_units(&mut self, cat: &Catalogue, a: usize, id: u32, amount: u64) -> bool {
         let Some(u) = self.rules[a].units.index(id as i64) else { return false };
-        self.idle_stash[a] = None;
         self.yards[a].counts[u] = amount;
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
@@ -1000,7 +1016,7 @@ impl World {
         // the host gives a colony; the cargo was already the account's, flying).
         self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, self.fleets[f].fuel / 2.0]);
         brought[2] += self.fleets[f].fuel / 2.0;
-        for r in 0..3 { self.games[slot].planet.res[r] = as_stored(self.games[slot].planet.res[r] + brought[r]) }
+        self.games[slot].planet.deliver(brought);
         self.next[slot] = cat.peek(&mut self.games[slot]);
         let ship = table.map_or(0, |t| t.ship);
         let fleet = &mut self.fleets[f];
@@ -1037,7 +1053,7 @@ impl World {
         for &(id, amount) in ships {
             self.yards[p].counts[rules.units.index(id as i64).unwrap()] += amount as u64;
         }
-        for r in 0..3 { self.games[p].planet.res[r] = as_stored(self.games[p].planet.res[r] + cargo[r]) }
+        self.games[p].planet.deliver(cargo);
         self.next[p] = cat.peek(&mut self.games[p]);
     }
 
@@ -1125,6 +1141,7 @@ impl World {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
         }
+        self.games[target].planet.settle();
         if outcome.moon_created && !self.moons[target] { self.raise_moon(target, outcome.debris.iter().sum()) }
         let owner = self.fleets[f].owner;
         self.fleets[f].cargo = outcome.cargo.map(|r| r as f64);
@@ -1271,7 +1288,8 @@ mod tests {
             for (x, y) in world_game.history.iter().zip(&alone.history) {
                 assert_eq!((x.0, x.1, x.2), (y.0, y.1, y.2), "account {a}: build differs");
             }
-            assert_eq!(world_game.planet.res, alone.planet.res, "account {a}: final stock");
+            // An idle login settles the planet, so accrual runs in finer steps: the same stock up to float rounding.
+            assert!((0..3).all(|r| (world_game.planet.res[r] - alone.planet.res[r]).abs() < 1e-6), "account {a}: final stock {:?} {:?}", world_game.planet.res, alone.planet.res);
         }
         }
     }
@@ -1534,8 +1552,8 @@ mod tests {
         assert!(home.1 > 0.0, "the account ended with nothing");
     }
 
-    /// A recall at an idle login is a flow like any other action there: the login's rollback keeps it, so the stock and
-    /// the books still reconcile (e73b: the rollback dropped the refund's booking and left the fuel in the hold).
+    /// A recall at an idle login is a flow like any other action there, so the stock and the books still reconcile
+    /// (e73b).
     #[test]
     fn a_recall_at_an_idle_login_keeps_the_books_balanced() {
         let Some((cat, mut world, _)) = pair(40.0) else { return eprintln!("no u1 catalogues; skipped") };
@@ -1546,7 +1564,6 @@ mod tests {
         let gap = |w: &World| w.stock(0) - w.books(0).net();
         let before = gap(&world);
         // An idle login of the sender while the fleet is still on its way out.
-        world.idle_stash[0] = Some((world.games[0].t, world.games[0].planet.res, world.games[0].planet.books));
         world.idle_now[0] = true;
         world.recall(0, 0).unwrap();
         world.wait(&cat, 0);
@@ -2043,6 +2060,7 @@ mod tests {
                     world.yards[a].counts[u] = amount as u64;
                 }
                 world.games[a].planet.res = planet.resources;
+                world.games[a].planet.settle();
                 world.games[a].t = case.dispatch.departure.unwrap_or(0.0);
                 // The login clock walks second by second from its last entry, so it starts where the case does.
                 world.games[a].login_times = vec![world.games[a].t];
@@ -2138,6 +2156,9 @@ mod tests {
                 world.games[1].planet.res = before.resources;
                 world.games[1].t = arrival.time;
             }
+            // The case drawer loads the target's page at the arrival (`updatedState`), which writes its stock.
+            world.catch_up(cat, 1, arrival.time);
+            world.games[1].planet.settle();
             run_until(cat, &mut world, arrival.time);
             if let Some(spy) = &arrival.espionage {
                 spied(cat, spy, &world, index);
@@ -2169,6 +2190,8 @@ mod tests {
             let home = world.fleets.iter().find(|f| f.owner == 0).expect("the fleet comes home");
             assert_eq!((home.arrive, home.home), (back.departure, back.arrival), "case {index}: the flight home");
             let Some(done) = &case.back else { return Some(true) };
+            world.catch_up(cat, 0, done.time);
+            world.games[0].planet.settle();
             run_until(cat, &mut world, done.time);
             stock(done.origin_after.as_ref(), &world, 0, index, "back home");
             Some(true)

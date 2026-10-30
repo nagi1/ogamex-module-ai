@@ -3,7 +3,8 @@
     .venv-rl/bin/python rl/scripts/world_parity.py storage/rl/ogsim/w14/replay-7d-s1.json
 
 A step differs when the host's stock before it differs from the simulator's by more than a resource unit, a
-building or research takes other seconds, or the yard queued another amount. The first difference of each planet
+building or research takes other seconds, the yard queued another amount, a fleet flies other seconds or burns other
+fuel, or a fleet event ends otherwise. The first difference of each planet
 is printed, because everything after it inherits it.
 """
 import json
@@ -11,12 +12,21 @@ import sys
 
 
 def first_gap(step: dict) -> str | None:
-    if step.get("queue") == "touch":
-        return None
     if step.get("sim_stock") is not None and step.get("host_stock") is not None:
         gaps = [abs(a - b) for a, b in zip(step["sim_stock"], step["host_stock"])]
         if max(gaps) > 1.0:
             return f"stock sim {[round(x) for x in step['sim_stock']]} host {[round(x) for x in step['host_stock']]}"
+    if step.get("queue") == "touch":
+        return None
+    if step.get("host_refusal"):
+        return f"the host refused: {step['host_refusal']}"
+    if step.get("queue") == "launch":
+        sim, host = (step["sim_arrive"], step["sim_fuel"]), (step["host_arrive"], step["host_fuel"])
+        return None if sim == host else f"flight and fuel sim {sim} host {host}"
+    if step.get("queue") in ("arrive", "return"):
+        if step["sim_outcome"] != step["host_outcome"]:
+            return f"outcome sim {step['sim_outcome']} host {step['host_outcome']}"
+        return None if step["host_at"] == int(step["start"]) else f"lands at sim {step['start']} host {step['host_at']}"
     if step.get("queue") == "units":
         return None if step["sim_queued"] == step["host_queued"] else f"queued sim {step['sim_queued']} host {step['host_queued']}"
     if step.get("host_seconds") is None:
@@ -26,6 +36,8 @@ def first_gap(step: dict) -> str | None:
 
 def final_gaps(planet: dict) -> list[str]:
     sim, host = planet["sim_final"], planet["host_final"]
+    if host is None:
+        return ["the host has no such planet"]
     out = []
     stock = [abs(a - b) for a, b in zip(sim["stock"], host["stock"])]
     if max(stock) > 1.0:
@@ -46,10 +58,10 @@ def main(path: str) -> int:
         finals = final_gaps(planet)
         if gap or finals:
             differ += 1
-            print(f"planet {planet['planet_id']}:")
+            print(f"planet {planet['planet_id']} at {planet.get('coord')}:")
             if gap:
                 i, s, g = gap
-                print(f"  step {i} of {len(planet['steps'])} at {s['start']} ({s.get('queue', 'building')} {s['id']}): {g}")
+                print(f"  step {i} of {len(planet['steps'])} at {s['start']} ({s.get('queue', 'building')} {s.get('id', s.get('mission', ''))}): {g}")
             for f in finals:
                 print(f"  {f}")
     print(f"{len(planets)} planets, {steps} steps, {differ} planets differ")

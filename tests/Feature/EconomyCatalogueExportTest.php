@@ -2,6 +2,7 @@
 
 use Modules\AI\Actions\ExportAiEconomyCatalogueAction;
 use Modules\AI\Actions\ReplayAiEconomyScheduleAction;
+use Modules\AI\Actions\ReplayAiWorldAction;
 use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
 use OGame\Enums\CharacterClass;
 use OGame\Factories\PlanetServiceFactory;
@@ -238,6 +239,33 @@ test('a replayed yard order reports what the host queued, and nothing while an o
     expect($placed['steps'][0]['host_queued'])->toBe(3)
         ->and($refused['steps'][0]['host_seconds'])->not->toBeNull()
         ->and($refused['steps'][1]['host_queued'])->toBe(0);
+});
+
+test('a replayed account sends its colony ship, founds the colony with the simulator\'s draw and builds on it', function (): void {
+    // The test account holds two planets already.
+    $this->playerSetResearchLevel('astrophysics', 3);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddResources(new Resources(0, 0, 100_000));
+    $home = $this->planetService->getPlanetCoordinates();
+    $to = $this->getNearbyEmptyCoordinate();
+    $mine = ObjectService::getObjectByMachineName('metal_mine');
+    $ship = ObjectService::getObjectByMachineName('colony_ship');
+    $capital = ['planet_id' => $this->planetService->getPlanetId(), 'account' => $this->planetService->getPlanetId(), 'coord' => [$home->galaxy, $home->system, $home->position], 'site' => null, 'final' => [], 'steps' => [
+        ['t' => 0.0, 'queue' => 'launch', 'mission' => 7, 'to' => [$to->galaxy, $to->system, $to->position], 'ships' => [[$ship->id, 1]], 'cargo' => [0, 0, 0], 'speed' => 10.0, 'fuel' => 0, 'arrive' => 1.0],
+        ['t' => 100_000.0, 'queue' => 'arrive', 'departed' => 0.0, 'outcome' => 'Done'],
+    ]];
+    $colony = ['planet_id' => null, 'account' => $this->planetService->getPlanetId(), 'coord' => [$to->galaxy, $to->system, $to->position], 'site' => ['temp_max' => 37, 'field_max' => 171], 'final' => [], 'steps' => [
+        ['t' => 100_100.0, 'queue' => 'building', 'id' => $mine->id, 'end' => 100_200.0, 'stock' => [0, 0, 0]],
+    ]];
+
+    [$home, $founded] = app(ReplayAiWorldAction::class)->handle([$capital, $colony], 100_300, []);
+
+    $planet = Planet::query()->find($founded['planet_id']);
+    expect($home['steps'][0]['host_refusal'])->toBeNull()
+        ->and($home['steps'][1]['host_outcome'])->toBe('Done')
+        ->and([$planet->temp_max, $planet->temp_min, $planet->field_max])->toBe([37, -3, 171])
+        ->and($founded['steps'][0]['host_seconds'])->not->toBeNull()
+        ->and($founded['host_final']['levels'][$mine->id])->toBe(1);
 });
 
 test('a research decision step reports research candidate features with no production columns and the player\'s level', function (): void {

@@ -29,12 +29,11 @@ class ReplayAiEconomyScheduleAction
      * @param  list<int>  $objectIds  the catalogue's objects in its order; a step with a `decision` also reports the encoder's features then
      * @param  list<int>  $researchObjectIds  the catalogue's researches in its order, offered at a research step's `decision`
      * @param  list<int>  $yardBlockedBy  objects whose upgrade makes the shipyard page refuse an order
-     * @return array{steps: list<array<string, mixed>>, final: array{stock: list<float>, levels: array<int, int>}, names: array{state: list<string>, candidate: list<string>}}
+     * @return array{steps: list<array<string, mixed>>, final: array{stock: list<float>, levels: array<int, int>, units: array<int, int>}, names: array{state: list<string>, candidate: list<string>}}
      */
     public function handle(PlanetService $planet, array $steps, int $horizonSeconds, array $objectIds = [], array $researchObjectIds = [], array $yardBlockedBy = []): array
     {
         $origin = $planet->getUpdatedAt()->timestamp;
-        $queue = app(BuildingQueueService::class);
         $rows = [];
         $features = [];
         // A queue can decide while another queue's pick is still saving up, so decisions and starts are replayed in clock order.
@@ -46,46 +45,72 @@ class ReplayAiEconomyScheduleAction
 
                 continue;
             }
-            $this->at($planet, $origin + (int) $step['start']);
-            if (($step['queue'] ?? 'building') === 'touch') {
-                // W14: a login that started nothing still loads the page, which settles the planet.
-                continue;
-            }
-            $stock = $this->stock($planet);
-            if (($step['queue'] ?? 'building') === 'units') {
-                // W14: a yard order is compared by what the host queued, not by a duration.
-                $rows[$index] = ['id' => (int) $step['id'], 'start' => (int) $step['start'], 'queue' => 'units', 'sim_stock' => $step['stock'] ?? null,
-                    'host_stock' => $stock, 'sim_queued' => (int) $step['queued'], 'host_queued' => $this->order($planet, $step, $yardBlockedBy)];
-
-                continue;
-            }
-            $refusal = null;
-            try {
-                $duration = $this->enqueue($planet, $queue, $step);
-            } catch (Exception $refused) {
-                // The host refusing a start is a difference to report, not a reason to stop the replay.
-                [$duration, $refusal] = [null, $refused->getMessage()];
-            }
-            $rows[$index] = [
-                'id' => (int) $step['id'],
-                'start' => (int) $step['start'],
-                'sim_stock' => $step['stock'],
-                'host_stock' => $stock,
-                'sim_seconds' => (int) $step['end'] - (int) $step['start'],
-                'host_seconds' => $duration,
-                'host_features' => null,
-                'sim_state' => $step['sim_state'] ?? null,
-                'sim_cands' => $step['sim_cands'] ?? null,
-                'sim_legal' => $step['sim_legal'] ?? null,
-                'host_refusal' => $refusal,
-            ];
+            $rows[$index] = $this->step($planet, $step, $origin, $yardBlockedBy);
         }
         ksort($rows);
         foreach ($rows as $index => $row) {
             $rows[$index]['host_features'] = $features[$index] ?? null;
         }
         $rows = array_values($rows);
-        $this->at($planet, $origin + $horizonSeconds);
+
+        return [
+            'steps' => $rows,
+            'final' => $this->final($planet, $origin + $horizonSeconds),
+            'names' => ['state' => EconomyChoiceEncoder::stateNames(), 'candidate' => EconomyChoiceEncoder::candidateNames()],
+        ];
+    }
+
+    /**
+     * Plays one start, yard order or page load at its second and returns what both sides had.
+     *
+     * @param  array<string, mixed>  $step
+     * @param  list<int>  $yardBlockedBy
+     * @return array<string, mixed>
+     */
+    public function step(PlanetService $planet, array $step, int $origin, array $yardBlockedBy): array
+    {
+        $this->at($planet, $origin + (int) $step['start']);
+        $stock = $this->stock($planet);
+        if (($step['queue'] ?? 'building') === 'touch') {
+            // W14: a login that started nothing still loads the page, which settles the planet; its stock is compared.
+            return ['start' => (int) $step['start'], 'queue' => 'touch', 'sim_stock' => $step['stock'] ?? null, 'host_stock' => $stock];
+        }
+        if (($step['queue'] ?? 'building') === 'units') {
+            // W14: a yard order is compared by what the host queued, not by a duration.
+            return ['id' => (int) $step['id'], 'start' => (int) $step['start'], 'queue' => 'units', 'sim_stock' => $step['stock'] ?? null,
+                'host_stock' => $stock, 'sim_queued' => (int) $step['queued'], 'host_queued' => $this->order($planet, $step, $yardBlockedBy)];
+        }
+        $refusal = null;
+        try {
+            $duration = $this->enqueue($planet, app(BuildingQueueService::class), $step);
+        } catch (Exception $refused) {
+            // The host refusing a start is a difference to report, not a reason to stop the replay.
+            [$duration, $refusal] = [null, $refused->getMessage()];
+        }
+
+        return [
+            'id' => (int) $step['id'],
+            'start' => (int) $step['start'],
+            'sim_stock' => $step['stock'],
+            'host_stock' => $stock,
+            'sim_seconds' => (int) $step['end'] - (int) $step['start'],
+            'host_seconds' => $duration,
+            'host_features' => null,
+            'sim_state' => $step['sim_state'] ?? null,
+            'sim_cands' => $step['sim_cands'] ?? null,
+            'sim_legal' => $step['sim_legal'] ?? null,
+            'host_refusal' => $refusal,
+        ];
+    }
+
+    /**
+     * The planet's stock, levels and units at the timestamp.
+     *
+     * @return array{stock: list<float>, levels: array<int, int>, units: array<int, int>}
+     */
+    public function final(PlanetService $planet, int $timestamp): array
+    {
+        $this->at($planet, $timestamp);
         $levels = [];
         foreach ([...ObjectService::getBuildingObjects(), ...ObjectService::getStationObjects()] as $object) {
             $levels[$object->id] = $planet->getObjectLevel($object->machine_name);
@@ -93,17 +118,12 @@ class ReplayAiEconomyScheduleAction
         foreach (ObjectService::getResearchObjects() as $object) {
             $levels[$object->id] = $planet->getPlayer()->getResearchLevel($object->machine_name);
         }
-
         $units = [];
         foreach ([...ObjectService::getShipObjects(), ...ObjectService::getDefenseObjects()] as $object) {
             $units[$object->id] = $planet->getObjectAmount($object->machine_name);
         }
 
-        return [
-            'steps' => $rows,
-            'final' => ['stock' => $this->stock($planet), 'levels' => $levels, 'units' => $units],
-            'names' => ['state' => EconomyChoiceEncoder::stateNames(), 'candidate' => EconomyChoiceEncoder::candidateNames()],
-        ];
+        return ['stock' => $this->stock($planet), 'levels' => $levels, 'units' => $units];
     }
 
     /**
@@ -187,7 +207,7 @@ class ReplayAiEconomyScheduleAction
     }
 
     /** Moves the host clock to the timestamp, stopping at each research that finishes on the way so its level counts from then on. */
-    private function at(PlanetService $planet, int $timestamp): void
+    public function at(PlanetService $planet, int $timestamp): void
     {
         while (($end = $this->nextResearchEnd($planet, $timestamp)) !== null) {
             $this->settle($planet, $end);

@@ -299,6 +299,28 @@ pub struct Planet {
     pub field_max: u32,
     /// The levels of the account's other planets, which the research network reads; the world keeps them, empty alone.
     pub peers: std::sync::Arc<Vec<Vec<u32>>>,
+    /// W14: the stock the host last wrote, at the planet's last page load or spend, plus what fleets delivered since.
+    pub settled: [f64; 3],
+}
+
+impl Planet {
+    /// A page load or a spend: the host writes the stock as it stands.
+    pub fn settle(&mut self) {
+        self.settled = self.res;
+    }
+
+    /// A fleet's delivery. The host adds it to the stock it last wrote and, at the next page load, lets production in
+    /// only up to the store (`PlanetService::updateResources`): a delivery near the cap takes the room production had.
+    pub fn deliver(&mut self, add: [f64; 3]) {
+        for r in 0..3 {
+            let written = as_stored(self.settled[r] + add[r]);
+            let held = if written >= self.cap[r] { written } else { as_stored((self.res[r] + add[r]).min(self.cap[r])) };
+            // Row 23: the production the delivery took the room of was booked as made; it spilled.
+            self.books.wasted += WEIGHTS[r] * (self.res[r] + add[r] - held);
+            self.res[r] = held;
+            self.settled[r] = written;
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -333,6 +355,8 @@ pub struct Game {
     pub sleep_hours: f64,
     /// (end second, object index) of the builds under way, earliest first; the level lands when the clock reaches it.
     pub pending: Vec<(f64, usize)>,
+    /// The builds under way on the account's other planets that can hold this one's (`held_until`); the world keeps it.
+    pub account_pending: Vec<(f64, usize)>,
     /// (start second, object index, end second, stock before paying) of every build, for traces and the host replay.
     pub history: Vec<(f64, usize, f64, [f64; 3])>,
     /// With tracing on: (decision second, state features, candidate features of every object, legal flags, the object chosen) per build, taken the
@@ -458,13 +482,13 @@ impl Catalogue {
     /// A game at second zero whose clock has not moved yet, for a world that moves it with `tick`.
     pub fn new_paused_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
         let c = &self.planets[config];
-        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default(), field_max: c.field_max, peers: Default::default() };
+        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default(), field_max: c.field_max, peers: Default::default(), settled: c.resources };
         self.refresh(&mut planet);
         // A night between six and eight hours (the host flags a dark period under six), starting at a drawn hour.
         let mut seed = login_seed | 1;
         let sleep_start = (next_random(&mut seed) % 24) as f64;
         let sleep_hours = 6.0 + (next_random(&mut seed) % 3) as f64;
-        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, in_world: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, sleep_hours, pending: Vec::new(), history: Vec::new(), trace: None }
+        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, in_world: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, sleep_hours, pending: Vec::new(), account_pending: Vec::new(), history: Vec::new(), trace: None }
     }
 
     /// The host's production row of object k at `level` under the planet's research levels and units, if k produces
@@ -771,14 +795,20 @@ impl Catalogue {
     /// W14: when the host would let object k start again, if it may not start now. The host refuses to upgrade the object
     /// that sets research time while a research runs, and to start a research while that object upgrades
     /// (`BuildingQueueService::start`, `ResearchQueueService::start`); which object that is, the research time modifiers
-    /// say (gate 1), as the yard's own block reads the unit time modifiers.
+    /// say (gate 1), as the yard's own block reads the unit time modifiers. Both checks are the player's, so the account's
+    /// other planets count (`PlayerService::isResearching`, `isBuildingObject`).
     pub fn held_until(&self, game: &Game, k: usize) -> Option<f64> {
-        let lab = |j: usize| self.modifiers[1].iter().any(|&(m, _)| m == j);
         let blocks = |j: usize| match self.objects[k].queue {
-            0 => lab(k) && self.objects[j].queue == 1,
-            _ => lab(j),
+            0 => self.sets_research_time(k) && self.objects[j].queue == 1,
+            _ => self.sets_research_time(j),
         };
-        game.pending.iter().filter(|&&(_, j)| blocks(j)).map(|&(end, _)| end).reduce(f64::max)
+        game.pending.iter().chain(game.account_pending.iter().filter(|p| p.0 > game.t))
+            .filter(|&&(_, j)| blocks(j)).map(|&(end, _)| end).reduce(f64::max)
+    }
+
+    /// Whether object k is one the research time modifiers read: a build of it or a research holds the other.
+    pub fn sets_research_time(&self, k: usize) -> bool {
+        self.modifiers[1].iter().any(|&(m, _)| m == k)
     }
 
     /// Runs the clock until a queue without a plan has something it can build and must decide (it becomes `game.queue`),
@@ -881,6 +911,7 @@ impl Catalogue {
         let stock = game.planet.res;
         let price = self.objects[k].price[game.planet.levels[k] as usize];
         for r in 0..3 { game.planet.res[r] -= price[r] }
+        game.planet.settle();
         // Row 23: a building and a research are paid out of the stock, each in its own field.
         let paid = weighted(price);
         match q { 0 => game.planet.books.spent_build += paid, _ => game.planet.books.spent_research += paid }
@@ -1138,6 +1169,11 @@ mod tests {
         assert_eq!(cat.held_until(&game, other), None, "another building does not");
         game.pending = vec![(700.0, lab)];
         assert_eq!(cat.held_until(&game, research), Some(700.0), "a research waits for the lab");
+        game.pending.clear();
+        game.account_pending = vec![(900.0, research)];
+        assert_eq!(cat.held_until(&game, lab), Some(900.0), "a colony's lab waits for the account's research");
+        game.t = 900.0;
+        assert_eq!(cat.held_until(&game, lab), None, "and not once it has landed");
     }
 
     #[test]

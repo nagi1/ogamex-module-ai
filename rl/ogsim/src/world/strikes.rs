@@ -38,7 +38,6 @@ impl World {
         let strike = rules.strike.as_ref().ok_or("no strike tables")?;
         let now = self.games[a].t;
         self.catch_up(cat, a, now);
-        self.idle_stash[a] = None;
         let u = rules.units.index(strike.missile as i64).ok_or("unknown unit")?;
         let coords = |p: usize| [self.coords[p].galaxy, self.coords[p].system, self.coords[p].position];
         let order = strike::Launch {
