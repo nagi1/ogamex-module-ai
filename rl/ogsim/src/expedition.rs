@@ -95,12 +95,37 @@ impl Mt19937 {
     }
 }
 
+impl Mt19937 {
+    fn word64(&mut self) -> u64 {
+        let low = self.next_u32() as u64;
+        low | (self.next_u32() as u64) << 32
+    }
+
+    fn range64(&mut self, span: u64) -> u64 {
+        let mut word = self.word64();
+        if span == u64::MAX {
+            return word;
+        }
+        let range = span + 1;
+        if range & (range - 1) == 0 {
+            return word & span;
+        }
+        let limit = u64::MAX - (u64::MAX % range) - 1;
+        while word > limit {
+            word = self.word64();
+        }
+        word % range
+    }
+}
+
 impl Draws for Mt19937 {
     /// `php_random_range32`: one 32-bit word, masked for a power-of-two range and re-drawn above the unbiased limit
-    /// otherwise. Ranges wider than 32 bits are not drawn by any expedition rule.
+    /// otherwise. A wider range is `php_random_range64`'s two words, the first low.
     fn int(&mut self, min: i64, max: i64) -> i64 {
         let span = (max - min) as u64;
-        assert!(span <= u32::MAX as u64, "range {min}..{max} is wider than 32 bits");
+        if span > u32::MAX as u64 {
+            return min.wrapping_add(self.range64(span) as i64);
+        }
         let mut word = self.next_u32();
         if span == u32::MAX as u64 {
             return min + word as i64;
@@ -599,7 +624,8 @@ pub fn arrive_with(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMa
             if let Some(engine) = recorded {
                 return Found { rolled, ..settle_fight(rules, catalogue, sent, enemy, engine) };
             }
-            let seed = draws.int(1, i32::MAX as i64) as u64;
+            // BattleEngine::simulateBattle draws its seed from the mission's stream.
+            let seed = draws.int(0, i64::MAX) as u64;
             let ours: Vec<(u32, i64)> = sent.fleet.iter().map(|(&id, &n)| (id, n)).collect();
             let theirs: Vec<(u32, i64)> = enemy.fleet.iter().map(|(&id, &n)| (id, n)).collect();
             let tech = tech_map(rules, enemy.tech);
@@ -882,5 +908,9 @@ mod tests {
         let mut list = [0u32, 1, 2, 3, 4, 5, 6, 7, 8];
         Mt19937::new(5).shuffle(&mut list);
         assert_eq!(list, [0, 5, 4, 7, 1, 3, 2, 6, 8], "PHP's Randomizer::shuffleArray on the same seed");
+        // A battle's seed: PHP's getInt(0, PHP_INT_MAX) on these seeds.
+        for (seed, battle) in [(1, 9_171_440_914_760_070_181), (7, 4_193_665_733_827_817_647), (123_456, 275_101_013_860_489_281)] {
+            assert_eq!(Mt19937::new(seed).int(0, i64::MAX), battle);
+        }
     }
 }

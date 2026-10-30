@@ -16,7 +16,7 @@
 //!   `combat::run_engine(&combat::engine_input(..))`), the moon's diameter and the two rolls in 1..=100, and answers
 //!   with the fight's loot and debris, what is left standing on the moon, whether it was attempted and destroyed, and the
 //!   fleet that flies home (`None`: nothing flies). The return carries the mission's original cargo, not the loot.
-use crate::combat::{defender_units, repair_rate, settle_in, Battle, CombatCatalogue, EngineResult, Units};
+use crate::combat::{defender_units, dice, repair_rate, roll_repairs, settle_in, Battle, CombatCatalogue, EngineResult, Units};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -235,69 +235,6 @@ pub fn combatants(rules: &StrikeRules, planet: &[(u32, i64)]) -> Vec<(u32, i64)>
     planet.iter().filter(|(id, _)| *id != rules.missile && *id != rules.interceptor).cloned().collect()
 }
 
-/// PHP's `mt_srand` / `mt_rand(1, 100)` (MT19937, 7.1+ range rule). `DefenseRepairService` seeds it with the fight's seed
-/// xor 0x9E3779B9, so a moon destruction's repairs (which set the debris) replay the host's exactly.
-struct PhpMt {
-    state: [u32; 624],
-    next: usize,
-}
-
-impl PhpMt {
-    fn new(seed: u64) -> PhpMt {
-        let mut state = [0u32; 624];
-        state[0] = seed as u32;
-        for i in 1..624 {
-            state[i] = 1_812_433_253u32.wrapping_mul(state[i - 1] ^ (state[i - 1] >> 30)).wrapping_add(i as u32);
-        }
-        PhpMt { state, next: 624 }
-    }
-
-    fn draw(&mut self) -> u32 {
-        if self.next >= 624 {
-            for i in 0..624 {
-                let mixed = (self.state[i] & 0x8000_0000) | (self.state[(i + 1) % 624] & 0x7fff_ffff);
-                let twisted = (mixed >> 1) ^ if mixed & 1 == 1 { 0x9908_b0df } else { 0 };
-                self.state[i] = self.state[(i + 397) % 624] ^ twisted;
-            }
-            self.next = 0;
-        }
-        let mut y = self.state[self.next];
-        self.next += 1;
-        y ^= y >> 11;
-        y ^= (y << 7) & 0x9d2c_5680;
-        y ^= (y << 15) & 0xefc6_0000;
-        y ^ (y >> 18)
-    }
-
-    /// `mt_rand(1, 100)`: the range rule rejects the top sliver of the 32-bit space so every value is equally likely.
-    fn percent(&mut self) -> i64 {
-        let range = 100u32;
-        let limit = u32::MAX - (u32::MAX % range) - 1;
-        let mut value = self.draw();
-        while value > limit {
-            value = self.draw();
-        }
-        (value % range) as i64 + 1
-    }
-}
-
-/// `DefenseRepairService::calculateRepairedDefenses` as `BattleEngine::simulateBattle` calls it, seeded from the fight.
-fn repairs(defender: &CombatCatalogue, lost: &Units, engineer: bool, seed: u64) -> Units {
-    let rate = repair_rate(defender, engineer);
-    let mut dice = PhpMt::new(seed ^ 0x9E37_79B9);
-    let mut repaired = Units::new();
-    for (&id, &n) in lost {
-        if !defender.is_defense(id) || rate == 0 {
-            continue;
-        }
-        let back = if rate == 100 { n } else { (0..n).filter(|_| dice.percent() <= rate).count() as i64 };
-        if back > 0 {
-            repaired.insert(id, back);
-        }
-    }
-    repaired
-}
-
 /// The chance in percent that the moon goes and that the whole destroyer fleet is lost, as the mission rolls against them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Chances {
@@ -356,7 +293,7 @@ pub fn resolve_moon_destruction(rules: &StrikeRules, attacker: &CombatCatalogue,
     let battle = &Battle { defender: &planet, ..*battle };
     let fought = defender_units(defender, battle);
     let lost: Units = fought.iter().map(|(&id, &n)| (id, n - engine.defender_left.get(&id).copied().unwrap_or(0))).filter(|&(_, n)| n > 0).collect();
-    let repaired = repairs(defender, &lost, battle.defender_engineer, battle.seed);
+    let repaired = roll_repairs(defender, &lost, battle.defender_engineer, &mut dice(battle.seed, repair_rate(defender, battle.defender_engineer)));
     let rounds = engine.rounds;
     let attacker_left = engine.attacker_left.clone();
     let defender_left = engine.defender_left.clone();

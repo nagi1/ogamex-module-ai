@@ -60,7 +60,7 @@ impl World {
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
         let arrive = now + flight.seconds as f64;
-        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon });
+        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: usize::MAX });
         Ok(())
     }
 
@@ -129,7 +129,8 @@ impl World {
             flight_seconds: flight,
             holding_seconds: fleet.holding as i64,
         };
-        let (seed, engine) = self.recorded_expedition.take().unwrap_or_else(|| ((next_random(&mut self.rng) >> 32) as u32, None));
+        let (seed, engine) = self.recorded_expedition.take().unwrap_or((self.dice, None));
+        self.dice = seed;
         let found = expedition::arrive_with(table, &rules.combat, &research, &sent, &mut expedition::Mt19937::new(seed), engine);
         let capital = self.account[a];
         self.dark_matter[capital] += found.dark_matter;
@@ -187,8 +188,7 @@ impl World {
         let ships = self.fleets[f].ships.clone();
         let mut cargo = self.fleets[f].cargo;
         cargo[2] += self.fleets[f].fuel / 2.0;
-        let seed = self.rng;
-        self.rng = next_random(&mut self.rng);
+        let seed = self.stream.int(0, i64::MAX) as u64;
         let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, defender_stock: hold.stock, defender_engineer: false, moon_exists: true, seed };
         let engine = match self.recorded.take() {
             Some(fight) => fight.engine,
@@ -198,7 +198,7 @@ impl World {
             }
         };
         let roll_max = strike.moon_destruction.roll_max.max(1) as u64;
-        let rolls = self.recorded_rolls.take().unwrap_or_else(|| [0, 1].map(|_| 1 + (next_random(&mut self.rng) % roll_max) as i64));
+        let rolls = self.recorded_rolls.take().unwrap_or_else(|| [0, 1].map(|_| self.stream.int(1, roll_max as i64)));
         let result = strike::resolve_moon_destruction(strike, &attacker.combat, &defender.combat, &battle, engine, hold.diameter, rolls);
 
         for r in 0..3 { hold.stock[r] = as_stored(hold.stock[r] - result.loot[r] as f64) }
@@ -208,7 +208,7 @@ impl World {
             if id == strike.missile || id == strike.interceptor { continue }
             if held.iter().any(|s| s.0 == id) { hold.counts[u] = result.defender_left.get(&id).copied().unwrap_or(0) as u64 }
         }
-        for r in 0..3 { self.debris[target][r] += result.debris[r] }
+        for r in 0..3 { self.debris[target][r] += result.debris[r] as f64 }
         self.fields[target] = true;
         let fleet = self.fleets[f].clone();
         let lost: Vec<(u32, i64)> = ships.iter().map(|&(id, n)| (id, n - result.return_fleet.as_ref().and_then(|r| r.get(&id)).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();

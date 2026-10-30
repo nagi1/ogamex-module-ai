@@ -223,6 +223,7 @@ mod tests {
                     returning: false,
                     departed: 0.0,
                     holding: 0.0,
+                    id: usize::MAX,
                     priority: 0,
                     moon: false,
                 });

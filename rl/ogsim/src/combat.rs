@@ -28,6 +28,7 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
+use crate::expedition::{Draws, Mt19937};
 use crate::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 
@@ -368,26 +369,10 @@ pub struct Recorded {
     pub moon_roll: i64,
 }
 
-/// splitmix64: the simulator's own stream for the host's post-battle dice (repairs, moon), seeded from the fight.
-pub struct Dice(u64);
-
-impl Dice {
-    pub fn new(seed: u64) -> Dice {
-        Dice(seed ^ 0x9E37_79B9)
-    }
-
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
-    }
-
-    /// A whole number in 1..=100, as the host's `mt_rand(1, 100)`.
-    pub fn percent(&mut self) -> i64 {
-        ((self.next() >> 11) as f64 / (1u64 << 53) as f64 * 100.0) as i64 + 1
-    }
+/// PHP's global `mt_rand` after a fight: `BattleEngine` seeds it with the battle's seed and `DefenseRepairService`
+/// reseeds it with the seed xor 0x9E3779B9 whenever its rate is above zero; the moon roll draws next from it.
+pub fn dice(battle_seed: u64, repair_rate: i64) -> Mt19937 {
+    Mt19937::new((if repair_rate == 0 { battle_seed } else { battle_seed ^ 0x9E37_79B9 }) as u32)
 }
 
 /// The repair rate after the Engineer halves the losses (BattleEngine::simulateBattle).
@@ -399,14 +384,14 @@ pub fn repair_rate(catalogue: &CombatCatalogue, engineer: bool) -> i64 {
 
 /// DefenseRepairService::calculateRepairedDefenses: each destroyed defence comes back on a roll at the repair rate.
 /// The host's one-per-planet cap on a few defences needs no rule here: a planet never holds more than one of them.
-pub fn roll_repairs(catalogue: &CombatCatalogue, defender_lost: &Units, engineer: bool, dice: &mut Dice) -> Units {
+pub fn roll_repairs(catalogue: &CombatCatalogue, defender_lost: &Units, engineer: bool, dice: &mut Mt19937) -> Units {
     let rate = repair_rate(catalogue, engineer);
     let mut repaired = Units::new();
     for (&id, &lost) in defender_lost {
         if !catalogue.unit(id).defense || rate == 0 {
             continue;
         }
-        let back = if rate == 100 { lost } else { (0..lost).filter(|_| dice.percent() <= rate).count() as i64 };
+        let back = if rate == 100 { lost } else { (0..lost).filter(|_| dice.int(1, 100) <= rate).count() as i64 };
         if back > 0 {
             repaired.insert(id, back);
         }
@@ -569,10 +554,10 @@ pub fn fight(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Ba
 /// `fight`, settled as `settle_in` does.
 pub fn fight_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle, plunder: bool) -> Outcome {
     let engine = run_engine(&engine_input(attacker, defender, battle));
-    let mut dice = Dice::new(battle.seed);
+    let mut dice = dice(battle.seed, repair_rate(defender, battle.defender_engineer));
     let defender_lost = minus(&defender_units(defender, battle), &engine.defender_left);
     let repaired = roll_repairs(defender, &defender_lost, battle.defender_engineer, &mut dice);
-    let moon_roll = dice.percent();
+    let moon_roll = dice.int(1, 100);
     settle_in(attacker, defender, battle, engine, repaired, moon_roll, plunder)
 }
 

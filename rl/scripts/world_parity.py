@@ -24,8 +24,12 @@ def first_gap(step: dict) -> str | None:
         sim, host = (step["sim_arrive"], step["sim_fuel"]), (step["host_arrive"], step["host_fuel"])
         return None if sim == host else f"flight and fuel sim {sim} host {host}"
     if step.get("queue") in ("arrive", "return"):
-        if step["sim_outcome"] != step["host_outcome"]:
+        # The host records only whether a mission ran; what it found or won shows in the hold and the stock.
+        sim_outcome = "Cancelled" if step["sim_outcome"] == "Cancelled" else "Done"
+        if sim_outcome != step["host_outcome"]:
             return f"outcome sim {step['sim_outcome']} host {step['host_outcome']}"
+        if step.get("host_gained") is not None and max(abs(a - b) for a, b in zip(step["sim_gained"], step["host_gained"])) > 1.0:
+            return f"lands with sim {[round(x) for x in step['sim_gained']]} host {step['host_gained']}"
         return None if step["host_at"] == int(step["start"]) else f"lands at sim {step['start']} host {step['host_at']}"
     if step.get("queue") == "units":
         return None if step["sim_queued"] == step["host_queued"] else f"queued sim {step['sim_queued']} host {step['host_queued']}"

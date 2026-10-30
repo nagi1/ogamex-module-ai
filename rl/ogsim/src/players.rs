@@ -279,11 +279,11 @@ pub(crate) fn harvest_plan(w: &World, cat: &Catalogue, a: usize, target: usize) 
     let harvester = *rules.combat.missions.harvesters.get(&w.coords[target].position.to_string())?;
     let research = w.research(cat, a);
     let hold = rules.combat.capacity(&[(harvester, 1)].into_iter().collect(), &research).max(1);
-    let total = w.debris[target].iter().sum::<i64>();
-    let n = ((total as f64 / hold as f64).ceil() as i64).min(on_shelf(w, a, harvester));
+    let total = w.debris[target].iter().sum::<f64>();
+    let n = ((total / hold as f64).ceil() as i64).min(on_shelf(w, a, harvester));
     // Fuel is the dispatch's own refusal: a fleet the planet cannot fill the tanks for never leaves.
     let fuel = fleet::consumption(&rules.settings, &rules.fleet, &[(harvester, n)], &research, account_distance(w, a, target), 0, 10.0) as f64;
-    (w.fields[target] && total >= hold / 2 && n >= 1 && fuel <= w.games[a].planet.res[2]).then_some((harvester, n))
+    (w.fields[target] && total >= (hold / 2) as f64 && n >= 1 && fuel <= w.games[a].planet.res[2]).then_some((harvester, n))
 }
 
 /// Everything that flies going away for longer than `remaining` seconds: the nearest account whose round trip is
@@ -297,7 +297,10 @@ pub(crate) fn save_plan(w: &World, cat: &Catalogue, a: usize, remaining: f64) ->
     for speed in [1.0, 2.0, 5.0, 10.0] {
         for b in others_by_distance(w, a) {
             let away = 2 * fleet::flight_seconds(&rules.settings, Mission::Transport as u32, account_distance(w, a, b), slowest, speed);
-            if (away as f64) > remaining + 120.0 { return Some((b, ships, speed)) }
+            if (away as f64) <= remaining + 120.0 { continue }
+            // The hold flies empty, so the store must hold the fuel alone; a save without it fails, as a player's does.
+            let fuel = fleet::consumption(&rules.settings, &rules.fleet, &ships, &research, account_distance(w, a, b), 0, speed) as f64;
+            if fuel <= w.games[a].planet.res[2] { return Some((b, ships, speed)) }
         }
     }
     None
@@ -989,7 +992,7 @@ impl Raider {
         let already = w.fleets.iter().any(|f| f.owner == a && f.target == target && f.mission == Mission::Recycle);
         if already { return }
         let fuel = fleet::consumption(&rules.settings, &rules.fleet, &[(harvester, n)], &research, account_distance(w, a, target), 0, 10.0) as f64;
-        if weighted(field.map(|r| r as f64)).min((n * hold) as f64) < PAYS * WEIGHTS[2] * fuel { return }
+        if weighted(field).min((n * hold) as f64) < PAYS * WEIGHTS[2] * fuel { return }
         if send(w, cat, a, target, Mission::Recycle, &[(harvester, n)], 10.0, ledger).is_ok() { ledger.recycles += 1 }
     }
 }

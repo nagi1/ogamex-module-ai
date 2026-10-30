@@ -302,7 +302,7 @@ pub fn candidate_features(w: &mut World, cat: &Catalogue, a: usize, errand: Erra
     f[7] = f32::from(inactive);
     if let Some((harvester, n)) = harvest_plan(w, cat, a, target) {
         let hold = rules.combat.capacity(&[(harvester, 1)].into_iter().collect(), &research).max(1) * n;
-        let field = players::weighted(w.debris[target].map(|r| r as f64));
+        let field = players::weighted(w.debris[target]);
         f[8] = ln1p(field);
         f[9] = ratio(field, hold as f64);
     }
