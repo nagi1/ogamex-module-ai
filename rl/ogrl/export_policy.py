@@ -13,7 +13,7 @@ import torch
 
 def main() -> None:
     saved = torch.load(sys.argv[1], map_location="cpu", weights_only=False)
-    weights = {name: tensor.tolist() for name, tensor in saved["model"].items() if not name.startswith("value.")}
+    weights = {name: tensor.tolist() for name, tensor in saved["model"].items()}
     with open(sys.argv[2], "w") as out:
         json.dump(weights, out)
 

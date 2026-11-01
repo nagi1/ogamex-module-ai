@@ -91,31 +91,55 @@ impl Detector {
 
 /// `ogrl.model.CandidateScorer` played in Rust, from `ogrl.export_policy`'s weights: a season writes its own lines, so
 /// `hds.py` judges a model exactly as it judges the personas.
-pub struct Policy { norm: [Vec<f32>; 4], state_net: Vec<Layer>, cand_net: Layer, joint: Vec<Layer> }
+pub struct Policy { norm: [Vec<f32>; 4], state_net: Vec<Layer>, cand_net: Layer, joint: Vec<Layer>, value: Vec<Layer> }
 
 impl Policy {
     pub fn load(path: &str) -> Result<Self, String> {
-        let v = weights(path)?;
+        Self::parse(&weights(path)?)
+    }
+
+    pub fn parse(v: &serde_json::Value) -> Result<Self, String> {
         Ok(Policy {
             norm: [floats(&v["state_mean"]), floats(&v["state_std"]), floats(&v["cand_mean"]), floats(&v["cand_std"])],
-            state_net: vec![Layer::load(&v, "state_net.0")?, Layer::load(&v, "state_net.2")?],
-            cand_net: Layer::load(&v, "cand_net.0")?,
-            joint: vec![Layer::load(&v, "joint.0")?, Layer::load(&v, "joint.2")?, Layer::load(&v, "joint.4")?],
+            state_net: vec![Layer::load(v, "state_net.0")?, Layer::load(v, "state_net.2")?],
+            cand_net: Layer::load(v, "cand_net.0")?,
+            joint: vec![Layer::load(v, "joint.0")?, Layer::load(v, "joint.2")?, Layer::load(v, "joint.4")?],
+            value: vec![Layer::load(v, "value.0")?, Layer::load(v, "value.2")?],
         })
     }
 
-    /// The legal row with the highest score; `cands` is [K, C] flat.
-    pub fn best(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> usize {
+    /// The state's hidden layer and the score of every legal row; `cands` is [K, C] flat.
+    fn scores(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> (Vec<f32>, Vec<(usize, f32)>) {
         let scaled = |x: &[f32], mean: &[f32], std: &[f32]| x.iter().zip(mean).zip(std).map(|((v, m), s)| (v - m) / s).collect::<Vec<f32>>();
         let mut s = scaled(state, &self.norm[0], &self.norm[1]);
         for layer in &self.state_net { s = layer.apply(&s) }
-        let score = |row: usize| {
+        let rows = (0..legal.len()).filter(|&row| legal[row] > 0).map(|row| {
             let c = self.cand_net.apply(&scaled(&cands[row * LEARNER_CAND..(row + 1) * LEARNER_CAND], &self.norm[2], &self.norm[3]));
             let mut x: Vec<f32> = s.iter().chain(&c).copied().collect();
             for layer in &self.joint[..2] { x = layer.apply(&x) }
-            self.joint[2].output(&x)
-        };
-        (0..legal.len()).filter(|&row| legal[row] > 0).map(|row| (row, score(row))).max_by(|x, y| x.1.total_cmp(&y.1)).map_or(legal.len() - 1, |best| best.0)
+            (row, self.joint[2].output(&x))
+        }).collect();
+        (s, rows)
+    }
+
+    /// The legal row with the highest score.
+    pub fn best(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> usize {
+        self.scores(state, cands, legal).1.into_iter().max_by(|x, y| x.1.total_cmp(&y.1)).map_or(legal.len() - 1, |best| best.0)
+    }
+
+    /// A row drawn from the softmax over the legal rows, with its log-probability and the state's value.
+    pub fn sample(&self, state: &[f32], cands: &[f32], legal: &[u8], rng: &mut u64) -> (usize, f32, f32) {
+        let (s, rows) = self.scores(state, cands, legal);
+        let top = rows.iter().map(|r| r.1).fold(f32::NEG_INFINITY, f32::max);
+        let weights: Vec<f64> = rows.iter().map(|r| ((r.1 - top) as f64).exp()).collect();
+        let total: f64 = weights.iter().sum();
+        let mut draw = (next_random(rng) >> 11) as f64 / (1u64 << 53) as f64 * total;
+        let mut at = rows.len() - 1;
+        for (i, w) in weights.iter().enumerate() {
+            if draw < *w { at = i; break }
+            draw -= w;
+        }
+        (rows[at].0, (weights[at] / total).ln() as f32, self.value[1].output(&self.value[0].apply(&s)))
     }
 }
 

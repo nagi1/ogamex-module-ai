@@ -35,7 +35,8 @@ class CandidateScorer(nn.Module):
         joint = torch.cat([s.unsqueeze(1).expand(-1, c.shape[1], -1), c], dim=-1)
         logits = self.joint(joint).squeeze(-1)
         logits = logits.masked_fill(~mask, torch.finfo(logits.dtype).min)
-        return logits, self.value(s).squeeze(-1)
+        # The value reads the policy's state layers but never moves them: its large first losses flattened a cloned policy.
+        return logits, self.value(s.detach()).squeeze(-1)
 
 
 def parameter_count(model: nn.Module) -> int:

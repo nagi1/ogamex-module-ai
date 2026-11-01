@@ -69,7 +69,6 @@ from .model import CandidateScorer, parameter_count
 
 DATA = Path(__file__).resolve().parents[4] / "storage/rl/ogsim"
 KIND_NAMES = {0: "building", 1: "research", 2: "errand", 3: "building+research"}
-AGE_YEARS = 17  # the state column SeasonWorld writes the account's age in: the season discounts by game time
 # Columns of the shared per-actor statistics table.
 ST = {n: i for i, n in enumerate(("decisions", "shipped", "finished", "sim_hours", "wait_s", "env_s", "model_s", "book_s", "loop_s", "ctl_sum", "ctl_n", "rule_sum", "rule_n", "reward_abs"))}
 
@@ -117,13 +116,12 @@ def observe(env: "ogsim.VecWorld", dims: tuple[int, int, int]) -> tuple[np.ndarr
     return state, np.frombuffer(cands, dtype=np.float32).reshape(len(state), k, c_dim), np.frombuffer(legal, dtype=np.uint8).reshape(len(state), k)
 
 
-def gae(rewards: np.ndarray, values: np.ndarray, bootstrap: float, gamma: np.ndarray, lam: np.ndarray) -> np.ndarray:
-    """GAE along one stream of consecutive own decisions, with the discount of each step; `bootstrap` is V of the decision
-    after the last row (0 when the account ended, its own V when the season's horizon cut it)."""
+def gae(rewards: np.ndarray, values: np.ndarray, bootstrap: float, gamma: float, lam: float) -> np.ndarray:
+    """GAE along one stream of consecutive own decisions; `bootstrap` is V of the decision after the last row (0 when finished)."""
     adv, last, following = np.empty(len(rewards)), 0.0, bootstrap
     for t in range(len(rewards) - 1, -1, -1):
-        delta = rewards[t] + gamma[t] * following - values[t]
-        last = delta + gamma[t] * lam[t] * last
+        delta = rewards[t] + gamma * following - values[t]
+        last = delta + gamma * lam * last
         adv[t], following = last, values[t]
     return adv
 
@@ -159,7 +157,6 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
     model.load_state_dict(shared)
     model.eval()
     seen_version = version.value
-    args.stagger = args.season
     env = load_world(args, args.seed * 1000 + idx * 17 + 1, args.worlds)
     n, A, ctl = args.worlds, args.accounts, args.controlled
     pool = n * (args.flush_steps + 2 * ctl + 4)
@@ -222,14 +219,8 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
             elif not P_done[last]:
                 raise RuntimeError("a closed transition without a successor decision")
             c = np.asarray(chain)
-            bootstrap = float(P_v[successor]) if successor != -1 else float(P_v[last]) if P_done[last] == 2 else 0.0
-            # A season discounts by game days (decisions of one login share a second); other worlds per own decision.
-            if args.season:
-                days = P_s[np.append(c, successor if successor != -1 else last), AGE_YEARS].astype(np.float64) * 365.0
-                steps = np.maximum(np.diff(days), 0.0)
-            else:
-                steps = np.ones(len(c))
-            a = gae(P_r[c], P_v[c], bootstrap, args.gamma ** steps, args.lam ** steps)
+            bootstrap = float(P_v[successor]) if successor != -1 else 0.0
+            a = gae(P_r[c], P_v[c], bootstrap, args.gamma, args.lam)
             train = P_train[c]
             rows.append(c[train])
             advs.append(a[train])
@@ -318,6 +309,56 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
     ready_q.cancel_join_thread()
 
 
+def season_actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_q, ready_q, stats, stop, scale: float) -> None:
+    """One process for all of an arm's worlds: Rust plays them on every core with the newest weights and hands over finished
+    rows; here they only move to shared memory."""
+    s_dim, k, c_dim = dims
+    args.stagger = True
+    env = load_world(args, args.seed * 1000 + idx * 17 + 1, args.worlds)
+    my, seen = np.zeros(len(ST)), -1
+    while not stop.is_set() and os.getppid() == args.parent:
+        loop_start = clock = time.time()
+        if version.value != seen:
+            with lock:
+                weights = {name: tensor.tolist() for name, tensor in shared.items()}
+            seen = version.value
+            env.set_policy(json.dumps(weights))
+        my[ST["model_s"]] += time.time() - clock
+        clock = time.time()
+        state, cands, legal, action, logp, adv, ret = env.collect(args.collect_rows, args.gamma, args.lam, scale)
+        my[ST["env_s"]] += time.time() - clock
+        take = lambda raw, kind, *shape: torch.from_numpy(np.frombuffer(raw, kind).reshape(-1, *shape).copy())
+        state, cands, legal = take(state, np.float32, s_dim), take(cands, np.float32, k, c_dim), take(legal, np.uint8, k)
+        action, logp, adv, ret = take(action, np.int64), take(logp, np.float32), take(adv, np.float32), take(ret, np.float32)
+        for start in range(0, len(adv), slots.rows):
+            clock, slot = time.time(), None
+            while slot is None and not stop.is_set():
+                try:
+                    slot = free_q.get(timeout=0.5)
+                except queue_module.Empty:
+                    continue
+            my[ST["wait_s"]] += time.time() - clock
+            if slot is None:
+                break
+            part = slice(start, start + slots.rows)
+            m = len(adv[part])
+            for field, values in ((slots.state, state), (slots.cands, cands), (slots.mask, legal), (slots.action, action), (slots.logp, logp), (slots.adv, adv), (slots.ret, ret)):
+                field[slot, :m] = values[part]
+            slots.kind[slot, :m] = args.queue
+            slots.count[slot], slots.version[slot] = m, seen
+            ready_q.put(slot)
+            my[ST["shipped"]] += m
+        for i, row in enumerate(env.take_finished()):
+            my[ST["finished"]] += 1
+            my[ST["sim_hours"]] += args.horizon
+            my[ST["ctl_sum"]] += row[1]
+            my[ST["ctl_n"]] += 1
+        my[ST["decisions"]] += args.collect_rows * args.worlds
+        my[ST["loop_s"]] += time.time() - loop_start
+        stats[idx] = torch.from_numpy(my)
+    ready_q.cancel_join_thread()
+
+
 # ------------------------------------------------------------------------------------------------- learner
 
 def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None, policy_on: bool = True) -> dict[str, float]:
@@ -352,8 +393,8 @@ def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None, po
             with torch.no_grad():
                 kls.append(((ratio - 1) - (logp - batch["logp"][idx])).mean())
                 clips.append(((ratio - 1).abs() > args.clip).float().mean())
-                vlosses.append(value_loss)
-                ents.append(entropy)
+                vlosses.append(value_loss.detach())
+                ents.append(entropy.detach())
                 evs.append(1.0 - (batch["ret"][idx] - value).var() / batch["ret"][idx].var().clamp_min(1e-8))
     stat = lambda xs: float(torch.stack(xs).mean().detach())
     return {"kl": stat(kls), "clip": stat(clips), "value_loss": stat(vlosses), "entropy": stat(ents), "explained_variance": stat(evs)}
@@ -659,6 +700,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--season", action="store_true", help="W24: the season's own universe (ogsim.SeasonWorld, the world examples/season.rs writes and hds.py judges); 64 accounts, 8760 h, r8w data")
     ap.add_argument("--season-data", default=str(DATA / "r8w"), help="the season's exports and login gaps")
     ap.add_argument("--arms", nargs="*", default=SEASON_ARMS, help="the season's switches by their command-line names")
+    ap.add_argument("--collect-rows", type=int, default=8192, help="decisions per world in one rollout of a season: 128 per account, about 17 game days, so GAE sees past a step or two")
     ap.add_argument("--detector", help="ogrl.discriminator's file: the reward's realism term reads it")
     ap.add_argument("--realism", type=float, default=0.0, help="lambda: reward per midnight per unit of the detector's logit; 0 is growth alone")
     ap.add_argument("--reward-scale", type=float, help="fixed reward scale; default the --init checkpoint's, else calibrated")
@@ -717,7 +759,7 @@ def main(argv: list[str] | None = None) -> None:
         free_q.put(s)
     stats = torch.zeros(args.actors, len(ST), dtype=torch.float64).share_memory_()
     stop, final_event = ctx.Event(), ctx.Event()
-    procs = [ctx.Process(target=actor, args=(i, args, dims, shared, lock, version, slots, free_q, ready_q, stats, stop, scale), daemon=True) for i in range(args.actors)]
+    procs = [ctx.Process(target=season_actor if args.season else actor, args=(i, args, dims, shared, lock, version, slots, free_q, ready_q, stats, stop, scale), daemon=True) for i in range(args.actors)]
     for p in procs:
         p.start()
     judge = None if args.no_eval else ctx.Process(target=evaluator, args=(args, dims, stop, final_event), daemon=True)

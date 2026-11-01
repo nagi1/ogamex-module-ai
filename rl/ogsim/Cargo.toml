@@ -14,10 +14,12 @@ serde_json = "1.0"
 # The host battle engine, linked as a library for the combat module (not ported).
 battle_engine_ffi = { path = "../../../../rust/battle_engine_ffi" }
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
+# Worlds stepped across every core: one process and one catalogue instead of one per actor (0.9 GB each, measured).
+rayon = { version = "1", optional = true }
 
 [features]
 default = []
-python = ["dep:pyo3"]
+python = ["dep:pyo3", "dep:rayon"]
 
 [profile.release]
 lto = "fat"

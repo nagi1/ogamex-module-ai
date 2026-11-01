@@ -3,12 +3,13 @@
 use crate::fleet::Coord;
 use crate::players::{self, Ledger, Player};
 use crate::score;
-use crate::season::{Detector, Universe, ACCOUNT_NAMES, DAY, LEARNER_CAND, LEARNER_STATE};
+use crate::season::{Detector, Policy, Universe, ACCOUNT_NAMES, DAY, LEARNER_CAND, LEARNER_STATE};
 use crate::world::{Colonisation, Decision, Rules, World};
 use crate::{errands, next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use rayon::prelude::*;
 use crate::HashMap;
 use std::sync::Arc;
 
@@ -568,6 +569,13 @@ impl VecWorld {
 /// midnight crossed (plan/rl/TRAINING-RUN.md).
 #[pyclass]
 struct SeasonWorld {
+    shared: Arc<SeasonRules>,
+    seats: Vec<Seat>,
+    policy: Option<Policy>,
+}
+
+/// What every season of a `SeasonWorld` reads.
+struct SeasonRules {
     catalogue: Arc<Catalogue>,
     colonisation: Option<Arc<Colonisation>>,
     detector: Option<Arc<Detector>>,
@@ -578,19 +586,35 @@ struct SeasonWorld {
     controlled: usize,
     arms: Vec<String>,
     queue: usize,
+}
+
+/// One season in play: seats step in parallel, each alone with its own universe.
+struct Seat {
     rng: u64,
-    universes: Vec<Universe>,
-    midnight: Vec<f64>,
-    deciding: Vec<(usize, u64)>,
-    advice: Vec<Option<usize>>,
-    /// Until this second the personas play world w: seasons started together would keep every batch on one day of the year.
-    warm_until: Vec<f64>,
-    open: Vec<Vec<Option<(u64, f64)>>>,
-    realism: Vec<Vec<f64>>,
+    /// The high bits of its tickets, so tickets stay unique without a shared counter.
+    id: u64,
+    universe: Universe,
+    midnight: f64,
+    deciding: (usize, u64),
+    advice: Option<usize>,
+    /// Until this second the personas play: seasons started together would keep every batch on one day of the year.
+    warm_until: f64,
+    open: Vec<Option<(u64, f64)>>,
+    realism: Vec<f64>,
     tickets: u64,
     closed: Vec<Closed>,
     finished: Vec<Finished>,
+    /// Per account, the decisions `collect` has played and not yet handed over.
+    streams: Vec<Vec<Row>>,
+    recording: bool,
 }
+
+/// One decision as the learner reads it.
+struct Row { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: i64, logp: f32, value: f32, reward: f32, done: u8, closed: bool, day: f32 }
+
+/// What `collect` hands over, flat, for `ppo_update`.
+#[derive(Default)]
+struct Rollout { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: Vec<i64>, logp: Vec<f32>, adv: Vec<f32>, ret: Vec<f32> }
 
 const BOTH_QUEUES: usize = 3;
 /// A `done` that cuts the stream at the season's horizon, not an end of the account: the universe plays on, so the
@@ -602,73 +626,149 @@ fn log_score(world: &World, owner: usize) -> f64 {
     (1.0 + score::of(world, owner).total.max(0) as f64).ln()
 }
 
-impl SeasonWorld {
-    fn fresh(&mut self) -> Universe {
-        let seed = next_random(&mut self.rng);
+impl SeasonRules {
+    fn universe(&self, seed: u64) -> Universe {
         Universe::new(Arc::clone(&self.catalogue), self.colonisation.clone(), &self.data, self.days, self.accounts, seed, &self.arms)
     }
+}
 
-    fn close(&mut self, w: usize, owner: usize, done: u8) {
-        let Some((ticket, before)) = self.open[w][owner].take() else { return };
-        let reward = log_score(&self.universes[w].world, owner) - before + self.realism[w][owner];
-        self.closed.push((ticket, reward as f32, done));
-        self.realism[w][owner] = 0.0;
+impl Seat {
+    fn close(&mut self, owner: usize, done: u8) {
+        let Some((ticket, before)) = self.open[owner].take() else { return };
+        let reward = log_score(&self.universe.world, owner) - before + self.realism[owner];
+        if self.recording {
+            if let Some(row) = self.streams[owner].last_mut() { (row.reward, row.done, row.closed) = (reward as f32, done, true) }
+        } else {
+            self.closed.push((ticket, reward as f32, done));
+        }
+        self.realism[owner] = 0.0;
+    }
+
+    /// Plays `rows` decisions with the policy, every row recorded on its account's stream.
+    fn play_rows(&mut self, rules: &SeasonRules, policy: &Policy, rows: usize) {
+        self.recording = true;
+        let k = rules.catalogue.objects.len() + 1;
+        for _ in 0..rows {
+            let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
+            let a = self.deciding.0;
+            self.universe.observe(a, self.advice, &mut state, &mut cands, &mut legal);
+            let (action, logp, value) = policy.sample(&state, &cands, &legal, &mut self.rng);
+            let owner = self.universe.world.account_of(a);
+            let day = (self.universe.world.games[a].t / DAY) as f32;
+            self.streams[owner].push(Row { state, cands, legal, action: action as i64, logp, value, reward: 0.0, done: 0, closed: false, day });
+            self.answer(rules, action as i64);
+        }
+    }
+
+    /// GAE along each account's stream, discounting by game days, over every row whose successor is known: the rest wait.
+    /// An account that quit ends with no future; the season's horizon only cuts it, so that one bootstraps from its V.
+    fn hand_over(&mut self, gamma: f32, lam: f32, scale: f32, out: &mut Rollout) {
+        for stream in &mut self.streams {
+            let mut start = 0;
+            while start < stream.len() {
+                let Some(last) = (start..stream.len()).take_while(|&i| stream[i].closed).find(|&i| stream[i].done > 0 || !stream.get(i + 1).is_some_and(|next| next.closed)) else { break };
+                let successor = (stream[last].done == 0).then(|| stream.get(last + 1)).flatten();
+                if stream[last].done == 0 && successor.is_none() { break }
+                let (mut following, mut following_day) = match successor {
+                    Some(next) => (next.value, next.day),
+                    None if stream[last].done == CUT => (stream[last].value, stream[last].day),
+                    None => (0.0, stream[last].day),
+                };
+                let mut trace = 0.0;
+                let mut advantages = vec![0.0; last + 1 - start];
+                for i in (start..=last).rev() {
+                    let row = &stream[i];
+                    let days = (following_day - row.day).max(0.0);
+                    let discount = gamma.powf(days);
+                    trace = row.reward / scale + discount * following - row.value + discount * lam.powf(days) * trace;
+                    advantages[i - start] = trace;
+                    (following, following_day) = (row.value, row.day);
+                }
+                for (row, adv) in stream[start..=last].iter().zip(advantages) {
+                    out.state.extend_from_slice(&row.state);
+                    out.cands.extend_from_slice(&row.cands);
+                    out.legal.extend_from_slice(&row.legal);
+                    out.action.push(row.action);
+                    out.logp.push(row.logp);
+                    out.adv.push(adv);
+                    out.ret.push(adv + row.value);
+                }
+                start = last + 1;
+            }
+            stream.drain(..start);
+        }
     }
 
     /// At a midnight, what the detector says of every controlled account still playing.
-    fn judge(&mut self, w: usize, midnight: f64) {
-        let Some(detector) = self.detector.clone() else { return };
-        for owner in 0..self.controlled {
-            let u = &mut self.universes[w];
-            let cat = Arc::clone(&u.cat);
-            if u.world.inactive(&cat, owner, midnight) { continue }
+    fn judge(&mut self, rules: &SeasonRules, midnight: f64) {
+        let Some(detector) = &rules.detector else { return };
+        // The warm-up's days are the teacher's, and billing them would land on the account's first real decision.
+        if midnight < self.warm_until { return }
+        for owner in 0..rules.controlled {
+            if self.universe.world.inactive(&rules.catalogue, owner, midnight) { continue }
+            let u = &self.universe;
             if let Some(logit) = detector.logit(&u.measures(owner, midnight), u.rank[owner], midnight / DAY) {
-                self.realism[w][owner] += self.lambda * logit.clamp(-LOGIT_CLIP, LOGIT_CLIP) as f64;
+                self.realism[owner] += rules.lambda * logit.clamp(-LOGIT_CLIP, LOGIT_CLIP) as f64;
             }
         }
     }
 
-    /// Plays world w until a controlled account has a build in `queue` to decide; a retired account's stream ends there,
-    /// and a finished season closes every open decision, is recorded, and starts afresh.
-    fn advance(&mut self, w: usize) {
+    /// Plays on until a controlled account has a build in `queue` to decide; a retired account's stream ends there, and a
+    /// finished season closes every open decision, is recorded, and starts afresh.
+    fn advance(&mut self, rules: &SeasonRules) {
         loop {
-            let Some(a) = self.universes[w].next_decision() else {
-                for owner in 0..self.accounts {
-                    self.close(w, owner, CUT);
-                    let world = &self.universes[w].world;
+            let Some(a) = self.universe.next_decision() else {
+                for owner in 0..rules.accounts {
+                    self.close(owner, CUT);
+                    let world = &self.universe.world;
                     let slots = world.planets_of(owner);
                     let invalid = slots.iter().map(|&s| world.games[s].invalid).sum();
                     let builds = slots.iter().map(|&s| world.games[s].history.len()).sum();
                     self.finished.push((slots.len(), score::of(world, owner).total as f64, world.games[owner].effective_rate(), builds, invalid, 0.0));
                 }
-                self.universes[w] = self.fresh();
-                self.midnight[w] = DAY;
-                self.warm_until[w] = 0.0;
-                self.realism[w] = vec![0.0; self.accounts];
+                self.universe = rules.universe(next_random(&mut self.rng));
+                self.midnight = DAY;
+                self.warm_until = 0.0;
+                self.realism = vec![0.0; rules.accounts];
                 continue;
             };
-            let t = self.universes[w].world.games[a].t;
-            while self.midnight[w] <= t && self.midnight[w] <= self.days as f64 * DAY {
-                let midnight = self.midnight[w];
-                self.universes[w].day_end(midnight);
-                self.judge(w, midnight);
-                self.midnight[w] += DAY;
+            let t = self.universe.world.games[a].t;
+            while self.midnight <= t && self.midnight <= rules.days as f64 * DAY {
+                let midnight = self.midnight;
+                self.universe.day_end(midnight);
+                self.judge(rules, midnight);
+                self.midnight += DAY;
             }
-            let u = &mut self.universes[w];
+            let u = &mut self.universe;
             let owner = u.world.account_of(a);
             let plays = u.plays(a);
-            let build = u.world.decision_kind(a) == Decision::Build && (self.queue == BOTH_QUEUES || u.world.games[a].queue == self.queue);
-            if owner >= self.controlled || !plays || !build || t < self.warm_until[w] {
+            let build = u.world.decision_kind(a) == Decision::Build && (rules.queue == BOTH_QUEUES || u.world.games[a].queue == rules.queue);
+            if owner >= rules.controlled || !plays || !build || t < self.warm_until {
                 u.play(a, None);
-                if owner < self.controlled && !plays { self.close(w, owner, 1) }
+                if owner < rules.controlled && !plays { self.close(owner, 1) }
                 continue;
             }
-            self.close(w, owner, 0);
+            self.close(owner, 0);
             self.tickets += 1;
-            self.deciding[w] = (a, self.tickets);
-            self.advice[w] = self.universes[w].teacher(a);
+            self.deciding = (a, self.id << 40 | self.tickets);
+            self.advice = self.universe.teacher(a);
             return;
         }
+    }
+
+    /// One answer: an object index, or the last row to pass. An illegal answer is counted and replaced by the first legal row.
+    fn answer(&mut self, rules: &SeasonRules, action: i64) {
+        let cat = &rules.catalogue;
+        let (a, ticket) = self.deciding;
+        let u = &mut self.universe;
+        let owner = u.world.account_of(a);
+        self.open[owner] = Some((ticket, log_score(&u.world, owner)));
+        let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && u.world.legal(cat, a, k));
+        let pass = action == cat.objects.len() as i64;
+        let fallback = (!pass && chosen.is_none()).then(|| (0..cat.objects.len()).find(|&k| u.world.legal(cat, a, k))).flatten();
+        if !pass && chosen.is_none() { u.world.games[a].invalid += 1 }
+        u.play(a, Some(chosen.or(fallback)));
+        self.advance(rules);
     }
 }
 
@@ -680,29 +780,32 @@ impl SeasonWorld {
     #[new]
     #[pyo3(signature = (data, catalogue, n_worlds, arms, controlled=6, accounts=64, days=365, seed=0, queue=BOTH_QUEUES, detector=None, lambda=0.0, stagger=false))]
     #[allow(clippy::too_many_arguments)]
-    fn new(data: &str, catalogue: &str, n_worlds: usize, arms: Vec<String>, controlled: usize, accounts: usize, days: usize, seed: u64, queue: usize, detector: Option<&str>, lambda: f64, stagger: bool) -> PyResult<Self> {
+    fn new(py: Python<'_>, data: &str, catalogue: &str, n_worlds: usize, arms: Vec<String>, controlled: usize, accounts: usize, days: usize, seed: u64, queue: usize, detector: Option<&str>, lambda: f64, stagger: bool) -> PyResult<Self> {
         if controlled == 0 || controlled > accounts {
             return Err(PyValueError::new_err("controlled must be between 1 and the number of accounts"));
         }
         let loaded = Universe::catalogue(data, catalogue, &arms).map_err(PyValueError::new_err)?;
         let colonisation = Some(Arc::new(Colonisation::load(catalogue).map_err(PyValueError::new_err)?));
         let detector = detector.filter(|_| lambda > 0.0).map(|path| Detector::load(path).map(Arc::new).map_err(PyValueError::new_err)).transpose()?;
-        let mut env = SeasonWorld {
-            catalogue: Arc::new(loaded), colonisation, detector, lambda, data: data.to_string(), days, accounts, controlled, arms, queue, rng: seed,
-            universes: Vec::new(), midnight: vec![DAY; n_worlds], deciding: vec![(0, 0); n_worlds], advice: vec![None; n_worlds], warm_until: vec![0.0; n_worlds], open: vec![vec![None; accounts]; n_worlds],
-            realism: vec![vec![0.0; accounts]; n_worlds], tickets: 0, closed: Vec::new(), finished: Vec::new(),
-        };
-        env.universes = (0..n_worlds).map(|_| env.fresh()).collect();
-        for w in 0..n_worlds {
-            if stagger { env.warm_until[w] = (next_random(&mut env.rng) % days as u64) as f64 * DAY }
-            env.advance(w)
-        }
-        Ok(env)
+        let shared = Arc::new(SeasonRules { catalogue: Arc::new(loaded), colonisation, detector, lambda, data: data.to_string(), days, accounts, controlled, arms, queue });
+        let mut rng = seed;
+        let draws: Vec<(u64, u64, u64)> = (0..n_worlds).map(|_| (next_random(&mut rng), next_random(&mut rng), next_random(&mut rng))).collect();
+        let seats = py.detach(|| draws.into_par_iter().enumerate().map(|(w, (universe, own, warm))| {
+            let mut seat = Seat {
+                rng: own, id: w as u64, universe: shared.universe(universe), midnight: DAY, deciding: (0, 0), advice: None,
+                warm_until: if stagger { (warm % days as u64) as f64 * DAY } else { 0.0 },
+                open: vec![None; accounts], realism: vec![0.0; accounts], tickets: 0, closed: Vec::new(), finished: Vec::new(),
+                streams: (0..accounts).map(|_| Vec::new()).collect(), recording: false,
+            };
+            seat.advance(&shared);
+            seat
+        }).collect());
+        Ok(SeasonWorld { shared, seats, policy: None })
     }
 
     /// (state width, candidates per choice, candidate width); the last candidate row lets the login pass.
     fn dims(&self) -> (usize, usize, usize) {
-        (LEARNER_STATE, self.catalogue.objects.len() + 1, LEARNER_CAND)
+        (LEARNER_STATE, self.shared.catalogue.objects.len() + 1, LEARNER_CAND)
     }
 
     fn feature_names(&self) -> (Vec<&'static str>, Vec<&'static str>) {
@@ -711,53 +814,71 @@ impl SeasonWorld {
 
     /// Per world: (deciding account, the decision kind, ticket).
     fn decisions(&self) -> Vec<(usize, usize, u64)> {
-        self.universes.iter().zip(&self.deciding).map(|(u, &(a, t))| (u.world.account_of(a), self.queue, t)).collect()
+        self.seats.iter().map(|seat| (seat.universe.world.account_of(seat.deciding.0), self.shared.queue, seat.deciding.1)).collect()
     }
 
     /// The deciding planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]).
     fn observe<'py>(&self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
-        let (n, k) = (self.universes.len(), self.catalogue.objects.len() + 1);
+        let (n, k) = (self.seats.len(), self.shared.catalogue.objects.len() + 1);
         let mut state = vec![0f32; n * LEARNER_STATE];
         let mut cands = vec![0f32; n * k * LEARNER_CAND];
         let mut legal = vec![0u8; n * k];
-        for (w, u) in self.universes.iter().enumerate() {
-            u.observe(self.deciding[w].0, self.advice[w], &mut state[w * LEARNER_STATE..(w + 1) * LEARNER_STATE], &mut cands[w * k * LEARNER_CAND..(w + 1) * k * LEARNER_CAND], &mut legal[w * k..(w + 1) * k]);
-        }
+        py.detach(|| {
+            state.par_chunks_mut(LEARNER_STATE).zip(cands.par_chunks_mut(k * LEARNER_CAND)).zip(legal.par_chunks_mut(k)).zip(&self.seats)
+                .for_each(|(((s, c), l), seat)| seat.universe.observe(seat.deciding.0, seat.advice, s, c, l));
+        });
         (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
     }
 
-    /// One answer per world: an object index, or the last row to pass. An illegal answer is counted and replaced by
-    /// the first legal row. Returns the transitions closed since the last call.
-    fn step(&mut self, actions: Vec<i64>) -> PyResult<Vec<Closed>> {
-        if actions.len() != self.universes.len() {
+    /// One answer per world. Returns the transitions closed since the last call.
+    fn step(&mut self, py: Python<'_>, actions: Vec<i64>) -> PyResult<Vec<Closed>> {
+        if actions.len() != self.seats.len() {
             return Err(PyValueError::new_err("one action per world"));
         }
-        let cat = Arc::clone(&self.catalogue);
-        for (w, &action) in actions.iter().enumerate() {
-            let (a, ticket) = self.deciding[w];
-            let u = &mut self.universes[w];
-            let owner = u.world.account_of(a);
-            self.open[w][owner] = Some((ticket, log_score(&u.world, owner)));
-            let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && u.world.legal(&cat, a, k));
-            let pass = action == cat.objects.len() as i64;
-            let fallback = (!pass && chosen.is_none()).then(|| (0..cat.objects.len()).find(|&k| u.world.legal(&cat, a, k))).flatten();
-            if !pass && chosen.is_none() { u.world.games[a].invalid += 1 }
-            u.play(a, Some(chosen.or(fallback)));
-            self.advance(w);
-        }
-        Ok(std::mem::take(&mut self.closed))
+        let shared = Arc::clone(&self.shared);
+        let seats = &mut self.seats;
+        py.detach(|| seats.par_iter_mut().zip(actions).for_each(|(seat, action)| seat.answer(&shared, action)));
+        Ok(self.seats.iter_mut().flat_map(|seat| std::mem::take(&mut seat.closed)).collect())
+    }
+
+    /// The weights `collect` plays, as `ogrl.export_policy` writes them.
+    fn set_policy(&mut self, weights: &str) -> PyResult<()> {
+        let v: serde_json::Value = serde_json::from_str(weights).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.policy = Some(Policy::parse(&v).map_err(PyValueError::new_err)?);
+        Ok(())
+    }
+
+    /// Plays `rows` decisions per world on every core, deciding in Rust: a model this small costs less here than one trip
+    /// to a GPU (measured: 25k decisions a second on 12 cores, 10.7k through a GPU batch). Returns the
+    /// finished rows: (state, candidates, legal, action, log-probability, advantage, return), raw arrays.
+    #[allow(clippy::type_complexity)]
+    fn collect<'py>(&mut self, py: Python<'py>, rows: usize, gamma: f32, lam: f32, scale: f32) -> PyResult<(Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
+        let policy = self.policy.as_ref().ok_or_else(|| PyValueError::new_err("set_policy first"))?;
+        let shared = Arc::clone(&self.shared);
+        let seats = &mut self.seats;
+        let parts: Vec<Rollout> = py.detach(|| seats.par_iter_mut().map(|seat| {
+            seat.play_rows(&shared, policy, rows);
+            let mut out = Rollout::default();
+            seat.hand_over(gamma, lam, scale, &mut out);
+            out
+        }).collect());
+        let join = |pick: fn(&Rollout) -> &[f32]| parts.iter().flat_map(|p| pick(p).iter().copied()).collect::<Vec<f32>>();
+        let (state, cands, logp, adv, ret) = (join(|p| &p.state), join(|p| &p.cands), join(|p| &p.logp), join(|p| &p.adv), join(|p| &p.ret));
+        let legal: Vec<u8> = parts.iter().flat_map(|p| p.legal.iter().copied()).collect();
+        let action: Vec<i64> = parts.iter().flat_map(|p| p.action.iter().copied()).collect();
+        Ok((bytes(py, &state), bytes(py, &cands), bytes(py, &legal), bytes(py, &action), bytes(py, &logp), bytes(py, &adv), bytes(py, &ret)))
     }
 
     /// The persona's own build for every deciding account (the last row when it would pass): the teacher.
     fn baseline(&self) -> Vec<i64> {
-        let pass = self.catalogue.objects.len() as i64;
-        self.advice.iter().map(|advice| advice.map_or(pass, |k| k as i64)).collect()
+        let pass = self.shared.catalogue.objects.len() as i64;
+        self.seats.iter().map(|seat| seat.advice.map_or(pass, |k| k as i64)).collect()
     }
 
     /// Accounts whose season finished since the last call, `accounts` rows per season: (planets, score, the capital's
     /// effective rate, builds, invalid actions, 0).
     fn take_finished(&mut self) -> Vec<Finished> {
-        std::mem::take(&mut self.finished)
+        self.seats.iter_mut().flat_map(|seat| std::mem::take(&mut seat.finished)).collect()
     }
 }
 

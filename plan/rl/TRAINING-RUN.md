@@ -89,8 +89,32 @@ same as the teacher (HDS 0.767), so the door is sound. The teacher reads what no
 planet slot and the prerequisites of the ship it wants, so the model gets the teacher's pick as one candidate column and
 learns when to leave it. PHP serving needs that pick too (`DecideAiEconomyStepsAction` already has the planner's).
 
-Memory: one season process is 0.9 GB with torch, flat over the year. Process count times that stays under 30 GB, and
-`rl/scripts/guard.sh` runs throughout.
+## How an arm runs (measured 2 Nov)
+
+Rust plays and decides on every core (`SeasonWorld.collect`, `season::Policy`); Python only moves finished rows to the
+learner. Through a GPU batch one arm made 10.7k decisions a second with the CPU mostly idle waiting on the round trip;
+this way 17 cores make 31k alone, 16-23k each with three arms running (about 50k together).
+
+| Number | Value |
+| --- | --- |
+| One arm of 34 worlds on 17 cores | about 7-9 GB, of which learner 2.5 GB |
+| Start-up, worlds warmed to random days | about 3 minutes |
+| A judge (10 seasons at once) | about 5 GB, up to 5 minutes under load |
+| Learner | 5% busy; 3-5 GB of GPU memory |
+
+Sum the processes before launching and stay under 30 GB in `rl.slice`; `rl/scripts/guard.sh` runs throughout.
+
+## Trainer faults found by reading the first arms (2 Nov)
+
+| Fault | Reading | Fix |
+| --- | --- | --- |
+| Reward scale sized on one decision (0.0114), returns add many | Value loss rose to 205, KL 1e-5: the value gradient filled the shared clip, the policy did not move | Scale is the measured RMS of a rollout's returns: 0.2 (λ 0, 0.02), 1.0 (λ 0.1). Value loss 0.3-1.8, EV 0.94 |
+| Logged losses kept their graphs | GPU out of memory at 262k rows; small batches hid it | Detached |
+| Warm-up midnights billed to an account's first decision | Single returns of -155 at λ 0.1 | The detector does not judge warm-up days |
+| 128 decisions per world per hand-over is 2 per account | GAE cut to one or two steps | A rollout is 8192 decisions per world, 128 per account, about 17 game days |
+
+Entropy rises from 0.25 while KL stays low. It rose before the fixes too, so "shared layers" was not the whole cause;
+detaching the value head stays because the value must not drive the policy's layers. Open until read from play.
 
 Learner settings are not experiments (NORTH-STAR §10). Fidelity gaps (replay) are read alongside and do not block
 training; the rule fixes go in between rounds, and a changed world means a rerun of step A.
