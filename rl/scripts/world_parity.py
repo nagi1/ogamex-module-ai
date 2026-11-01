@@ -3,8 +3,8 @@
     .venv-rl/bin/python rl/scripts/world_parity.py storage/rl/ogsim/w14/replay-7d-s1.json
 
 A step differs when the host's stock before it differs from the simulator's by more than a resource unit, a
-building or research takes other seconds, the yard queued another amount, a fleet flies other seconds or burns other
-fuel, or a fleet event ends otherwise. The first difference of each planet
+building or research takes other seconds, the yard queued another amount, a fleet or a missile salvo flies other
+seconds or burns other fuel, a fleet event ends otherwise, or the host refuses an officer the simulator hired. The first difference of each planet
 is printed, because everything after it inherits it.
 """
 import json
@@ -20,6 +20,8 @@ def first_gap(step: dict) -> str | None:
         return None
     if step.get("host_refusal"):
         return f"the host refused: {step['host_refusal']}"
+    if step.get("queue") in ("recall", "officer"):
+        return None
     if step.get("queue") == "launch":
         sim, host = (step["sim_arrive"], step["sim_fuel"]), (step["host_arrive"], step["host_fuel"])
         return None if sim == host else f"flight and fuel sim {sim} host {host}"
@@ -46,6 +48,11 @@ def final_gaps(planet: dict) -> list[str]:
     stock = [abs(a - b) for a, b in zip(sim["stock"], host["stock"])]
     if max(stock) > 1.0:
         out.append(f"final stock sim {[round(x) for x in sim['stock']]} host {[round(x) for x in host['stock']]}")
+    if "moon" in sim and sim["moon"] != host.get("moon"):
+        out.append(f"final moon sim {sim['moon']} host {host.get('moon')}")
+    # Dark matter is the account's: the capital's slot holds it.
+    if "dark_matter" in sim and planet.get("account") == planet["planet_id"] and sim["dark_matter"] != host.get("dark_matter"):
+        out.append(f"final dark matter sim {sim['dark_matter']} host {host.get('dark_matter')}")
     for kind in ("levels", "units"):
         diff = {k: (sim[kind].get(k, 0), v) for k, v in ((str(k), v) for k, v in host[kind].items()) if sim[kind].get(k, 0) != v}
         if diff:

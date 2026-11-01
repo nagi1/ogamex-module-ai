@@ -476,9 +476,9 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
     // fractional like the host's, and are truncated only where the host stores a whole number.
     let gross = gross.map(|r| r as f64);
     let free = (capacity - carried[0] - carried[1] - carried[2] - loot[0] - loot[1] - loot[2]).max(0);
-    let hauled = if plunder { capped(collected(attacker, battle, &engine.attacker_left, battle.attacker_research, gross), free) } else { [0.0; 3] };
+    let hauled = if plunder { capped(collected(attacker, &engine.attacker_left, battle.attacker_research, gross), free) } else { [0.0; 3] };
     let left = [gross[0] - hauled[0], gross[1] - hauled[1], gross[2] - hauled[2]];
-    let salvage = if plunder { collected(defender, battle, &engine.defender_left, battle.defender_research, left) } else { [0.0; 3] };
+    let salvage = if plunder { collected(defender, &engine.defender_left, battle.defender_research, left) } else { [0.0; 3] };
     let debris = [left[0] - salvage[0], left[1] - salvage[1], left[2] - salvage[2]].map(|r| r as i64);
 
     // The cargo the fleet held, the loot and what its collectors hauled fly home together (startReturn).
@@ -505,7 +505,7 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
 
 /// What one side's surviving collectors haul out of a debris field: the host's share of each resource (a whole number),
 /// cut to what the collectors can carry (AttackMission::processArrival).
-fn collected(catalogue: &CombatCatalogue, battle: &Battle, survivors: &Units, research: &HashMap<u32, u32>, debris: [f64; 3]) -> [f64; 3] {
+fn collected(catalogue: &CombatCatalogue, survivors: &Units, research: &HashMap<u32, u32>, debris: [f64; 3]) -> [f64; 3] {
     let Some(id) = catalogue.debris_collector else { return [0.0; 3] };
     let count = survivors.get(&id).copied().unwrap_or(0);
     let share = catalogue.rules.reaper_debris_percentage;

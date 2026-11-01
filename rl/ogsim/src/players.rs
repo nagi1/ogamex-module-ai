@@ -28,6 +28,9 @@ pub(crate) const PAYS: f64 = 3.0;
 pub(crate) const SAFE_SHARE: f64 = 0.3;
 /// The most probes one spy is sent with.
 pub(crate) const SPY_PROBES: i64 = 4;
+/// The interplanetary missiles a raider keeps once a target's defence has turned a raid away: a salvo, as players
+/// fire them (gate 3); the silo's capacity, the host's, bounds what the yard takes.
+const MISSILE_SALVO: i64 = 20;
 
 pub(crate) fn weighted(r: [f64; 3]) -> f64 {
     (0..3).map(|i| WEIGHTS[i] * r[i]).sum()
@@ -50,6 +53,9 @@ pub struct Ledger {
     pub lost: f64,
     /// (attacker, target) pairs where the attacker's fleet was beaten: the raider does not go back.
     pub beaten: HashSet<(usize, usize)>,
+    /// Missiles fired, and per struck slot the largest salvo that reached it.
+    pub missiles: i64,
+    pub struck: HashMap<usize, i64>,
     /// How many events of the world's log have been read.
     read: usize,
 }
@@ -90,6 +96,11 @@ impl Ledger {
                 }
                 (EventKind::Arrival, Mission::Recycle) => {
                     for i in 0..3 { self.recycled[i] += e.gained[i] }
+                }
+                (EventKind::Arrival, Mission::Missile) => {
+                    let salvo: i64 = e.ships_lost.iter().map(|s| s.1).sum();
+                    let most = self.struck.entry(e.target).or_default();
+                    *most = (*most).max(salvo);
                 }
                 _ => {}
             }
@@ -354,6 +365,10 @@ pub struct Miner {
     /// Row 94 arm: the idle lab takes its research without keeping the next building's price back (a player keeps the
     /// lab running; the building waits). Without it the capital's metal never covered both and the lab sat idle for weeks.
     pub lab_first: bool,
+    /// The missiles this account keeps on its capital (a raider's, once defence turned a raid away).
+    pub missiles: i64,
+    /// Per slot of the account, the interceptors it keeps: as many as the largest salvo that struck it.
+    pub interceptors: HashMap<usize, i64>,
 }
 
 /// W14: a lab on a colony before the account's research network reads it shortens no research, and the host holds the
@@ -366,7 +381,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, missiles: 0, interceptors: HashMap::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -396,6 +411,10 @@ impl Miner {
         }
         if short && orders {
             self.order_defence(w, cat, a, pick);
+        }
+        // A colony struck by missiles orders its own interceptors; a capital's come with its ship orders.
+        if w.account_of(a) != a {
+            self.order_interceptors(w, cat, a, pick);
         }
         // Row 73 arm: the surplus goes to the military only while the account is under its share (real mid accounts hold
         // a military share near 0.2; spending every surplus on it held 0.5, e74).
@@ -568,6 +587,26 @@ impl Miner {
         }
     }
 
+    fn order_interceptors(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
+        let keep = saving(w, cat, a, pick);
+        for (u, amount) in self.strike_plans(w, a) {
+            let amount = within(w, a, u, amount as u64, keep);
+            if amount > 0 { w.order_units(cat, a, u, amount); }
+        }
+    }
+
+    /// The missiles and interceptors slot a keeps and does not have, from the host's strike tables (gate 1).
+    fn strike_plans(&self, w: &World, a: usize) -> Vec<(usize, i64)> {
+        let rules = &w.rules[a];
+        let Some(strike) = rules.strike.as_ref() else { return Vec::new() };
+        let missiles = if w.account_of(a) == a { self.missiles } else { 0 };
+        [(strike.missile, missiles), (strike.interceptor, self.interceptors.get(&a).copied().unwrap_or(0))].into_iter().filter_map(|(id, want)| {
+            let u = rules.units.index(id as i64)?;
+            let missing = want - owned(w, a, id);
+            (missing > 0).then_some((u, missing))
+        }).collect()
+    }
+
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
         let keep = saving(w, cat, a, pick);
         for (u, amount) in self.order_plans(w, cat, a) {
@@ -579,7 +618,7 @@ impl Miner {
     /// The ships this rule wants at this login that the account does not have, as (catalogue index, amount): what the
     /// yard is told to build. Shared with the errand choice, whose `order` candidate is this rule's answer.
     pub(crate) fn order_plans(&self, w: &World, cat: &Catalogue, a: usize) -> Vec<(usize, i64)> {
-        let Some(kit) = Kit::of(w, cat, a) else { return Vec::new() };
+        let Some(kit) = Kit::of(w, cat, a) else { return self.strike_plans(w, a) };
         let rules = &w.rules[a];
         let research = w.research(cat, a);
         let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
@@ -598,6 +637,7 @@ impl Miner {
                 if owned(w, a, ship) < 1 { plans.push((u, 1)) }
             }
         }
+        plans.extend(self.strike_plans(w, a));
         plans
     }
 }
@@ -929,12 +969,14 @@ pub struct Raider {
     last: f64,
     spied: HashMap<usize, f64>,
     hit: HashMap<usize, f64>,
+    /// Per target, the second the last salvo left.
+    fired: HashMap<usize, f64>,
 }
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false };
-        Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default() }
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, missiles: 0, interceptors: HashMap::default() };
+        Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
@@ -954,7 +996,8 @@ impl Raider {
 
     fn spy(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, kit: Kit, ledger: &mut Ledger) {
         let now = w.games[a].t;
-        let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < REPORT_HOURS * 3600.0);
+        // A salvo since the report has changed the defence it read.
+        let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < REPORT_HOURS * 3600.0 && self.fired.get(&target).is_none_or(|&t| t < r.time));
         let recent = self.spied.get(&target).is_some_and(|&t| now - t < 2.0 * 3600.0);
         let probes = on_shelf(w, a, kit.probe).min(SPY_PROBES);
         if fresh || recent || probes < 1 { return }
@@ -975,12 +1018,29 @@ impl Raider {
         let research = w.research(cat, a);
         let fuel = fleet::consumption(&rules.settings, &rules.fleet, &plan.fleet, &research, account_distance(w, a, target), 0, 10.0) as f64;
         if weighted(plan.expected) < PAYS * WEIGHTS[2] * fuel { return false }
-        if plan.attack * 3.0 > SAFE_SHARE * plan.hull { return false }
+        if plan.attack * 3.0 > SAFE_SHARE * plan.hull {
+            self.strike(w, cat, a, target, ledger);
+            return false;
+        }
         let had_fleet = stack(&w.rules[target], &w.yards[target].counts).iter().any(|&(id, _)| movable(&w.rules[target], id, &w.research(cat, target)));
         let Ok(arrive) = send(w, cat, a, target, Mission::Attack, &plan.fleet, 10.0, ledger) else { return false };
         self.hit.insert(target, now);
         ledger.raids.push(Raid { attacker: a, target, arrive, loot: None, target_had_fleet: had_fleet, saved: false });
         true
+    }
+
+    /// A rich target whose defence turns the raid away is softened with missiles first, as a raider with a silo does
+    /// (gate 3): the account keeps a salvo from then on, its prerequisites built through `unlock`, and fires what it holds.
+    fn strike(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, ledger: &mut Ledger) {
+        let Some(missile) = w.rules[a].strike.as_ref().map(|s| s.missile) else { return };
+        self.miner.missiles = MISSILE_SALVO;
+        let now = w.games[a].t;
+        let held = on_shelf(w, a, missile);
+        if held < 1 || self.fired.get(&target).is_some_and(|&t| now - t < RAID_COOLDOWN) { return }
+        if w.launch_missiles(cat, a, target, false, held, 0).is_ok() {
+            self.fired.insert(target, now);
+            ledger.missiles += held;
+        }
     }
 
     fn recycle(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, ledger: &mut Ledger) {
@@ -1075,6 +1135,9 @@ impl Player {
     /// What the account does at its deciding login: the economy's pick for the queue.
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
         ledger.scan(w, cat);
+        // A planet struck by missiles keeps interceptors for the next salvo (gate 3).
+        if let Some(&salvo) = ledger.struck.get(&a) { self.miner().interceptors.insert(a, salvo); }
+        hire_officer(w, a, !matches!(self, Player::Miner(_)));
         match self {
             Player::Miner(p) => p.act(w, cat, a),
             Player::Raider(p) => p.act(w, cat, a, ledger),
@@ -1090,6 +1153,20 @@ impl Player {
             Player::Saver(p) => p.miner.yard_stall(w, cat, a),
         }
     }
+}
+
+/// W15: a player spends its dark matter on the officer that serves its play, a week at a time (gate 3): one whose fleet
+/// flies (`slots`) the officer that adds fleet slots, any other the one that shortens research. Officers are read by
+/// what the host says they do, never by name (gate 1); one whose effect the host does not report here is never hired.
+fn hire_officer(w: &mut World, a: usize, slots: bool) {
+    if w.account_of(a) != a { return }
+    let worth = |o: &crate::fleet::Officer| if slots { o.fleet_slots as f64 } else { 1.0 - o.research_multiplier };
+    let wanted = w.rules[a].settings.officers.iter().filter(|(_, o)| !o.bundle && worth(o) > 0.0)
+        .max_by(|x, y| worth(x.1).total_cmp(&worth(y.1)))
+        .and_then(|(key, o)| o.costs.keys().filter_map(|d| d.parse::<i64>().ok()).min().map(|days| (key.clone(), days)));
+    let Some((key, days)) = wanted else { return };
+    if w.officers[a].get(&key).is_some_and(|&until| until > w.games[a].t) { return }
+    let _ = w.hire(a, &key, days);
 }
 
 /// Row 29: what stops a login's yard order. `ShareMet` is row 10's `military_share` standing as a ceiling - the account

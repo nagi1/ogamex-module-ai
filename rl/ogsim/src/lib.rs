@@ -30,6 +30,8 @@ pub mod players;
 pub mod errands;
 /// The host's highscore over a world: the four scores an account is worth (plan/rl/north-star-plan.md, N1).
 pub mod score;
+/// The season's universe: the world `examples/season.rs` measures and the binding trains in (W24).
+pub mod season;
 
 pub use economy::*;
 

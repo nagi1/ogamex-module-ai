@@ -3,11 +3,14 @@
 namespace Modules\AI\Actions;
 
 use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
 use Modules\AI\Support\SimulatedTime;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameObjects\Models\Units\UnitCollection;
+use OGame\Http\Controllers\GalaxyController;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
 use OGame\Models\Highscore;
@@ -17,6 +20,7 @@ use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\SettingsService;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
 
@@ -27,8 +31,11 @@ use Random\Randomizer;
  */
 class ReplayAiWorldAction
 {
-    /** At one second the fleets land first, then a login loads the page, places its yard orders, sends its fleets, then starts its builds. */
-    private const ORDER = ['arrive' => 0, 'return' => 0, 'touch' => 1, 'units' => 2, 'launch' => 3];
+    /** At one second the fleets land first, then a login loads the page, places its yard orders, sends and recalls its fleets, then starts its builds. */
+    private const ORDER = ['arrive' => 0, 'return' => 0, 'touch' => 1, 'officer' => 2, 'units' => 2, 'launch' => 3, 'recall' => 3];
+
+    /** The host's mission type id of a missile strike, which the galaxy page sends and not the fleet form. */
+    private const MISSILE = 10;
 
     /** @var array<string, int> a planet's coordinates to its host id, colonies from the moment the host founds them */
     private array $ids = [];
@@ -43,11 +50,13 @@ class ReplayAiWorldAction
      * @param  list<array<string, mixed>>  $planets  the trace's planets
      * @param  list<int>  $yardBlockedBy
      * @param  int  $rank1Points  the simulator's best score, which sets what an expedition can find
+     * @param  int  $darkMatter  the dark matter every account starts the simulated world with
      * @return list<array<string, mixed>> per planet: its key, its rows and both final states
      */
-    public function handle(array $planets, int $horizonSeconds, array $yardBlockedBy, int $rank1Points): array
+    public function handle(array $planets, int $horizonSeconds, array $yardBlockedBy, int $rank1Points, int $darkMatter = 0): array
     {
         Highscore::query()->update(['general' => $rank1Points]);
+        DB::table('users')->update(['dark_matter' => $darkMatter]);
         $schedule = app(ReplayAiEconomyScheduleAction::class);
         foreach ($planets as $simulated) {
             $this->origins[(int) $simulated['account']] ??= $this->planet((int) $simulated['account'])->getUpdatedAt()->timestamp;
@@ -61,7 +70,10 @@ class ReplayAiWorldAction
             $origin = $this->origins[(int) $planets[$p]['account']];
             $rows[$p][] = match (true) {
                 in_array($step['queue'], ['arrive', 'return'], true) => $this->land($step, $origin, $planets),
+                $step['queue'] === 'recall' => $this->recall($step, $origin),
+                $step['queue'] === 'officer' => $this->hire($step, $origin, (int) $planets[$p]['account']),
                 ! isset($this->ids[$key]) => ['start' => (int) $step['start'], 'queue' => $step['queue'], 'host_refusal' => 'the host has no planet there'],
+                $step['queue'] === 'launch' && (int) $step['mission'] === self::MISSILE => $this->fire($this->planet($this->ids[$key]), $step, $origin),
                 $step['queue'] === 'launch' => $this->launch($this->planet($this->ids[$key]), $step, $origin),
                 default => $schedule->step($this->planet($this->ids[$key]), $step, $origin, $yardBlockedBy),
             };
@@ -69,10 +81,13 @@ class ReplayAiWorldAction
 
         return array_map(fn (array $simulated, int $p): array => [
             'planet_id' => $simulated['planet_id'] ?? $this->ids[$this->key($simulated['coord'])] ?? null,
+            'account' => (int) $simulated['account'],
             'coord' => $simulated['coord'],
             'steps' => $rows[$p],
             'host_final' => isset($this->ids[$this->key($simulated['coord'])])
-                ? $schedule->final($this->planet($this->ids[$this->key($simulated['coord'])]), $this->origins[(int) $simulated['account']] + $horizonSeconds) : null,
+                ? $schedule->final($this->planet($this->ids[$this->key($simulated['coord'])]), $this->origins[(int) $simulated['account']] + $horizonSeconds)
+                    + ['moon' => $this->planet($this->ids[$this->key($simulated['coord'])])->hasMoon(),
+                        'dark_matter' => (int) $this->planet($this->ids[$this->key($simulated['coord'])])->getPlayer()->getUser()->dark_matter] : null,
             'sim_final' => $simulated['final'],
         ], $planets, array_keys($planets));
     }
@@ -123,6 +138,49 @@ class ReplayAiWorldAction
     }
 
     /**
+     * Fires the missiles through the galaxy page's own call (`GalaxyController::missileAttack`) from the launching planet.
+     *
+     * @param  array<string, mixed>  $step
+     * @return array<string, mixed>
+     */
+    private function fire(PlanetService $planet, array $step, int $origin): array
+    {
+        app(ReplayAiEconomyScheduleAction::class)->at($planet, $origin + (int) $step['t']);
+        $row = ['start' => (int) $step['t'], 'queue' => 'launch', 'mission' => self::MISSILE, 'sim_arrive' => (int) $step['arrive'] - (int) $step['t'],
+            'sim_fuel' => 0, 'host_arrive' => null, 'host_fuel' => 0, 'host_refusal' => null];
+        DB::table('users')->where('id', $planet->getPlayer()->getId())->update(['planet_current' => $planet->getPlanetId()]);
+        $this->forget();
+        $player = app(PlayerServiceFactory::class)->make($planet->getPlayer()->getId());
+        $request = Request::create('/', 'POST', ['galaxy' => $step['to'][0], 'system' => $step['to'][1], 'position' => $step['to'][2],
+            'type' => $this->targetType($step)->value, 'missile_count' => array_sum(array_column($step['ships'], 1)), 'target_priority' => (int) $step['priority']]);
+        $data = app(GalaxyController::class)->missileAttack($request, $player, app(PlanetServiceFactory::class), app(SettingsService::class))->getData(true);
+        $this->forget();
+        if (! ($data['success'] ?? false)) {
+            return ['host_refusal' => (string) ($data['error'] ?? 'refused')] + $row;
+        }
+        $mission = FleetMission::query()->findOrFail((int) $data['mission_id']);
+        $this->missions[(int) $step['fleet']] = $mission;
+
+        return ['host_arrive' => (int) $mission->time_arrival - (int) $mission->time_departure] + $row;
+    }
+
+    /**
+     * Hires the officer through the host's own purchase, at the second the simulator did.
+     *
+     * @param  array<string, mixed>  $step
+     * @return array<string, mixed>
+     */
+    private function hire(array $step, int $origin, int $account): array
+    {
+        SimulatedTime::freezeAt(Date::createFromTimestamp($origin + (int) $step['t']));
+        $this->forget();
+        $result = app(QueueAiOfficerAction::class)->handle($this->planet($account)->getPlayer()->getId(), (string) $step['key'], (int) $step['days']);
+        $this->forget();
+
+        return ['start' => (int) $step['t'], 'queue' => 'officer', 'host_refusal' => $result->successful ? null : $result->reason];
+    }
+
+    /**
      * Processes the host's mission at the second the host lands it (its own clock, so a flight gap shows as a gap and is not
      * hidden). A colony the mission founds takes the size and temperature the simulator drew: both draw from the host's
      * own table for the slot, and its production depends on them.
@@ -164,6 +222,31 @@ class ReplayAiWorldAction
         if ($row['host_outcome'] === 'Done' && $step['queue'] === 'arrive' && (int) $mission->mission_type === 7) {
             $this->found($mission, $planets);
         }
+
+        return $row;
+    }
+
+    /**
+     * Turns the fleet home through the fleet page's own call at the second the simulator recalled it.
+     *
+     * @param  array<string, mixed>  $step
+     * @return array<string, mixed>
+     */
+    private function recall(array $step, int $origin): array
+    {
+        $row = ['start' => (int) $step['t'], 'queue' => 'recall', 'host_refusal' => null];
+        $sent = $this->missions[(int) $step['fleet']] ?? null;
+        if ($sent === null) {
+            return ['host_refusal' => 'no mission'] + $row;
+        }
+        SimulatedTime::freezeAt(Date::createFromTimestamp($origin + (int) $step['t']));
+        $this->forget();
+        try {
+            app()->makeWith(FleetMissionService::class, ['player' => app(PlayerServiceFactory::class)->make((int) $sent->user_id)])->cancelMission(FleetMission::query()->findOrFail($sent->id));
+        } catch (Exception $refused) {
+            return ['host_refusal' => $refused->getMessage()] + $row;
+        }
+        $this->forget();
 
         return $row;
     }

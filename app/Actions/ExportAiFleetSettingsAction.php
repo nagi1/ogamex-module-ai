@@ -4,7 +4,9 @@ namespace Modules\AI\Actions;
 
 use OGame\Enums\FleetSpeedType;
 use OGame\Factories\GameMissionFactory;
+use OGame\Models\User;
 use OGame\Services\CharacterClassService;
+use OGame\Services\OfficerService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
 use ReflectionProperty;
@@ -16,7 +18,7 @@ use ReflectionProperty;
  */
 class ExportAiFleetSettingsAction
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     /**
      * @param  PlayerService  $player  the owner whose class changes fuel use
@@ -38,7 +40,39 @@ class ExportAiFleetSettingsAction
             'mission_fleet_speed' => $this->missionFleetSpeeds($settings),
             'deuterium_consumption' => $settings->deuteriumConsumption(),
             'class_consumption_multiplier' => app(CharacterClassService::class)->getDeuteriumConsumptionMultiplier($player->getUser()),
+            // W15: the dark matter a new account starts with, and each officer's price and effects as the host answers them.
+            'dark_matter_initial' => $settings->darkMatterBonus(),
+            'officers' => $this->officers($player->getUser()),
         ];
+    }
+
+    /**
+     * W15: per officer the host sells, its price per duration and what the host's own helpers answer while only that
+     * officer is active (the bundle answers with the commanding staff's extras too). The officer is activated on the
+     * cached model and never saved, so nothing is written.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function officers(User $user): array
+    {
+        $service = app(OfficerService::class);
+        $rows = [];
+        foreach (array_keys(OfficerService::COSTS) as $key) {
+            $service->clearCache($user);
+            $service->getOfficer($user)->activate($key, OfficerService::DURATIONS[0]);
+            $rows[$key] = [
+                'costs' => array_combine(array_map('strval', OfficerService::DURATIONS), array_map(static fn (int $days): int => $service->getCost($key, $days), OfficerService::DURATIONS)),
+                'fleet_slots' => $service->getAdmiralFleetSlots($user) + $service->getCommandingStaffFleetSlots($user),
+                'expedition_slots' => $service->getAdditionalExpeditionSlots($user),
+                'research_multiplier' => $service->getResearchTimeMultiplier($user),
+                'espionage' => $service->getAdditionalEspionageLevels($user) + $service->getCommandingStaffEspionageLevels($user),
+                // The bundle is the officer that makes every other one active; the host says which by answering, not by name.
+                'bundle' => array_filter(array_keys(OfficerService::COSTS), static fn (string $other): bool => $other !== $key && !$service->isActive($user, $other)) === [],
+            ];
+        }
+        $service->clearCache($user);
+
+        return $rows;
     }
 
     /**

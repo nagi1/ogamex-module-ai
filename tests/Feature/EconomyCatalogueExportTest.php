@@ -268,6 +268,25 @@ test('a replayed account sends its colony ship, founds the colony with the simul
         ->and($founded['host_final']['levels'][$mine->id])->toBe(1);
 });
 
+test('a replayed recall turns the fleet home in the time it had flown', function (): void {
+    $this->planetAddUnit('small_cargo', 1);
+    $this->planetAddResources(new Resources(0, 0, 10_000));
+    $home = $this->planetService->getPlanetCoordinates();
+    $to = $this->secondPlanetService->getPlanetCoordinates();
+    $ship = ObjectService::getObjectByMachineName('small_cargo');
+    $capital = ['planet_id' => $this->planetService->getPlanetId(), 'account' => $this->planetService->getPlanetId(), 'coord' => [$home->galaxy, $home->system, $home->position], 'site' => null, 'final' => [], 'steps' => [
+        ['t' => 0.0, 'queue' => 'launch', 'fleet' => 0, 'mission' => 3, 'to' => [$to->galaxy, $to->system, $to->position], 'ships' => [[$ship->id, 1]], 'cargo' => [0, 0, 0], 'speed' => 10.0, 'fuel' => 0, 'arrive' => 1.0],
+        ['t' => 10.0, 'queue' => 'recall', 'fleet' => 0],
+        ['t' => 20.0, 'queue' => 'return', 'fleet' => 0, 'outcome' => 'Done', 'gained' => [0, 0, 0]],
+    ]];
+
+    [$home] = app(ReplayAiWorldAction::class)->handle([$capital], 100, [], 100_000);
+
+    expect($home['steps'][1]['host_refusal'])->toBeNull()
+        ->and($home['steps'][2]['host_outcome'])->toBe('Done')
+        ->and($home['steps'][2]['host_at'])->toBe(20);
+});
+
 test('a research decision step reports research candidate features with no production columns and the player\'s level', function (): void {
     $names = EconomyChoiceEncoder::candidateNames();
     $column = static fn (string $name): int => array_search($name, $names, true);

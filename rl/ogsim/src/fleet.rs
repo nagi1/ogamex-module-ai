@@ -46,6 +46,25 @@ pub struct FleetSettings {
     pub mission_fleet_speed: HashMap<String, i64>,
     pub deuterium_consumption: f64,
     pub class_consumption_multiplier: f64,
+    /// W15: the dark matter a new account starts with, and the officers the host sells by key (fleet settings v2).
+    #[serde(default)]
+    pub dark_matter_initial: i64,
+    #[serde(default)]
+    pub officers: std::collections::BTreeMap<String, Officer>,
+}
+
+/// One officer as the host's `OfficerService` answers while it alone is active (the bundle with the staff's extras).
+#[derive(Deserialize, Clone, Debug)]
+pub struct Officer {
+    /// Dark matter by duration in days.
+    pub costs: std::collections::BTreeMap<String, i64>,
+    pub fleet_slots: usize,
+    pub expedition_slots: usize,
+    pub research_multiplier: f64,
+    pub espionage: i64,
+    /// Hiring it makes every other officer active (the host's bundle).
+    #[serde(default)]
+    pub bundle: bool,
 }
 
 impl FleetSettings {

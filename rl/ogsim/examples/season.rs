@@ -17,32 +17,16 @@
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::sync::Arc;
 
-use ogsim::fleet::Coord;
-use ogsim::players::{self, account_value, FleetSaver, Ledger, Miner, Player, Raider, YardStall};
-use ogsim::score::{self, Score};
+use ogsim::players::{account_value, YardStall};
+use ogsim::score;
+use ogsim::season::{Universe, DAY, PERSONAS, SAVER};
 use ogsim::economy::{Baseline, Books};
 use ogsim::units::UnitKind;
-use ogsim::world::{Colonisation, Event, EventKind, Mission, Rules, World};
-use ogsim::{next_random, Catalogue, WEIGHTS};
+use ogsim::world::{Colonisation, Event, EventKind, Mission, World};
+use std::sync::Arc;
+use ogsim::{WEIGHTS};
 use serde_json::json;
-
-const DAY: f64 = 86_400.0;
-/// Personas in role order, with the share of the accounts each gets.
-const PERSONAS: [(&str, f64); 3] = [("miner", 0.4), ("raider", 0.3), ("saver", 0.3)];
-const RAIDER: usize = 1;
-const SAVER: usize = 2;
-/// An account that stops playing draws its quit day from an exponential with this mean, in days.
-const QUIT_MEAN_DAYS: f64 = 15.0;
-/// Row 15: the alliance join day is drawn five days after the third (exponential). 65% and the mean are assumptions -
-/// the bands say only that 65% of real active players are in an alliance (p10 24%, p90 77%) - so they are stated here.
-const ALLIANCE_SHARE: u64 = 65;
-const ALLIANCE_MEAN_DAYS: f64 = 5.0;
-/// Row 92: how much a place in an alliance falls with the highscore rank percentile p (inactives ranked too): an account
-/// with its own draw u is a member while u < 1 - slope * p, about 0.96 at the top, 0.76 mid-table, 0.44 below the middle.
-const ALLIANCE_STANDING_SLOPE: f64 = 0.8;
-const RECRUIT_DAYS: u32 = 7;
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -57,169 +41,25 @@ fn main() {
         true => catalogue.clone(),
         false => format!("{data}/units-parity/econ-{catalogue}.json"),
     };
-    let mut cat = Catalogue::load(&econ).expect("the economy catalogue");
-    // The accounts' own login gaps where the corpus has them: the host rule reads this table, so a season must play real ones.
-    cat.login_gaps = std::fs::read_to_string(format!("{data}/login-gaps.json")).ok()
-        .and_then(|text| serde_json::from_str::<Vec<f64>>(&text).ok())
-        .filter(|gaps| !gaps.is_empty())
-        .unwrap_or_else(|| vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0]);
-    // Row 23's ceiling arm: no gaps at all is the economy's own "always there" path, so it bounds what any cadence
-    // change can buy. Quitting, personas and everything else stay as they are.
-    if std::env::args().any(|arg| arg == "always-online") {
-        cat.login_gaps.clear();
-    }
-    let rules = Arc::new(Rules::load(&cat,
-        &format!("{data}/units-parity/units-u1.json"),
-        &format!("{data}/fleet-settings-u1.json"),
-        &format!("{data}/combat-u1.json")).expect("the units, fleet and combat exports"));
-
-    // One shipyard table per home planet: a colony site has none, so a season starts its accounts on homes.
-    let configs: Vec<usize> = (0..accounts).map(|a| a % rules.units.planets.len()).collect();
-    let mut world = World::new(&cat, &configs, days as f64 * 24.0, 0.0, seed);
+    let arms: Vec<String> = std::env::args().collect();
+    let cat = Arc::new(Universe::catalogue(&data, &econ, &arms).expect("the economy catalogue"));
     // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
-    world.colonisation = Colonisation::load(&econ).ok().map(Arc::new);
-    // Row 66: how many galaxies each account colonises in, 1 to 7 alike - an assumption, as the alliance draw is: the
-    // bands say real mid accounts hold 1 / 3 / 6 galaxies at p10 / p50 / p90. Its own stream leaves the other draws as they were.
-    if std::env::args().any(|arg| arg == "reach") {
-        let mut draw = seed ^ 0x5eed_6a1a;
-        world.reach = (0..world.games.len()).map(|_| 1 + (next_random(&mut draw) % 7) as u32).collect();
-    }
-    let moon_shots = std::env::args().any(|arg| arg == "moonstack");
-    let moon_feed = std::env::args().any(|arg| arg == "moonfeed");
-    // A fully built account still logs in, to raid or to save its fleet.
-    world.enable_idle_logins(&cat);
-    // Three galaxies, a system each, wide apart: a raider has neighbours to fly at and a saver has somewhere to be away.
-    let systems = rules.settings.number_of_systems as i64;
-    let coords: Vec<Coord> = (0..accounts as i64).map(|a| Coord {
-        galaxy: 1 + a % 3,
-        system: 1 + (a * 167) % systems,
-        position: 4 + a % 9,
-    }).collect();
-    world.arm(vec![Arc::clone(&rules); accounts], coords);
-
-    let mut rng = seed ^ 0x5eed_1234;
-    let mut roles: Vec<usize> = (0..PERSONAS.len())
-        .flat_map(|r| std::iter::repeat(r).take((accounts as f64 * PERSONAS[r].1).round() as usize))
-        .collect();
-    while roles.len() < accounts { roles.push(0) }
-    roles.truncate(accounts);
-    shuffle(&mut roles, &mut rng);
-    let mut order: Vec<usize> = (0..accounts).collect();
-    shuffle(&mut order, &mut rng);
-    // Row 74: an account flies with its own character class's rules - the class its home's production rows were made
-    // with (the host owner's) - from the host's export of that class; without the arm every account flies the first's.
-    if std::env::args().any(|arg| arg == "classes") {
-        // Each class's own fleet settings too: a General flies on half the fuel (`class_consumption_multiplier`).
-        let class_rules = |class: u32| Arc::new(Rules::load(&cat,
-            &format!("{data}/units-parity/units-u1.json"),
-            &format!("{data}/fleet-settings-u1-class{class}.json"),
-            &format!("{data}/combat-u1-class{class}.json")).expect("a class's combat export"));
-        let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules(2)), (3, class_rules(3))];
-        for a in 0..accounts {
-            let class = cat.planets[configs[a]].character_class;
-            if let Some((_, r)) = by_class.iter().find(|(c, _)| Some(*c) == class) {
-                world.rules[a] = Arc::clone(r);
-            }
-        }
-    }
-    // Half the accounts stop playing, each at its own quit day: a quitter's last login is the day it leaves.
-    let mut quit: Vec<Option<f64>> = vec![None; accounts];
-    for &a in &order[..accounts / 2] {
-        let u = ((next_random(&mut rng) >> 11) as f64 + 0.5) / (1u64 << 53) as f64;
-        quit[a] = Some(-u.ln() * QUIT_MEAN_DAYS * DAY);
-    }
-
-    // Row 15: an account still playing at day 3 joins an alliance, at a drawn day; a quitter never joins. Membership
-    // is the season's data, not a world mechanic (the world has no alliances).
-    let mut alliance_at: Vec<Option<f64>> = vec![None; accounts];
-    // Row 92 arm: membership follows standing, decided at each day's highscore instead of drawn up front.
-    let standing = std::env::args().any(|arg| arg == "standing")
-        .then(|| (0..accounts).map(|_| ((next_random(&mut rng) >> 11) as f64 + 0.5) / (1u64 << 53) as f64).collect::<Vec<f64>>());
-    for a in (0..accounts).filter(|_| standing.is_none()) {
-        let quits = quit[a].unwrap_or(f64::INFINITY);
-        if quits <= 3.0 * DAY || next_random(&mut rng) % 100 >= ALLIANCE_SHARE {
-            continue;
-        }
-        let u = ((next_random(&mut rng) >> 11) as f64 + 0.5) / (1u64 << 53) as f64;
-        let join = 3.0 * DAY + -u.ln() * ALLIANCE_MEAN_DAYS * DAY;
-        if join < quits {
-            alliance_at[a] = Some(join);
-        }
-    }
-
-    let mut players: Vec<Player> = (0..accounts).map(|a| {
-        let s = seed.wrapping_mul(100).wrapping_add(a as u64);
-        match roles[a] {
-            RAIDER => Player::Raider(Raider::new(s)),
-            SAVER => Player::Saver(FleetSaver::new(s)),
-            _ => Player::Miner(Miner::new(s)),
-        }
-    }).collect();
-    // Row 45 arm C: every persona brings its colonies' surplus home at each login.
-    // Row 45 arm FR: every persona keeps its planets' last fields for the field-adding chain.
-    // Row 46: the stack of both.
-    let consolidate = std::env::args().any(|arg| arg == "consolidate" || arg == "stack" || arg == "yardstack" || arg == "moonstack");
-    let reserve = std::env::args().any(|arg| arg == "reserve" || arg == "stack" || arg == "yardstack" || arg == "moonstack");
-    // Row 33: the spending order, alone and on the kept stack.
-    let yard = std::env::args().any(|arg| arg == "yard" || arg == "yardstack" || arg == "moonstack");
-    // N6b: every persona fills its expedition slots.
-    let expeditions = std::env::args().any(|arg| arg == "expedition");
-    // Row 70: the next planet slot is the research priority once the slots are full.
-    let colonies_first = std::env::args().any(|arg| arg == "colonies");
-    // Row 71: the military share in ships.
-    let ships = std::env::args().any(|arg| arg == "ships");
-    // Row 72: research with no purpose only from what the next building leaves.
-    let lab = std::env::args().any(|arg| arg == "lab");
-    // Row 73: the surplus buys military only under the share.
-    let cap = std::env::args().any(|arg| arg == "cap");
-    // Row 75: the capital feeds its colonies' next buildings.
-    let feed = std::env::args().any(|arg| arg == "feed");
-    // Row 77: a planet waiting on time builds the factory that shortens its queue.
-    let factory = std::env::args().any(|arg| arg == "factory");
-    // Row 79: research from surplus only under the real research share.
-    let balance = std::env::args().any(|arg| arg == "balance");
-    let lab_first = std::env::args().any(|arg| arg == "labfirst");
-    let satellites = std::env::args().any(|arg| arg == "satellites");
-    let doubler = std::env::args().any(|arg| arg == "doubler");
-    for player in &mut players {
-        let miner = player.miner();
-        miner.consolidate = consolidate;
-        miner.reserve = reserve;
-        miner.yard = yard;
-        miner.expeditions = expeditions;
-        miner.colonies_first = colonies_first;
-        miner.ships = ships;
-        miner.lab = lab;
-        miner.cap = cap;
-        miner.feed = feed;
-        miner.factory = factory;
-        miner.balance = balance;
-        miner.lab_first = lab_first;
-        miner.satellites = satellites;
-        miner.doubler = doubler;
-    }
+    let colonisation = Colonisation::load(&econ).ok().map(Arc::new);
+    let mut universe = Universe::new(cat, colonisation, &data, days, accounts, seed, &arms);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
     }
     let out = BufWriter::new(File::create(&out_path).expect("the output file"));
     // Row 23: the books and the stock at the last line written, so a day is the difference of two samples.
-    let since: Vec<(Books, f64)> = (0..accounts).map(|a| (world.books(a), world.stock(a))).collect();
+    let since: Vec<(Books, f64)> = (0..accounts).map(|a| (universe.world.books(a), universe.world.stock(a))).collect();
     let mut season = Season {
-        world: &mut world,
-        cat: &cat,
-        roles: &roles,
-        players,
-        ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
+        u: &mut universe,
         out,
         per_day: vec![vec![Tally::default(); accounts]; days],
         since,
         login_at: vec![0; accounts],
         counted_login: vec![f64::NEG_INFINITY; accounts],
-        alliance_at,
-        recruit: std::env::args().any(|arg| arg == "recruit"),
-        standing,
-        top_days: vec![0; accounts],
         read: 0,
         midnight: DAY,
         days,
@@ -240,47 +80,24 @@ fn main() {
     };
 
     let start = std::time::Instant::now();
-    let mut gone = vec![false; accounts];
-    while let Some(a) = season.world.next_decision(season.cat) {
-        // A colony slot decides too; its player, quit day and ledger are its account's.
-        let owner = season.world.account_of(a);
-        let t = season.world.games[a].t;
-        season.flush(t);
-        if let Some(q) = quit[owner] {
-            if !gone[owner] && t >= q {
-                retire(season.world, owner, q);
-                gone[owner] = true;
-            }
-        }
-        if gone[owner] {
-            season.world.wait(season.cat, a);
-            continue;
-        }
-        season.touch(owner, a);
-        let pick = season.players[owner].act(&mut *season.world, season.cat, a, &mut season.ledgers[owner]);
-        // Row 64: alliance members shoot moons for each other at their logins (membership is the season's data).
-        if moon_shots && a == owner && season.alliance_at[owner].is_some_and(|join| t >= join) {
-            let alliance_at = &season.alliance_at;
-            players::moon_shot(&mut *season.world, season.cat, a, |b| alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut season.ledgers[owner]);
-            players::ready_for_moon(&mut *season.world, season.cat, a, moon_feed);
-        }
-        match pick {
-            Some(k) => season.world.commit(season.cat, a, k),
-            None => season.world.wait(season.cat, a),
-        }
+    while let Some(a) = season.u.next_decision() {
+        let owner = season.u.world.account_of(a);
+        season.flush(season.u.world.games[a].t);
+        if season.u.plays(a) { season.touch(owner, a) }
+        season.u.play(a, None);
     }
     season.flush(f64::INFINITY);
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
     if std::env::args().any(|arg| arg == "levels") {
         let planets: Vec<_> = (0..accounts).map(|a| {
-            let slots: Vec<_> = season.world.planets_of(a).into_iter().map(|slot| {
-                let planet = &season.world.games[slot].planet;
-                let levels: serde_json::Map<String, serde_json::Value> = season.cat.objects.iter().zip(&planet.levels)
+            let slots: Vec<_> = season.u.world.planets_of(a).into_iter().map(|slot| {
+                let planet = &season.u.world.games[slot].planet;
+                let levels: serde_json::Map<String, serde_json::Value> = season.u.cat.objects.iter().zip(&planet.levels)
                     .filter(|(_, &l)| l > 0).map(|(o, &l)| (o.id.to_string(), json!(l))).collect();
-                json!({"fields": season.cat.fields_used(planet), "cap": season.cat.field_cap(planet), "rate": planet.rate,
-                       "position": season.cat.planets[planet.config].position, "levels": levels})
+                json!({"fields": season.u.cat.fields_used(planet), "cap": season.u.cat.field_cap(planet), "rate": planet.rate,
+                       "position": season.u.cat.planets[planet.config].position, "levels": levels})
             }).collect();
-            json!({"account": a, "inactive": gone[a], "total": score::of(&*season.world, a).total, "planets": slots})
+            json!({"account": a, "inactive": season.u.gone[a], "total": score::of(&season.u.world, a).total, "planets": slots})
         }).collect();
         std::fs::write(format!("{out_path}.levels.json"), serde_json::to_string(&planets).expect("levels json")).expect("write the levels");
     }
@@ -294,13 +111,13 @@ fn main() {
     let seconds = start.elapsed().as_secs_f64();
     drop(season);
 
-    let count = |role: usize| roles.iter().filter(|&&r| r == role).count();
-    let quit_days: Vec<f64> = quit.iter().flatten().map(|d| d / DAY).collect();
+    let count = |role: usize| universe.roles.iter().filter(|&&r| r == role).count();
+    let quit_days: Vec<f64> = universe.quit.iter().flatten().map(|d| d / DAY).collect();
     println!("{}", json!({
         "seed": seed,
         "days": days,
         "accounts": accounts,
-        "world_speed": cat.speed,
+        "world_speed": universe.cat.speed,
         "personas": {PERSONAS[0].0: count(0), PERSONAS[1].0: count(1), PERSONAS[2].0: count(2)},
         "quit": quit_days.len(),
         "quit_day_median": median(&quit_days),
@@ -313,29 +130,9 @@ fn main() {
     }));
 }
 
-/// The account's owner stopped coming at `quit`: the login record ends there, which is what `World::inactive` reads, and
-/// its clock stops, so nothing of it is decided afterwards.
-fn retire(w: &mut World, a: usize, quit: f64) {
-    // Every planet the account holds stops with it, colonies included.
-    for slot in w.planets_of(a) {
-        let end = quit.max(w.games[slot].t);
-        let game = &mut w.games[slot];
-        game.horizon = end;
-        game.login_times.retain(|&t| t <= end);
-        if game.login_times.is_empty() { game.login_times.push(end) }
-        // A login no clock reaches: the record has no entry after the quit day, and `Catalogue::login` draws none.
-        game.login_times.push(f64::INFINITY);
-    }
-}
-
 /// A season's output: the world, the day's buckets still filling, and the lines written so far.
 struct Season<'a, W: Write> {
-    world: &'a mut World,
-    cat: &'a Catalogue,
-    roles: &'a [usize],
-    players: Vec<Player>,
-   /// What each account did.
-    ledgers: Vec<Ledger>,
+    u: &'a mut Universe,
     out: W,
     /// Per day and account, what the world played that day.
     per_day: Vec<Vec<Tally>>,
@@ -345,14 +142,6 @@ struct Season<'a, W: Write> {
     login_at: Vec<usize>,
     /// The last login second counted per account: every planet may decide at it, and it is one login.
     counted_login: Vec<f64>,
-    /// Per account, the second it joined an alliance (row 15), or `None` if it never did.
-    alliance_at: Vec<Option<f64>>,
-    /// Row 82: an active account that has held its world's top tenth for `RECRUIT_DAYS` day ends joins an alliance, as
-    /// every real one is in one (a single day's rank is noise early on, and joining on it made the mid 96% allied).
-    recruit: bool,
-    standing: Option<Vec<f64>>,
-    /// Per account, the consecutive day ends it has ended in its world's top tenth.
-    top_days: Vec<u32>,
     /// How many events of the world's log have been read.
     read: usize,
     /// The next midnight no line has been written for.
@@ -379,36 +168,10 @@ impl<W: Write> Season<'_, W> {
     fn flush(&mut self, until: f64) {
         while self.midnight <= until && self.midnight <= self.days as f64 * DAY {
             let d = (self.midnight / DAY) as usize - 1;
-            scan(self.world, &mut self.read, self.roles, &mut self.per_day, self.days, &mut self.delivered);
+            scan(&self.u.world, &mut self.read, &self.u.roles, &mut self.per_day, self.days, &mut self.delivered);
             self.write_day(d, snapshot_time(until, self.midnight));
-            // N6b: an expedition's find bracket reads the universe's rank-1 score, which the host's highscore refreshes
-            // daily; the world's own leader stands in for it instead of a fixed number.
-            self.world.rank1_points = (0..self.roles.len()).map(|a| score::of(self.world, a).total).max().unwrap_or(0);
-            if let Some(draws) = &self.standing {
-                let mut ranked: Vec<usize> = (0..self.roles.len()).collect();
-                ranked.sort_by_key(|&a| std::cmp::Reverse(score::of(self.world, a).total));
-                for (rank, &a) in ranked.iter().enumerate() {
-                    let p = rank as f64 / ranked.len() as f64;
-                    // Membership follows today's standing both ways: an alliance drops a member that falls away.
-                    let playing = self.world.games[a].horizon > self.midnight && self.midnight >= 3.0 * DAY;
-                    let placed = playing && draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p;
-                    if placed != self.alliance_at[a].is_some() {
-                        self.alliance_at[a] = placed.then_some(self.midnight);
-                    }
-                }
-            }
-            if self.recruit {
-                let mut ranked: Vec<usize> = (0..self.roles.len()).collect();
-                ranked.sort_by_key(|&a| std::cmp::Reverse(score::of(self.world, a).total));
-                let top = ranked.len().div_ceil(10);
-                for (rank, &a) in ranked.iter().enumerate() {
-                    self.top_days[a] = if rank < top { self.top_days[a] + 1 } else { 0 };
-                    if self.top_days[a] >= RECRUIT_DAYS && self.alliance_at[a].is_none() && !self.world.inactive(self.cat, a, self.midnight) {
-                        self.alliance_at[a] = Some(self.midnight);
-                    }
-                }
-            }
-            self.lines += self.world.games.len();
+            self.u.day_end(self.midnight);
+            self.lines += self.u.world.games.len();
             self.midnight += DAY;
         }
     }
@@ -416,51 +179,51 @@ impl<W: Write> Season<'_, W> {
     /// One line per account for the day `d` (0-based; the line says `d + 1`), as §9.1 of the plan fixes it.
     fn write_day(&mut self, d: usize, world_time: f64) {
         let at = (d + 1) as f64 * DAY;
-        for a in 0..self.roles.len() {
+        for a in 0..self.u.roles.len() {
             // Inactive is the world's own flag (last login more than seven days ago), not the quit day we drew.
-            let inactive = self.world.inactive(self.cat, a, at);
+            let inactive = self.u.world.inactive(&self.u.cat, a, at);
             // An account's value is every planet it holds, as `score::of` already sums it.
-            let planets = self.world.planets_of(a);
-            let value: f64 = planets.iter().map(|&s| account_value(self.world, s)).sum();
-            let economy: f64 = planets.iter().map(|&s| self.world.games[s].value()).sum();
+            let planets = self.u.world.planets_of(a);
+            let value: f64 = planets.iter().map(|&s| account_value(&self.u.world, s)).sum();
+            let economy: f64 = planets.iter().map(|&s| self.u.world.games[s].value()).sum();
             // The host's own four scores (row N1: `score::of` equals HighscoreService on 600 drawn accounts,
             // 0 differ to the integer). Every band in the plan is written in this score, so the line says so.
-            let score = score::of(self.world, a);
-            let galaxies: BTreeSet<i64> = planets.iter().map(|&s| self.world.coords[s].galaxy).collect();
-            let moons = planets.iter().filter(|&&s| self.world.moons[s]).count();
+            let score = score::of(&self.u.world, a);
+            let galaxies: BTreeSet<i64> = planets.iter().map(|&s| self.u.world.coords[s].galaxy).collect();
+            let moons = planets.iter().filter(|&&s| self.u.world.moons[s]).count();
             let logins = self.logins_today(a, d);
-            let busy = self.world.busy_seconds(a, at - DAY, at);
+            let busy = self.u.world.busy_seconds(a, at - DAY, at);
             let tally = &self.per_day[d][a];
             // Row 29: what holds each queue of this account's planets, in hours, and the host's time modifiers for them.
             let stall = self.stall(a, &planets);
             // Row 23: the day's flows are the difference of two samples of the same second, so a line whose events
             // all fell inside it closes by construction and one the world moved without booking a flow does not.
-            let books = self.world.books(a);
-            let stock = self.world.stock(a);
+            let books = self.u.world.books(a);
+            let stock = self.u.world.stock(a);
             let (before, was) = self.since[a];
             let flows = flows_of(&before, &books);
             let unexplained = (stock - was) - (books.net() - before.net());
             self.since[a] = (books, stock);
             let fleet = value - economy;
             // The day an account quits, its last login is the quit itself (`retire`), where it no longer acts.
-            let quits_today = (at - DAY..at).contains(&self.world.games[a].horizon);
+            let quits_today = (at - DAY..at).contains(&self.u.world.games[a].horizon);
             // A clock behind midnight with nothing due before it is lazy, not stuck: its day is booked at its next event.
-            let lazy = planets.iter().all(|&p| self.world.games[p].t < at && self.world.moves_at(p) > at);
+            let lazy = planets.iter().all(|&p| self.u.world.games[p].t < at && self.u.world.moves_at(p) > at);
             let frozen = !quits_today && !lazy && frozen_day(self.previous[a], inactive, tally.logins, books.produced - before.produced, stock, score.total, fleet);
             if frozen {
                 self.frozen_days += 1;
             }
             self.previous[a] = Some((stock, score.total, fleet));
-            let invalid_stock = planets.iter().any(|&p| self.world.games[p].planet.res.iter().any(|r| !r.is_finite() || *r < -1e-6));
-            let clock_ahead = planets.iter().any(|&p| self.world.games[p].t > world_time + 1e-6);
-            self.excess.resize(self.world.games.len(), [0.0; 3]);
-            self.seen_planet.resize(self.world.games.len(), false);
+            let invalid_stock = planets.iter().any(|&p| self.u.world.games[p].planet.res.iter().any(|r| !r.is_finite() || *r < -1e-6));
+            let clock_ahead = planets.iter().any(|&p| self.u.world.games[p].t > world_time + 1e-6);
+            self.excess.resize(self.u.world.games.len(), [0.0; 3]);
+            self.seen_planet.resize(self.u.world.games.len(), false);
             let unexplained_over_cap = planets.iter().fold(false, |bad, &p| {
-                let planet = &self.world.games[p].planet;
+                let planet = &self.u.world.games[p].planet;
                 let mut invalid = false;
                 for r in 0..3 {
                     let current = (planet.res[r] - planet.cap[r]).max(0.0);
-                    let initial = if !self.seen_planet[p] { (self.cat.planets[planet.config].resources[r] - planet.cap[r]).max(0.0) } else { 0.0 };
+                    let initial = if !self.seen_planet[p] { (self.u.cat.planets[planet.config].resources[r] - planet.cap[r]).max(0.0) } else { 0.0 };
                     let (next, bad) = excess_after(current, self.excess[p][r], self.delivered.get(p).map_or(0.0, |v| v[r]) + initial);
                     invalid |= bad;
                     self.excess[p][r] = next;
@@ -469,7 +232,7 @@ impl<W: Write> Season<'_, W> {
                 self.seen_planet[p] = true;
                 bad || invalid
             });
-            let factors: Vec<(usize, f64)> = planets.iter().map(|&p| (p, self.world.games[p].planet.factor)).collect();
+            let factors: Vec<(usize, f64)> = planets.iter().map(|&p| (p, self.u.world.games[p].planet.factor)).collect();
             let unchanged_energy = self.previous_factors[a].iter().all(|&(slot, factor)| {
                 factors.iter().any(|&(current, now)| current == slot && now >= factor - 1e-6)
             });
@@ -488,16 +251,16 @@ impl<W: Write> Season<'_, W> {
             self.over_cap += usize::from(unexplained_over_cap);
             let line = json!({
                 "seed": self.seed,
-                "world_speed": self.cat.speed as i64,
+                "world_speed": self.u.cat.speed as i64,
                 "day": d + 1,
                 "account": a,
-                "persona": PERSONAS[self.roles[a]].0,
+                "persona": PERSONAS[self.u.roles[a]].0,
                 "controlled": false,
                 "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
                            "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
                            "production_drop_warning": production_drop},
                 "clock_ahead_detail": planets.iter().filter_map(|&p| {
-                    (self.world.games[p].t > world_time + 1e-6).then_some(json!({"slot": p, "planet_time": self.world.games[p].t, "world_time": world_time, "day_end": at}))
+                    (self.u.world.games[p].t > world_time + 1e-6).then_some(json!({"slot": p, "planet_time": self.u.world.games[p].t, "world_time": world_time, "day_end": at}))
                 }).collect::<Vec<_>>(),
                 "inactive": inactive,
                 "score_source": "host",
@@ -506,7 +269,7 @@ impl<W: Write> Season<'_, W> {
                 "planets": planets.len(),
                 "moons": moons,
                 "galaxies": galaxies.len(),
-                "alliance": self.alliance_at[a].is_some_and(|join| at >= join),
+                "alliance": self.u.alliance_at[a].is_some_and(|join| at >= join),
                 "value": value,
                 "fleet_value": value - economy,
                 "logins_today": logins,
@@ -542,19 +305,19 @@ impl<W: Write> Season<'_, W> {
     fn stall(&self, a: usize, planets: &[usize]) -> serde_json::Value {
         let (mut blocked, mut idle, mut long) = (0.0, 0.0, 0_u32);
         for &slot in planets {
-            let (now, pending) = (self.world.games[slot].t, &self.world.games[slot].pending);
-            let left: f64 = pending.iter().filter(|&&(_, k)| self.cat.objects[k].queue == 0)
+            let (now, pending) = (self.u.world.games[slot].t, &self.u.world.games[slot].pending);
+            let left: f64 = pending.iter().filter(|&&(_, k)| self.u.cat.objects[k].queue == 0)
                 .map(|&(end, _)| (end - now).max(0.0) / 3600.0).fold(0.0, f64::max);
             blocked += left.min(24.0);
             idle += 24.0 - left.min(24.0);
             long += u32::from(left > 24.0);
         }
-        let planet = &self.world.games[a].planet;
+        let planet = &self.u.world.games[a].planet;
         let levels = |queue: usize| -> Vec<(i64, u32)> {
-            self.cat.modifiers[queue].iter().map(|&(k, _)| (self.cat.objects[k].id, planet.levels[k])).collect()
+            self.u.cat.modifiers[queue].iter().map(|&(k, _)| (self.u.cat.objects[k].id, planet.levels[k])).collect()
         };
         let mut rng = self.seed ^ (self.midnight.to_bits());
-        let next = self.cat.baseline(planet, 0, Baseline::Player, &mut rng);
+        let next = self.u.cat.baseline(planet, 0, Baseline::Player, &mut rng);
         let hours = |seconds: f64| if seconds >= 1e9 { serde_json::Value::Null } else { json!(seconds / 3600.0) };
         // Row 29, extended by row 37: why each queue's objects cannot start, counted for **every** planet the account
         // holds (the building queue) and for the account's lab, which is the capital's; and the stock above two hours of
@@ -562,15 +325,15 @@ impl<W: Write> Season<'_, W> {
         let mut reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
         let mut research_reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
         for &slot in planets {
-            for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 0) {
-                *reasons.entry(self.cat.stall_of(&self.world.games[slot].planet, k)).or_default() += 1;
+            for k in (0..self.u.cat.objects.len()).filter(|&k| self.u.cat.objects[k].queue == 0) {
+                *reasons.entry(self.u.cat.stall_of(&self.u.world.games[slot].planet, k)).or_default() += 1;
             }
         }
-        for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 1) {
-            *research_reasons.entry(self.cat.stall_of(planet, k)).or_default() += 1;
+        for k in (0..self.u.cat.objects.len()).filter(|&k| self.u.cat.objects[k].queue == 1) {
+            *research_reasons.entry(self.u.cat.stall_of(planet, k)).or_default() += 1;
         }
         let surplus: f64 = planets.iter().map(|&slot| {
-            let planet = &self.world.games[slot].planet;
+            let planet = &self.u.world.games[slot].planet;
             let reserve: f64 = (0..3).map(|r| WEIGHTS[r] * planet.rate[r].max(0.0) * 2.0).sum();
             (weighted(planet.res) - reserve).max(0.0)
         }).sum();
@@ -578,34 +341,34 @@ impl<W: Write> Season<'_, W> {
         // cannot start, the first missing prerequisite and the first resource its price cannot fit), the lab on the planet
         // that pays for it, and the yard's own bound: what the surplus is worth against what the yard could start at all.
         let census: Vec<serde_json::Value> = planets.iter().map(|&slot| {
-            let planet = &self.world.games[slot].planet;
+            let planet = &self.u.world.games[slot].planet;
             let mut planet_reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
             let (mut needs, mut unaffordable) = (serde_json::Value::Null, serde_json::Value::Null);
-            for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 0) {
-                let reason = self.cat.stall_of(planet, k);
+            for k in (0..self.u.cat.objects.len()).filter(|&k| self.u.cat.objects[k].queue == 0) {
+                let reason = self.u.cat.stall_of(planet, k);
                 *planet_reasons.entry(reason).or_default() += 1;
-                if reason == "needs" && needs.is_null() { needs = json!(self.cat.needs_first(planet, k)); }
-                if reason == "never affordable" && unaffordable.is_null() { unaffordable = json!(self.cat.unaffordable_first(planet, k)); }
+                if reason == "needs" && needs.is_null() { needs = json!(self.u.cat.needs_first(planet, k)); }
+                if reason == "never affordable" && unaffordable.is_null() { unaffordable = json!(self.u.cat.unaffordable_first(planet, k)); }
             }
-            let used = self.cat.fields_used(planet);
-            let cap = self.cat.field_cap(planet);
+            let used = self.u.cat.fields_used(planet);
+            let cap = self.u.cat.field_cap(planet);
             // Row 42: is the object that adds fields itself startable here, and if not, what is the first thing its own
             // chain is missing - the reachability table's whole question. Found by its data (it adds fields at its next
             // level), never by name.
-            let adder = (0..self.cat.objects.len())
-                .find(|&k| self.cat.objects[k].fields_added.get(planet.levels[k] as usize + 1).copied().unwrap_or(0) > 0);
+            let adder = (0..self.u.cat.objects.len())
+                .find(|&k| self.u.cat.objects[k].fields_added.get(planet.levels[k] as usize + 1).copied().unwrap_or(0) > 0);
             let (adder_legal, adder_needs) = match adder {
-                Some(k) => (self.world.legal(self.cat, slot, k), json!(self.cat.needs_first(planet, k))),
+                Some(k) => (self.u.world.legal(&self.u.cat, slot, k), json!(self.u.cat.needs_first(planet, k))),
                 None => (false, serde_json::Value::Null),
             };
             // Row 67: whether this planet can build defence at all and how much it holds - a moon shot needs guns there.
-            let units = &self.world.rules[slot].units;
+            let units = &self.u.world.rules[slot].units;
             let defence: Vec<usize> = (0..units.units.len()).filter(|&u| units.kind.get(u) == Some(&UnitKind::Defence)).collect();
             json!({
                 "slot": slot,
                 "capital": slot == a,
                 "defence_buildable": defence.iter().any(|&u| units.requirements_met(planet, u)),
-                "defence_held": defence.iter().map(|&u| self.world.yards[slot].counts[u]).sum::<u64>(),
+                "defence_held": defence.iter().map(|&u| self.u.world.yards[slot].counts[u]).sum::<u64>(),
                 "used": used,
                 "cap": cap,
                 "sealed": used >= cap,
@@ -617,21 +380,21 @@ impl<W: Write> Season<'_, W> {
             })
         }).collect();
         let lab = planets.iter().find(|&&slot| slot == a).map(|&slot| {
-            let planet = &self.world.games[slot].planet;
+            let planet = &self.u.world.games[slot].planet;
             let mut lab_reasons: std::collections::BTreeMap<&'static str, u32> = std::collections::BTreeMap::new();
             let mut needs = serde_json::Value::Null;
             let mut unaffordable = serde_json::Value::Null;
-            for k in (0..self.cat.objects.len()).filter(|&k| self.cat.objects[k].queue == 1) {
-                let reason = self.cat.stall_of(planet, k);
+            for k in (0..self.u.cat.objects.len()).filter(|&k| self.u.cat.objects[k].queue == 1) {
+                let reason = self.u.cat.stall_of(planet, k);
                 *lab_reasons.entry(reason).or_default() += 1;
-                if reason == "needs" && needs.is_null() { needs = json!(self.cat.needs_first(planet, k)); }
-                if reason == "never affordable" && unaffordable.is_null() { unaffordable = json!(self.cat.unaffordable_first(planet, k)); }
+                if reason == "needs" && needs.is_null() { needs = json!(self.u.cat.needs_first(planet, k)); }
+                if reason == "never affordable" && unaffordable.is_null() { unaffordable = json!(self.u.cat.unaffordable_first(planet, k)); }
             }
             json!({ "reasons": lab_reasons, "needs_first": needs, "unaffordable_first": unaffordable })
         }).map_or(serde_json::Value::Null, |lab| lab);
-        let units = &self.world.rules[a].units;
+        let units = &self.u.world.rules[a].units;
         let yard_capacity: f64 = (0..units.units.len())
-            .map(|u| units.max_amount(&self.world.yards[a], planet, u) as f64 * weighted(units.units[u].price))
+            .map(|u| units.max_amount(&self.u.world.yards[a], planet, u) as f64 * weighted(units.units[u].price))
             .sum();
         json!({
             "blocked_hours": blocked,
@@ -645,18 +408,18 @@ impl<W: Write> Season<'_, W> {
             "long_builds": long,
             "mod_build": levels(0),
             "mod_research": levels(1),
-            "next_id": next.map(|k| self.cat.objects[k].id),
-            "next_seconds": next.map(|k| self.cat.build_seconds(planet, k)).map(|s| s / 3600.0),
-            "next_wait": next.map(|k| self.cat.wait_seconds(planet, k)).map_or(serde_json::Value::Null, hours),
+            "next_id": next.map(|k| self.u.cat.objects[k].id),
+            "next_seconds": next.map(|k| self.u.cat.build_seconds(planet, k)).map(|s| s / 3600.0),
+            "next_wait": next.map(|k| self.u.cat.wait_seconds(planet, k)).map_or(serde_json::Value::Null, hours),
             // The lab at the day's end: running (hours left), saving for (object, what its price lacks), or idle.
-            "lab_left": hours((self.world.games[a].free[1] - self.world.games[a].t).max(0.0)),
-            "lab_pending": self.world.games[a].pending.iter().filter(|&&(_, k)| self.cat.objects[k].queue == 1).map(|&(_, k)| self.cat.objects[k].id).collect::<Vec<_>>(),
+            "lab_left": hours((self.u.world.games[a].free[1] - self.u.world.games[a].t).max(0.0)),
+            "lab_pending": self.u.world.games[a].pending.iter().filter(|&&(_, k)| self.u.cat.objects[k].queue == 1).map(|&(_, k)| self.u.cat.objects[k].id).collect::<Vec<_>>(),
             "capital_res": planet.res.iter().map(|r| r.round()).collect::<Vec<f64>>(),
-            "keep": self.world.games[a].commit[0].or_else(|| self.cat.baseline(planet, 0, Baseline::Player, &mut 0))
-                .map(|b| self.cat.objects[b].price[planet.levels[b] as usize].to_vec()),
-            "lab_commit": self.world.games[a].commit[1].map(|k| self.cat.objects[k].id),
-            "lab_lacks": self.world.games[a].commit[1].map(|k| {
-                let price = self.cat.objects[k].price[planet.levels[k] as usize];
+            "keep": self.u.world.games[a].commit[0].or_else(|| self.u.cat.baseline(planet, 0, Baseline::Player, &mut 0))
+                .map(|b| self.u.cat.objects[b].price[planet.levels[b] as usize].to_vec()),
+            "lab_commit": self.u.world.games[a].commit[1].map(|k| self.u.cat.objects[k].id),
+            "lab_lacks": self.u.world.games[a].commit[1].map(|k| {
+                let price = self.u.cat.objects[k].price[planet.levels[k] as usize];
                 (0..3).map(|r| (price[r] - planet.res[r]).max(0.0).round()).collect::<Vec<f64>>()
             }),
         })
@@ -664,19 +427,19 @@ impl<W: Write> Season<'_, W> {
 
     /// Counts this login for the account's day, and whether a store stood at 80% or more (row 11).
     fn touch(&mut self, a: usize, slot: usize) {
-        let t = self.world.games[slot].t;
+        let t = self.u.world.games[slot].t;
         let d = ((t / DAY) as usize).min(self.days - 1);
-        let planet = &self.world.games[slot].planet;
+        let planet = &self.u.world.games[slot].planet;
         let full = (0..3).any(|r| planet.res[r] >= 0.8 * planet.cap[r]);
         // A session places several decisions per login, so a login is a decision whose second is in the login record
         // (row 12r): counting decisions here would read 57 "logins" a day where the account logged in twelve times.
         // The world's clock never goes back, so one remembered second per account counts each login once.
-        let login = self.world.games[slot].login_times.iter().any(|&x| (x - t).abs() < 1e-6) && t != self.counted_login[a];
+        let login = self.u.world.games[slot].login_times.iter().any(|&x| (x - t).abs() < 1e-6) && t != self.counted_login[a];
         if login { self.counted_login[a] = t }
         // Row 29: at a login that finds a store full, why the yard did or did not spend it.
         let yard = full && login;
         let stall = match yard {
-            true => Some(self.players[a].yard_stall(&*self.world, self.cat, slot)),
+            true => Some(self.u.players[a].yard_stall(&self.u.world, &self.u.cat, slot)),
             false => None,
         };
         let tally = &mut self.per_day[d][a];
@@ -688,7 +451,7 @@ impl<W: Write> Season<'_, W> {
     /// The account's logins during day `d`, as seconds of the day: the world's own login record, read forward once.
     fn logins_today(&mut self, a: usize, d: usize) -> Vec<i64> {
         let end = (d + 1) as f64 * DAY;
-        let times = &self.world.games[self.world.account_of(a)].login_times;
+        let times = &self.u.world.games[self.u.world.account_of(a)].login_times;
         let mut at = self.login_at[a].min(times.len());
         let mut today = Vec::new();
         while at < times.len() && times[at] < end {
@@ -753,14 +516,6 @@ mod health_tests {
         assert!(!excess_after(95_771_162.000_01, 84_639_043.0, 11_132_119.0).1);
         assert!(excess_after(95_771_163.0, 84_639_043.0, 11_132_119.0).1);
     }
-}
-
-/// What the account paid for its research levels: the stub's research share of `account_value`.
-fn research_value(w: &World, cat: &Catalogue, a: usize) -> f64 {
-    let levels = &w.games[w.account_of(a)].planet.levels;
-    cat.objects.iter().enumerate().filter(|(_, o)| o.queue == 1)
-        .map(|(k, o)| (0..levels[k] as usize).map(|level| weighted(o.price[level])).sum::<f64>())
-        .sum()
 }
 
 /// Reads the events the world wrote since the last call into their day and account.
@@ -895,12 +650,6 @@ fn flows_of(before: &Books, now: &Books) -> serde_json::Value {
 
 fn weighted(resources: [f64; 3]) -> f64 {
     (0..3).map(|r| WEIGHTS[r] * resources[r]).sum()
-}
-
-fn shuffle<T>(values: &mut [T], rng: &mut u64) {
-    for i in (1..values.len()).rev() {
-        values.swap(i, (next_random(rng) % (i as u64 + 1)) as usize);
-    }
 }
 
 fn median(values: &[f64]) -> f64 {

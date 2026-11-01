@@ -301,6 +301,8 @@ pub struct Planet {
     pub peers: std::sync::Arc<Vec<Vec<u32>>>,
     /// W14: the stock the host last wrote, at the planet's last page load or spend, plus what fleets delivered since.
     pub settled: [f64; 3],
+    /// W15: what the account's officers multiply a research time by (1 without), set when the account decides.
+    pub research_multiplier: f64,
 }
 
 impl Planet {
@@ -482,7 +484,7 @@ impl Catalogue {
     /// A game at second zero whose clock has not moved yet, for a world that moves it with `tick`.
     pub fn new_paused_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
         let c = &self.planets[config];
-        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default(), field_max: c.field_max, peers: Default::default(), settled: c.resources };
+        let mut planet = Planet { config, levels: c.levels.clone(), res: c.resources, rate: [0.0; 3], cap: [0.0; 3], energy_max: 0.0, energy_used: 0.0, factor: 1.0, units: c.units.clone(), books: Books::default(), field_max: c.field_max, peers: Default::default(), settled: c.resources, research_multiplier: 1.0 };
         self.refresh(&mut planet);
         // A night between six and eight hours (the host flags a dark period under six), starting at a drawn hour.
         let mut seed = login_seed | 1;
@@ -700,7 +702,10 @@ impl Catalogue {
         let seconds = self.table_seconds(planet, k);
         if self.objects[k].queue == 0 { return seconds }
         let factor = self.planets[planet.config].character_class.and_then(|c| self.research_time_multipliers.get(&c)).copied().unwrap_or(1.0);
-        (seconds * factor).floor().max(1.0)
+        // The host truncates after the class's factor and again after the officer's (PlanetService::getTechnologyResearchTime).
+        let seconds = (seconds * factor).floor();
+        let seconds = if planet.research_multiplier != 1.0 { (seconds * planet.research_multiplier).floor() } else { seconds };
+        seconds.max(1.0)
     }
 
     fn table_seconds(&self, planet: &Planet, k: usize) -> f64 {

@@ -31,7 +31,7 @@ class ReplayAiRlWorldTrace extends Command
         $trace = json_decode((string) file_get_contents((string) $this->argument('trace')), true, 512, JSON_THROW_ON_ERROR);
 
         DB::beginTransaction();
-        $planets = app(ReplayAiWorldAction::class)->handle($trace['planets'], (int) $trace['planets'][0]['final']['t'], $trace['yard_blocked_by'] ?? [], (int) ($trace['rank1_points'] ?? 0));
+        $planets = app(ReplayAiWorldAction::class)->handle($trace['planets'], (int) $trace['planets'][0]['final']['t'], $trace['yard_blocked_by'] ?? [], (int) ($trace['rank1_points'] ?? 0), (int) ($trace['dark_matter_initial'] ?? 0));
         DB::rollBack();
 
         file_put_contents((string) $this->argument('out'), json_encode(['planets' => $planets], JSON_THROW_ON_ERROR));

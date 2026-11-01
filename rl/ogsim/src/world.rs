@@ -341,6 +341,9 @@ pub struct World {
     pub events: Vec<Event>,
     /// Dark matter per slot; an account's is the capital's.
     pub dark_matter: Vec<i64>,
+    /// W15: per slot (the capital's is the account's), each hired officer's last second, and every hire made.
+    pub officers: Vec<HashMap<String, f64>>,
+    pub officer_log: Vec<(usize, f64, String, i64)>,
     /// W14: every yard order (slot, second, host unit id, amount asked, amount queued), for the host's replay of the world.
     pub unit_log: Vec<(usize, f64, u32, u64, u64)>,
     /// Every fleet as it left, with the speed it was sent at (W14: the trace a host replay dispatches).
@@ -378,7 +381,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -387,6 +390,7 @@ impl World {
         assert_eq!(coords.len(), self.games.len(), "one coordinate per account");
         assert_eq!(rules.len(), self.games.len(), "one rules per account");
         self.yards = rules.iter().zip(&self.games).map(|(r, g)| r.units.shipyard(g.planet.config)).collect();
+        self.dark_matter = rules.iter().map(|r| r.settings.dark_matter_initial).collect();
         self.coords = coords;
         self.rules = rules;
     }
@@ -590,6 +594,7 @@ impl World {
         self.moons.push(false);
         self.moon_holds.push(MoonHold::default());
         self.dark_matter.push(0);
+        self.officers.push(HashMap::default());
         self.idle_next.push(NEVER);
         self.idle_now.push(false);
         self.account.push(capital);
@@ -608,6 +613,7 @@ impl World {
         if self.idle_now[a] { return self.wait(cat, a) }
         debug_assert!(self.legal(cat, a, k), "account {a} cannot start object {k} now");
         self.sync_peers(cat, a);
+        self.games[a].planet.research_multiplier = self.hired(a).map(|o| o.research_multiplier).fold(1.0, f64::min);
         cat.decide(&mut self.games[a], Some(k));
         self.next[a] = cat.peek(&mut self.games[a]);
     }
@@ -647,7 +653,31 @@ impl World {
     pub fn expedition_slots(&self, cat: &Catalogue, a: usize) -> Option<usize> {
         let table = self.colonisation.as_ref()?;
         let level = self.research(cat, a).get(&(table.research as u32)).copied().unwrap_or(0);
-        Some(table.max_expeditions(level)? + self.rules[a].expedition.as_ref()?.class_slots)
+        Some(table.max_expeditions(level)? + self.rules[a].expedition.as_ref()?.class_slots + self.hired(a).map(|o| o.expedition_slots).sum::<usize>())
+    }
+
+    /// W15: the officers account a has working at its clock; the bundle stands for all of them (`Officer::isOfficerActive`).
+    pub fn hired(&self, a: usize) -> impl Iterator<Item = &crate::fleet::Officer> {
+        let (account, now) = (self.account[a], self.games[a].t);
+        // An economy-only world has no fleet settings, so no officers.
+        let officers = self.rules.get(account).map(|r| &r.settings.officers);
+        let active = move |key: &str| self.officers[account].get(key).is_some_and(|&until| until > now);
+        let bundle = officers.and_then(|o| o.iter().find(|(key, o)| o.bundle && active(key)).map(|(key, _)| key));
+        officers.into_iter().flatten().filter(move |(key, _)| match bundle { Some(b) => *key == b, None => active(key) }).map(|(_, o)| o)
+    }
+
+    /// W15: account a buys `key` for `days` with its dark matter (`OfficerService::purchase`); a running officer is
+    /// extended from its end.
+    pub fn hire(&mut self, a: usize, key: &str, days: i64) -> Result<(), &'static str> {
+        let account = self.account[a];
+        let now = self.games[a].t;
+        let cost = *self.rules[account].settings.officers.get(key).ok_or("no such officer")?.costs.get(&days.to_string()).ok_or("no such duration")?;
+        if self.dark_matter[account] < cost { return Err("not enough dark matter") }
+        self.dark_matter[account] -= cost;
+        let until = self.officers[account].entry(key.to_string()).or_insert(now);
+        *until = until.max(now) + days as f64 * 86_400.0;
+        self.officer_log.push((a, now, key.to_string(), days));
+        Ok(())
     }
 
     /// Account a's fleet slots as `PlayerService::getFleetSlotsMax` counts them (no officers): the table's at its research
@@ -655,7 +685,7 @@ impl World {
     pub fn fleet_slots(&self, cat: &Catalogue, a: usize) -> Option<usize> {
         let table = self.colonisation.as_ref()?;
         let level = self.research(cat, a).get(&table.fleet_research?).copied().unwrap_or(0) as usize;
-        Some(*table.max_fleets.get(level.min(table.max_fleets.len().checked_sub(1)?))? + self.rules[a].combat.rules.class_fleet_slots)
+        Some(*table.max_fleets.get(level.min(table.max_fleets.len().checked_sub(1)?))? + self.rules[a].combat.rules.class_fleet_slots + self.hired(a).map(|o| o.fleet_slots).sum::<usize>())
     }
 
     /// Brings planet p's stock to second t before a fleet touches it; nothing of p's own is due before t. The yard's
@@ -1184,7 +1214,8 @@ impl World {
     fn espionage(&mut self, cat: &Catalogue, f: usize) {
         let (owner, target) = (self.fleets[f].owner, self.fleets[f].target);
         let missions = self.rules[owner].combat.missions.clone();
-        let level = |w: &World, a: usize| missions.espionage_research.map_or(0, |id| w.research(cat, a).get(&id).copied().unwrap_or(0)) as i64;
+        // The officers' extra levels count on both sides (EspionageMission::processArrival).
+        let level = |w: &World, a: usize| missions.espionage_research.map_or(0, |id| w.research(cat, a).get(&id).copied().unwrap_or(0)) as i64 + w.hired(a).map(|o| o.espionage).sum::<i64>();
         let (spy, guard) = (level(self, owner), level(self, target));
         let probes: i64 = self.fleets[f].ships.iter().filter(|(id, _)| missions.espionage_units.contains(id)).map(|s| s.1).sum();
         let ships = self.held(target, false);

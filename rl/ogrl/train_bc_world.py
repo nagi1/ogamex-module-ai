@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 import ogsim
+from ogrl.train_world import SEASON_ARMS, season_world
 
 from .model import CandidateScorer
 from .econ import bootstrap_ci
@@ -47,12 +48,14 @@ def collect_parallel(args):
 
 def collect(args, n_rows: int):
     """Rows the teacher decided: its state, candidates, mask and its own answer."""
-    gaps = json.loads(Path(args.login_gaps).read_text())
-    controlled = [True] * args.controlled + [False] * (args.accounts - args.controlled)
-    env = ogsim.VecWorld(args.catalogue, list(range(ogsim.VecEnv.planet_count(args.catalogue))), args.worlds, controlled,
-                         horizon_hours=args.horizon, seed=args.seed, login_gaps=gaps,
-                         units=args.units, fleet_settings=args.fleet_settings, combat=args.combat, errands=not args.season,
-                         season=args.season, queue=0)
+    if args.season:
+        env = season_world(args, args.seed, args.worlds)
+    else:
+        gaps = json.loads(Path(args.login_gaps).read_text())
+        controlled = [True] * args.controlled + [False] * (args.accounts - args.controlled)
+        env = ogsim.VecWorld(args.catalogue, list(range(ogsim.VecEnv.planet_count(args.catalogue))), args.worlds, controlled,
+                             horizon_hours=args.horizon, seed=args.seed, login_gaps=gaps,
+                             units=args.units, fleet_settings=args.fleet_settings, combat=args.combat, errands=True)
     s_dim, k, c_dim = env.dims()
     states, cands, masks, labels = [], [], [], []
     steps = 0
@@ -94,11 +97,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--procs", type=int, default=1, help="collector processes, the worlds split between them")
     ap.add_argument("--device", default="cuda:1" if torch.cuda.device_count() > 1 else ("cuda:0" if torch.cuda.is_available() else "cpu"))
     ap.add_argument("--out", required=True)
-    ap.add_argument("--season", action="store_true", help="row 34: clone the persona's build (field reserve and all) in the season world; colonies catalogue, 8760 h")
+    ap.add_argument("--season", action="store_true", help="W24: clone the persona's build in the season's own universe (ogsim.SeasonWorld); 64 accounts, 8760 h")
+    ap.add_argument("--season-data", default=str(DATA / "r8w"))
+    ap.add_argument("--arms", nargs="*", default=SEASON_ARMS)
     args = ap.parse_args(argv)
     if args.season:
-        args.catalogue = str(DATA / "units-parity/econ-u1-colonies.json") if args.catalogue == str(DATA / "units-parity/econ-u1.json") else args.catalogue
+        args.catalogue = str(DATA / "r8w/units-parity/econ-u1-colonies.json") if args.catalogue == str(DATA / "units-parity/econ-u1.json") else args.catalogue
         args.horizon = 8760.0 if args.horizon == 240.0 else args.horizon
+        args.accounts = 64 if args.accounts == 8 else args.accounts
+        args.queue = 0
 
     states, cands, masks, labels, dims = collect_parallel(args)
     s_dim, k, c_dim = dims

@@ -60,7 +60,8 @@ impl World {
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
         let arrive = now + flight.seconds as f64;
-        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: usize::MAX });
+        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: self.launch_log.len() });
+        self.launch_log.push((self.fleets.last().expect("just fired").clone(), 0.0));
         Ok(())
     }
 
@@ -106,7 +107,8 @@ impl World {
         self.sync_units(cat, target);
         self.next[target] = cat.peek(&mut self.games[target]);
         let lost: Vec<(u32, i64)> = defence.iter().map(|(&id, &n)| (id, n - struck.defence_after.get(&id).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();
-        self.log(EventKind::Arrival, at, &fleet, Outcome::Done, |e| e.target_lost = lost);
+        // The salvo is spent: the sender's loss, and how a struck player reads how many came.
+        self.log(EventKind::Arrival, at, &fleet, Outcome::Done, |e| { e.target_lost = lost; e.ships_lost = fleet.ships.clone() });
     }
 
     /// ExpeditionMission::processArrival at the end of the hold: the module's dice give what the fleet finds and loses

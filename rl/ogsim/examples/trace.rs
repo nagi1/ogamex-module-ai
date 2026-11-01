@@ -71,6 +71,23 @@ fn main() {
         // A colony is played by its account's player, as the season plays it.
         let owner = world.account_of(a);
         let pick = players[owner].act(&mut world, &cat, a, &mut ledgers[owner]);
+        // From day 3 the accounts shoot moons for each other, as the season's alliance members do (its `moonstack`).
+        if a == owner && world.games[a].t >= 3.0 * 86_400.0 {
+            let logged = world.unit_log.len();
+            ogsim::players::moon_shot(&mut world, &cat, a, |_| true, &mut ledgers[owner]);
+            ogsim::players::ready_for_moon(&mut world, &cat, a, true);
+            // A colony readied here is loaded by its own order: its sample carries the stock before that order paid.
+            for &(p, t, id, _, queued) in &world.unit_log[logged..] {
+                // As at a decision: no sample once a fleet has left that planet in that second (a consolidation).
+                let sent = world.launch_log.iter().rev().take_while(|l| l.0.departed == t).any(|l| l.0.owner == p);
+                if p == a || sent { continue }
+                let rules = &world.rules[p].units;
+                let price = rules.units[rules.index(id as i64).expect("an ordered unit")].price;
+                let stock = std::array::from_fn(|r| world.games[p].planet.res[r] + price[r] * queued as f64);
+                if touches.len() <= p { touches.resize(p + 1, Vec::new()) }
+                if touches[p].last().is_none_or(|l| l.0 as i64 != t as i64) { touches[p].push((t, stock)); }
+            }
+        }
         match pick {
             Some(k) => world.commit(&cat, a, k),
             None => world.wait(&cat, a),
@@ -91,10 +108,11 @@ fn main() {
         // A launch names its fleet by its id; its arrival and its return come back under it.
         let launches = world.launch_log.iter().filter(|l| l.0.owner == a).map(|(f, speed)| json!({
             "t": f.departed, "queue": "launch", "fleet": f.id, "mission": f.mission as u32, "to": coord(f.to), "ships": f.ships,
-            "cargo": f.cargo, "speed": speed, "fuel": f.fuel, "arrive": f.arrive, "moon": f.moon, "holding_hours": f.holding / 3600.0,
+            "cargo": f.cargo, "speed": speed, "fuel": f.fuel, "arrive": f.arrive, "moon": f.moon, "holding_hours": f.holding / 3600.0, "priority": f.priority,
         }));
-        let events = world.events.iter().filter(|e| e.owner == a && matches!(e.kind, EventKind::Arrival | EventKind::Return)).map(|e| json!({
-            "t": e.time, "queue": if e.kind == EventKind::Arrival { "arrive" } else { "return" }, "departed": e.departed, "fleet": e.fleet,
+        let officers = world.officer_log.iter().filter(|o| o.0 == a).map(|(_, t, key, days)| json!({ "t": t, "queue": "officer", "key": key, "days": days }));
+        let events = world.events.iter().filter(|e| e.owner == a && matches!(e.kind, EventKind::Arrival | EventKind::Return | EventKind::Recall)).map(|e| json!({
+            "t": e.time, "queue": match e.kind { EventKind::Arrival => "arrive", EventKind::Return => "return", _ => "recall" }, "departed": e.departed, "fleet": e.fleet,
             "outcome": format!("{:?}", e.outcome), "gained": e.gained, "seed": e.seed,
         }));
         let levels: serde_json::Map<_, _> = cat.objects.iter().zip(&game.planet.levels).map(|(o, &l)| (o.id.to_string(), json!(l))).collect();
@@ -109,12 +127,12 @@ fn main() {
             .map(|s| json!({ "temp_max": s.temp_max, "field_max": game.planet.field_max }))).flatten();
         json!({
             "planet_id": (a < homes).then(|| home_ids[a]), "account": home_ids[capital], "coord": coord(world.coords[a]), "site": site,
-            "steps": starts.chain(orders).chain(touches).chain(launches).chain(events).collect::<Vec<_>>(),
-            "final": { "t": game.t, "stock": game.planet.res, "levels": levels, "units": units },
+            "steps": starts.chain(orders).chain(touches).chain(launches).chain(events).chain(officers).collect::<Vec<_>>(),
+            "final": { "t": game.t, "stock": game.planet.res, "levels": levels, "units": units, "moon": world.moons[a], "dark_matter": world.dark_matter[a] },
         })
     }).collect();
     // The shipyard page refuses an order while one of these upgrades; the host's queue service alone does not check it.
     let blocked: Vec<i64> = rules.units.blocked.iter().map(|&k| cat.objects[k].id).collect();
-    std::fs::write(&args[4], serde_json::to_string(&json!({ "days": days, "seed": seed, "rank1_points": world.rank1_points, "yard_blocked_by": blocked, "planets": planets })).expect("trace json"))
+    std::fs::write(&args[4], serde_json::to_string(&json!({ "days": days, "seed": seed, "rank1_points": world.rank1_points, "dark_matter_initial": world.rules[0].settings.dark_matter_initial, "yard_blocked_by": blocked, "planets": planets })).expect("trace json"))
         .expect("write the trace");
 }

@@ -86,14 +86,26 @@ class Slots:
         self.rows = rows
 
 
-def load_world(args, seed: int, n_worlds: int, catalogue: str | None = None) -> "ogsim.VecWorld":
+# W24: the season's arms as the flow's last kept row plays them (runs/flow/e99h/run.sh), so training sees the world hds.py judges.
+SEASON_ARMS = ("moonstack", "reach", "expedition", "colonies", "ships", "cap", "lab", "classes", "feed", "factory", "balance",
+               "satellites", "doubler", "moonfeed", "standing", "labfirst")
+
+
+def season_world(args, seed: int, n_worlds: int) -> "ogsim.SeasonWorld":
+    return ogsim.SeasonWorld(args.season_data, args.catalogue, n_worlds, list(args.arms), controlled=args.controlled,
+                             accounts=args.accounts, days=int(args.horizon // 24), seed=seed, queue=args.queue)
+
+
+def load_world(args, seed: int, n_worlds: int, catalogue: str | None = None) -> "ogsim.VecWorld | ogsim.SeasonWorld":
+    if args.season:
+        return season_world(args, seed, n_worlds)
     cat = catalogue or args.catalogue
     gaps = json.loads(Path(args.login_gaps).read_text())
     controlled = [True] * args.controlled + [False] * (args.accounts - args.controlled)
     return ogsim.VecWorld(cat, list(range(ogsim.VecEnv.planet_count(cat))), n_worlds, controlled,
                           horizon_hours=args.horizon, seed=seed, login_gaps=gaps,
                           units=args.units, fleet_settings=args.fleet_settings, combat=args.combat,
-                          errands=args.queue == 2, season=args.season, queue=args.queue)
+                          errands=args.queue == 2)
 
 
 def observe(env: "ogsim.VecWorld", dims: tuple[int, int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -629,16 +641,20 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--eval-worlds", type=int, default=64)
     ap.add_argument("--no-eval", action="store_true")
     ap.add_argument("--calibrate-worlds", type=int, default=64, help="worlds played to the end for the feature and reward scales; one process, so a year-long season wants fewer")
-    ap.add_argument("--season", action="store_true", help="row 34: the world the season measures (colonies, idle logins, the persona mix with the field reserve and consolidation); default catalogue econ-u1-colonies.json, horizon 8760 h")
+    ap.add_argument("--season", action="store_true", help="W24: the season's own universe (ogsim.SeasonWorld, the world examples/season.rs writes and hds.py judges); 64 accounts, 8760 h, r8w data")
+    ap.add_argument("--season-data", default=str(DATA / "r8w"), help="the season's exports and login gaps")
+    ap.add_argument("--arms", nargs="*", default=SEASON_ARMS, help="the season's switches by their command-line names")
     args = ap.parse_args(argv)
     args.parent = os.getpid()
     if args.horizon <= 0.0:
         args.horizon = 8760.0 if args.season else 240.0 if args.queue == 2 else 72.0
+    if args.season and args.accounts == 12:
+        args.accounts = 64
     if args.smoke:
         args.minutes, args.horizon, args.eval_worlds = 2.0, 24.0, min(args.eval_worlds, 16)
     name = KIND_NAMES[args.queue]
     defaults = {0: ("plain-train.json", "plain-eval.json"), 1: ("research-train.json", "research-eval.json"), 2: ("units-parity/econ-u1.json", "units-parity/econ-u1.json")}
-    train_catalogue, eval_catalogue = ("units-parity/econ-u1-colonies.json",) * 2 if args.season else defaults[args.queue]
+    train_catalogue, eval_catalogue = ("r8w/units-parity/econ-u1-colonies.json",) * 2 if args.season else defaults[args.queue]
     args.catalogue = args.catalogue or str(DATA / train_catalogue)
     args.eval_catalogue = args.eval_catalogue or str(DATA / eval_catalogue)
     args.slots = args.slots or 3 * args.actors
