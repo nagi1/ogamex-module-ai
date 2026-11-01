@@ -68,7 +68,8 @@ from .econ import bootstrap_ci
 from .model import CandidateScorer, parameter_count
 
 DATA = Path(__file__).resolve().parents[4] / "storage/rl/ogsim"
-KIND_NAMES = {0: "building", 1: "research", 2: "errand"}
+KIND_NAMES = {0: "building", 1: "research", 2: "errand", 3: "building+research"}
+AGE_YEARS = 17  # the state column SeasonWorld writes the account's age in: the season discounts by game time
 # Columns of the shared per-actor statistics table.
 ST = {n: i for i, n in enumerate(("decisions", "shipped", "finished", "sim_hours", "wait_s", "env_s", "model_s", "book_s", "loop_s", "ctl_sum", "ctl_n", "rule_sum", "rule_n", "reward_abs"))}
 
@@ -93,7 +94,8 @@ SEASON_ARMS = ("moonstack", "reach", "expedition", "colonies", "ships", "cap", "
 
 def season_world(args, seed: int, n_worlds: int) -> "ogsim.SeasonWorld":
     return ogsim.SeasonWorld(args.season_data, args.catalogue, n_worlds, list(args.arms), controlled=args.controlled,
-                             accounts=args.accounts, days=int(args.horizon // 24), seed=seed, queue=args.queue)
+                             accounts=args.accounts, days=int(args.horizon // 24), seed=seed, queue=args.queue,
+                             detector=args.detector, stagger=args.stagger, **{"lambda": args.realism})
 
 
 def load_world(args, seed: int, n_worlds: int, catalogue: str | None = None) -> "ogsim.VecWorld | ogsim.SeasonWorld":
@@ -115,12 +117,13 @@ def observe(env: "ogsim.VecWorld", dims: tuple[int, int, int]) -> tuple[np.ndarr
     return state, np.frombuffer(cands, dtype=np.float32).reshape(len(state), k, c_dim), np.frombuffer(legal, dtype=np.uint8).reshape(len(state), k)
 
 
-def gae(rewards: np.ndarray, values: np.ndarray, bootstrap: float, gamma: float, lam: float) -> np.ndarray:
-    """GAE along one stream of consecutive own decisions; `bootstrap` is V of the decision after the last row (0 when finished)."""
+def gae(rewards: np.ndarray, values: np.ndarray, bootstrap: float, gamma: np.ndarray, lam: np.ndarray) -> np.ndarray:
+    """GAE along one stream of consecutive own decisions, with the discount of each step; `bootstrap` is V of the decision
+    after the last row (0 when the account ended, its own V when the season's horizon cut it)."""
     adv, last, following = np.empty(len(rewards)), 0.0, bootstrap
     for t in range(len(rewards) - 1, -1, -1):
-        delta = rewards[t] + gamma * following - values[t]
-        last = delta + gamma * lam * last
+        delta = rewards[t] + gamma[t] * following - values[t]
+        last = delta + gamma[t] * lam[t] * last
         adv[t], following = last, values[t]
     return adv
 
@@ -156,6 +159,7 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
     model.load_state_dict(shared)
     model.eval()
     seen_version = version.value
+    args.stagger = args.season
     env = load_world(args, args.seed * 1000 + idx * 17 + 1, args.worlds)
     n, A, ctl = args.worlds, args.accounts, args.controlled
     pool = n * (args.flush_steps + 2 * ctl + 4)
@@ -163,7 +167,7 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
     P_m, P_a = np.zeros((pool, k), np.uint8), np.zeros(pool, np.int64)
     P_lp, P_v, P_r = np.zeros(pool, np.float32), np.zeros(pool, np.float32), np.zeros(pool, np.float32)
     P_kind, P_train = np.zeros(pool, np.int8), np.zeros(pool, bool)
-    P_done, P_closed, P_next = np.zeros(pool, bool), np.zeros(pool, bool), np.full(pool, -1, np.int64)
+    P_done, P_closed, P_next = np.zeros(pool, np.int8), np.zeros(pool, bool), np.full(pool, -1, np.int64)
     P_key = np.zeros(pool, np.int64)
     free, top = np.arange(pool, dtype=np.int64), pool
     tail: dict[int, int] = {}
@@ -218,7 +222,14 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
             elif not P_done[last]:
                 raise RuntimeError("a closed transition without a successor decision")
             c = np.asarray(chain)
-            a = gae(P_r[c], P_v[c], 0.0 if successor == -1 else float(P_v[successor]), args.gamma, args.lam)
+            bootstrap = float(P_v[successor]) if successor != -1 else float(P_v[last]) if P_done[last] == 2 else 0.0
+            # A season discounts by game days (decisions of one login share a second); other worlds per own decision.
+            if args.season:
+                days = P_s[np.append(c, successor if successor != -1 else last), AGE_YEARS].astype(np.float64) * 365.0
+                steps = np.maximum(np.diff(days), 0.0)
+            else:
+                steps = np.ones(len(c))
+            a = gae(P_r[c], P_v[c], bootstrap, args.gamma ** steps, args.lam ** steps)
             train = P_train[c]
             rows.append(c[train])
             advs.append(a[train])
@@ -230,7 +241,7 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
                 ship(rows_all, adv_all)
         if released:
             freed = np.concatenate(released)
-            P_closed[freed], P_done[freed], P_next[freed] = False, False, -1
+            P_closed[freed], P_done[freed], P_next[freed] = False, 0, -1
             free[top:top + len(freed)] = freed
             top += len(freed)
 
@@ -264,7 +275,7 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
         top -= n
         P_s[take], P_c[take], P_m[take], P_a[take] = state, cands, legal, actions
         P_lp[take], P_v[take], P_kind[take], P_train[take] = logp, value.numpy(), kinds, train
-        P_next[take], P_closed[take], P_done[take] = -1, False, False
+        P_next[take], P_closed[take], P_done[take] = -1, False, 0
         for w, ((account, _, ticket), r) in enumerate(zip(decisions, take.tolist())):
             key = w * A + account
             ticket_to_record[ticket] = r
@@ -286,7 +297,7 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
         clock = time.time()
         for ticket, reward, done in closed:
             r = ticket_to_record.pop(ticket)
-            P_r[r], P_done[r], P_closed[r] = reward / scale, bool(done), True
+            P_r[r], P_done[r], P_closed[r] = reward / scale, done, True
             my[ST["reward_abs"]] += abs(reward)
             if done and tail.get(int(P_key[r])) == r:
                 del tail[int(P_key[r])]
@@ -309,10 +320,10 @@ def actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots, free_
 
 # ------------------------------------------------------------------------------------------------- learner
 
-def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None) -> dict[str, float]:
+def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None, policy_on: bool = True) -> dict[str, float]:
     """The loss of train_ppo.py: clipped ratio, 0.5 MSE value, entropy over legal rows, per-minibatch advantage normalisation."""
     n = batch["adv"].shape[0]
-    kls, clips, vlosses, ents = [], [], [], []
+    kls, clips, vlosses, ents, evs = [], [], [], [], []
     for _ in range(args.epochs):
         for idx in torch.randperm(n, device=device).split(args.minibatch):
             if len(idx) < 64:  # a one-row tail has no standard deviation
@@ -328,13 +339,13 @@ def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None) ->
             value_loss = 0.5 * (value - batch["ret"][idx]).pow(2).mean()
             p = dist.probs
             entropy = -(p * torch.where(mask, p.clamp_min(1e-12).log(), torch.zeros_like(p))).sum(1).mean()
-            loss = policy_loss + args.vf * value_loss - args.ent * entropy
+            loss = args.vf * value_loss + (policy_loss - args.ent * entropy if policy_on else 0.0)
             if anchor is not None:
                 # KL(pi || pi_cloned): the policy may leave the behaviour-cloned teacher, but pays for how far.
                 with torch.no_grad():
                     ref_logits, _ = anchor(batch["state"][idx], batch["cands"][idx], mask)
                 loss = loss + args.kl_anchor * (logp - Categorical(logits=ref_logits).log_prob(batch["action"][idx])).mean()
-            optimizer.zero_grad()
+            model.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             optimizer.step()
@@ -343,8 +354,9 @@ def ppo_update(model, optimizer, batch: dict, args, device: str, anchor=None) ->
                 clips.append(((ratio - 1).abs() > args.clip).float().mean())
                 vlosses.append(value_loss)
                 ents.append(entropy)
+                evs.append(1.0 - (batch["ret"][idx] - value).var() / batch["ret"][idx].var().clamp_min(1e-8))
     stat = lambda xs: float(torch.stack(xs).mean().detach())
-    return {"kl": stat(kls), "clip": stat(clips), "value_loss": stat(vlosses), "entropy": stat(ents)}
+    return {"kl": stat(kls), "clip": stat(clips), "value_loss": stat(vlosses), "entropy": stat(ents), "explained_variance": stat(evs)}
 
 
 def save(model, dims, args, names, update: int, path: Path) -> None:
@@ -401,6 +413,8 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
         anchor.load_state_dict(saved["model"])
         anchor.requires_grad_(False)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, eps=1e-5)
+    # BC leaves the value head untrained: it learns alone first, on the head's own parameters, so the clone is not disturbed.
+    value_optimizer = torch.optim.Adam(model.value.parameters(), lr=1e-3, eps=1e-5)
     out = Path(args.out)
     log = open(out / "learner.jsonl", "w")
     cap = args.batch + slots.rows
@@ -444,7 +458,7 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
     last_update, last_rows, wait_total, busy_total, updates, rows_total = 0, 0, 0.0, 0.0, 0, 0
     lag_sum, lag_n = 0.0, 0
     save(model, dims, args, names, 0, out / "latest.pt")
-    print(f"{'time':>6} {'acct-h/s':>10} {'dec/s':>9} {'train/s':>9} {'upd/s':>6} {'upd':>5} {'lag':>4} {'ready':>5} {'learn%':>6} {'actwait%':>8} {'ctl/rule':>8}  entropy     kl clip vloss  gpu0 util/MiB/C   gpu1 util/MiB/C", flush=True)
+    print(f"{'time':>6} {'acct-h/s':>10} {'dec/s':>9} {'train/s':>9} {'upd/s':>6} {'upd':>5} {'lag':>4} {'ready':>5} {'learn%':>6} {'actwait%':>8} {'score':>10}  entropy     kl clip vloss    ev  gpu0 util/MiB/C   gpu1 util/MiB/C", flush=True)
     recent: dict[str, float] = {}
     while time.time() < deadline and (not args.updates or updates < args.updates):
         clock = time.time()
@@ -458,7 +472,8 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
         wait_total += time.time() - clock
         clock = time.time()
         gpus.wait_if_hot()
-        recent = ppo_update(model, optimizer, {name: tensor[:filled] for name, tensor in gpu.items()}, args, device, anchor)
+        warming = updates < args.value_warmup
+        recent = ppo_update(model, value_optimizer if warming else optimizer, {name: tensor[:filled] for name, tensor in gpu.items()}, args, device, anchor, not warming)
         busy_total += time.time() - clock
         updates += 1
         rows_total += filled
@@ -475,24 +490,24 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
         if now - last_print >= args.log_every:
             totals, dt = stats.numpy().sum(0), now - last_print
             delta = totals - last_totals
-            ratio = (totals[ST["ctl_sum"]] / max(totals[ST["ctl_n"]], 1)) / max(totals[ST["rule_sum"]] / max(totals[ST["rule_n"]], 1), 1e-9) - 1
+            # The controlled accounts' mean final result over the seasons finished in this window; 0 until one is.
+            result = delta[ST["ctl_sum"]] / delta[ST["ctl_n"]] if delta[ST["ctl_n"]] else 0.0
             loop = max(delta[ST["loop_s"]], 1e-9)
             row = {"t": round(now - started), "acct_hours_s": delta[ST["sim_hours"]] / dt, "decisions_s": delta[ST["decisions"]] / dt, "train_rows_s": (rows_total - last_rows) / dt,
                    "updates_s": (updates - last_update) / dt, "updates": updates, "lag": lag_sum / max(lag_n, 1), "ready": ready_q.qsize(), "learner_busy": busy_total / max(busy_total + wait_total, 1e-9),
                    "actor_wait": delta[ST["wait_s"]] / loop, "actor_env": delta[ST["env_s"]] / loop, "actor_model": delta[ST["model_s"]] / loop, "actor_book": delta[ST["book_s"]] / loop,
-                   "ctl_vs_rule_cumulative": float(ratio), **recent, "kind_rows": {KIND_NAMES.get(i, str(i)): int(v) for i, v in enumerate(kind_rows) if v}}
+                   "controlled_result": float(result), **recent, "kind_rows": {KIND_NAMES.get(i, str(i)): int(v) for i, v in enumerate(kind_rows) if v}}
             cards = gpus.window()
             row["gpus"] = [{"util": c[0], "mem_mib": c[1], "temp_c": c[2]} for c in cards]
             row["learner_throttled_s"] = gpus.throttled
             log.write(json.dumps(row) + "\n")
             log.flush()
-            print(f"{row['t']:>5}s {row['acct_hours_s']:>10,.0f} {row['decisions_s']:>9,.0f} {row['train_rows_s']:>9,.0f} {row['updates_s']:>6.2f} {updates:>5} {row['lag']:>4.1f} {row['ready']:>5} {row['learner_busy']:>6.0%} {row['actor_wait']:>8.0%} {ratio:>+8.1%}  {recent.get('entropy', 0):.3f} {recent.get('kl', 0):.4f} {recent.get('clip', 0):.2f} {recent.get('value_loss', 0):.3f}  " + "  ".join(f"{c[0]:>3.0f}%/{c[1]:>5.0f}/{c[2]:.0f}" for c in cards), flush=True)
+            print(f"{row['t']:>5}s {row['acct_hours_s']:>10,.0f} {row['decisions_s']:>9,.0f} {row['train_rows_s']:>9,.0f} {row['updates_s']:>6.2f} {updates:>5} {row['lag']:>4.1f} {row['ready']:>5} {row['learner_busy']:>6.0%} {row['actor_wait']:>8.0%} {result:>10.4g}  {recent.get('entropy', 0):.3f} {recent.get('kl', 0):.4f} {recent.get('clip', 0):.2f} {recent.get('value_loss', 0):.3f} {recent.get('explained_variance', 0):+.2f}  " + "  ".join(f"{c[0]:>3.0f}%/{c[1]:>5.0f}/{c[2]:.0f}" for c in cards), flush=True)
             last_print, last_totals, last_update, last_rows, lag_sum, lag_n = now, totals, updates, rows_total, 0.0, 0
     elapsed = time.time() - started
     totals = stats.numpy().sum(0)
     summary = {"seconds": elapsed, "updates": updates, "updates_per_s": updates / elapsed, "train_rows": rows_total, "train_rows_per_s": rows_total / elapsed, "decisions": totals[ST["decisions"]], "decisions_per_s": totals[ST["decisions"]] / elapsed,
                "account_hours": totals[ST["sim_hours"]], "account_hours_per_s": totals[ST["sim_hours"]] / elapsed, "finished_accounts": totals[ST["finished"]],
-               "controlled_vs_rule_cumulative_unpaired": float((totals[ST["ctl_sum"]] / max(totals[ST["ctl_n"]], 1)) / max(totals[ST["rule_sum"]] / max(totals[ST["rule_n"]], 1), 1e-9) - 1),
                "actor_time_share": {n: float(totals[ST[n]] / max(totals[ST["loop_s"]], 1e-9)) for n in ("env_s", "model_s", "book_s", "wait_s")},
                "learner_busy": busy_total / max(busy_total + wait_total, 1e-9), "kind_rows": {KIND_NAMES.get(i, str(i)): int(v) for i, v in enumerate(kind_rows) if v}}
     save(model, dims, args, names, updates, out / "latest.pt")
@@ -599,7 +614,7 @@ def evaluator(args, dims, stop, final_event) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ogrl.train_world")
-    ap.add_argument("--queue", type=int, default=0, choices=(0, 1, 2), help="0 decides buildings, 1 research, 2 errands (the fleet side of a login); the other decisions play the player rule; this is the decision kind id")
+    ap.add_argument("--queue", type=int, choices=(0, 1, 2, 3), help="0 decides buildings, 1 research, 2 errands (the fleet side of a login), 3 buildings and research (a season's default, else 0); the other decisions play the player rule; this is the decision kind id")
     ap.add_argument("--init", help="start from a checkpoint (a behaviour-cloned warm start, eg runs/bc-errand.pt)")
     ap.add_argument("--kl-anchor", type=float, default=0.0, help="penalty on leaving the --init policy (KL per row); 0 disables")
     ap.add_argument("--catalogue", help="default: plain-train.json for queue 0, research-train.json for queue 1, units-parity/econ-u1.json for errands")
@@ -644,12 +659,21 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--season", action="store_true", help="W24: the season's own universe (ogsim.SeasonWorld, the world examples/season.rs writes and hds.py judges); 64 accounts, 8760 h, r8w data")
     ap.add_argument("--season-data", default=str(DATA / "r8w"), help="the season's exports and login gaps")
     ap.add_argument("--arms", nargs="*", default=SEASON_ARMS, help="the season's switches by their command-line names")
+    ap.add_argument("--detector", help="ogrl.discriminator's file: the reward's realism term reads it")
+    ap.add_argument("--realism", type=float, default=0.0, help="lambda: reward per midnight per unit of the detector's logit; 0 is growth alone")
+    ap.add_argument("--reward-scale", type=float, help="fixed reward scale; default the --init checkpoint's, else calibrated")
+    ap.add_argument("--value-warmup", type=int, default=0, help="updates that train the value head alone, after a BC start")
     args = ap.parse_args(argv)
     args.parent = os.getpid()
+    args.stagger = False
     if args.horizon <= 0.0:
         args.horizon = 8760.0 if args.season else 240.0 if args.queue == 2 else 72.0
     if args.season and args.accounts == 12:
         args.accounts = 64
+    if args.season and args.controlled == 6:
+        args.controlled = args.accounts  # the world hds.py judges: every account the model's, ranks among themselves
+    if args.queue is None:
+        args.queue = 3 if args.season else 0
     if args.smoke:
         args.minutes, args.horizon, args.eval_worlds = 2.0, 24.0, min(args.eval_worlds, 16)
     name = KIND_NAMES[args.queue]
@@ -668,16 +692,19 @@ def main(argv: list[str] | None = None) -> None:
     dims = probe.dims()
     names = dict(zip(("state", "candidate"), probe.feature_names()))
     del probe
-    norm, scale = calibrate(args, dims)
+    saved = torch.load(args.init, map_location="cpu", weights_only=False) if args.init else {}
+    scale = args.reward_scale or saved.get("reward_scale")
     model = CandidateScorer(dims[0], dims[2], args.width)
-    model.set_normalisation(*(torch.as_tensor(x, dtype=torch.float32) for x in norm))
+    if not (args.init and scale):  # a year-long world costs minutes per game: a BC start brings its scale and normalisation
+        norm, calibrated = calibrate(args, dims)
+        scale = scale or calibrated
+        model.set_normalisation(*(torch.as_tensor(x, dtype=torch.float32) for x in norm))
     if args.init:
         # A behaviour-cloned warm start (ogrl.train_bc_world): PPO begins where the scripted teacher plays instead of at noise.
-        saved = torch.load(args.init, map_location="cpu", weights_only=False)
         if (saved["state_dim"], saved["cand_dim"], saved["width"]) != dims[0:1] + dims[2:3] + (args.width,):
             raise SystemExit(f"{args.init} is {saved['state_dim']}x{saved['cand_dim']} width {saved['width']}, this run is {dims[0]}x{dims[2]} width {args.width}")
         model.load_state_dict(saved["model"])
-        print(f"warm start from {args.init}", flush=True)
+        print(f"warm start from {args.init}, reward scale {scale:.4g}", flush=True)
     shared = {k: v.detach().clone().share_memory_() for k, v in model.state_dict().items()}
     print(f"ogsim world PPO: {parameter_count(model):,} parameters, kind {args.queue} ({name}), {args.actors} actors x {args.worlds} worlds x {args.accounts} accounts ({args.controlled} controlled), "
           f"horizon {args.horizon:g} h, learner {args.device}, evaluator {args.eval_device}", flush=True)

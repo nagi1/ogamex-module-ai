@@ -8,7 +8,7 @@ use crate::fleet::Coord;
 use crate::players::{self, FleetSaver, Ledger, Miner, Player, Raider};
 use crate::score;
 use crate::world::{Colonisation, Rules, World};
-use crate::{next_random, Catalogue};
+use crate::{next_random, Catalogue, CAND_DIM, HashMap, STATE_DIM};
 
 pub const DAY: f64 = 86_400.0;
 /// Personas in role order, with the share of the accounts each gets.
@@ -25,6 +25,99 @@ const ALLIANCE_MEAN_DAYS: f64 = 5.0;
 /// with its own draw u is a member while u < 1 - slope * p, about 0.96 at the top, 0.76 mid-table, 0.44 below the middle.
 const ALLIANCE_STANDING_SLOPE: f64 = 0.8;
 const RECRUIT_DAYS: u32 = 7;
+/// What the learner reads of its account beside the planet: where it stands, which `hds.py` judges and a planet cannot say.
+pub const ACCOUNT_NAMES: [&str; 8] = ["age_years", "is_research", "eco_share", "res_share", "mil_share", "ln_score", "rank", "planets"];
+pub const LEARNER_STATE: usize = STATE_DIM + ACCOUNT_NAMES.len();
+/// The candidate columns plus one: 1 on the row the persona would take. It knows what no column says (the research that
+/// opens a planet slot, a prerequisite of the ship it wants), so the model starts at its play and learns when to leave it.
+pub const LEARNER_CAND: usize = CAND_DIM + 1;
+
+struct Layer { weight: Vec<Vec<f32>>, bias: Vec<f32> }
+
+impl Layer {
+    fn load(v: &serde_json::Value, name: &str) -> Result<Self, String> {
+        let weight = v[format!("{name}.weight")].as_array().ok_or(format!("{name} missing"))?.iter().map(floats).collect();
+        Ok(Layer { weight, bias: floats(&v[format!("{name}.bias")]) })
+    }
+
+    fn apply(&self, input: &[f32]) -> Vec<f32> {
+        self.weight.iter().zip(&self.bias).map(|(row, b)| (row.iter().zip(input).map(|(w, x)| w * x).sum::<f32>() + b).max(0.0)).collect()
+    }
+
+    /// A network's last layer has no ReLU after it.
+    fn output(&self, input: &[f32]) -> f32 {
+        self.weight[0].iter().zip(input).map(|(w, x)| w * x).sum::<f32>() + self.bias[0]
+    }
+}
+
+fn floats(v: &serde_json::Value) -> Vec<f32> {
+    v.as_array().map_or(Vec::new(), |a| a.iter().map(|x| x.as_f64().unwrap_or(0.0) as f32).collect())
+}
+
+fn weights(path: &str) -> Result<serde_json::Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))
+}
+
+/// `ogrl.discriminator`'s detector: is this account's day real? It reads `hds.py`'s eight measures standardised inside the
+/// account's cell (rank band by universe age) of the real sample, and answers a logit.
+pub struct Detector { cells: HashMap<String, (Vec<f32>, Vec<f32>)>, net: Vec<Layer> }
+
+impl Detector {
+    pub fn load(path: &str) -> Result<Self, String> {
+        let v = weights(path)?;
+        let cells = v["cells"].as_object().ok_or("no cells")?.iter()
+            .map(|(name, c)| (name.clone(), (floats(&c["centre"]), floats(&c["spread"])))).collect();
+        Ok(Detector { cells, net: vec![Layer::load(&v, "net.0")?, Layer::load(&v, "net.2")?, Layer::load(&v, "net.4")?] })
+    }
+
+    /// The logit of `measures` (`hds.py`'s order, growth as ln(1 + growth)); `None` where no real universe of that age exists.
+    pub fn logit(&self, measures: &[f32; 8], rank: f64, day: f64) -> Option<f32> {
+        let band = if rank < 0.10 { "top10" } else if rank < 0.50 { "mid" } else { "bottom" };
+        let age = match day {
+            d if d < 15.0 => "0-14",
+            d if d < 64.0 => return None,
+            d if d < 129.0 => "64-128",
+            d if d < 257.0 => "128-256",
+            d if d < 513.0 => "256-512",
+            _ => "512+",
+        };
+        let (centre, spread) = self.cells.get(&format!("{band}|{age}"))?;
+        let mut x: Vec<f32> = measures.iter().zip(centre).zip(spread).map(|((m, c), s)| ((m - c) / s).clamp(-8.0, 8.0)).collect();
+        for layer in &self.net[..2] { x = layer.apply(&x) }
+        Some(self.net[2].output(&x))
+    }
+}
+
+/// `ogrl.model.CandidateScorer` played in Rust, from `ogrl.export_policy`'s weights: a season writes its own lines, so
+/// `hds.py` judges a model exactly as it judges the personas.
+pub struct Policy { norm: [Vec<f32>; 4], state_net: Vec<Layer>, cand_net: Layer, joint: Vec<Layer> }
+
+impl Policy {
+    pub fn load(path: &str) -> Result<Self, String> {
+        let v = weights(path)?;
+        Ok(Policy {
+            norm: [floats(&v["state_mean"]), floats(&v["state_std"]), floats(&v["cand_mean"]), floats(&v["cand_std"])],
+            state_net: vec![Layer::load(&v, "state_net.0")?, Layer::load(&v, "state_net.2")?],
+            cand_net: Layer::load(&v, "cand_net.0")?,
+            joint: vec![Layer::load(&v, "joint.0")?, Layer::load(&v, "joint.2")?, Layer::load(&v, "joint.4")?],
+        })
+    }
+
+    /// The legal row with the highest score; `cands` is [K, C] flat.
+    pub fn best(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> usize {
+        let scaled = |x: &[f32], mean: &[f32], std: &[f32]| x.iter().zip(mean).zip(std).map(|((v, m), s)| (v - m) / s).collect::<Vec<f32>>();
+        let mut s = scaled(state, &self.norm[0], &self.norm[1]);
+        for layer in &self.state_net { s = layer.apply(&s) }
+        let score = |row: usize| {
+            let c = self.cand_net.apply(&scaled(&cands[row * LEARNER_CAND..(row + 1) * LEARNER_CAND], &self.norm[2], &self.norm[3]));
+            let mut x: Vec<f32> = s.iter().chain(&c).copied().collect();
+            for layer in &self.joint[..2] { x = layer.apply(&x) }
+            self.joint[2].output(&x)
+        };
+        (0..legal.len()).filter(|&row| legal[row] > 0).map(|row| (row, score(row))).max_by(|x, y| x.1.total_cmp(&y.1)).map_or(legal.len() - 1, |best| best.0)
+    }
+}
 
 pub struct Universe {
     pub cat: Arc<Catalogue>,
@@ -40,6 +133,8 @@ pub struct Universe {
     /// Row 82: an active account that has held its world's top tenth for `RECRUIT_DAYS` day ends joins an alliance.
     recruit: bool,
     top_days: Vec<u32>,
+    /// Per account, its place in the last highscore as a share of the world, inactives ranked too, as `hds.py` reads it.
+    pub rank: Vec<f64>,
     moon_shots: bool,
     moon_feed: bool,
 }
@@ -150,7 +245,7 @@ impl Universe {
         }
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(), alliance_at,
-            quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts],
+            quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
             moon_shots: on("moonstack"), moon_feed: on("moonfeed"),
         }
     }
@@ -192,6 +287,60 @@ impl Universe {
         }
     }
 
+    /// What the learner reads at slot a's decision, with the persona's own `advice` (`teacher`): state [LEARNER_STATE],
+    /// candidates [K, LEARNER_CAND] and the legal rows; the last row, always legal, passes (the persona waits at half its
+    /// decisions, field reserve and saving for a build).
+    pub fn observe(&self, a: usize, advice: Option<usize>, state: &mut [f32], cands: &mut [f32], legal: &mut [u8]) {
+        let (world, cat, owner) = (&self.world, &self.cat, self.world.account_of(a));
+        let game = &world.games[a];
+        cat.state_features(&game.planet, &mut state[..STATE_DIM]);
+        let held = score::of(world, owner);
+        let total = (held.total as f32).max(1.0);
+        state[STATE_DIM..].copy_from_slice(&[
+            (game.t / (365.0 * DAY)) as f32, game.queue as f32, held.economy as f32 / total, held.research as f32 / total,
+            held.military as f32 / total, total.ln(), self.rank[owner] as f32, world.planets_of(owner).len() as f32 / 16.0,
+        ]);
+        let objects = cat.objects.len();
+        for k in 0..objects {
+            cat.candidate_features(&game.planet, k, &mut cands[k * LEARNER_CAND..k * LEARNER_CAND + CAND_DIM]);
+            cands[k * LEARNER_CAND + CAND_DIM] = 0.0;
+            legal[k] = u8::from(world.legal(cat, a, k));
+        }
+        cands[objects * LEARNER_CAND..].fill(0.0);
+        cands[advice.unwrap_or(objects) * LEARNER_CAND + CAND_DIM] = 1.0;
+        legal[objects] = 1;
+    }
+
+    /// The model's build at slot a: an object, or `None` to pass.
+    pub fn choose(&mut self, policy: &Policy, a: usize) -> Option<usize> {
+        let k = self.cat.objects.len() + 1;
+        let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
+        let advice = self.teacher(a);
+        self.observe(a, advice, &mut state, &mut cands, &mut legal);
+        Some(policy.best(&state, &cands, &legal)).filter(|&row| row < k - 1)
+    }
+
+    /// The persona's own build at slot a, asked as the model is asked: the learner's teacher.
+    pub fn teacher(&mut self, a: usize) -> Option<usize> {
+        let owner = self.world.account_of(a);
+        let (world, cat) = (&self.world, &self.cat);
+        self.players[owner].miner().pick(world, cat, a).filter(|&k| world.legal(cat, a, k))
+    }
+
+    /// `hds.py`'s eight measures of an account at `midnight`, growth as ln(1 + growth).
+    pub fn measures(&self, owner: usize, midnight: f64) -> [f32; 8] {
+        let held = score::of(&self.world, owner);
+        let total = (held.total as f32).max(1.0);
+        let planets = self.world.planets_of(owner);
+        let galaxies: std::collections::BTreeSet<i64> = planets.iter().map(|&s| self.world.coords[s].galaxy).collect();
+        let speed_days = (midnight / DAY) as f32 * self.cat.speed as f32;
+        [
+            (1.0 + held.total.max(0) as f32 / speed_days).ln(), held.economy as f32 / total, held.research as f32 / total, held.military as f32 / total,
+            planets.len() as f32, planets.iter().filter(|&&s| self.world.moons[s]).count() as f32, galaxies.len() as f32,
+            f32::from(self.alliance_at[owner].is_some_and(|join| midnight >= join)),
+        ]
+    }
+
     /// The day's highscore at `midnight`: the rank-1 score an expedition's find reads, and alliance membership by standing.
     pub fn day_end(&mut self, midnight: f64) {
         let n = self.accounts();
@@ -200,6 +349,7 @@ impl Universe {
         self.world.rank1_points = totals.iter().copied().max().unwrap_or(0);
         let mut ranked: Vec<usize> = (0..n).collect();
         ranked.sort_by_key(|&a| std::cmp::Reverse(totals[a]));
+        for (place, &a) in ranked.iter().enumerate() { self.rank[a] = (place + 1) as f64 / n as f64 }
         if let Some(draws) = &self.standing {
             for (rank, &a) in ranked.iter().enumerate() {
                 let p = rank as f64 / n as f64;

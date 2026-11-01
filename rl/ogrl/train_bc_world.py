@@ -43,7 +43,7 @@ def collect_parallel(args):
     with ProcessPoolExecutor(max_workers=args.procs) as pool:
         done = list(pool.map(collect_part, parts))
     cat = lambda i: np.concatenate([d[i] for d in done])
-    return cat(0), cat(1), cat(2), cat(3), done[0][4]
+    return cat(0), cat(1), cat(2), cat(3), done[0][4], float(np.sqrt(np.mean([d[5] ** 2 for d in done])))
 
 
 def collect(args, n_rows: int):
@@ -58,22 +58,29 @@ def collect(args, n_rows: int):
                              units=args.units, fleet_settings=args.fleet_settings, combat=args.combat, errands=True)
     s_dim, k, c_dim = env.dims()
     states, cands, masks, labels = [], [], [], []
-    steps = 0
+    steps, finished, squares, closed = 0, 0, 0.0, 0
     started = time.time()
-    while sum(len(x) for x in labels) < n_rows:
+    rng = np.random.default_rng(args.seed)
+    # A season is cloned whole, sampled evenly: the first rows of a year are only its opening.
+    while finished < args.seasons if args.season else sum(len(x) for x in labels) < n_rows:
         state, cand, legal = env.observe()
         state = np.frombuffer(state, np.float32).reshape(-1, s_dim)
         cand = np.frombuffer(cand, np.float32).reshape(-1, k, c_dim)
         legal = np.frombuffer(legal, np.uint8).reshape(-1, k)
         label = np.asarray(env.baseline(), dtype=np.int64)
-        # A build decision the persona lets pass (-2) has no row to clone.
-        live = legal.any(1) & (label >= 0)
-        states.append(state[live]), cands.append(cand[live]), masks.append(legal[live]), labels.append(label[live])
-        env.step(label.tolist())
+        # Only the old worlds answer -2; a season's pass is its last row.
+        live = legal.any(1) & (label >= 0) & (rng.random(len(label)) < args.keep)
+        if live.any():
+            states.append(state[live]), cands.append(cand[live]), masks.append(legal[live]), labels.append(label[live])
+        rewards = [reward for _, reward, _ in env.step(label.tolist())]
+        squares += float(np.square(rewards).sum())
+        closed += len(rewards)
+        if args.season:
+            finished += len(env.take_finished()) // args.accounts
         steps += 1
-    print(f"collected {sum(len(x) for x in labels):,} teacher rows in {steps} steps, {time.time() - started:.0f}s", flush=True)
+    print(f"collected {sum(len(x) for x in labels):,} teacher rows in {steps} steps, {closed:,} rewards, {time.time() - started:.0f}s", flush=True)
     cat = lambda xs: np.concatenate(xs)
-    return cat(states), cat(cands), cat(masks).astype(bool), cat(labels), (s_dim, k, c_dim)
+    return cat(states), cat(cands), cat(masks).astype(bool), cat(labels), (s_dim, k, c_dim), float(np.sqrt(squares / max(closed, 1)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -100,14 +107,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--season", action="store_true", help="W24: clone the persona's build in the season's own universe (ogsim.SeasonWorld); 64 accounts, 8760 h")
     ap.add_argument("--season-data", default=str(DATA / "r8w"))
     ap.add_argument("--arms", nargs="*", default=SEASON_ARMS)
+    ap.add_argument("--seasons", type=int, default=1, help="whole seasons each collector plays")
+    ap.add_argument("--smooth", type=float, default=0.0, help="share of the target spread over the legal rows, so PPO has something to explore")
+    ap.add_argument("--keep", type=float, default=1.0, help="share of a season's decisions kept as rows")
     args = ap.parse_args(argv)
     if args.season:
         args.catalogue = str(DATA / "r8w/units-parity/econ-u1-colonies.json") if args.catalogue == str(DATA / "units-parity/econ-u1.json") else args.catalogue
         args.horizon = 8760.0 if args.horizon == 240.0 else args.horizon
         args.accounts = 64 if args.accounts == 8 else args.accounts
-        args.queue = 0
+        args.controlled = args.accounts
+        args.queue, args.detector, args.realism, args.stagger = 3, None, 0.0, False
 
-    states, cands, masks, labels, dims = collect_parallel(args)
+    states, cands, masks, labels, dims, reward_scale = collect_parallel(args)
     s_dim, k, c_dim = dims
     n = len(labels)
     cut = int(n * (1.0 - args.valid))
@@ -133,6 +144,11 @@ def main(argv: list[str] | None = None) -> int:
             idx = order[at:at + args.batch]
             logits, _ = model(tr[0][idx].to(args.device), tr[1][idx].to(args.device), tr[2][idx].to(args.device))
             loss = torch.nn.functional.cross_entropy(logits, tr[3][idx].to(args.device))
+            if args.smooth > 0:
+                # A clone certain of every row would never try anything else under PPO: part of its mass stays on the legal rows.
+                legal = tr[2][idx].to(args.device)
+                spread = -(torch.where(legal, logits.log_softmax(1), torch.zeros_like(logits)).sum(1) / legal.sum(1)).mean()
+                loss = (1 - args.smooth) * loss + args.smooth * spread
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -146,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"model": {k: v.detach().cpu() for k, v in model.state_dict().items()}, "state_dim": s_dim, "cand_dim": c_dim,
-                "width": args.width, "iteration": 0, "names": {"state": [], "candidate": []}, "queue": 0 if args.season else 2}, out)
+                "width": args.width, "iteration": 0, "names": {"state": [], "candidate": []}, "queue": 3 if args.season else 2, "reward_scale": reward_scale}, out)
     print(f"wrote {out} ({time.time() - started:.0f}s of training); top-1 against the teacher {top1:.1%}")
     print(f"rows {n:,}, candidates {k}, state {s_dim}, candidate {c_dim}")
     return 0

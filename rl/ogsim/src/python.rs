@@ -2,7 +2,8 @@
 
 use crate::fleet::Coord;
 use crate::players::{self, Ledger, Player};
-use crate::season::{Universe, DAY};
+use crate::score;
+use crate::season::{Detector, Universe, ACCOUNT_NAMES, DAY, LEARNER_CAND, LEARNER_STATE};
 use crate::world::{Colonisation, Decision, Rules, World};
 use crate::{errands, next_random, Baseline, Catalogue, Game, CAND_DIM, CAND_NAMES, STATE_DIM, STATE_NAMES};
 use pyo3::exceptions::PyValueError;
@@ -560,13 +561,17 @@ impl VecWorld {
 }
 
 /// W24: training in the season's own universe (`season::Universe`), the world `examples/season.rs` writes and `hds.py`
-/// judges. The first `controlled` accounts' builds in `queue` are the model's; their personas play the rest of each
-/// login, and every other account is its persona. A decision's reward is the account's value change until it decides
-/// again, less the worth of the fleet events in between, which no build decided.
+/// judges. The builds of the first `controlled` accounts' planets in `queue` (`BOTH_QUEUES`: buildings and research) are
+/// the model's; their personas play the rest of each login, and every other account is its persona. A decision's reward
+/// is the growth of the account's highscore until it decides again (ln score: the host's own measure, in which a store
+/// counts nothing and a year's compounding is not 1000x a first week's), plus `lambda` times the detector's logit at each
+/// midnight crossed (plan/rl/TRAINING-RUN.md).
 #[pyclass]
 struct SeasonWorld {
     catalogue: Arc<Catalogue>,
     colonisation: Option<Arc<Colonisation>>,
+    detector: Option<Arc<Detector>>,
+    lambda: f64,
     data: String,
     days: usize,
     accounts: usize,
@@ -577,12 +582,24 @@ struct SeasonWorld {
     universes: Vec<Universe>,
     midnight: Vec<f64>,
     deciding: Vec<(usize, u64)>,
+    advice: Vec<Option<usize>>,
+    /// Until this second the personas play world w: seasons started together would keep every batch on one day of the year.
+    warm_until: Vec<f64>,
     open: Vec<Vec<Option<(u64, f64)>>>,
-    during: Vec<Vec<f64>>,
-    read: Vec<usize>,
+    realism: Vec<Vec<f64>>,
     tickets: u64,
     closed: Vec<Closed>,
     finished: Vec<Finished>,
+}
+
+const BOTH_QUEUES: usize = 3;
+/// A `done` that cuts the stream at the season's horizon, not an end of the account: the universe plays on, so the
+/// trainer bootstraps from V (1 is the account quitting, which ends it).
+const CUT: u8 = 2;
+const LOGIT_CLIP: f32 = 5.0;
+
+fn log_score(world: &World, owner: usize) -> f64 {
+    (1.0 + score::of(world, owner).total.max(0) as f64).ln()
 }
 
 impl SeasonWorld {
@@ -591,57 +608,65 @@ impl SeasonWorld {
         Universe::new(Arc::clone(&self.catalogue), self.colonisation.clone(), &self.data, self.days, self.accounts, seed, &self.arms)
     }
 
-    /// The worth of the fleet events world w has played since the last look, booked to their owners.
-    fn attribute(&mut self, w: usize) {
-        let world = &self.universes[w].world;
-        for e in &world.events[self.read[w]..] {
-            let price = world.rules.get(e.owner).map_or(0.0, |r| {
-                e.ships_lost.iter().map(|&(id, n)| players::unit_price(r, id) * n.max(0) as f64).sum::<f64>()
-            });
-            if let Some(d) = self.during[w].get_mut(e.owner) { *d += players::weighted(e.gained) - price }
-        }
-        self.read[w] = world.events.len();
-    }
-
-    fn close(&mut self, w: usize, a: usize, done: u8) {
-        let Some((ticket, before)) = self.open[w][a].take() else { return };
-        let reward = players::account_value(&self.universes[w].world, a) - before - self.during[w][a];
+    fn close(&mut self, w: usize, owner: usize, done: u8) {
+        let Some((ticket, before)) = self.open[w][owner].take() else { return };
+        let reward = log_score(&self.universes[w].world, owner) - before + self.realism[w][owner];
         self.closed.push((ticket, reward as f32, done));
-        self.during[w][a] = 0.0;
+        self.realism[w][owner] = 0.0;
     }
 
-    /// Plays world w until a controlled account has a build in `queue` to decide; a finished season closes every open
-    /// decision, is recorded, and starts afresh.
+    /// At a midnight, what the detector says of every controlled account still playing.
+    fn judge(&mut self, w: usize, midnight: f64) {
+        let Some(detector) = self.detector.clone() else { return };
+        for owner in 0..self.controlled {
+            let u = &mut self.universes[w];
+            let cat = Arc::clone(&u.cat);
+            if u.world.inactive(&cat, owner, midnight) { continue }
+            if let Some(logit) = detector.logit(&u.measures(owner, midnight), u.rank[owner], midnight / DAY) {
+                self.realism[w][owner] += self.lambda * logit.clamp(-LOGIT_CLIP, LOGIT_CLIP) as f64;
+            }
+        }
+    }
+
+    /// Plays world w until a controlled account has a build in `queue` to decide; a retired account's stream ends there,
+    /// and a finished season closes every open decision, is recorded, and starts afresh.
     fn advance(&mut self, w: usize) {
         loop {
-            self.attribute(w);
             let Some(a) = self.universes[w].next_decision() else {
-                for a in 0..self.accounts {
-                    self.close(w, a, 1);
+                for owner in 0..self.accounts {
+                    self.close(w, owner, CUT);
                     let world = &self.universes[w].world;
-                    let g = &world.games[a];
-                    let fleet = players::account_value(world, a) - g.value();
-                    self.finished.push((g.planet.config, g.value(), g.effective_rate(), g.history.len(), g.invalid, fleet));
+                    let slots = world.planets_of(owner);
+                    let invalid = slots.iter().map(|&s| world.games[s].invalid).sum();
+                    let builds = slots.iter().map(|&s| world.games[s].history.len()).sum();
+                    self.finished.push((slots.len(), score::of(world, owner).total as f64, world.games[owner].effective_rate(), builds, invalid, 0.0));
                 }
                 self.universes[w] = self.fresh();
-                (self.midnight[w], self.read[w]) = (DAY, 0);
-                self.during[w] = vec![0.0; self.accounts];
+                self.midnight[w] = DAY;
+                self.warm_until[w] = 0.0;
+                self.realism[w] = vec![0.0; self.accounts];
                 continue;
             };
-            let u = &mut self.universes[w];
-            let t = u.world.games[a].t;
+            let t = self.universes[w].world.games[a].t;
             while self.midnight[w] <= t && self.midnight[w] <= self.days as f64 * DAY {
-                u.day_end(self.midnight[w]);
+                let midnight = self.midnight[w];
+                self.universes[w].day_end(midnight);
+                self.judge(w, midnight);
                 self.midnight[w] += DAY;
             }
-            let model = u.plays(a) && a < self.controlled && u.world.decision_kind(a) == Decision::Build && u.world.games[a].queue == self.queue;
-            if !model {
+            let u = &mut self.universes[w];
+            let owner = u.world.account_of(a);
+            let plays = u.plays(a);
+            let build = u.world.decision_kind(a) == Decision::Build && (self.queue == BOTH_QUEUES || u.world.games[a].queue == self.queue);
+            if owner >= self.controlled || !plays || !build || t < self.warm_until[w] {
                 u.play(a, None);
+                if owner < self.controlled && !plays { self.close(w, owner, 1) }
                 continue;
             }
-            self.close(w, a, 0);
+            self.close(w, owner, 0);
             self.tickets += 1;
             self.deciding[w] = (a, self.tickets);
+            self.advice[w] = self.universes[w].teacher(a);
             return;
         }
     }
@@ -650,59 +675,53 @@ impl SeasonWorld {
 #[pymethods]
 impl SeasonWorld {
     /// `data` holds the units, fleet and combat exports and the login gaps; `catalogue` is the economy export with its
-    /// colonisation block; `arms` are the season's switches by their command-line names (`run.sh` of the flow row).
+    /// colonisation block; `arms` are the season's switches by their command-line names (`run.sh` of the flow row);
+    /// `detector` is `ogrl.discriminator`'s file, read when `lambda` is above 0.
     #[new]
-    #[pyo3(signature = (data, catalogue, n_worlds, arms, controlled=6, accounts=64, days=365, seed=0, queue=0))]
+    #[pyo3(signature = (data, catalogue, n_worlds, arms, controlled=6, accounts=64, days=365, seed=0, queue=BOTH_QUEUES, detector=None, lambda=0.0, stagger=false))]
     #[allow(clippy::too_many_arguments)]
-    fn new(data: &str, catalogue: &str, n_worlds: usize, arms: Vec<String>, controlled: usize, accounts: usize, days: usize, seed: u64, queue: usize) -> PyResult<Self> {
+    fn new(data: &str, catalogue: &str, n_worlds: usize, arms: Vec<String>, controlled: usize, accounts: usize, days: usize, seed: u64, queue: usize, detector: Option<&str>, lambda: f64, stagger: bool) -> PyResult<Self> {
         if controlled == 0 || controlled > accounts {
             return Err(PyValueError::new_err("controlled must be between 1 and the number of accounts"));
         }
         let loaded = Universe::catalogue(data, catalogue, &arms).map_err(PyValueError::new_err)?;
         let colonisation = Some(Arc::new(Colonisation::load(catalogue).map_err(PyValueError::new_err)?));
+        let detector = detector.filter(|_| lambda > 0.0).map(|path| Detector::load(path).map(Arc::new).map_err(PyValueError::new_err)).transpose()?;
         let mut env = SeasonWorld {
-            catalogue: Arc::new(loaded), colonisation, data: data.to_string(), days, accounts, controlled, arms, queue, rng: seed,
-            universes: Vec::new(), midnight: vec![DAY; n_worlds], deciding: vec![(0, 0); n_worlds], open: vec![vec![None; accounts]; n_worlds],
-            during: vec![vec![0.0; accounts]; n_worlds], read: vec![0; n_worlds], tickets: 0, closed: Vec::new(), finished: Vec::new(),
+            catalogue: Arc::new(loaded), colonisation, detector, lambda, data: data.to_string(), days, accounts, controlled, arms, queue, rng: seed,
+            universes: Vec::new(), midnight: vec![DAY; n_worlds], deciding: vec![(0, 0); n_worlds], advice: vec![None; n_worlds], warm_until: vec![0.0; n_worlds], open: vec![vec![None; accounts]; n_worlds],
+            realism: vec![vec![0.0; accounts]; n_worlds], tickets: 0, closed: Vec::new(), finished: Vec::new(),
         };
         env.universes = (0..n_worlds).map(|_| env.fresh()).collect();
-        for w in 0..n_worlds { env.advance(w) }
+        for w in 0..n_worlds {
+            if stagger { env.warm_until[w] = (next_random(&mut env.rng) % days as u64) as f64 * DAY }
+            env.advance(w)
+        }
         Ok(env)
     }
 
     /// (state width, candidates per choice, candidate width); the last candidate row lets the login pass.
     fn dims(&self) -> (usize, usize, usize) {
-        (STATE_DIM, self.catalogue.objects.len() + 1, CAND_DIM)
+        (LEARNER_STATE, self.catalogue.objects.len() + 1, LEARNER_CAND)
     }
 
     fn feature_names(&self) -> (Vec<&'static str>, Vec<&'static str>) {
-        (STATE_NAMES.to_vec(), CAND_NAMES.to_vec())
+        (STATE_NAMES.iter().chain(&ACCOUNT_NAMES).copied().collect(), CAND_NAMES.iter().chain(&["advised"]).copied().collect())
     }
 
     /// Per world: (deciding account, the decision kind, ticket).
     fn decisions(&self) -> Vec<(usize, usize, u64)> {
-        self.deciding.iter().map(|&(a, t)| (a, self.queue, t)).collect()
+        self.universes.iter().zip(&self.deciding).map(|(u, &(a, t))| (u.world.account_of(a), self.queue, t)).collect()
     }
 
-    /// The deciding planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]). The last row,
-    /// always legal, passes: the persona waits at half its decisions (field reserve, saving for a build), and a menu
-    /// without it trained a model that sealed its planets (row 68).
+    /// The deciding planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]).
     fn observe<'py>(&self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
-        let (n, objects) = (self.universes.len(), self.catalogue.objects.len());
-        let k = objects + 1;
-        let mut state = vec![0f32; n * STATE_DIM];
-        let mut cands = vec![0f32; n * k * CAND_DIM];
+        let (n, k) = (self.universes.len(), self.catalogue.objects.len() + 1);
+        let mut state = vec![0f32; n * LEARNER_STATE];
+        let mut cands = vec![0f32; n * k * LEARNER_CAND];
         let mut legal = vec![0u8; n * k];
         for (w, u) in self.universes.iter().enumerate() {
-            let a = self.deciding[w].0;
-            let planet = &u.world.games[a].planet;
-            self.catalogue.state_features(planet, &mut state[w * STATE_DIM..(w + 1) * STATE_DIM]);
-            for j in 0..objects {
-                let at = (w * k + j) * CAND_DIM;
-                self.catalogue.candidate_features(planet, j, &mut cands[at..at + CAND_DIM]);
-                legal[w * k + j] = u8::from(u.world.legal(&self.catalogue, a, j));
-            }
-            legal[w * k + objects] = 1;
+            u.observe(self.deciding[w].0, self.advice[w], &mut state[w * LEARNER_STATE..(w + 1) * LEARNER_STATE], &mut cands[w * k * LEARNER_CAND..(w + 1) * k * LEARNER_CAND], &mut legal[w * k..(w + 1) * k]);
         }
         (bytes(py, &state), bytes(py, &cands), bytes(py, &legal))
     }
@@ -717,7 +736,8 @@ impl SeasonWorld {
         for (w, &action) in actions.iter().enumerate() {
             let (a, ticket) = self.deciding[w];
             let u = &mut self.universes[w];
-            self.open[w][a] = Some((ticket, players::account_value(&u.world, a)));
+            let owner = u.world.account_of(a);
+            self.open[w][owner] = Some((ticket, log_score(&u.world, owner)));
             let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && u.world.legal(&cat, a, k));
             let pass = action == cat.objects.len() as i64;
             let fallback = (!pass && chosen.is_none()).then(|| (0..cat.objects.len()).find(|&k| u.world.legal(&cat, a, k))).flatten();
@@ -729,15 +749,13 @@ impl SeasonWorld {
     }
 
     /// The persona's own build for every deciding account (the last row when it would pass): the teacher.
-    fn baseline(&mut self) -> Vec<i64> {
-        let cat = Arc::clone(&self.catalogue);
-        self.universes.iter_mut().zip(&self.deciding).map(|(u, &(a, _))| {
-            let world = &u.world;
-            u.players[a].miner().pick(world, &cat, a).filter(|&k| world.legal(&cat, a, k)).map_or(cat.objects.len() as i64, |k| k as i64)
-        }).collect()
+    fn baseline(&self) -> Vec<i64> {
+        let pass = self.catalogue.objects.len() as i64;
+        self.advice.iter().map(|advice| advice.map_or(pass, |k| k as i64)).collect()
     }
 
-    /// Accounts whose season finished since the last call, `accounts` rows per season.
+    /// Accounts whose season finished since the last call, `accounts` rows per season: (planets, score, the capital's
+    /// effective rate, builds, invalid actions, 0).
     fn take_finished(&mut self) -> Vec<Finished> {
         std::mem::take(&mut self.finished)
     }

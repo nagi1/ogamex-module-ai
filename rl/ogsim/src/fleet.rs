@@ -128,8 +128,8 @@ impl FleetCatalogue {
     pub fn speed(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
         let table = &self.unit(id).speed;
         let index = table.by.iter().fold(0usize, |index, r| {
-            let level = research.get(r).copied().unwrap_or(0);
-            assert!(level <= self.max_level, "research {r} at {level} is past the catalogue's max level {}", self.max_level);
+            // Past the table reads its last level, as `CombatCatalogue::cell`: a year's play must not die on a rare top level.
+            let level = research.get(r).copied().unwrap_or(0).min(self.max_level);
             index * (self.max_level as usize + 1) + level as usize
         });
         table.values[index]

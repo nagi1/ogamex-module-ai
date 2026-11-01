@@ -20,10 +20,10 @@ use std::io::{BufWriter, Write};
 
 use ogsim::players::{account_value, YardStall};
 use ogsim::score;
-use ogsim::season::{Universe, DAY, PERSONAS, SAVER};
+use ogsim::season::{Policy, Universe, DAY, PERSONAS, SAVER};
 use ogsim::economy::{Baseline, Books};
 use ogsim::units::UnitKind;
-use ogsim::world::{Colonisation, Event, EventKind, Mission, World};
+use ogsim::world::{Colonisation, Decision, Event, EventKind, Mission, World};
 use std::sync::Arc;
 use ogsim::{WEIGHTS};
 use serde_json::json;
@@ -46,6 +46,10 @@ fn main() {
     // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
     let colonisation = Colonisation::load(&econ).ok().map(Arc::new);
     let mut universe = Universe::new(cat, colonisation, &data, days, accounts, seed, &arms);
+    // `policy=<weights>` hands every account's builds and research to a trained model; its persona plays the rest of the login.
+    // `teacher-pick` asks the persona through the model's own door, so that door is measured apart from the model.
+    let teacher_pick = arms.iter().any(|arm| arm == "teacher-pick");
+    let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -77,14 +81,22 @@ fn main() {
         excess: vec![[0.0; 3]; accounts],
         seen_planet: vec![false; accounts],
         over_cap: 0,
+        controlled: policy.is_some(),
     };
 
     let start = std::time::Instant::now();
     while let Some(a) = season.u.next_decision() {
         let owner = season.u.world.account_of(a);
         season.flush(season.u.world.games[a].t);
-        if season.u.plays(a) { season.touch(owner, a) }
-        season.u.play(a, None);
+        let plays = season.u.plays(a);
+        if plays { season.touch(owner, a) }
+        let build = plays && season.u.world.decision_kind(a) == Decision::Build;
+        let pick = match &policy {
+            Some(p) if build => Some(season.u.choose(p, a)),
+            None if build && teacher_pick => Some(season.u.teacher(a)),
+            _ => None,
+        };
+        season.u.play(a, pick);
     }
     season.flush(f64::INFINITY);
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
@@ -161,6 +173,7 @@ struct Season<'a, W: Write> {
     excess: Vec<[f64; 3]>,
     seen_planet: Vec<bool>,
     over_cap: usize,
+    controlled: bool,
 }
 
 impl<W: Write> Season<'_, W> {
@@ -255,7 +268,7 @@ impl<W: Write> Season<'_, W> {
                 "day": d + 1,
                 "account": a,
                 "persona": PERSONAS[self.u.roles[a]].0,
-                "controlled": false,
+                "controlled": self.controlled,
                 "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
                            "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
                            "production_drop_warning": production_drop},
