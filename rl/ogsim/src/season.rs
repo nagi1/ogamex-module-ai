@@ -335,13 +335,17 @@ impl Universe {
         legal[objects] = 1;
     }
 
-    /// The model's build at slot a: an object, or `None` to pass.
-    pub fn choose(&mut self, policy: &Policy, a: usize) -> Option<usize> {
+    /// The model's build at slot a: an object, or `None` to pass. With `draw` it samples as it does in training.
+    pub fn choose(&mut self, policy: &Policy, a: usize, draw: Option<&mut u64>) -> Option<usize> {
         let k = self.cat.objects.len() + 1;
         let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
         let advice = self.teacher(a);
         self.observe(a, advice, &mut state, &mut cands, &mut legal);
-        Some(policy.best(&state, &cands, &legal)).filter(|&row| row < k - 1)
+        let row = match draw {
+            Some(rng) => policy.sample(&state, &cands, &legal, rng).0,
+            None => policy.best(&state, &cands, &legal),
+        };
+        Some(row).filter(|&row| row < k - 1)
     }
 
     /// The persona's own build at slot a, asked as the model is asked: the learner's teacher.

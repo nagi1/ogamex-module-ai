@@ -113,8 +113,25 @@ Sum the processes before launching and stay under 30 GB in `rl.slice`; `rl/scrip
 | Warm-up midnights billed to an account's first decision | Single returns of -155 at λ 0.1 | The detector does not judge warm-up days |
 | 128 decisions per world per hand-over is 2 per account | GAE cut to one or two steps | A rollout is 8192 decisions per world, 128 per account, about 17 game days |
 
-Entropy rises from 0.25 while KL stays low. It rose before the fixes too, so "shared layers" was not the whole cause;
-detaching the value head stays because the value must not drive the policy's layers. Open until read from play.
+Entropy rises from 0.25 while KL stays low. It rose before the fixes too, so "shared layers" was not the whole cause.
+Measured by queue and season phase (`runs/train1/pays.py`): same-queue choices differ by about 0.03 in advantage against
+a spread of about 0.6, the order of the entropy bonus's pull at low probabilities, so where the reward barely separates
+choices the bonus can win. Arm `arm02e0` (λ 0.02, no bonus) tests this against `arm02`.
+
+## The judge plays as training plays (2 Nov)
+
+A checkpoint played greedy left the teacher on 0.0000 of rows while sampled play left it on 20%: the greedy judge cannot
+see what the policy has learned, so every checkpoint read as the clone. `judge_policy.sh ... sampled` plays it sampled.
+
+The clone itself, unchanged, moves with this alone:
+
+| Clone played | HDS | Pooled AUC |
+| --- | --- | --- |
+| Greedy | 0.767 | 0.931-0.943 |
+| Sampled | 0.805 | 0.905 |
+
+Sampled clone is the baseline for step C. Slight randomness makes accounts differ the way real players do. One reading so
+far; its spread needs more than one run before a small gain counts.
 
 Learner settings are not experiments (NORTH-STAR §10). Fidelity gaps (replay) are read alongside and do not block
 training; the rule fixes go in between rounds, and a changed world means a rerun of step A.

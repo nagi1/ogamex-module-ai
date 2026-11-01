@@ -49,6 +49,8 @@ fn main() {
     // `policy=<weights>` hands every account's builds and research to a trained model; its persona plays the rest of the login.
     // `teacher-pick` asks the persona through the model's own door, so that door is measured apart from the model.
     let teacher_pick = arms.iter().any(|arm| arm == "teacher-pick");
+    // `sampled` plays the policy as training does; a model cloned from a teacher can keep every greedy pick while it changes.
+    let mut draw = arms.iter().any(|arm| arm == "sampled").then_some(seed ^ 0x5A17);
     let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -92,7 +94,7 @@ fn main() {
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
         let pick = match &policy {
-            Some(p) if build => Some(season.u.choose(p, a)),
+            Some(p) if build => Some(season.u.choose(p, a, draw.as_mut())),
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };
