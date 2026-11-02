@@ -38,6 +38,9 @@ class ExportAiEconomyCatalogueAction
     /** The level a build-time probe uses: high enough that the host's whole seconds keep the divisor precise. */
     private const PROBE_LEVEL = 40;
 
+    /** The largest price tabulated: about ten thousand times the richest season account's whole stock. */
+    private const PRICE_CEILING = 1_000_000_000_000_000;
+
     /** Build times are the host's own for every time modifier up to this level; beyond it the divisor is used. */
     private const TIME_GRID_LEVEL = 12;
 
@@ -275,6 +278,10 @@ class ExportAiEconomyCatalogueAction
         $this->withLevels($planet, $objects, [], function () use ($object, $planet, $modifierIds, $maxLevel, &$prices, &$energyPrices, &$seconds, &$grid): void {
             for ($level = 1; $level <= $maxLevel; $level++) {
                 $price = ObjectService::getObjectRawPrice($object->machine_name, $level);
+                // A level no account can pay for ends the table: past it the host's own time arithmetic overflows an int.
+                if ($price->metal->get() + $price->crystal->get() + $price->deuterium->get() > self::PRICE_CEILING) {
+                    break;
+                }
                 $prices[] = [$price->metal->get(), $price->crystal->get(), $price->deuterium->get()];
                 $energyPrices[] = $price->energy->get();
                 $grid[] = $this->timeGrid($planet, $object, $level - 1, $modifierIds);

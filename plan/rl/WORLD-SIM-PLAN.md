@@ -133,6 +133,10 @@ nothing, and the share of accounts reaching each object is compared with the rea
 | --- | --- | --- | --- |
 | L1 (W23) | Levels past 40: the economy catalogue and the highscore table re-exported to 60 (`--max-level=60`, `ai:rl-units-catalogue --score-levels=60`) into `r8x/`, then installed in `r8w/` | `cargo test --release` green on the new files; the teacher's year no longer stops at a table's edge | in progress |
 | L2 (W20) | Wreck fields: the battle's wreck (defender, and a General attacker's carried home), repair at the space dock, collected at a login; settings and the excluded units read from the host | host attack cases with the wreck in their output, exact | open |
+| M1 | Moons in the export: `ai:rl-catalogue --moons` makes a moon beside each home (rolled back) and tabulates the 9 objects a moon takes (stores, robot factory, shipyard, missile silo, lunar base, phalanx, jump gate); host moons start at 1 field (+5 General) and the lunar base adds 3 a level, diameter gives none (§7). Every object's table ends at a price above 10^15 (`PRICE_CEILING`): past it the host's own research-time arithmetic overflows an int | `r8x/econ-r8-moons.json`, 24 moons | done |
+| M2 | One catalogue for both types: the export writes every station and building with its `valid_types`, the moon configs join `planets` flagged `moon`, and `Catalogue::legal` refuses an object on a type it may not stand on | Rust test: a mine is refused on a moon, a lunar base on a planet; every earlier test green | open |
+| M3 | A moon is a slot of its account (`World::add_moon` beside `add_planet`, at the planet's coordinates, moon config, no production): fleets fly to and from it (transport, deploy, espionage, attack on its contents = W21), it holds stock and units, builds in its own queue, and `MoonHold` goes | mission parity still 0 differ; a moon's lunar base, phalanx and gate are built in a test | open |
+| M4 | A player's moon: fleet and stock stationed there, a lunar base when its fields run out, a phalanx and a jump gate once the account can use them, the fleet saved from the moon | coverage: lunar base, phalanx, jump gate owned | open |
 | L3 (W17) | Phalanx: scan cost and range from the host; a raider scans before it attacks a moon-holding target's planet | host cases, exact | open |
 | L4 (W18) | Jump gate: moon-to-moon transfer and cooldown from the host; a saver with two gated moons jumps instead of flying | host cases, exact | open |
 | L5 (W19) | ACS attack (union, one battle, loot shared) and ACS defend (holding at a mate's planet) for alliance members | host cases, exact | open |
@@ -162,6 +166,7 @@ Agents commit nothing; the lead commits by file name. Check `git status` before 
 
 ## 7. Host behaviour that differs from real OGame (the simulator mirrors the host; the owner decides on host fixes)
 
+- A moon's fields are 1 (+5 for a General) plus the lunar base's; its diameter adds none (real OGame: floor((d/1000)^2)).
 - Half the fuel is added to the cargo of every mission (`FleetMissionService::getResources`), not only deployment;
   recycle is the exception. A transport delivers its deuterium plus fuel/2, and attack and espionage fleets carry
   fuel/2 home.
