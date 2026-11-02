@@ -370,6 +370,8 @@ pub struct World {
     idle_next: Vec<f64>,
     /// Whether the account that is deciding now has no build to decide.
     idle_now: Vec<bool>,
+    /// L4: the second each slot's jump gate is ready again (0: never used).
+    pub gate_ready: Vec<f64>,
     rng: u64,
 }
 
@@ -384,7 +386,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -625,6 +627,75 @@ impl World {
         self.games[m].done = true;
     }
 
+    /// L3: the deciding account reads planet `target` from its moon slot's sensor phalanx (`PhalanxService`): same
+    /// galaxy, systems within the level's range around the donut, 5,000 deuterium from the moon. Returns the fleets the
+    /// host lists: those flying to the planet and those it sent that will come back to it.
+    pub fn phalanx(&mut self, cat: &Catalogue, moon: usize, target: usize) -> Result<Vec<usize>, &'static str> {
+        let rules = Arc::clone(&self.rules[moon]);
+        let gear = rules.settings.moon_gear.as_ref().ok_or("no moon gear")?;
+        if self.moon_at[moon].is_none() || self.moon_at[target].is_some() { return Err("phalanx from a moon onto a planet") }
+        let level = self.moon_level(cat, moon, gear.phalanx_object);
+        let range = gear.phalanx_range[level.min(gear.phalanx_range.len() - 1)];
+        let (from, to) = (self.coords[moon], self.coords[target]);
+        let systems = (from.system - to.system).abs();
+        if range < 0 || from.galaxy != to.galaxy || systems.min((systems - rules.settings.number_of_systems).abs()) > range {
+            return Err("out of phalanx range");
+        }
+        let now = self.games[self.account[moon]].t;
+        self.catch_up(cat, moon, now);
+        if self.games[moon].planet.res[2] < gear.phalanx_cost { return Err("not enough deuterium") }
+        self.games[moon].planet.res[2] -= gear.phalanx_cost;
+        self.games[moon].planet.settle();
+        self.next[moon] = cat.peek(&mut self.games[moon]);
+        Ok((0..self.fleets.len()).filter(|&f| {
+            let fleet = &self.fleets[f];
+            (fleet.target == target && !fleet.returning) || (fleet.owner == target && (fleet.returning || fleet.mission != Mission::Deploy))
+        }).collect())
+    }
+
+    /// L4: the deciding account moves ships through the jump gate from its moon slot `from` to its moon slot `to`
+    /// (`JumpGateService`): both gates built and rested, only the ships a gate carries, there at once; both gates then
+    /// rest as long as the lower level says.
+    pub fn jump(&mut self, cat: &Catalogue, from: usize, to: usize, ships: &[(u32, i64)]) -> Result<(), &'static str> {
+        let rules = Arc::clone(&self.rules[from]);
+        let gear = rules.settings.moon_gear.as_ref().ok_or("no moon gear")?;
+        if from == to || self.moon_at[from].is_none() || self.moon_at[to].is_none() || self.account[from] != self.account[to] {
+            return Err("a jump between two moons of one account");
+        }
+        let level = self.moon_level(cat, from, gear.gate_object).min(self.moon_level(cat, to, gear.gate_object));
+        if level == 0 { return Err("no jump gate") }
+        let now = self.games[self.account[from]].t;
+        if self.gate_ready[from] > now || self.gate_ready[to] > now { return Err("jump gate resting") }
+        for slot in [from, to] {
+            self.catch_up(cat, slot, now);
+            self.settle_yard(cat, slot);
+        }
+        let mut moved = Vec::new();
+        for &(id, n) in ships.iter().filter(|&&(_, n)| n > 0) {
+            if !gear.gate_ships.contains(&id) { return Err("a ship the gate does not carry") }
+            let u = rules.units.index(id as i64).ok_or("no such ship")?;
+            if self.yards[from].counts[u] < n as u64 { return Err("not enough ships") }
+            moved.push((u, n as u64));
+        }
+        if moved.is_empty() { return Err("no ships") }
+        for (u, n) in moved {
+            self.yards[from].counts[u] -= n;
+            self.yards[to].counts[u] += n;
+        }
+        let rest = now + gear.gate_cooldown[level.min(gear.gate_cooldown.len() - 1)];
+        for slot in [from, to] {
+            self.gate_ready[slot] = rest;
+            self.sync_units(cat, slot);
+            self.next[slot] = cat.peek(&mut self.games[slot]);
+        }
+        Ok(())
+    }
+
+    /// The level of host object `id` on slot s (0 where the catalogue has no such object).
+    fn moon_level(&self, cat: &Catalogue, s: usize, id: i64) -> usize {
+        cat.objects.iter().position(|o| o.id == id).map_or(0, |k| self.games[s].planet.levels[k] as usize)
+    }
+
     /// The planet a slot stands over: itself, or a moon's planet. Debris, a field and a moon belong to the position.
     pub fn ground(&self, slot: usize) -> usize {
         self.moon_at[slot].unwrap_or(slot)
@@ -647,6 +718,7 @@ impl World {
         self.officers.push(HashMap::default());
         self.idle_next.push(NEVER);
         self.idle_now.push(false);
+        self.gate_ready.push(0.0);
         self.account.push(capital);
         self.colonies.push(Vec::new());
         self.next.push(0.0);
@@ -1496,7 +1568,7 @@ mod tests {
 
     /// Two accounts on u1 that never build: every difference from a quiet twin world is what the fleet moved.
     fn pair(hours: f64) -> Option<(Catalogue, World, World)> {
-        let mut cat = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")).ok()?;
+        let mut cat = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-merged.json")).ok()?;
         cat.login_gaps = vec![1800.0];
         let rules = Arc::new(Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")).ok()?);
         let coords = vec![Coord { galaxy: 1, system: 10, position: 4 }, Coord { galaxy: 1, system: 14, position: 8 }];
@@ -1529,6 +1601,40 @@ mod tests {
         idle(&cat, &mut w);
         let u = w.rules[moon].units.index(ship as i64).unwrap();
         assert_eq!((w.yards[moon].counts[u], w.yards[0].counts[u]), (5, 0), "the ships stand on the moon");
+    }
+
+    /// L3/L4: a phalanx on a moon reads the fleets flying to a planet in range for its deuterium, and a jump gate
+    /// moves ships between an account's two moons at once and then rests both gates by the lower level.
+    #[test]
+    fn a_moon_reads_fleets_with_its_phalanx_and_jumps_ships_through_its_gate() {
+        let Some((cat, mut w, _)) = pair(240.0) else { return eprintln!("no u1 catalogues; skipped") };
+        let gear = w.rules[0].settings.moon_gear.clone().expect("fleet settings v3");
+        let at = |id: i64| cat.objects.iter().position(|o| o.id == id).unwrap();
+        let moon = w.add_moon(&cat, 0, 8000, 0.0);
+        let colony = w.add_planet(&cat, 0, 0, Coord { galaxy: 1, system: 11, position: 6 }, 0.0);
+        let other = w.add_moon(&cat, colony, 8000, 0.0);
+        assert_eq!(w.phalanx(&cat, moon, 1), Err("out of phalanx range"), "no phalanx built");
+        w.games[moon].planet.levels[at(gear.phalanx_object)] = 3;
+        w.games[moon].planet.res = [0.0, 0.0, 6000.0];
+        let ship = 202;
+        give(&mut w, 1, ship, 3);
+        w.games[1].planet.res = [1e6; 3];
+        w.dispatch(&cat, 1, 0, Mission::Transport, &[(ship, 3)], [0.0; 3], 10.0).unwrap();
+        assert_eq!(w.phalanx(&cat, moon, 0), Ok(vec![0]), "the fleet flying to the planet");
+        assert_eq!(w.games[moon].planet.res[2] as i64, 6000 - gear.phalanx_cost as i64);
+        assert_eq!(w.phalanx(&cat, moon, 0), Err("not enough deuterium"));
+
+        let warship = *gear.gate_ships.iter().find(|&&id| id != ship).expect("a ship the gate carries");
+        give(&mut w, moon, warship, 7);
+        assert_eq!(w.jump(&cat, moon, other, &[(warship, 7)]), Err("no jump gate"));
+        w.games[moon].planet.levels[at(gear.gate_object)] = 2;
+        w.games[other].planet.levels[at(gear.gate_object)] = 1;
+        w.jump(&cat, moon, other, &[(warship, 7)]).expect("a jump");
+        let u = w.rules[moon].units.index(warship as i64).unwrap();
+        assert_eq!((w.yards[moon].counts[u], w.yards[other].counts[u]), (0, 7));
+        let now = w.games[0].t;
+        assert_eq!((w.gate_ready[moon], w.gate_ready[other]), (now + gear.gate_cooldown[1], now + gear.gate_cooldown[1]), "the lower level rests both");
+        assert_eq!(w.jump(&cat, other, moon, &[(warship, 7)]), Err("jump gate resting"));
     }
 
     fn idle(cat: &Catalogue, w: &mut World) {

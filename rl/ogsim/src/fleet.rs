@@ -51,6 +51,24 @@ pub struct FleetSettings {
     pub dark_matter_initial: i64,
     #[serde(default)]
     pub officers: std::collections::BTreeMap<String, Officer>,
+    /// Late game: the sensor phalanx and jump gate as the host's services answer (fleet settings v3).
+    #[serde(default)]
+    pub moon_gear: Option<MoonGear>,
+}
+
+/// What a moon's sensor phalanx and jump gate do (`PhalanxService`, `JumpGateService`), per level from 0.
+#[derive(Deserialize, Clone, Debug)]
+pub struct MoonGear {
+    pub phalanx_object: i64,
+    pub gate_object: i64,
+    /// Systems either way the phalanx reads in its own galaxy (-1 at level 0: none).
+    pub phalanx_range: Vec<i64>,
+    /// Deuterium a scan takes from the moon.
+    pub phalanx_cost: f64,
+    /// Seconds both gates rest after a jump, by the lower of their levels.
+    pub gate_cooldown: Vec<f64>,
+    /// The ships a gate carries, by host id.
+    pub gate_ships: Vec<u32>,
 }
 
 /// One officer as the host's `OfficerService` answers while it alone is active (the bundle with the staff's extras).

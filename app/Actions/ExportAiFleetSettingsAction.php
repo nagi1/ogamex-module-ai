@@ -6,9 +6,13 @@ use OGame\Enums\FleetSpeedType;
 use OGame\Factories\GameMissionFactory;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
+use OGame\Services\JumpGateService;
+use OGame\Services\ObjectService;
 use OGame\Services\OfficerService;
+use OGame\Services\PhalanxService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
+use ReflectionClassConstant;
 use ReflectionProperty;
 
 /**
@@ -18,7 +22,10 @@ use ReflectionProperty;
  */
 class ExportAiFleetSettingsAction
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
+
+    /** Moon gear levels tabulated (sensor phalanx range, jump gate cooldown); no account builds either this high. */
+    private const MOON_GEAR_LEVELS = 30;
 
     /**
      * @param  PlayerService  $player  the owner whose class changes fuel use
@@ -43,6 +50,30 @@ class ExportAiFleetSettingsAction
             // W15: the dark matter a new account starts with, and each officer's price and effects as the host answers them.
             'dark_matter_initial' => $settings->darkMatterBonus(),
             'officers' => $this->officers($player->getUser()),
+            'moon_gear' => $this->moonGear($player),
+        ];
+    }
+
+    /**
+     * Late game: what a moon's sensor phalanx and jump gate do, as the host's services answer for this owner. The phalanx
+     * range per level (the class bonus included) and the deuterium a scan takes from the moon; the gate's cooldown per
+     * level and the ships it carries, by id.
+     *
+     * @return array<string, mixed>
+     */
+    private function moonGear(PlayerService $player): array
+    {
+        $phalanx = app(PhalanxService::class);
+        $gate = app(JumpGateService::class);
+        $levels = range(0, self::MOON_GEAR_LEVELS);
+
+        return [
+            'phalanx_object' => ObjectService::getObjectByMachineName('sensor_phalanx')->id,
+            'gate_object' => ObjectService::getObjectByMachineName('jump_gate')->id,
+            'phalanx_range' => array_map(static fn (int $level): int => $level === 0 ? -1 : $phalanx->calculatePhalanxRange($level, $player->getId()), $levels),
+            'phalanx_cost' => (new ReflectionClassConstant(PhalanxService::class, 'SCAN_COST'))->getValue(),
+            'gate_cooldown' => array_map(static fn (int $level): int => $level === 0 ? 0 : $gate->calculateCooldown($level), $levels),
+            'gate_ships' => array_map(static fn (string $name): int => ObjectService::getObjectByMachineName($name)->id, $gate->getTransferableShips()),
         ];
     }
 
