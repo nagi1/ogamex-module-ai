@@ -16,7 +16,6 @@ import json
 import math
 import subprocess
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -56,14 +55,22 @@ def finals(path: Path) -> dict[int, tuple[float, bool]]:
     return {a: (math.log1p(r["score"]["total"]), not r.get("inactive")) for a, r in last.items()}
 
 
-def season(args, gen_dir: Path, seed: int, sign: int) -> dict[int, tuple[float, bool]]:
-    out = gen_dir / f"s{seed}{'+' if sign > 0 else '-'}.jsonl"
-    arms = ARMS + [f"policy={gen_dir / 'policy.json'}", f"es={gen_dir / f'noise-{seed}.f32'}:{sign}:{args.sigma}"]
-    subprocess.run([args.bin, str(DATA), str(args.days), str(args.accounts), str(seed), str(DATA / "units-parity/econ-u1-colonies.json"), str(out), *arms],
-                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"OMP_NUM_THREADS": "1", "RAYON_NUM_THREADS": "1"})
-    scores = finals(out)
-    out.unlink()
-    return scores
+def generation(args, gen_dir: Path, seeds: list[int]) -> dict[tuple[int, int], dict[int, tuple[float, bool]]]:
+    """Both signs of every seed, in one process: the seasons share the 0.8 GB catalogue a process each would load again."""
+    jobs, outs = [], {}
+    for seed in seeds:
+        for sign in (1, -1):
+            out = gen_dir / f"s{seed}{'+' if sign > 0 else '-'}.jsonl"
+            outs[(seed, sign)] = out
+            jobs.append(f"{seed} {out} es={gen_dir / f'noise-{seed}.f32'}:{sign}:{args.sigma}")
+    (gen_dir / "jobs.txt").write_text("\n".join(jobs) + "\n")
+    arms = ARMS + [f"policy={gen_dir / 'policy.json'}", f"jobs={gen_dir / 'jobs.txt'}", f"threads={args.procs}"]
+    subprocess.run([args.bin, str(DATA), str(args.days), str(args.accounts), "0", str(DATA / "units-parity/econ-u1-colonies.json"), str(gen_dir / "unused.jsonl"), *arms],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"OMP_NUM_THREADS": "1"})
+    done = {key: finals(out) for key, out in outs.items()}
+    for out in outs.values():
+        out.unlink()
+    return done
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--bin", required=True, help="the season binary (examples/season)")
     ap.add_argument("--seeds", type=int, default=20, help="antithetic seed pairs per generation: 2x this many seasons")
-    ap.add_argument("--procs", type=int, default=40)
+    ap.add_argument("--procs", type=int, default=40, help="season threads in the one process")
     ap.add_argument("--sigma", type=float, default=0.02)
     ap.add_argument("--lr", type=float, default=0.01)
     ap.add_argument("--gens", type=int, default=1000)
@@ -103,9 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         for seed in seeds:
             noise[seed] = np.random.default_rng(seed).standard_normal((args.accounts, len(theta)), dtype=np.float32)
             noise[seed].astype("<f4").tofile(gen_dir / f"noise-{seed}.f32")
-        with ThreadPoolExecutor(args.procs) as pool:
-            runs = {(s, sign): pool.submit(season, args, gen_dir, s, sign) for s in seeds for sign in (1, -1)}
-            done = {key: run.result() for key, run in runs.items()}
+        done = generation(args, gen_dir, seeds)
         votes, rows, plus, minus = [], [], [], []
         for seed in seeds:
             up, down = done[(seed, 1)], done[(seed, -1)]

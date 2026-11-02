@@ -45,7 +45,34 @@ fn main() {
     let cat = Arc::new(Universe::catalogue(&data, &econ, &arms).expect("the economy catalogue"));
     // The host's colonisation tables, when the catalogue carries them: without them no account can found a colony.
     let colonisation = Colonisation::load(&econ).ok().map(Arc::new);
-    let mut universe = Universe::new(cat, colonisation, &data, days, accounts, seed, &arms);
+    // `jobs=FILE threads=N`: many seasons in one process, sharing the catalogue (about 0.8 GB, which every process would load
+    // again). FILE has one season per line: SEED OUT [ARM...], the line's arms added to the command line's.
+    match arms.iter().find_map(|arm| arm.strip_prefix("jobs=")) {
+        Some(file) => {
+            let threads = arms.iter().find_map(|arm| arm.strip_prefix("threads=")).map_or(1, |n| n.parse::<usize>().expect("threads=N"));
+            let jobs: Vec<(u64, String, Vec<String>)> = std::fs::read_to_string(file).expect("the jobs file").lines().filter(|l| !l.trim().is_empty()).map(|line| {
+                let mut words = line.split_whitespace();
+                let seed = words.next().expect("a seed").parse().expect("seed");
+                let out = words.next().expect("an output path").to_string();
+                (seed, out, arms.iter().cloned().chain(words.map(String::from)).collect())
+            }).collect();
+            let queue = std::sync::Mutex::new(jobs.into_iter());
+            std::thread::scope(|scope| {
+                for _ in 0..threads {
+                    scope.spawn(|| while let Some((seed, out, arms)) = { let next = queue.lock().expect("the job queue").next(); next } {
+                        play(Arc::clone(&cat), colonisation.clone(), &data, days, accounts, seed, &out, &arms);
+                    });
+                }
+            });
+        }
+        None => play(cat, colonisation, &data, days, accounts, seed, &out_path, &arms),
+    }
+}
+
+/// One season, written to `out_path`, its summary printed.
+#[allow(clippy::too_many_arguments)]
+fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisation>>, data: &str, days: usize, accounts: usize, seed: u64, out_path: &str, arms: &[String]) {
+    let mut universe = Universe::new(cat, colonisation, data, days, accounts, seed, arms);
     // `policy=<weights>` hands every account's builds and research to a trained model; its persona plays the rest of the login.
     // `teacher-pick` asks the persona through the model's own door, so that door is measured apart from the model.
     let teacher_pick = arms.iter().any(|arm| arm == "teacher-pick");
@@ -138,7 +165,7 @@ fn main() {
     }
     season.flush(f64::INFINITY);
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
-    if std::env::args().any(|arg| arg == "levels") {
+    if arms.iter().any(|arm| arm == "levels") {
         let planets: Vec<_> = (0..accounts).map(|a| {
             let slots: Vec<_> = season.u.world.planets_of(a).into_iter().map(|slot| {
                 let planet = &season.u.world.games[slot].planet;

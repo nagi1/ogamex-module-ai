@@ -60,8 +60,8 @@ impl World {
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
         let arrive = now + flight.seconds as f64;
-        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: self.launch_log.len(), union: None });
-        self.launch_log.push((self.fleets.last().expect("just fired").clone(), 0.0));
+        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: self.launched, union: None });
+        self.log_launch(0.0);
         Ok(())
     }
 

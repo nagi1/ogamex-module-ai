@@ -81,8 +81,8 @@ impl World {
         let slowest = units.fleet.slowest_speed(&ships, &research) as f64;
         let seconds = ((35_000.0 / 10.0 * (distance * 10.0 / slowest).sqrt() + 10.0) / rules.fleet_speed).round().max(1.0);
         let to = self.coords[s];
-        self.fleets.push(Fleet { owner: s, target: s, to, mission: Mission::Deploy, ships, cargo: [0.0; 3], fuel: 0.0, arrive: at + seconds, home: at + seconds, returning: false, departed: at, holding: 0.0, priority: 0, moon: false, id: self.launch_log.len(), union: None });
-        self.launch_log.push((self.fleets.last().expect("just sent").clone(), rules.fleet_speed));
+        self.fleets.push(Fleet { owner: s, target: s, to, mission: Mission::Deploy, ships, cargo: [0.0; 3], fuel: 0.0, arrive: at + seconds, home: at + seconds, returning: false, departed: at, holding: 0.0, priority: 0, moon: false, id: self.launched, union: None });
+        self.log_launch(rules.fleet_speed);
     }
 
     /// A planet slot or a moon's slot stands at `to`.

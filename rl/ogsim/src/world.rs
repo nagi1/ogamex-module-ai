@@ -365,8 +365,12 @@ pub struct World {
     pub officer_log: Vec<(usize, f64, String, i64)>,
     /// W14: every yard order (slot, second, host unit id, amount asked, amount queued), for the host's replay of the world.
     pub unit_log: Vec<(usize, f64, u32, u64, u64)>,
-    /// Every fleet as it left, with the speed it was sent at (W14: the trace a host replay dispatches).
+    /// Every fleet as it left, with the speed it was sent at (W14: the trace a host replay dispatches). Kept only with
+    /// `keep_launches` (the trace); a season launches hundreds of thousands of fleets and reads none of them back.
     pub launch_log: Vec<(Fleet, f64)>,
+    pub keep_launches: bool,
+    /// Fleets launched so far: the next fleet's id.
+    pub launched: usize,
     /// Debris over deep space (slot 16) by (galaxy, system); nothing harvests it yet.
     pub deep_space: HashMap<(i64, i64), [i64; 3]>,
     /// The best score in the highscore, which sets what an expedition can find.
@@ -430,7 +434,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), moves: HashMap::default(), moved_at: HashMap::default(), move_log: Vec::new(), last_attacked: HashMap::default(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15, keyed: false, drawn: HashMap::default() }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), keep_launches: false, launched: 0, deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), moves: HashMap::default(), moved_at: HashMap::default(), move_log: Vec::new(), last_attacked: HashMap::default(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15, keyed: false, drawn: HashMap::default() }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -896,6 +900,11 @@ impl World {
 
     /// Account a lets this login pass and decides again at its next one.
     /// Spends one of account 0's draws (the world's, unkeyed): the `jolt` probe's change that changes nothing a player chose.
+    pub(crate) fn log_launch(&mut self, speed: f64) {
+        self.launched += 1;
+        if self.keep_launches { self.launch_log.push((self.fleets.last().expect("just sent").clone(), speed)) }
+    }
+
     pub fn jolt(&mut self) { self.draw(0, 1); }
 
     /// One draw for slot a's account and `purpose`: the shared stream, or with `keyed` the account's own.
@@ -1183,8 +1192,8 @@ impl World {
         // Row 23: the fuel is burnt at dispatch; the cargo is still the account's, in the hold, until it lands.
         planet.books.fuel += weighted([0.0, 0.0, fuel]);
         let holding = fleet::holding_seconds(hold_hours) as f64;
-        self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy, id: self.launch_log.len(), union: None });
-        self.launch_log.push((self.fleets.last().expect("just sent").clone(), speed));
+        self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy, id: self.launched, union: None });
+        self.log_launch(speed);
         self.next[a] = cat.peek(&mut self.games[a]);
         Ok(())
     }

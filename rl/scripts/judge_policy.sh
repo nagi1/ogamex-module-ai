@@ -13,8 +13,9 @@ PYTHONPATH=$root/Modules/AI/rl "$root/.venv-rl/bin/python" -m ogrl.export_policy
 # any other decides the builds.
 queue=$("$root/.venv-rl/bin/python" -c "import sys, torch; print(torch.load(sys.argv[1], map_location='cpu', weights_only=False).get('queue', 3))" "$ckpt")
 plays="policy=policy.json"; [ "$queue" = 2 ] && plays="errand-policy=policy.json fleet-model=${FLEET:-21}"
-for s in ${SEEDS:-$(seq 1 10)}; do "$bin" "$data" 365 64 "$s" "$data/units-parity/econ-u1-colonies.json" "ready-$s.jsonl" $arms $plays ${4:-} > "ready-$s.log" & done
-wait
+# One process plays every seed, sharing the 0.8 GB catalogue a process each would load again.
+for s in ${SEEDS:-$(seq 1 10)}; do echo "$s $out/ready-$s.jsonl"; done > jobs.txt
+"$bin" "$data" 365 64 0 "$data/units-parity/econ-u1-colonies.json" unused.jsonl $arms $plays ${4:-} jobs=jobs.txt threads=10 > ready-all.log
 # hds.py exits 1 on a FAIL verdict, which is the normal state until the target is met.
 "$root/.venv-rl/bin/python" "$root/Modules/AI/rl/scripts/hds.py" ready-*.jsonl --save ready-score.json > ready-hds.txt 2>&1 || true
 grep -E 'health|HDS \(|Turing|importance|verdict' ready-hds.txt

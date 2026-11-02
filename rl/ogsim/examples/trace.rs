@@ -31,6 +31,7 @@ fn main() {
     let homes = rules.units.planets.len();
     let configs: Vec<usize> = (0..homes).collect();
     let mut world = World::new(&cat, &configs, days * 24.0, 0.0, seed);
+    world.keep_launches = true;
     world.enable_idle_logins(&cat);
     let per_class: Vec<Arc<Rules>> = configs.iter().map(|&c| match cat.planets[c].character_class {
         Some(2) => rules_of("-class2"),
