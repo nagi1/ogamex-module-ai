@@ -6,6 +6,7 @@ use OGame\Enums\FleetSpeedType;
 use OGame\Factories\GameMissionFactory;
 use OGame\Models\User;
 use OGame\Services\CharacterClassService;
+use OGame\Services\HalvingService;
 use OGame\Services\JumpGateService;
 use OGame\Services\ObjectService;
 use OGame\Services\OfficerService;
@@ -13,6 +14,7 @@ use OGame\Services\PhalanxService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
 use ReflectionClassConstant;
+use ReflectionMethod;
 use ReflectionProperty;
 
 /**
@@ -22,7 +24,7 @@ use ReflectionProperty;
  */
 class ExportAiFleetSettingsAction
 {
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     /** Moon gear levels tabulated (sensor phalanx range, jump gate cooldown); no account builds either this high. */
     private const MOON_GEAR_LEVELS = 30;
@@ -51,6 +53,27 @@ class ExportAiFleetSettingsAction
             'dark_matter_initial' => $settings->darkMatterBonus(),
             'officers' => $this->officers($player->getUser()),
             'moon_gear' => $this->moonGear($player),
+            'halving' => $this->halving(),
+        ];
+    }
+
+    /**
+     * L6: what halving a queue with dark matter costs and gives (HalvingService): the price per half hour left, its floor,
+     * and per queue the price cap and the most a halving takes off. The second use completes the build.
+     *
+     * @return array<string, mixed>
+     */
+    private function halving(): array
+    {
+        $constant = static fn (string $name): int => (new ReflectionClassConstant(HalvingService::class, $name))->getValue();
+        $reduction = new ReflectionMethod(HalvingService::class, 'getMaxReduction');
+        $queues = ['building', 'research', 'unit'];
+
+        return [
+            'per_half_hour' => $constant('COST_PER_30_MINUTES'),
+            'min_cost' => $constant('MIN_COST'),
+            'max_cost' => array_map(static fn (string $queue): int => app(HalvingService::class)->calculateHalvingCost(PHP_INT_MAX >> 8, $queue), array_combine($queues, $queues)),
+            'max_reduction' => array_map(static fn (string $queue): int => $reduction->invoke(app(HalvingService::class), $queue), array_combine($queues, $queues)),
         ];
     }
 

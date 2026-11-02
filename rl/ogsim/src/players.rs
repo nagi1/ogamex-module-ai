@@ -1520,7 +1520,11 @@ impl Player {
         ledger.scan(w, cat);
         // A planet struck by missiles keeps interceptors for the next salvo (gate 3).
         if let Some(&salvo) = ledger.struck.get(&a) { self.miner().interceptors.insert(a, salvo); }
-        hire_officer(w, a, !matches!(self, Player::Miner(_)));
+        let slots = !matches!(self, Player::Miner(_));
+        hire_officer(w, a, slots);
+        // Only an officer the account has hired before is kept up; one it never could afford is no reason to sit on dark matter.
+        let reserve = wanted_officer(w, a, slots).filter(|o| w.officers[a].contains_key(&o.0)).map_or(0, |o| o.2);
+        halve_long_build(w, cat, a, reserve);
         let miner = self.miner();
         if miner.merchant { trade_surplus(w, cat, a, &mut miner.rng) }
         match self {
@@ -1545,14 +1549,36 @@ impl Player {
 /// what the host says they do, never by name (gate 1); one whose effect the host does not report here is never hired.
 fn hire_officer(w: &mut World, a: usize, slots: bool) {
     if w.account_of(a) != a { return }
-    let worth = |o: &crate::fleet::Officer| if slots { o.fleet_slots as f64 } else { 1.0 - o.research_multiplier };
-    let wanted = w.rules[a].settings.officers.iter().filter(|(_, o)| !o.bundle && worth(o) > 0.0)
-        .max_by(|x, y| worth(x.1).total_cmp(&worth(y.1)))
-        .and_then(|(key, o)| o.costs.keys().filter_map(|d| d.parse::<i64>().ok()).min().map(|days| (key.clone(), days)));
-    let Some((key, days)) = wanted else { return };
+    let Some((key, days, _)) = wanted_officer(w, a, slots) else { return };
     if w.officers[a].get(&key).is_some_and(|&until| until > w.games[a].t) { return }
     let _ = w.hire(a, &key, days);
 }
+
+/// The officer `hire_officer` keeps, its shortest hire in days and that hire's dark matter.
+fn wanted_officer(w: &World, a: usize, slots: bool) -> Option<(String, i64, i64)> {
+    let worth = |o: &crate::fleet::Officer| if slots { o.fleet_slots as f64 } else { 1.0 - o.research_multiplier };
+    let (key, o) = w.rules[a].settings.officers.iter().filter(|(_, o)| !o.bundle && worth(o) > 0.0)
+        .max_by(|x, y| worth(x.1).total_cmp(&worth(y.1)))?;
+    let days = o.costs.keys().filter_map(|d| d.parse::<i64>().ok()).min()?;
+    Some((key.clone(), days, o.costs[&days.to_string()]))
+}
+
+/// L6: a player puts the dark matter its officer does not need into the longest build that dark matter pays for, when
+/// an hour or more is left (gate 3: a halving is priced on the time left, so a short build is not worth one); the next
+/// hire of the officer it keeps (`reserve`) stays.
+fn halve_long_build(w: &mut World, cat: &Catalogue, a: usize, reserve: i64) {
+    if w.account_of(a) != a { return }
+    let now = w.games[a].t;
+    let spare = w.dark_matter[a] - reserve;
+    let longest = w.planets_of(a).into_iter().flat_map(|s| [(s, 0), (s, 1)])
+        .filter_map(|(s, q)| w.halving_price(cat, s, q).map(|(end, _, cost)| (s, q, end - now, cost)))
+        .filter(|&(_, _, left, cost)| left >= HALVE_SECONDS && cost <= spare)
+        .max_by(|x, y| x.2.total_cmp(&y.2));
+    if let Some((s, q, _, _)) = longest { let _ = w.halve(cat, s, q); }
+}
+
+/// The time left from which a player halves a build.
+const HALVE_SECONDS: f64 = 3_600.0;
 
 /// Row 29: what stops a login's yard order. `ShareMet` is row 10's `military_share` standing as a ceiling - the account
 /// holds its share, so it buys nothing however full the store is; `NothingPayable` is a want the stock cannot pay for.

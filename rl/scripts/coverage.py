@@ -35,7 +35,7 @@ def main(catalogue, units, *seasons):
     for i, name in sorted(names.items()):
         print(f"{i:>4} {name:32} {reached[i] / n:6.1%}")
     missing = [names[i] for i in sorted(names) if not reached[i]]
-    missions = ("raid_sent", "spy_sent", "recycle", "colonise", "expedition", "save_ok", "moon_made", "missile", "moon_shot", "phalanx", "jump")
+    missions = ("raid_sent", "spy_sent", "recycle", "colonise", "expedition", "save_ok", "moon_made", "missile", "moon_shot", "phalanx", "jump", "halved")
     missing += [m for m in missions if not flown[m]]
     print("accounts", n, "never reached:", ", ".join(missing) or "nothing")
     return 1 if missing else 0

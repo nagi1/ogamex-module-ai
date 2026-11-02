@@ -66,7 +66,7 @@ fn main() {
         since,
         login_at: vec![0; accounts],
         counted_login: vec![f64::NEG_INFINITY; accounts],
-        read: [0; 2],
+        read: [0; 3],
         midnight: DAY,
         days,
         seed,
@@ -157,8 +157,8 @@ struct Season<'a, W: Write> {
     /// The last login second counted per account: every planet may decide at it, and it is one login.
     counted_login: Vec<f64>,
     /// How many events of the world's log have been read.
-    /// How far the world's event log and its moon gear log have been read.
-    read: [usize; 2],
+    /// How far the world's event, moon gear and halving logs have been read.
+    read: [usize; 3],
     /// The next midnight no line has been written for.
     midnight: f64,
     days: usize,
@@ -288,6 +288,7 @@ impl<W: Write> Season<'_, W> {
                 "alliance": self.u.alliance_at[a].is_some_and(|join| at >= join),
                 "value": value,
                 "fleet_value": value - economy,
+                "dark_matter": self.u.world.dark_matter[a],
                 "logins_today": logins,
                 // Row 11: where the day went, so the growth gap can be attributed instead of guessed.
             "build_hours": (busy / 3600.0 * 1000.0).round() / 1000.0,
@@ -552,13 +553,17 @@ mod health_tests {
 }
 
 /// Reads the events the world wrote since the last call into their day and account.
-fn scan(w: &World, read: &mut [usize; 2], roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
+fn scan(w: &World, read: &mut [usize; 3], roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
     delivered.resize(w.games.len(), [0.0; 3]);
     for &(slot, time, jump) in &w.gear_log[read[1]..] {
         let tally = &mut per_day[((time / DAY) as usize).min(days - 1)][w.account_of(slot)];
         if jump { tally.jump += 1 } else { tally.phalanx += 1 }
     }
     read[1] = w.gear_log.len();
+    for &(slot, time, _, _) in &w.halving_log[read[2]..] {
+        per_day[((time / DAY) as usize).min(days - 1)][w.account_of(slot)].halved += 1;
+    }
+    read[2] = w.halving_log.len();
     while read[0] < w.events.len() {
         let e = &w.events[read[0]];
         read[0] += 1;
@@ -637,6 +642,8 @@ struct Tally {
     /// M4: phalanx scans and jump gate jumps.
     phalanx: u32,
     jump: u32,
+    /// L6: builds halved or completed with dark matter.
+    halved: u32,
     /// Row 17: every fight, those of them whose debris cleared the host's moon threshold (a roll was made), and the
     /// moons the rolls made. `moon_shot` above is moon *destruction*, a different thing.
     fights: u32,
@@ -666,6 +673,7 @@ impl Tally {
             "moon_shot": self.moon_shot,
             "phalanx": self.phalanx,
             "jump": self.jump,
+            "halved": self.halved,
             "fights": self.fights,
             "moon_rolls": self.moon_rolls,
             "moon_made": self.moon_made,

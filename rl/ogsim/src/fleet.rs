@@ -54,6 +54,19 @@ pub struct FleetSettings {
     /// Late game: the sensor phalanx and jump gate as the host's services answer (fleet settings v3).
     #[serde(default)]
     pub moon_gear: Option<MoonGear>,
+    /// L6: halving a queue with dark matter (fleet settings v4).
+    #[serde(default)]
+    pub halving: Option<Halving>,
+}
+
+/// `HalvingService`: dark matter per half hour left (at least `min_cost`, at most the queue's cap), and per queue the most a
+/// halving takes off the build's original time. Queues are keyed "building", "research", "unit".
+#[derive(Deserialize, Clone, Debug)]
+pub struct Halving {
+    pub per_half_hour: i64,
+    pub min_cost: i64,
+    pub max_cost: std::collections::BTreeMap<String, i64>,
+    pub max_reduction: std::collections::BTreeMap<String, f64>,
 }
 
 /// What a moon's sensor phalanx and jump gate do (`PhalanxService`, `JumpGateService`), per level from 0.

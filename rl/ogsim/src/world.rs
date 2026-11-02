@@ -14,7 +14,7 @@
 //! the capital's lab and every level that lands there is copied to the account's other planets at that second
 //! (`share_research`), and the other planets never decide the research queue. Missions run slot to slot.
 
-use crate::HashMap;
+use crate::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::combat::{self, Battle, CombatCatalogue};
@@ -374,6 +374,9 @@ pub struct World {
     pub gate_ready: Vec<f64>,
     /// Every phalanx scan and gate jump: (slot, second, whether a jump).
     pub gear_log: Vec<(usize, f64, bool)>,
+    /// L6: every halving (slot, second, object, dark matter paid); a build halved once is completed by the next.
+    pub halving_log: Vec<(usize, f64, usize, i64)>,
+    halved: HashSet<(usize, u64)>,
     rng: u64,
 }
 
@@ -388,7 +391,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), halved: HashSet::default(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -702,6 +705,52 @@ impl World {
             self.next[slot] = cat.peek(&mut self.games[slot]);
         }
         Ok(())
+    }
+
+    /// L6: the deciding account pays dark matter to halve the build running in queue q of slot s (`HalvingService`): the
+    /// price is read on the time left, the cut is half the build's own time within the queue's cap, and a build already
+    /// halved is completed instead. Returns the dark matter paid.
+    pub fn halve(&mut self, cat: &Catalogue, s: usize, q: usize) -> Result<i64, &'static str> {
+        let account = self.account[s];
+        let halving = self.rules[account].settings.halving.clone().ok_or("no halving tables")?;
+        let now = self.games[account].t;
+        self.catch_up(cat, s, now);
+        let (end, k, cost) = self.halving_price(cat, s, q).ok_or("nothing to halve")?;
+        let start = self.games[s].history.iter().rev().find(|h| h.1 == k && h.2 == end).map_or(now, |h| h.0);
+        let queue = if q == 0 { "building" } else { "research" };
+        let left = end - now;
+        if self.dark_matter[account] < cost { return Err("not enough dark matter") }
+        let again = self.halved.contains(&(s, start.to_bits()));
+        let cut = if again { left } else { ((end - start) / 2.0).floor().min(halving.max_reduction[queue]).min(left) };
+        let new_end = end - cut;
+        self.dark_matter[account] -= cost;
+        self.halved.insert((s, start.to_bits()));
+        self.halving_log.push((s, now, k, cost));
+        let game = &mut self.games[s];
+        let at = game.pending.iter().position(|&p| p == (end, k)).expect("the build just found");
+        game.pending.remove(at);
+        let at = game.pending.partition_point(|p| p.0 <= new_end);
+        game.pending.insert(at, (new_end, k));
+        if game.free[q] == end { game.free[q] = new_end }
+        if let Some(h) = game.history.iter_mut().rev().find(|h| h.1 == k && h.2 == end) { h.2 = new_end }
+        // A research or a lab that ends sooner frees the account's other planets sooner.
+        for p in self.planets_of(account) {
+            self.games[p].account_pending = self.account_holds(cat, p);
+            self.next[p] = cat.peek(&mut self.games[p]);
+        }
+        self.next[s] = cat.peek(&mut self.games[s]);
+        Ok(cost)
+    }
+
+    /// The build running in queue q of slot s (its end and object) and the dark matter a halving of it costs now.
+    pub fn halving_price(&self, cat: &Catalogue, s: usize, q: usize) -> Option<(f64, usize, i64)> {
+        let account = self.account[s];
+        let halving = self.rules[account].settings.halving.as_ref()?;
+        let now = self.games[account].t;
+        let (end, k) = *self.games[s].pending.iter().find(|&&(end, k)| cat.objects[k].queue == q && end > now)?;
+        let queue = if q == 0 { "building" } else { "research" };
+        let cost = (((end - now) / 60.0 / 30.0) * halving.per_half_hour as f64).ceil() as i64;
+        Some((end, k, cost.max(halving.min_cost).min(halving.max_cost[queue])))
     }
 
     /// The level of host object `id` on slot s (0 where the catalogue has no such object).
@@ -1684,6 +1733,46 @@ mod tests {
         assert!((to[0] - back[0] - 1000.0).abs() < 1e-6 && (to[1] - back[1] - 500.0).abs() < 1e-6, "target {to:?} vs {back:?}");
         let (from, home) = (&sent.games[0].planet.res, &quiet.games[0].planet.res);
         assert!((home[0] - from[0] - 1000.0).abs() < 1e-6 && (home[2] - from[2] - fuel).abs() < 1e-6, "origin {from:?} vs {home:?}");
+    }
+
+    /// L6: dark matter halves a running research by half its own time, priced on the time left, and a second use
+    /// completes it; the level lands at the new end.
+    #[test]
+    fn dark_matter_halves_a_research_and_then_completes_it() {
+        let Some((cat, mut w, _)) = pair(240.0) else { return eprintln!("no u1 catalogues; skipped") };
+        let halving = w.rules[0].settings.halving.clone().expect("fleet settings v4");
+        let lab = (0..cat.objects.len()).find(|&b| cat.objects[b].queue == 0 && cat.objects.iter().any(|r| r.queue == 1 && r.requires.contains(&(Some(b), 1)))).expect("a lab");
+        w.games[0].planet.levels[lab] = 3;
+        w.games[0].planet.res = [1e7; 3];
+        cat.refresh(&mut w.games[0].planet);
+        w.dark_matter[0] = 1_000_000;
+        assert_eq!(w.halve(&cat, 0, 1), Err("nothing to halve"));
+        let k = loop {
+            let a = w.next_decision(&cat).expect("the capital researches");
+            if a == 0 && w.games[0].queue == 1 {
+                let k = (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1 && w.legal(&cat, 0, k))
+                    .max_by(|&x, &y| cat.build_seconds(&w.games[0].planet, x).total_cmp(&cat.build_seconds(&w.games[0].planet, y))).expect("a research");
+                w.commit(&cat, 0, k);
+                break k;
+            }
+            w.wait(&cat, a);
+        };
+        while !w.games[0].history.iter().any(|h| h.1 == k) {
+            let a = w.next_decision(&cat).expect("the research starts");
+            w.wait(&cat, a);
+        }
+        let (start, _, end, _) = *w.games[0].history.iter().rev().find(|h| h.1 == k).expect("the research started");
+        let now = w.games[0].t;
+        let level = w.games[0].planet.levels[k];
+        let cost = w.halve(&cat, 0, 1).expect("a halving");
+        let expected = (((end - now) / 1800.0 * halving.per_half_hour as f64).ceil() as i64).clamp(halving.min_cost, halving.max_cost["research"]);
+        assert_eq!((cost, w.dark_matter[0]), (expected, 1_000_000 - expected));
+        let halved = end - ((end - start) / 2.0).floor().min(halving.max_reduction["research"]);
+        assert!(w.games[0].pending.contains(&(halved, k)), "{:?} vs {halved}", w.games[0].pending);
+        w.halve(&cat, 0, 1).expect("the completion");
+        assert!(w.games[0].pending.contains(&(now, k)), "the second use completes the research");
+        let a = w.next_decision(&cat).expect("the capital decides again");
+        assert_eq!((a, w.games[0].planet.levels[k]), (0, level + 1), "the level landed before anything else");
     }
 
     /// An account with a colony researches once, at its capital's lab, and every level lands on both planets at the
