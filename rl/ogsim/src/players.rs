@@ -365,6 +365,8 @@ pub struct Miner {
     /// Row 94 arm: the idle lab takes its research without keeping the next building's price back (a player keeps the
     /// lab running; the building waits). Without it the capital's metal never covered both and the lab sat idle for weeks.
     pub lab_first: bool,
+    /// A grown account works towards the research network and raises its colonies' labs to the capital's (`network_step`).
+    pub network: bool,
     /// The missiles this account keeps on its capital (a raider's, once defence turned a raid away).
     pub missiles: i64,
     /// Per slot of the account, the interceptors it keeps: as many as the largest salvo that struck it.
@@ -374,6 +376,41 @@ pub struct Miner {
 /// W14: a lab on a colony before the account's research network reads it shortens no research, and the host holds the
 /// account's research for as long as it upgrades (`PlayerService::isBuildingObject`): a player does not build it (gate 3).
 /// Which object sets research time and which research is the network, the catalogue says (gate 1).
+/// Whether the account's capital holds more than its mines can use.
+fn surplus(w: &World, cat: &Catalogue, a: usize) -> bool {
+    let capital = &w.games[w.account_of(a)].planet;
+    weighted(capital.res) >= SURPLUS_DAYS * 24.0 * weighted(cat.production(capital, true).0)
+}
+
+/// A player with colonies works towards the network, one level per colony, since research points a day are capped by the
+/// labs it pools. What this queue does for it: `Some(Some(k))` the next payable step, `Some(None)` wait, as research holds a
+/// lab upgrade the chain needs, `None` no step here. Requirements come from the catalogue (gate 1).
+fn network_step(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> {
+    let network = cat.research_network.filter(|_| surplus(w, cat, a))?;
+    let (levels, queue) = (&w.games[a].planet.levels, w.games[a].queue);
+    let others = w.planets_of(a).len() as u32 - 1;
+    if others < NETWORK_FROM_COLONIES || levels[network] >= others { return None }
+    let mut need = vec![(network, others)];
+    let mut at = 0;
+    while at < need.len() && need.len() < 256 {
+        need.extend(cat.objects[need[at].0].requires.iter().filter_map(|&(k, level)| Some((k?, level))));
+        at += 1;
+    }
+    let payable = |k: usize, q: usize| cat.objects[k].queue == q && w.legal(cat, a, k) && cat.wait_seconds(&w.games[a].planet, k) == 0.0;
+    let missing = |&&(k, level): &&(usize, u32)| levels[k] < level;
+    if let Some(&(k, _)) = need.iter().filter(missing).find(|&&(k, _)| payable(k, queue)) { return Some(Some(k)) }
+    (queue == 1 && need.iter().filter(missing).any(|&(k, _)| payable(k, 0))).then_some(None)
+}
+
+/// The lab colony slot a raises next: once the network reads them, a colony's lab comes up to the capital's.
+fn colony_lab(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+    let &(lab, _) = cat.modifiers[1].first()?;
+    let capital = w.account_of(a);
+    let planet = &w.games[a].planet;
+    (capital != a && surplus(w, cat, a) && !idle_lab(w, cat, a, lab) && planet.levels[lab] < w.games[capital].planet.levels[lab]
+        && w.legal(cat, a, lab) && cat.wait_seconds(planet, lab) == 0.0).then_some(lab)
+}
+
 fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
     let capital = w.account_of(a);
     capital != a && cat.sets_research_time(k) && cat.research_network.is_none_or(|n| w.games[capital].planet.levels[n] == 0)
@@ -381,7 +418,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, missiles: 0, interceptors: HashMap::default() }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, missiles: 0, interceptors: HashMap::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -444,6 +481,10 @@ impl Miner {
             return chain;
         }
         let queue = w.games[a].queue;
+        if self.network {
+            if let Some(lab) = colony_lab(w, cat, a).filter(|_| queue == 0) { return Some(lab) }
+            if let Some(step) = network_step(w, cat, a).filter(|_| a == w.account_of(a)) { return step }
+        }
         // Units already cover the shortfall (or are on order): the pick reads the planet as powered and builds producers.
         let powered = (self.satellites && w.games[a].planet.factor < 1.0 && energy_unit(w, cat, a).is_some())
             .then(|| Planet { factor: 1.0, ..w.games[a].planet.clone() });
@@ -456,6 +497,8 @@ impl Miner {
                 .filter(|&k| !idle_lab(w, cat, a, k)),
         };
         self.short(w, cat, a).or_else(|| self.unlock(w, cat, a)).or_else(|| fallback)
+            .filter(|&k| !(self.network && queue == 1 && cat.build_seconds(&w.games[a].planet, k) > LONG_RESEARCH
+                && w.planets_of(w.account_of(a)).into_iter().any(|slot| colony_lab(w, cat, slot).is_some())))
     }
 
     /// Row 29: why this login's yard order did or did not happen, asked of the same rule `act` uses: under its military
@@ -773,6 +816,12 @@ fn saving(w: &World, cat: &Catalogue, a: usize, pick: Option<usize>) -> [f64; 3]
 /// on (e78b: comparing build time with the planet's own production rarely fired, since expeditions and transports, not
 /// production, fill a rich planet's store).
 const TIME_BOUND_STOCK: f64 = 3.0;
+/// A player starts on the network once it has this many colonies for it to read.
+const NETWORK_FROM_COLONIES: u32 = 2;
+/// A research longer than this waits for the colony labs that would shorten it; a shorter one runs.
+const LONG_RESEARCH: f64 = 86_400.0;
+/// Labs are for surplus: a capital holding this many days of its own production has more than its mines can use.
+const SURPLUS_DAYS: f64 = 60.0;
 
 /// Row 77: a planet whose stock covers its next building several times over waits on its queue's time: a player then
 /// builds the cheapest of the host's time modifiers for that queue it can start now (gate 3; found by asking, gate 1).
@@ -975,7 +1024,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, missiles: 0, interceptors: HashMap::default() };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, missiles: 0, interceptors: HashMap::default() };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
@@ -1433,6 +1482,17 @@ mod tests {
 
     /// Row 77: a planet whose stock covers its next building many times over builds a host time modifier; one that just
     /// covers it builds the building.
+    #[test]
+    fn only_a_capital_holding_surplus_works_towards_the_network() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        cat.refresh(&mut world.games[0].planet);
+        world.games[0].planet.res = [0.0; 3];
+        assert!(!surplus(&world, &cat, 0), "an empty store is no surplus");
+        world.games[0].planet.res = [1e15; 3];
+        assert!(surplus(&world, &cat, 0), "a store of far more than its mines make is");
+        assert_eq!(network_step(&world, &cat, 0), None, "an account with no colonies has no network to read them");
+    }
+
     #[test]
     fn a_planet_waiting_on_time_builds_a_factory() {
         let Some((cat, mut world)) = bare(1) else { return };

@@ -177,6 +177,12 @@ the network and colony labs; the teacher's median account has no network level u
 its own share of its planets mooned; the top tenth wants them all. On the temperature 2 clone: AUC 0.800 to 0.760, HDS
 0.873 to 0.869. The draw runs a little low (median 4), so the moon band fell from 0.89 to 0.84. Open.
 
+**Kept: `netchain`.** An account with at least 2 colonies and 60 days of production idle in its capital works through the
+prerequisites to the research network, one level per colony; colony labs rise to the capital's; a research over a day
+waits for a payable colony lab. On the teacher with `moontaste`: HDS 0.769 to 0.786, AUC 0.894 to 0.897, top accounts at
+day 364 104M to 209M points, stock 134B to 34B, pooled labs 10 to 180. Without the surplus gate mid accounts lost their
+economy (median score 6.7M to 1.4M). Top research share stays 1.4%: their labs sit idle 47% of the time. Open.
+
 ## The yardstick was noisy (fixed 2 Nov)
 
 `hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,

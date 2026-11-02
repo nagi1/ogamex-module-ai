@@ -267,6 +267,7 @@ impl Universe {
             m.factory = on("factory");
             m.balance = on("balance");
             m.lab_first = on("labfirst");
+            m.network = on("netchain");
             m.satellites = on("satellites");
             m.doubler = on("doubler");
         }
