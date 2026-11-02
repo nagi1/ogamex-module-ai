@@ -160,6 +160,9 @@ pub struct Universe {
     /// Per account, its place in the last highscore as a share of the world, inactives ranked too, as `hds.py` reads it.
     pub rank: Vec<f64>,
     moon_shots: bool,
+    /// `noadvice`: the persona's own pick is not shown to the model. A clone of the teacher that sees it copies the flag,
+    /// and PPO then has to unlearn a near-certain copy before it can improve on it.
+    advise: bool,
     moon_feed: bool,
     /// L5 arm: alliance members hold at a mate's planet that a raid is flying at.
     acs_defend: bool,
@@ -296,7 +299,7 @@ impl Universe {
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
-            moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"), wrecks: on("wrecks"), relocations: on("relocate"),
+            advise: !on("noadvice"), moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"), wrecks: on("wrecks"), relocations: on("relocate"),
             moon_taste: on("moontaste").then(|| { let mut draw = seed ^ 0x4d00_a7e5; (0..accounts).map(|_| unit(&mut draw)).collect() }),
         }
     }
@@ -384,7 +387,7 @@ impl Universe {
             legal[k] = u8::from(world.legal(cat, a, k));
         }
         cands[objects * LEARNER_CAND..].fill(0.0);
-        cands[advice.unwrap_or(objects) * LEARNER_CAND + CAND_DIM] = 1.0;
+        if self.advise { cands[advice.unwrap_or(objects) * LEARNER_CAND + CAND_DIM] = 1.0 }
         legal[objects] = 1;
     }
 
