@@ -477,3 +477,22 @@ Teacher fixes (the clones and ES start from the teacher):
    ("one combat ship (the strongest you have)"). In OGameX the ships a find can hold are capped by the best ship type in the fleet.
 
 One paired check (6 Discoverer seeds) decides whether both join the win-first arms. Then the teacher is re-cloned and ES restarts from that clone.
+
+### 3 Nov 01:55: sealed planets and the missing labs (root causes of the hoard and of research at 1%)
+
+Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then confirmed on the rule alone (seed 1).
+
+- **Sealed planets.** A third of the active accounts' planets ended the season full. The terraformer takes a field itself, so a
+  full planet never grows again (`BuildingQueueService`, as in the original game). Two leaks:
+  - The model's sampled builds took the fields the persona's reserve held: 131 sealed colonies, against 0 under the rule. Now
+    `observe` leaves the model only the reserve's chain step or a pass while the reserve binds.
+  - Under the rule, a capital short of terraformer energy for a moment released its last fields, and was sealed a day later
+    with the satellites on order (traced on account 1, day 54.5). The building queue now always keeps the field; energy only
+    gates research starting the chain early.
+
+  Masked model, 10 seeds: median 250M -> 260M, median hoard 37B -> 20B. The fix for the last field is judged next.
+- **No labs under the model.** At day 365 the rule's median account has 185 lab levels and a level-12 research network (11%
+  research); the model's has 9 and 0 (1%). The clone copies the everyday builds but not the rare long-horizon ones, so DAgger
+  from bc0 runs in the current world (`d2`, 3090; the stuck net-worth run `nw2` was stopped for it).
+- **Rejected.** `labahead` (raise the lab between researches) never fired: identical to the base, as the capitals were sealed.
+  Dropping `cap` (ships from all surplus): median 65M, military 66%, research 0.4%.
