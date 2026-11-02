@@ -339,7 +339,7 @@ Test of the fix: g2's exact settings on seeds 1 and 2 (k1 on the 4070, k2 on the
 Second reading: one skipped build barely moves an account's year, because the persona builds it next login. The build model's leverage is in
 its systematic choices, not in single picks.
 
-### 3 Nov 00:30 — what the score is made of (keyed dice, 6 paired seeds, persona only)
+### 2 Nov 23:40 — what the score is made of (keyed dice, 6 paired seeds, persona only)
 
 Keyed dice did not unblock the build model: k1 at 80 updates scores 20.87M against bc0 rejudged on keyed dice, 21.01M. So I measured what moves the score.
 Drop one rule, change in the world median:
@@ -373,7 +373,7 @@ Next, in order:
 
 The human class mix comes back with the human-likeness tuning.
 
-### 3 Nov 01:00 — the class as a choice (faithful)
+### 2 Nov 23:55 — the class as a choice (faithful)
 
 `class=N` now starts each account on the class-N donor home nearest its own home's temperature, so production rows, research time and fleet rules
 all follow the class. The rules-only probe is gone. Without the arm, account a still starts on home a mod 24 (3 of 24 homes are Discoverers:
@@ -387,7 +387,7 @@ Win-first runs play `class=3`, chosen by this trial over the classes the donors 
 The class mix comes back with the human-likeness tuning. Next: the expedition errand on the fleet model's menu. Then re-measure the build
 levers in the Discoverer world (expedition slots and cargo hold research should matter more there).
 
-### 3 Nov 01:20 — levers in the Discoverer world; it is the win-first yardstick now
+### 3 Nov 00:10 — levers in the Discoverer world; it is the win-first yardstick now
 
 World median change, 6 paired keyed seeds, all Discoverer, one rule off:
 - expedition -95%
