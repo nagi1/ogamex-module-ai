@@ -386,3 +386,18 @@ To verify against the original game: the Discoverer's resource find multiplier i
 Win-first runs play `class=3`, chosen by this trial over the classes the donors have. The trial is the choice; no model needed for one pick.
 The class mix comes back with the human-likeness tuning. Next: the expedition errand on the fleet model's menu. Then re-measure the build
 levers in the Discoverer world (expedition slots and cargo hold research should matter more there).
+
+### 3 Nov 01:20 — levers in the Discoverer world; it is the win-first yardstick now
+
+World median change, 6 paired keyed seeds, all Discoverer, one rule off:
+- expedition -95%
+- factory -69/-70%
+- doubler -50/-63%
+- techtree -20/-56%
+- colonies 0/-9%
+- labfirst ~0
+- all cargo flies (`expofull`) +2 to +8% on every seed
+
+Here the build plan carries tens of percent and expedition sizing has measured headroom. `class=3` joins SEASON_ARMS and the judge; judged.txt is marked.
+Runs dw1 and dw2: g2's settings (bc-t2, KL .05, gamma .995, lam .97), seeds 1 and 2, on both cards. The bar is bc0 judged in this world.
+Root cause each run addresses: the decision now has leverage (measured) and the dice no longer drown it (keyed).
