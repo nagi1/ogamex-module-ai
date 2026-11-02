@@ -97,7 +97,8 @@ fn main() {
         excess: vec![[0.0; 3]; accounts],
         seen_planet: vec![false; accounts],
         over_cap: 0,
-        controlled: policy.is_some(),
+        // A build model plays every account; an errand model only the fleets of the first `fleet-model` accounts.
+        controlled: if policy.is_some() { accounts } else if errand_model.is_some() { fleet_model } else { 0 },
     };
 
     let start = std::time::Instant::now();
@@ -199,7 +200,8 @@ struct Season<'a, W: Write> {
     excess: Vec<[f64; 3]>,
     seen_planet: Vec<bool>,
     over_cap: usize,
-    controlled: bool,
+    /// The accounts a model plays (the first this many).
+    controlled: usize,
 }
 
 impl<W: Write> Season<'_, W> {
@@ -299,7 +301,7 @@ impl<W: Write> Season<'_, W> {
                 "day": d + 1,
                 "account": a,
                 "persona": PERSONAS[self.u.roles[a]].0,
-                "controlled": self.controlled,
+                "controlled": a < self.controlled,
                 "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
                            "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
                            "production_drop_warning": production_drop},
