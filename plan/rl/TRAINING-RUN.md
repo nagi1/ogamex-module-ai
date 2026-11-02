@@ -418,3 +418,38 @@ Bar: bc0 in the Discoverer world, 251M active median (top 314M).
    - The hours left are 0 at the end, so a season's rewards still sum to ln(1 + final score).
    - Runs nw1 and nw2: g2's settings, seeds 1 and 2, 12 worlds each, on both cards.
 3. dw1 was killed by the OOM killer when es1 started; dw2 and dw3 were stopped for es1's cores.
+
+### 3 Nov 00:34 — the reward, from OGame practice and the real data we hold
+
+Sources: `plan/details/research/veteran-play.md` (forum and guide claims, each verified against its page), the 267 public-API universes in
+`storage/rl/external/sources/PUB-*` (26 of them at speed 8, as ours), and the host's `ExpeditionMission.php`.
+
+**What winning is in OGame.** The highscore: total points, resources spent / 1000, falling when ships are destroyed. It is the game's own
+measure and cannot be gamed by timing, so it stays the objective (win-first).
+
+**How veterans judge a decision.** By payback, three sources independently:
+- "prioritize mines with lowest amortization first"
+- "Payback (hours) = Upgrade Cost ÷ Hourly Production Gain", "accept paybacks up to about 2-3 real days"
+- "treat [research] like they are mines… build whatever has the shortest return on investment time"
+
+The `networth` reward is that rule as a potential: ln(1 + points + income per hour × hours left / 1000). A build is credited with what it will
+earn before the season ends. Expedition income is in the income because "expeditions are at the lowest estimate comparable to your mine income".
+
+**What winners' points are made of** (real, lifeform points stripped; median shares):
+
+| | economy | research | military |
+| --- | --- | --- | --- |
+| real top 10, speed 8 (26 universes) | 46% | 31% | 16% |
+| real top 1%, speed 8 | 44% | 35% | 14% |
+| real middle (p40-60), speed 8 | 73% | 18% | 1% |
+| ours, top 10%, recorded classes | 63% | 11% | 28% |
+| ours, top 10%, all Discoverer | 64% | 10% | 30% |
+| ours, middle, recorded classes | 78% | 13% | 14% |
+
+Real winners put a third of their points into research. Our personas, the teachers the clones copy, put a tenth. The models start from a
+research-poor habit, and that is where the payback reward should pull them. Research composition is not rewarded directly (that is
+human-likeness, parked), but it is the first thing to read on any checkpoint that beats the bar.
+
+**To verify against the original game (owner):** the host gives the Discoverer economy speed × 1.5 (×12 at speed 8) on expedition resource
+and ship finds (`ExpeditionMission.php:1115`, `:1154`). The guide sources say "×1.5". The brackets match the published table. If the
+original is ×1.5, the Discoverer world (×11 median) is a host artefact, and the yardstick goes back to the recorded classes.
