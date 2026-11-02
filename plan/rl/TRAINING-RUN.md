@@ -453,3 +453,10 @@ human-likeness, parked), but it is the first thing to read on any checkpoint tha
 **To verify against the original game (owner):** the host gives the Discoverer economy speed × 1.5 (×12 at speed 8) on expedition resource
 and ship finds (`ExpeditionMission.php:1115`, `:1154`). The guide sources say "×1.5". The brackets match the published table. If the
 original is ×1.5, the Discoverer world (×11 median) is a host artefact, and the yardstick goes back to the recorded classes.
+
+### 3 Nov 00:49 — decided: the Discoverer bonus is the original game's; the Discoverer world stays
+
+The OGame wiki ("1.5×universe economic speed" on resources and ships gained during expeditions) and the Gameforge forums ("(Baseloot +
+Classbonus) × ecospeed", worked example (1 + 0.5) × 5 × 2 = 15) agree with the host's `ExpeditionMission.php`. The host is accurate, so a
+winning player in a speed-8 universe is a Discoverer, and win-first training stays in that world. The research gap stands as a weakness of
+the personas: real speed-8 winners, many of them Discoverers, still hold a third of their points in research.
