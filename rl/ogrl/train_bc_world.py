@@ -68,7 +68,7 @@ def collect(args, n_rows: int):
         cand = np.frombuffer(cand, np.float32).reshape(-1, k, c_dim)
         legal = np.frombuffer(legal, np.uint8).reshape(-1, k)
         label = np.asarray(env.baseline(), dtype=np.int64)
-        # Only the old worlds answer -2; a season's pass is its last row.
+        # Only the old worlds answer -2; a season's build pass is its last row, an errand's wait its first.
         live = legal.any(1) & (label >= 0) & (rng.random(len(label)) < args.keep)
         if live.any():
             states.append(state[live]), cands.append(cand[live]), masks.append(legal[live]), labels.append(label[live])
@@ -110,13 +110,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seasons", type=int, default=1, help="whole seasons each collector plays")
     ap.add_argument("--smooth", type=float, default=0.0, help="share of the target spread over the legal rows, so PPO has something to explore")
     ap.add_argument("--keep", type=float, default=1.0, help="share of a season's decisions kept as rows")
+    ap.add_argument("--errands", action="store_true", help="with --season: clone the scripted mix's fleet errand at every login instead of the build")
     args = ap.parse_args(argv)
     if args.season:
         args.catalogue = str(DATA / "r8w/units-parity/econ-u1-colonies.json") if args.catalogue == str(DATA / "units-parity/econ-u1.json") else args.catalogue
         args.horizon = 8760.0 if args.horizon == 240.0 else args.horizon
         args.accounts = 64 if args.accounts == 8 else args.accounts
         args.controlled = args.accounts
-        args.queue, args.detector, args.realism, args.stagger = 3, None, 0.0, False
+        args.queue, args.detector, args.realism, args.stagger = 2 if args.errands else 3, None, 0.0, False
 
     states, cands, masks, labels, dims, reward_scale = collect_parallel(args)
     s_dim, k, c_dim = dims
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"model": {k: v.detach().cpu() for k, v in model.state_dict().items()}, "state_dim": s_dim, "cand_dim": c_dim,
-                "width": args.width, "iteration": 0, "names": {"state": [], "candidate": []}, "queue": 3 if args.season else 2, "reward_scale": reward_scale}, out)
+                "width": args.width, "iteration": 0, "names": {"state": [], "candidate": []}, "queue": args.queue if args.season else 2, "reward_scale": reward_scale}, out)
     print(f"wrote {out} ({time.time() - started:.0f}s of training); top-1 against the teacher {top1:.1%}")
     print(f"rows {n:,}, candidates {k}, state {s_dim}, candidate {c_dim}")
     return 0

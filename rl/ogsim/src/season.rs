@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use crate::fleet::Coord;
+use crate::errands::{self, Errand};
 use crate::players::{self, FleetSaver, Ledger, Miner, Player, Raider};
 use crate::score;
 use crate::world::{Colonisation, Rules, World};
@@ -114,7 +115,8 @@ impl Policy {
         let mut s = scaled(state, &self.norm[0], &self.norm[1]);
         for layer in &self.state_net { s = layer.apply(&s) }
         let rows = (0..legal.len()).filter(|&row| legal[row] > 0).map(|row| {
-            let c = self.cand_net.apply(&scaled(&cands[row * LEARNER_CAND..(row + 1) * LEARNER_CAND], &self.norm[2], &self.norm[3]));
+            let width = self.norm[2].len();
+            let c = self.cand_net.apply(&scaled(&cands[row * width..(row + 1) * width], &self.norm[2], &self.norm[3]));
             let mut x: Vec<f32> = s.iter().chain(&c).copied().collect();
             for layer in &self.joint[..2] { x = layer.apply(&x) }
             (row, self.joint[2].output(&x))
@@ -256,6 +258,12 @@ impl Universe {
                 _ => Player::Miner(Miner::new(s)),
             }
         }).collect();
+        // `fleet-model=N`: the first N accounts' fleet errands are a model's, so their persona keeps only the economy and
+        // its yard (its archetype's doctrine stays), as the errand world does.
+        let fleet_model = arms.iter().find_map(|arm| arm.strip_prefix("fleet-model=")).map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
+        for (a, player) in players.iter_mut().enumerate().take(fleet_model) {
+            *player = Player::Miner(Miner::new(seed.wrapping_mul(100).wrapping_add(a as u64)));
+        }
         let stack = on("stack") || on("yardstack") || on("moonstack");
         // Late-game arm: each persona's yard fills its archetype's fleet and defence templates (`rl/scripts/doctrine_json.py`).
         let doctrine: HashMap<String, players::Doctrine> = if on("doctrine") {
@@ -339,7 +347,7 @@ impl Universe {
             players::tend_wrecks(&mut self.world, &self.cat, a, &mut self.ledgers[owner]);
         }
         if self.relocations && a == owner {
-            players::relocate_colony(&mut self.world, &self.cat, a, &mut self.ledgers[owner]);
+            players::relocate_colony(&mut self.world, a, &mut self.ledgers[owner]);
         }
         match (pick, persona) {
             (Some(Some(_)), _) => {}
@@ -378,6 +386,33 @@ impl Universe {
         cands[objects * LEARNER_CAND..].fill(0.0);
         cands[advice.unwrap_or(objects) * LEARNER_CAND + CAND_DIM] = 1.0;
         legal[objects] = 1;
+    }
+
+    /// The errand choice at slot a's login: the errands offered (row 0 waits), and the state, candidate rows and legal
+    /// flags the errand model reads, padded to `errands::MAX_CANDIDATES` rows.
+    pub fn observe_errands(&mut self, a: usize) -> (Vec<Errand>, Vec<f32>, Vec<f32>, Vec<u8>) {
+        let (world, cat) = (&mut self.world, &self.cat);
+        let offered = errands::candidates(world, cat, a);
+        let state = errands::account_features(world, cat, a).to_vec();
+        let mut cands = vec![0.0; errands::MAX_CANDIDATES * errands::CAND_DIM];
+        let mut legal = vec![0; errands::MAX_CANDIDATES];
+        for (row, &errand) in offered.iter().enumerate() {
+            cands[row * errands::CAND_DIM..(row + 1) * errands::CAND_DIM].copy_from_slice(&errands::candidate_features(world, cat, a, errand));
+            legal[row] = 1;
+        }
+        (offered, state, cands, legal)
+    }
+
+    /// The row of `offered` the scripted mix would take at slot a: the errand model's teacher.
+    pub fn errand_teacher(&mut self, a: usize, offered: &[Errand]) -> usize {
+        let pick = errands::teacher_choice(&mut self.world, &self.cat, a);
+        offered.iter().position(|&e| e == pick).unwrap_or(0)
+    }
+
+    /// Runs the errand at row `row` of `offered`; a row that is not offered, or one the world refuses, counts as invalid.
+    pub fn run_errand(&mut self, a: usize, offered: &[Errand], row: usize) {
+        let done = offered.get(row).map(|&e| errands::apply(&mut self.world, &self.cat, a, e));
+        if !matches!(done, Some(Ok(()))) { self.world.games[a].invalid += 1 }
     }
 
     /// The model's build at slot a: an object, or `None` to pass. With `draw` it samples as it does in training.

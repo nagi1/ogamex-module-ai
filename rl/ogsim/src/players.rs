@@ -868,7 +868,7 @@ pub fn tend_wrecks(w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger
 /// Planet moves: with the dark matter for it, an account moves a colony standing outside its home system into a free
 /// slot there, the nearest first, so the colony is supplied and defended from home: why players pay for a move (gate 3).
 /// One move at a time; the host refuses it while the colony builds or a fleet is out, and the account asks again later.
-pub fn relocate_colony(w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> bool {
+pub fn relocate_colony(w: &mut World, a: usize, ledger: &mut Ledger) -> bool {
     let Some(cost) = w.rules[a].settings.relocation.as_ref().map(|r| r.cost) else { return false };
     if w.dark_matter[a] < cost || !w.moves.is_empty() && w.moves.keys().any(|&p| w.account_of(p) == a) { return false }
     let home = w.coords[a];
@@ -2501,10 +2501,10 @@ mod tests {
         let colony = world.add_planet(&cat, 0, world.games[0].planet.config, Coord { galaxy: home.galaxy, system: home.system + 40, position: 9 }, 0.0);
         let mut ledger = Ledger::default();
         world.dark_matter[0] = cost - 1;
-        assert!(!relocate_colony(&mut world, &cat, 0, &mut ledger), "short of dark matter");
+        assert!(!relocate_colony(&mut world, 0, &mut ledger), "short of dark matter");
         world.dark_matter[0] = cost + 5;
-        assert!(relocate_colony(&mut world, &cat, 0, &mut ledger), "the colony is asked to move");
-        assert!(!relocate_colony(&mut world, &cat, 0, &mut ledger), "one move at a time");
+        assert!(relocate_colony(&mut world, 0, &mut ledger), "the colony is asked to move");
+        assert!(!relocate_colony(&mut world, 0, &mut ledger), "one move at a time");
         while world.move_log.is_empty() && world.moved_at.is_empty() {
             let a = world.next_decision(&cat).expect("the world plays on");
             world.wait(&cat, a);

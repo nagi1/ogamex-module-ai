@@ -597,6 +597,8 @@ struct Seat {
     midnight: f64,
     deciding: (usize, u64),
     advice: Option<usize>,
+    /// In the errand mode, the deciding login's errands and the rows the model reads (state, candidates, legal).
+    errand: Option<(Vec<errands::Errand>, Vec<f32>, Vec<f32>, Vec<u8>)>,
     /// Until this second the personas play: seasons started together would keep every batch on one day of the year.
     warm_until: f64,
     open: Vec<Option<(u64, f64)>>,
@@ -617,6 +619,8 @@ struct Row { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: i64, logp
 struct Rollout { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: Vec<i64>, logp: Vec<f32>, adv: Vec<f32>, ret: Vec<f32> }
 
 const BOTH_QUEUES: usize = 3;
+/// The decision kind of a login's fleet errand (`errands.rs`): the season's first `controlled` accounts fly by the model.
+const ERRANDS: usize = 2;
 /// A `done` that cuts the stream at the season's horizon, not an end of the account: the universe plays on, so the
 /// trainer bootstraps from V (1 is the account quitting, which ends it).
 const CUT: u8 = 2;
@@ -651,7 +655,10 @@ impl Seat {
         for _ in 0..rows {
             let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
             let a = self.deciding.0;
-            self.universe.observe(a, self.advice, &mut state, &mut cands, &mut legal);
+            match &self.errand {
+                Some((_, s, c, l)) => (state, cands, legal) = (s.clone(), c.clone(), l.clone()),
+                None => self.universe.observe(a, self.advice, &mut state, &mut cands, &mut legal),
+            }
             let (action, logp, value) = policy.sample(&state, &cands, &legal, 1.0, &mut self.rng);
             let owner = self.universe.world.account_of(a);
             let day = (self.universe.world.games[a].t / DAY) as f32;
@@ -743,7 +750,9 @@ impl Seat {
             let owner = u.world.account_of(a);
             let plays = u.plays(a);
             let build = u.world.decision_kind(a) == Decision::Build && (rules.queue == BOTH_QUEUES || u.world.games[a].queue == rules.queue);
-            if owner >= rules.controlled || !plays || !build || t < self.warm_until {
+            // An errand is the capital's, at every login it plays (a build login or an idle one).
+            let decides = if rules.queue == ERRANDS { a == owner } else { build };
+            if owner >= rules.controlled || !plays || !decides || t < self.warm_until {
                 u.play(a, None);
                 if owner < rules.controlled && !plays { self.close(owner, 1) }
                 continue;
@@ -751,6 +760,12 @@ impl Seat {
             self.close(owner, 0);
             self.tickets += 1;
             self.deciding = (a, self.id << 40 | self.tickets);
+            if rules.queue == ERRANDS {
+                let rows = self.universe.observe_errands(a);
+                self.advice = Some(self.universe.errand_teacher(a, &rows.0));
+                self.errand = Some(rows);
+                return;
+            }
             self.advice = self.universe.teacher(a);
             return;
         }
@@ -763,6 +778,11 @@ impl Seat {
         let u = &mut self.universe;
         let owner = u.world.account_of(a);
         self.open[owner] = Some((ticket, log_score(&u.world, owner)));
+        if let Some((offered, ..)) = self.errand.take() {
+            u.run_errand(a, &offered, usize::try_from(action).unwrap_or(usize::MAX));
+            u.play(a, None);
+            return self.advance(rules);
+        }
         let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && u.world.legal(cat, a, k));
         let pass = action == cat.objects.len() as i64;
         let fallback = (!pass && chosen.is_none()).then(|| (0..cat.objects.len()).find(|&k| u.world.legal(cat, a, k))).flatten();
@@ -787,12 +807,14 @@ impl SeasonWorld {
         let loaded = Universe::catalogue(data, catalogue, &arms).map_err(PyValueError::new_err)?;
         let colonisation = Some(Arc::new(Colonisation::load(catalogue).map_err(PyValueError::new_err)?));
         let detector = detector.filter(|_| lambda > 0.0).map(|path| Detector::load(path).map(Arc::new).map_err(PyValueError::new_err)).transpose()?;
+        let mut arms = arms;
+        if queue == ERRANDS { arms.push(format!("fleet-model={controlled}")) }
         let shared = Arc::new(SeasonRules { catalogue: Arc::new(loaded), colonisation, detector, lambda, data: data.to_string(), days, accounts, controlled, arms, queue });
         let mut rng = seed;
         let draws: Vec<(u64, u64, u64)> = (0..n_worlds).map(|_| (next_random(&mut rng), next_random(&mut rng), next_random(&mut rng))).collect();
         let seats = py.detach(|| draws.into_par_iter().enumerate().map(|(w, (universe, own, warm))| {
             let mut seat = Seat {
-                rng: own, id: w as u64, universe: shared.universe(universe), midnight: DAY, deciding: (0, 0), advice: None,
+                rng: own, id: w as u64, universe: shared.universe(universe), midnight: DAY, deciding: (0, 0), advice: None, errand: None,
                 warm_until: if stagger { (warm % days as u64) as f64 * DAY } else { 0.0 },
                 open: vec![None; accounts], realism: vec![0.0; accounts], tickets: 0, closed: Vec::new(), finished: Vec::new(),
                 streams: (0..accounts).map(|_| Vec::new()).collect(), recording: false,
@@ -805,10 +827,14 @@ impl SeasonWorld {
 
     /// (state width, candidates per choice, candidate width); the last candidate row lets the login pass.
     fn dims(&self) -> (usize, usize, usize) {
+        if self.shared.queue == ERRANDS { return (errands::STATE_DIM, errands::MAX_CANDIDATES, errands::CAND_DIM) }
         (LEARNER_STATE, self.shared.catalogue.objects.len() + 1, LEARNER_CAND)
     }
 
     fn feature_names(&self) -> (Vec<&'static str>, Vec<&'static str>) {
+        if self.shared.queue == ERRANDS {
+            return (errands::STATE_NAMES.to_vec(), errands::CAND_NAMES.iter().chain(&errands::KIND_NAMES).copied().collect());
+        }
         (STATE_NAMES.iter().chain(&ACCOUNT_NAMES).copied().collect(), CAND_NAMES.iter().chain(&["advised"]).copied().collect())
     }
 
@@ -819,6 +845,13 @@ impl SeasonWorld {
 
     /// The deciding planet in every world: (state f32 [N,S], candidates f32 [N,K,C], legal u8 [N,K]).
     fn observe<'py>(&self, py: Python<'py>) -> (Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>) {
+        if self.shared.queue == ERRANDS {
+            let errands: Vec<_> = self.seats.iter().map(|seat| seat.errand.as_ref().expect("an errand to decide")).collect();
+            let state: Vec<f32> = errands.iter().flat_map(|e| e.1.iter().copied()).collect();
+            let cands: Vec<f32> = errands.iter().flat_map(|e| e.2.iter().copied()).collect();
+            let legal: Vec<u8> = errands.iter().flat_map(|e| e.3.iter().copied()).collect();
+            return (bytes(py, &state), bytes(py, &cands), bytes(py, &legal));
+        }
         let (n, k) = (self.seats.len(), self.shared.catalogue.objects.len() + 1);
         let mut state = vec![0f32; n * LEARNER_STATE];
         let mut cands = vec![0f32; n * k * LEARNER_CAND];
@@ -871,7 +904,7 @@ impl SeasonWorld {
 
     /// The persona's own build for every deciding account (the last row when it would pass): the teacher.
     fn baseline(&self) -> Vec<i64> {
-        let pass = self.shared.catalogue.objects.len() as i64;
+        let pass = if self.shared.queue == ERRANDS { 0 } else { self.shared.catalogue.objects.len() as i64 };
         self.seats.iter().map(|seat| seat.advice.map_or(pass, |k| k as i64)).collect()
     }
 

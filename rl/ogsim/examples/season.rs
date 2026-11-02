@@ -52,6 +52,11 @@ fn main() {
     // `sampled` plays the policy as training does; a model cloned from a teacher can keep every greedy pick while it changes.
     let mut draw = arms.iter().any(|arm| arm == "sampled").then_some(seed ^ 0x5A17);
     let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
+    // `errand-policy=<weights>` flies the fleets of the first `fleet-model=N` accounts by a trained errand model;
+    // `errand-policy=teacher` asks the scripted mix through the same door, so the door is measured apart from the model.
+    let errand_policy = arms.iter().find_map(|arm| arm.strip_prefix("errand-policy="));
+    let errand_model = errand_policy.filter(|&path| path != "teacher").map(|path| Policy::load(path).expect("the errand weights"));
+    let fleet_model = arms.iter().find_map(|arm| arm.strip_prefix("fleet-model=")).map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
     // `skill=LO:HI` gives each account its own sampling heat, log-uniform in [LO, HI]: real players range from sharp to loose.
     let heat: Vec<f32> = match arms.iter().find_map(|arm| arm.strip_prefix("skill=")).and_then(|r| r.split_once(':')) {
         Some((lo, hi)) => {
@@ -107,6 +112,15 @@ fn main() {
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };
+        if errand_policy.is_some() && plays && a == owner && owner < fleet_model {
+            let (offered, state, cands, legal) = season.u.observe_errands(a);
+            let row = match (&errand_model, draw.as_mut()) {
+                (Some(p), Some(rng)) => p.sample(&state, &cands, &legal, 1.0, rng).0,
+                (Some(p), None) => p.best(&state, &cands, &legal),
+                (None, _) => season.u.errand_teacher(a, &offered),
+            };
+            season.u.run_errand(a, &offered, row);
+        }
         season.u.play(a, pick);
     }
     season.flush(f64::INFINITY);
@@ -243,13 +257,18 @@ impl<W: Write> Season<'_, W> {
             let clock_ahead = planets.iter().any(|&p| self.u.world.games[p].t > world_time + 1e-6);
             self.excess.resize(self.u.world.games.len(), [0.0; 3]);
             self.seen_planet.resize(self.u.world.games.len(), false);
+            let mut over_cap_detail = Vec::new();
             let unexplained_over_cap = planets.iter().fold(false, |bad, &p| {
                 let planet = &self.u.world.games[p].planet;
                 let mut invalid = false;
                 for r in 0..3 {
                     let current = (planet.res[r] - planet.cap[r]).max(0.0);
                     let initial = if !self.seen_planet[p] { (self.u.cat.planets[planet.config].resources[r] - planet.cap[r]).max(0.0) } else { 0.0 };
-                    let (next, bad) = excess_after(current, self.excess[p][r], self.delivered.get(p).map_or(0.0, |v| v[r]) + initial);
+                    let delivered = self.delivered.get(p).map_or(0.0, |v| v[r]) + initial;
+                    let (next, bad) = excess_after(current, self.excess[p][r], delivered);
+                    if bad {
+                        over_cap_detail.push(json!({"slot": p, "resource": r, "stock": planet.res[r], "cap": planet.cap[r], "excess_before": self.excess[p][r], "delivered": delivered}));
+                    }
                     invalid |= bad;
                     self.excess[p][r] = next;
                     if let Some(delivered) = self.delivered.get_mut(p) { delivered[r] = 0.0; }
@@ -287,6 +306,7 @@ impl<W: Write> Season<'_, W> {
                 "clock_ahead_detail": planets.iter().filter_map(|&p| {
                     (self.u.world.games[p].t > world_time + 1e-6).then_some(json!({"slot": p, "planet_time": self.u.world.games[p].t, "world_time": world_time, "day_end": at}))
                 }).collect::<Vec<_>>(),
+                "over_cap_detail": over_cap_detail,
                 "inactive": inactive,
                 "score_source": "host",
                 "score": { "total": score.total, "economy": score.economy, "research": score.research,
@@ -595,6 +615,9 @@ fn scan(w: &World, read: &mut [usize; 6], roles: &[usize], per_day: &mut [Vec<Ta
         };
         if let Some(slot) = recipient.filter(|&slot| slot < delivered.len()) {
             for r in 0..3 { delivered[slot][r] += e.gained[r].max(0.0); }
+        }
+        if e.kind == EventKind::Fight && e.target < delivered.len() {
+            for r in 0..3 { delivered[e.target][r] += e.salvaged[r].max(0.0); }
         }
         record(&mut per_day[((e.time / DAY) as usize).min(days - 1)], e, w, roles);
     }
