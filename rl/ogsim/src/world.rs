@@ -141,12 +141,11 @@ pub struct Event {
     pub fleet: usize,
 }
 
-/// What a moon holds: it has its own diameter, stock and units (in its owner's `Units` order), and makes nothing.
+/// What a moon has that a slot does not: its diameter, which the moon destruction rolls read. Its stock, units and
+/// buildings are its own slot's (`World::moon_of`).
 #[derive(Clone, Debug, Default)]
 pub struct MoonHold {
     pub diameter: i64,
-    pub stock: [f64; 3],
-    pub counts: Vec<u64>,
 }
 
 /// What kind of decision an account faces at a login.
@@ -335,8 +334,12 @@ pub struct World {
     /// Debris over each planet (a double in the host: a harvest the hold cuts leaves its fraction), and whether it has a moon.
     pub debris: Vec<[f64; 3]>,
     pub moons: Vec<bool>,
-    /// What each slot's moon holds (empty counts: nothing yet); read only where `moons` is true.
+    /// Each planet slot's moon diameter; read only where `moons` is true.
     pub moon_holds: Vec<MoonHold>,
+    /// M3: the slot of each planet's moon, and the planet under each moon slot. A moon is a slot of its account as the
+    /// host's moon is a planet row: its own stock, units, buildings and queue, at its planet's coordinates.
+    pub moon_of: Vec<Option<usize>>,
+    pub moon_at: Vec<Option<usize>>,
     /// Every fleet arrival, fight, landing, loss and recall, oldest first.
     pub events: Vec<Event>,
     /// Dark matter per slot; an account's is the capital's.
@@ -381,7 +384,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -583,16 +586,63 @@ impl World {
             game.planet.levels[k] = home.planet.levels[k];
         }
         cat.refresh(&mut game.planet);
-        let rules = Arc::clone(&self.rules[capital]);
-        // A new planet holds no unit and builds what its owner's class may: the capital's yard says which.
+        let slot = self.push_slot(cat, game, capital, coord);
+        self.colonies[capital].push(slot);
+        slot
+    }
+
+    /// M3: a moon comes up over planet slot `planet` at second `at` as a slot of the same account, on the moon config of
+    /// its capital's class, with nothing built, nothing stored and the account's research; it is no colony (it takes no
+    /// planet slot). Returns its slot.
+    pub fn add_moon(&mut self, cat: &Catalogue, planet: usize, diameter: i64, at: f64) -> usize {
+        let capital = self.account[planet];
+        let home = &self.games[capital];
+        let mut game = cat.new_paused_game(cat.moon_config(home.planet.config), home.horizon / 3600.0, home.bonus_hours, home.login_rng);
+        game.t = at;
+        game.in_world = true;
+        game.free = [at, f64::INFINITY];
+        game.login_times = home.login_times.clone();
+        (game.sleep_start, game.sleep_hours) = (home.sleep_start, home.sleep_hours);
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1) { game.planet.levels[k] = home.planet.levels[k] }
+        cat.refresh(&mut game.planet);
+        let slot = self.push_slot(cat, game, capital, self.coords[planet]);
+        self.moons[planet] = true;
+        self.moon_holds[planet] = MoonHold { diameter: diameter.min(MOON_DIAMETER_CAP) };
+        self.moon_of[planet] = Some(slot);
+        self.moon_at[slot] = Some(planet);
+        slot
+    }
+
+    /// A moon destroyed is gone with all it held: its slot is emptied and plays no more, and its planet has no moon.
+    pub(crate) fn lose_moon(&mut self, planet: usize) {
+        self.moons[planet] = false;
+        self.moon_holds[planet] = MoonHold::default();
+        let Some(m) = self.moon_of[planet].take() else { return };
+        self.yards[m].counts.iter_mut().for_each(|n| *n = 0);
+        self.yards[m].orders.clear();
+        self.games[m].planet.res = [0.0; 3];
+        self.games[m].planet.settle();
+        self.games[m].done = true;
+    }
+
+    /// The planet a slot stands over: itself, or a moon's planet. Debris, a field and a moon belong to the position.
+    pub fn ground(&self, slot: usize) -> usize {
+        self.moon_at[slot].unwrap_or(slot)
+    }
+
+    /// Every per-slot table grown by one slot of account `capital` holding no unit, whose yard builds what the capital's
+    /// class may (the capital's yard says which).
+    fn push_slot(&mut self, cat: &Catalogue, game: Game, capital: usize, coord: Coord) -> usize {
         let yard = &self.yards[capital];
         self.yards.push(Shipyard { counts: vec![0; yard.counts.len()], allowed: yard.allowed.clone(), orders: Vec::new() });
-        self.rules.push(rules);
+        self.rules.push(Arc::clone(&self.rules[capital]));
         self.coords.push(coord);
         self.fields.push(false);
         self.debris.push([0.0; 3]);
         self.moons.push(false);
         self.moon_holds.push(MoonHold::default());
+        self.moon_of.push(None);
+        self.moon_at.push(None);
         self.dark_matter.push(0);
         self.officers.push(HashMap::default());
         self.idle_next.push(NEVER);
@@ -602,7 +652,6 @@ impl World {
         self.next.push(0.0);
         self.games.push(game);
         let slot = self.games.len() - 1;
-        self.colonies[capital].push(slot);
         self.sync_units(cat, slot);
         self.next[slot] = cat.peek(&mut self.games[slot]);
         slot
@@ -1122,7 +1171,7 @@ impl World {
             defender_research: &defender_research,
             defender_stock: self.games[target].planet.res,
             defender_engineer: false,
-            moon_exists: self.moons[target],
+            moon_exists: self.moons[self.ground(target)],
             seed,
         };
         let fought = combat::defender_units(&defender_rules.combat, &battle);
@@ -1136,8 +1185,9 @@ impl World {
                 self.yards[target].counts[u] = (outcome.defender_left.get(&id).copied().unwrap_or(0) + outcome.repaired.get(&id).copied().unwrap_or(0)) as u64;
             }
         }
-        for r in 0..3 { self.debris[target][r] += outcome.debris[r] as f64 }
-        self.fields[target] = true;
+        let ground = self.ground(target);
+        for r in 0..3 { self.debris[ground][r] += outcome.debris[r] as f64 }
+        self.fields[ground] = true;
         self.fleets[f].ships = outcome.attacker_left.iter().map(|(&id, &n)| (id, n)).collect();
         let fleet = self.fleets[f].clone();
         let result = match outcome.winner {
@@ -1183,7 +1233,8 @@ impl World {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
         }
         self.games[target].planet.settle();
-        if outcome.moon_created && !self.moons[target] { self.raise_moon(target, outcome.debris.iter().sum()) }
+        let ground = self.ground(target);
+        if outcome.moon_created && !self.moons[ground] { self.raise_moon(cat, ground, outcome.debris.iter().sum(), self.fleets[f].arrive) }
         let owner = self.fleets[f].owner;
         self.fleets[f].cargo = outcome.cargo.map(|r| r as f64);
         // Row 23s: the hold is the account's stock while the fleet flies, so the plunder (and what the collectors
@@ -1201,11 +1252,10 @@ impl World {
     }
 
     /// A moon comes up over `target`, sized as the host sizes it: a random 10..20 plus the debris of the fight, rooted.
-    fn raise_moon(&mut self, target: usize, debris: i64) {
+    fn raise_moon(&mut self, cat: &Catalogue, target: usize, debris: i64, at: f64) {
         let x = self.stream.int(10, 20);
         let diameter = (((x as f64) + 3.0 * debris as f64 / 100_000.0).sqrt() * 1000.0).floor() as i64;
-        self.moons[target] = true;
-        self.moon_holds[target] = MoonHold { diameter: diameter.min(MOON_DIAMETER_CAP), stock: [0.0; 3], counts: vec![0; self.yards[target].counts.len()] };
+        self.add_moon(cat, target, diameter, at);
     }
 
     /// EspionageMission: the counter-espionage chance and roll, a fight against the target's ships alone (its defence
@@ -1457,6 +1507,28 @@ mod tests {
         });
         let (a, b) = (worlds.next().unwrap(), worlds.next().unwrap());
         Some((cat, a, b))
+    }
+
+    /// M3: a moon raised over a planet is a slot of its account at the planet's coordinates and no colony: ships deploy
+    /// to it and stay there, it takes no planet's object, and a fight over it leaves its debris on the planet's field.
+    #[test]
+    fn a_moon_is_a_slot_of_its_account_that_fleets_fly_to() {
+        let Some((cat, mut w, _)) = pair(240.0) else { return eprintln!("no u1 catalogues; skipped") };
+        let moon = w.add_moon(&cat, 0, 8000, 0.0);
+        assert_eq!((w.account_of(moon), w.moon_of[0], w.ground(moon), w.coords[moon]), (0, Some(moon), 0, w.coords[0]));
+        assert!(!w.planets_of(0).contains(&moon), "a moon takes no planet slot");
+        let mine = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 0 && !cat.objects[k].on_moon).expect("a planet's own object");
+        w.games[moon].planet.res = [1e9; 3];
+        assert!(!w.legal(&cat, moon, mine), "a mine stood on a moon");
+        let rules = Arc::clone(&w.rules[0]);
+        let ship = (0..rules.units.units.len()).find(|&u| rules.units.kind.get(u) == Some(&crate::units::UnitKind::MilitaryShip))
+            .map(|u| rules.units.units[u].id as u32).expect("a warship");
+        give(&mut w, 0, ship, 5);
+        w.games[0].planet.res = [1e6; 3];
+        w.dispatch(&cat, 0, moon, Mission::Deploy, &[(ship, 5)], [0.0; 3], 10.0).expect("a deploy to the account's own moon");
+        idle(&cat, &mut w);
+        let u = w.rules[moon].units.index(ship as i64).unwrap();
+        assert_eq!((w.yards[moon].counts[u], w.yards[0].counts[u]), (5, 0), "the ships stand on the moon");
     }
 
     fn idle(cat: &Catalogue, w: &mut World) {
@@ -2125,8 +2197,10 @@ mod tests {
                     let u = world.rules[1].units.index(strike.interceptor as i64).expect("interceptors in the catalogue");
                     world.yards[1].counts[u] = parent as u64;
                 }
-                world.moons[1] = true;
-                world.moon_holds[1] = MoonHold { diameter, stock: hold.resources, counts };
+                let moon = world.add_moon(cat, 1, diameter, world.games[1].t);
+                world.yards[moon].counts = counts;
+                world.games[moon].planet.res = hold.resources;
+                world.games[moon].planet.settle();
             }
             let mission = match case.mission.as_str() {
                 "moon_destruction" => Mission::MoonDestroy,
@@ -2244,11 +2318,12 @@ mod tests {
             let stands = arrival.moon_exists_after.unwrap_or(true);
             assert_eq!(w.moons[1], stands, "case {index}: the moon stands after the strike");
             let Some(after) = arrival.target_after.as_ref().filter(|_| stands) else { return };
-            let hold = &w.moon_holds[1];
+            let moon = w.moon_of[1].expect("a standing moon has a slot");
+            let stock = w.games[moon].planet.res;
             for r in 0..3 {
-                assert!((hold.stock[r] - after.resources[r]).abs() < 1e-6, "case {index}: moon stock {r} world {} host {}", hold.stock[r], after.resources[r]);
+                assert!((stock[r] - after.resources[r]).abs() < 1e-6, "case {index}: moon stock {r} world {} host {}", stock[r], after.resources[r]);
             }
-            let held: HashMap<String, i64> = w.rules[1].units.units.iter().zip(&hold.counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id.to_string(), n as i64)).collect();
+            let held: HashMap<String, i64> = w.rules[1].units.units.iter().zip(&w.yards[moon].counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id.to_string(), n as i64)).collect();
             let mut host = after.ships.clone();
             host.extend(after.defence.clone());
             assert_eq!(held, host, "case {index}: what stands on the moon");

@@ -73,11 +73,12 @@ impl World {
         self.catch_up(cat, target, at);
         let (attacker, defender) = (Arc::clone(&self.rules[a]), Arc::clone(&self.rules[target]));
         let strike = attacker.strike.as_ref().expect("a missile flew without strike tables");
-        // A moon's defences are its own and the planet's interceptors meet the missiles first; a planet's are its yard's.
-        let mut moon_counts = self.moon_holds[target].counts.clone();
-        moon_counts.resize(defender.units.units.len(), 0);
-        let counts = if fleet.moon { &moon_counts } else { &self.yards[target].counts };
-        let defence: combat::Units = defender.units.units.iter().zip(counts)
+        // A moon's defences are its own slot's and the planet's interceptors meet the missiles first; a planet's are its
+        // yard's. A moon gone before the salvo lands leaves nothing to strike.
+        let struck = if fleet.moon { self.moon_of[target] } else { Some(target) };
+        if let Some(s) = struck { self.catch_up(cat, s, at) }
+        let counts = struck.map_or_else(|| vec![0; defender.units.units.len()], |s| self.yards[s].counts.clone());
+        let defence: combat::Units = defender.units.units.iter().zip(&counts)
             .filter(|(u, &n)| n > 0 && defender.combat.is_defense(u.id as u32))
             .map(|(u, &n)| (u.id as u32, n as i64)).collect();
         let interceptor = defender.units.index(strike.interceptor as i64);
@@ -90,23 +91,19 @@ impl World {
             defence: &defence,
             parent_interceptors,
         };
-        let struck = strike::impact(strike, &hit);
+        let impact = strike::impact(strike, &hit);
         for (u, unit) in defender.units.units.iter().enumerate() {
-            if defence.contains_key(&(unit.id as u32)) {
-                let left = struck.defence_after.get(&(unit.id as u32)).copied().unwrap_or(0) as u64;
-                match fleet.moon {
-                    true => moon_counts[u] = left,
-                    false => self.yards[target].counts[u] = left,
-                }
+            if let (Some(s), true) = (struck, defence.contains_key(&(unit.id as u32))) {
+                self.yards[s].counts[u] = impact.defence_after.get(&(unit.id as u32)).copied().unwrap_or(0) as u64;
             }
         }
         if fleet.moon {
-            if let Some(u) = interceptor { self.yards[target].counts[u] = struck.interceptors_after[1] as u64 }
-            self.moon_holds[target].counts = moon_counts;
+            if let Some(u) = interceptor { self.yards[target].counts[u] = impact.interceptors_after[1] as u64 }
         }
+        if let Some(s) = struck.filter(|&s| s != target) { self.sync_units(cat, s) }
         self.sync_units(cat, target);
         self.next[target] = cat.peek(&mut self.games[target]);
-        let lost: Vec<(u32, i64)> = defence.iter().map(|(&id, &n)| (id, n - struck.defence_after.get(&id).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();
+        let lost: Vec<(u32, i64)> = defence.iter().map(|(&id, &n)| (id, n - impact.defence_after.get(&id).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();
         // The salvo is spent: the sender's loss, and how a struck player reads how many came.
         self.log(EventKind::Arrival, at, &fleet, Outcome::Done, |e| { e.target_lost = lost; e.ships_lost = fleet.ships.clone() });
     }
@@ -184,14 +181,17 @@ impl World {
         let (attacker, defender) = (Arc::clone(&self.rules[a]), Arc::clone(&self.rules[target]));
         let strike = attacker.strike.as_ref().expect("a moon destroyer flew without strike tables");
         let (attacker_research, defender_research) = (self.research(cat, a), self.research(cat, target));
-        let mut hold = self.moon_holds[target].clone();
-        hold.counts.resize(defender.units.units.len(), 0);
-        let held: Vec<(u32, i64)> = defender.units.units.iter().zip(&hold.counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
+        // What the moon holds is its own slot's; a moon gone before the fleet lands holds nothing.
+        let moon = self.moon_of[target];
+        if let Some(m) = moon { self.catch_up(cat, m, at) }
+        let mut counts = moon.map_or_else(|| vec![0; defender.units.units.len()], |m| self.yards[m].counts.clone());
+        let mut stock = moon.map_or([0.0; 3], |m| self.games[m].planet.res);
+        let held: Vec<(u32, i64)> = defender.units.units.iter().zip(&counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
         let ships = self.fleets[f].ships.clone();
         let mut cargo = self.fleets[f].cargo;
         cargo[2] += self.fleets[f].fuel / 2.0;
         let seed = self.stream.int(0, i64::MAX) as u64;
-        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, defender_stock: hold.stock, defender_engineer: false, moon_exists: true, seed };
+        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
         let engine = match self.recorded.take() {
             Some(fight) => fight.engine,
             None => {
@@ -201,14 +201,14 @@ impl World {
         };
         let roll_max = strike.moon_destruction.roll_max.max(1) as u64;
         let rolls = self.recorded_rolls.take().unwrap_or_else(|| [0, 1].map(|_| self.stream.int(1, roll_max as i64)));
-        let result = strike::resolve_moon_destruction(strike, &attacker.combat, &defender.combat, &battle, engine, hold.diameter, rolls);
+        let result = strike::resolve_moon_destruction(strike, &attacker.combat, &defender.combat, &battle, engine, self.moon_holds[target].diameter, rolls);
 
-        for r in 0..3 { hold.stock[r] = as_stored(hold.stock[r] - result.loot[r] as f64) }
+        for r in 0..3 { stock[r] = as_stored(stock[r] - result.loot[r] as f64) }
         for (u, unit) in defender.units.units.iter().enumerate() {
             let id = unit.id as u32;
             // Missiles and interceptors never fight, so the moon keeps them as they were.
             if id == strike.missile || id == strike.interceptor { continue }
-            if held.iter().any(|s| s.0 == id) { hold.counts[u] = result.defender_left.get(&id).copied().unwrap_or(0) as u64 }
+            if held.iter().any(|s| s.0 == id) { counts[u] = result.defender_left.get(&id).copied().unwrap_or(0) as u64 }
         }
         for r in 0..3 { self.debris[target][r] += result.debris[r] as f64 }
         self.fields[target] = true;
@@ -228,12 +228,15 @@ impl World {
         });
         self.fleets[f].ships = result.return_fleet.clone().unwrap_or_default().into_iter().collect();
         self.fleets[f].fuel = 0.0;
-        match result.moon_destroyed {
-            true => {
-                self.moons[target] = false;
-                self.moon_holds[target] = MoonHold::default();
+        match (result.moon_destroyed, moon) {
+            (true, _) => self.lose_moon(target),
+            (false, Some(m)) => {
+                self.yards[m].counts = counts;
+                self.games[m].planet.res = stock;
+                self.games[m].planet.settle();
+                self.sync_units(cat, m);
             }
-            false => self.moon_holds[target] = hold,
+            (false, None) => {}
         }
         outcome
     }

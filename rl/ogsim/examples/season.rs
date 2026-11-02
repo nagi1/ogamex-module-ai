@@ -414,9 +414,8 @@ impl<W: Write> Season<'_, W> {
         // Every unit the account owns, at home, on its moons and in flight, by host id: the coverage gate reads it.
         let world = &self.u.world;
         let mut owned: BTreeMap<u32, u64> = BTreeMap::new();
-        for &slot in planets.iter() {
-            let ids = world.rules[slot].units.units.iter().map(|x| x.id as u32);
-            for (id, n) in ids.clone().zip(&world.yards[slot].counts).chain(ids.zip(&world.moon_holds[slot].counts)) { *owned.entry(id).or_default() += n }
+        for &slot in planets.iter().chain(planets.iter().filter_map(|&p| world.moon_of[p].as_ref())) {
+            for (x, n) in world.rules[slot].units.units.iter().zip(&world.yards[slot].counts) { *owned.entry(x.id as u32).or_default() += n }
         }
         for f in world.fleets.iter().filter(|f| world.account_of(f.owner) == a) {
             for &(id, n) in &f.ships { *owned.entry(id).or_default() += n.max(0) as u64 }

@@ -28,11 +28,9 @@ pub fn of(world: &World, account: usize) -> Score {
         total += general;
         economy += econ;
         military += mil;
-        if !world.moons[slot] {
-            continue;
-        }
-        // A moon is a planet of its own to the host (`planets->all()` lists it), with nothing built on it.
-        let (moon_general, moon_econ, moon_mil) = planet(units, &[], &world.moon_holds[slot].counts);
+        // A moon is a planet of its own to the host (`planets->all()` lists it): its buildings and units count.
+        let Some(moon) = world.moon_of[slot] else { continue };
+        let (moon_general, moon_econ, moon_mil) = planet(units, &world.games[moon].planet.levels, &world.yards[moon].counts);
         total += moon_general;
         economy += moon_econ;
         military += moon_mil;
@@ -192,8 +190,8 @@ mod tests {
             }
             for (slot, planet) in self.planets.iter().enumerate() {
                 let object = |id: &String| cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap()).expect("an object in the catalogue");
-                let units = &world.rules[slot].units;
-                let unit = |id: &String| units.index(id.parse::<i64>().unwrap()).expect("a unit in the catalogue");
+                let rules = Arc::clone(&world.rules[slot]);
+                let unit = |id: &String| rules.units.index(id.parse::<i64>().unwrap()).expect("a unit in the catalogue");
                 for (id, &level) in planet.levels.iter().chain(&self.research) {
                     world.games[slot].planet.levels[object(id)] = level;
                 }
@@ -203,10 +201,9 @@ mod tests {
                 if planet.moon_ships.is_empty() {
                     continue;
                 }
-                world.moons[slot] = true;
-                world.moon_holds[slot].counts = vec![0; units.units.len()];
+                let moon = world.add_moon(cat, slot, 0, 0.0);
                 for (id, &held) in &planet.moon_ships {
-                    world.moon_holds[slot].counts[unit(id)] = held as u64;
+                    world.yards[moon].counts[unit(id)] = held as u64;
                 }
             }
             for flight in &self.fleets {

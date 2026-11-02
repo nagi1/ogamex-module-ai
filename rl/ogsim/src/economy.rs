@@ -232,6 +232,8 @@ pub struct Catalogue {
     /// Object index of the research that adds the best labs of the account's other planets to the researching one.
     pub research_network: Option<usize>,
     pub planets: Vec<PlanetConfig>,
+    /// M3: where the moon configs start in `planets` (one per home, or one per config when made at load).
+    pub first_moon: usize,
     /// Host ids of the units that move production; `Planet::units` and the planet tables follow this order.
     pub units: Vec<i64>,
     /// The host's own answers at levels and unit counts its tables are not tabulated at (`ai:rl-catalogue`).
@@ -497,13 +499,30 @@ impl Catalogue {
         }).collect();
 
         let unit_ids = raw.units.clone();
+        let mut planets: Vec<PlanetConfig> = planets;
+        let first_moon = planets.iter().position(|c| c.moon).unwrap_or(planets.len());
+        // A catalogue made before moons were exported gets one per config: the host's moon is its planet with no
+        // production, nothing built, an empty store and one field; it takes only the objects marked for moons.
+        if first_moon == planets.len() {
+            let moons: Vec<PlanetConfig> = planets.iter().map(|c| PlanetConfig {
+                moon: true, field_max: 1, basic: [0.0; 4], resources: [0.0; 3], levels: vec![0; count],
+                production: vec![None; count], production_research: vec![None; count], units: vec![0; raw.units.len()], unit_production: Vec::new(),
+                ..c.clone()
+            }).collect();
+            planets.extend(moons);
+        }
 
-        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, research_network: raw.research_network.and_then(|id| index.get(&id).copied()), research_time_multipliers: raw.research_time_multipliers.iter().filter_map(|(c, m)| Some((c.parse().ok()?, *m))).collect(), planets, units: raw.units, probes: raw.unit_probes.iter().map(|p| Probe {
+        Ok(Catalogue { speed: raw.economy_speed, time_grid_level: raw.time_grid_level, research_grid_level: raw.research_grid_level, objects, modifiers, research_network: raw.research_network.and_then(|id| index.get(&id).copied()), research_time_multipliers: raw.research_time_multipliers.iter().filter_map(|(c, m)| Some((c.parse().ok()?, *m))).collect(), planets, first_moon, units: raw.units, probes: raw.unit_probes.iter().map(|p| Probe {
             config: p.planet,
             levels: per_object(&p.levels, &index, count).into_iter().map(|l| l.unwrap_or(0)).collect(),
             units: unit_ids.iter().map(|id| p.units.get(&id.to_string()).copied().unwrap_or(0)).collect(),
             answer: p.answer,
         }).collect(), login_gaps: Vec::new() })
+    }
+
+    /// M3: the config a moon raised over a planet of the account whose capital has config `home` plays on.
+    pub fn moon_config(&self, home: usize) -> usize {
+        self.first_moon + home % (self.planets.len() - self.first_moon)
     }
 
     pub fn new_game(&self, config: usize, horizon_hours: f64, bonus_hours: f64, login_seed: u64) -> Game {
