@@ -612,11 +612,11 @@ struct Seat {
 }
 
 /// One decision as the learner reads it.
-struct Row { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: i64, logp: f32, value: f32, reward: f32, done: u8, closed: bool, day: f32 }
+struct Row { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: i64, logp: f32, value: f32, reward: f32, done: u8, closed: bool, day: f32, teacher: i64 }
 
 /// What `collect` hands over, flat, for `ppo_update`.
 #[derive(Default)]
-struct Rollout { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: Vec<i64>, logp: Vec<f32>, adv: Vec<f32>, ret: Vec<f32> }
+struct Rollout { state: Vec<f32>, cands: Vec<f32>, legal: Vec<u8>, action: Vec<i64>, logp: Vec<f32>, adv: Vec<f32>, ret: Vec<f32>, teacher: Vec<i64> }
 
 const BOTH_QUEUES: usize = 3;
 /// The decision kind of a login's fleet errand (`errands.rs`): the season's first `controlled` accounts fly by the model.
@@ -662,7 +662,9 @@ impl Seat {
             let (action, logp, value) = policy.sample(&state, &cands, &legal, 1.0, &mut self.rng);
             let owner = self.universe.world.account_of(a);
             let day = (self.universe.world.games[a].t / DAY) as f32;
-            self.streams[owner].push(Row { state, cands, legal, action: action as i64, logp, value, reward: 0.0, done: 0, closed: false, day });
+            // The persona's answer here (the pass or wait row when it has none): DAgger's label for the state the model reached.
+            let teacher = self.advice.map_or(if self.errand.is_some() { 0 } else { k as i64 - 1 }, |row| row as i64);
+            self.streams[owner].push(Row { state, cands, legal, action: action as i64, logp, value, reward: 0.0, done: 0, closed: false, day, teacher });
             self.answer(rules, action as i64);
         }
     }
@@ -699,6 +701,7 @@ impl Seat {
                     out.logp.push(row.logp);
                     out.adv.push(adv);
                     out.ret.push(adv + row.value);
+                    out.teacher.push(row.teacher);
                 }
                 start = last + 1;
             }
@@ -883,9 +886,9 @@ impl SeasonWorld {
 
     /// Plays `rows` decisions per world on every core, deciding in Rust: a model this small costs less here than one trip
     /// to a GPU (measured: 25k decisions a second on 12 cores, 10.7k through a GPU batch). Returns the
-    /// finished rows: (state, candidates, legal, action, log-probability, advantage, return), raw arrays.
+    /// finished rows: (state, candidates, legal, action, log-probability, advantage, return, the persona's answer), raw arrays.
     #[allow(clippy::type_complexity)]
-    fn collect<'py>(&mut self, py: Python<'py>, rows: usize, gamma: f32, lam: f32, scale: f32) -> PyResult<(Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
+    fn collect<'py>(&mut self, py: Python<'py>, rows: usize, gamma: f32, lam: f32, scale: f32) -> PyResult<(Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
         let policy = self.policy.as_ref().ok_or_else(|| PyValueError::new_err("set_policy first"))?;
         let shared = Arc::clone(&self.shared);
         let seats = &mut self.seats;
@@ -899,7 +902,8 @@ impl SeasonWorld {
         let (state, cands, logp, adv, ret) = (join(|p| &p.state), join(|p| &p.cands), join(|p| &p.logp), join(|p| &p.adv), join(|p| &p.ret));
         let legal: Vec<u8> = parts.iter().flat_map(|p| p.legal.iter().copied()).collect();
         let action: Vec<i64> = parts.iter().flat_map(|p| p.action.iter().copied()).collect();
-        Ok((bytes(py, &state), bytes(py, &cands), bytes(py, &legal), bytes(py, &action), bytes(py, &logp), bytes(py, &adv), bytes(py, &ret)))
+        let teacher: Vec<i64> = parts.iter().flat_map(|p| p.teacher.iter().copied()).collect();
+        Ok((bytes(py, &state), bytes(py, &cands), bytes(py, &legal), bytes(py, &action), bytes(py, &logp), bytes(py, &adv), bytes(py, &ret), bytes(py, &teacher)))
     }
 
     /// The persona's own build for every deciding account (the last row when it would pass): the teacher.

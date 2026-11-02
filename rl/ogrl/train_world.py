@@ -326,7 +326,7 @@ def season_actor(idx: int, args, dims, shared: dict, lock, version, slots: Slots
             env.set_policy(json.dumps(weights))
         my[ST["model_s"]] += time.time() - clock
         clock = time.time()
-        state, cands, legal, action, logp, adv, ret = env.collect(args.collect_rows, args.gamma, args.lam, scale)
+        state, cands, legal, action, logp, adv, ret, _ = env.collect(args.collect_rows, args.gamma, args.lam, scale)
         my[ST["env_s"]] += time.time() - clock
         take = lambda raw, kind, *shape: torch.from_numpy(np.frombuffer(raw, kind).reshape(-1, *shape).copy())
         state, cands, legal = take(state, np.float32, s_dim), take(cands, np.float32, k, c_dim), take(legal, np.uint8, k)
