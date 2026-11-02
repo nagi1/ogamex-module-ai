@@ -293,3 +293,8 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   delivery; the over-cap check now counts it. Two judges (w0, w1 at 80) had failed on it and were requeued.
 - **Memory:** a trainer takes ~10 GB, a season ~0.7 GB. Three trainers plus 20 extra seasons hit the 46 GB cap and
   the slice killed `g0` (resumed from its update-131 save). Keep three trainers plus one judge at most.
+- **Unanchored score arms lose (2 Nov).** w1 (no anchor, gamma 0.985) at 160: median 5.99 M, top 287 M; w0 (no anchor,
+  gamma 0.995) at 160: median 4.99 M, top 228 M; against the clone's 6.96 M / 270 M and g0 (anchor 0.05) at 80:
+  7.56 M / 234 M. Entropy fell to 0.46-0.62 without the anchor; planets stayed at 7, so not gaming but drift. Stopped.
+  Running: g0 (anchor 0.05, 4070), g1 (anchor 0.02, 3090), e0 (the fleet errand model from its clone, 99.7% top-1 on
+  333 k rows, anchor 0.05, 3090). The fleet clone `bce0` is judged first as e0's baseline.
