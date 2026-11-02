@@ -232,6 +232,13 @@ the temperature 2 clone with no bonus, entropy falls instead (`c0` 1.74 to 1.06 
 The no-bonus arms `c0`, `c02`, `c10` were stopped on the older world: AUC 0.775-0.823 against the temperature 2 clone's 0.788, no learning shown.
 Entropy fell to 0.17 with lambda 0.02 and held near 1.8 with lambda 0.1. Next: stronger realism weights on this world, run `train3`.
 
+**`train3` (2 Nov).** The teacher's clone at temperature 1, no entropy bonus, detector-0 (teacher and clone seasons), and three arms at
+lambda 0.1, 0.3 and 1.0 (`d10`, `d30`, `d100`). Baselines: the sampled clone `bc0` HDS 0.885, AUC 0.763. KL per update stays at 1e-4 to
+3e-4 with clip 0: entropy is 0.15-0.2, so most rows are near-certain. `d10` update 80: HDS 0.896, AUC 0.790, research share in band 0.70
+to 0.76. That is no gain: HDS inside the noise, AUC worse by more than it.
+The clone's top tenth holds research at 1.3% of score against the teacher's 11.6%, with no research network or graviton. The teacher
+waits on about half its decisions to save for research, and a sampled pass that turns into a cheap building never saves.
+
 ## The yardstick was noisy (fixed 2 Nov)
 
 `hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,
