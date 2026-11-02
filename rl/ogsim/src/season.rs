@@ -33,6 +33,7 @@ pub const LEARNER_STATE: usize = STATE_DIM + ACCOUNT_NAMES.len();
 /// opens a planet slot, a prerequisite of the ship it wants), so the model starts at its play and learns when to leave it.
 pub const LEARNER_CAND: usize = CAND_DIM + 1;
 
+#[derive(Clone)]
 struct Layer { weight: Vec<Vec<f32>>, bias: Vec<f32> }
 
 impl Layer {
@@ -92,6 +93,7 @@ impl Detector {
 
 /// `ogrl.model.CandidateScorer` played in Rust, from `ogrl.export_policy`'s weights: a season writes its own lines, so
 /// `hds.py` judges a model exactly as it judges the personas.
+#[derive(Clone)]
 pub struct Policy { norm: [Vec<f32>; 4], state_net: Vec<Layer>, cand_net: Layer, joint: Vec<Layer>, value: Vec<Layer> }
 
 impl Policy {
@@ -107,6 +109,26 @@ impl Policy {
             joint: vec![Layer::load(v, "joint.0")?, Layer::load(v, "joint.2")?, Layer::load(v, "joint.4")?],
             value: vec![Layer::load(v, "value.0")?, Layer::load(v, "value.2")?],
         })
+    }
+
+    /// The policy with `noise * scale` added to its scoring weights, walked in the trainer's parameter order (state_net,
+    /// cand_net, joint; weight rows then bias). The value head is not part of the policy and stays. Evolution strategies.
+    pub fn nudged(&self, noise: &[f32], scale: f32) -> Policy {
+        let mut out = self.clone();
+        let mut at = 0;
+        let layers = out.state_net.iter_mut().chain(std::iter::once(&mut out.cand_net)).chain(out.joint.iter_mut());
+        for layer in layers {
+            for w in layer.weight.iter_mut().flatten().chain(layer.bias.iter_mut()) {
+                *w += noise[at] * scale;
+                at += 1;
+            }
+        }
+        out
+    }
+
+    /// How many weights `nudged` reads.
+    pub fn scoring_weights(&self) -> usize {
+        self.state_net.iter().chain(std::iter::once(&self.cand_net)).chain(&self.joint).map(|l| l.weight.iter().map(Vec::len).sum::<usize>() + l.bias.len()).sum()
     }
 
     /// The state's hidden layer and the score of every legal row; `cands` is [K, C] flat.

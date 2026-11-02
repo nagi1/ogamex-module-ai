@@ -53,6 +53,17 @@ fn main() {
     // One stream per account, so an account's extra decision does not reshuffle the others' samples.
     let mut draw = arms.iter().any(|arm| arm == "sampled").then(|| (0..accounts as u64).map(|a| seed ^ 0x5A17 ^ (a + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)).collect::<Vec<u64>>());
     let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
+    // `es=NOISE:SIGN:SIGMA` (with `policy=`): account a plays the policy nudged by SIGN x SIGMA x row a of NOISE, raw little-endian
+    // f32 [accounts, weights] (`ogrl.es_world`). The antithetic season plays the opposite sign on the same seed.
+    let nudged: Option<Vec<Policy>> = arms.iter().find_map(|arm| arm.strip_prefix("es=")).zip(policy.as_ref()).map(|(spec, base)| {
+        let mut parts = spec.split(':');
+        let (file, sign, sigma) = (parts.next().expect("es=NOISE:SIGN:SIGMA"), parts.next().expect("sign").parse::<f32>().expect("sign"), parts.next().expect("sigma").parse::<f32>().expect("sigma"));
+        let raw = std::fs::read(file).expect("the noise file");
+        let noise: Vec<f32> = raw.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        let n = base.scoring_weights();
+        assert_eq!(noise.len(), accounts * n, "noise is [accounts, {n}]");
+        (0..accounts).map(|a| base.nudged(&noise[a * n..(a + 1) * n], sign * sigma)).collect()
+    });
     // `errand-policy=<weights>` flies the fleets of the first `fleet-model=N` accounts by a trained errand model;
     // `errand-policy=teacher` asks the scripted mix through the same door, so the door is measured apart from the model.
     let errand_policy = arms.iter().find_map(|arm| arm.strip_prefix("errand-policy="));
@@ -110,7 +121,7 @@ fn main() {
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
         let pick = match &policy {
-            Some(p) if build => Some(season.u.choose(p, a, heat[owner], draw.as_mut().map(|d| &mut d[owner]))),
+            Some(p) if build => Some(season.u.choose(nudged.as_ref().map_or(p, |all| &all[owner]), a, heat[owner], draw.as_mut().map(|d| &mut d[owner]))),
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };

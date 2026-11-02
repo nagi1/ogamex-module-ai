@@ -586,6 +586,10 @@ struct SeasonRules {
     controlled: usize,
     arms: Vec<String>,
     queue: usize,
+    /// `networth`: a decision's reward is the change in ln(1 + score + income per hour x hours left / 1000), the account
+    /// valued as an OGame player values a mine, by what it earns before the season ends. The hours left are 0 at the end,
+    /// so a season's rewards still sum to ln(1 + final score): the shaping moves credit earlier and cannot add to the total.
+    networth: bool,
 }
 
 fn account_streams(seed: u64, accounts: usize) -> Vec<u64> {
@@ -609,6 +613,8 @@ struct Seat {
     warm_until: f64,
     open: Vec<Option<(u64, f64)>>,
     realism: Vec<f64>,
+    /// Per account, (second, `earned`) at the last two midnights: the income rate `networth` reads spans 24 to 48 hours.
+    marks: Vec<[(f64, f64); 2]>,
     tickets: u64,
     closed: Vec<Closed>,
     finished: Vec<Finished>,
@@ -636,6 +642,12 @@ fn log_score(world: &World, owner: usize) -> f64 {
     (1.0 + score::of(world, owner).total.max(0) as f64).ln()
 }
 
+/// What the account has earned so far: production kept, loot and expedition finds.
+fn earned(world: &World, owner: usize) -> f64 {
+    let books = world.books(owner);
+    books.produced - books.wasted + books.loot_in + books.expedition_in
+}
+
 impl SeasonRules {
     fn universe(&self, seed: u64) -> Universe {
         Universe::new(Arc::clone(&self.catalogue), self.colonisation.clone(), &self.data, self.days, self.accounts, seed, &self.arms)
@@ -643,9 +655,20 @@ impl SeasonRules {
 }
 
 impl Seat {
-    fn close(&mut self, owner: usize, done: u8) {
+    /// The value a decision's reward is the change of: ln(1 + score), or with `networth` the score plus the income still to come.
+    fn potential(&self, rules: &SeasonRules, owner: usize) -> f64 {
+        let world = &self.universe.world;
+        if !rules.networth { return log_score(world, owner) }
+        let now = world.games[owner].t;
+        let (since, base) = self.marks[owner][0];
+        let rate = if now > since { (earned(world, owner) - base).max(0.0) / (now - since) } else { 0.0 };
+        let left = (rules.days as f64 * DAY - now).max(0.0);
+        (1.0 + score::of(world, owner).total.max(0) as f64 + rate * left / 1000.0).ln()
+    }
+
+    fn close(&mut self, rules: &SeasonRules, owner: usize, done: u8) {
         let Some((ticket, before)) = self.open[owner].take() else { return };
-        let reward = log_score(&self.universe.world, owner) - before + self.realism[owner];
+        let reward = self.potential(rules, owner) - before + self.realism[owner];
         if self.recording {
             if let Some(row) = self.streams[owner].last_mut() { (row.reward, row.done, row.closed) = (reward as f32, done, true) }
         } else {
@@ -735,7 +758,7 @@ impl Seat {
         loop {
             let Some(a) = self.universe.next_decision() else {
                 for owner in 0..rules.accounts {
-                    self.close(owner, CUT);
+                    self.close(rules, owner, CUT);
                     let world = &self.universe.world;
                     let slots = world.planets_of(owner);
                     let invalid = slots.iter().map(|&s| world.games[s].invalid).sum();
@@ -747,12 +770,16 @@ impl Seat {
                 self.midnight = DAY;
                 self.warm_until = 0.0;
                 self.realism = vec![0.0; rules.accounts];
+                self.marks = vec![[(0.0, 0.0); 2]; rules.accounts];
                 continue;
             };
             let t = self.universe.world.games[a].t;
             while self.midnight <= t && self.midnight <= rules.days as f64 * DAY {
                 let midnight = self.midnight;
                 self.universe.day_end(midnight);
+                for owner in 0..rules.accounts {
+                    self.marks[owner] = [self.marks[owner][1], (midnight, earned(&self.universe.world, owner))];
+                }
                 self.judge(rules, midnight);
                 self.midnight += DAY;
             }
@@ -764,10 +791,10 @@ impl Seat {
             let decides = if rules.queue == ERRANDS { a == owner } else { build };
             if owner >= rules.controlled || !plays || !decides || t < self.warm_until {
                 u.play(a, None);
-                if owner < rules.controlled && !plays { self.close(owner, 1) }
+                if owner < rules.controlled && !plays { self.close(rules, owner, 1) }
                 continue;
             }
-            self.close(owner, 0);
+            self.close(rules, owner, 0);
             self.tickets += 1;
             self.deciding = (a, self.id << 40 | self.tickets);
             if rules.queue == ERRANDS {
@@ -787,7 +814,9 @@ impl Seat {
         let (a, ticket) = self.deciding;
         let u = &mut self.universe;
         let owner = u.world.account_of(a);
-        self.open[owner] = Some((ticket, log_score(&u.world, owner)));
+        let before = self.potential(rules, owner);
+        let u = &mut self.universe;
+        self.open[owner] = Some((ticket, before));
         if let Some((offered, ..)) = self.errand.take() {
             u.run_errand(a, &offered, usize::try_from(action).unwrap_or(usize::MAX));
             u.play(a, None);
@@ -819,14 +848,15 @@ impl SeasonWorld {
         let detector = detector.filter(|_| lambda > 0.0).map(|path| Detector::load(path).map(Arc::new).map_err(PyValueError::new_err)).transpose()?;
         let mut arms = arms;
         if queue == ERRANDS { arms.push(format!("fleet-model={controlled}")) }
-        let shared = Arc::new(SeasonRules { catalogue: Arc::new(loaded), colonisation, detector, lambda, data: data.to_string(), days, accounts, controlled, arms, queue });
+        let networth = arms.iter().any(|arm| arm == "networth");
+        let shared = Arc::new(SeasonRules { catalogue: Arc::new(loaded), colonisation, detector, lambda, data: data.to_string(), days, accounts, controlled, arms, queue, networth });
         let mut rng = seed;
         let draws: Vec<(u64, u64, u64)> = (0..n_worlds).map(|_| (next_random(&mut rng), next_random(&mut rng), next_random(&mut rng))).collect();
         let seats = py.detach(|| draws.into_par_iter().enumerate().map(|(w, (universe, own, warm))| {
             let mut seat = Seat {
                 rng: own, picks: account_streams(own, shared.accounts), id: w as u64, universe: shared.universe(universe), midnight: DAY, deciding: (0, 0), advice: None, errand: None,
                 warm_until: if stagger { (warm % days as u64) as f64 * DAY } else { 0.0 },
-                open: vec![None; accounts], realism: vec![0.0; accounts], tickets: 0, closed: Vec::new(), finished: Vec::new(),
+                open: vec![None; accounts], realism: vec![0.0; accounts], marks: vec![[(0.0, 0.0); 2]; accounts], tickets: 0, closed: Vec::new(), finished: Vec::new(),
                 streams: (0..accounts).map(|_| Vec::new()).collect(), recording: false,
             };
             seat.advance(&shared);

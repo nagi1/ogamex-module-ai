@@ -401,3 +401,20 @@ World median change, 6 paired keyed seeds, all Discoverer, one rule off:
 Here the build plan carries tens of percent and expedition sizing has measured headroom. `class=3` joins SEASON_ARMS and the judge; judged.txt is marked.
 Runs dw1 and dw2: g2's settings (bc-t2, KL .05, gamma .995, lam .97), seeds 1 and 2, on both cards. The bar is bc0 judged in this world.
 Root cause each run addresses: the decision now has leverage (measured) and the dice no longer drown it (keyed).
+
+### 3 Nov 00:30 — new methods instead of more probes (owner: stop measuring, change the approach)
+
+Bar: bc0 in the Discoverer world, 251M active median (top 314M).
+
+1. **Evolution strategies on the build model** (`ogrl/es_world.py`, Salimans et al. 2017). This is the standard answer when a fast simulator exists and credit is long and sparse.
+   - Each generation plays 18 fresh seeds twice: every account plays the policy nudged by +sigma, then -sigma, times its own noise row, on the same keyed dice.
+   - The ln(final score) difference is the account's vote. The normalised votes give an Adam step. No credit assignment, no value net.
+   - The objective is the final host score itself, so nothing in it can be gamed.
+   - `es=NOISE:SIGN:SIGMA` in the season binary; `season::Policy::nudged` walks the trainer's parameter order.
+   - Sigma 0.08: at 0.02 no decision flips (the clone follows the persona's flag by a wide margin); at 0.3 play collapses.
+   - Run es1: from bc-t2, 36 seasons per generation on 36 cores. Checkpoint every 5 generations.
+2. **Net-worth reward for PPO** (`networth` arm). The potential is ln(1 + score + income per hour x hours left / 1000), with income measured over the last 24-48 h (production kept, loot, expedition finds).
+   - A mine earns its worth when it is built, as the OGame amortisation tables value it.
+   - The hours left are 0 at the end, so a season's rewards still sum to ln(1 + final score).
+   - Runs nw1 and nw2: g2's settings, seeds 1 and 2, 12 worlds each, on both cards.
+3. dw1 was killed by the OOM killer when es1 started; dw2 and dw3 were stopped for es1's cores.
