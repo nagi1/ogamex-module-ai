@@ -133,6 +133,9 @@ pub struct Battle<'a> {
     pub attacker_cargo: [f64; 3],
     pub defender: &'a [(u32, i64)],
     pub defender_research: &'a HashMap<u32, u32>,
+    /// ACS defend fleets holding at the target, in the order the engine lists them after the planet's own. The host
+    /// values every defending fleet at the planet owner's research (RustBattleEngine::prepareBattleInput).
+    pub allies: &'a [Units],
     pub defender_stock: [f64; 3],
     pub defender_engineer: bool,
     pub moon_exists: bool,
@@ -152,6 +155,8 @@ pub struct EngineResult {
     pub rounds: u32,
     pub attacker_left: Units,
     pub defender_left: Units,
+    /// Each holding ally's survivors, in `Battle::allies` order; `defender_left` counts them too.
+    pub allies_left: Vec<Units>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -160,6 +165,7 @@ pub struct Outcome {
     pub winner: Winner,
     pub attacker_left: Units,
     pub defender_left: Units,
+    pub allies_left: Vec<Units>,
     pub attacker_lost: Units,
     pub defender_lost: Units,
     pub repaired: Units,
@@ -305,19 +311,28 @@ fn minus(start: &Units, left: &Units) -> Units {
     start.iter().map(|(&id, &n)| (id, n - left.get(&id).copied().unwrap_or(0))).filter(|&(_, n)| n > 0).collect()
 }
 
-/// The units the defender fights with: the planet's units without the host's non-combatants.
+/// The units the defender fights with: the planet's units without the host's non-combatants, and its holding allies.
 pub fn defender_units(catalogue: &CombatCatalogue, battle: &Battle) -> Units {
-    units_of(battle.defender, &catalogue.non_combatants)
+    let mut units = units_of(battle.defender, &catalogue.non_combatants);
+    for (&id, &n) in battle.allies.iter().flatten() {
+        *units.entry(id).or_insert(0) += n;
+    }
+    units
 }
 
-/// RustBattleEngine::prepareBattleInput: one fleet a side, each valued at its owner's research and class, hull =
-/// floor(SI / 10). Each side reads its own catalogue: the class changes weapon, shield and hull levels and speeds.
+/// RustBattleEngine::prepareBattleInput: one attacking fleet, the planet's own forces as defending fleet 0 and each
+/// holding ally after it, valued at research and class, hull = floor(SI / 10). Each side reads its own catalogue: the
+/// class changes weapon, shield and hull levels and speeds.
 pub fn engine_input(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle: &Battle) -> Value {
     let fleet = units_of(battle.attacker, &HashSet::default());
-    let planet = defender_units(defender, battle);
+    let planet = units_of(battle.defender, &defender.non_combatants);
+    let mut defenders = vec![defender.fleet_json(0, 2, &planet, battle.defender_research)];
+    for (i, ally) in battle.allies.iter().enumerate() {
+        defenders.push(defender.fleet_json(i as u32 + 1, i as u32 + 3, ally, battle.defender_research));
+    }
     json!({
         "attacker_fleets": [attacker.fleet_json(1, 1, &fleet, battle.attacker_research)],
-        "defender_fleets": [defender.fleet_json(0, 2, &planet, battle.defender_research)],
+        "defender_fleets": defenders,
         "seed": battle.seed,
     })
 }
@@ -332,6 +347,13 @@ struct EngineCount {
 struct EngineRound {
     attacker_ships: HashMap<String, EngineCount>,
     defender_ships: HashMap<String, EngineCount>,
+    #[serde(default)]
+    defender_fleet_results: HashMap<String, EngineFleet>,
+}
+
+#[derive(Deserialize)]
+struct EngineFleet {
+    units_result: HashMap<String, EngineCount>,
 }
 
 #[derive(Deserialize)]
@@ -350,12 +372,26 @@ pub fn run_engine(input: &Value) -> EngineResult {
     let output: EngineOutput = serde_json::from_str(unsafe { CStr::from_ptr(pointer) }.to_str().expect("engine output is UTF-8")).expect("engine output parses");
     battle_engine_ffi::free_battle_result(pointer);
 
-    let side = |key: &str| -> Units {
-        input[key][0]["units"].as_object().map_or_else(Units::new, |units| units.values().map(|u| (u["unit_id"].as_u64().unwrap() as u32, u["amount"].as_i64().unwrap())).filter(|&(_, n)| n > 0).collect())
+    let fleet = |key: &str, i: usize| -> Units {
+        input[key][i]["units"].as_object().map_or_else(Units::new, |units| units.values().map(|u| (u["unit_id"].as_u64().unwrap() as u32, u["amount"].as_i64().unwrap())).filter(|&(_, n)| n > 0).collect())
     };
+    let allies = input["defender_fleets"].as_array().map_or(0, |d| d.len().saturating_sub(1));
     match output.rounds.last() {
-        Some(last) => EngineResult { rounds: output.rounds.len() as u32, attacker_left: counts(&last.attacker_ships), defender_left: counts(&last.defender_ships) },
-        None => EngineResult { rounds: 0, attacker_left: side("attacker_fleets"), defender_left: side("defender_fleets") },
+        Some(last) => EngineResult {
+            rounds: output.rounds.len() as u32,
+            attacker_left: counts(&last.attacker_ships),
+            defender_left: counts(&last.defender_ships),
+            allies_left: (1..=allies).map(|i| last.defender_fleet_results.get(&i.to_string()).map_or_else(Units::new, |f| counts(&f.units_result))).collect(),
+        },
+        None => EngineResult {
+            rounds: 0,
+            attacker_left: fleet("attacker_fleets", 0),
+            defender_left: (0..=allies).map(|i| fleet("defender_fleets", i)).fold(Units::new(), |mut all, f| {
+                for (id, n) in f { *all.entry(id).or_insert(0) += n }
+                all
+            }),
+            allies_left: (1..=allies).map(|i| fleet("defender_fleets", i)).collect(),
+        },
     }
 }
 
@@ -491,6 +527,7 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
         defender_loss: attacker.price_of(&defender_lost),
         attacker_left: engine.attacker_left,
         defender_left: engine.defender_left,
+        allies_left: engine.allies_left,
         attacker_lost,
         defender_lost,
         repaired,
@@ -675,6 +712,7 @@ mod tests {
             attacker_cargo: case.attacker.cargo,
             defender: &o.defender,
             defender_research: &o.defender_research,
+            allies: &[],
             defender_stock: case.defender.resources,
             defender_engineer: case.defender.engineer,
             moon_exists: case.defender.moon_exists,
@@ -706,7 +744,7 @@ mod tests {
             let o = owned(case);
             let b = battle(case, &o, case.seed);
             let r = &case.result;
-            let engine = EngineResult { rounds: r.rounds, attacker_left: units(&r.attacker_left), defender_left: units(&r.defender_left) };
+            let engine = EngineResult { rounds: r.rounds, attacker_left: units(&r.attacker_left), defender_left: units(&r.defender_left), allies_left: Vec::new() };
             let out = settle(&catalogue, &catalogue, &b, engine, units(&r.repaired), 101);
             let winner = match out.winner {
                 Winner::Attacker => "attacker",

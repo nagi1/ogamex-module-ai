@@ -57,6 +57,10 @@ pub struct FleetSettings {
     /// L6: halving a queue with dark matter (fleet settings v4).
     #[serde(default)]
     pub halving: Option<Halving>,
+    /// L5: the universe's alliance combat system switch (`SettingsService::allianceCombatSystemOn`, fleet settings v5);
+    /// an older export reads as off, so no ACS mission flies on tables that do not say it may.
+    #[serde(default)]
+    pub alliance_combat_system: bool,
 }
 
 /// `HalvingService`: dark matter per half hour left (at least `min_cost`, at most the queue's cap), and per queue the most a

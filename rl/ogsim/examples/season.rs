@@ -285,7 +285,7 @@ impl<W: Write> Season<'_, W> {
                 "planets": planets.len(),
                 "moons": moons,
                 "galaxies": galaxies.len(),
-                "alliance": self.u.alliance_at[a].is_some_and(|join| at >= join),
+                "alliance": self.u.world.alliance_at[a].is_some_and(|join| at >= join),
                 "value": value,
                 "fleet_value": value - economy,
                 "dark_matter": self.u.world.dark_matter[a],
@@ -619,6 +619,7 @@ fn record(day: &mut [Tally], e: &Event, w: &World, roles: &[usize]) {
         (Mission::Colonise, EventKind::Arrival) => day[owner].colonise += 1,
         (Mission::Missile, EventKind::Arrival) => day[owner].missile += 1,
         (Mission::MoonDestroy, EventKind::Arrival) => day[owner].moon_shot += 1,
+        (Mission::AcsDefend, EventKind::Arrival | EventKind::Lost) => day[owner].acs_defend += 1,
         _ => {}
     }
 }
@@ -639,6 +640,8 @@ struct Tally {
     colonise: u32,
     missile: u32,
     moon_shot: u32,
+    /// L5: holds at a mate's planet that ended (home again, or wiped out there).
+    acs_defend: u32,
     /// M4: phalanx scans and jump gate jumps.
     phalanx: u32,
     jump: u32,
@@ -671,6 +674,7 @@ impl Tally {
             "colonise": self.colonise,
             "missile": self.missile,
             "moon_shot": self.moon_shot,
+            "acs_defend": self.acs_defend,
             "phalanx": self.phalanx,
             "jump": self.jump,
             "halved": self.halved,

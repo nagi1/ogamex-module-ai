@@ -12,6 +12,8 @@ use OGame\Enums\CharacterClass;
 use OGame\Factories\GameMissionFactory;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\AcsDefendMission;
+use OGame\GameMissions\AttackMission;
 use OGame\GameMissions\BattleEngine\PhpBattleEngine;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\ExpeditionMission;
@@ -20,6 +22,7 @@ use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Http\Controllers\GalaxyController;
 use OGame\Models\BattleReport;
+use OGame\Models\BuddyRequest;
 use OGame\Models\DebrisField;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\FleetMission;
@@ -38,7 +41,8 @@ use ReflectionMethod;
 
 /**
  * Training only (plan/rl/world-sim-spec.md, `world`): the second mission referee. DrawAiMissionCasesAction covers
- * transport, deploy, espionage, attack and recycle; this one covers colonise, expedition, missile and moon destruction.
+ * transport, deploy, espionage, attack and recycle; this one covers colonise, expedition, missile,
+ * moon destruction and ACS defend.
  * Same method: every case runs in a savepoint rolled back before the next, on the universe's real accounts, through
  * the host's own calls (`createNewFromPlanet` for colonise, expedition and moon destruction; `GalaxyController::missileAttack`
  * for missiles), with the frozen clock moved to the arrival (an expedition: arrival plus holding time) and the return,
@@ -55,7 +59,7 @@ use ReflectionMethod;
  * `settings`: fleet speeds (war, peaceful, holding), economy_speed, expedition weights/multipliers, planet_fields_bonus.
  *
  * Case (all):
- *   index, mission ("colonise"|"expedition"|"missile"|"moon_destruction"), mission_type (host id 7, 15, 10, 9),
+ *   index, mission ("colonise"|"expedition"|"missile"|"moon_destruction"|"acs_defend"), mission_type (host id 7, 15, 10, 9, 5),
  *   case_seed, perturbation (string|null: an input a player gets wrong, one case in eight),
  *   input{origin: planetState, target: planetState|null, target_coordinates[g,s,p], target_type (1 planet, 2 debris,
  *     3 moon, 4 deep space), origin_player{id,class,research{id:level}}, target_player|null, units{unitId:n}, cargo[m,c,d],
@@ -84,6 +88,11 @@ use ReflectionMethod;
  *     seed, the first draw), rolls{destroy, loss}|null (the next two getInt(1,100) draws, taken only when the attacker won),
  *     attempted, chance{destroy, loss} (host formulas, for the consistency check only), deathstars_before,
  *     deathstars_after (return fleet), roll_consistent.
+ *   acs_defend: the sender holds at a buddy's planet (an accepted buddy request, left out by the `not_mates`
+ *     perturbation) while a third account's attack, sent at the same second, lands there; `input.raid{origin, player,
+ *     units, speed}`. arrival is the attack's second: time, target_before, target_after, debris_after, battle
+ *     (battleReport)|null, defend_after (the holding mission's flight after the fight)|null, raid_return (flight)|null.
+ *     `return` is the defender's return home, `defend_return` its flight. The hold may end before the attack lands.
  */
 class DrawAiMoreMissionCasesAction
 {
@@ -95,6 +104,7 @@ class DrawAiMoreMissionCasesAction
         'expedition' => ExpeditionMission::class,
         'missile' => MissileMission::class,
         'moon_destruction' => MoonDestructionMission::class,
+        'acs_defend' => AcsDefendMission::class,
     ];
 
     private const SPEEDS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0];
@@ -104,6 +114,7 @@ class DrawAiMoreMissionCasesAction
         'expedition' => ['fuel_short', 'missing_units', 'no_astrophysics', 'not_deep_space'],
         'missile' => ['too_many_missiles', 'own_target', 'no_missiles'],
         'moon_destruction' => ['fuel_short', 'missing_units', 'no_deathstar', 'no_moon', 'target_is_planet'],
+        'acs_defend' => ['fuel_short', 'missing_units', 'not_mates'],
     ];
 
     private const MAX_STOCK = 5_000_000;
@@ -206,6 +217,7 @@ class DrawAiMoreMissionCasesAction
                     'colonise' => $this->colonise($ids, $start, $caseSeed, $perturbation),
                     'expedition' => $this->expedition($ids, $start, $caseSeed, $perturbation),
                     'missile' => $this->missile($ids, $start, $caseSeed, $perturbation),
+                    'acs_defend' => $this->acsDefend($ids, $start, $caseSeed, $perturbation),
                     default => $this->moonDestruction($ids, $start, $caseSeed, $perturbation),
                 };
         } finally {
@@ -791,7 +803,102 @@ class DrawAiMoreMissionCasesAction
         );
     }
 
-    /** Ships and defences on the moon half of the time, so the fight is not always a walkover. */
+    // ------------------------------------------------------------- ACS defend
+
+    /**
+     * @param  list<int>  $ids  at least three
+     * @return array<string, mixed>
+     */
+    private function acsDefend(array $ids, int $start, int $caseSeed, string|null $perturbation): array
+    {
+        [$owner, $mate, $raider] = array_slice($this->random->shuffleArray($ids), 0, 3);
+        [$originId, $targetId, $raidId] = array_map(fn (int $id): int => $this->freshPlayer($id)->planets->allPlanets()[0]->getPlanetId(), [$owner, $mate, $raider]);
+        foreach ([$owner, $mate, $raider] as $id) {
+            $this->drawPlayer($id);
+        }
+        if ($perturbation !== 'not_mates') {
+            BuddyRequest::query()->create(['sender_user_id' => $owner, 'receiver_user_id' => $mate, 'status' => BuddyRequest::STATUS_ACCEPTED]);
+        }
+        $this->forget();
+        $this->stockMoon($targetId, $start);
+        $coordinate = $this->freshPlanet($targetId)->getPlanetCoordinates();
+
+        $units = $this->someShips();
+        $origin = $this->freshPlanet($originId);
+        $speed = $this->pick(self::SPEEDS);
+        $hold = $this->random->getInt(0, 3);
+        $cargo = $this->cargo($units->getTotalCargoCapacity($origin->getPlayer() ?? throw new Exception('No owner.')), 0.5);
+        $this->stockOrigin($originId, $units, $cargo, $this->fuel($origin, $units, $coordinate, $hold, $speed), $perturbation, $start);
+        $raid = $this->someShips();
+        $raidSpeed = $this->pick(self::SPEEDS);
+        $this->stockOrigin($raidId, $raid, [0, 0, 0], $this->fuel($this->freshPlanet($raidId), $raid, $coordinate, 0, $raidSpeed), null, $start);
+        $this->forget();
+        foreach ([$originId, $targetId, $raidId] as $planetId) {
+            $this->freshPlanet($planetId)->update();
+        }
+        $this->forget();
+
+        $input = $this->input($originId, $targetId, $coordinate, PlanetType::Planet, $owner, $mate, $units, $cargo, $speed, $hold)
+            + ['raid' => ['origin' => $this->planetState($raidId), 'player' => $this->playerState($raider), 'units' => (object) $this->counts($raid), 'speed' => $raidSpeed]];
+        $service = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($owner)]);
+        app()->instance(Randomizer::class, new Randomizer(new Mt19937($caseSeed)));
+        try {
+            $sent = $service->createNewFromPlanet($this->freshPlanet($originId), $coordinate, PlanetType::Planet, AcsDefendMission::getTypeId(), $units, new Resources($cargo[0], $cargo[1], $cargo[2], 0), $speed, $hold);
+        } catch (Exception $refusal) {
+            return ['input' => $input, 'dispatch' => ['accepted' => false, 'error' => $refusal->getMessage()], 'arrival' => null, 'return' => null];
+        }
+        $dispatch = ['accepted' => true, 'error' => null, 'departure' => $sent->time_departure, 'arrival' => $sent->time_arrival, 'fuel' => (int) $sent->deuterium_consumption, 'holding_seconds' => (int) $sent->time_holding, 'origin_after' => $this->planetState($originId)];
+        $raidService = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($raider)]);
+        $attack = $raidService->createNewFromPlanet($this->freshPlanet($raidId), $coordinate, PlanetType::Planet, AttackMission::getTypeId(), $raid, new Resources(0, 0, 0, 0), $raidSpeed, 0);
+
+        // Both left at the same second; the fight is processed at the attack's arrival, the hold's end after it.
+        $hit = (int) $attack->time_arrival;
+        SimulatedTime::freezeAt(Date::createFromTimestamp($hit));
+        $targetBefore = $this->updatedState($targetId);
+        $reports = (int) (BattleReport::query()->max('id') ?? 0);
+        $raidService->processDueMissionEventsForMissionId($attack->id);
+        $this->forget();
+        $report = BattleReport::query()->where('id', '>', $reports)->orderBy('id')->first();
+        $holding = FleetMission::query()->whereKey($sent->id)->where('processed', 0)->first();
+        $raidBack = FleetMission::query()->where('parent_id', $attack->id)->first();
+        $arrival = [
+            'time' => $hit,
+            'target_before' => $targetBefore,
+            'target_after' => $this->planetState($targetId),
+            'debris_after' => $this->debris($coordinate),
+            'battle' => $report === null ? null : $this->battleReport($report),
+            'defend_after' => $holding === null ? null : $this->flight($holding),
+            'raid_return' => $raidBack === null ? null : $this->flight($raidBack),
+        ];
+
+        if (FleetMission::query()->where('parent_id', $sent->id)->doesntExist()) {
+            SimulatedTime::freezeAt(Date::createFromTimestamp(max($hit, (int) $sent->time_arrival)));
+            $service->processDueMissionEventsForMissionId($sent->id);
+            $this->forget();
+        }
+        $back = FleetMission::query()->where('parent_id', $sent->id)->first();
+
+        return [
+            'input' => $input,
+            'dispatch' => $dispatch,
+            'arrival' => $arrival,
+            'defend_return' => $back === null ? null : $this->flight($back),
+            'return' => $back === null ? null : $this->comeHome($service, $back, $originId),
+        ];
+    }
+
+    /** One to three kinds of flying ship, a few hundred at most of each. */
+    private function someShips(): UnitCollection
+    {
+        $units = new UnitCollection();
+        foreach (array_slice($this->random->shuffleArray($this->flyingShips()), 0, $this->random->getInt(1, 3)) as $ship) {
+            $units->addUnit($ship, $this->logUniform(200));
+        }
+
+        return $units;
+    }
+
+    /** Ships and defences on the moon (or planet) half of the time, so the fight is not always a walkover. */
     private function stockMoon(int $moonId, int $start): void
     {
         $columns = $this->zeroUnits();
@@ -1031,6 +1138,9 @@ class DrawAiMoreMissionCasesAction
         $debris = $report->debris ?? [];
 
         return [
+            'moon_chance' => (int) ($report->general['moon_chance'] ?? 0),
+            'moon_created' => (bool) ($report->general['moon_created'] ?? false),
+            'repaired' => (object) $this->byId($report->repaired_defenses ?? []),
             'attacker' => $side($report->attacker ?? []),
             'defender' => $side($report->defender ?? []),
             'loot' => [(int) ($loot['metal'] ?? 0), (int) ($loot['crystal'] ?? 0), (int) ($loot['deuterium'] ?? 0)],

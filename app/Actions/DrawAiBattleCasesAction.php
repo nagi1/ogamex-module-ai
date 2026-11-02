@@ -47,7 +47,6 @@ class DrawAiBattleCasesAction
         $defender = $target->getPlayer() ?? throw new RuntimeException('The target planet has no owner.');
         $found = [$this->research($attacker), $this->research($defender), $this->unitsOn($target), $target->getResources(), $defender->getUser()->tactical_retreat_ratio];
 
-        $catalogue['non_combatants'] = $this->nonCombatants($target);
         $caps = $this->buildCaps($target);
         $random = new Randomizer(new Mt19937($seed));
         // The simulator has no tactical retreat (raid-sim-spec.md), so the defender never flees here.
@@ -165,24 +164,6 @@ class DrawAiBattleCasesAction
         }
 
         return $last->attackerShips->getAmount() > 0 ? 'attacker' : 'defender';
-    }
-
-    /**
-     * Every unit the host leaves out of a planet's defence (`DefenderFleet::fromPlanet`), found by asking it.
-     *
-     * @return list<int>
-     */
-    private function nonCombatants(PlanetService $planet): array
-    {
-        $all = new UnitCollection();
-        foreach (ObjectService::getUnitObjects() as $unit) {
-            $all->addUnit($unit, 1);
-        }
-        $this->placeOnPlanet($planet, $all, new Resources(0, 0, 0, 0));
-        $fighting = array_map(static fn ($entry): int => $entry->unitObject->id, DefenderFleet::fromPlanet($planet)->units->units);
-        $this->placeOnPlanet($planet, new UnitCollection(), new Resources(0, 0, 0, 0));
-
-        return array_values(array_diff(array_map(static fn (UnitObject $unit): int => $unit->id, ObjectService::getUnitObjects()), $fighting));
     }
 
     /**

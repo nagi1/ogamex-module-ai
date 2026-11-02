@@ -149,8 +149,6 @@ pub struct Universe {
     pub roles: Vec<usize>,
     pub players: Vec<Player>,
     pub ledgers: Vec<Ledger>,
-    /// Per account, the second it joined an alliance (row 15), or `None` if it never did.
-    pub alliance_at: Vec<Option<f64>>,
     pub quit: Vec<Option<f64>>,
     pub gone: Vec<bool>,
     standing: Option<Vec<f64>>,
@@ -161,6 +159,8 @@ pub struct Universe {
     pub rank: Vec<f64>,
     moon_shots: bool,
     moon_feed: bool,
+    /// L5 arm: alliance members hold at a mate's planet that a raid is flying at.
+    acs_defend: bool,
     /// The share of its planets each account wants mooned, when accounts differ in that: real mid players hold 1 to 12 moons
     /// on about 10 planets, and the top tenth a moon on almost every planet.
     moon_taste: Option<Vec<f64>>,
@@ -243,6 +243,7 @@ impl Universe {
             let join = 3.0 * DAY + -unit(&mut rng).ln() * ALLIANCE_MEAN_DAYS * DAY;
             if join < quits { alliance_at[a] = Some(join) }
         }
+        world.alliance_at = alliance_at;
 
         let mut players: Vec<Player> = (0..accounts).map(|a| {
             let s = seed.wrapping_mul(100).wrapping_add(a as u64);
@@ -279,9 +280,9 @@ impl Universe {
             m.doubler = on("doubler");
         }
         Universe {
-            cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(), alliance_at,
+            cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
-            moon_shots: on("moonstack"), moon_feed: on("moonfeed"),
+            moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"),
             moon_taste: on("moontaste").then(|| { let mut draw = seed ^ 0x4d00_a7e5; (0..accounts).map(|_| unit(&mut draw)).collect() }),
         }
     }
@@ -311,14 +312,18 @@ impl Universe {
         if let Some(Some(k)) = pick { self.world.commit(&self.cat, a, k) }
         let persona = self.players[owner].act(&mut self.world, &self.cat, a, &mut self.ledgers[owner]);
         // Row 64: alliance members shoot moons for each other at their logins (membership is the season's data).
-        if self.moon_shots && a == owner && self.alliance_at[owner].is_some_and(|join| t >= join) {
+        if self.moon_shots && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
             let wants: Vec<bool> = (0..self.accounts()).map(|b| self.wants_moon(b)).collect();
-            let (alliance_at, gone) = (&self.alliance_at, &self.gone);
+            let (alliance_at, gone) = (self.world.alliance_at.clone(), &self.gone);
             players::moon_shot(&mut self.world, &self.cat, a, |b| wants[b] && alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut self.ledgers[owner]);
             if wants[owner] {
                 let wall = self.players[owner].miner().doctrine.defence.clone();
                 players::ready_for_moon(&mut self.world, &self.cat, a, self.moon_feed, &wall);
             }
+        }
+        if self.acs_defend && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
+            let gone = &self.gone;
+            players::defend_mate(&mut self.world, &self.cat, a, |b| !gone[b], &mut self.ledgers[owner]);
         }
         match (pick, persona) {
             (Some(Some(_)), _) => {}
@@ -389,7 +394,7 @@ impl Universe {
         [
             (1.0 + held.total.max(0) as f32 / speed_days).ln(), held.economy as f32 / total, held.research as f32 / total, held.military as f32 / total,
             planets.len() as f32, planets.iter().filter(|&&s| self.world.moons[s]).count() as f32, galaxies.len() as f32,
-            f32::from(self.alliance_at[owner].is_some_and(|join| midnight >= join)),
+            f32::from(self.world.alliance_at[owner].is_some_and(|join| midnight >= join)),
         ]
     }
 
@@ -408,15 +413,15 @@ impl Universe {
                 // Membership follows today's standing both ways: an alliance drops a member that falls away.
                 let playing = self.world.games[a].horizon > midnight && midnight >= 3.0 * DAY;
                 let placed = playing && draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p;
-                if placed != self.alliance_at[a].is_some() { self.alliance_at[a] = placed.then_some(midnight) }
+                if placed != self.world.alliance_at[a].is_some() { self.world.alliance_at[a] = placed.then_some(midnight) }
             }
         }
         if self.recruit {
             let top = n.div_ceil(10);
             for (rank, &a) in ranked.iter().enumerate() {
                 self.top_days[a] = if rank < top { self.top_days[a] + 1 } else { 0 };
-                if self.top_days[a] >= RECRUIT_DAYS && self.alliance_at[a].is_none() && !self.world.inactive(&self.cat, a, midnight) {
-                    self.alliance_at[a] = Some(midnight);
+                if self.top_days[a] >= RECRUIT_DAYS && self.world.alliance_at[a].is_none() && !self.world.inactive(&self.cat, a, midnight) {
+                    self.world.alliance_at[a] = Some(midnight);
                 }
             }
         }

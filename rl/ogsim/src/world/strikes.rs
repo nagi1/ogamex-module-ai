@@ -191,7 +191,7 @@ impl World {
         let mut cargo = self.fleets[f].cargo;
         cargo[2] += self.fleets[f].fuel / 2.0;
         let seed = self.stream.int(0, i64::MAX) as u64;
-        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
+        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, allies: &[], defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
         let engine = match self.recorded.take() {
             Some(fight) => fight.engine,
             None => {

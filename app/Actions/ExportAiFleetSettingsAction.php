@@ -24,7 +24,7 @@ use ReflectionProperty;
  */
 class ExportAiFleetSettingsAction
 {
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     /** Moon gear levels tabulated (sensor phalanx range, jump gate cooldown); no account builds either this high. */
     private const MOON_GEAR_LEVELS = 30;
@@ -54,6 +54,8 @@ class ExportAiFleetSettingsAction
             'officers' => $this->officers($player->getUser()),
             'moon_gear' => $this->moonGear($player),
             'halving' => $this->halving(),
+            // L5: whether ACS missions may fly at all on this universe.
+            'alliance_combat_system' => (bool) $settings->allianceCombatSystemOn(),
         ];
     }
 

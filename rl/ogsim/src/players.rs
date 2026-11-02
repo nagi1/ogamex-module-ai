@@ -58,6 +58,8 @@ pub struct Ledger {
     /// Missiles fired, and per struck slot the largest salvo that reached it.
     pub missiles: i64,
     pub struck: HashMap<usize, i64>,
+    /// L5: holds sent to a mate's planet under attack.
+    pub defends: usize,
     /// How many events of the world's log have been read.
     read: usize,
 }
@@ -804,6 +806,46 @@ fn kept(w: &World, cat: &Catalogue, a: usize) -> [f64; 3] {
     keep
 }
 
+/// The warships on a planet that fly.
+fn warships(rules: &Rules, research: &HashMap<u32, u32>, counts: &[u64]) -> Vec<(u32, i64)> {
+    stack(rules, counts).into_iter()
+        .filter(|&(id, _)| movable(rules, id, research) && rules.units.index(id as i64).is_some_and(|u| rules.units.kind.get(u) == Some(&UnitKind::MilitaryShip)))
+        .collect()
+}
+
+/// L5: an alliance member whose warships reach a mate's planet before a raid lands there holds at it, when the planet
+/// alone would lose and the two together destroy the raid in three rounds without being worn down: the help a player
+/// in an alliance gives (gate 3). Raids landing soonest go first, one hold per planet.
+pub fn defend_mate(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) -> bool, ledger: &mut Ledger) -> bool {
+    let now = w.games[a].t;
+    let rules = Arc::clone(&w.rules[a]);
+    let research = w.research(cat, a);
+    let ships = warships(&rules, &research, &w.yards[a].counts);
+    if ships.is_empty() || !rules.settings.alliance_combat_system { return false }
+    let mut raids: Vec<(usize, f64, usize, Vec<(u32, i64)>)> = w.fleets.iter()
+        .filter(|f| f.mission == Mission::Attack && !f.returning && !f.moon && f.arrive > now && w.account_of(f.owner) != w.account_of(a))
+        .filter(|f| w.mates(a, f.target, now) && mate(w.account_of(f.target)))
+        .map(|f| (f.target, f.arrive, f.owner, f.ships.clone())).collect();
+    raids.sort_by(|x, y| x.1.total_cmp(&y.1));
+    let ours = strength(&rules, &research, &ships);
+    for (target, lands, raider, raid) in raids {
+        if w.fleets.iter().any(|f| f.owner == a && f.mission == Mission::AcsDefend && f.target == target && !f.returning) { continue }
+        let flight = fleet::flight_seconds(&rules.settings, Mission::AcsDefend as u32, account_distance(w, a, target), rules.fleet.slowest_speed(&ships, &research), 10.0) as f64;
+        if now + flight >= lands { continue }
+        let planet = strength(&w.rules[target], &w.research(cat, target), &stack(&w.rules[target], &w.yards[target].counts));
+        let (attack, hull) = strength(&w.rules[raider], &w.research(cat, raider), &raid);
+        let alone_loses = planet.0 * 3.0 < hull;
+        let together_win = (ours.0 + planet.0) * 3.0 >= hull && attack * 3.0 <= SAFE_SHARE * (ours.1 + planet.1);
+        if !(alone_loses && together_win) { continue }
+        let hold = ((lands - now - flight) / 3600.0).floor() as i64 + 1;
+        if w.defend(cat, a, target, &ships, [0.0; 3], 10.0, hold).is_ok() {
+            ledger.defends += 1;
+            return true;
+        }
+    }
+    false
+}
+
 /// Row 64: a moon shot for an alliance mate, the way players make moons: the shot `shot_size` gives, sent at the nearest
 /// mate's planet that has no moon and guns to shoot it all down in three rounds (the moon forms at the receiver). Short
 /// of fighters, the shooter orders them from what its queues do not need. Returns whether a shot left.
@@ -1486,9 +1528,7 @@ impl FleetSaver {
 fn station(w: &mut World, cat: &Catalogue, a: usize, moon: usize, ledger: &mut Ledger) {
     let rules = Arc::clone(&w.rules[a]);
     let research = w.research(cat, a);
-    let ships: Vec<(u32, i64)> = stack(&rules, &w.yards[a].counts).into_iter()
-        .filter(|&(id, _)| movable(&rules, id, &research) && rules.units.index(id as i64).is_some_and(|u| rules.units.kind.get(u) == Some(&UnitKind::MilitaryShip)))
-        .collect();
+    let ships = warships(&rules, &research, &w.yards[a].counts);
     if ships.is_empty() { return }
     let hold = rules.combat.capacity(&ships.iter().copied().collect(), &research) as f64;
     let fuel = fleet::consumption(&rules.settings, &rules.fleet, &ships, &research, account_distance(w, a, moon), 0, 10.0) as f64;
@@ -2248,6 +2288,33 @@ mod tests {
         assert!(sent * each >= debris.maximum_moon_chance * 100_000.0 && (sent - 1.0) * each < debris.maximum_moon_chance * 100_000.0, "{sent} fighters");
         assert!(!moon_shot(&mut world, &cat, 0, |b| b == 1, &mut ledger), "one shot at a time");
         assert!(!moon_shot(&mut world, &cat, 0, |b| b == 2, &mut ledger), "only a mate is shot at");
+    }
+
+    /// L5: an alliance member with warships near a mate's planet holds there before a raid lands, and the raid meets
+    /// both; outside the alliance, or with a hold already there, nothing is sent.
+    #[test]
+    fn an_alliance_member_holds_at_a_raided_mate_and_the_raid_meets_both() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let fighter = Kit::of(&world, &cat, 0).expect("a fighter hull").fighter;
+        world.coords[2] = Coord { galaxy: 1, system: 60, position: 8 };
+        for a in [0, 2] { world.games[a].planet.res = [1e9; 3] }
+        assert!(world.set_units(&cat, 2, fighter, 2_000) && world.set_units(&cat, 0, fighter, 1_000_000), "both hold fighters");
+        world.dispatch(&cat, 2, 1, Mission::Attack, &[(fighter, 2_000)], [0.0; 3], 10.0).expect("the raid flies");
+        let mut ledger = Ledger::default();
+        assert!(!defend_mate(&mut world, &cat, 0, |_| true, &mut ledger), "no hold for an account outside the alliance");
+        world.alliance_at[0] = Some(0.0);
+        world.alliance_at[1] = Some(0.0);
+        assert!(defend_mate(&mut world, &cat, 0, |_| true, &mut ledger), "the member holds at its mate");
+        assert!(!defend_mate(&mut world, &cat, 0, |_| true, &mut ledger), "one hold per planet");
+        let (raid, hold) = (&world.fleets[0], world.fleets.iter().find(|f| f.mission == Mission::AcsDefend).expect("a hold"));
+        assert!(hold.arrive <= raid.arrive && raid.arrive < hold.arrive + hold.holding, "the hold covers the raid's landing");
+        while !world.events.iter().any(|e| e.kind == EventKind::Fight) {
+            let a = world.next_decision(&cat).expect("the world plays on");
+            world.wait(&cat, a);
+        }
+        let fight = world.events.iter().find(|e| e.kind == EventKind::Fight).unwrap();
+        assert_eq!(fight.ships_lost, vec![(fighter, 2_000)], "the raid fell to the mate's ally");
+        assert!(world.fleets.iter().any(|f| f.mission == Mission::AcsDefend && f.owner == 0), "the ally still holds");
     }
 
     /// M4: a fleeter's warships deploy to its capital's moon; with a gate on two moons the fleet jumps away from the first

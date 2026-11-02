@@ -2,14 +2,17 @@
 
 namespace Modules\AI\Actions;
 
+use OGame\GameMissions\BattleEngine\Models\DefenderFleet;
 use OGame\GameMissions\EspionageMission;
 use OGame\GameMissions\MissileMission;
 use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\UnitObject;
+use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Services\CharacterClassService;
 use OGame\Services\ObjectService;
+use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
 use ReflectionMethod;
@@ -68,7 +71,27 @@ class ExportAiCombatCatalogueAction
             'missions' => $this->missions(),
             'strike' => $this->strike($player, $research, $maxLevel),
             'expedition' => $this->expedition($player),
+            'non_combatants' => $this->nonCombatants($player->planets->allPlanets()[0]),
         ];
+    }
+
+    /**
+     * The units the host leaves out of a planet's fighting forces (DefenderFleet::fromPlanet), asked of a planet holding
+     * one of every unit for the moment of the question; nothing is saved.
+     *
+     * @return list<int>
+     */
+    public function nonCombatants(PlanetService $planet): array
+    {
+        $every = new UnitCollection();
+        foreach (ObjectService::getUnitObjects() as $unit) {
+            $every->addUnit($unit, 1);
+        }
+        $planet->addUnits($every, false);
+        $fighting = array_map(static fn ($entry): int => $entry->unitObject->id, DefenderFleet::fromPlanet($planet)->units->units);
+        $planet->removeUnits($every, false);
+
+        return array_values(array_diff(array_map(static fn (UnitObject $unit): int => $unit->id, ObjectService::getUnitObjects()), $fighting));
     }
 
     /** The priority codes the missile form sends (MissileMission::decodePriority knows 0..9; anything else is the cheapest). */
