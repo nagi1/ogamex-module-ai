@@ -512,3 +512,7 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   research (hundreds of times a season) and the world starts it when the hold ends, as the host's queue does. Now all three
   read `World::committable`; the persona through the model's path matches the rule (labs 149.5, network 10, 48.5M vs 48.9M).
   Every clone, PPO and ES judgement before this commit played under that handicap.
+- **New yardstick (fixed world, 10 seeds):** bc0 sampled 268.8M (research 11%), rule alone 266.5M, bc-t2 greedy 265.3M. From
+  250.5M this morning by the two fixes alone.
+- `labahead` on the fixed world: 265.8M against 268.8M, research unchanged (10.9%): rejected. The lab is busy every day and the
+  capital's lab level is not what holds research at 11%.
