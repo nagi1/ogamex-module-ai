@@ -253,13 +253,15 @@ pub struct Books {
     pub expedition_in: f64,
     /// Cargo destroyed with a fleet in flight (row 23s).
     pub cargo_lost: f64,
+    /// What the merchant paid over what it took, at the score weights: its rates are not those weights.
+    pub merchant_net: f64,
 }
 
 impl Books {
     /// The stock this books says the account should have gained.
     pub fn net(&self) -> f64 {
         self.produced - self.wasted - self.spent_build - self.spent_research - self.spent_units - self.fuel
-            + self.loot_in - self.loot_out + self.expedition_in - self.cargo_lost
+            + self.loot_in - self.loot_out + self.expedition_in - self.cargo_lost + self.merchant_net
     }
 
     pub fn add(&mut self, other: &Books) {
@@ -273,6 +275,7 @@ impl Books {
         self.loot_out += other.loot_out;
         self.expedition_in += other.expedition_in;
         self.cargo_lost += other.cargo_lost;
+        self.merchant_net += other.merchant_net;
     }
 
     /// Books resources at the host's score weights.

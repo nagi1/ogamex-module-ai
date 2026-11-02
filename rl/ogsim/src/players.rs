@@ -367,6 +367,8 @@ pub struct Miner {
     pub lab_first: bool,
     /// A grown account works towards the research network and raises its colonies' labs to the capital's (`network_step`).
     pub network: bool,
+    /// An account with idle surplus trades its richest resource into its poorest at the merchant (`trade_surplus`).
+    pub merchant: bool,
     /// The missiles this account keeps on its capital (a raider's, once defence turned a raid away).
     pub missiles: i64,
     /// Per slot of the account, the interceptors it keeps: as many as the largest salvo that struck it.
@@ -376,6 +378,50 @@ pub struct Miner {
 /// W14: a lab on a colony before the account's research network reads it shortens no research, and the host holds the
 /// account's research for as long as it upgrades (`PlayerService::isBuildingObject`): a player does not build it (gate 3).
 /// Which object sets research time and which research is the network, the catalogue says (gate 1).
+/// `MerchantService::DARK_MATTER_COST`.
+const MERCHANT_COST: i64 = 3500;
+/// `MerchantService::getBaseRate`: metal, crystal, deuterium.
+const MERCHANT_BASE: [f64; 3] = [3.0, 2.0, 1.0];
+/// `generateWeightedRate`: the lowest rate and the step, by resource received.
+const MERCHANT_RANGE: [(f64, f64); 3] = [(2.10, 0.03), (1.40, 0.02), (0.70, 0.01)];
+/// A trade is worth a call when the richest resource is this many times the poorest, by the merchant's own values.
+const MERCHANT_IMBALANCE: f64 = 2.0;
+
+/// `MerchantService::generateWeightedRate`: a triangle over 31 steps, the last step's weight raised to 3 (the code's
+/// `round(1 * 3.14)`, whatever its comment says that does), rounded to 2 places.
+fn merchant_rate(receive: usize, rng: &mut u64) -> f64 {
+    let weight = |i: u64| match i { 30 => 3, 0..=15 => i + 1, _ => 31 - i };
+    let mut draw = crate::next_random(rng) % (0..=30).map(weight).sum::<u64>();
+    let step = (0..=30).find(|&i| { let w = weight(i); if draw < w { true } else { draw -= w; false } }).unwrap_or(30);
+    let (low, increment) = MERCHANT_RANGE[receive];
+    ((low + step as f64 * increment) * 100.0).round() / 100.0
+}
+
+/// One merchant call by capital a holding idle surplus: its richest resource by the merchant's values into its poorest,
+/// up to level with each other and within the store (`MerchantService::executeTrade`). A player's stock of crystal and
+/// deuterium buys nothing without metal (gate 3); which resource is short the numbers say.
+fn trade_surplus(w: &mut World, cat: &Catalogue, a: usize, rng: &mut u64) {
+    if a != w.account_of(a) || w.dark_matter[a] < MERCHANT_COST || !surplus(w, cat, a) { return }
+    let planet = &w.games[a].planet;
+    let value = |r: usize| planet.res[r] / MERCHANT_BASE[r];
+    let order = |x: &usize, y: &usize| value(*x).total_cmp(&value(*y));
+    let (Some(give), Some(receive)) = ((0..3).max_by(order), (0..3).min_by(order)) else { return };
+    if value(give) < MERCHANT_IMBALANCE * value(receive) { return }
+    let budget = (value(give) - value(receive)) / 2.0 * MERCHANT_BASE[give];
+    let exchange = merchant_rate(receive, rng) / MERCHANT_BASE[give];
+    let got = (budget * exchange).min(planet.cap[receive] - planet.res[receive]).floor();
+    if got <= 0.0 { return }
+    let paid = (got / exchange).ceil();
+    w.dark_matter[a] -= MERCHANT_COST;
+    let planet = &mut w.games[a].planet;
+    planet.res[give] -= paid;
+    planet.res[receive] += got;
+    planet.settle();
+    let (mut was, mut now) = ([0.0; 3], [0.0; 3]);
+    (was[give], now[receive]) = (paid, got);
+    w.games[a].planet.books.merchant_net += weighted(now) - weighted(was);
+}
+
 /// Whether the account's capital holds more than its mines can use.
 fn surplus(w: &World, cat: &Catalogue, a: usize) -> bool {
     let capital = &w.games[w.account_of(a)].planet;
@@ -418,7 +464,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, missiles: 0, interceptors: HashMap::default() }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, merchant: false, missiles: 0, interceptors: HashMap::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -1024,7 +1070,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, missiles: 0, interceptors: HashMap::default() };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, merchant: false, missiles: 0, interceptors: HashMap::default() };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
@@ -1187,6 +1233,8 @@ impl Player {
         // A planet struck by missiles keeps interceptors for the next salvo (gate 3).
         if let Some(&salvo) = ledger.struck.get(&a) { self.miner().interceptors.insert(a, salvo); }
         hire_officer(w, a, !matches!(self, Player::Miner(_)));
+        let miner = self.miner();
+        if miner.merchant { trade_surplus(w, cat, a, &mut miner.rng) }
         match self {
             Player::Miner(p) => p.act(w, cat, a),
             Player::Raider(p) => p.act(w, cat, a, ledger),
@@ -1482,6 +1530,41 @@ mod tests {
 
     /// Row 77: a planet whose stock covers its next building many times over builds a host time modifier; one that just
     /// covers it builds the building.
+    #[test]
+    fn the_merchant_draws_the_hosts_rates() {
+        let mut rng = 7;
+        for (receive, (low, high)) in [(0, (2.10, 3.00)), (1, (1.40, 2.00)), (2, (0.70, 1.00))] {
+            let rates: Vec<f64> = (0..20_000).map(|_| merchant_rate(receive, &mut rng)).collect();
+            assert!(rates.iter().all(|&r| r >= low - 1e-9 && r <= high + 1e-9), "a rate outside the host's range");
+            // 258 weights in all, 16 on the middle step, 3 on the top one.
+            let middle = (low + high) / 2.0;
+            let share = |x: f64| rates.iter().filter(|&&r| (r - x).abs() < 1e-6).count() as f64 / 20_000.0;
+            assert!((share(middle) - 16.0 / 258.0).abs() < 0.01, "middle step: {}", share(middle));
+            assert!((share(high) - 3.0 / 258.0).abs() < 0.005, "top step: {}", share(high));
+        }
+    }
+
+    #[test]
+    fn a_rich_capital_short_of_one_resource_calls_the_merchant_and_stays_balanced() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        cat.refresh(&mut world.games[0].planet);
+        world.dark_matter[0] = MERCHANT_COST;
+        world.games[0].planet.cap = [1e15; 3];
+        world.games[0].planet.res = [0.0, 1e13, 0.0];
+        let before = weighted(world.games[0].planet.res);
+        trade_surplus(&mut world, &cat, 0, &mut 3);
+        let planet = &world.games[0].planet;
+        assert!(planet.res[1] < 1e13, "the crystal went nowhere");
+        assert!(planet.res[0] > 0.0 || planet.res[2] > 0.0, "nothing came back");
+        assert_eq!(world.dark_matter[0], 0, "the call costs its dark matter");
+        assert!((weighted(planet.res) - before - world.games[0].planet.books.merchant_net).abs() < 1.0, "the books do not explain the trade");
+        let traded = planet.res;
+        world.games[0].planet.deliver([0.0; 3]);
+        assert_eq!(world.games[0].planet.res, traded, "the next delivery undid the trade");
+        trade_surplus(&mut world, &cat, 0, &mut 3);
+        assert_eq!(world.dark_matter[0], 0, "no dark matter, no call");
+    }
+
     #[test]
     fn only_a_capital_holding_surplus_works_towards_the_network() {
         let Some((cat, mut world)) = bare(1) else { return };

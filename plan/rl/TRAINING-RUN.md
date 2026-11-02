@@ -183,6 +183,13 @@ waits for a payable colony lab. On the teacher with `moontaste`: HDS 0.769 to 0.
 day 364 104M to 209M points, stock 134B to 34B, pooled labs 10 to 180. Without the surplus gate mid accounts lost their
 economy (median score 6.7M to 1.4M). Top research share stays 1.4%: their labs sit idle 47% of the time. Open.
 
+**Kept: `merchant` (row W16, the trade only).** A capital with a resource piled at more than `MERCHANT_IMBALANCE` times its
+scarcest pays 3,500 dark matter and swaps at a rate drawn the way the host draws it. Against `rule-net3` on 10 seeds x 365
+days: HDS 0.788 against 0.786 and AUC 0.902 against 0.897, no change on the scorer; top research 3.89M against 2.59M and top
+labs idle 25% against 47%. Kept because it is a real mechanic that hurts nothing. The first run of it (top 221M, research
+3.54M) is void: the trade did not write the stored stock, so the next delivery undid the payment and the merchant printed
+resources. The health check caught it (`unexplained_over_cap` 6); a test now holds the case.
+
 ## The yardstick was noisy (fixed 2 Nov)
 
 `hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,
