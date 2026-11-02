@@ -1326,17 +1326,21 @@ fn chain_energy(cat: &Catalogue, planet: &Planet) -> f64 {
         .fold(0.0, |short: f64, &need| short.max(need - planet.energy_max))
 }
 
-/// Whether planet a can come by the energy its field chain asks for: units it can pay for within `CHAIN_POWER_DAYS` of
-/// production. A player who cannot makes do with the fields it has rather than hold the last ones for good (gate 3).
+/// Whether planet a can come by the energy its field chain asks for: units the account can pay for from its stock and
+/// `CHAIN_POWER_DAYS` of production. A player who cannot makes do with the fields it has rather than hold the last ones
+/// for good (gate 3). The account's, not the planet's: a planet's store dips at every start, and one dip let the last
+/// fields go while the satellites were on order, sealing a capital that had the energy a day later.
 fn chain_powered(w: &World, cat: &Catalogue, a: usize) -> bool {
     let planet = &w.games[a].planet;
+    let slots = w.planets_of(w.account_of(a));
+    let wealth = |r: usize| slots.iter().map(|&s| { let p = &w.games[s].planet; p.res[r] + CHAIN_POWER_DAYS * 24.0 * p.rate[r].max(0.0) }).sum::<f64>();
     let short = chain_energy(cat, planet);
     if short <= 0.0 { return true }
     let Some((u, each)) = energy_unit(w, cat, a, false) else { return false };
     let coming: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
     let needed = ((short / each).ceil() - coming as f64).max(0.0);
     let price = w.rules[a].units.units[u].price;
-    (0..3).all(|r| price[r] * needed <= planet.res[r] + CHAIN_POWER_DAYS * 24.0 * planet.rate[r].max(0.0))
+    (0..3).all(|r| price[r] * needed <= wealth(r))
 }
 
 fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
@@ -1387,7 +1391,7 @@ fn field_chain(cat: &Catalogue, planet: &Planet) -> Option<(Vec<(usize, u32)>, u
 /// down to what its chain still consumes, its building queue builds the chain's next startable object (or waits for
 /// one), and the capital's research queue researches the chain of whichever of its planets is short. None leaves the
 /// pick to the ordinary rule.
-fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> {
+pub(crate) fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> {
     let queue = w.games[a].queue;
     // The lab starts the chain while a planet still has RESEARCH_LEAD times its reserve free: research takes weeks, and a
     // building queue that waits on it at the last fields idles for them (row 46: the stack lost C's growth that way).
@@ -1395,7 +1399,9 @@ fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> 
     let short = |slot: usize| {
         let planet = &w.games[slot].planet;
         let (chain, fields) = field_chain(cat, planet)?;
-        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= lead * fields && chain_powered(w, cat, slot)).then_some(chain)
+        // The building queue always keeps them: a planet that spends its last field never adds one again, while one that
+        // keeps it forgoes a single level. Energy only decides whether research starts the chain early.
+        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= lead * fields && (queue == 0 || chain_powered(w, cat, slot))).then_some(chain)
     };
     let slots = match queue {
         0 => vec![a],
@@ -1701,6 +1707,14 @@ pub enum Player {    Miner(Miner),
 
 impl Player {
     /// The economy every persona shares.
+    pub fn miner_ref(&self) -> &Miner {
+        match self {
+            Player::Miner(m) => m,
+            Player::Raider(r) => &r.miner,
+            Player::Saver(s) => &s.miner,
+        }
+    }
+
     pub fn miner(&mut self) -> &mut Miner {
         match self {
             Player::Miner(m) => m,
@@ -1915,9 +1929,10 @@ mod tests {
 
     /// Row 45 FR: a planet whose free fields are down to what its field-adding chain still consumes builds that chain,
     /// prerequisite first, and spends no reserved field on anything else; with fields to spare the ordinary rule picks.
-    /// A planet that cannot make the energy its next field adder asks for spends the field: waiting froze its queue for good.
+    /// A planet that cannot make the energy its next field adder asks for still keeps the field from its building queue (a
+    /// spent last field seals it for good), and its research does not start the chain early.
     #[test]
-    fn a_planet_that_cannot_power_its_field_chain_gives_up_the_reserve() {
+    fn a_planet_short_of_its_field_chains_energy_keeps_the_reserve_and_researches_nothing_for_it() {
         let Some((mut cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
         world.games[0].queue = 0;
         let (chain, fields) = field_chain(&cat, &world.games[0].planet).expect("an object that adds fields");
@@ -1933,7 +1948,9 @@ mod tests {
         let adder = chain.iter().find(|c| cat.objects[c.0].fields_added.iter().any(|&f| f > 0)).expect("the adder").0;
         cat.objects[adder].energy_price = vec![1e15; cat.objects[adder].price.len()];
         assert!(chain_energy(&cat, &world.games[0].planet) > 0.0);
-        assert!(field_reserve(&world, &cat, 0).is_none(), "a planet that can never pay held its last field");
+        assert!(field_reserve(&world, &cat, 0).is_some(), "a planet short of energy spent its last field");
+        world.games[0].queue = 1;
+        assert!(field_reserve(&world, &cat, 0).is_none(), "research started a chain the planet cannot power");
     }
 
     #[test]

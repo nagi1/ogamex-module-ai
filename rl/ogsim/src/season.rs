@@ -434,6 +434,12 @@ impl Universe {
             cands[k * LEARNER_CAND + CAND_DIM] = 0.0;
             legal[k] = u8::from(world.legal(cat, a, k));
         }
+        // A planet down to the fields its field-adding chain needs takes that chain's next step or waits, as the persona
+        // does: one other building there takes the field the chain needed and the planet never grows again.
+        let keeps = game.queue == 0 && world.moon_at[a].is_none() && self.players[owner].miner_ref().reserve;
+        if let Some(hold) = keeps.then(|| players::field_reserve(world, cat, a)).flatten() {
+            (0..objects).filter(|&k| Some(k) != hold).for_each(|k| legal[k] = 0);
+        }
         cands[objects * LEARNER_CAND..].fill(0.0);
         if self.advise { cands[advice.unwrap_or(objects) * LEARNER_CAND + CAND_DIM] = 1.0 }
         legal[objects] = 1;
