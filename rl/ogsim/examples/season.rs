@@ -66,7 +66,7 @@ fn main() {
         since,
         login_at: vec![0; accounts],
         counted_login: vec![f64::NEG_INFINITY; accounts],
-        read: 0,
+        read: [0; 2],
         midnight: DAY,
         days,
         seed,
@@ -157,7 +157,8 @@ struct Season<'a, W: Write> {
     /// The last login second counted per account: every planet may decide at it, and it is one login.
     counted_login: Vec<f64>,
     /// How many events of the world's log have been read.
-    read: usize,
+    /// How far the world's event log and its moon gear log have been read.
+    read: [usize; 2],
     /// The next midnight no line has been written for.
     midnight: f64,
     days: usize,
@@ -436,6 +437,7 @@ impl<W: Write> Season<'_, W> {
             "mod_research": levels(1),
             "network": self.u.cat.research_network.map_or(0, |n| self.u.world.games[a].planet.levels[n]),
             "built": self.u.cat.objects.iter().enumerate().filter(|(_, o)| o.queue == 0).map(|(k, o)| (o.id, planets.iter().map(|&slot| self.u.world.games[slot].planet.levels[k]).collect::<Vec<_>>())).collect::<Vec<_>>(),
+            "moon_built": self.u.cat.objects.iter().enumerate().filter(|(_, o)| o.queue == 0 && o.on_moon).map(|(k, o)| (o.id, planets.iter().filter_map(|&p| self.u.world.moon_of[p]).map(|m| self.u.world.games[m].planet.levels[k]).collect::<Vec<_>>())).collect::<Vec<_>>(),
             "tech": self.u.cat.objects.iter().enumerate().filter(|(_, o)| o.queue == 1).map(|(k, o)| (o.id, self.u.world.games[a].planet.levels[k])).collect::<Vec<_>>(),
             "tech_wait": self.u.cat.objects.iter().enumerate().filter(|&(k, o)| o.queue == 1 && self.u.world.legal(&self.u.cat, a, k)).map(|(k, o)| (o.id, (self.u.cat.wait_seconds(&self.u.world.games[a].planet, k) / 3600.0) as u32, (self.u.cat.build_seconds(&self.u.world.games[a].planet, k) / 3600.0) as u32)).collect::<Vec<_>>(),
             "labs": self.u.cat.modifiers[1].first().map_or(0, |&(lab, _)| planets.iter().map(|&slot| self.u.world.games[slot].planet.levels[lab]).sum::<u32>()),
@@ -550,11 +552,16 @@ mod health_tests {
 }
 
 /// Reads the events the world wrote since the last call into their day and account.
-fn scan(w: &World, read: &mut usize, roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
+fn scan(w: &World, read: &mut [usize; 2], roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
     delivered.resize(w.games.len(), [0.0; 3]);
-    while *read < w.events.len() {
-        let e = &w.events[*read];
-        *read += 1;
+    for &(slot, time, jump) in &w.gear_log[read[1]..] {
+        let tally = &mut per_day[((time / DAY) as usize).min(days - 1)][w.account_of(slot)];
+        if jump { tally.jump += 1 } else { tally.phalanx += 1 }
+    }
+    read[1] = w.gear_log.len();
+    while read[0] < w.events.len() {
+        let e = &w.events[read[0]];
+        read[0] += 1;
         let recipient = match (e.kind, e.mission) {
             (EventKind::Return, _) => Some(e.owner),
             (EventKind::Arrival, Mission::Transport | Mission::Deploy | Mission::Colonise) => Some(e.target),
@@ -627,6 +634,9 @@ struct Tally {
     colonise: u32,
     missile: u32,
     moon_shot: u32,
+    /// M4: phalanx scans and jump gate jumps.
+    phalanx: u32,
+    jump: u32,
     /// Row 17: every fight, those of them whose debris cleared the host's moon threshold (a roll was made), and the
     /// moons the rolls made. `moon_shot` above is moon *destruction*, a different thing.
     fights: u32,
@@ -654,6 +664,8 @@ impl Tally {
             "colonise": self.colonise,
             "missile": self.missile,
             "moon_shot": self.moon_shot,
+            "phalanx": self.phalanx,
+            "jump": self.jump,
             "fights": self.fights,
             "moon_rolls": self.moon_rolls,
             "moon_made": self.moon_made,

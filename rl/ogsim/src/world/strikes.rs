@@ -228,11 +228,15 @@ impl World {
         });
         self.fleets[f].ships = result.return_fleet.clone().unwrap_or_default().into_iter().collect();
         self.fleets[f].fuel = 0.0;
+        // The loot leaves the moon's books (the host flies none of it home); a moon that falls loses what is left.
+        if let Some(m) = moon {
+            self.games[m].planet.books.loot_out += weighted(result.loot.map(|r| r as f64));
+            self.games[m].planet.res = stock;
+        }
         match (result.moon_destroyed, moon) {
             (true, _) => self.lose_moon(target),
             (false, Some(m)) => {
                 self.yards[m].counts = counts;
-                self.games[m].planet.res = stock;
                 self.games[m].planet.settle();
                 self.sync_units(cat, m);
             }

@@ -14,7 +14,7 @@ use crate::economy::{own_row, Baseline, Catalogue, Planet, WEIGHTS};
 use crate::fleet::{self, Coord, SystemState};
 use crate::score;
 use crate::units::UnitKind;
-use crate::world::{Decision, EventKind, Mission, Outcome, Rules, SpyReport, World};
+use crate::world::{Decision, EventKind, Fleet, Mission, Outcome, Rules, SpyReport, World};
 
 pub(crate) const SLOTS: usize = 4;
 pub(crate) const NEIGHBOURS: usize = 5;
@@ -26,6 +26,8 @@ pub(crate) const RAID_COOLDOWN: f64 = 3.0 * 3600.0;
 pub(crate) const PAYS: f64 = 3.0;
 /// A target whose guns do more than this share of our hull in three rounds is left alone.
 pub(crate) const SAFE_SHARE: f64 = 0.3;
+/// Phalanx scans a moon keeps the deuterium for.
+const SCAN_RESERVE: f64 = 10.0;
 /// The most probes one spy is sent with.
 pub(crate) const SPY_PROBES: i64 = 4;
 /// The interplanetary missiles a raider keeps once a target's defence has turned a raid away: a salvo, as players
@@ -524,6 +526,7 @@ impl Miner {
         }
         if self.satellites {
             power_by_units(w, cat, a, pick);
+            boost_by_units(w, cat, a, pick);
         }
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
@@ -563,6 +566,7 @@ impl Miner {
     /// The persona's build for the deciding queue, with no side effect: the field reserve's chain when it binds, a missing
     /// resource's producer, a wanted ship's prerequisite, then the player rule. Also the teacher a learner clones.
     pub fn pick(&mut self, w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+        if w.moon_at[a].is_some() { return moon_next(w, cat, a).filter(|&k| w.legal(cat, a, k)) }
         if let Some(chain) = self.reserve.then(|| field_reserve(w, cat, a)).flatten() {
             return chain;
         }
@@ -818,16 +822,19 @@ pub fn moon_shot(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) 
     false
 }
 
-/// Row 67: an alliance member readies its first planet with no moon to receive a mate's shot: the cheapest defence the
-/// host has, enough to down the shot in three rounds, paid from that planet's own stock above what it keeps. With `fed`
-/// (row 89) the capital ships a colony the rest of the price: consolidation keeps a colony's store too small to pay it.
-pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize, fed: bool) {
+/// Row 67: an alliance member readies its first planet with no moon to receive a mate's shot: its doctrine's wall (the
+/// unit furthest below its share), else the cheapest defence the host has, enough to down the shot in three rounds,
+/// paid from that planet's own stock above what it keeps. With `fed` (row 89) the capital ships a colony the rest of the
+/// price: consolidation keeps a colony's store too small to pay it.
+pub fn ready_for_moon(w: &mut World, cat: &Catalogue, a: usize, fed: bool, wall: &[(u32, f64)]) {
     let Some((_, _, hull)) = shot_size(w, cat, a) else { return };
     let Some(p) = w.planets_of(a).into_iter().find(|&p| !w.moons[p] && guns(w, cat, p) * 3.0 < hull) else { return };
     let rules = Arc::clone(&w.rules[p]);
-    let Some(u) = (0..rules.units.units.len())
-        .filter(|&u| rules.units.kind.get(u) == Some(&UnitKind::Defence) && rules.units.requirements_met(&w.games[p].planet, u))
-        .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price)))
+    let research = w.research(cat, p);
+    let standing = |u: usize| rules.units.kind.get(u) == Some(&UnitKind::Defence) && rules.units.requirements_met(&w.games[p].planet, u)
+        && strength(&rules, &research, &[(rules.units.units[u].id as u32, 1)]).0 > 0.0;
+    let Some(u) = template_pick(w, p, wall, standing).or_else(|| (0..rules.units.units.len()).filter(|&u| standing(u))
+        .min_by(|&x, &y| weighted(rules.units.units[x].price).total_cmp(&weighted(rules.units.units[y].price))))
     else { return };
     let each = strength(&rules, &w.research(cat, p), &[(rules.units.units[u].id as u32, 1)]).0;
     if each <= 0.0 { return }
@@ -933,6 +940,38 @@ fn feed_colonies(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) 
         let lack = colony_lack(w, cat, colony);
         ship_from_home(w, cat, a, colony, lack, keep);
     }
+    // M4: a moon makes nothing, so everything it builds is carried up from its planet's capital.
+    let moons: Vec<usize> = w.planets_of(a).into_iter().filter_map(|p| w.moon_of[p]).collect();
+    for moon in moons {
+        let res = w.games[moon].planet.res;
+        let mut lack: [f64; 3] = moon_next(w, cat, moon).map_or([0.0; 3], |k| {
+            let price = cat.objects[k].price[w.games[moon].planet.levels[k] as usize];
+            std::array::from_fn(|r| (price[r] - res[r]).max(0.0).ceil())
+        });
+        // A phalanx is read at a raider's every raid: the moon keeps the deuterium for a day of scans.
+        if let Some(gear) = w.rules[moon].settings.moon_gear.as_ref().filter(|g| w.moon_level(cat, moon, g.phalanx_object) > 0) {
+            lack[2] = lack[2].max((SCAN_RESERVE * gear.phalanx_cost - res[2]).max(0.0).ceil());
+        }
+        let underway = w.fleets.iter().any(|f| f.target == moon && f.mission == Mission::Transport && !f.returning);
+        if !underway { ship_from_home(w, cat, a, moon, lack, keep); }
+    }
+}
+
+/// M4: what a moon builds next, as a player builds a moon up (gate 3): the lunar base its fields need when they run out,
+/// else the cheapest building only a moon takes (the phalanx, the gate) that it does not hold yet and whose requirements
+/// stand; only its stock may be missing. Nothing is named: the host's planet types and field tables say which (gate 1).
+fn moon_next(w: &World, cat: &Catalogue, moon: usize) -> Option<usize> {
+    let planet = &w.games[moon].planet;
+    let startable = |k: usize| matches!(cat.stall_of(planet, k), "ok" | "never affordable");
+    if let Some((chain, fields)) = field_chain(cat, planet) {
+        if cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= fields {
+            return chain.into_iter().map(|(k, _)| k).find(|&k| startable(k));
+        }
+    }
+    let price = |k: usize| weighted(cat.objects[k].price[planet.levels[k] as usize]);
+    (0..cat.objects.len())
+        .filter(|&k| cat.objects[k].queue == 0 && cat.objects[k].on_moon && !cat.objects[k].on_planet && planet.levels[k] == 0 && startable(k))
+        .min_by(|&x, &y| price(x).total_cmp(&price(y)))
 }
 
 /// Capital a sends `lack` to its planet `to` in its cargo hull, when it holds that above `keep` and has the ships.
@@ -1037,7 +1076,7 @@ fn energy_unit(w: &World, cat: &Catalogue, a: usize, against_buildings: bool) ->
         })
         .fold(f64::INFINITY, f64::min);
     (0..cat.units.len()).filter_map(|e| {
-        let own = config.unit_production[e].own.as_ref()?;
+        let own = config.unit_production.get(e)?.own.as_ref()?;
         let held = planet.units.get(e).copied().unwrap_or(0) as usize;
         let each = own_row(own, held + 1)[3] - own_row(own, held)[3];
         let u = rules.units.index(cat.units[e])?;
@@ -1059,6 +1098,42 @@ fn power_by_units(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>)
     let amount = within(w, a, u, (short / each).ceil() as u64, saving(w, cat, a, pick));
     if amount > 0 { w.order_units(cat, a, u, amount); }
 }
+
+/// A unit that adds output, by its own row or by raising the mines' (a collector's crawler), is bought while one pays for itself sooner than the building
+/// the queue picked, as a collector does (gate 3), and only to the number the host puts to use; the host's unit tables
+/// say which unit (gate 1).
+fn boost_by_units(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
+    let planet = &w.games[a].planet;
+    let output = |p: &Planet| weighted(cat.production(p, false).0);
+    let now = output(planet);
+    let payback = |price: f64, mut next: Planet| {
+        cat.refresh(&mut next);
+        let gain = output(&next) - now;
+        (gain > 0.0).then(|| price / gain)
+    };
+    let building = pick.filter(|&k| cat.objects[k].queue == 0).and_then(|k| {
+        let mut next = planet.clone();
+        next.levels[k] += 1;
+        payback(weighted(cat.objects[k].price[planet.levels[k] as usize]), next)
+    }).unwrap_or(f64::INFINITY);
+    let rules = &w.rules[a];
+    let best = (0..cat.units.len()).filter_map(|e| {
+        let table = cat.planets[planet.config].unit_production.get(e)?;
+        if table.own.is_none() && table.producers.is_empty() { return None }
+        let u = rules.units.index(cat.units[e])?;
+        if !w.yards[a].allowed[u] || !rules.units.requirements_met(planet, u) || w.yards[a].orders.iter().any(|o| o.unit == u) { return None }
+        let mut next = planet.clone();
+        next.units[e] += 1;
+        let per = payback(weighted(rules.units.units[u].price), next)?;
+        (per < building).then_some((u, per))
+    }).min_by(|x, y| x.1.total_cmp(&y.1));
+    let Some((u, _)) = best else { return };
+    let amount = within(w, a, u, BOOST_BATCH, saving(w, cat, a, pick));
+    if amount > 0 { w.order_units(cat, a, u, amount); }
+}
+
+/// Production units ordered at one login.
+const BOOST_BATCH: u64 = 10;
 
 /// How long a planet saves towards the energy units of its next field adder before it gives up the field it holds.
 const CHAIN_POWER_DAYS: f64 = 30.0;
@@ -1107,7 +1182,7 @@ fn yard_blocks_reserve(w: &World, cat: &Catalogue, a: usize) -> bool {
 fn field_chain(cat: &Catalogue, planet: &Planet) -> Option<(Vec<(usize, u32)>, u32)> {
     let adds = |k: usize, l: usize| cat.objects[k].fields_added.get(l).copied().unwrap_or(0);
     let adder = (0..cat.objects.len())
-        .filter(|&k| adds(k, planet.levels[k] as usize + 1) > adds(k, planet.levels[k] as usize))
+        .filter(|&k| cat.stands_on(planet, k) && adds(k, planet.levels[k] as usize + 1) > adds(k, planet.levels[k] as usize))
         .min_by(|&x, &y| weighted(cat.objects[x].price[planet.levels[x] as usize]).total_cmp(&weighted(cat.objects[y].price[planet.levels[y] as usize])))?;
     let mut chain = vec![(adder, planet.levels[adder] + 1)];
     let mut at = 0;
@@ -1189,6 +1264,7 @@ impl Raider {
         for target in nearest(w, cat, a, NEIGHBOURS) {
             if w.fleets.iter().filter(|f| f.owner == a).count() >= SLOTS { break }
             self.recycle(w, cat, a, target, ledger);
+            if self.destroy_moon(w, cat, a, target, ledger) { continue }
             if self.raid(w, cat, a, target, kit, ledger) { continue }
             self.spy(w, cat, a, target, kit, ledger);
         }
@@ -1214,7 +1290,11 @@ impl Raider {
         let now = w.games[a].t;
         let Some(report) = last_report(w, a, target) else { return false };
         if now - report.time > REPORT_HOURS * 3600.0 || self.hit.get(&target).is_some_and(|&t| now - t < RAID_COOLDOWN) || ledger.beaten.contains(&(a, target)) { return false }
-        let Some(plan) = raid_plan(w, cat, a, target, kit) else { return false };
+        let Some(plan) = raid_plan(w, cat, a, target, kit) else {
+            // More guns than the raider's fighters can take on: the missiles go first when the loot pays for the salvo.
+            if defended_loot(w, cat, a, target) { self.strike(w, cat, a, target, ledger) }
+            return false;
+        };
         let rules = Arc::clone(&w.rules[a]);
         let research = w.research(cat, a);
         let fuel = fleet::consumption(&rules.settings, &rules.fleet, &plan.fleet, &research, account_distance(w, a, target), 0, 10.0) as f64;
@@ -1223,6 +1303,8 @@ impl Raider {
             self.strike(w, cat, a, target, ledger);
             return false;
         }
+        let lands = now + fleet::flight_seconds(&rules.settings, Mission::Attack as u32, account_distance(w, a, target), rules.fleet.slowest_speed(&plan.fleet, &research), 10.0) as f64;
+        if fleet_home_first(w, cat, a, target, lands) { return false }
         let had_fleet = stack(&w.rules[target], &w.yards[target].counts).iter().any(|&(id, _)| movable(&w.rules[target], id, &w.research(cat, target)));
         let Ok(arrive) = send(w, cat, a, target, Mission::Attack, &plan.fleet, 10.0, ledger) else { return false };
         self.hit.insert(target, now);
@@ -1244,6 +1326,28 @@ impl Raider {
         }
     }
 
+    /// M4: a raider holding the host's moon destroyer goes for a neighbour's moon that keeps a fleet, when the moon's guns
+    /// cannot hurt its warships: the fleet is caught and the moon (its phalanx, its gate) may fall, as a deathstar
+    /// player does (gate 3). The strike tables name the destroyer (gate 1).
+    fn destroy_moon(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, ledger: &mut Ledger) -> bool {
+        let Some(moon) = w.moon_of[target] else { return false };
+        let Some(destroyer) = w.rules[a].strike.as_ref().map(|s| s.moon_destroyer) else { return false };
+        let now = w.games[a].t;
+        if on_shelf(w, a, destroyer) < 1 || self.hit.get(&moon).is_some_and(|&t| now - t < RAID_COOLDOWN) { return false }
+        let research = w.research(cat, a);
+        let kept = stack(&w.rules[moon], &w.yards[moon].counts);
+        if !kept.iter().any(|&(id, _)| movable(&w.rules[moon], id, &w.research(cat, moon))) { return false }
+        let rules = Arc::clone(&w.rules[a]);
+        let fleet: Vec<(u32, i64)> = stack(&rules, &w.yards[a].counts).into_iter()
+            .filter(|&(id, _)| movable(&rules, id, &research) && rules.combat.fights(id))
+            .collect();
+        let (_, hull) = strength(&rules, &research, &fleet);
+        if guns(w, cat, moon) * 3.0 > SAFE_SHARE * hull { return false }
+        if send(w, cat, a, target, Mission::MoonDestroy, &fleet, 10.0, ledger).is_err() { return false }
+        self.hit.insert(moon, now);
+        true
+    }
+
     fn recycle(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, ledger: &mut Ledger) {
         let Some((harvester, n)) = harvest_plan(w, cat, a, target) else { return };
         let field = w.debris[target];
@@ -1256,6 +1360,29 @@ impl Raider {
         if weighted(field).min((n * hold) as f64) < PAYS * WEIGHTS[2] * fuel { return }
         if send(w, cat, a, target, Mission::Recycle, &[(harvester, n)], 10.0, ledger).is_ok() { ledger.recycles += 1 }
     }
+}
+
+/// Whether the last full report on `target` shows defence that shoots and loot worth more than a missile salvo.
+fn defended_loot(w: &World, cat: &Catalogue, a: usize, target: usize) -> bool {
+    let Some(report) = last_report(w, a, target) else { return false };
+    let Some(defence) = &report.defence else { return false };
+    let Some(missile) = w.rules[a].strike.as_ref().map(|s| s.missile) else { return false };
+    let shoots = strength(&w.rules[target], &w.research(cat, target), &stack(&w.rules[target], defence)).0 > 0.0;
+    let loot = weighted(report.resources.map(|r| r.max(0) as f64 * w.rules[a].combat.rules.loot_percentage / 100.0));
+    shoots && loot > MISSILE_SALVO as f64 * unit_price(&w.rules[a], missile)
+}
+
+/// M4: a raider with a phalanx in range reads the target before it attacks and holds back when the target's own fleet
+/// lands there before the raid would (gate 3: a phalanx is how a player times a hit). Without a phalanx it raids blind.
+fn fleet_home_first(w: &mut World, cat: &Catalogue, a: usize, target: usize, lands: f64) -> bool {
+    let account = w.account_of(target);
+    let moons: Vec<usize> = w.planets_of(a).into_iter().filter_map(|p| w.moon_of[p]).collect();
+    let Some(seen) = moons.into_iter().find_map(|m| { w.catch_up(cat, m, w.games[a].t); w.phalanx(cat, m, target).ok() }) else { return false };
+    seen.into_iter().any(|f| {
+        let fleet = &w.fleets[f];
+        let home = if fleet.returning { fleet.home } else if fleet.mission == Mission::Deploy { fleet.arrive } else { fleet.home };
+        w.account_of(fleet.owner) == account && home <= lands && fleet.ships.iter().any(|&(id, _)| w.rules[target].combat.fights(id))
+    })
 }
 
 /// Watches for hostile fleets bound for its capital and sends its ships out of reach; once the attack has landed it
@@ -1279,18 +1406,28 @@ impl FleetSaver {
         let pick = self.miner.act(w, cat, a);
         if w.account_of(a) != a { return pick }
         let now = w.games[a].t;
-        self.recall_passed(w, a, now, ledger);
+        // M4: a fleeter keeps its fleet on its capital's moon, where no raid on the planet finds it.
+        let post = w.moon_of[a].unwrap_or(a);
+        if post != a {
+            w.catch_up(cat, post, now);
+            station(w, cat, a, post, ledger);
+            gate_home(w, cat, post);
+        }
+        self.recall_passed(w, post, now, ledger);
         // Before the night the fleet goes out for it, as a player's does: the next login is hours away and a raid does not
         // wait for it. A save that only answered an attack seen while awake could never happen at all (measured: zero in
         // ten days across four savers).
         let hours_to_night = (w.games[a].sleep_start - (now % 86_400.0) / 3600.0).rem_euclid(24.0);
-        if hours_to_night <= 1.0 && self.leave(w, cat, a, w.games[a].sleep_hours * 3600.0, ledger) {
+        // A fleeter with two gates leaves from the other moon, so the phalanx that read its fleet here times nothing.
+        let from = if hours_to_night <= 1.0 { gate_escape(w, cat, post).unwrap_or(post) } else { post };
+        if hours_to_night <= 1.0 && self.leave(w, cat, from, w.games[a].sleep_hours * 3600.0, ledger) {
             ledger.saves_sent += 1;
         }
-        let coming: Vec<(usize, f64)> = w.fleets.iter().filter(|f| f.target == a && f.mission == Mission::Attack && !f.returning && f.arrive > now).map(|f| (f.owner, f.arrive)).collect();
+        let aimed = |f: &Fleet| f.target == a && f.moon == (post != a) && matches!(f.mission, Mission::Attack | Mission::MoonDestroy);
+        let coming: Vec<(usize, f64)> = w.fleets.iter().filter(|f| aimed(f) && !f.returning && f.arrive > now).map(|f| (f.owner, f.arrive)).collect();
         let fresh: Vec<f64> = coming.into_iter().filter(|c| self.answered.insert((c.0, c.1.to_bits()))).map(|c| c.1).collect();
         for lands in fresh {
-            let saved = self.leave(w, cat, a, lands - now, ledger);
+            let saved = gate_escape(w, cat, post).is_some() || self.leave(w, cat, post, lands - now, ledger);
             if saved { self.saving.push((w.fleets.last().map_or(0, |f| f.departed.to_bits()), lands)) }
             ledger.saves_sent += usize::from(saved);
             ledger.saves_refused += usize::from(!saved);
@@ -1315,6 +1452,51 @@ impl FleetSaver {
         let Some((b, ships, speed)) = save_plan(w, cat, a, remaining) else { return false };
         send(w, cat, a, b, Mission::Transport, &ships, speed, ledger).is_ok()
     }
+}
+
+/// M4: the capital's warships deploy to its moon with a hold of deuterium for the moon's own save, up to a hold the
+/// moon does not have yet and half of what the capital holds.
+fn station(w: &mut World, cat: &Catalogue, a: usize, moon: usize, ledger: &mut Ledger) {
+    let rules = Arc::clone(&w.rules[a]);
+    let research = w.research(cat, a);
+    let ships: Vec<(u32, i64)> = stack(&rules, &w.yards[a].counts).into_iter()
+        .filter(|&(id, _)| movable(&rules, id, &research) && rules.units.index(id as i64).is_some_and(|u| rules.units.kind.get(u) == Some(&UnitKind::MilitaryShip)))
+        .collect();
+    if ships.is_empty() { return }
+    let hold = rules.combat.capacity(&ships.iter().copied().collect(), &research) as f64;
+    let fuel = fleet::consumption(&rules.settings, &rules.fleet, &ships, &research, account_distance(w, a, moon), 0, 10.0) as f64;
+    let carried = (hold - w.games[moon].planet.res[2]).min(0.5 * w.games[a].planet.res[2] - fuel).max(0.0).floor();
+    let before = w.games[a].planet.res[2];
+    if w.dispatch(cat, a, moon, Mission::Deploy, &ships, [0.0, 0.0, carried], 10.0).is_ok() {
+        ledger.fuel += WEIGHTS[2] * (before - carried - w.games[a].planet.res[2]);
+    }
+}
+
+/// M4: a fleet on a moon with a jump gate meets a seen attack by jumping to another of the account's gated moons: no
+/// fuel, no flight, the move a fleeter with two gates makes (gate 3). The host's gate rules decide which jump stands.
+fn gate_escape(w: &mut World, cat: &Catalogue, moon: usize) -> Option<usize> {
+    if w.moon_at[moon].is_none() { return None }
+    let gear = w.rules[moon].settings.moon_gear.clone()?;
+    let ships = gate_ships(w, moon, &gear.gate_ships);
+    if ships.is_empty() || w.moon_level(cat, moon, gear.gate_object) == 0 { return None }
+    let others: Vec<usize> = w.planets_of(w.account_of(moon)).into_iter().filter_map(|p| w.moon_of[p]).filter(|&m| m != moon).collect();
+    others.into_iter().find(|&to| w.jump(cat, moon, to, &ships).is_ok())
+}
+
+/// M4: a fleet left on another moon after a gate save jumps back to the moon the fleeter keeps it on.
+fn gate_home(w: &mut World, cat: &Catalogue, post: usize) {
+    let Some(gear) = w.rules[post].settings.moon_gear.clone() else { return };
+    let away: Vec<usize> = w.planets_of(w.account_of(post)).into_iter().filter_map(|p| w.moon_of[p]).filter(|&m| m != post).collect();
+    for moon in away {
+        w.catch_up(cat, moon, w.games[w.account_of(post)].t);
+        let ships = gate_ships(w, moon, &gear.gate_ships);
+        if !ships.is_empty() { let _ = w.jump(cat, moon, post, &ships); }
+    }
+}
+
+/// The ships on slot s a jump gate carries.
+fn gate_ships(w: &World, s: usize, carried: &[u32]) -> Vec<(u32, i64)> {
+    stack(&w.rules[s], &w.yards[s].counts).into_iter().filter(|(id, _)| carried.contains(id)).collect()
 }
 
 /// One of the three, for a world that mixes them.
@@ -1500,7 +1682,7 @@ mod tests {
 
     /// A world of accounts with nothing on the shelf: what a run starts from.
     fn bare(seed: u64) -> Option<(Catalogue, World)> {
-        let mut cat = Catalogue::load(&format!("{DATA}/units-parity/econ-u1.json")).ok()?;
+        let mut cat = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-merged.json")).ok()?;
         cat.login_gaps = vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0];
         let rules = Arc::new(Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")).ok()?);
         let configs: Vec<usize> = (0..ACCOUNTS).collect();
@@ -2013,6 +2195,40 @@ mod tests {
         assert!(sent * each >= debris.maximum_moon_chance * 100_000.0 && (sent - 1.0) * each < debris.maximum_moon_chance * 100_000.0, "{sent} fighters");
         assert!(!moon_shot(&mut world, &cat, 0, |b| b == 1, &mut ledger), "one shot at a time");
         assert!(!moon_shot(&mut world, &cat, 0, |b| b == 2, &mut ledger), "only a mate is shot at");
+    }
+
+    /// M4: a fleeter's warships deploy to its capital's moon; with a gate on two moons the fleet jumps away from the first
+    /// and, once the gates have rested, back home to it.
+    #[test]
+    fn a_fleeter_keeps_its_fleet_on_its_moon_and_moves_it_through_the_gates() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let gear = world.rules[0].settings.moon_gear.clone().expect("fleet settings v3");
+        let gate = cat.objects.iter().position(|o| o.id == gear.gate_object).expect("a jump gate in the catalogue");
+        let rules = Arc::clone(&world.rules[0]);
+        let warship = *gear.gate_ships.iter().find(|&&id| rules.units.index(id as i64).is_some_and(|u| rules.units.kind.get(u) == Some(&UnitKind::MilitaryShip))).expect("a warship the gate carries");
+        let moon = world.add_moon(&cat, 0, 8000, 0.0);
+        let colony = world.add_planet(&cat, 0, 0, Coord { galaxy: 1, system: 11, position: 6 }, 0.0);
+        let other = world.add_moon(&cat, colony, 8000, 0.0);
+        assert!(world.set_units(&cat, 0, warship, 50));
+        world.games[0].planet.res = [1e7; 3];
+        let mut ledger = Ledger::default();
+        station(&mut world, &cat, 0, moon, &mut ledger);
+        while !world.fleets.is_empty() {
+            let a = world.next_decision(&cat).expect("the deploy lands");
+            world.wait(&cat, a);
+        }
+        let u = rules.units.index(warship as i64).unwrap();
+        assert_eq!((world.yards[0].counts[u], world.yards[moon].counts[u]), (0, 50), "the fleet stands on the moon");
+        assert!(world.games[moon].planet.res[2] > 0.0, "with the deuterium for its own save");
+        assert_eq!(gate_escape(&mut world, &cat, moon), None, "no gate yet");
+        world.games[moon].planet.levels[gate] = 1;
+        world.games[other].planet.levels[gate] = 1;
+        assert_eq!(gate_escape(&mut world, &cat, moon), Some(other));
+        gate_home(&mut world, &cat, moon);
+        assert_eq!(world.yards[other].counts[u], 50, "the gates rest before the fleet comes back");
+        world.gate_ready.iter_mut().for_each(|t| *t = 0.0);
+        gate_home(&mut world, &cat, moon);
+        assert_eq!((world.yards[moon].counts[u], world.yards[other].counts[u]), (50, 0));
     }
 
     /// Row 65: a capital whose field reserve waits on a building the busy yard blocks orders no more units, so the yard

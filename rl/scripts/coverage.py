@@ -4,13 +4,10 @@
 
 Reads each account's last line. An object is reached when some account holds a level or a unit of it; a mission when
 some account flew it. Prints the share of accounts reaching each, then what nobody reached; exits 1 when anything is
-missing. Objects the host has that the catalogue lacks (moon buildings today) are listed from the host's own names.
+missing. A moon's buildings count from `moon_built`.
 """
 import json, lzma, sys
 from collections import Counter
-
-HOST_ONLY = ("lunar_base", "sensor_phalanx", "jump_gate")
-
 
 def lines(path):
     with (lzma.open if path.endswith(".xz") else open)(path, "rt") as f:
@@ -31,14 +28,14 @@ def main(catalogue, units, *seasons):
     reached = Counter()
     for r in last.values():
         s = r["stall"]
-        held = {i for i, lv in s.get("built", []) if max(lv, default=0) > 0} | {i for i, lv in s.get("tech", []) if lv > 0}
+        held = {i for i, lv in s.get("built", []) + s.get("moon_built", []) if max(lv, default=0) > 0} | {i for i, lv in s.get("tech", []) if lv > 0}
         held |= {i for i, n in s.get("units", []) if n > 0}
         reached.update(held)
     n = len(last)
     for i, name in sorted(names.items()):
         print(f"{i:>4} {name:32} {reached[i] / n:6.1%}")
-    missing = [names[i] for i in sorted(names) if not reached[i]] + list(HOST_ONLY)
-    missions = ("raid_sent", "spy_sent", "recycle", "colonise", "expedition", "save_ok", "moon_made", "missile", "moon_shot")
+    missing = [names[i] for i in sorted(names) if not reached[i]]
+    missions = ("raid_sent", "spy_sent", "recycle", "colonise", "expedition", "save_ok", "moon_made", "missile", "moon_shot", "phalanx", "jump")
     missing += [m for m in missions if not flown[m]]
     print("accounts", n, "never reached:", ", ".join(missing) or "nothing")
     return 1 if missing else 0

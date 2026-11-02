@@ -315,7 +315,10 @@ impl Universe {
             let wants: Vec<bool> = (0..self.accounts()).map(|b| self.wants_moon(b)).collect();
             let (alliance_at, gone) = (&self.alliance_at, &self.gone);
             players::moon_shot(&mut self.world, &self.cat, a, |b| wants[b] && alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut self.ledgers[owner]);
-            if wants[owner] { players::ready_for_moon(&mut self.world, &self.cat, a, self.moon_feed) }
+            if wants[owner] {
+                let wall = self.players[owner].miner().doctrine.defence.clone();
+                players::ready_for_moon(&mut self.world, &self.cat, a, self.moon_feed, &wall);
+            }
         }
         match (pick, persona) {
             (Some(Some(_)), _) => {}

@@ -75,7 +75,7 @@ fn main() {
         if a == owner && world.games[a].t >= 3.0 * 86_400.0 {
             let logged = world.unit_log.len();
             ogsim::players::moon_shot(&mut world, &cat, a, |_| true, &mut ledgers[owner]);
-            ogsim::players::ready_for_moon(&mut world, &cat, a, true);
+            ogsim::players::ready_for_moon(&mut world, &cat, a, true, &[]);
             // A colony readied here is loaded by its own order: its sample carries the stock before that order paid.
             for &(p, t, id, _, queued) in &world.unit_log[logged..] {
                 // As at a decision: no sample once a fleet has left that planet in that second (a consolidation).

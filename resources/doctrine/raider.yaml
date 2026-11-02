@@ -60,6 +60,8 @@ fleet_template:
   battle_ship: 8
   destroyer: 3
   bomber: 3
+  # A late raider keeps a deathstar or two for the moons that hide a fleet (moon destruction).
+  deathstar: 1
   small_cargo: 8
   large_cargo: 5
   recycler: 3

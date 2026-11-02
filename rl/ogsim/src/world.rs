@@ -18,7 +18,7 @@ use crate::HashMap;
 use std::sync::Arc;
 
 use crate::combat::{self, Battle, CombatCatalogue};
-use crate::economy::{as_stored, next_random, weighted, Books, Catalogue, Game, PlanetConfig};
+use crate::economy::{as_stored, next_random, weighted, Books, Catalogue, Game, PlanetConfig, WEIGHTS};
 use crate::expedition::{self, Draws};
 use crate::fleet::{self, Coord, FleetCatalogue, FleetSettings, SystemState};
 use crate::strike::{self, StrikeRules};
@@ -372,6 +372,8 @@ pub struct World {
     idle_now: Vec<bool>,
     /// L4: the second each slot's jump gate is ready again (0: never used).
     pub gate_ready: Vec<f64>,
+    /// Every phalanx scan and gate jump: (slot, second, whether a jump).
+    pub gear_log: Vec<(usize, f64, bool)>,
     rng: u64,
 }
 
@@ -386,7 +388,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -528,10 +530,15 @@ impl World {
         std::iter::once(capital).chain(self.colonies[capital].iter().copied()).collect()
     }
 
-    /// Row 23: the account's books, summed over the planets it holds (a colony's are its owner's).
+    /// Every slot the account ever held: its planets, its moons and the moons it lost (their books stay its own).
+    fn slots_of(&self, capital: usize) -> Vec<usize> {
+        (0..self.account.len()).filter(|&s| self.account[s] == capital).collect()
+    }
+
+    /// Row 23: the account's books, summed over its slots (a colony's and a moon's are their owner's).
     pub fn books(&self, capital: usize) -> Books {
         let mut books = Books::default();
-        for slot in self.planets_of(capital) {
+        for slot in self.slots_of(capital) {
             books.add(&self.games[slot].planet.books);
         }
         books
@@ -541,7 +548,7 @@ impl World {
     /// of its planet at dispatch and delivers when it lands. A sample is only comparable with another taken at the same
     /// second, which is how the season reads them.
     pub fn stock(&self, capital: usize) -> f64 {
-        let planets = self.planets_of(capital);
+        let planets = self.slots_of(capital);
         let stored: f64 = planets.iter().map(|&slot| weighted(self.games[slot].planet.res)).sum();
         let flying: f64 = self.fleets.iter().filter(|fleet| planets.contains(&fleet.owner)).map(|fleet| weighted(fleet.cargo)).sum();
         stored + flying
@@ -622,6 +629,9 @@ impl World {
         let Some(m) = self.moon_of[planet].take() else { return };
         self.yards[m].counts.iter_mut().for_each(|n| *n = 0);
         self.yards[m].orders.clear();
+        let store = self.games[m].planet.res;
+        let books = &mut self.games[m].planet.books;
+        books.cargo_lost += weighted(store);
         self.games[m].planet.res = [0.0; 3];
         self.games[m].planet.settle();
         self.games[m].done = true;
@@ -645,6 +655,8 @@ impl World {
         self.catch_up(cat, moon, now);
         if self.games[moon].planet.res[2] < gear.phalanx_cost { return Err("not enough deuterium") }
         self.games[moon].planet.res[2] -= gear.phalanx_cost;
+        self.games[moon].planet.books.scans += WEIGHTS[2] * gear.phalanx_cost;
+        self.gear_log.push((moon, now, false));
         self.games[moon].planet.settle();
         self.next[moon] = cat.peek(&mut self.games[moon]);
         Ok((0..self.fleets.len()).filter(|&f| {
@@ -682,6 +694,7 @@ impl World {
             self.yards[from].counts[u] -= n;
             self.yards[to].counts[u] += n;
         }
+        self.gear_log.push((from, now, true));
         let rest = now + gear.gate_cooldown[level.min(gear.gate_cooldown.len() - 1)];
         for slot in [from, to] {
             self.gate_ready[slot] = rest;
@@ -692,7 +705,7 @@ impl World {
     }
 
     /// The level of host object `id` on slot s (0 where the catalogue has no such object).
-    fn moon_level(&self, cat: &Catalogue, s: usize, id: i64) -> usize {
+    pub fn moon_level(&self, cat: &Catalogue, s: usize, id: i64) -> usize {
         cat.objects.iter().position(|o| o.id == id).map_or(0, |k| self.games[s].planet.levels[k] as usize)
     }
 
@@ -811,7 +824,7 @@ impl World {
 
     /// Brings planet p's stock to second t before a fleet touches it; nothing of p's own is due before t. The yard's
     /// finished units wait for the planet's next load (`settle_yard`): the host hands them over only there.
-    fn catch_up(&mut self, cat: &Catalogue, p: usize, t: f64) {
+    pub(crate) fn catch_up(&mut self, cat: &Catalogue, p: usize, t: f64) {
         if t <= self.games[p].t { return }
         cat.advance_to(&mut self.games[p], t, true);
         self.share_research(cat, p);

@@ -269,8 +269,10 @@ pub struct Books {
     pub loot_in: f64,
     pub loot_out: f64,
     pub expedition_in: f64,
-    /// Cargo destroyed with a fleet in flight (row 23s).
+    /// Resources destroyed: cargo with a fleet in flight (row 23s), a moon's store with the moon.
     pub cargo_lost: f64,
+    /// Deuterium a phalanx burnt on its scans.
+    pub scans: f64,
     /// What the merchant paid over what it took, at the score weights: its rates are not those weights.
     pub merchant_net: f64,
 }
@@ -279,7 +281,7 @@ impl Books {
     /// The stock this books says the account should have gained.
     pub fn net(&self) -> f64 {
         self.produced - self.wasted - self.spent_build - self.spent_research - self.spent_units - self.fuel
-            + self.loot_in - self.loot_out + self.expedition_in - self.cargo_lost + self.merchant_net
+            + self.loot_in - self.loot_out + self.expedition_in - self.cargo_lost + self.merchant_net - self.scans
     }
 
     pub fn add(&mut self, other: &Books) {
@@ -294,6 +296,7 @@ impl Books {
         self.expedition_in += other.expedition_in;
         self.cargo_lost += other.cargo_lost;
         self.merchant_net += other.merchant_net;
+        self.scans += other.scans;
     }
 
     /// Books resources at the host's score weights.
@@ -579,9 +582,9 @@ impl Catalogue {
     /// A planet with no table for the unit (one that can neither build nor hold it) has none in use.
     fn units_in_use(&self, planet: &Planet, u: usize) -> usize {
         let held = planet.units.get(u).copied().unwrap_or(0);
-        let table = &self.planets[planet.config].unit_production[u];
+        let Some(table) = self.planets[planet.config].unit_production.get(u) else { return 0 };
         if held == 0 || (table.energy.is_empty() && table.own.is_none()) { return 0 }
-        let bound = self.planets[planet.config].unit_production[u].usable.as_ref()
+        let bound = table.usable.as_ref()
             .map_or(u64::MAX, |by| by.iter().map(|&(k, per)| per * planet.levels[k] as u64).sum());
         held.min(bound) as usize
     }
@@ -711,11 +714,16 @@ impl Catalogue {
         self.stall_of(planet, k) == "ok"
     }
 
+    /// Whether the host lets object k stand on this planet's type (a moon or a planet).
+    pub fn stands_on(&self, planet: &Planet, k: usize) -> bool {
+        if self.planets[planet.config].moon { self.objects[k].on_moon } else { self.objects[k].on_planet }
+    }
+
     /// Row 29: why object k cannot start on this planet, in `legal`'s own terms - the diagnosis reads this instead of
     /// asking the same four questions twice.
     pub fn stall_of(&self, planet: &Planet, k: usize) -> &'static str {
         let o = &self.objects[k];
-        if !(if self.planets[planet.config].moon { o.on_moon } else { o.on_planet }) { return "wrong type" }
+        if !self.stands_on(planet, k) { return "wrong type" }
         if planet.levels[k] as usize >= o.price.len() { return "max level" }
         if !self.requirements_met(&planet.levels, k) { return "needs" }
         if o.consumes_field && self.fields_used(planet) >= self.field_cap(planet) { return "no fields" }
