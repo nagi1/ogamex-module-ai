@@ -10,7 +10,7 @@
 use crate::economy::{Catalogue, WEIGHTS};
 use crate::fleet;
 use crate::players::{self, harvest_plan, last_report, nearest, on_shelf, raid_plan, save_plan, stack, Kit, Miner, Raider};
-use crate::world::{Decision, Event, Mission, World};
+use crate::world::{Decision, Mission, World};
 
 /// The errand kinds, in the order their one-hot columns are written.
 pub const KIND_NAMES: [&str; 7] = ["spy", "raid", "recycle", "save", "recall", "order", "wait"];
@@ -111,11 +111,6 @@ fn incoming(w: &World, a: usize) -> Option<f64> {
 
 fn outbound(w: &World, a: usize) -> bool {
     w.fleets.iter().any(|f| f.owner == a && !f.returning)
-}
-
-/// The last attack that landed on slot `a`, from the world's event log.
-fn last_attack(w: &World, a: usize) -> Option<&Event> {
-    w.events.iter().rev().find(|e| e.mission == Mission::Attack && e.target == a)
 }
 
 /// Every errand this login may choose, the last one always `wait`.
@@ -243,7 +238,7 @@ pub fn account_features(w: &World, cat: &Catalogue, a: usize) -> [f32; STATE_DIM
     let hour = (w.games[a].t % 86_400.0) / 86_400.0 * std::f64::consts::TAU;
     f[7] = hour.sin() as f32;
     f[8] = hour.cos() as f32;
-    f[9] = ln1p(last_attack(w, a).map_or(0.0, |e| (w.games[a].t - e.time).max(0.0) / 3600.0));
+    f[9] = ln1p(w.last_attacked.get(&a).map_or(0.0, |&at| (w.games[a].t - at).max(0.0) / 3600.0));
     f[10] = incoming(w, a).map_or(0.0, |lands| ((lands - w.games[a].t).max(0.0) / 3600.0) as f32);
     f[11] = f32::from(matches!(w.decision_kind(a), Decision::Idle));
     f
