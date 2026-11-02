@@ -1011,10 +1011,31 @@ fn power_by_units(w: &mut World, cat: &Catalogue, a: usize) {
     let Some((u, each)) = energy_unit(w, cat, a) else { return };
     let planet = &w.games[a].planet;
     let coming: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
-    let short = 1.1 * planet.energy_used - planet.energy_max - coming as f64 * each;
+    let short = (1.1 * planet.energy_used - planet.energy_max).max(chain_energy(cat, planet)) - coming as f64 * each;
     if short <= 0.0 { return }
     let amount = within(w, a, u, (short / each).ceil() as u64, saving(w, cat, a, None));
     if amount > 0 { w.order_units(cat, a, u, amount); }
+}
+
+/// The energy planet is short of for its field chain: a terraformer asks for energy the planet must make, not spend.
+fn chain_energy(cat: &Catalogue, planet: &Planet) -> f64 {
+    let Some((chain, _)) = field_chain(cat, planet) else { return 0.0 };
+    chain.iter().filter(|&&(k, level)| planet.levels[k] < level)
+        .filter_map(|&(k, _)| cat.objects[k].energy_price.get(planet.levels[k] as usize))
+        .fold(0.0, |short: f64, &need| short.max(need - planet.energy_max))
+}
+
+/// Whether planet a can come by the energy its field chain asks for: units on order or units it can pay for. A player who
+/// cannot makes do with the fields it has rather than hold the last ones for good (gate 3).
+fn chain_powered(w: &World, cat: &Catalogue, a: usize) -> bool {
+    let planet = &w.games[a].planet;
+    let short = chain_energy(cat, planet);
+    if short <= 0.0 { return true }
+    let Some((u, each)) = energy_unit(w, cat, a) else { return false };
+    let coming: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
+    let needed = ((short / each).ceil() - coming as f64).max(0.0);
+    let price = w.rules[a].units.units[u].price;
+    (0..3).all(|r| price[r] * needed <= planet.res[r])
 }
 
 fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
@@ -1073,7 +1094,7 @@ fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> 
     let short = |slot: usize| {
         let planet = &w.games[slot].planet;
         let (chain, fields) = field_chain(cat, planet)?;
-        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= lead * fields).then_some(chain)
+        (cat.field_cap(planet).saturating_sub(cat.fields_used(planet)) <= lead * fields && chain_powered(w, cat, slot)).then_some(chain)
     };
     let slots = match queue {
         0 => vec![a],
@@ -1446,6 +1467,27 @@ mod tests {
 
     /// Row 45 FR: a planet whose free fields are down to what its field-adding chain still consumes builds that chain,
     /// prerequisite first, and spends no reserved field on anything else; with fields to spare the ordinary rule picks.
+    /// A planet that cannot make the energy its next field adder asks for spends the field: waiting froze its queue for good.
+    #[test]
+    fn a_planet_that_cannot_power_its_field_chain_gives_up_the_reserve() {
+        let Some((mut cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        world.games[0].queue = 0;
+        let (chain, fields) = field_chain(&cat, &world.games[0].planet).expect("an object that adds fields");
+        let planet = &mut world.games[0].planet;
+        let mut free = cat.field_cap(planet) - cat.fields_used(planet) - fields;
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].consumes_field && cat.objects[k].queue == 0 && !chain.iter().any(|c| c.0 == k)) {
+            let room = (cat.objects[k].price.len() as u32 - 1).saturating_sub(planet.levels[k]).min(free);
+            planet.levels[k] += room;
+            free -= room;
+        }
+        cat.refresh(planet);
+        assert!(field_reserve(&world, &cat, 0).is_some(), "the reserve binds while the planet has the energy");
+        let adder = chain.iter().find(|c| cat.objects[c.0].fields_added.iter().any(|&f| f > 0)).expect("the adder").0;
+        cat.objects[adder].energy_price = vec![1e15; cat.objects[adder].price.len()];
+        assert!(chain_energy(&cat, &world.games[0].planet) > 0.0);
+        assert!(field_reserve(&world, &cat, 0).is_none(), "a planet that can never pay held its last field");
+    }
+
     #[test]
     fn a_planet_at_its_field_reserve_builds_the_field_adding_chain() {
         let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };

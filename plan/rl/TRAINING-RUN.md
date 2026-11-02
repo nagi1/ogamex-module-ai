@@ -203,7 +203,10 @@ health PASS. The levels now look like a player's (top at day 200: plasma 14, wea
   exporter now writes `energy_price`, and `stall_of` holds an object short of it: buildings against energy made, research
   against energy free (`ObjectService`). The installed catalogue was patched from the host's own prices, not re-exported.
   Fields now cap near 300-350 as the terraformer's energy runs out.
-Open: top accounts stall after day 200 (research 3.84M to 4.06M, stock 154B, score 144M against about 255M real).
+- **Frozen planets (fault in the player).** With energy in force, a planet holding its last field for a terraformer it could not
+  power waited for good, and a colony lab it would never build held the account's research too. `power_by_units` now buys the
+  energy the chain asks for and `chain_powered` releases the field when the planet cannot pay. HDS 0.888, AUC 0.810, top
+  research 28.6M (14%), mid 4.36M (19%), health PASS. Still open: top stock 106B and top military 41% against 7-24% real.
 
 ## The yardstick was noisy (fixed 2 Nov)
 
