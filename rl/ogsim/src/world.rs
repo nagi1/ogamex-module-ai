@@ -1684,16 +1684,14 @@ mod tests {
         assert!(fight.gained.iter().sum::<f64>() > 0.0 && fight.time < raided.events[2].time, "the fight comes before the landing");
     }
 
-    /// With idle logins on, an account that is saving for a build with no queue to decide still logs in, as a decision
+    /// With idle logins on, an account with no queue to decide still logs in, as a decision
     /// that offers nothing to build; without them it never decides.
     #[test]
     fn an_account_with_nothing_to_build_still_logs_in() {
         let Some((cat, mut with, mut without)) = pair(6.0) else { return eprintln!("no u1 catalogues; skipped") };
-        let dear = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 0 && cat.objects[k].price[0][0] > 1e9).or_else(|| (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 0).max_by(|&x, &y| cat.objects[x].price[0].iter().sum::<f64>().total_cmp(&cat.objects[y].price[0].iter().sum::<f64>()))).unwrap();
         for w in [&mut with, &mut without] {
-            // Saving up for the dearest building: the economy has nothing to decide for hours.
-            w.games[0].commit[0] = Some(dear);
-            w.games[0].planet.rate = [0.0; 3];
+            // Both queues busy past the horizon: the economy has nothing to decide for hours.
+            w.games[0].free = [w.games[0].t + 1e6; 2];
             w.next[0] = cat.peek(&mut w.games[0]);
         }
         with.enable_idle_logins(&cat);
@@ -1712,7 +1710,7 @@ mod tests {
             quiet_logins += usize::from(a == 0);
             without.wait(&cat, a);
         }
-        assert_eq!(quiet_logins, 0, "an account saving for a build decided without idle logins");
+        assert_eq!(quiet_logins, 0, "an account with both queues busy decided without idle logins");
     }
 
     /// OGame's 'i' status: no login for seven days.

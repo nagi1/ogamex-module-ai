@@ -884,6 +884,16 @@ impl Catalogue {
     /// sleeps until the next build lands, which may unlock something; with nothing pending it sleeps for good, and the
     /// game ends when every queue does.
     pub fn tick(&self, game: &mut Game) -> bool {
+        // A commit the same login spent away reads as `decide` does: the account logs off. Waiting on it could outlast the
+        // season, and the clock went with it.
+        if !self.login_gaps.is_empty() {
+            for q in 0..2 {
+                if game.commit[q].is_some_and(|k| self.wait_seconds(&game.planet, k) > 0.0) {
+                    game.commit[q] = None;
+                    game.free[q] = self.login(game, game.t, true);
+                }
+            }
+        }
         let (at, next) = self.next_event(game);
         let Some(q) = next else {
             if at >= game.horizon {

@@ -1671,6 +1671,20 @@ mod tests {
     }
 
     #[test]
+    fn a_commit_the_login_spent_away_logs_off_instead_of_running_the_clock_out() {
+        let Some((cat, mut world)) = bare(5) else { return };
+        let game = &mut world.games[0];
+        let k = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1 && cat.objects[k].price[0][2] > 0.0).expect("a research priced in deuterium");
+        game.commit = [None, Some(k)];
+        game.planet.res = [0.0; 3];
+        game.planet.rate = [0.0, 0.0, 1e-9];
+        let t = game.t;
+        cat.tick(game);
+        assert_eq!(game.commit[1], None, "the commit stands with nothing to pay it");
+        assert!(game.t < t + 86400.0 * 30.0, "the clock ran to the horizon on an unpayable commit");
+    }
+
+    #[test]
     fn research_held_by_a_lab_on_another_planet_wakes_when_the_lab_lands() {
         let Some((cat, mut world)) = bare(1) else { return };
         let &(lab, _) = cat.modifiers[1].first().expect("a lab");
