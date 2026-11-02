@@ -525,6 +525,13 @@ impl World {
     fn step_account(&mut self, cat: &Catalogue, a: usize) -> bool {
         self.sync_peers(cat, a);
         self.games[a].account_pending = self.account_holds(cat, a);
+        // What the account holds moved this slot's next event past the second it was scheduled for: it waits in the
+        // world's order instead of jumping there, so a fleet landing on it in between finds it at its own second.
+        let due = cat.peek(&mut self.games[a]);
+        if due > self.next[a] {
+            self.next[a] = due;
+            return false;
+        }
         let holds = self.holding(cat, a);
         let deciding = cat.tick(&mut self.games[a]);
         if self.holding(cat, a) != holds {
@@ -3401,6 +3408,9 @@ mod tests {
                 assert_eq!(home.cargo.map(|r| r as i64), cargo, "case {index}: the cargo flying home");
             }
             let Some(done) = &case.back else { return Some(true) };
+            // The host loads the planet as the fleet lands, so the delivery adds to the stock written then.
+            world.catch_up(cat, 0, done.time);
+            world.games[0].planet.settle();
             run_until(cat, &mut world, done.time);
             stock(done.origin_after.as_ref(), &world, 0, index, "back home");
             Some(true)
@@ -3487,6 +3497,9 @@ mod tests {
                 assert_eq!(home.cargo.map(|r| r as i64), cargo, "case {index}: the cargo flying home");
             }
             let Some(done) = &case.back else { return Some(true) };
+            // The host loads the planet as the fleet lands, so the delivery adds to the stock written then.
+            world.catch_up(cat, 0, done.time);
+            world.games[0].planet.settle();
             run_until(cat, &mut world, done.time);
             stock(done.origin_after.as_ref(), &world, 0, index, "back home");
             Some(true)

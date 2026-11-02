@@ -936,13 +936,18 @@ impl Catalogue {
     pub fn tick(&self, game: &mut Game) -> bool {
         // A commit the same login spent away reads as `decide` does: the account logs off. Waiting on it could outlast the
         // season, and the clock went with it.
+        // The clock stays put: the next login is later than the world scheduled this slot for, and a fleet landing on it in
+        // between must find it at its own second (a slot that jumped ahead met raids with future stock).
         if !self.login_gaps.is_empty() {
+            let mut dropped = false;
             for q in 0..2 {
                 if game.commit[q].is_some_and(|k| self.wait_seconds(&game.planet, k) > 0.0) {
                     game.commit[q] = None;
                     game.free[q] = self.login(game, game.t, true);
+                    dropped = true;
                 }
             }
+            if dropped { return false }
         }
         let (at, next) = self.next_event(game);
         let Some(q) = next else {
