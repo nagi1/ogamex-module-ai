@@ -14,7 +14,7 @@ use crate::economy::{own_row, Baseline, Catalogue, Planet, WEIGHTS};
 use crate::fleet::{self, Coord, SystemState};
 use crate::score;
 use crate::units::UnitKind;
-use crate::world::{Decision, EventKind, Fleet, Mission, Outcome, Rules, SpyReport, World};
+use crate::world::{Decision, EventKind, Fleet, Mission, Outcome, Rules, SpyReport, World, UNIT_QUEUE};
 
 pub(crate) const SLOTS: usize = 4;
 pub(crate) const NEIGHBOURS: usize = 5;
@@ -969,9 +969,24 @@ fn moon_next(w: &World, cat: &Catalogue, moon: usize) -> Option<usize> {
         }
     }
     let price = |k: usize| weighted(cat.objects[k].price[planet.levels[k] as usize]);
+    // The phalanx is raised until it reads the account's neighbours: a level-1 phalanx reads only its own system.
+    let phalanx = w.rules[moon].settings.moon_gear.as_ref().and_then(|g| {
+        let k = cat.objects.iter().position(|o| o.id == g.phalanx_object)?;
+        let range = g.phalanx_range[(planet.levels[k] as usize).min(g.phalanx_range.len() - 1)];
+        (planet.levels[k] > 0 && range < neighbour_reach(w, moon)).then_some(k)
+    });
     (0..cat.objects.len())
-        .filter(|&k| cat.objects[k].queue == 0 && cat.objects[k].on_moon && !cat.objects[k].on_planet && planet.levels[k] == 0 && startable(k))
+        .filter(|&k| cat.objects[k].queue == 0 && cat.objects[k].on_moon && !cat.objects[k].on_planet && (planet.levels[k] == 0 || Some(k) == phalanx) && startable(k))
         .min_by(|&x, &y| price(x).total_cmp(&price(y)))
+}
+
+/// The systems between slot s and the farthest of its account's `NEIGHBOURS` nearest accounts in its galaxy.
+fn neighbour_reach(w: &World, s: usize) -> i64 {
+    let (here, systems) = (w.coords[s], w.rules[s].settings.number_of_systems);
+    let mut gaps: Vec<i64> = (0..w.games.len()).filter(|&b| w.account_of(b) == b && b != w.account_of(s) && w.coords[b].galaxy == here.galaxy)
+        .map(|b| { let d = (w.coords[b].system - here.system).abs(); d.min(systems - d) }).collect();
+    gaps.sort_unstable();
+    gaps.into_iter().take(NEIGHBOURS).last().unwrap_or(0)
 }
 
 /// Capital a sends `lack` to its planet `to` in its cargo hull, when it holds that above `keep` and has the ships.
@@ -1326,7 +1341,8 @@ impl Raider {
         }
     }
 
-    /// M4: a raider holding the host's moon destroyer goes for a neighbour's moon that keeps a fleet, when the moon's guns
+    /// M4: a raider holding the host's moon destroyer goes for a neighbour's moon that keeps a fleet or whose phalanx reads
+    /// the raider's planet, when the moon's guns
     /// cannot hurt its warships: the fleet is caught and the moon (its phalanx, its gate) may fall, as a deathstar
     /// player does (gate 3). The strike tables name the destroyer (gate 1).
     fn destroy_moon(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, ledger: &mut Ledger) -> bool {
@@ -1336,7 +1352,8 @@ impl Raider {
         if on_shelf(w, a, destroyer) < 1 || self.hit.get(&moon).is_some_and(|&t| now - t < RAID_COOLDOWN) { return false }
         let research = w.research(cat, a);
         let kept = stack(&w.rules[moon], &w.yards[moon].counts);
-        if !kept.iter().any(|&(id, _)| movable(&w.rules[moon], id, &w.research(cat, moon))) { return false }
+        let hides_fleet = kept.iter().any(|&(id, _)| movable(&w.rules[moon], id, &w.research(cat, moon)));
+        if !hides_fleet && !watches(w, cat, moon, a) { return false }
         let rules = Arc::clone(&w.rules[a]);
         let fleet: Vec<(u32, i64)> = stack(&rules, &w.yards[a].counts).into_iter()
             .filter(|&(id, _)| movable(&rules, id, &research) && rules.combat.fights(id))
@@ -1360,6 +1377,16 @@ impl Raider {
         if weighted(field).min((n * hold) as f64) < PAYS * WEIGHTS[2] * fuel { return }
         if send(w, cat, a, target, Mission::Recycle, &[(harvester, n)], 10.0, ledger).is_ok() { ledger.recycles += 1 }
     }
+}
+
+/// Whether moon slot `moon` has a phalanx whose range reaches planet `p` (same galaxy, systems around the donut).
+fn watches(w: &World, cat: &Catalogue, moon: usize, p: usize) -> bool {
+    let Some(g) = w.rules[moon].settings.moon_gear.as_ref() else { return false };
+    let level = w.moon_level(cat, moon, g.phalanx_object);
+    let range = g.phalanx_range[level.min(g.phalanx_range.len() - 1)];
+    let (from, to, systems) = (w.coords[moon], w.coords[p], w.rules[moon].settings.number_of_systems);
+    let d = (from.system - to.system).abs();
+    level > 0 && from.galaxy == to.galaxy && d.min(systems - d) <= range
 }
 
 /// Whether the last full report on `target` shows defence that shoots and loot worth more than a missile salvo.
@@ -1570,7 +1597,7 @@ fn halve_long_build(w: &mut World, cat: &Catalogue, a: usize, reserve: i64) {
     if w.account_of(a) != a { return }
     let now = w.games[a].t;
     let spare = w.dark_matter[a] - reserve;
-    let longest = w.planets_of(a).into_iter().flat_map(|s| [(s, 0), (s, 1)])
+    let longest = w.planets_of(a).into_iter().flat_map(|s| [(s, 0), (s, 1), (s, UNIT_QUEUE)])
         .filter_map(|(s, q)| w.halving_price(cat, s, q).map(|(end, _, cost)| (s, q, end - now, cost)))
         .filter(|&(_, _, left, cost)| left >= HALVE_SECONDS && cost <= spare)
         .max_by(|x, y| x.2.total_cmp(&y.2));

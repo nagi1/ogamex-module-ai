@@ -157,6 +157,8 @@ pub struct Order {
     pub end: i64,
     /// Seconds per unit, fixed when the order was placed.
     pub each: i64,
+    /// L6: halved once with dark matter; the next halving completes it.
+    pub halved: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -306,7 +308,7 @@ impl Units {
         planet.books.spent_units += weighted(total);
         let each = self.seconds(planet, u);
         let start = yard.orders.last().map_or(now, |o| o.end);
-        yard.orders.push(Order { unit: u, amount, done: 0, start, end: start + each * amount as i64, each });
+        yard.orders.push(Order { unit: u, amount, done: 0, start, end: start + each * amount as i64, each, halved: false });
         amount
     }
 
@@ -314,7 +316,8 @@ impl Units {
     /// whatever is left the moment it ends.
     pub fn advance(&self, yard: &mut Shipyard, now: i64) {
         for o in yard.orders.iter_mut().filter(|o| o.start <= now) {
-            let due = if now >= o.end { o.amount } else { (((now - o.start) / o.each) as u64).min(o.amount) };
+            // A halved order has had units handed over ahead of its clock, so the clock can trail what is done.
+            let due = if now >= o.end { o.amount } else { (((now - o.start) / o.each) as u64).min(o.amount) }.max(o.done);
             yard.counts[o.unit] += due - o.done;
             o.done = due;
         }

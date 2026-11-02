@@ -148,6 +148,9 @@ pub struct MoonHold {
     pub diameter: i64,
 }
 
+/// The shipyard's queue for `World::halve` and `World::halving_price`, after the building (0) and research (1) queues.
+pub const UNIT_QUEUE: usize = 2;
+
 /// What kind of decision an account faces at a login.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Decision {
@@ -715,11 +718,13 @@ impl World {
         let halving = self.rules[account].settings.halving.clone().ok_or("no halving tables")?;
         let now = self.games[account].t;
         self.catch_up(cat, s, now);
+        self.settle_yard(cat, s);
         let (end, k, cost) = self.halving_price(cat, s, q).ok_or("nothing to halve")?;
+        if self.dark_matter[account] < cost { return Err("not enough dark matter") }
+        if q == UNIT_QUEUE { return Ok(self.halve_order(cat, s, now, cost)) }
         let start = self.games[s].history.iter().rev().find(|h| h.1 == k && h.2 == end).map_or(now, |h| h.0);
         let queue = if q == 0 { "building" } else { "research" };
         let left = end - now;
-        if self.dark_matter[account] < cost { return Err("not enough dark matter") }
         let again = self.halved.contains(&(s, start.to_bits()));
         let cut = if again { left } else { ((end - start) / 2.0).floor().min(halving.max_reduction[queue]).min(left) };
         let new_end = end - cut;
@@ -742,13 +747,47 @@ impl World {
         Ok(cost)
     }
 
-    /// The build running in queue q of slot s (its end and object) and the dark matter a halving of it costs now.
+    /// `HalvingService::halveUnit` on slot s's running yard order: the cut is half the order's own time (no cap), the units
+    /// that time held are handed over at once, and the order and those behind it move up by the cut; a halved order is
+    /// completed instead.
+    fn halve_order(&mut self, cat: &Catalogue, s: usize, now: f64, cost: i64) -> i64 {
+        let account = self.account[s];
+        let now = now as i64;
+        let yard = &mut self.yards[s];
+        let o = &mut yard.orders[0];
+        let left = o.end - now;
+        let (cut, award) = match o.halved {
+            true => (left, o.amount - o.done),
+            false => { let cut = ((o.end - o.start) / 2).min(left); (cut, ((cut / o.each) as u64).min(o.amount - o.done)) }
+        };
+        o.halved = true;
+        o.done += award;
+        yard.counts[o.unit] += award;
+        let unit = o.unit;
+        for o in yard.orders.iter_mut() {
+            o.start -= cut;
+            o.end -= cut;
+        }
+        yard.orders.retain(|o| o.done < o.amount);
+        self.dark_matter[account] -= cost;
+        self.halving_log.push((s, now as f64, unit, cost));
+        self.sync_units(cat, s);
+        self.next[s] = cat.peek(&mut self.games[s]);
+        cost
+    }
+
+    /// The build running in queue q of slot s (its end and object, or for the yard `UNIT_QUEUE` its order's end and
+    /// unit) and the dark matter a halving of it costs now.
     pub fn halving_price(&self, cat: &Catalogue, s: usize, q: usize) -> Option<(f64, usize, i64)> {
         let account = self.account[s];
         let halving = self.rules[account].settings.halving.as_ref()?;
         let now = self.games[account].t;
-        let (end, k) = *self.games[s].pending.iter().find(|&&(end, k)| cat.objects[k].queue == q && end > now)?;
-        let queue = if q == 0 { "building" } else { "research" };
+        let running = match q {
+            UNIT_QUEUE => self.yards[s].orders.first().filter(|o| o.start as f64 <= now && o.end as f64 > now).map(|o| (o.end as f64, o.unit)),
+            _ => self.games[s].pending.iter().find(|&&(end, k)| cat.objects[k].queue == q && end > now).copied(),
+        };
+        let (end, k) = running?;
+        let queue = ["building", "research", "unit"][q];
         let cost = (((end - now) / 60.0 / 30.0) * halving.per_half_hour as f64).ceil() as i64;
         Some((end, k, cost.max(halving.min_cost).min(halving.max_cost[queue])))
     }
@@ -1708,6 +1747,32 @@ mod tests {
     fn give(w: &mut World, a: usize, id: u32, amount: u64) {
         let u = w.rules[a].units.index(id as i64).unwrap();
         w.yards[a].counts[u] = amount;
+    }
+
+    /// L6: a halved yard order hands over the units half its time held and moves up by that half; the second halving
+    /// hands over the rest.
+    #[test]
+    fn dark_matter_halves_a_yard_order_and_then_completes_it() {
+        let Some((cat, mut w, _)) = pair(240.0) else { return eprintln!("no u1 catalogues; skipped") };
+        let rules = Arc::clone(&w.rules[0]);
+        let u = rules.units.index(202).expect("a small cargo");
+        for &(k, level) in &rules.units.units[u].requires {
+            if let Some(k) = k { w.games[0].planet.levels[k] = w.games[0].planet.levels[k].max(level) }
+        }
+        w.games[0].planet.res = [1e8; 3];
+        cat.refresh(&mut w.games[0].planet);
+        w.dark_matter[0] = 1_000_000;
+        let a = w.next_decision(&cat).expect("a decision");
+        assert_eq!(a, 0);
+        assert_eq!(w.order_units(&cat, 0, u, 400), 400);
+        let o = w.yards[0].orders[0].clone();
+        let now = w.games[0].t as i64;
+        let cost = w.halve(&cat, 0, UNIT_QUEUE).expect("a halving");
+        let cut = ((o.end - o.start) / 2).min(o.end - now);
+        assert_eq!(w.yards[0].counts[u] as i64, cut / o.each, "the units the cut held are there at once");
+        assert_eq!((w.yards[0].orders[0].end, w.dark_matter[0]), (o.end - cut, 1_000_000 - cost));
+        w.halve(&cat, 0, UNIT_QUEUE).expect("the completion");
+        assert!(w.yards[0].orders.is_empty() && w.yards[0].counts[u] == 400, "the second halving hands over the rest");
     }
 
     /// A transport unloads exactly its cargo, pays the host's fuel, and its ships come home at twice the flight time.
