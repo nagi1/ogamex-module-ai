@@ -298,3 +298,11 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   7.56 M / 234 M. Entropy fell to 0.46-0.62 without the anchor; planets stayed at 7, so not gaming but drift. Stopped.
   Running: g0 (anchor 0.05, 4070), g1 (anchor 0.02, 3090), e0 (the fleet errand model from its clone, 99.7% top-1 on
   333 k rows, anchor 0.05, 3090). The fleet clone `bce0` is judged first as e0's baseline.
+- **The median was measuring quitters (2 Nov).** Half the accounts quit by design, so the all-account median sits on
+  the edge between quitters and players and swings with nothing (the "+9 %" and "-28 %" above were that). The judge
+  now reads the accounts still active at the end (`judge.sh`, `look.py`). Re-read on active accounts, median / top /
+  planets: clone bc0 20.98 M / 270 M / 11; g1 (anchor 0.02) at 80 19.94 M / 251 M / 11; w1 at 160 21.21 M / 287 M / 11;
+  w0 at 160 20.17 M / 228 M / 11; g0 resumed (~291 updates) 6.69 M / 213 M / 9 (collapsed: the resume anchored to the
+  drifted checkpoint). PPO lands within +-5 % of the clone: a fixed point, KL ~1e-3 per update.
+- **Next arm g2** (4070): anchor 0.05, gamma 0.995 per day and GAE lambda 0.97 - credit that reaches the slow payoffs
+  (astrophysics, colonies, large mines) that a 0.985/0.9 horizon of ~65 days barely sees. g1 and e0 continue (3090).
