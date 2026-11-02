@@ -268,6 +268,7 @@ impl Universe {
             m.balance = on("balance");
             m.lab_first = on("labfirst");
             m.network = on("netchain");
+            m.tech_tree = on("techtree");
             m.merchant = on("merchant");
             m.satellites = on("satellites");
             m.doubler = on("doubler");

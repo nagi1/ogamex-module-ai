@@ -86,6 +86,9 @@ struct RawObject {
     /// Row 36: planet fields this object adds per level, probed from the host; a catalogue without the column adds none.
     #[serde(default)]
     fields_added: Vec<u32>,
+    /// The energy the host asks for at each level; it is held, not spent. A catalogue without the column asks none.
+    #[serde(default)]
+    energy_price: Vec<f64>,
 }
 
 #[derive(Deserialize)]
@@ -165,6 +168,8 @@ pub struct Object {
     /// Row 36: the planet fields this object adds at each level, per the host's `getPlanetFieldMax`; empty when the
     /// catalogue predates the column, which adds nothing.
     pub fields_added: Vec<u32>,
+    /// The energy the planet must hold for the level after index `level`.
+    pub energy_price: Vec<f64>,
 }
 
 #[derive(Clone)]
@@ -435,6 +440,7 @@ impl Catalogue {
             build_seconds: o.build_seconds.clone(),
             build_seconds_grid: o.build_seconds_grid.clone(),
             fields_added: o.fields_added.clone(),
+            energy_price: o.energy_price.clone(),
         }).collect();
         let modifiers_of = |rows: &Vec<RawModifier>| -> Vec<(usize, Vec<f64>)> { rows.iter().filter_map(|m| index.get(&m.id).map(|&i| (i, m.divisor.clone()))).collect() };
         let modifiers = [modifiers_of(&raw.time_modifiers), modifiers_of(&raw.time_modifiers_research)];
@@ -671,6 +677,9 @@ impl Catalogue {
         if planet.levels[k] as usize >= o.price.len() { return "max level" }
         if !self.requirements_met(&planet.levels, k) { return "needs" }
         if o.consumes_field && self.fields_used(planet) >= self.field_cap(planet) { return "no fields" }
+        // ObjectService: a building reads the energy the planet makes, research what it has free. Neither is spent.
+        let energy = if o.queue == 0 { planet.energy_max } else { planet.energy_max - planet.energy_used };
+        if o.energy_price.get(planet.levels[k] as usize).is_some_and(|&need| energy < need) { return "no energy" }
         if self.wait_seconds(planet, k) >= NEVER { return "never affordable" }
         "ok"
     }
@@ -907,7 +916,9 @@ impl Catalogue {
         if (0..self.objects.len()).any(|k| self.queue_legal(game, k)) {
             return true;
         }
-        game.free[q] = game.pending.first().map_or(NEVER, |p| p.0);
+        // A hold from a build on another planet ends without landing here: read it, or the queue sleeps while the others run.
+        let held = (0..self.objects.len()).filter(|&k| self.objects[k].queue == q).filter_map(|k| self.held_until(game, k));
+        game.free[q] = game.pending.first().map(|p| p.0).into_iter().chain(held).fold(NEVER, f64::min);
         if game.free[q] >= game.horizon {
             game.free[q] = NEVER;
         }

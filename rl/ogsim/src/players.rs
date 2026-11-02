@@ -367,6 +367,8 @@ pub struct Miner {
     pub lab_first: bool,
     /// A grown account works towards the research network and raises its colonies' labs to the capital's (`network_step`).
     pub network: bool,
+    /// The lab walks the requirements of what it wants, and a rich account keeps the cheapest research moving (`next_research`).
+    pub tech_tree: bool,
     /// An account with idle surplus trades its richest resource into its poorest at the merchant (`trade_surplus`).
     pub merchant: bool,
     /// The missiles this account keeps on its capital (a raider's, once defence turned a raid away).
@@ -464,7 +466,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, merchant: false, missiles: 0, interceptors: HashMap::default() }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -536,7 +538,9 @@ impl Miner {
             .then(|| Planet { factor: 1.0, ..w.games[a].planet.clone() });
         let planet = powered.as_ref().unwrap_or(&w.games[a].planet);
         let fallback = match self.lab && queue == 1 {
-            true => purpose(w, cat, a).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
+            true => self.tech_tree.then(|| next_research(w, cat, a)).flatten()
+                .filter(|_| !(self.balance && research_share(w, a) >= RESEARCH_SHARE))
+                .or_else(|| purpose(w, cat, a)).or_else(|| cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .filter(|&k| (self.lab_first || spare(w, cat, a, k)) && !(self.balance && research_share(w, a) >= RESEARCH_SHARE))),
             false => cat.baseline(planet, queue, Baseline::Player, &mut self.rng)
                 .map(|k| self.factory.then(|| time_bound(w, cat, a, k)).flatten().unwrap_or(k))
@@ -927,6 +931,41 @@ fn purpose(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
         .min_by(|&x, &y| price(x).total_cmp(&price(y)))
 }
 
+/// The planets a player settles before its lab goes for output: the median real mid account's at 64-128 speed days
+/// (`real-bands.json`). A taste over host data, as `RESEARCH_SHARE` is.
+const SETTLED_PLANETS: usize = 8;
+
+/// What a player's lab takes next. With idle surplus, the cheapest research it can pay now, which levels the whole tree
+/// the way price does for a real account. Otherwise what raises output or the colonisation research, cheapest first, reached
+/// through its unmet requirements: a player goes for the laser levels plasma asks for, not the next astrophysics (gate 3).
+/// Output, requirements and prices come from the catalogue (gate 1).
+fn next_research(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+    let planet = &w.games[a].planet;
+    let price = |k: usize| cat.objects[k].price.get(planet.levels[k] as usize).map_or(f64::INFINITY, |&p| weighted(p));
+    let research = || (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1);
+    let cheapest = |keys: Vec<usize>| keys.into_iter().min_by(|&x, &y| price(x).total_cmp(&price(y)));
+    if surplus(w, cat, a) {
+        return cheapest(research().filter(|&k| w.legal(cat, a, k) && cat.wait_seconds(planet, k) == 0.0).collect());
+    }
+    let output = |p: &Planet| weighted(cat.production(p, true).0);
+    let now = output(planet);
+    let colonise = w.colonisation.as_ref().map(|t| t.research);
+    let raises = |k: usize| { let mut next = planet.clone(); next.levels[k] += 1; cat.refresh(&mut next); output(&next) > now };
+    let settling = colonise.is_some() && w.planets_of(a).len() < SETTLED_PLANETS;
+    let wanted = research().filter(|&k| price(k).is_finite() && (Some(cat.objects[k].id) == colonise || (raises(k) && !settling))).collect::<Vec<_>>();
+    let steps = wanted.into_iter().filter_map(|k| {
+        let mut need = vec![(k, planet.levels[k] + 1)];
+        let mut at = 0;
+        while at < need.len() && need.len() < 256 {
+            need.extend(cat.objects[need[at].0].requires.iter().filter_map(|&(k, level)| Some((k?, level))));
+            at += 1;
+        }
+        let step = need.iter().find(|&&(k, level)| planet.levels[k] < level && cat.objects[k].queue == 1 && w.legal(cat, a, k))?.0;
+        Some((k, step))
+    }).collect::<Vec<_>>();
+    steps.into_iter().min_by(|x, y| price(x.0).total_cmp(&price(y.0))).map(|(_, step)| step)
+}
+
 /// Whether planet a pays for research k and still holds the price of its next building (the one it saves for, else the
 /// player rule's): a player feeds the mines first and researches from the rest (row 72, gate 3).
 fn spare(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
@@ -1070,7 +1109,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, merchant: false, missiles: 0, interceptors: HashMap::default() };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default() };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
@@ -1574,6 +1613,59 @@ mod tests {
         world.games[0].planet.res = [1e15; 3];
         assert!(surplus(&world, &cat, 0), "a store of far more than its mines make is");
         assert_eq!(network_step(&world, &cat, 0), None, "an account with no colonies has no network to read them");
+    }
+
+    #[test]
+    fn an_object_priced_in_energy_waits_for_the_planet_to_make_it() {
+        let Some((mut cat, mut world)) = bare(1) else { return };
+        let Some(k) = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1 && cat.objects[k].price[0] == [0.0; 3]) else { return };
+        cat.objects[k].requires.clear();
+        cat.objects[k].energy_price = vec![300000.0];
+        let planet = &mut world.games[0].planet;
+        (planet.energy_max, planet.energy_used) = (299999.0, 0.0);
+        assert_eq!(cat.stall_of(planet, k), "no energy");
+        planet.energy_max = 300000.0;
+        assert_eq!(cat.stall_of(planet, k), "ok");
+    }
+
+    #[test]
+    fn research_held_by_a_lab_on_another_planet_wakes_when_the_lab_lands() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        let &(lab, _) = cat.modifiers[1].first().expect("a lab");
+        let game = &mut world.games[0];
+        let t = game.t;
+        game.account_pending = vec![(t + 100.0, lab)];
+        game.free = [t + 1e6, t];
+        game.commit = [None, None];
+        cat.tick(game);
+        assert_eq!(game.free[1], t + 100.0, "the research queue slept through the hold");
+    }
+
+    #[test]
+    fn the_lab_climbs_requirements_to_what_raises_output_and_a_rich_account_takes_the_cheapest() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        for k in 0..cat.objects.len() {
+            world.games[0].planet.levels[k] = if cat.objects[k].queue == 0 { 20 } else { 0 };
+        }
+        world.games[0].queue = 1;
+        world.colonisation = None;
+        world.games[0].planet.res = [0.0; 3];
+        cat.refresh(&mut world.games[0].planet);
+        let output = |p: &Planet| weighted(cat.production(p, true).0);
+        let before = output(&world.games[0].planet);
+        let mut steps = 0;
+        while output(&world.games[0].planet) <= before {
+            let k = next_research(&world, &cat, 0).expect("a step towards more output");
+            assert_eq!(cat.objects[k].queue, 1);
+            world.games[0].planet.levels[k] += 1;
+            cat.refresh(&mut world.games[0].planet);
+            steps += 1;
+            assert!(steps < 100, "the lab never reached what raises output");
+        }
+        world.games[0].planet.res = [1e15; 3];
+        let k = next_research(&world, &cat, 0).expect("a payable research");
+        let price = |k: usize| weighted(cat.objects[k].price[world.games[0].planet.levels[k] as usize]);
+        assert!((0..cat.objects.len()).filter(|&j| cat.objects[j].queue == 1 && world.legal(&cat, 0, j) && cat.wait_seconds(&world.games[0].planet, j) == 0.0).all(|j| price(k) <= price(j)), "a rich account did not take the cheapest");
     }
 
     #[test]

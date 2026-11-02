@@ -190,6 +190,21 @@ labs idle 25% against 47%. Kept because it is a real mechanic that hurts nothing
 3.54M) is void: the trade did not write the stored stock, so the next delivery undid the payment and the merchant printed
 resources. The health check caught it (`unexplained_over_cap` 6); a test now holds the case.
 
+**Kept: `techtree`, and two sim faults it exposed (2 Nov).** On 10 seeds x 365 days, the teacher alone, against the merchant
+run: HDS 0.878 against 0.788, AUC 0.828 against 0.902, research share in band 72% against 32%, top labs idle 0% against 25%,
+health PASS. The levels now look like a player's (top at day 200: plasma 14, weapons 17; before: plasma 0, weapons 7).
+- `next_research`: the lab walks requirements to what raises output, and a rich account takes the cheapest payable research.
+  `purpose` only looked at research it could start, so plasma, behind laser 10, was never wanted and astrophysics took it all.
+  Colonisation research comes first up to `SETTLED_PLANETS` (8, real mid at 64-128 speed days).
+- **Sleeping lab (sim fault).** With a research held by a lab upgrade on another planet, the queue slept until every queue did,
+  which a busy account never reaches. This, not the hold itself, was the idle lab of every earlier reading: earlier research
+  numbers were all understated by it, and any run before this fix read a world with a broken lab.
+- **Energy prices (sim fault).** The catalogue had no energy column, so graviton was free and terraformers had no limit. The
+  exporter now writes `energy_price`, and `stall_of` holds an object short of it: buildings against energy made, research
+  against energy free (`ObjectService`). The installed catalogue was patched from the host's own prices, not re-exported.
+  Fields now cap near 300-350 as the terraformer's energy runs out.
+Open: top accounts stall after day 200 (research 3.84M to 4.06M, stock 154B, score 144M against about 255M real).
+
 ## The yardstick was noisy (fixed 2 Nov)
 
 `hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,

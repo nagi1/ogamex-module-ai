@@ -269,12 +269,14 @@ class ExportAiEconomyCatalogueAction
     private function object(GameObject $object, PlanetService $planet, array $objects, array $modifierIds, int $maxLevel): array
     {
         $prices = [];
+        $energyPrices = [];
         $seconds = [];
         $grid = [];
-        $this->withLevels($planet, $objects, [], function () use ($object, $planet, $modifierIds, $maxLevel, &$prices, &$seconds, &$grid): void {
+        $this->withLevels($planet, $objects, [], function () use ($object, $planet, $modifierIds, $maxLevel, &$prices, &$energyPrices, &$seconds, &$grid): void {
             for ($level = 1; $level <= $maxLevel; $level++) {
                 $price = ObjectService::getObjectRawPrice($object->machine_name, $level);
                 $prices[] = [$price->metal->get(), $price->crystal->get(), $price->deuterium->get()];
+                $energyPrices[] = $price->energy->get();
                 $grid[] = $this->timeGrid($planet, $object, $level - 1, $modifierIds);
                 $seconds[] = $grid[$level - 1][0];
             }
@@ -297,6 +299,7 @@ class ExportAiEconomyCatalogueAction
                 'level' => $requirement->level,
             ], $object->requirements),
             'price' => $prices,
+            'energy_price' => $energyPrices,
             'build_seconds' => $seconds,
             'build_seconds_grid' => $grid,
         ];
