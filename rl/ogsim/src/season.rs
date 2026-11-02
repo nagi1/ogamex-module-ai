@@ -281,6 +281,9 @@ impl Universe {
             m.satellites = on("satellites");
             m.doubler = on("doubler");
         }
+        for player in players.iter_mut() {
+            if let Player::Raider(raider) = player { raider.moon_raids = on("moonraid") }
+        }
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],

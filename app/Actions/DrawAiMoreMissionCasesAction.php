@@ -116,6 +116,7 @@ class DrawAiMoreMissionCasesAction
         'acs_defend' => AcsDefendMission::class,
         'acs_attack' => AttackMission::class,
         'wreck' => AttackMission::class,
+        'moon_attack' => AttackMission::class,
     ];
 
     private const SPEEDS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0];
@@ -128,6 +129,7 @@ class DrawAiMoreMissionCasesAction
         'acs_defend' => ['fuel_short', 'missing_units', 'not_mates'],
         'acs_attack' => ['fuel_short', 'missing_units', 'not_mates'],
         'wreck' => ['no_dock', 'general', 'expire', 'second_battle'],
+        'moon_attack' => ['fuel_short', 'missing_units'],
     ];
 
     private const MAX_STOCK = 5_000_000;
@@ -233,6 +235,7 @@ class DrawAiMoreMissionCasesAction
                     'acs_defend' => $this->acsDefend($ids, $start, $caseSeed, $perturbation),
                     'acs_attack' => $this->acsAttack($ids, $start, $caseSeed, $perturbation),
                     'wreck' => $this->wreck($ids, $start, $caseSeed, $perturbation),
+                    'moon_attack' => $this->moonAttack($ids, $start, $caseSeed, $perturbation),
                     default => $this->moonDestruction($ids, $start, $caseSeed, $perturbation),
                 };
         } finally {
@@ -1145,6 +1148,56 @@ class DrawAiMoreMissionCasesAction
         $step($begun + $lifetime + $this->random->getInt(1, 7200), 'cleanup', $cleanup);
 
         return $steps;
+    }
+
+    /**
+     * A raid on a moon: what the moon holds fights and is plundered, the debris falls at the position and a wreck forms at
+     * the planet's coordinates.
+     *
+     * @param  list<int>  $ids
+     * @return array<string, mixed>
+     */
+    private function moonAttack(array $ids, int $start, int $caseSeed, string|null $perturbation): array
+    {
+        $owner = $this->pick($ids);
+        $originId = $this->pick($this->freshPlayer($owner)->planets->allPlanets())->getPlanetId();
+        $targetOwner = $this->pick(array_values(array_diff($ids, [$owner])));
+        $planet = $this->pick($this->freshPlayer($targetOwner)->planets->allPlanets());
+        $this->drawPlayer($owner);
+        $this->drawPlayer($targetOwner);
+        $this->forget();
+        $coordinate = $planet->getPlanetCoordinates();
+        $moonId = app(PlanetServiceFactory::class)->createMoonForPlanet($this->freshPlanet($planet->getPlanetId()), $this->logUniform(2_000_000), 20, $this->random->getInt(10, 20))->getPlanetId();
+        $this->forget();
+        $this->stockMoon($moonId, $start);
+
+        $units = $this->someShips();
+        $speed = $this->pick(self::SPEEDS);
+        $this->stockOrigin($originId, $units, [0, 0, 0], $this->fuel($this->freshPlanet($originId), $units, $coordinate, 0, $speed), $perturbation, $start);
+        $this->forget();
+        $this->freshPlanet($originId)->update();
+        $this->freshPlanet($moonId)->update();
+        $this->forget();
+        $input = $this->input($originId, $moonId, $coordinate, PlanetType::Moon, $owner, $targetOwner, $units, [0, 0, 0], $speed, 0);
+
+        return ['input' => $input] + $this->fly(
+            AttackMission::class,
+            $originId,
+            $coordinate,
+            PlanetType::Moon,
+            $units,
+            [0, 0, 0],
+            $speed,
+            0,
+            $caseSeed,
+            during: static function (): void {
+            },
+            after: function (FleetMission $sent) use ($coordinate): array {
+                $report = BattleReport::query()->where('planet_type', 3)->orderByDesc('id')->first();
+
+                return ['battle' => $report === null ? null : $this->battleReport($report), 'wreck_after' => $this->wreckField($coordinate)];
+            },
+        );
     }
 
     /** One to three kinds of flying ship, a few hundred at most of each. */

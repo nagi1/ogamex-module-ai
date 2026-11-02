@@ -605,6 +605,7 @@ fn record(day: &mut [Tally], e: &Event, w: &World, roles: &[usize]) {
         (Mission::Attack, EventKind::Fight) => {
             let lost = e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
             day[owner].raid_sent += 1;
+            day[owner].moon_raid += u32::from(w.moon_at[e.target].is_some());
             day[owner].loot_value += weighted(e.gained);
             day[owner].ships_lost_value += lost;
             let lost = e.target_lost.iter().map(|&(id, n)| price(e.target, id) * n as f64).sum::<f64>();
@@ -652,6 +653,8 @@ struct Tally {
     acs_defend: u32,
     /// L5: fleets that fought as a raid union's partner.
     acs_attack: u32,
+    /// Raids on a moon (its parked fleet and stock).
+    moon_raid: u32,
     /// Wreck fields: repaired ships taken back at the space dock.
     wreck_repaired: u32,
     /// M4: phalanx scans and jump gate jumps.
@@ -689,6 +692,7 @@ impl Tally {
             "acs_defend": self.acs_defend,
             "acs_attack": self.acs_attack,
             "wreck_repaired": self.wreck_repaired,
+            "moon_raid": self.moon_raid,
             "phalanx": self.phalanx,
             "jump": self.jump,
             "halved": self.halved,

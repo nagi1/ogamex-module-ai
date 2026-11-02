@@ -2553,6 +2553,7 @@ mod tests {
                 "acs_defend" => ("acs-cases-u1.json", "units-parity/econ-u1.json"),
                 "acs_attack" => ("acs-attack-cases-u1.json", "units-parity/econ-u1.json"),
                 "wreck" => ("wreck-cases-u1.json", "units-parity/econ-u1.json"),
+                "moon_attack" => ("moon-attack-cases-u1.json", "units-parity/econ-u1.json"),
                 "colonise" | "expedition" => ("more-mission-cases-u1.json", "units-parity/econ-u1-colonies.json"),
                 "missile" | "moon_destruction" => ("more-mission-cases-u1.json", "units-parity/econ-u1.json"),
                 _ => ("mission-cases-u1.json", "units-parity/econ-u1.json"),
@@ -2650,7 +2651,8 @@ mod tests {
             }
             let (missile, moon_strike) = (case.mission == "missile", case.mission == "moon_destruction");
             // A missile may also go for a moon: its defences are the moon's, and the planet's interceptors help it.
-            let moon = moon_strike || (missile && case.input.target_type == 3);
+            let moon_raid = case.mission == "moon_attack";
+            let moon = moon_strike || moon_raid || (missile && case.input.target_type == 3);
             let deploying = case.mission == "deploy";
             // A recycler flies to a debris field, not a planet: the world needs some planet under the field, so any other
             // account of the catalogue stands in for it, at the field's coordinates and with the sender's class.
@@ -2675,7 +2677,7 @@ mod tests {
             // A deploy goes to the sender's second planet, which the catalogue has no tables for: the sender's home config
             // stands in (its buildings are cleared below, and the planet's production is switched off).
             let target_config = match () {
-                _ if recycling || moon_strike => (0..cat.planets.len()).find(|&c| c != origin_config)?,
+                _ if recycling || moon_strike || moon_raid => (0..cat.planets.len()).find(|&c| c != origin_config)?,
                 _ if deploying => config_of(cat, target.id).unwrap_or(origin_config),
                 // A missile's target the catalogue has no tables for stands in as a deploy's second planet does.
                 _ if missile && moon => (0..cat.planets.len()).find(|&c| c != origin_config)?,
@@ -2735,7 +2737,7 @@ mod tests {
             }
             let mission = match case.mission.as_str() {
                 "moon_destruction" => Mission::MoonDestroy,
-                "attack" => Mission::Attack,
+                "attack" | "moon_attack" => Mission::Attack,
                 "espionage" => Mission::Espionage,
                 "recycle" => Mission::Recycle,
                 "deploy" => Mission::Deploy,
@@ -2752,7 +2754,7 @@ mod tests {
             let before = world.games[0].planet.res;
             let flew = match missile {
                 true => world.launch_missiles(cat, 0, 1, moon, case.input.missiles.unwrap_or(0), case.input.priority.unwrap_or(0)),
-                false => world.dispatch(cat, 0, 1, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed),
+                false => world.dispatch(cat, 0, if moon_raid { world.moon_of[1]? } else { 1 }, mission, &units_of(&case.input.units), case.input.cargo, case.input.speed),
             };
             if !case.dispatch.accepted {
                 assert!(flew.is_err(), "case {index}: the host refused this mission and the world flew it");
@@ -2776,7 +2778,7 @@ mod tests {
                 if let Some(battle) = arrival.battle.as_ref().filter(|b| b.rounds > 0 || !b.attacker_left.is_null()) {
                     world.recorded = Some(combat::Recorded {
                         engine: combat::EngineResult { rounds: battle.rounds, attacker_left: counted(&battle.attacker_left), defender_left: counted(&battle.defender_left), allies_left: Vec::new(), partners_left: Vec::new() },
-                        repaired: combat::Units::new(),
+                        repaired: if moon_raid { counted(&battle.repaired) } else { combat::Units::new() },
                         moon_roll: 0,
                     });
                 }
@@ -2815,6 +2817,8 @@ mod tests {
             }
             if moon {
                 moon_after(&world, arrival, index);
+                // A fight on a moon leaves its wreck at the planet's coordinates (AttackMission).
+                if moon_raid { wreck(&world, 1, arrival.wreck_after.as_ref(), index, "after the moon raid") }
             } else {
                 stock(arrival.target_after.as_ref(), &world, 1, index, "at arrival");
             }

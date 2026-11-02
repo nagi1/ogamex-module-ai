@@ -1363,6 +1363,8 @@ pub struct Raider {
     pub miner: Miner,
     /// A twin world turns raiding off to show what the same accounts do in peace.
     pub hostile: bool,
+    /// A neighbour's moon is spied and raided like its planet: the fleet parked there and the stock it holds.
+    pub moon_raids: bool,
     last: f64,
     spied: HashMap<usize, f64>,
     hit: HashMap<usize, f64>,
@@ -1373,7 +1375,7 @@ pub struct Raider {
 impl Raider {
     pub fn new(seed: u64) -> Raider {
         let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
-        Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
+        Raider { miner, hostile: true, moon_raids: false, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
@@ -1382,7 +1384,9 @@ impl Raider {
         if !self.hostile || now == self.last || w.account_of(a) != a { return pick }
         self.last = now;
         let Some(kit) = Kit::of(w, cat, a) else { return pick };
-        for target in nearest(w, cat, a, NEIGHBOURS) {
+        let mut targets = nearest(w, cat, a, NEIGHBOURS);
+        if self.moon_raids { targets.extend(targets.clone().into_iter().filter_map(|t| w.moon_of[t])) }
+        for target in targets {
             if w.fleets.iter().filter(|f| f.owner == a).count() >= SLOTS { break }
             self.recycle(w, cat, a, target, ledger);
             if self.destroy_moon(w, cat, a, target, ledger) { continue }
@@ -2442,6 +2446,31 @@ mod tests {
         tend_wrecks(&mut world, &cat, 1, &mut ledger);
         assert!(world.wrecks[&1].is_empty() && ledger.repaired == kept, "the repaired fighters are back");
         assert_eq!(on_shelf(&world, 1, fighter), kept);
+    }
+
+    /// Moon raids: a raider spies a neighbour's moon and raids the stock and the cargo ships parked there; without the
+    /// habit it leaves the moon alone.
+    #[test]
+    fn a_raider_spies_and_raids_a_neighbours_moon() {
+        for habit in [false, true] {
+            let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+            let kit = Kit::of(&world, &cat, 0).expect("a fighter, a cargo hull and a probe");
+            let moon = world.add_moon(&cat, 1, 8000, 0.0);
+            world.games[moon].planet.res = [2e6; 3];
+            assert!(world.set_units(&cat, moon, kit.cargo, 5), "a fleet parked on the moon");
+            for (id, n) in [(kit.fighter, 5_000), (kit.cargo, 500), (kit.probe, 10)] { assert!(world.set_units(&cat, 0, id, n)) }
+            world.games[0].planet.res = [1e7; 3];
+            let mut raider = Raider { moon_raids: habit, ..Raider::new(1) };
+            let mut ledger = Ledger::default();
+            for _ in 0..5_000 {
+                if world.events.iter().any(|e| e.kind == EventKind::Fight && e.target == moon) { break }
+                let Some(a) = world.next_decision(&cat) else { break };
+                if a == 0 { raider.act(&mut world, &cat, 0, &mut ledger); }
+                world.wait(&cat, a);
+            }
+            let raided = world.events.iter().any(|e| e.kind == EventKind::Fight && e.target == moon && e.gained.iter().sum::<f64>() > 0.0);
+            assert_eq!(raided, habit, "the moon is raided only with the habit");
+        }
     }
 
     /// M4: a fleeter's warships deploy to its capital's moon; with a gate on two moons the fleet jumps away from the first
