@@ -9,7 +9,10 @@ bin=$(realpath "${3:-$root/Modules/AI/rl/ogsim/target/release/examples/season}")
 arms="moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler moonfeed standing labfirst moontaste netchain merchant techtree doctrine acsdefend acsattack wrecks moonraid relocate"
 mkdir -p "$out"; cd "$out"
 PYTHONPATH=$root/Modules/AI/rl "$root/.venv-rl/bin/python" -m ogrl.export_policy "$ckpt" policy.json
-for s in ${SEEDS:-$(seq 1 10)}; do "$bin" "$data" 365 64 "$s" "$data/units-parity/econ-u1-colonies.json" "ready-$s.jsonl" $arms "policy=policy.json" ${4:-} > "ready-$s.log" & done
+# A checkpoint of the errand kind (queue 2) flies every account's fleet; the rest decide the builds.
+queue=$("$root/.venv-rl/bin/python" -c "import sys, torch; print(torch.load(sys.argv[1], map_location='cpu', weights_only=False).get('queue', 3))" "$ckpt")
+plays="policy=policy.json"; [ "$queue" = 2 ] && plays="errand-policy=policy.json fleet-model=64"
+for s in ${SEEDS:-$(seq 1 10)}; do "$bin" "$data" 365 64 "$s" "$data/units-parity/econ-u1-colonies.json" "ready-$s.jsonl" $arms $plays ${4:-} > "ready-$s.log" & done
 wait
 # hds.py exits 1 on a FAIL verdict, which is the normal state until the target is met.
 "$root/.venv-rl/bin/python" "$root/Modules/AI/rl/scripts/hds.py" ready-*.jsonl --save ready-score.json > ready-hds.txt 2>&1 || true
