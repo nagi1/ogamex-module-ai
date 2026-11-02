@@ -330,6 +330,7 @@ impl Universe {
             m.satellites = on("satellites");
             m.doubler = on("doubler");
             m.expo_full = on("expofull");
+            m.expo_ship = on("exposhield");
         }
         for player in players.iter_mut() {
             if let Player::Raider(raider) = player { raider.moon_raids = on("moonraid") }

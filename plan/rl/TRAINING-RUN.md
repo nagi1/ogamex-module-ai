@@ -460,3 +460,20 @@ The OGame wiki ("1.5×universe economic speed" on resources and ships gained dur
 Classbonus) × ecospeed", worked example (1 + 0.5) × 5 × 2 = 15) agree with the host's `ExpeditionMission.php`. The host is accurate, so a
 winning player in a speed-8 universe is a Discoverer, and win-first training stays in that world. The research gap stands as a weakness of
 the personas: real speed-8 winners, many of them Discoverers, still hold a third of their points in research.
+
+### 3 Nov 00:55 — two host gaps in expeditions, and two teacher fixes from the forums and the data
+
+The forum's advanced expedition guide ("Expeditions & You") gives two original-game mechanics that `ExpeditionMission.php` does not have:
+- the find scales with the fleet's expedition points, "(Fleet Structural Integrity * 5) ÷ 1000", capped by the top player's bracket;
+- positions deplete, shared by every player, and "high depletion can drastically reduce the amount of rewards".
+
+Both make OGameX expeditions richer than the original's, which fits our accounts' 30% military share against real winners' 16%.
+**Host tasks, not AI work.** Training stays on OGameX as it is, and is retrained if the host gains them.
+
+Teacher fixes (the clones and ES start from the teacher):
+1. `RESEARCH_SHARE` 0.12 -> 0.33. With `balance` the persona stopped researching at 12% of its points. The 0.12 read real totals with lifeform
+   points in them. Stripped, real top players at speed 8 hold 31-35%, and real middle players 17-18%.
+2. `exposhield` arm: each expedition takes one of the account's strongest ships (most hull, from the host's tables), as the guide advises
+   ("one combat ship (the strongest you have)"). In OGameX the ships a find can hold are capped by the best ship type in the fleet.
+
+One paired check (6 Discoverer seeds) decides whether both join the win-first arms. Then the teacher is re-cloned and ES restarts from that clone.
