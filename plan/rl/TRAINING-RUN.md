@@ -306,3 +306,7 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   drifted checkpoint). PPO lands within +-5 % of the clone: a fixed point, KL ~1e-3 per update.
 - **Next arm g2** (4070): anchor 0.05, gamma 0.995 per day and GAE lambda 0.97 - credit that reaches the slow payoffs
   (astrophysics, colonies, large mines) that a 0.985/0.9 horizon of ~65 days barely sees. g1 and e0 continue (3090).
+- **Suspected blocker: the advice flag (2 Nov, 22:00).** The season's build state carries the persona's own pick as a
+  candidate column. The clone copies it (100 % top-1 in 52 s) and every PPO arm from it sits at a fixed point. On the
+  single-planet economy (25 Oct), with no such flag, PPO beat the player by +28 to +34 %. Test: arm `noadvice` drops the
+  column in training and judging; `bc-noadvice.pt` clones from the state alone, is judged as `bcn0`, then PPO from it.
