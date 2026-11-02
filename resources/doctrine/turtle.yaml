@@ -43,6 +43,9 @@ phases:
 # The late hulls and defences (shares of the late fleet and wall the wiki describes) stay in the same list: one the account
 # cannot build yet is skipped, so they only start to count once their requirements are met.
 fleet_template:
+  # Class ships: only the class the host lets build one does (General reaper, Collector crawler, Discoverer pathfinder).
+  crawler: 15
+  pathfinder: 3
   large_cargo: 50
   recycler: 30
   light_fighter: 20

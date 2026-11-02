@@ -115,6 +115,31 @@ or maturin, as `rl/README` and `train_ppo.py` expect.
 | W24 | Throughput for RL: the Python binding rebuilt on today's world; seasons per hour on the 85% budget measured, target thousands of seasons a day | measurement | open |
 | W25 | **Each season plays one real universe's settings.** The 196 real speed-8 universes differ (debris 30-80%, median 70; war fleet speed 1-6; holding 2-6; peaceful 3-8; bonus fields 10/25/30; galaxies 4-9; wreck fields from 0% fleet loss; deuterium save 0.5-1), and the bands pool them. A seed draws one universe's serverData and the season reads the host exports made under it (only fleet and combat exports vary, so they are cheap; research divisor is 2 in 193 of 196). Until then r8 holds the modal values: research divisor 2, war 2, peaceful 5, holding 3, bonus fields 30, debris 60 with deuterium, deuterium 0.5, 6 galaxies | the per-setting spread of our seasons equals the real one | open |
 
+### Late game first (owner, 2 Nov: "before you continue, fix the simulator to support all game features till late game")
+
+Training is paused until these rows are done; each changes the world, so step A (clone, detector) is rerun after them.
+Measured on the teacher's year (`train1/rule-built6`, seed 1): expeditions, raids, spying, recycling, saves, colonising, moons
+and officers are flown; missiles and moon destruction are exact in the world but no player ever uses them; top accounts sit at
+metal mine 40, the export's last row.
+
+**Coverage gate (owner, 2 Nov: "make sure every object in the game is utilized, deathstars and jump gates and late/end game
+mechanics, all of it").** The teacher's 10-seed year must show every catalogue object (each building, research, ship and
+defence the host exports, deathstar and jump gate included) owned by some account, and every mission and late-game action
+(phalanx scan, gate jump, ACS attack and defend, wreck repair, halving, missile strike, moon destruction) taken by some
+account. `rl/scripts/coverage.py` over the season lines prints what was never reached; training resumes only when it prints
+nothing, and the share of accounts reaching each object is compared with the real game where data exists. Order, one commit each:
+
+| Row | What | Proof | Status |
+| --- | --- | --- | --- |
+| L1 (W23) | Levels past 40: the economy catalogue and the highscore table re-exported to 60 (`--max-level=60`, `ai:rl-units-catalogue --score-levels=60`) into `r8x/`, then installed in `r8w/` | `cargo test --release` green on the new files; the teacher's year no longer stops at a table's edge | in progress |
+| L2 (W20) | Wreck fields: the battle's wreck (defender, and a General attacker's carried home), repair at the space dock, collected at a login; settings and the excluded units read from the host | host attack cases with the wreck in their output, exact | open |
+| L3 (W17) | Phalanx: scan cost and range from the host; a raider scans before it attacks a moon-holding target's planet | host cases, exact | open |
+| L4 (W18) | Jump gate: moon-to-moon transfer and cooldown from the host; a saver with two gated moons jumps instead of flying | host cases, exact | open |
+| L5 (W19) | ACS attack (union, one battle, loot shared) and ACS defend (holding at a mate's planet) for alliance members | host cases, exact | open |
+| L6 (W16) | Dark matter: halving and completing builds, research and units | host cases, exact | open |
+| L7 | Late-game play: deathstars in the yard order, moon destruction on a phalanx-holding enemy moon, missiles against a defended raid target | the teacher's year flies each | open |
+| L8 (W21, W22) | Attacks on a moon's own contents; planet relocation | host cases, exact | open |
+
 ## 5. Agents in flight (Sonnet, 25 Oct; each owns separate files)
 
 | Agent task | Row | Files it owns |

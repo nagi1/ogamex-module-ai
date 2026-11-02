@@ -253,8 +253,13 @@ impl Universe {
             }
         }).collect();
         let stack = on("stack") || on("yardstack") || on("moonstack");
-        for player in &mut players {
+        // Late-game arm: each persona's yard fills its archetype's fleet and defence templates (`rl/scripts/doctrine_json.py`).
+        let doctrine: HashMap<String, players::Doctrine> = if on("doctrine") {
+            serde_json::from_str(&std::fs::read_to_string(format!("{data}/doctrine.json")).expect("the doctrine export")).expect("doctrine.json")
+        } else { HashMap::default() };
+        for (a, player) in players.iter_mut().enumerate() {
             let m = player.miner();
+            m.doctrine = doctrine.get(PERSONAS[roles[a]].0).cloned().unwrap_or_default();
             m.consolidate = on("consolidate") || stack;
             m.reserve = on("reserve") || stack;
             m.yard = on("yard") || on("yardstack") || on("moonstack");

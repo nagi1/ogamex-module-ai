@@ -20,7 +20,8 @@ use OGame\Factories\PlayerServiceFactory;
 #[Signature('ai:rl-units-catalogue
     {universe : A SQLite file made by ai:rl-universe}
     {out : The JSON file to write}
-    {--grid-level=24 : Highest level of each build-time modifier tabulated}')]
+    {--grid-level=24 : Highest level of each build-time modifier tabulated}
+    {--score-levels=40 : Highest level of each building and research the highscore is tabulated at}')]
 class ExportAiRlUnitsCatalogue extends Command
 {
     use OpensRlUniverse;
@@ -33,7 +34,7 @@ class ExportAiRlUnitsCatalogue extends Command
             ->map(static fn (int $playerId) => app(PlayerServiceFactory::class)->make($playerId, true)->planets->first())
             ->filter()->values()->all();
 
-        $catalogue = app(ExportAiUnitsCatalogueAction::class)->handle($planets, max(1, (int) $this->option('grid-level')));
+        $catalogue = app(ExportAiUnitsCatalogueAction::class)->handle($planets, max(1, (int) $this->option('grid-level')), max(1, (int) $this->option('score-levels')));
         file_put_contents((string) $this->argument('out'), json_encode($catalogue, JSON_THROW_ON_ERROR));
 
         $this->info(sprintf('RL-UNITS-CATALOGUE: %s, %d unit(s), %d time modifier(s), %d planet(s)', $this->argument('out'), count($catalogue['units']), count($catalogue['time_modifiers']), count($catalogue['planets'])));

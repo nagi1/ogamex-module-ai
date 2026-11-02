@@ -375,6 +375,41 @@ pub struct Miner {
     pub missiles: i64,
     /// Per slot of the account, the interceptors it keeps: as many as the largest salvo that struck it.
     pub interceptors: HashMap<usize, i64>,
+    /// The persona's archetype doctrine (`doctrine` arm): the yard's surplus fills its fleet or defence template.
+    pub doctrine: Doctrine,
+}
+
+/// An archetype's fleet and defence templates as (host unit id, share by count), from `resources/doctrine` through
+/// `rl/scripts/doctrine_json.py`: data names the units, the code names none (gate 1).
+#[derive(Clone, Default, serde::Deserialize)]
+pub struct Doctrine {
+    pub fleet: Vec<(u32, f64)>,
+    pub defence: Vec<(u32, f64)>,
+    /// The defence value kept per unit of warship value: below it, the yard's surplus builds the defence template.
+    #[serde(default)]
+    pub defence_weight: f64,
+}
+
+impl Doctrine {
+    /// Whether account a's defences, at price, are short of its weight times its warships, as the host's kinds tell them.
+    fn defence_due(&self, w: &World, a: usize) -> bool {
+        let units = &w.rules[a].units;
+        let value = |kind: UnitKind| (0..units.units.len()).filter(|&u| units.kind.get(u) == Some(&kind))
+            .map(|u| owned(w, a, units.units[u].id as u32) as f64 * weighted(units.units[u].price)).sum::<f64>();
+        !self.defence.is_empty() && value(UnitKind::Defence) < self.defence_weight * value(UnitKind::MilitaryShip)
+    }
+}
+
+/// `ArchetypeDoctrine::templateGaps` followed by the planner's pick: among the template's units the yard can start, the one
+/// furthest below its share by count, and any not held yet first. Held units of the template are the denominator.
+fn template_pick(w: &World, a: usize, template: &[(u32, f64)], buildable: impl Fn(usize) -> bool) -> Option<usize> {
+    let rules = &w.rules[a];
+    let total = template.iter().map(|&(id, _)| owned(w, a, id)).sum::<i64>().max(1) as f64;
+    let weight = template.iter().map(|t| t.1).sum::<f64>().max(1.0);
+    let gap = |&(id, share): &(u32, f64)| { let held = owned(w, a, id); share / weight - held as f64 / total + if held == 0 { 1.0 } else { 0.0 } };
+    template.iter().filter_map(|t| Some((rules.units.index(t.0 as i64)?, gap(t))))
+        .filter(|&(u, _)| buildable(u))
+        .max_by(|x, y| x.1.total_cmp(&y.1)).map(|(u, _)| u)
 }
 
 /// W14: a lab on a colony before the account's research network reads it shortens no research, and the host holds the
@@ -469,7 +504,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default() }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -633,7 +668,9 @@ impl Miner {
     /// always), else the cheapest unit the host marks as defence that the yard can start now. No object is named (gate 1).
     fn hull(&self, w: &World, cat: &Catalogue, a: usize, fighter: bool) -> Option<usize> {
         let rules = &w.rules[a];
-        let buildable = |u: usize| rules.units.max_amount(&w.yards[a], &w.games[a].planet, u) > 0;
+        let buildable = |u: usize| w.yards[a].allowed[u] && rules.units.max_amount(&w.yards[a], &w.games[a].planet, u) > 0;
+        let template =if fighter { &self.doctrine.fleet } else { &self.doctrine.defence };
+        if let Some(u) = template_pick(w, a, template, buildable) { return Some(u) }
         let ship = fighter.then(|| Kit::of(w, cat, a)).flatten().and_then(|kit| rules.units.index(kit.fighter as i64));
         if let Some(u) = ship.filter(|&u| buildable(u) || self.fighters > 0) { return Some(u) }
         (0..rules.units.units.len())
@@ -672,7 +709,7 @@ impl Miner {
         for (u, amount) in self.order_plans(w, cat, a) {
             for r in 0..3 { keep[r] += rules.units.units[u].price[r] * amount as f64 }
         }
-        let unit = self.hull(w, cat, a, self.fighters > 0 || self.ships);
+        let unit = self.hull(w, cat, a, (self.fighters > 0 || self.ships) && !self.doctrine.defence_due(w, a));
         let Some(u) = unit else { return };
         let price = rules.units.units[u].price;
         let amount = (0..3).filter(|&r| price[r] > 0.0)
@@ -1139,7 +1176,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default() };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
         Raider { miner, hostile: true, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
@@ -2055,6 +2092,29 @@ mod tests {
         let res = world.games[0].planet.res;
         assert!((0..3).all(|r| res[r] + 1e-6 >= keep[r]), "the reserve was spent: {res:?} against {keep:?}");
         assert!((0..3).any(|r| res[r] < 1e7), "most of the surplus is still in the store: {res:?}");
+    }
+
+    /// Late game: the yard fills the doctrine's template, a unit not held first, and never one the class may not build.
+    #[test]
+    fn the_yard_fills_the_doctrine_template_with_what_the_class_may_build() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let planet = &mut world.games[0].planet;
+        planet.levels = cat.objects.iter().map(|o| (o.price.len() as u32 - 1).min(12)).collect();
+        cat.refresh(planet);
+        planet.res = [5e7, 5e7, 5e7];
+        let rules = Arc::clone(&world.rules[0]);
+        let units = &rules.units;
+        let defences: Vec<usize> = (0..units.units.len()).filter(|&u| units.kind.get(u) == Some(&UnitKind::Defence) && units.max_amount(&world.yards[0], &world.games[0].planet, u) > 0).take(3).collect();
+        assert_eq!(defences.len(), 3, "the test needs three defences the planet can build");
+        let [held, wanted, barred] = [defences[0], defences[1], defences[2]];
+        world.yards[0].counts[held] = 100;
+        world.yards[0].allowed[barred] = false;
+        let mut miner = Miner::new(5);
+        miner.yard = true;
+        miner.doctrine.defence = [held, wanted, barred].iter().map(|&u| (units.units[u].id as u32, 1.0)).collect();
+        miner.spend_surplus(&mut world, &cat, 0, None);
+        let ordered: Vec<usize> = world.yards[0].orders.iter().map(|o| o.unit).collect();
+        assert_eq!(ordered, vec![wanted], "the template's first unit not held, and the class's bar kept");
     }
 
     /// Row 45 C: a colony whose store is filling sends what it holds above half its cap home in the cargo ships stationed on it, and

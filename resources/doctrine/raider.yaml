@@ -51,6 +51,9 @@ phases:
 # 35-50% battlecruisers and 20-45% cruisers, 4-7% battleships, 3-13% light fighters, and only 2-3% destroyers and bombers.
 # A destroyer-and-bomber heavy list (the wiki's theory) is not what players fly.
 fleet_template:
+  # Class ships: only the class the host lets build one does (General reaper, Collector crawler, Discoverer pathfinder).
+  reaper: 5
+  pathfinder: 3
   battlecruiser: 30
   cruiser: 25
   light_fighter: 15

@@ -14,7 +14,7 @@
 //!
 //!     cargo run --release --example season -- <data dir> <days> <accounts> <seed> <catalogue> <out JSONL>
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
@@ -411,7 +411,19 @@ impl<W: Write> Season<'_, W> {
         let yard_capacity: f64 = (0..units.units.len())
             .map(|u| units.max_amount(&self.u.world.yards[a], planet, u) as f64 * weighted(units.units[u].price))
             .sum();
+        // Every unit the account owns, at home, on its moons and in flight, by host id: the coverage gate reads it.
+        let world = &self.u.world;
+        let mut owned: BTreeMap<u32, u64> = BTreeMap::new();
+        for &slot in planets.iter() {
+            let ids = world.rules[slot].units.units.iter().map(|x| x.id as u32);
+            for (id, n) in ids.clone().zip(&world.yards[slot].counts).chain(ids.zip(&world.moon_holds[slot].counts)) { *owned.entry(id).or_default() += n }
+        }
+        for f in world.fleets.iter().filter(|f| world.account_of(f.owner) == a) {
+            for &(id, n) in &f.ships { *owned.entry(id).or_default() += n.max(0) as u64 }
+        }
+        owned.retain(|_, n| *n > 0);
         json!({
+            "units": owned.into_iter().collect::<Vec<_>>(),
             "blocked_hours": blocked,
             "buildings": reasons,
             "research": research_reasons,
