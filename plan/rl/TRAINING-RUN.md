@@ -316,7 +316,7 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   DAgger (`rl/ogrl/dagger_world.py`) starts from bc-noadvice: the clone plays, the persona labels every state it reaches. Smoke test: on its own states the clone matches the persona about 80% of the time, against 94% on the persona's own games.
   Run d1: 4 rounds of 600k rows, on the 4070. dqueue.sh judges each round when no other judge is playing. Bar to beat: bc0 20.98M.
 
-### 2 Nov 23:45 — root cause of the stalled training: the world's shared dice
+### 2 Nov 23:15 — root cause of the stalled training: the world's shared dice
 
 Every PPO arm since the clone (g0, g1, g2, l1, w0, w1, e0) ended on the clone's ~21M. The training mechanics were healthy (value net
 explains ~90%, KL 1e-3, entropy falling 1.5 to 0.3), so the signal was the suspect, not the learner. The per-day discount (0.995 = ~200 days) was ruled out.
