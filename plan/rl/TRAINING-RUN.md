@@ -500,3 +500,15 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   (-21%). Entropy fell and KL went to ~0 in both: PPO drifted to a worse fixed point. Both stopped; ES (final score itself as the
   objective) and DAgger carry the training.
 - **Rule alone with both field fixes, 10 seeds: 266.5M** (research 11%, hoard 18.6B): the score the model now has to beat.
+
+### 3 Nov 03:00: every model played without the lab (harness bug, fixed in 09c3c320)
+
+- Greedy bc-t2 and ES generation 5 judged to the same number to the unit (267,316,254): five ES generations flipped no
+  greedy decision. The advice input decides; ES restarts from the fixed world and is watched for a greedy change.
+- DAgger round 1 matched the persona on 100% of the rows: nothing for it to teach, stopped.
+- Under a model, research stayed at 1% (lab 8, no network) even played greedily. The persona's own picks through the model's
+  path (`teacher-pick`) did the same: 8 lab levels, network 0, -12% at day 120. Cause: the model's legal set, the advice it
+  reads and the training path's action check used "can start now", while the persona commits to the lab under a running
+  research (hundreds of times a season) and the world starts it when the hold ends, as the host's queue does. Now all three
+  read `World::committable`; the persona through the model's path matches the rule (labs 149.5, network 10, 48.5M vs 48.9M).
+  Every clone, PPO and ES judgement before this commit played under that handicap.
