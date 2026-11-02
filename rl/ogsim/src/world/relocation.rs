@@ -6,7 +6,7 @@ use super::*;
 
 impl World {
     /// PlanetMoveController::move for planet p to `to`, at its account's clock.
-    pub fn relocate(&mut self, cat: &Catalogue, p: usize, to: Coord) -> Result<(), &'static str> {
+    pub fn relocate(&mut self, p: usize, to: Coord) -> Result<(), &'static str> {
         let rules = self.rules[p].settings.relocation.clone().ok_or("no relocation rules")?;
         let now = self.games[self.account[p]].t;
         let settings = &self.rules[p].settings;

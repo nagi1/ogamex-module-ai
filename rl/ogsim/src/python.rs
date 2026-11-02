@@ -652,7 +652,7 @@ impl Seat {
             let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
             let a = self.deciding.0;
             self.universe.observe(a, self.advice, &mut state, &mut cands, &mut legal);
-            let (action, logp, value) = policy.sample(&state, &cands, &legal, &mut self.rng);
+            let (action, logp, value) = policy.sample(&state, &cands, &legal, 1.0, &mut self.rng);
             let owner = self.universe.world.account_of(a);
             let day = (self.universe.world.games[a].t / DAY) as f32;
             self.streams[owner].push(Row { state, cands, legal, action: action as i64, logp, value, reward: 0.0, done: 0, closed: false, day });

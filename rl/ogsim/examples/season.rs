@@ -21,7 +21,7 @@ use std::io::{BufWriter, Write};
 use ogsim::players::{account_value, YardStall};
 use ogsim::score;
 use ogsim::season::{Policy, Universe, DAY, PERSONAS, SAVER};
-use ogsim::economy::{Baseline, Books};
+use ogsim::economy::{next_random, Baseline, Books};
 use ogsim::units::UnitKind;
 use ogsim::world::{Colonisation, Decision, Event, EventKind, Mission, World};
 use std::sync::Arc;
@@ -52,6 +52,15 @@ fn main() {
     // `sampled` plays the policy as training does; a model cloned from a teacher can keep every greedy pick while it changes.
     let mut draw = arms.iter().any(|arm| arm == "sampled").then_some(seed ^ 0x5A17);
     let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
+    // `skill=LO:HI` gives each account its own sampling heat, log-uniform in [LO, HI]: real players range from sharp to loose.
+    let heat: Vec<f32> = match arms.iter().find_map(|arm| arm.strip_prefix("skill=")).and_then(|r| r.split_once(':')) {
+        Some((lo, hi)) => {
+            let (lo, hi) = (lo.parse::<f64>().expect("skill low").ln(), hi.parse::<f64>().expect("skill high").ln());
+            let mut rng = seed ^ 0x5C11;
+            (0..accounts).map(|_| (lo + (hi - lo) * (next_random(&mut rng) >> 11) as f64 / (1u64 << 53) as f64).exp() as f32).collect()
+        }
+        None => vec![1.0; accounts],
+    };
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -94,7 +103,7 @@ fn main() {
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
         let pick = match &policy {
-            Some(p) if build => Some(season.u.choose(p, a, draw.as_mut())),
+            Some(p) if build => Some(season.u.choose(p, a, heat[owner], draw.as_mut())),
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };

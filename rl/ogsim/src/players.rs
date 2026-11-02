@@ -876,7 +876,7 @@ pub fn relocate_colony(w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Le
     let mut free: Vec<Coord> = (1..=15).map(|position| Coord { position, ..home }).filter(|&c| !w.coords.contains(&c) && !w.moves.values().any(|m| m.0 == c)).collect();
     free.sort_by_key(|c| (c.position - home.position).abs());
     let Some(&to) = free.first() else { return false };
-    let asked = w.relocate(cat, colony, to).is_ok();
+    let asked = w.relocate(colony, to).is_ok();
     ledger.relocations += usize::from(asked);
     asked
 }

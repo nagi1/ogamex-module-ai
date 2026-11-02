@@ -3158,7 +3158,7 @@ mod tests {
                 assert_eq!(world.fleets.last().map(|f| f.arrive), Some(raid.arrival), "case {index}: the raid's arrival");
             };
             if let (Some(raid), true) = (raid, early) { send(&mut world, raid) }
-            let asked = world.relocate(cat, 0, to);
+            let asked = world.relocate(0, to);
             if !case.dispatch.accepted {
                 assert!(asked.is_err(), "case {index}: the host refused the move and the world scheduled it");
                 return Some(false);

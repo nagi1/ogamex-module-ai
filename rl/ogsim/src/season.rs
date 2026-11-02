@@ -127,11 +127,11 @@ impl Policy {
         self.scores(state, cands, legal).1.into_iter().max_by(|x, y| x.1.total_cmp(&y.1)).map_or(legal.len() - 1, |best| best.0)
     }
 
-    /// A row drawn from the softmax over the legal rows, with its log-probability and the state's value.
-    pub fn sample(&self, state: &[f32], cands: &[f32], legal: &[u8], rng: &mut u64) -> (usize, f32, f32) {
+    /// A row drawn from the softmax over the legal rows, scores divided by `heat`, with its log-probability and the state's value.
+    pub fn sample(&self, state: &[f32], cands: &[f32], legal: &[u8], heat: f32, rng: &mut u64) -> (usize, f32, f32) {
         let (s, rows) = self.scores(state, cands, legal);
         let top = rows.iter().map(|r| r.1).fold(f32::NEG_INFINITY, f32::max);
-        let weights: Vec<f64> = rows.iter().map(|r| ((r.1 - top) as f64).exp()).collect();
+        let weights: Vec<f64> = rows.iter().map(|r| ((r.1 - top) as f64 / heat as f64).exp()).collect();
         let total: f64 = weights.iter().sum();
         let mut draw = (next_random(rng) >> 11) as f64 / (1u64 << 53) as f64 * total;
         let mut at = rows.len() - 1;
@@ -381,13 +381,13 @@ impl Universe {
     }
 
     /// The model's build at slot a: an object, or `None` to pass. With `draw` it samples as it does in training.
-    pub fn choose(&mut self, policy: &Policy, a: usize, draw: Option<&mut u64>) -> Option<usize> {
+    pub fn choose(&mut self, policy: &Policy, a: usize, heat: f32, draw: Option<&mut u64>) -> Option<usize> {
         let k = self.cat.objects.len() + 1;
         let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
         let advice = self.teacher(a);
         self.observe(a, advice, &mut state, &mut cands, &mut legal);
         let row = match draw {
-            Some(rng) => policy.sample(&state, &cands, &legal, rng).0,
+            Some(rng) => policy.sample(&state, &cands, &legal, heat, rng).0,
             None => policy.best(&state, &cands, &legal),
         };
         Some(row).filter(|&row| row < k - 1)
