@@ -496,3 +496,7 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   from bc0 runs in the current world (`d2`, 3090; the stuck net-worth run `nw2` was stopped for it).
 - **Rejected.** `labahead` (raise the lab between researches) never fired: identical to the base, as the capitals were sealed.
   Dropping `cap` (ships from all surplus): median 65M, military 66%, research 0.4%.
+- **Net-worth PPO rejected.** Judged at update 80 in the Discoverer world: nw1 197.7M, nw2 196.6M, against the clone's 251.3M
+  (-21%). Entropy fell and KL went to ~0 in both: PPO drifted to a worse fixed point. Both stopped; ES (final score itself as the
+  objective) and DAgger carry the training.
+- **Rule alone with both field fixes, 10 seeds: 266.5M** (research 11%, hoard 18.6B): the score the model now has to beat.
