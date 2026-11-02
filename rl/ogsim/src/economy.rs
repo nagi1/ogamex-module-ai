@@ -89,6 +89,9 @@ struct RawObject {
     /// The energy the host asks for at each level; it is held, not spent. A catalogue without the column asks none.
     #[serde(default)]
     energy_price: Vec<f64>,
+    /// M2: the planet types the host lets it stand on ("planet", "moon"); a catalogue without the column is planets only.
+    #[serde(default)]
+    valid_types: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -112,6 +115,9 @@ struct RawPlanet {
     #[serde(default)]
     character_class: Option<u32>,
     field_max: u32,
+    /// M2: a moon's config (`merge_moons.py`): no production, its own buildings.
+    #[serde(default)]
+    moon: bool,
     basic_income: [f64; 4],
     resources: [f64; 3],
     levels: HashMap<String, u32>,
@@ -170,6 +176,9 @@ pub struct Object {
     pub fields_added: Vec<u32>,
     /// The energy the planet must hold for the level after index `level`.
     pub energy_price: Vec<f64>,
+    /// M2: whether it may stand on a planet, and on a moon (`ObjectService::objectValidPlanetType`).
+    pub on_planet: bool,
+    pub on_moon: bool,
 }
 
 #[derive(Clone)]
@@ -181,6 +190,8 @@ pub struct PlanetConfig {
     /// The owner's character class (the host enum value) the production rows were made with; None for none.
     pub character_class: Option<u32>,
     pub field_max: u32,
+    /// M2: a moon (no production; it takes the objects marked `on_moon`).
+    pub moon: bool,
     pub basic: [f64; 4],
     pub resources: [f64; 3],
     pub levels: Vec<u32>,
@@ -449,6 +460,8 @@ impl Catalogue {
             build_seconds_grid: o.build_seconds_grid.clone(),
             fields_added: o.fields_added.clone(),
             energy_price: o.energy_price.clone(),
+            on_planet: o.valid_types.is_empty() || o.valid_types.iter().any(|t| t == "planet"),
+            on_moon: o.valid_types.iter().any(|t| t == "moon"),
         }).collect();
         let modifiers_of = |rows: &Vec<RawModifier>| -> Vec<(usize, Vec<f64>)> { rows.iter().filter_map(|m| index.get(&m.id).map(|&i| (i, m.divisor.clone()))).collect() };
         let modifiers = [modifiers_of(&raw.time_modifiers), modifiers_of(&raw.time_modifiers_research)];
@@ -458,6 +471,7 @@ impl Catalogue {
             temperature: p.temperature,
             character_class: p.character_class,
             field_max: p.field_max,
+            moon: p.moon,
             basic: p.basic_income,
             resources: p.resources,
             levels: per_object(&p.levels, &index, count).into_iter().map(|l| l.unwrap_or(0)).collect(),
@@ -682,6 +696,7 @@ impl Catalogue {
     /// asking the same four questions twice.
     pub fn stall_of(&self, planet: &Planet, k: usize) -> &'static str {
         let o = &self.objects[k];
+        if !(if self.planets[planet.config].moon { o.on_moon } else { o.on_planet }) { return "wrong type" }
         if planet.levels[k] as usize >= o.price.len() { return "max level" }
         if !self.requirements_met(&planet.levels, k) { return "needs" }
         if o.consumes_field && self.fields_used(planet) >= self.field_cap(planet) { return "no fields" }
@@ -1130,6 +1145,28 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// M2: an object stands only where the host lets it: a planet's own object is refused on a moon, a moon's own on a
+    /// planet, research on a moon (no lab stands there), and a moon's own object starts on a moon that can pay for it.
+    #[test]
+    fn an_object_stands_only_on_the_planet_types_the_host_allows() {
+        let path = format!("{}/../../../../storage/rl/ogsim/r8x/econ-merged-40.json", env!("CARGO_MANIFEST_DIR"));
+        let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no merged moon catalogue; skipped") };
+        let moon = (0..cat.planets.len()).find(|&c| cat.planets[c].moon).expect("a moon config");
+        let planet_only = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 0 && !cat.objects[k].on_moon).expect("a planet's own object");
+        let moon_only = (0..cat.objects.len()).find(|&k| cat.objects[k].requires.is_empty() && !cat.objects[k].on_planet).expect("a moon's own object");
+        let research = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1).expect("a research");
+        let mut on_moon = cat.new_paused_game(moon, 1.0, 0.0, 0).planet;
+        on_moon.res = [1e9; 3];
+        cat.refresh(&mut on_moon);
+        let mut on_planet = cat.new_paused_game(0, 1.0, 0.0, 0).planet;
+        on_planet.res = [1e9; 3];
+        cat.refresh(&mut on_planet);
+        assert_eq!(cat.stall_of(&on_moon, planet_only), "wrong type");
+        assert_eq!(cat.stall_of(&on_moon, research), "wrong type");
+        assert_eq!(cat.stall_of(&on_planet, moon_only), "wrong type");
+        assert_eq!(cat.stall_of(&on_moon, moon_only), "ok");
+    }
 
     /// The host's own answer at level patterns and unit counts its tables are not tabulated at, so the module is judged
     /// on how it combines those tables, which is the part of production no table can hold.
