@@ -1177,7 +1177,7 @@ mod tests {
     /// planet, research on a moon (no lab stands there), and a moon's own object starts on a moon that can pay for it.
     #[test]
     fn an_object_stands_only_on_the_planet_types_the_host_allows() {
-        let path = format!("{}/../../../../storage/rl/ogsim/r8x/econ-merged-40.json", env!("CARGO_MANIFEST_DIR"));
+        let path = format!("{}/../../../../storage/rl/ogsim/units-parity/econ-u1-merged.json", env!("CARGO_MANIFEST_DIR"));
         let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no merged moon catalogue; skipped") };
         let moon = (0..cat.planets.len()).find(|&c| cat.planets[c].moon).expect("a moon config");
         let planet_only = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 0 && !cat.objects[k].on_moon).expect("a planet's own object");
