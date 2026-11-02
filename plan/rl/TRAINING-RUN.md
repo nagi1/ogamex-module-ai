@@ -372,3 +372,17 @@ Next, in order:
 3. Then score-only training of all three decisions on keyed dice.
 
 The human class mix comes back with the human-likeness tuning.
+
+### 3 Nov 01:00 — the class as a choice (faithful)
+
+`class=N` now starts each account on the class-N donor home nearest its own home's temperature, so production rows, research time and fleet rules
+all follow the class. The rules-only probe is gone. Without the arm, account a still starts on home a mod 24 (3 of 24 homes are Discoverers:
+accounts 4, 9, 23, 28, 33, 47, 52, 57 every season). Earlier training controlled accounts 0-5 (one Discoverer); the fleet model 0-20 (three).
+
+World median, 6 paired keyed seeds, persona only: as recorded 21-24M; all Collector 19-21M; all General ~17M; **all Discoverer 251-269M**.
+Choosing Discoverer is x11 in this universe (economy speed 8: expedition finds x12, +2 slots, Pathfinder). No build-plan change comes near.
+To verify against the original game: the Discoverer's resource find multiplier is economy speed x 1.5 in the host (`ExpeditionMission.php:1115`).
+
+Win-first runs play `class=3`, chosen by this trial over the classes the donors have. The trial is the choice; no model needed for one pick.
+The class mix comes back with the human-likeness tuning. Next: the expedition errand on the fleet model's menu. Then re-measure the build
+levers in the Discoverer world (expedition slots and cargo hold research should matter more there).

@@ -202,7 +202,18 @@ impl Universe {
             &format!("{data}/combat-u1.json")).expect("the units, fleet and combat exports"));
 
         // One shipyard table per home planet: a colony site has none, so a season starts its accounts on homes.
-        let configs: Vec<usize> = (0..accounts).map(|a| a % rules.units.planets.len()).collect();
+        let homes = rules.units.planets.len();
+        let mut configs: Vec<usize> = (0..accounts).map(|a| a % homes).collect();
+        // `class=N`: an account plays class N, as a player picks it. It starts on the class-N donor home nearest its own home's
+        // temperature, so the class's production rows, research time and fleet rules all come with it. The classes are
+        // the donors' own (gate 1).
+        if let Some(class) = arms.iter().find_map(|arm| arm.strip_prefix("class=")).map(|n| n.parse::<u32>().expect("class=N")) {
+            let of = |c: usize| (cat.planets[c].character_class, cat.planets[c].temperature);
+            for config in configs.iter_mut() {
+                let own = of(*config).1;
+                if let Some(home) = (0..homes).filter(|&h| of(h).0 == Some(class)).min_by(|&x, &y| (of(x).1 - own).abs().total_cmp(&(of(y).1 - own).abs())) { *config = home }
+            }
+        }
         let mut world = World::new(&cat, &configs, days as f64 * 24.0, 0.0, seed);
         world.colonisation = colonisation;
         // Row 66: how many galaxies each account colonises in, 1 to 7 alike - an assumption, as the alliance draw is.
@@ -233,10 +244,8 @@ impl Universe {
                 &format!("{data}/fleet-settings-u1-class{class}.json"),
                 &format!("{data}/combat-u1-class{class}.json")).expect("a class's combat export"));
             let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules(2)), (3, class_rules(3))];
-            // `class=N` probe: every account flies class N's rules, whatever class its home planet's donor had.
-            let forced = arms.iter().find_map(|arm| arm.strip_prefix("class=")).map(|n| n.parse::<u32>().expect("class=N"));
             for a in 0..accounts {
-                let class = forced.or(cat.planets[configs[a]].character_class);
+                let class = cat.planets[configs[a]].character_class;
                 if let Some((_, r)) = by_class.iter().find(|(c, _)| Some(*c) == class) {
                     world.rules[a] = Arc::clone(r);
                 }
