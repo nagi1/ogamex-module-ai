@@ -208,6 +208,17 @@ health PASS. The levels now look like a player's (top at day 200: plasma 14, wea
   energy the chain asks for and `chain_powered` releases the field when the planet cannot pay. HDS 0.888, AUC 0.810, top
   research 28.6M (14%), mid 4.36M (19%), health PASS. Still open: top stock 106B and top military 41% against 7-24% real.
 
+**Removed: `latejoin` (2 Nov).** Accounts signing up on a uniform day of the year, against the teacher's HDS 0.888, AUC 0.810:
+60% late 0.831, 0.872; 30% late 0.869, 0.834. Real snapshots carry no sign-up date, so the share was a guess. It fixed the low
+end of mid growth and emptied the top. The comparison it came from is the lesson: at 256-512 days real mid growth is
+343 / 3,383 / 41,409 (p10 / p50 / p90) against the teacher's 4,076 / 5,774 / 7,425, real top 20,967 / 112,963 / 354,414 against
+8,152 / 53,184 / 69,713. The missing spread is at the upper end: real strong players grow far faster than ours.
+
+**Noise, measured (2 Nov).** The same model on seeds 1-10 and 11-20: `ct2` HDS 0.826 and 0.818, AUC 0.788 and 0.775; `b10` update
+160 HDS 0.863 and 0.846, AUC 0.771 and 0.781. A difference under about 0.015 is no difference. `b10` beats `ct2` on HDS in both
+seed sets (0.03-0.04) and ties it on AUC. With the 0.003 entropy bonus the arms drift towards uniform (2.48 of 2.53); started from
+the temperature 2 clone with no bonus, entropy falls instead (`c0` 1.74 to 1.06 by update 81): the reward alone moves the policy.
+
 ## The yardstick was noisy (fixed 2 Nov)
 
 `hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,
