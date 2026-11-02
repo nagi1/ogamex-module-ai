@@ -276,3 +276,9 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   anchor or a floor on growth.
 - **Round 2** (running): `g0` growth alone with KL anchor 0.05 (4070); `r3` realism 0.3 from this run's
   `detector-0.json` with anchor 0.3, and `r1` realism 0.1 with anchor 0.1 (3090). Judged every 80 updates.
+- **Owner, 2 Nov: win first.** Realism is parked: train for the highest score using everything in the game, then tune
+  for human-likeness. Round 2's realism arms were stopped. Running: `g0` (score only, anchor 0.05, gamma 0.985/day),
+  `w0` (score only, no anchor, gamma 0.995/day: the final score weighs more), `w1` (score only, no anchor, 0.985).
+  Arms are ranked by median and top score against the clone (6.96 M median, 270 M top). The reward telescopes to
+  ln(final score) - ln(start), and the host score counts only resources spent, so stock and timing cannot game it.
+  The model decides buildings and research only; ships, defence and fleet missions are still the personas'.
