@@ -58,8 +58,9 @@ pub struct Ledger {
     /// Missiles fired, and per struck slot the largest salvo that reached it.
     pub missiles: i64,
     pub struck: HashMap<usize, i64>,
-    /// L5: holds sent to a mate's planet under attack.
+    /// L5: holds sent to a mate's planet under attack, and fleets sent to join a mate's raid.
     pub defends: usize,
+    pub joins: usize,
     /// How many events of the world's log have been read.
     read: usize,
 }
@@ -840,6 +841,53 @@ pub fn defend_mate(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize
         let hold = ((lands - now - flight) / 3600.0).floor() as i64 + 1;
         if w.defend(cat, a, target, &ships, [0.0; 3], 10.0, hold).is_ok() {
             ledger.defends += 1;
+            return true;
+        }
+    }
+    false
+}
+
+/// L5: an alliance member sends cargo ships to join a mate's raid when the mate's report shows more plunder than the
+/// raid carries, the extra plunder pays for the fuel, the target's guns cannot wear down the joint fleet and the ships
+/// land within the union's window: the ACS a player in an alliance flies for a rich target (gate 3).
+pub fn join_raid(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize) -> bool, ledger: &mut Ledger) -> bool {
+    let now = w.games[a].t;
+    let Some(kit) = Kit::of(w, cat, a) else { return false };
+    let shelf = on_shelf(w, a, kit.cargo);
+    if shelf < 1 || !w.rules[a].settings.alliance_combat_system { return false }
+    let raids: Vec<usize> = (0..w.fleets.len()).filter(|&f| {
+        let lead = &w.fleets[f];
+        lead.mission == Mission::Attack && !lead.returning && !lead.moon && lead.arrive > now && lead.union.is_none_or(|u| u == lead.id)
+            && w.account_of(lead.owner) != w.account_of(a) && mate(w.account_of(lead.owner)) && w.mates(a, lead.owner, now)
+            && !w.mates(a, lead.target, now) && w.account_of(lead.target) != w.account_of(a)
+            && !w.fleets.iter().any(|g| g.owner == a && g.union.is_some() && g.union == Some(lead.union.unwrap_or(lead.id)))
+    }).collect();
+    let rules = Arc::clone(&w.rules[a]);
+    let research = w.research(cat, a);
+    let hold = rules.combat.capacity(&[(kit.cargo, 1)].into_iter().collect(), &research).max(1);
+    for f in raids {
+        let (owner, target, key) = (w.fleets[f].owner, w.fleets[f].target, w.fleets[f].union.unwrap_or(w.fleets[f].id));
+        let Some(report) = last_report(w, owner, target) else { continue };
+        let (Some(ships), Some(defence)) = (&report.ships, &report.defence) else { continue };
+        let loot = report.resources.map(|r| r.max(0) as f64 * w.rules[owner].combat.rules.loot_percentage / 100.0);
+        let members: Vec<usize> = (0..w.fleets.len()).filter(|&g| g == f || w.fleets[g].union == Some(key)).collect();
+        let (capacity, union_hull) = members.iter().fold((0, 0.0), |(c, h), &g| {
+            let (r, re) = (&w.rules[w.fleets[g].owner], w.research(cat, w.fleets[g].owner));
+            (c + r.combat.capacity(&w.fleets[g].ships.iter().copied().collect(), &re), h + strength(r, &re, &w.fleets[g].ships).1)
+        });
+        let n = ((loot.iter().sum::<f64>() - capacity as f64) / hold as f64).ceil().min(shelf as f64) as i64;
+        if n < 1 { continue }
+        let mut guns = stack(&w.rules[target], ships);
+        guns.extend(stack(&w.rules[target], defence));
+        let (attack, _) = strength(&w.rules[target], &w.research(cat, target), &guns);
+        let fleet = [(kit.cargo, n)];
+        if attack * 3.0 > SAFE_SHARE * (union_hull + strength(&rules, &research, &fleet).1) { continue }
+        let extra = combat::distribute_loot(loot, capacity + n * hold);
+        let carried = combat::distribute_loot(loot, capacity);
+        let fuel = fleet::consumption(&rules.settings, &rules.fleet, &fleet, &research, account_distance(w, a, target), 0, 10.0) as f64;
+        if weighted(extra) - weighted(carried) < PAYS * WEIGHTS[2] * fuel { continue }
+        if w.join(cat, a, f, &fleet, [0.0; 3], 10.0).is_ok() {
+            ledger.joins += 1;
             return true;
         }
     }
@@ -2315,6 +2363,37 @@ mod tests {
         let fight = world.events.iter().find(|e| e.kind == EventKind::Fight).unwrap();
         assert_eq!(fight.ships_lost, vec![(fighter, 2_000)], "the raid fell to the mate's ally");
         assert!(world.fleets.iter().any(|f| f.mission == Mission::AcsDefend && f.owner == 0), "the ally still holds");
+    }
+
+    /// L5: an alliance member sends cargo ships to join a mate's raid when the mate's report shows more plunder than the
+    /// raid carries; the union lands together and the partner flies home with a share. Outside the alliance, or once
+    /// joined, nothing is sent.
+    #[test]
+    fn an_alliance_member_joins_a_mates_raid_on_a_rich_target_and_carries_a_share() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let kit = Kit::of(&world, &cat, 0).expect("a fighter and a cargo hull");
+        world.coords[2] = Coord { galaxy: 1, system: 60, position: 8 };
+        world.games[2].planet.res = [1e9; 3];
+        world.games[0].planet.res = [1e7; 3];
+        world.games[1].planet.res = [5e6; 3];
+        assert!(world.set_units(&cat, 2, kit.fighter, 100) && world.set_units(&cat, 0, kit.cargo, 1_000), "both hold ships");
+        world.reports.push(SpyReport { owner: 2, target: 1, time: 0.0, resources: [5_000_000; 3], debris: None, counter_chance: 0, ships: Some(vec![0; world.yards[1].counts.len()]), defence: Some(vec![0; world.yards[1].counts.len()]), buildings: None, research: None });
+        world.dispatch(&cat, 2, 1, Mission::Attack, &[(kit.fighter, 100)], [0.0; 3], 10.0).expect("the raid flies");
+        let mut ledger = Ledger::default();
+        assert!(!join_raid(&mut world, &cat, 0, |_| true, &mut ledger), "no join outside the alliance");
+        world.alliance_at[0] = Some(0.0);
+        world.alliance_at[2] = Some(0.0);
+        assert!(join_raid(&mut world, &cat, 0, |_| true, &mut ledger), "the member joins its mate's raid");
+        assert!(!join_raid(&mut world, &cat, 0, |_| true, &mut ledger), "one join per raid");
+        let (raid, partner) = (&world.fleets[0], world.fleets.iter().find(|f| f.owner == 0).expect("the partner flies"));
+        assert_eq!((raid.union, raid.arrive), (partner.union, partner.arrive), "the union lands together");
+        while !world.events.iter().any(|e| e.kind == EventKind::Return && e.owner == 0) {
+            let a = world.next_decision(&cat).expect("the world plays on");
+            world.wait(&cat, a);
+        }
+        assert_eq!(world.union_log.len(), 1, "one partner fought in the union");
+        let home = world.events.iter().find(|e| e.kind == EventKind::Return && e.owner == 0).unwrap();
+        assert!(home.gained.iter().sum::<f64>() > 0.0, "the partner brings home its share of the plunder");
     }
 
     /// M4: a fleeter's warships deploy to its capital's moon; with a gate on two moons the fleet jumps away from the first

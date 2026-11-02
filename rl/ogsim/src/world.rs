@@ -288,6 +288,8 @@ pub struct Fleet {
     pub moon: bool,
     /// Its index in `launch_log`, which its events carry (W14: fleets leaving in one second stay apart).
     pub id: usize,
+    /// L5: the union (ACS attack) it flies in, named by the first fleet's id; None for a lone fleet.
+    pub union: Option<usize>,
 }
 
 impl Fleet {
@@ -296,6 +298,11 @@ impl Fleet {
         if self.returning { self.home } else { self.arrive + self.holding }
     }
 }
+
+/// FleetUnion's limits and FleetUnionService::MAX_DELAY_PERCENTAGE.
+const UNION_FLEETS: usize = 16;
+const UNION_PLAYERS: usize = 5;
+const UNION_DELAY: f64 = 0.30;
 
 /// Row 66: planets a player holds in a galaxy before it colonises the next one within its reach (`colony_site`).
 const PLANETS_PER_GALAXY: usize = 3;
@@ -384,6 +391,8 @@ pub struct World {
     /// Per capital, the second its account joined the world's alliance, or None (the season draws membership); the
     /// host lets ACS defend fly only between buddies or members of one alliance.
     pub alliance_at: Vec<Option<f64>>,
+    /// L5: every fleet that fought in a union beside its first: (slot, second).
+    pub union_log: Vec<(usize, f64)>,
     rng: u64,
 }
 
@@ -398,7 +407,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), halved: HashSet::default(), alliance_at: vec![None; n], reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -991,6 +1000,37 @@ impl World {
         self.launch(cat, a, Some(target), self.coords[target], Mission::AcsDefend, ships, cargo, speed, hold_hours)
     }
 
+    /// L5: account a, while it decides, sends ships to join the attack `f` is flying (FleetController's union dispatch,
+    /// FleetUnionService::joinUnion): at most 16 fleets of 5 players, landing no later than 30% of the time the union
+    /// still has to fly past its arrival, or refused before it leaves. A fleet of someone neither the union's owner nor a
+    /// mate leaves and attacks alone, as the host's does. The union lands together at its latest member's second.
+    pub fn join(&mut self, cat: &Catalogue, a: usize, f: usize, ships: &[(u32, i64)], cargo: [f64; 3], speed: f64) -> Result<(), &'static str> {
+        let now = self.games[a].t;
+        let lead = self.fleets.get(f).ok_or("no such fleet")?;
+        if lead.mission != Mission::Attack || lead.returning || lead.moon || now >= lead.arrive { return Err("no attack to join") }
+        let (key, target, lands) = (lead.union.unwrap_or(lead.id), lead.target, lead.arrive);
+        let members: Vec<usize> = (0..self.fleets.len()).filter(|&g| g == f || (self.fleets[g].union == Some(key) && !self.fleets[g].returning)).collect();
+        let players: HashSet<usize> = members.iter().map(|&g| self.account[self.fleets[g].owner]).collect();
+        if members.len() >= UNION_FLEETS { return Err("the union is full") }
+        if !players.contains(&self.account[a]) && players.len() >= UNION_PLAYERS { return Err("the union has its players") }
+        let rules = Arc::clone(&self.rules[a]);
+        let research = self.research(cat, a);
+        let distance = fleet::distance(&rules.settings, self.coords[a], self.coords[target], &|_, _| SystemState::Active);
+        let flight = fleet::flight_seconds(&rules.settings, Mission::Attack as u32, distance, rules.fleet.slowest_speed(ships, &research), speed) as f64;
+        if now + flight > lands + ((lands - now).max(0.0) * UNION_DELAY).floor() { return Err("too slow for the union") }
+        self.launch(cat, a, Some(target), self.coords[target], Mission::Attack, ships, cargo, speed, 0)?;
+        let first = *members.iter().min_by_key(|&&g| self.fleets[g].id).expect("the lead");
+        let owner = self.fleets[first].owner;
+        if self.account[owner] != self.account[a] && !self.mates(owner, a, now) { return Err("not a buddy or alliance member") }
+        let joined = self.fleets.len() - 1;
+        let arrive = self.fleets[joined].arrive.max(lands);
+        for g in members.into_iter().chain([joined]) {
+            self.fleets[g].union = Some(key);
+            self.fleets[g].arrive = arrive;
+        }
+        Ok(())
+    }
+
     /// Account a, while it decides, sends ships on an expedition to deep space at `to` (position 16) for `hold_hours`.
     /// Refused as the host refuses: not deep space, no astrophysics, nothing but probes, or the usual checks.
     #[allow(clippy::too_many_arguments)]
@@ -1095,7 +1135,7 @@ impl World {
         // Row 23: the fuel is burnt at dispatch; the cargo is still the account's, in the hold, until it lands.
         planet.books.fuel += weighted([0.0, 0.0, fuel]);
         let holding = fleet::holding_seconds(hold_hours) as f64;
-        self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy, id: self.launch_log.len() });
+        self.fleets.push(Fleet { owner: a, target: target.unwrap_or(a), to, mission, ships: sent, cargo, fuel, arrive: now + flight, home: now + 2.0 * flight + holding, returning: false, departed: now, holding, priority: 0, moon: mission == Mission::MoonDestroy, id: self.launch_log.len(), union: None });
         self.launch_log.push((self.fleets.last().expect("just sent").clone(), speed));
         self.next[a] = cat.peek(&mut self.games[a]);
         Ok(())
@@ -1109,6 +1149,8 @@ impl World {
     }
 
     fn fleet_acts(&mut self, cat: &Catalogue, f: usize) {
+        // A union fights once, when its first fleet lands (AttackMission: only slot 1 processes the battle).
+        let f = self.union_members(f).into_iter().chain([f]).min_by_key(|&g| self.fleets[g].id).filter(|_| !self.fleets[f].returning).unwrap_or(f);
         let at = self.fleets[f].next();
         self.dice = (next_random(&mut self.rng) >> 32) as u32;
         self.stream = expedition::Mt19937::new(self.dice);
@@ -1197,6 +1239,7 @@ impl World {
         fleet.cargo[2] += (fleet.fuel / 2.0).floor();
         fleet.fuel = 0.0;
         fleet.holding = 0.0;
+        fleet.union = None;
         fleet.home = now + (now - fleet.departed);
         fleet.arrive = now;
         fleet.returning = true;
@@ -1370,7 +1413,14 @@ impl World {
         let seed = self.stream.int(0, i64::MAX) as u64;
         let holding = self.holding_at(f);
         let allies: Vec<combat::Units> = holding.iter().map(|&g| self.fleets[g].ships.iter().copied().collect()).collect();
+        let members = if plunder { self.union_members(f) } else { Vec::new() };
+        let joined: Vec<(Arc<Rules>, HashMap<u32, u32>)> = members.iter().map(|&g| (Arc::clone(&self.rules[self.fleets[g].owner]), self.research(cat, self.fleets[g].owner))).collect();
+        let partners: Vec<combat::Partner> = members.iter().zip(&joined).map(|(&g, (rules, research))| {
+            let fleet = &self.fleets[g];
+            combat::Partner { combat: &rules.combat, ships: &fleet.ships, research, cargo: [fleet.cargo[0], fleet.cargo[1], fleet.cargo[2] + fleet.fuel / 2.0] }
+        }).collect();
         let battle = Battle {
+            partners: &partners,
             attacker: &self.fleets[f].ships,
             attacker_research: &attacker_research,
             attacker_cargo: cargo,
@@ -1420,6 +1470,23 @@ impl World {
         outcome
     }
 
+    /// L5: the other fleets of fleet f's union still flying at its target, in the order they joined.
+    fn union_members(&self, f: usize) -> Vec<usize> {
+        let Some(key) = self.fleets[f].union else { return Vec::new() };
+        let mut members: Vec<usize> = (0..self.fleets.len()).filter(|&g| g != f && self.fleets[g].union == Some(key) && !self.fleets[g].returning && self.fleets[g].mission == Mission::Attack).collect();
+        members.sort_by_key(|&g| self.fleets[g].id);
+        members
+    }
+
+    /// The flight home a union's fleet takes after the fight: its own survivors' speed at 100% from its own planet
+    /// (AttackMission's multi-fleet path), not the speed the union was flown at.
+    fn natural_return(&self, cat: &Catalogue, g: usize) -> f64 {
+        let fleet = &self.fleets[g];
+        let rules = &self.rules[fleet.owner];
+        let distance = fleet::distance(&rules.settings, self.coords[fleet.owner], self.coords[fleet.target], &|_, _| SystemState::Active);
+        fleet::flight_seconds(&rules.settings, Mission::Attack as u32, distance, rules.fleet.slowest_speed(&fleet.ships, &self.research(cat, fleet.owner)), 10.0) as f64
+    }
+
     /// L5: the ACS defend fleets holding at fleet f's target when it lands there (GameMission::collectDefendingFleets:
     /// arrived, and the hold not yet over).
     fn holding_at(&self, f: usize) -> Vec<usize> {
@@ -1449,6 +1516,29 @@ impl World {
         }
     }
 
+    /// A union's partner after the fight: its survivors and its cargo (the half fuel it carried in, the cargo that
+    /// survived and its share of the plunder), home at its own speed; wiped out, it is gone with all it carried.
+    fn partner_fought(&mut self, cat: &Catalogue, g: usize, left: &combat::Units, cargo: [i64; 3]) {
+        let owner = self.fleets[g].owner;
+        let refund = self.fleets[g].fuel / 2.0;
+        let held = weighted(self.fleets[g].cargo) + weighted([0.0, 0.0, refund]);
+        self.fleets[g].ships = left.iter().map(|(&id, &n)| (id, n)).collect();
+        self.fleets[g].cargo = cargo.map(|r| r as f64);
+        let held_now = weighted(self.fleets[g].cargo);
+        let books = &mut self.games[owner].planet.books;
+        books.fuel -= weighted([0.0, 0.0, refund]);
+        if held_now >= held { books.loot_in += held_now - held } else { books.cargo_lost += held - held_now }
+        self.fleets[g].returning = true;
+        let fleet = self.fleets[g].clone();
+        self.union_log.push((owner, fleet.arrive));
+        if left.is_empty() {
+            self.log(EventKind::Lost, fleet.arrive, &fleet, Outcome::Defeated, |_| {});
+            return;
+        }
+        self.fleets[g].home = fleet.arrive + self.natural_return(cat, g);
+        self.log(EventKind::Arrival, fleet.arrive, &fleet, Outcome::Done, |e| e.gained = cargo.map(|r| r as f64));
+    }
+
     /// The units on planet p (host unit id, amount), defences only or ships only.
     fn held(&self, p: usize, defence: bool) -> Vec<(u32, i64)> {
         let rules = &self.rules[p];
@@ -1468,7 +1558,14 @@ impl World {
         let refund = self.fleets[f].fuel / 2.0;
         cargo[2] += refund;
         let held = weighted(cargo);
+        let members = self.union_members(f);
         let outcome = self.fight(cat, f, &defender, cargo, true);
+        for (i, &g) in members.iter().enumerate() {
+            self.partner_fought(cat, g, &outcome.partners_left[i], outcome.partner_cargo[i]);
+        }
+        if !members.is_empty() {
+            self.fleets[f].home = self.fleets[f].arrive + self.natural_return(cat, f);
+        }
         for r in 0..3 {
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] - outcome.loot[r] as f64);
             self.games[target].planet.res[r] = as_stored(self.games[target].planet.res[r] + outcome.salvage[r] as f64);
@@ -2163,7 +2260,34 @@ mod tests {
             #[serde(default)] perturbation: Option<String>,
             /// ACS defend: the holding fleet's flight home.
             #[serde(default)] defend_return: Option<Again>,
+            /// ACS attack: each fleet's flight home and landing, the first attack's then the partner's.
+            #[serde(default)] returns: Vec<Option<Homeward>>,
         }
+
+        #[derive(Deserialize)]
+        struct Homeward { flight: Again, home: Landing }
+
+        #[derive(Deserialize)]
+        struct Landing { time: f64, origin_after: Option<State> }
+
+        #[derive(Deserialize)]
+        struct Join {
+            at: f64,
+            origin: PlanetState,
+            player: PlayerState,
+            units: HashMap<String, i64>,
+            cargo: [f64; 3],
+            speed: f64,
+            accepted: bool,
+            joined: bool,
+            error: Option<String>,
+            arrival: Option<f64>,
+            fuel: Option<f64>,
+            #[serde(default)] origin_after: Option<State>,
+        }
+
+        #[derive(Deserialize)]
+        struct Landed { time: f64, battle: Option<BattleAnswer> }
 
         #[derive(Deserialize)]
         struct Input {
@@ -2184,6 +2308,8 @@ mod tests {
             #[serde(default)] target_type: i64,
             /// ACS defend: the third account's attack on the held planet.
             #[serde(default)] raid: Option<RaidInput>,
+            /// ACS attack: the fleet sent to join the union.
+            #[serde(default)] join: Option<Join>,
         }
 
         #[derive(Deserialize)]
@@ -2239,6 +2365,8 @@ mod tests {
             /// ACS defend: the holding fleet after the fight (None once wiped out or gone home) and the raid's flight home.
             #[serde(default)] defend_after: Option<Again>,
             #[serde(default)] raid_return: Option<Again>,
+            /// ACS attack: each landing second and its fight.
+            #[serde(default)] arrivals: Vec<Landed>,
         }
 
         #[derive(Deserialize)]
@@ -2383,6 +2511,7 @@ mod tests {
             let only = std::env::var("OGSIM_MISSION").unwrap_or_else(|_| "transport".into());
             let (cases_file, econ_file) = match only.as_str() {
                 "acs_defend" => ("acs-cases-u1.json", "units-parity/econ-u1.json"),
+                "acs_attack" => ("acs-attack-cases-u1.json", "units-parity/econ-u1.json"),
                 "colonise" | "expedition" => ("more-mission-cases-u1.json", "units-parity/econ-u1-colonies.json"),
                 "missile" | "moon_destruction" => ("more-mission-cases-u1.json", "units-parity/econ-u1.json"),
                 _ => ("mission-cases-u1.json", "units-parity/econ-u1.json"),
@@ -2435,7 +2564,7 @@ mod tests {
                     rounds: report.rounds,
                     attacker_left: counted(&report.attacker_left),
                     defender_left: counted(&report.defender_left),
-                    allies_left: Vec::new(),
+                    allies_left: Vec::new(), partners_left: Vec::new(),
                 },
                 repaired: counted(&report.repaired),
                 moon_roll: if report.moon_created { report.moon_chance } else { report.moon_chance + 1 },
@@ -2473,6 +2602,7 @@ mod tests {
             match case.mission.as_str() {
                 "colonise" => return play_colonise(cat, case, index, setup),
                 "acs_defend" => return play_acs_defend(cat, case, index),
+                "acs_attack" => return play_acs_attack(cat, case, index),
                 "expedition" => return play_expedition(cat, case, index, setup),
                 _ => {}
             }
@@ -2603,7 +2733,7 @@ mod tests {
                 world.recorded_rolls = arrival.rolls.as_ref().map(|r| [r.destroy, r.loss]);
                 if let Some(battle) = arrival.battle.as_ref().filter(|b| b.rounds > 0 || !b.attacker_left.is_null()) {
                     world.recorded = Some(combat::Recorded {
-                        engine: combat::EngineResult { rounds: battle.rounds, attacker_left: counted(&battle.attacker_left), defender_left: counted(&battle.defender_left), allies_left: Vec::new() },
+                        engine: combat::EngineResult { rounds: battle.rounds, attacker_left: counted(&battle.attacker_left), defender_left: counted(&battle.defender_left), allies_left: Vec::new(), partners_left: Vec::new() },
                         repaired: combat::Units::new(),
                         moon_roll: 0,
                     });
@@ -2672,6 +2802,109 @@ mod tests {
             Some(true)
         }
 
+        /// An ACS attack case: account 0's attack is made a union and account 1 sends a fleet to join it at `join.at`;
+        /// account 2's planet is the target. The join's refusals, each landing with the host's survivors handed over,
+        /// the planet and the field afterwards, and each fleet's flight home and landing.
+        fn play_acs_attack(cat: &Catalogue, case: &Case, index: usize) -> Option<bool> {
+            let (join, target, defender) = (case.input.join.as_ref()?, case.input.target.as_ref()?, case.input.target_player.as_ref()?);
+            let configs = [config_of(cat, case.input.origin.id)?, config_of(cat, join.origin.id)?, config_of(cat, target.id)?];
+            let players = [&case.input.origin_player, &join.player, defender];
+            let rules = players.iter().map(|p| rules_for(cat, p.class)).collect::<Option<Vec<_>>>()?;
+            let mut world = World::new(cat, &configs, 1e6, 0.0, 1);
+            world.arm(rules, vec![coords(&case.input.origin), coords(&join.origin), coords(target)]);
+            if case.perturbation.as_deref() != Some("not_mates") {
+                world.alliance_at[0] = Some(0.0);
+                world.alliance_at[1] = Some(0.0);
+            }
+            let departure = case.dispatch.departure?;
+            for (a, ((player, planet), t)) in players.iter().zip([&case.input.origin, &join.origin, target]).zip([departure, join.at, departure]).enumerate() {
+                for (id, &level) in &player.research {
+                    let k = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
+                    world.games[a].planet.levels[k] = level;
+                }
+                let mut held = planet.ships.clone();
+                held.extend(planet.defence.clone());
+                for (id, amount) in units_of(&held) {
+                    let u = world.rules[a].units.index(id as i64).expect("a unit in the catalogue");
+                    world.yards[a].counts[u] = amount as u64;
+                }
+                world.games[a].planet.res = planet.resources;
+                world.games[a].planet.settle();
+                world.games[a].t = t;
+                world.games[a].login_times = vec![t];
+                cat.refresh(&mut world.games[a].planet);
+            }
+            world.dispatch(cat, 0, 2, Mission::Attack, &units_of(&case.input.units), case.input.cargo, case.input.speed).unwrap_or_else(|e| panic!("case {index}: the world refused the first attack: {e}"));
+            assert_eq!(world.fleets[0].arrive, case.dispatch.arrival?, "case {index}: the first attack's arrival");
+            stock(case.dispatch.origin_after.as_ref(), &world, 0, index, "after dispatch");
+            let before = world.games[1].planet.res;
+            let joined = world.join(cat, 1, 0, &units_of(&join.units), join.cargo, join.speed);
+            match (join.accepted, join.joined, &joined) {
+                (true, true, Ok(())) => {}
+                (true, false, Err(_)) => assert!(world.fleets.len() == 2 && world.fleets[1].union.is_none(), "case {index}: a non-mate's fleet attacks alone"),
+                (false, _, Err(_)) => assert_eq!(world.fleets.len(), 1, "case {index}: a refused join sends nothing"),
+                _ => panic!("case {index}: host accepted {} joined {} ({:?}), world {joined:?}", join.accepted, join.joined, join.error),
+            }
+            if join.accepted {
+                let fuel = before[2] - join.cargo[2] - world.games[1].planet.res[2];
+                assert!((fuel - join.fuel.unwrap_or(0.0)).abs() < 1e-6, "case {index}: the partner's fuel {fuel} host {:?}", join.fuel);
+                stock(join.origin_after.as_ref(), &world, 1, index, "after the partner left");
+                assert_eq!(Some(world.fleets[1].arrive), join.arrival, "case {index}: the partner's arrival");
+            }
+            let arrival = case.arrival.as_ref()?;
+            // Two lone fleets landing in one second leave two reports the case keeps only one of.
+            if join.accepted && !join.joined && arrival.arrivals.len() < 2 { return None }
+            // Landings and homecomings in time order: a lone partner can land and be home before the attack lands.
+            let mut events: Vec<(f64, usize, usize)> = arrival.arrivals.iter().enumerate().map(|(i, l)| (l.time, 0, i)).collect();
+            events.extend(case.returns.iter().enumerate().filter_map(|(a, r)| r.as_ref().map(|r| (r.home.time, 1, a))));
+            events.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+            for (time, kind, i) in events {
+                if kind == 1 {
+                    world.catch_up(cat, i, time);
+                    world.games[i].planet.settle();
+                    run_until(cat, &mut world, time);
+                    stock(case.returns[i].as_ref().and_then(|r| r.home.origin_after.as_ref()), &world, i, index, "back home");
+                    continue;
+                }
+                if let Some(battle) = &arrival.arrivals[i].battle {
+                    let partner = case.returns.get(1).and_then(|r| r.as_ref()).and_then(|r| r.flight.units.clone()).unwrap_or_default();
+                    world.recorded = Some(combat::Recorded {
+                        engine: combat::EngineResult {
+                            rounds: battle.rounds,
+                            attacker_left: counted(&battle.attacker_left),
+                            defender_left: counted(&battle.defender_left),
+                            allies_left: Vec::new(),
+                            partners_left: if join.joined { vec![units_of(&partner).into_iter().collect()] } else { Vec::new() },
+                        },
+                        repaired: counted(&battle.repaired),
+                        moon_roll: if battle.moon_created { battle.moon_chance } else { battle.moon_chance + 1 },
+                    });
+                }
+                world.catch_up(cat, 2, time);
+                world.games[2].planet.settle();
+                run_until(cat, &mut world, time);
+                for (a, back) in case.returns.iter().enumerate() {
+                    let fleet = world.fleets.iter().find(|f| f.owner == a);
+                    match back {
+                        None => assert!(fleet.is_none(), "case {index}: fleet {a} was lost at the host and flies home here"),
+                        Some(back) if back.flight.departure == time => {
+                            let f = fleet.unwrap_or_else(|| panic!("case {index}: fleet {a} flies home at the host and is lost here"));
+                            assert_eq!(f.home, back.flight.arrival, "case {index}: fleet {a}'s landing");
+                            assert_eq!(Some(f.cargo.map(|r| r as i64)), back.flight.cargo, "case {index}: fleet {a}'s cargo home");
+                        }
+                        Some(_) => {}
+                    }
+                }
+                if i + 1 == arrival.arrivals.len() {
+                    stock(arrival.target_after.as_ref(), &world, 2, index, "after the attack");
+                    if let Some(debris) = arrival.debris_after {
+                        assert_eq!(world.debris[2].map(|r| r as i64), debris, "case {index}: debris after the attack");
+                    }
+                }
+            }
+            Some(true)
+        }
+
         /// An ACS defend case: account 0 holds at its mate's planet (account 1) while account 2's attack lands there. The
         /// dispatch rules, the fight with the ally beside the planet (the host's survivors handed over), what the planet,
         /// the field, the ally and the raid hold afterwards, and the ally's flight home.
@@ -2729,6 +2962,7 @@ mod tests {
                         attacker_left: counted(&battle.attacker_left),
                         defender_left: counted(&battle.defender_left),
                         allies_left: if inside { vec![units_of(&ally).into_iter().collect()] } else { Vec::new() },
+                        partners_left: Vec::new(),
                     },
                     repaired: counted(&battle.repaired),
                     moon_roll: if battle.moon_created { battle.moon_chance } else { battle.moon_chance + 1 },
@@ -2834,7 +3068,7 @@ mod tests {
                 // The report is the expedition fleet's: the enemy is its attacker.
                 attacker_left: counted(&r.defender_left),
                 defender_left: counted(&r.attacker_left),
-                allies_left: Vec::new(),
+                allies_left: Vec::new(), partners_left: Vec::new(),
             });
             world.recorded_expedition = Some((case.case_seed, engine));
             run_until(cat, &mut world, arrival.time);

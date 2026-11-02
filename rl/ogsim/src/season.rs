@@ -161,6 +161,7 @@ pub struct Universe {
     moon_feed: bool,
     /// L5 arm: alliance members hold at a mate's planet that a raid is flying at.
     acs_defend: bool,
+    acs_attack: bool,
     /// The share of its planets each account wants mooned, when accounts differ in that: real mid players hold 1 to 12 moons
     /// on about 10 planets, and the top tenth a moon on almost every planet.
     moon_taste: Option<Vec<f64>>,
@@ -282,7 +283,7 @@ impl Universe {
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
-            moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"),
+            moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"),
             moon_taste: on("moontaste").then(|| { let mut draw = seed ^ 0x4d00_a7e5; (0..accounts).map(|_| unit(&mut draw)).collect() }),
         }
     }
@@ -324,6 +325,10 @@ impl Universe {
         if self.acs_defend && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
             let gone = &self.gone;
             players::defend_mate(&mut self.world, &self.cat, a, |b| !gone[b], &mut self.ledgers[owner]);
+        }
+        if self.acs_attack && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
+            let gone = &self.gone;
+            players::join_raid(&mut self.world, &self.cat, a, |b| !gone[b], &mut self.ledgers[owner]);
         }
         match (pick, persona) {
             (Some(Some(_)), _) => {}

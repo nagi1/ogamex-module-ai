@@ -31,6 +31,7 @@ use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
 use OGame\Services\FleetMissionService;
+use OGame\Services\FleetUnionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
@@ -93,6 +94,10 @@ use ReflectionMethod;
  *     units, speed}`. arrival is the attack's second: time, target_before, target_after, debris_after, battle
  *     (battleReport)|null, defend_after (the holding mission's flight after the fight)|null, raid_return (flight)|null.
  *     `return` is the defender's return home, `defend_return` its flight. The hold may end before the attack lands.
+ *   acs_attack (host id 1, made a union): `input.join{at, origin, player, units, cargo, speed, max_arrival, accepted,
+ *     joined, error, arrival, fuel, origin_after}` is a second fleet sent at `at` to join (refused first when too slow;
+ *     a non-mate's fleet is refused the union after leaving and attacks alone). `arrival.arrivals[{time, target_before,
+ *     battle}]` per landing second, then target_after and debris_after; `returns` [initiator, partner] {flight, home}|null.
  */
 class DrawAiMoreMissionCasesAction
 {
@@ -105,6 +110,7 @@ class DrawAiMoreMissionCasesAction
         'missile' => MissileMission::class,
         'moon_destruction' => MoonDestructionMission::class,
         'acs_defend' => AcsDefendMission::class,
+        'acs_attack' => AttackMission::class,
     ];
 
     private const SPEEDS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0];
@@ -115,6 +121,7 @@ class DrawAiMoreMissionCasesAction
         'missile' => ['too_many_missiles', 'own_target', 'no_missiles'],
         'moon_destruction' => ['fuel_short', 'missing_units', 'no_deathstar', 'no_moon', 'target_is_planet'],
         'acs_defend' => ['fuel_short', 'missing_units', 'not_mates'],
+        'acs_attack' => ['fuel_short', 'missing_units', 'not_mates'],
     ];
 
     private const MAX_STOCK = 5_000_000;
@@ -218,6 +225,7 @@ class DrawAiMoreMissionCasesAction
                     'expedition' => $this->expedition($ids, $start, $caseSeed, $perturbation),
                     'missile' => $this->missile($ids, $start, $caseSeed, $perturbation),
                     'acs_defend' => $this->acsDefend($ids, $start, $caseSeed, $perturbation),
+                    'acs_attack' => $this->acsAttack($ids, $start, $caseSeed, $perturbation),
                     default => $this->moonDestruction($ids, $start, $caseSeed, $perturbation),
                 };
         } finally {
@@ -801,6 +809,109 @@ class DrawAiMoreMissionCasesAction
                 ];
             },
         );
+    }
+
+    // ------------------------------------------------------------- ACS attack
+
+    /**
+     * An attack made a union, joined by a second fleet the way the fleet page sends it (FleetController: fleet and
+     * player limits and the delay limit checked first, then `createNewFromPlanet` and `joinUnion`, which refuses a
+     * non-mate after the fleet has left, so it flies alone).
+     *
+     * @param  list<int>  $ids  at least three
+     * @return array<string, mixed>
+     */
+    private function acsAttack(array $ids, int $start, int $caseSeed, string|null $perturbation): array
+    {
+        [$owner, $partner, $defender] = array_slice($this->random->shuffleArray($ids), 0, 3);
+        [$originId, $partnerOriginId, $targetId] = array_map(fn (int $id): int => $this->freshPlayer($id)->planets->allPlanets()[0]->getPlanetId(), [$owner, $partner, $defender]);
+        foreach ([$owner, $partner, $defender] as $id) {
+            $this->drawPlayer($id);
+        }
+        if ($perturbation !== 'not_mates') {
+            BuddyRequest::query()->create(['sender_user_id' => $owner, 'receiver_user_id' => $partner, 'status' => BuddyRequest::STATUS_ACCEPTED]);
+        }
+        $this->forget();
+        $this->stockMoon($targetId, $start);
+        $coordinate = $this->freshPlanet($targetId)->getPlanetCoordinates();
+
+        $units = $this->someShips();
+        $speed = $this->pick(self::SPEEDS);
+        $cargo = $this->cargo($units->getTotalCargoCapacity($this->freshPlayer($owner)), 0.3);
+        $this->stockOrigin($originId, $units, $cargo, $this->fuel($this->freshPlanet($originId), $units, $coordinate, 0, $speed), null, $start);
+        $partnerUnits = $this->someShips();
+        $partnerSpeed = $this->pick(self::SPEEDS);
+        $partnerCargo = $this->cargo($partnerUnits->getTotalCargoCapacity($this->freshPlayer($partner)), 0.3);
+        $this->stockOrigin($partnerOriginId, $partnerUnits, $partnerCargo, $this->fuel($this->freshPlanet($partnerOriginId), $partnerUnits, $coordinate, 0, $partnerSpeed), $perturbation === 'not_mates' ? null : $perturbation, $start);
+        $this->forget();
+        foreach ([$originId, $partnerOriginId, $targetId] as $planetId) {
+            $this->freshPlanet($planetId)->update();
+        }
+        $this->forget();
+
+        $input = $this->input($originId, $targetId, $coordinate, PlanetType::Planet, $owner, $defender, $units, $cargo, $speed, 0);
+        $service = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($owner)]);
+        app()->instance(Randomizer::class, new Randomizer(new Mt19937($caseSeed)));
+        $sent = $service->createNewFromPlanet($this->freshPlanet($originId), $coordinate, PlanetType::Planet, AttackMission::getTypeId(), $units, new Resources($cargo[0], $cargo[1], $cargo[2], 0), $speed, 0);
+        $unions = app(FleetUnionService::class);
+        $union = $unions->createUnion($sent);
+        $dispatch = ['accepted' => true, 'error' => null, 'departure' => $sent->time_departure, 'arrival' => $sent->time_arrival, 'fuel' => (int) $sent->deuterium_consumption, 'holding_seconds' => 0, 'origin_after' => $this->planetState($originId)];
+
+        $joinAt = $start + $this->random->getInt(0, intdiv($sent->time_arrival - $start, 2));
+        SimulatedTime::freezeAt(Date::createFromTimestamp($joinAt));
+        $partnerOrigin = $this->updatedState($partnerOriginId);
+        $partnerService = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($partner)]);
+        $duration = $partnerService->calculateFleetMissionDuration($this->freshPlanet($partnerOriginId), $coordinate, $partnerUnits, GameMissionFactory::getMissionById(1, []), $partnerSpeed);
+        $union->refresh();
+        $join = ['at' => $joinAt, 'origin' => $partnerOrigin, 'player' => $this->playerState($partner), 'units' => (object) $this->counts($partnerUnits), 'cargo' => $partnerCargo, 'speed' => $partnerSpeed,
+            'max_arrival' => $union->time_arrival + $unions->getMaxDelayTime($union), 'accepted' => false, 'joined' => false, 'error' => null, 'arrival' => null, 'fuel' => null];
+        $joined = null;
+        if ($joinAt + $duration > $join['max_arrival']) {
+            $join['error'] = 'too_slow';
+        } else {
+            try {
+                $joined = $partnerService->createNewFromPlanet($this->freshPlanet($partnerOriginId), $coordinate, PlanetType::Planet, AttackMission::getTypeId(), $partnerUnits, new Resources($partnerCargo[0], $partnerCargo[1], $partnerCargo[2], 0), $partnerSpeed, 0);
+                $join['accepted'] = true;
+                $join['fuel'] = (int) $joined->deuterium_consumption;
+                $join['origin_after'] = $this->planetState($partnerOriginId);
+                $unions->joinUnion($union, $joined);
+                $join['joined'] = true;
+            } catch (Exception $refusal) {
+                $join['error'] = $refusal->getMessage();
+            }
+        }
+
+        $missions = array_values(array_filter([$sent, $joined]));
+        foreach ($missions as $mission) {
+            $mission->refresh();
+        }
+        $join['arrival'] = $joined?->time_arrival;
+        $arrivals = [];
+        $reports = (int) (BattleReport::query()->max('id') ?? 0);
+        foreach (collect($missions)->sortBy('time_arrival')->groupBy('time_arrival') as $time => $landing) {
+            SimulatedTime::freezeAt(Date::createFromTimestamp((int) $time));
+            $before = $this->updatedState($targetId);
+            foreach ($landing as $mission) {
+                $service->processDueMissionEventsForMissionId($mission->id);
+            }
+            $this->forget();
+            $report = BattleReport::query()->where('id', '>', $reports)->orderBy('id')->first();
+            $reports = (int) (BattleReport::query()->max('id') ?? 0);
+            $arrivals[] = ['time' => (int) $time, 'target_before' => $before, 'battle' => $report === null ? null : $this->battleReport($report)];
+        }
+        $backs = [];
+        foreach ([[$sent, $originId], [$joined, $partnerOriginId]] as [$mission, $from]) {
+            $back = $mission === null ? null : FleetMission::query()->where('parent_id', $mission->id)->first();
+            $backs[] = $back === null ? null : ['flight' => $this->flight($back), 'home' => $this->comeHome($service, $back, $from)];
+        }
+
+        return [
+            'input' => $input + ['join' => $join],
+            'dispatch' => $dispatch,
+            'arrival' => ['time' => $arrivals[0]['time'] ?? null, 'arrivals' => $arrivals, 'target_after' => $this->planetState($targetId), 'debris_after' => $this->debris($coordinate)],
+            'returns' => $backs,
+            'return' => null,
+        ];
     }
 
     // ------------------------------------------------------------- ACS defend

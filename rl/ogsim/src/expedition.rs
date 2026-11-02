@@ -629,7 +629,7 @@ pub fn arrive_with(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMa
             let ours: Vec<(u32, i64)> = sent.fleet.iter().map(|(&id, &n)| (id, n)).collect();
             let theirs: Vec<(u32, i64)> = enemy.fleet.iter().map(|(&id, &n)| (id, n)).collect();
             let tech = tech_map(rules, enemy.tech);
-            let battle = Battle { attacker: &ours, attacker_research: research, attacker_cargo: [0.0; 3], defender: &theirs, defender_research: &tech, allies: &[], defender_stock: [0.0; 3], defender_engineer: false, moon_exists: true, seed };
+            let battle = Battle { attacker: &ours, attacker_research: research, attacker_cargo: [0.0; 3], defender: &theirs, defender_research: &tech, allies: &[], partners: &[], defender_stock: [0.0; 3], defender_engineer: false, moon_exists: true, seed };
             let engine = combat::run_engine(&combat::engine_input(catalogue, catalogue, &battle));
             Found { rolled, ..settle_fight(rules, catalogue, sent, enemy, engine) }
         }
@@ -792,7 +792,7 @@ mod tests {
                 say("enemy fleet", format!("{:?}", enemy.fleet), format!("{:?}", units(&report.attacker.units)));
                 say("enemy tech", format!("{:?}", enemy.tech), format!("{:?}", [report.attacker.weapon, report.attacker.shield, report.attacker.armour]));
                 say("player fleet in the report", format!("{:?}", fleet), format!("{:?}", units(&report.defender.units)));
-                let engine = EngineResult { rounds: report.rounds.as_ref().and_then(|r| r.as_u64()).unwrap_or(1) as u32, attacker_left: counted(&report.defender_left), defender_left: counted(&report.attacker_left), allies_left: Vec::new() };
+                let engine = EngineResult { rounds: report.rounds.as_ref().and_then(|r| r.as_u64()).unwrap_or(1) as u32, attacker_left: counted(&report.defender_left), defender_left: counted(&report.attacker_left), allies_left: Vec::new(), partners_left: Vec::new() };
                 settle_fight(rules, catalogue, &sent, enemy, engine)
             }
         };

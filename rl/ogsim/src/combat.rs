@@ -125,8 +125,19 @@ pub struct CombatCatalogue {
 
 pub type Units = BTreeMap<u32, i64>;
 
+/// L5: a fleet that joined the attack in a union (ACS), fought at its own owner's tables and research.
+pub struct Partner<'a> {
+    pub combat: &'a CombatCatalogue,
+    pub ships: &'a [(u32, i64)],
+    pub research: &'a HashMap<u32, u32>,
+    /// What it carries into the fight, half fuel included.
+    pub cargo: [f64; 3],
+}
+
 pub struct Battle<'a> {
     pub attacker: &'a [(u32, i64)],
+    /// The fleets that joined the attacker's union, in the order they joined; empty for a lone attack.
+    pub partners: &'a [Partner<'a>],
     pub attacker_research: &'a HashMap<u32, u32>,
     /// What the fleet carries into the fight, half fuel included; a fractional deuterium survives to the same decimals
     /// the host's `Resources` does.
@@ -157,6 +168,8 @@ pub struct EngineResult {
     pub defender_left: Units,
     /// Each holding ally's survivors, in `Battle::allies` order; `defender_left` counts them too.
     pub allies_left: Vec<Units>,
+    /// Each partner's survivors, in `Battle::partners` order; `attacker_left` counts them too.
+    pub partners_left: Vec<Units>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,6 +179,9 @@ pub struct Outcome {
     pub attacker_left: Units,
     pub defender_left: Units,
     pub allies_left: Vec<Units>,
+    /// A union's partners: what survived and what each flies home with (the attacker's own are `attacker_left`, `cargo`).
+    pub partners_left: Vec<Units>,
+    pub partner_cargo: Vec<[i64; 3]>,
     pub attacker_lost: Units,
     pub defender_lost: Units,
     pub repaired: Units,
@@ -330,8 +346,12 @@ pub fn engine_input(attacker: &CombatCatalogue, defender: &CombatCatalogue, batt
     for (i, ally) in battle.allies.iter().enumerate() {
         defenders.push(defender.fleet_json(i as u32 + 1, i as u32 + 3, ally, battle.defender_research));
     }
+    let mut attackers = vec![attacker.fleet_json(1, 1, &fleet, battle.attacker_research)];
+    for (i, p) in battle.partners.iter().enumerate() {
+        attackers.push(p.combat.fleet_json(i as u32 + 2, i as u32 + 2, &units_of(p.ships, &HashSet::default()), p.research));
+    }
     json!({
-        "attacker_fleets": [attacker.fleet_json(1, 1, &fleet, battle.attacker_research)],
+        "attacker_fleets": attackers,
         "defender_fleets": defenders,
         "seed": battle.seed,
     })
@@ -349,6 +369,8 @@ struct EngineRound {
     defender_ships: HashMap<String, EngineCount>,
     #[serde(default)]
     defender_fleet_results: HashMap<String, EngineFleet>,
+    #[serde(default)]
+    attacker_fleet_results: HashMap<String, EngineFleet>,
 }
 
 #[derive(Deserialize)]
@@ -376,21 +398,25 @@ pub fn run_engine(input: &Value) -> EngineResult {
         input[key][i]["units"].as_object().map_or_else(Units::new, |units| units.values().map(|u| (u["unit_id"].as_u64().unwrap() as u32, u["amount"].as_i64().unwrap())).filter(|&(_, n)| n > 0).collect())
     };
     let allies = input["defender_fleets"].as_array().map_or(0, |d| d.len().saturating_sub(1));
+    let partners = input["attacker_fleets"].as_array().map_or(0, |d| d.len().saturating_sub(1));
+    let summed = |key: &str, n: usize| (0..=n).map(|i| fleet(key, i)).fold(Units::new(), |mut all, f| {
+        for (id, n) in f { *all.entry(id).or_insert(0) += n }
+        all
+    });
     match output.rounds.last() {
         Some(last) => EngineResult {
             rounds: output.rounds.len() as u32,
             attacker_left: counts(&last.attacker_ships),
             defender_left: counts(&last.defender_ships),
             allies_left: (1..=allies).map(|i| last.defender_fleet_results.get(&i.to_string()).map_or_else(Units::new, |f| counts(&f.units_result))).collect(),
+            partners_left: (2..partners + 2).map(|i| last.attacker_fleet_results.get(&i.to_string()).map_or_else(Units::new, |f| counts(&f.units_result))).collect(),
         },
         None => EngineResult {
             rounds: 0,
-            attacker_left: fleet("attacker_fleets", 0),
-            defender_left: (0..=allies).map(|i| fleet("defender_fleets", i)).fold(Units::new(), |mut all, f| {
-                for (id, n) in f { *all.entry(id).or_insert(0) += n }
-                all
-            }),
+            attacker_left: summed("attacker_fleets", partners),
+            defender_left: summed("defender_fleets", allies),
             allies_left: (1..=allies).map(|i| fleet("defender_fleets", i)).collect(),
+            partners_left: (1..=partners).map(|i| fleet("attacker_fleets", i)).collect(),
         },
     }
 }
@@ -473,7 +499,14 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
     let rules = &attacker.rules;
     let attacker_start = units_of(battle.attacker, &HashSet::default());
     let defender_start = defender_units(defender, battle);
-    let attacker_lost = minus(&attacker_start, &engine.attacker_left);
+    // In a union the engine counts every fleet's survivors together; the attacker's own are what the partners leave.
+    let mut own_left = engine.attacker_left.clone();
+    for (&id, &n) in engine.partners_left.iter().flatten() {
+        *own_left.entry(id).or_insert(0) -= n;
+    }
+    own_left.retain(|_, n| *n > 0);
+    let attacker_lost = minus(&attacker_start, &own_left);
+    let partners_lost: Vec<Units> = battle.partners.iter().zip(&engine.partners_left).map(|(p, left)| minus(&units_of(p.ships, &HashSet::default()), left)).collect();
     let defender_lost = minus(&defender_start, &engine.defender_left);
 
     let winner = match (engine.rounds, total(&engine.attacker_left) > 0, total(&engine.defender_left) > 0) {
@@ -485,11 +518,20 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
 
     // The host loots only a defender wiped out to the last unit, and the cargo a fleet held survives at the same rate
     // as its cargo capacity (BattleEngine::distributeResources).
-    let (capacity, carried) = surviving(attacker, battle, &attacker_start, &engine.attacker_left);
-    let loot = if plunder && total(&engine.defender_left) == 0 { loot(attacker, battle, &attacker_start, capacity, carried) } else { [0; 3] };
+    let (capacity, carried) = surviving(attacker, battle, &attacker_start, &own_left);
+    let won = plunder && total(&engine.defender_left) == 0;
+    let joint = (!battle.partners.is_empty()).then(|| joint_loot(attacker, battle, &attacker_start, &own_left, &engine.partners_left, won));
+    let loot = match &joint {
+        Some(j) => j.shares.iter().fold([0; 3], |t, s| [t[0] + s[0], t[1] + s[1], t[2] + s[2]]),
+        None if won => loot(attacker, battle, &attacker_start, capacity, carried),
+        None => [0; 3],
+    };
 
     // Debris: the build price of what is gone for good, ships and defences at their own share (calculateDebris).
     let mut gone = attacker_lost.clone();
+    for (&id, &n) in partners_lost.iter().flatten() {
+        *gone.entry(id).or_insert(0) += n;
+    }
     for (&id, &n) in &minus(&defender_lost, &repaired) {
         *gone.entry(id).or_insert(0) += n;
     }
@@ -511,23 +553,36 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
     // the room its fleet has left), then the defender's, whose share lands back on the planet. The shares stay
     // fractional like the host's, and are truncated only where the host stores a whole number.
     let gross = gross.map(|r| r as f64);
+    // In a union the attacker's collectors (counted over every fleet, at the initiator's research) take their share
+    // out of the field and no fleet carries it home: the host's multi-fleet path leaves it out (AttackMission TODO).
     let free = (capacity - carried[0] - carried[1] - carried[2] - loot[0] - loot[1] - loot[2]).max(0);
-    let hauled = if plunder { capped(collected(attacker, &engine.attacker_left, battle.attacker_research, gross), free) } else { [0.0; 3] };
+    let haul = collected(attacker, &engine.attacker_left, battle.attacker_research, gross);
+    let hauled = match (plunder, &joint) {
+        (false, _) => [0.0; 3],
+        (true, Some(_)) => haul,
+        (true, None) => capped(haul, free),
+    };
     let left = [gross[0] - hauled[0], gross[1] - hauled[1], gross[2] - hauled[2]];
     let salvage = if plunder { collected(defender, &engine.defender_left, battle.defender_research, left) } else { [0.0; 3] };
     let debris = [left[0] - salvage[0], left[1] - salvage[1], left[2] - salvage[2]].map(|r| r as i64);
 
     // The cargo the fleet held, the loot and what its collectors hauled fly home together (startReturn).
-    let cargo = capped([carried[0] as f64 + loot[0] as f64 + hauled[0], carried[1] as f64 + loot[1] as f64 + hauled[1], carried[2] as f64 + loot[2] as f64 + hauled[2]], capacity).map(|r| r as i64);
+    let home = |carried: [i64; 3], share: [i64; 3], extra: [f64; 3], capacity: i64| capped(std::array::from_fn(|r| carried[r] as f64 + share[r] as f64 + extra[r]), capacity).map(|r| r as i64);
+    let (cargo, partner_cargo) = match &joint {
+        Some(j) => (home(j.carried[0], j.shares[0], [0.0; 3], j.capacity[0]), (1..j.shares.len()).map(|i| home(j.carried[i], j.shares[i], [0.0; 3], j.capacity[i])).collect()),
+        None => (home(carried, loot, hauled, capacity), Vec::new()),
+    };
 
     Outcome {
         rounds: engine.rounds,
         winner,
         attacker_loss: attacker.price_of(&attacker_lost),
         defender_loss: attacker.price_of(&defender_lost),
-        attacker_left: engine.attacker_left,
+        attacker_left: own_left,
         defender_left: engine.defender_left,
         allies_left: engine.allies_left,
+        partners_left: engine.partners_left,
+        partner_cargo,
         attacker_lost,
         defender_lost,
         repaired,
@@ -538,6 +593,76 @@ pub fn settle_in(attacker: &CombatCatalogue, defender: &CombatCatalogue, battle:
         moon_chance,
         moon_created: !battle.moon_exists && moon_roll <= moon_chance,
     }
+}
+
+/// A union's fleets after the fight, the attacker first: surviving capacity, the cargo that survived with it, and each
+/// fleet's share of the plunder.
+struct Joint {
+    capacity: Vec<i64>,
+    carried: Vec<[i64; 3]>,
+    shares: Vec<[i64; 3]>,
+}
+
+/// BattleEngine::distributeResources for a union: `loot%` (the initiator's) of the stock cut to every fleet's starting
+/// capacity at its owner's research, then shared out by surviving capacity in whole units, pass after pass, each fleet
+/// capped by the room its surviving cargo leaves; the units a pass's flooring leaves go one at a time, the initiator
+/// first, then the largest remainder, the larger capacity and the earlier fleet (distributeLootResource).
+fn joint_loot(attacker: &CombatCatalogue, battle: &Battle, start: &Units, own_left: &Units, partners_left: &[Units], won: bool) -> Joint {
+    let mut fleets = vec![(attacker, start.clone(), own_left.clone(), battle.attacker_research, battle.attacker_cargo)];
+    for (p, left) in battle.partners.iter().zip(partners_left) {
+        fleets.push((p.combat, units_of(p.ships, &HashSet::default()), left.clone(), p.research, p.cargo));
+    }
+    let mut joint = Joint { capacity: Vec::new(), carried: Vec::new(), shares: vec![[0; 3]; fleets.len()] };
+    let mut starting = 0;
+    for (combat, start, left, research, cargo) in &fleets {
+        let before = combat.capacity(start, research);
+        let after = if left.is_empty() { 0 } else { combat.capacity(left, research) };
+        let rate = if before > 0 { after as f64 / before as f64 } else { 0.0 };
+        starting += before;
+        joint.capacity.push(after);
+        joint.carried.push(cargo.map(|c| ((c * rate) as i64).max(0)));
+    }
+    let total_capacity: i64 = joint.capacity.iter().sum();
+    if !won || total_capacity <= 0 { return joint }
+    let wanted = distribute_loot(battle.defender_stock.map(|r| r.max(0.0) * attacker.rules.loot_percentage / 100.0), starting);
+    let mut room: Vec<i64> = (0..fleets.len()).map(|i| (joint.capacity[i] - joint.carried[i].iter().sum::<i64>()).max(0)).collect();
+    for r in 0..3 {
+        let mut remaining = wanted[r] as i64;
+        while remaining > 0 {
+            let eligible: Vec<usize> = (0..fleets.len()).filter(|&i| joint.capacity[i] > 0 && room[i] > 0).collect();
+            let weight: i64 = eligible.iter().map(|&i| joint.capacity[i]).sum();
+            if eligible.is_empty() || weight <= 0 { break }
+            let mut exact = vec![0.0; fleets.len()];
+            let mut allocated = 0;
+            for &i in &eligible {
+                exact[i] = (remaining * joint.capacity[i]) as f64 / weight as f64;
+                let assigned = (exact[i].floor() as i64).min(room[i]);
+                if assigned > 0 {
+                    joint.shares[i][r] += assigned;
+                    room[i] -= assigned;
+                    allocated += assigned;
+                }
+            }
+            remaining -= allocated;
+            if remaining <= 0 { break }
+            let mut ranked = eligible;
+            ranked.sort_by(|&x, &y| (y == 0).cmp(&(x == 0))
+                .then((exact[y] - exact[y].floor()).total_cmp(&(exact[x] - exact[x].floor())))
+                .then(joint.capacity[y].cmp(&joint.capacity[x]))
+                .then(x.cmp(&y)));
+            let mut extra = 0;
+            for i in ranked {
+                if remaining <= 0 { break }
+                if room[i] <= 0 { continue }
+                joint.shares[i][r] += 1;
+                room[i] -= 1;
+                remaining -= 1;
+                extra += 1;
+            }
+            if allocated == 0 && extra == 0 { break }
+        }
+    }
+    joint
 }
 
 /// What one side's surviving collectors haul out of a debris field: the host's share of each resource (a whole number),
@@ -712,7 +837,7 @@ mod tests {
             attacker_cargo: case.attacker.cargo,
             defender: &o.defender,
             defender_research: &o.defender_research,
-            allies: &[],
+            allies: &[], partners: &[],
             defender_stock: case.defender.resources,
             defender_engineer: case.defender.engineer,
             moon_exists: case.defender.moon_exists,
@@ -744,7 +869,7 @@ mod tests {
             let o = owned(case);
             let b = battle(case, &o, case.seed);
             let r = &case.result;
-            let engine = EngineResult { rounds: r.rounds, attacker_left: units(&r.attacker_left), defender_left: units(&r.defender_left), allies_left: Vec::new() };
+            let engine = EngineResult { rounds: r.rounds, attacker_left: units(&r.attacker_left), defender_left: units(&r.defender_left), allies_left: Vec::new(), partners_left: Vec::new() };
             let out = settle(&catalogue, &catalogue, &b, engine, units(&r.repaired), 101);
             let winner = match out.winner {
                 Winner::Attacker => "attacker",

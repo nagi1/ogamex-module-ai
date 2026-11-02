@@ -485,13 +485,13 @@ mod tests {
             attacker_cargo: cargo,
             defender: &planet,
             defender_research: &defender_research,
-            allies: &[],
+            allies: &[], partners: &[],
             defender_stock: [0, 1, 2].map(|i| target["resources"][i].as_f64().unwrap()),
             defender_engineer: false,
             moon_exists: true,
             seed: arrival["seed"].as_u64().unwrap(),
         };
-        let engine = EngineResult { rounds: report["rounds"].as_u64().unwrap() as u32, attacker_left: units(&report["attacker_left"]), defender_left: units(&report["defender_left"]), allies_left: Vec::new() };
+        let engine = EngineResult { rounds: report["rounds"].as_u64().unwrap() as u32, attacker_left: units(&report["attacker_left"]), defender_left: units(&report["defender_left"]), allies_left: Vec::new(), partners_left: Vec::new() };
         let rolls = if arrival["rolls"].is_null() { [0, 0] } else { [arrival["rolls"]["destroy"].as_i64().unwrap(), arrival["rolls"]["loss"].as_i64().unwrap()] };
         let diameter = arrival["moon_before"]["diameter"].as_i64().unwrap();
         let strike = resolve_moon_destruction(rules, &attacker, &defender, &battle, engine, diameter, rolls);

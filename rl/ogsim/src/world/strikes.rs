@@ -60,7 +60,7 @@ impl World {
         self.sync_units(cat, a);
         self.next[a] = cat.peek(&mut self.games[a]);
         let arrive = now + flight.seconds as f64;
-        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: self.launch_log.len() });
+        self.fleets.push(Fleet { owner: a, target, mission: Mission::Missile, ships: vec![(strike.missile, missiles)], cargo: [0.0; 3], fuel: 0.0, to: self.coords[target], arrive, home: arrive, returning: false, departed: now, holding: 0.0, priority, moon: on_moon, id: self.launch_log.len(), union: None });
         self.launch_log.push((self.fleets.last().expect("just fired").clone(), 0.0));
         Ok(())
     }
@@ -191,7 +191,7 @@ impl World {
         let mut cargo = self.fleets[f].cargo;
         cargo[2] += self.fleets[f].fuel / 2.0;
         let seed = self.stream.int(0, i64::MAX) as u64;
-        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, allies: &[], defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
+        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, allies: &[], partners: &[], defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
         let engine = match self.recorded.take() {
             Some(fight) => fight.engine,
             None => {
