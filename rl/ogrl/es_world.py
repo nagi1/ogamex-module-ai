@@ -122,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                 plus.append(score)
                 minus.append(down[a][0])
         votes = np.asarray(votes, np.float32)
-        weights = votes / (votes.std() + 1e-8)
+        # Centred ranks (Salimans et al.): a season's tail (a sealed planet, a lucky expedition run) moves no more than its rank.
+        weights = (np.argsort(np.argsort(votes)) / max(len(votes) - 1, 1) - 0.5).astype(np.float32)
         grad = (weights[:, None] * np.stack(rows)).mean(0) / args.sigma
         m = 0.9 * m + 0.1 * grad
         v = 0.999 * v + 0.001 * grad * grad
