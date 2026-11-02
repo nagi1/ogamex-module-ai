@@ -282,3 +282,14 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   Arms are ranked by median and top score against the clone (6.96 M median, 270 M top). The reward telescopes to
   ln(final score) - ln(start), and the host score counts only resources spent, so stock and timing cannot game it.
   The model decides buildings and research only; ships, defence and fleet missions are still the personas'.
+- **Fleet errands join the season (2 Nov, `c0a9cc41`, `5d0220df`).** `SeasonWorld(queue=2)` gives the fleet errand at
+  every capital login of the first `controlled` accounts to a model (`fleet-model=N`: their persona keeps economy and
+  yard); `train_bc_world --season --errands` clones the scripted errand; the judge plays `errand-policy=<weights>`.
+  Plumbing check with the teacher through the model's door for all 64 accounts: HDS 0.788 / AUC 0.870 against the
+  normal mix's 0.898 / 0.791 - every account becomes a miner with the raider's errands, so the mix is not the same
+  world; the errand model is judged against this check, not the normal mix. The errand path ran 7x slower (a scan of
+  the whole event log per login); an index made it as fast as a normal season.
+- **Health false alarms fixed:** a raided planet above its cap gets salvage (the host's collector rule) with no
+  delivery; the over-cap check now counts it. Two judges (w0, w1 at 80) had failed on it and were requeued.
+- **Memory:** a trainer takes ~10 GB, a season ~0.7 GB. Three trainers plus 20 extra seasons hit the 46 GB cap and
+  the slice killed `g0` (resumed from its update-131 save). Keep three trainers plus one judge at most.
