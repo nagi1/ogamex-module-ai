@@ -423,6 +423,8 @@ impl<W: Write> Season<'_, W> {
             "long_builds": long,
             "mod_build": levels(0),
             "mod_research": levels(1),
+            "network": self.u.cat.research_network.map_or(0, |n| self.u.world.games[a].planet.levels[n]),
+            "labs": self.u.cat.modifiers[1].first().map_or(0, |&(lab, _)| planets.iter().map(|&slot| self.u.world.games[slot].planet.levels[lab]).sum::<u32>()),
             "next_id": next.map(|k| self.u.cat.objects[k].id),
             "next_seconds": next.map(|k| self.u.cat.build_seconds(planet, k)).map(|s| s / 3600.0),
             "next_wait": next.map(|k| self.u.cat.wait_seconds(planet, k)).map_or(serde_json::Value::Null, hours),

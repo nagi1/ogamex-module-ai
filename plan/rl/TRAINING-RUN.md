@@ -130,8 +130,53 @@ The clone itself, unchanged, moves with this alone:
 | Greedy | 0.767 | 0.931-0.943 |
 | Sampled | 0.805 | 0.905 |
 
-Sampled clone is the baseline for step C. Slight randomness makes accounts differ the way real players do. One reading so
-far; its spread needs more than one run before a small gain counts.
+Sampled clone is the baseline for step C. One reading so far; its spread needs more than one run before a small gain counts.
+
+## First arms: no gain over randomness (2 Nov)
+
+Every line is 10 seeds x 365 days, sampled, against the lifeform-free real bands (below).
+
+| Player | Entropy | HDS | Pooled AUC |
+| --- | --- | --- | --- |
+| Teacher (rule-base) | - | 0.768 | 0.909 |
+| Clone | 0.27 | 0.810 | 0.900 |
+| Clone, temperature 2, untrained | 1.63 | 0.873 | 0.805 |
+| Clone, temperature 3, untrained | 2.11 | 0.872 | 0.823 |
+| λ 0, update 120 | 1.3 | 0.871 | 0.803 |
+| λ 0.02, update 160 | 1.3 | 0.877 | 0.815 |
+| λ 0.1, update 120 | 1.3 | 0.874 | 0.823 |
+| λ 0.02, no entropy bonus, update 320 | 0.07 | 0.770 | 0.942 (read on the old bands) |
+
+A trained arm sits where an untrained clone of its entropy sits: the gain is randomness, not learning. With no entropy
+bonus the policy returns to the teacher's greedy play. Near-random buying outscores the teacher, so the teacher's build
+order is not what limits the score; randomness is not the fix, since the goal is a good player.
+
+**Why the detector still tells us apart: one style across all accounts.** Against real, with the clone at temperature 2:
+
+| Measure | Ours | Real |
+| --- | --- | --- |
+| Moons, mid band, day 128-256 | 9 on 9 planets | 5.5 on 10 |
+| Moons, bottom band | 1 on 1 planet | 0 on 4 |
+| Growth, mid band, p10-p90 | 3.8k-6.1k (1.6x) | 0.9k-46k (48x) |
+| Top growth | 38k | 99k |
+| Top research share | 1.8% | 12.6% |
+
+**Tried and removed (teacher, 10 seeds):**
+
+| Arm | Change | HDS | AUC | Reading |
+| --- | --- | --- | --- | --- |
+| `effort` | login gaps scaled per account, p90/p10 46x | 0.781 | 0.944 | 46x in gaps gives 2.7x in growth: logins are not the lever |
+| `labtime` v1 | a research over a week waits for a lab upgrade | 0.756 | 0.914 | Top lab 8 to 13, research +53%, median jobs last 10 hours so it rarely fires |
+| `labtime` v2 | research waits while share is under 12% and a lab can rise | 0.729 | 0.942 | Capital lab 27 by day 30, network still 0 at day 200: starves the research that opens the network |
+
+Research points a day are capped near 24 x 8 x (1 + pooled labs). 12% of a top score needs about 170, reachable only with
+the network and colony labs; the teacher's median account has no network level until day 300 under v2. Open.
+
+## The real bands had kept lifeform points (fixed 2 Nov)
+
+The owner's 29 Oct rule never reached the yardstick: `real_bands.py` still used the published total, which counts
+lifeform points. Totals and ranks now read `lifeform_free`. Top growth 117k to 99k, top research share 10.6% to 12.6%. The
+old file is `real-bands-with-lifeforms.json`. `detector-*.json` were trained on the old bands.
 
 Learner settings are not experiments (NORTH-STAR §10). Fidelity gaps (replay) are read alongside and do not block
 training; the rule fixes go in between rounds, and a changed world means a rerun of step A.

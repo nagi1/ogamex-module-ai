@@ -15,7 +15,8 @@ Nothing here names a game object: it is a read of published player data, so gate
 
 The printed pooled table is the check: it must reproduce NORTH-STAR-PLAN.md §2 to ±0.01 on shares and
 ±1 on medians. A rank band is the player's own highscore position over the number of ranked players in its
-universe, inactives included, because that is what a human sees in the highscore.
+universe, inactives included, because that is what a human sees in the highscore. OGameX has no lifeforms, so totals
+and ranks are read without lifeform points (`lifeform_free`).
 """
 from __future__ import annotations
 
@@ -161,14 +162,25 @@ def planets_of(directory: Path) -> tuple[dict[str, list[int]], list[int]]:
     return owned, slots
 
 
+def lifeform_free(by_kind: dict[int, list[float]]) -> float:
+    """The player's total without lifeform points: OGameX has no lifeforms, and the published total counts them with no
+    score type of their own, so anything above economy + research + military comes out."""
+    total = by_kind.get(0, [0.0, 0.0])[0]
+    parts = sum(by_kind.get(kind, [0.0, 0.0])[0] for kind in (1, 2, 3))
+    return min(total, parts) if parts > 0 else total
+
+
 def account_measures(directory: Path, universe: dict, status: dict, allied: dict, scores: dict, ranked: int,
                      owned: dict[str, list[int]]) -> list[tuple[str, str, list[float]]]:
     """One (band, bucket, measure vector) per active player with a real score."""
     out = []
+    # The rank is recomputed on the same total, inactives included: only players the highscore ranks take part.
+    placed = sorted((pid for pid, by_kind in scores.items() if by_kind.get(0, [0.0, 0.0])[1]), key=lambda pid: -lifeform_free(scores[pid]))
+    ranks = {pid: place + 1 for place, pid in enumerate(placed)}
     for pid, by_kind in scores.items():
         if status.get(pid, "missing") != "":
             continue  # a status of i/I/v/o is not an active player: counted in the rank, never in a band
-        total, position = by_kind.get(0, [0.0, 0.0])
+        total, position = lifeform_free(by_kind), ranks.get(pid, 0)
         if not position or total <= 0:
             continue  # unranked or a zero score says nothing about how a player plays
         planets = owned.get(pid, [0, 0, 0])
