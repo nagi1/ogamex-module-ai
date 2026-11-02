@@ -89,7 +89,7 @@ class Slots:
 # W24: the season's arms as the flow's last kept row plays them (runs/flow/e99h/run.sh), so training sees the world hds.py judges.
 SEASON_ARMS = ("moonstack", "reach", "expedition", "colonies", "ships", "cap", "lab", "classes", "feed", "factory", "balance",
                "satellites", "doubler", "moonfeed", "standing", "labfirst", "moontaste", "netchain", "merchant", "techtree", "doctrine",
-               "acsdefend", "acsattack", "wrecks", "moonraid", "relocate")
+               "acsdefend", "acsattack", "wrecks", "moonraid", "relocate", "keyed")
 
 
 def season_world(args, seed: int, n_worlds: int) -> "ogsim.SeasonWorld":

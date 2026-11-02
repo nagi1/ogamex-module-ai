@@ -315,3 +315,26 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   The judge script was edited while a queue was running it, so g2's scoring died. Rescored from the saved seasons. Never edit judge.sh under a running queue.
   DAgger (`rl/ogrl/dagger_world.py`) starts from bc-noadvice: the clone plays, the persona labels every state it reaches. Smoke test: on its own states the clone matches the persona about 80% of the time, against 94% on the persona's own games.
   Run d1: 4 rounds of 600k rows, on the 4070. dqueue.sh judges each round when no other judge is playing. Bar to beat: bc0 20.98M.
+
+### 2 Nov 23:45 — root cause of the stalled training: the world's shared dice
+
+Every PPO arm since the clone (g0, g1, g2, l1, w0, w1, e0) ended on the clone's ~21M. The training mechanics were healthy (value net
+explains ~90%, KL 1e-3, entropy falling 1.5 to 0.3), so the signal was the suspect, not the learner. The per-day discount (0.995 = ~200 days) was ruled out.
+
+Measurement (6 seeds x 7 variants, persona only, `skip=A:D` and `jolt=D` probe arms). Change in an account's final score:
+
+| change | median | p90 | max |
+| --- | --- | --- | --- |
+| same season twice | 0% | 0% | 0% |
+| one extra draw of the world's dice on day 30 (luck only) | 7.3% | 30% | 11x |
+| an account passes on one build on day 30 (a decision) | 0% | 2.9% | 26% |
+
+One shared stream fed every fleet event, colony draw and the model's own samples. Any change re-dealt the luck of the whole world, so a
+decision's return was ~all luck and PPO learned noise. Fix: `keyed` dice. An account's k-th fleet event, colony field and site draw, and the
+model's samples, come from its own stream. Same distributions; off in the parity replays (all 14 missions still exact, 86 lib tests pass).
+With keyed dice the luck-only change drops to median 0%, p90 5.9%; what remains is real interaction (raids between accounts).
+
+Now standard in SEASON_ARMS and judge_policy.sh; judged.txt is marked where keyed starts. The bc0 bar is rejudged on keyed dice.
+Test of the fix: g2's exact settings on seeds 1 and 2 (k1 on the 4070, k2 on the 3090). If they rise above the rejudged bc0, the root cause is confirmed.
+Second reading: one skipped build barely moves an account's year, because the persona builds it next login. The build model's leverage is in
+its systematic choices, not in single picks.

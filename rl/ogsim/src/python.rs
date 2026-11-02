@@ -588,9 +588,15 @@ struct SeasonRules {
     queue: usize,
 }
 
+fn account_streams(seed: u64, accounts: usize) -> Vec<u64> {
+    (0..accounts as u64).map(|a| seed ^ (a + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)).collect()
+}
+
 /// One season in play: seats step in parallel, each alone with its own universe.
 struct Seat {
     rng: u64,
+    /// The policy's draws, one stream per account: one account's extra decision does not reshuffle the others' samples.
+    picks: Vec<u64>,
     /// The high bits of its tickets, so tickets stay unique without a shared counter.
     id: u64,
     universe: Universe,
@@ -659,8 +665,8 @@ impl Seat {
                 Some((_, s, c, l)) => (state, cands, legal) = (s.clone(), c.clone(), l.clone()),
                 None => self.universe.observe(a, self.advice, &mut state, &mut cands, &mut legal),
             }
-            let (action, logp, value) = policy.sample(&state, &cands, &legal, 1.0, &mut self.rng);
             let owner = self.universe.world.account_of(a);
+            let (action, logp, value) = policy.sample(&state, &cands, &legal, 1.0, &mut self.picks[owner]);
             let day = (self.universe.world.games[a].t / DAY) as f32;
             // The persona's answer here (the pass or wait row when it has none): DAgger's label for the state the model reached.
             let teacher = self.advice.map_or(if self.errand.is_some() { 0 } else { k as i64 - 1 }, |row| row as i64);
@@ -737,6 +743,7 @@ impl Seat {
                     self.finished.push((slots.len(), score::of(world, owner).total as f64, world.games[owner].effective_rate(), builds, invalid, 0.0));
                 }
                 self.universe = rules.universe(next_random(&mut self.rng));
+                self.picks = account_streams(self.rng, rules.accounts);
                 self.midnight = DAY;
                 self.warm_until = 0.0;
                 self.realism = vec![0.0; rules.accounts];
@@ -817,7 +824,7 @@ impl SeasonWorld {
         let draws: Vec<(u64, u64, u64)> = (0..n_worlds).map(|_| (next_random(&mut rng), next_random(&mut rng), next_random(&mut rng))).collect();
         let seats = py.detach(|| draws.into_par_iter().enumerate().map(|(w, (universe, own, warm))| {
             let mut seat = Seat {
-                rng: own, id: w as u64, universe: shared.universe(universe), midnight: DAY, deciding: (0, 0), advice: None, errand: None,
+                rng: own, picks: account_streams(own, shared.accounts), id: w as u64, universe: shared.universe(universe), midnight: DAY, deciding: (0, 0), advice: None, errand: None,
                 warm_until: if stagger { (warm % days as u64) as f64 * DAY } else { 0.0 },
                 open: vec![None; accounts], realism: vec![0.0; accounts], tickets: 0, closed: Vec::new(), finished: Vec::new(),
                 streams: (0..accounts).map(|_| Vec::new()).collect(), recording: false,

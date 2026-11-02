@@ -169,6 +169,10 @@ pub struct Universe {
     acs_attack: bool,
     wrecks: bool,
     relocations: bool,
+    /// Leverage probes: `jolt=D` spends one draw of the world's dice at day D's end and changes nothing else; `skip=A:D`
+    /// makes account A pass on its persona's build at its first login after day D. Their gap is a decision's signal over its noise.
+    jolt: Option<f64>,
+    skip: Option<(usize, f64)>,
     /// The share of its planets each account wants mooned, when accounts differ in that: real mid players hold 1 to 12 moons
     /// on about 10 planets, and the top tenth a moon on almost every planet.
     moon_taste: Option<Vec<f64>>,
@@ -296,10 +300,16 @@ impl Universe {
         for player in players.iter_mut() {
             if let Player::Raider(raider) = player { raider.moon_raids = on("moonraid") }
         }
+        world.keyed = on("keyed");
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
             advise: !on("noadvice"), moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"), wrecks: on("wrecks"), relocations: on("relocate"),
+            jolt: arms.iter().find_map(|arm| arm.strip_prefix("jolt=")).map(|d| d.parse::<f64>().expect("jolt=DAY") * DAY),
+            skip: arms.iter().find_map(|arm| arm.strip_prefix("skip=")).map(|v| {
+                let (a, d) = v.split_once(':').expect("skip=ACCOUNT:DAY");
+                (a.parse().expect("skip account"), d.parse::<f64>().expect("skip day") * DAY)
+            }),
             moon_taste: on("moontaste").then(|| { let mut draw = seed ^ 0x4d00_a7e5; (0..accounts).map(|_| unit(&mut draw)).collect() }),
         }
     }
@@ -352,6 +362,8 @@ impl Universe {
         if self.relocations && a == owner {
             players::relocate_colony(&mut self.world, a, &mut self.ledgers[owner]);
         }
+        let skipped = self.skip.is_some_and(|(b, day)| b == owner && a == owner && t >= day && pick.is_none() && persona.is_some());
+        if skipped { self.skip = None; return self.world.wait(&self.cat, a) }
         match (pick, persona) {
             (Some(Some(_)), _) => {}
             (None, Some(k)) => self.world.commit(&self.cat, a, k),
@@ -454,6 +466,7 @@ impl Universe {
 
     /// The day's highscore at `midnight`: the rank-1 score an expedition's find reads, and alliance membership by standing.
     pub fn day_end(&mut self, midnight: f64) {
+        if self.jolt.is_some_and(|day| midnight >= day) { self.jolt = None; self.world.jolt() }
         let n = self.accounts();
         let totals: Vec<i64> = (0..n).map(|a| score::of(&self.world, a).total).collect();
         // N6b: an expedition's find bracket reads the universe's rank-1 score, which the host's highscore refreshes daily.

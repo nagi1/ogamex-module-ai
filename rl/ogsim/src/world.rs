@@ -412,6 +412,11 @@ pub struct World {
     /// L5: every fleet that fought in a union beside its first: (slot, second).
     pub union_log: Vec<(usize, f64)>,
     rng: u64,
+    /// `keyed` dice: an account's k-th draw of each purpose is fixed by the season's seed, so one account's choices
+    /// (which reorder the world's events) do not reshuffle every other account's luck. Off for the parity replays,
+    /// which hand the host's seed over through `rng`.
+    pub keyed: bool,
+    drawn: HashMap<(usize, u64), u64>,
 }
 
 impl World {
@@ -425,7 +430,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), moves: HashMap::default(), moved_at: HashMap::default(), move_log: Vec::new(), last_attacked: HashMap::default(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), moves: HashMap::default(), moved_at: HashMap::default(), move_log: Vec::new(), last_attacked: HashMap::default(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15, keyed: false, drawn: HashMap::default() }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -890,6 +895,19 @@ impl World {
     }
 
     /// Account a lets this login pass and decides again at its next one.
+    /// Spends one of account 0's draws (the world's, unkeyed): the `jolt` probe's change that changes nothing a player chose.
+    pub fn jolt(&mut self) { self.draw(0, 1); }
+
+    /// One draw for slot a's account and `purpose`: the shared stream, or with `keyed` the account's own.
+    fn draw(&mut self, a: usize, purpose: u64) -> u64 {
+        if !self.keyed { return next_random(&mut self.rng) }
+        let account = self.account_of(a);
+        let k = self.drawn.entry((account, purpose)).or_insert(0);
+        *k += 1;
+        let mut key = self.rng ^ (account as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ purpose.wrapping_mul(0xd1b5_4a32_d192_ed03) ^ k.wrapping_mul(0x94d0_49bb_1331_11eb);
+        next_random(&mut key)
+    }
+
     pub fn wait(&mut self, cat: &Catalogue, a: usize) {
         if self.idle_now[a] {
             self.idle_now[a] = false;
@@ -1182,7 +1200,7 @@ impl World {
         // A union fights once, when its first fleet lands (AttackMission: only slot 1 processes the battle).
         let f = self.union_members(f).into_iter().chain([f]).min_by_key(|&g| self.fleets[g].id).filter(|_| !self.fleets[f].returning).unwrap_or(f);
         let at = self.fleets[f].next();
-        self.dice = (next_random(&mut self.rng) >> 32) as u32;
+        self.dice = (self.draw(self.fleets[f].owner, 1) >> 32) as u32;
         self.stream = expedition::Mt19937::new(self.dice);
         if self.fleets[f].returning {
             let fleet = self.fleets.swap_remove(f);
@@ -1379,7 +1397,7 @@ impl World {
         let slot = self.add_planet(cat, owner, site.config, to, at);
         // The site lends its temperature's tables; the size is the host's own draw for the slot and the owner's class.
         if let Some(&(low, high)) = table.as_ref().filter(|_| !recorded).and_then(|t| t.field_ranges.get(&to.position)) {
-            let drawn = low + (next_random(&mut self.rng) % (high - low + 1) as u64) as u32;
+            let drawn = low + (self.draw(owner, 2) % (high - low + 1) as u64) as u32;
             self.games[slot].planet.field_max = (drawn as f64 * self.rules[capital].combat.rules.planet_size_multiplier) as u32;
         }
         let mut brought = self.fleets[f].cargo;
@@ -1412,7 +1430,7 @@ impl World {
         let site = match self.recorded_colony.take() {
             Some((temp_max, fields)) => sites.into_iter().find(|s| s.temp_max == temp_max && s.fields == fields),
             None if sites.is_empty() => None,
-            None => Some(sites[(next_random(&mut self.rng) % sites.len() as u64) as usize]),
+            None => Some(sites[(self.draw(capital, 3) % sites.len() as u64) as usize]),
         };
         if site.is_none() { self.unplaced += 1 }
         site.cloned()

@@ -50,7 +50,8 @@ fn main() {
     // `teacher-pick` asks the persona through the model's own door, so that door is measured apart from the model.
     let teacher_pick = arms.iter().any(|arm| arm == "teacher-pick");
     // `sampled` plays the policy as training does; a model cloned from a teacher can keep every greedy pick while it changes.
-    let mut draw = arms.iter().any(|arm| arm == "sampled").then_some(seed ^ 0x5A17);
+    // One stream per account, so an account's extra decision does not reshuffle the others' samples.
+    let mut draw = arms.iter().any(|arm| arm == "sampled").then(|| (0..accounts as u64).map(|a| seed ^ 0x5A17 ^ (a + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)).collect::<Vec<u64>>());
     let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
     // `errand-policy=<weights>` flies the fleets of the first `fleet-model=N` accounts by a trained errand model;
     // `errand-policy=teacher` asks the scripted mix through the same door, so the door is measured apart from the model.
@@ -109,13 +110,13 @@ fn main() {
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
         let pick = match &policy {
-            Some(p) if build => Some(season.u.choose(p, a, heat[owner], draw.as_mut())),
+            Some(p) if build => Some(season.u.choose(p, a, heat[owner], draw.as_mut().map(|d| &mut d[owner]))),
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };
         if errand_policy.is_some() && plays && a == owner && owner < fleet_model {
             let (offered, state, cands, legal) = season.u.observe_errands(a);
-            let row = match (&errand_model, draw.as_mut()) {
+            let row = match (&errand_model, draw.as_mut().map(|d| &mut d[owner])) {
                 (Some(p), Some(rng)) => p.sample(&state, &cands, &legal, 1.0, rng).0,
                 (Some(p), None) => p.best(&state, &cands, &legal),
                 (None, _) => season.u.errand_teacher(a, &offered),

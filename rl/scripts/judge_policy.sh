@@ -6,7 +6,7 @@ ckpt=$(realpath "$1") out=$(realpath -m "$2")
 root=$(cd "$(dirname "$0")/../../../.." && pwd)
 data=$root/storage/rl/ogsim/r8w
 bin=$(realpath "${3:-$root/Modules/AI/rl/ogsim/target/release/examples/season}")
-arms="moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler moonfeed standing labfirst moontaste netchain merchant techtree doctrine acsdefend acsattack wrecks moonraid relocate"
+arms="moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler moonfeed standing labfirst moontaste netchain merchant techtree doctrine acsdefend acsattack wrecks moonraid relocate keyed"
 mkdir -p "$out"; cd "$out"
 PYTHONPATH=$root/Modules/AI/rl "$root/.venv-rl/bin/python" -m ogrl.export_policy "$ckpt" policy.json
 # A checkpoint of the errand kind (queue 2) flies the fleets of the first FLEET accounts (a third, as raiders are);
