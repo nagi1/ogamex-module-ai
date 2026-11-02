@@ -423,6 +423,14 @@ pub fn next_random(state: &mut u64) -> u64 {
     z ^ (z >> 31)
 }
 
+/// A producing unit's row at n held: the host's output is linear in the count, so past the export's last probe the row
+/// scales with n. The export stops at a thousand; a grown planet holds far more.
+pub(crate) fn own_row(rows: &[[f64; 4]], n: usize) -> [f64; 4] {
+    let last = rows.len() - 1;
+    if n <= last { return rows[n] }
+    rows[last].map(|x| x * n as f64 / last as f64)
+}
+
 impl Catalogue {
     pub fn load(path: &str) -> Result<Catalogue, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -575,7 +583,7 @@ impl Catalogue {
             let n = self.units_in_use(planet, u);
             (n > 0).then_some((u, n))
         });
-        let own = || units().filter_map(|(u, n)| c.unit_production[u].own.as_ref().map(|rows| rows[n.min(rows.len() - 1)]));
+        let own = || units().filter_map(|(u, n)| c.unit_production[u].own.as_ref().map(|rows| own_row(rows, n)));
         let rows: Vec<[f64; 4]> = producers().map(|(k, rows)| row(k, rows)).chain(own()).collect();
         for &row in &rows {
             if row[3] > 0.0 { energy_max += row[3] } else { energy_used -= row[3] }

@@ -219,6 +219,19 @@ end of mid growth and emptied the top. The comparison it came from is the lesson
 seed sets (0.03-0.04) and ties it on AUC. With the 0.003 entropy bonus the arms drift towards uniform (2.48 of 2.53); started from
 the temperature 2 clone with no bonus, entropy falls instead (`c0` 1.74 to 1.06 by update 81): the reward alone moves the policy.
 
+**The economy that froze at day 200 (2 Nov).** Levels of top and mid accounts were identical at days 200 and 364 and stock piled to
+106B, because of four faults. Teacher alone, 10 seeds x 365 days: HDS 0.920, AUC 0.788, top 294M, research share in band 89%, health PASS.
+- `chain_powered` compared satellites with buildings, but a building needs the field being held. Energy for the chain now comes from units,
+  and the field goes only if they cost more than `CHAIN_POWER_DAYS` (30) of production.
+- **Sim fault:** the export's satellite table ends at 1,000, and output stopped there (39,600 energy). The host is linear (`floor((tmax + 140) / 6) * n`);
+  `own_row` scales past the last row. A re-export is not needed.
+- `power_by_units` spent the stock the login had just committed to a research, which then logged off. It now keeps the pick's price.
+- The `netchain` hold waited on colonies that would never raise a lab, being down to their chain's fields. They no longer count.
+- `next_research` takes the cheapest payable research under the real share too, not only with surplus: money now goes to buildings, and mid
+  accounts had weapons 0 at day 200.
+The no-bonus arms `c0`, `c02`, `c10` were stopped on the older world: AUC 0.775-0.823 against the temperature 2 clone's 0.788, no learning shown.
+Entropy fell to 0.17 with lambda 0.02 and held near 1.8 with lambda 0.1. Next: stronger realism weights on this world, run `train3`.
+
 ## The yardstick was noisy (fixed 2 Nov)
 
 `hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,

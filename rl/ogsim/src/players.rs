@@ -10,7 +10,7 @@ use crate::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::combat;
-use crate::economy::{Baseline, Catalogue, Planet, WEIGHTS};
+use crate::economy::{own_row, Baseline, Catalogue, Planet, WEIGHTS};
 use crate::fleet::{self, Coord, SystemState};
 use crate::score;
 use crate::units::UnitKind;
@@ -450,11 +450,14 @@ fn network_step(w: &World, cat: &Catalogue, a: usize) -> Option<Option<usize>> {
     (queue == 1 && need.iter().filter(missing).any(|&(k, _)| payable(k, 0))).then_some(None)
 }
 
-/// The lab colony slot a raises next: once the network reads them, a colony's lab comes up to the capital's.
+/// The lab colony slot a raises next: once the network reads them, a colony's lab comes up to the capital's. A colony down
+/// to the fields its chain needs raises none, and the research waiting on it must not wait for good.
 fn colony_lab(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
     let &(lab, _) = cat.modifiers[1].first()?;
     let capital = w.account_of(a);
     let planet = &w.games[a].planet;
+    let free = cat.field_cap(planet).saturating_sub(cat.fields_used(planet));
+    if field_chain(cat, planet).is_some_and(|(_, fields)| free <= fields) { return None }
     (capital != a && surplus(w, cat, a) && !idle_lab(w, cat, a, lab) && planet.levels[lab] < w.games[capital].planet.levels[lab]
         && w.legal(cat, a, lab) && cat.wait_seconds(planet, lab) == 0.0).then_some(lab)
 }
@@ -485,7 +488,7 @@ impl Miner {
             feed_colonies(w, cat, a, pick);
         }
         if self.satellites {
-            power_by_units(w, cat, a);
+            power_by_units(w, cat, a, pick);
         }
         // Under its military share the persona buys before the economy: the share is the top giveaway (row 10, S4).
         let short = military_share(w, a) < self.military_share;
@@ -534,7 +537,7 @@ impl Miner {
             if let Some(step) = network_step(w, cat, a).filter(|_| a == w.account_of(a)) { return step }
         }
         // Units already cover the shortfall (or are on order): the pick reads the planet as powered and builds producers.
-        let powered = (self.satellites && w.games[a].planet.factor < 1.0 && energy_unit(w, cat, a).is_some())
+        let powered = (self.satellites && w.games[a].planet.factor < 1.0 && energy_unit(w, cat, a, true).is_some())
             .then(|| Planet { factor: 1.0, ..w.games[a].planet.clone() });
         let planet = powered.as_ref().unwrap_or(&w.games[a].planet);
         let fallback = match self.lab && queue == 1 {
@@ -935,8 +938,8 @@ fn purpose(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
 /// (`real-bands.json`). A taste over host data, as `RESEARCH_SHARE` is.
 const SETTLED_PLANETS: usize = 8;
 
-/// What a player's lab takes next. With idle surplus, the cheapest research it can pay now, which levels the whole tree
-/// the way price does for a real account. Otherwise what raises output or the colonisation research, cheapest first, reached
+/// What a player's lab takes next. With idle surplus or under the real research share, the cheapest research it can pay now,
+/// which levels the whole tree the way price does for a real account. Otherwise what raises output or the colonisation research, cheapest first, reached
 /// through its unmet requirements: a player goes for the laser levels plasma asks for, not the next astrophysics (gate 3).
 /// Output, requirements and prices come from the catalogue (gate 1).
 fn next_research(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
@@ -944,14 +947,15 @@ fn next_research(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
     let price = |k: usize| cat.objects[k].price.get(planet.levels[k] as usize).map_or(f64::INFINITY, |&p| weighted(p));
     let research = || (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1);
     let cheapest = |keys: Vec<usize>| keys.into_iter().min_by(|&x, &y| price(x).total_cmp(&price(y)));
-    if surplus(w, cat, a) {
-        return cheapest(research().filter(|&k| w.legal(cat, a, k) && cat.wait_seconds(planet, k) == 0.0).collect());
+    let colonise = w.colonisation.as_ref().map(|t| t.research);
+    let settling = colonise.is_some() && w.planets_of(a).len() < SETTLED_PLANETS;
+    if surplus(w, cat, a) || (!settling && research_share(w, a) < RESEARCH_SHARE) {
+        let payable = cheapest(research().filter(|&k| w.legal(cat, a, k) && cat.wait_seconds(planet, k) == 0.0).collect());
+        if payable.is_some() { return payable }
     }
     let output = |p: &Planet| weighted(cat.production(p, true).0);
     let now = output(planet);
-    let colonise = w.colonisation.as_ref().map(|t| t.research);
     let raises = |k: usize| { let mut next = planet.clone(); next.levels[k] += 1; cat.refresh(&mut next); output(&next) > now };
-    let settling = colonise.is_some() && w.planets_of(a).len() < SETTLED_PLANETS;
     let wanted = research().filter(|&k| price(k).is_finite() && (Some(cat.objects[k].id) == colonise || (raises(k) && !settling))).collect::<Vec<_>>();
     let steps = wanted.into_iter().filter_map(|k| {
         let mut need = vec![(k, planet.levels[k] + 1)];
@@ -980,7 +984,7 @@ fn spare(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 /// Row 83: the production unit that pays the most energy per resource on planet a, with the energy one more adds, when
 /// it beats every energy building the planet can start (gate 3: a grown planet runs on satellites and keeps its fields
 /// for mines; gate 1: the catalogue's production units and the yard's prices say which, nothing is named).
-fn energy_unit(w: &World, cat: &Catalogue, a: usize) -> Option<(usize, f64)> {
+fn energy_unit(w: &World, cat: &Catalogue, a: usize, against_buildings: bool) -> Option<(usize, f64)> {
     let planet = &w.games[a].planet;
     let rules = &w.rules[a];
     let config = &cat.planets[planet.config];
@@ -998,24 +1002,29 @@ fn energy_unit(w: &World, cat: &Catalogue, a: usize) -> Option<(usize, f64)> {
     (0..cat.units.len()).filter_map(|e| {
         let own = config.unit_production[e].own.as_ref()?;
         let held = planet.units.get(e).copied().unwrap_or(0) as usize;
-        let each = own[(held + 1).min(own.len() - 1)][3] - own[held.min(own.len() - 1)][3];
+        let each = own_row(own, held + 1)[3] - own_row(own, held)[3];
         let u = rules.units.index(cat.units[e])?;
         let per_energy = weighted(rules.units.units[u].price) / each;
-        (each > 0.0 && per_energy < building && w.yards[a].allowed[u] && rules.units.requirements_met(planet, u)).then_some((u, each, per_energy))
+        (each > 0.0 && (!against_buildings || per_energy < building) && w.yards[a].allowed[u] && rules.units.requirements_met(planet, u)).then_some((u, each, per_energy))
     }).min_by(|x, y| x.2.total_cmp(&y.2)).map(|(u, each, _)| (u, each))
 }
 
 /// Row 83: orders the energy unit for the planet's shortfall and a tenth more headroom (the next mine level's draw),
 /// less what the yard already has on order, paid around the queue's committed builds.
-fn power_by_units(w: &mut World, cat: &Catalogue, a: usize) {
-    let Some((u, each)) = energy_unit(w, cat, a) else { return };
+fn power_by_units(w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
     let planet = &w.games[a].planet;
+    let for_chain = chain_energy(cat, planet);
+    // The field chain's energy cannot come from a building: the planet is holding its last fields for the chain.
+    let Some((u, each)) = energy_unit(w, cat, a, for_chain <= 0.0) else { return };
     let coming: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
-    let short = (1.1 * planet.energy_used - planet.energy_max).max(chain_energy(cat, planet)) - coming as f64 * each;
+    let short = (1.1 * planet.energy_used - planet.energy_max).max(for_chain) - coming as f64 * each;
     if short <= 0.0 { return }
-    let amount = within(w, a, u, (short / each).ceil() as u64, saving(w, cat, a, None));
+    let amount = within(w, a, u, (short / each).ceil() as u64, saving(w, cat, a, pick));
     if amount > 0 { w.order_units(cat, a, u, amount); }
 }
+
+/// How long a planet saves towards the energy units of its next field adder before it gives up the field it holds.
+const CHAIN_POWER_DAYS: f64 = 30.0;
 
 /// The energy planet is short of for its field chain: a terraformer asks for energy the planet must make, not spend.
 fn chain_energy(cat: &Catalogue, planet: &Planet) -> f64 {
@@ -1025,17 +1034,17 @@ fn chain_energy(cat: &Catalogue, planet: &Planet) -> f64 {
         .fold(0.0, |short: f64, &need| short.max(need - planet.energy_max))
 }
 
-/// Whether planet a can come by the energy its field chain asks for: units on order or units it can pay for. A player who
-/// cannot makes do with the fields it has rather than hold the last ones for good (gate 3).
+/// Whether planet a can come by the energy its field chain asks for: units it can pay for within `CHAIN_POWER_DAYS` of
+/// production. A player who cannot makes do with the fields it has rather than hold the last ones for good (gate 3).
 fn chain_powered(w: &World, cat: &Catalogue, a: usize) -> bool {
     let planet = &w.games[a].planet;
     let short = chain_energy(cat, planet);
     if short <= 0.0 { return true }
-    let Some((u, each)) = energy_unit(w, cat, a) else { return false };
+    let Some((u, each)) = energy_unit(w, cat, a, false) else { return false };
     let coming: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
     let needed = ((short / each).ceil() - coming as f64).max(0.0);
     let price = w.rules[a].units.units[u].price;
-    (0..3).all(|r| price[r] * needed <= planet.res[r])
+    (0..3).all(|r| price[r] * needed <= planet.res[r] + CHAIN_POWER_DAYS * 24.0 * planet.rate[r].max(0.0))
 }
 
 fn within(w: &World, a: usize, u: usize, amount: u64, keep: [f64; 3]) -> u64 {
@@ -1685,6 +1694,22 @@ mod tests {
     }
 
     #[test]
+    fn a_producing_unit_keeps_producing_past_the_exports_last_row() {
+        let Some((cat, mut world)) = bare(5) else { return };
+        let config = world.games[0].planet.config;
+        let Some(u) = cat.planets[config].unit_production.iter().position(|t| t.own.is_some()) else { return };
+        let rows = cat.planets[config].unit_production[u].own.clone().unwrap();
+        assert_eq!(own_row(&rows, rows.len() - 1), rows[rows.len() - 1]);
+        let planet = &mut world.games[0].planet;
+        planet.units[u] = (rows.len() as u64 - 1) * 2;
+        cat.refresh(planet);
+        let doubled = planet.energy_max;
+        planet.units[u] = rows.len() as u64 - 1;
+        cat.refresh(planet);
+        assert!(doubled >= planet.energy_max + rows[rows.len() - 1][3] - 1.0, "energy stopped at the table's end");
+    }
+
+    #[test]
     fn research_held_by_a_lab_on_another_planet_wakes_when_the_lab_lands() {
         let Some((cat, mut world)) = bare(1) else { return };
         let &(lab, _) = cat.modifiers[1].first().expect("a lab");
@@ -1915,16 +1940,16 @@ mod tests {
         world.games[0].planet.res = [1e9; 3];
         cat.refresh(&mut world.games[0].planet);
         assert!(world.games[0].planet.factor < 1.0, "the planet is short of energy");
-        let Some((u, each)) = energy_unit(&world, &cat, 0) else { return eprintln!("no production unit beats the buildings here; skipped") };
+        let Some((u, each)) = energy_unit(&world, &cat, 0, true) else { return eprintln!("no production unit beats the buildings here; skipped") };
         let mut miner = Miner::new(5);
         miner.satellites = true;
         let pick = miner.pick(&world, &cat, 0).expect("a build");
         assert!(!energy.contains(&pick), "a producer, not an energy building, while the units come");
-        power_by_units(&mut world, &cat, 0);
+        power_by_units(&mut world, &cat, 0, None);
         let ordered: u64 = world.yards[0].orders.iter().filter(|o| o.unit == u).map(|o| o.amount).sum();
         let planet = &world.games[0].planet;
         assert!(ordered as f64 * each >= planet.energy_used - planet.energy_max, "the order covers the shortfall");
-        power_by_units(&mut world, &cat, 0);
+        power_by_units(&mut world, &cat, 0, None);
         let again: u64 = world.yards[0].orders.iter().filter(|o| o.unit == u).map(|o| o.amount).sum();
         assert_eq!(again, ordered, "units on order count: no second order");
     }
