@@ -371,6 +371,8 @@ pub struct Miner {
     /// Row 84 arm: every expedition takes the host's find doubler when the account's class may build it, with the hold
     /// for the doubled find (`expedition_cargo`).
     pub doubler: bool,
+    /// `expofull` probe: every cargo ship on the shelf flies, split over the free slots, not only the plain find's hold.
+    pub expo_full: bool,
     /// Row 94 arm: the idle lab takes its research without keeping the next building's price back (a player keeps the
     /// lab running; the building waits). Without it the capital's metal never covered both and the lab sat idle for weeks.
     pub lab_first: bool,
@@ -513,7 +515,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -555,7 +557,7 @@ impl Miner {
             self.spend_surplus(w, cat, a, pick);
         }
         if self.expeditions && w.account_of(a) == a {
-            expedition_trips(w, cat, a, self.doubler);
+            expedition_trips(w, cat, a, self.doubler, self.expo_full);
         }
         // The colony the ship was built for is founded at the same login: one mission, no cargo.
         if w.account_of(a) == a {
@@ -994,13 +996,15 @@ fn expedition_cargo(w: &World, cat: &Catalogue, a: usize, doubled: bool) -> Opti
 
 /// N6b: a player sends an expedition from its capital whenever a slot is free (gate 3): cargo ships for the largest
 /// find, to deep space in its own system, held an hour. The world refuses past the host's slot limit or without fuel.
-fn expedition_trips(w: &mut World, cat: &Catalogue, a: usize, doubled: bool) {
+fn expedition_trips(w: &mut World, cat: &Catalogue, a: usize, doubled: bool, full: bool) {
     let Some((n, slots)) = expedition_cargo(w, cat, a, doubled) else { return };
     let Some(kit) = Kit::of(w, cat, a) else { return };
     let deep = Coord { position: 16, ..w.coords[a] };
     let doubler = doubler_of(w, a, doubled);
-    for _ in 0..slots {
-        let ships = n.min(on_shelf(w, a, kit.cargo));
+    let flying = w.fleets.iter().filter(|f| f.owner == a && f.mission == Mission::Expedition).count();
+    for free in (1..=slots.saturating_sub(flying)).rev() {
+        let shelf = on_shelf(w, a, kit.cargo);
+        let ships = if full { (shelf / free as i64).max(n.min(shelf)) } else { n.min(shelf) };
         let mut fleet = vec![(kit.cargo, ships)];
         fleet.extend(doubler.filter(|&id| on_shelf(w, a, id) > 0).map(|id| (id, 1)));
         if ships < 1 || w.expedition(cat, a, deep, &fleet, [0.0; 3], 10.0, 1).is_err() { return }
@@ -1392,7 +1396,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
         Raider { miner, hostile: true, moon_raids: false, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
@@ -2276,11 +2280,11 @@ mod tests {
         world.games[0].planet.res = [1e7; 3];
         let (n, slots) = expedition_cargo(&world, &cat, 0, false).expect("an expedition is possible");
         assert_eq!(slots, 1);
-        expedition_trips(&mut world, &cat, 0, false);
+        expedition_trips(&mut world, &cat, 0, false, false);
         let out: Vec<_> = world.fleets.iter().filter(|f| f.mission == Mission::Expedition).collect();
         assert_eq!(out.len(), 1, "one slot, one expedition");
         assert_eq!(out[0].ships, vec![(kit.cargo, n)], "the hold for the largest find");
-        expedition_trips(&mut world, &cat, 0, false);
+        expedition_trips(&mut world, &cat, 0, false, false);
         assert_eq!(world.fleets.iter().filter(|f| f.mission == Mission::Expedition).count(), 1, "no second trip while the slot is taken");
     }
 
@@ -2308,7 +2312,7 @@ mod tests {
         let (plain, _) = expedition_cargo(&world, &cat, 0, false).expect("an expedition is possible");
         let (doubled, _) = expedition_cargo(&world, &cat, 0, true).expect("an expedition is possible");
         assert!(doubled >= 2 * plain - 1 && doubled <= 2 * plain, "twice the hold: {plain} -> {doubled}");
-        expedition_trips(&mut world, &cat, 0, true);
+        expedition_trips(&mut world, &cat, 0, true, false);
         let out: Vec<_> = world.fleets.iter().filter(|f| f.mission == Mission::Expedition).collect();
         // The research's one slot and the class's own: a Discoverer flies three (PlayerService::getExpeditionSlotsMax).
         let class_slots = world.rules[0].expedition.as_ref().map_or(0, |t| t.class_slots);

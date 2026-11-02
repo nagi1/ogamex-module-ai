@@ -338,3 +338,37 @@ Now standard in SEASON_ARMS and judge_policy.sh; judged.txt is marked where keye
 Test of the fix: g2's exact settings on seeds 1 and 2 (k1 on the 4070, k2 on the 3090). If they rise above the rejudged bc0, the root cause is confirmed.
 Second reading: one skipped build barely moves an account's year, because the persona builds it next login. The build model's leverage is in
 its systematic choices, not in single picks.
+
+### 3 Nov 00:30 — what the score is made of (keyed dice, 6 paired seeds, persona only)
+
+Keyed dice did not unblock the build model: k1 at 80 updates scores 20.87M against bc0 rejudged on keyed dice, 21.01M. So I measured what moves the score.
+Drop one rule, change in the world median:
+- expedition off: -37% to -42% (all seeds)
+- factory off: -2% to -12%
+- netchain, labfirst, doctrine, balance, techtree off: within a few %, either sign
+
+Sending every cargo ship on expeditions (`expofull`) changes nothing (-4% to +2%).
+
+The real split is the player class, which the simulator copies from the donor planet's host account and no player or model chooses:
+
+| class | active (3 seeds) | median | over 100M |
+| --- | --- | --- | --- |
+| 1 Collector | 45 | 25M | 0 |
+| 2 General | 37 | 22M | 0 |
+| 3 Discoverer | 14 | 236M | 12 |
+
+The host's Discoverer: expedition finds x (economy speed x 1.5) = x12 at speed 8, +2 expedition slots, Pathfinder (find doubler).
+`app/GameMissions/ExpeditionMission.php` does the same, so the simulator is faithful.
+Every account forced to Discoverer (`class=3`): world median x3.5 to x4.8 on all six seeds; former Collectors 24.5M -> 79M, Generals 21M -> 92M.
+Caveat: the donor planet's own tables, such as a Collector's mine bonus, stay.
+
+**Root cause for "win first":** the models train on the smallest lever. The build plan is worth a few %. The two big levers have no decision anyone takes:
+- the class: x4. The host lets a player choose it (`CharacterClassService::selectClass`, first pick free).
+- the expedition fleet: about 40%. It is not in the errand menu; a fixed rule flies it.
+
+Next, in order:
+1. Class choice as the account's first decision, with one candidate per host class, read from the host's class exports (gate 1: a modded class is reachable).
+2. An expedition errand in the fleet model's menu.
+3. Then score-only training of all three decisions on keyed dice.
+
+The human class mix comes back with the human-likeness tuning.

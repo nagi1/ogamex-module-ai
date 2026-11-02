@@ -233,8 +233,10 @@ impl Universe {
                 &format!("{data}/fleet-settings-u1-class{class}.json"),
                 &format!("{data}/combat-u1-class{class}.json")).expect("a class's combat export"));
             let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules(2)), (3, class_rules(3))];
+            // `class=N` probe: every account flies class N's rules, whatever class its home planet's donor had.
+            let forced = arms.iter().find_map(|arm| arm.strip_prefix("class=")).map(|n| n.parse::<u32>().expect("class=N"));
             for a in 0..accounts {
-                let class = cat.planets[configs[a]].character_class;
+                let class = forced.or(cat.planets[configs[a]].character_class);
                 if let Some((_, r)) = by_class.iter().find(|(c, _)| Some(*c) == class) {
                     world.rules[a] = Arc::clone(r);
                 }
@@ -296,6 +298,7 @@ impl Universe {
             m.merchant = on("merchant");
             m.satellites = on("satellites");
             m.doubler = on("doubler");
+            m.expo_full = on("expofull");
         }
         for player in players.iter_mut() {
             if let Player::Raider(raider) = player { raider.moon_raids = on("moonraid") }

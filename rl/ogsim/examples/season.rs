@@ -302,6 +302,7 @@ impl<W: Write> Season<'_, W> {
                 "day": d + 1,
                 "account": a,
                 "persona": PERSONAS[self.u.roles[a]].0,
+                "class": self.u.cat.planets[self.u.world.games[a].planet.config].character_class,
                 "controlled": a < self.controlled,
                 "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
                            "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
