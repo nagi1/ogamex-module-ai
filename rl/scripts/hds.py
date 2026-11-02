@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import lzma
 import statistics
 import sys
 from pathlib import Path
@@ -59,7 +60,8 @@ COUNTS = ["planets", "moons", "galaxies", "alliance"]
 def read_season(paths: list[Path]) -> list[dict]:
     rows = []
     for path in paths:
-        with path.open(encoding="utf-8") as handle:
+        # Scored seasons are kept xz-compressed.
+        with (lzma.open(path, "rt", encoding="utf-8") if path.suffix == ".xz" else path.open(encoding="utf-8")) as handle:
             for line in handle:
                 line = line.strip()
                 if line:
