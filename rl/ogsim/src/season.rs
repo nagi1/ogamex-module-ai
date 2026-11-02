@@ -161,6 +161,9 @@ pub struct Universe {
     pub rank: Vec<f64>,
     moon_shots: bool,
     moon_feed: bool,
+    /// The share of its planets each account wants mooned, when accounts differ in that: real mid players hold 1 to 12 moons
+    /// on about 10 planets, and the top tenth a moon on almost every planet.
+    moon_taste: Option<Vec<f64>>,
 }
 
 impl Universe {
@@ -271,6 +274,7 @@ impl Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(), alliance_at,
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
             moon_shots: on("moonstack"), moon_feed: on("moonfeed"),
+            moon_taste: on("moontaste").then(|| { let mut draw = seed ^ 0x4d00_a7e5; (0..accounts).map(|_| unit(&mut draw)).collect() }),
         }
     }
 
@@ -300,15 +304,24 @@ impl Universe {
         let persona = self.players[owner].act(&mut self.world, &self.cat, a, &mut self.ledgers[owner]);
         // Row 64: alliance members shoot moons for each other at their logins (membership is the season's data).
         if self.moon_shots && a == owner && self.alliance_at[owner].is_some_and(|join| t >= join) {
+            let wants: Vec<bool> = (0..self.accounts()).map(|b| self.wants_moon(b)).collect();
             let (alliance_at, gone) = (&self.alliance_at, &self.gone);
-            players::moon_shot(&mut self.world, &self.cat, a, |b| alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut self.ledgers[owner]);
-            players::ready_for_moon(&mut self.world, &self.cat, a, self.moon_feed);
+            players::moon_shot(&mut self.world, &self.cat, a, |b| wants[b] && alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut self.ledgers[owner]);
+            if wants[owner] { players::ready_for_moon(&mut self.world, &self.cat, a, self.moon_feed) }
         }
         match (pick, persona) {
             (Some(Some(_)), _) => {}
             (None, Some(k)) => self.world.commit(&self.cat, a, k),
             _ => self.world.wait(&self.cat, a),
         }
+    }
+
+    /// Whether account b wants another moon: the top tenth always, the others up to their own share of their planets.
+    fn wants_moon(&self, b: usize) -> bool {
+        let Some(taste) = &self.moon_taste else { return true };
+        let slots = self.world.planets_of(b);
+        let moons = slots.iter().filter(|&&s| self.world.moons[s]).count();
+        self.rank[b] < 0.10 || (moons + 1) as f64 <= taste[b] * slots.len() as f64
     }
 
     /// What the learner reads at slot a's decision, with the persona's own `advice` (`teacher`): state [LEARNER_STATE],

@@ -197,11 +197,13 @@ def giveaways(cells: dict[str, list[dict]], bands: dict, measures: list[str]) ->
     folds = min(5, len(set(groups)))
     if len(set(rows_y)) < 2 or folds < 2:
         return [], 0.0
+    # Early stopping draws a random validation split: unseeded, identical seasons read 0.749 to 0.778. Five seeds, averaged.
     aucs = []
-    for train, test in GroupKFold(n_splits=folds).split(x, y, groups):
-        model = HistGradientBoostingClassifier(max_iter=200).fit(x[train], y[train])
-        aucs.append(roc_auc_score(y[test], model.predict_proba(x[test])[:, 1]))
-    model = HistGradientBoostingClassifier(max_iter=200).fit(x, y)
+    for seed in range(5):
+        for train, test in GroupKFold(n_splits=folds).split(x, y, groups):
+            model = HistGradientBoostingClassifier(max_iter=200, random_state=seed).fit(x[train], y[train])
+            aucs.append(roc_auc_score(y[test], model.predict_proba(x[test])[:, 1]))
+    model = HistGradientBoostingClassifier(max_iter=200, random_state=0).fit(x, y)
     importance = permutation_importance(model, x, y, n_repeats=5, random_state=0)
     ranked = sorted(zip(measures, importance.importances_mean), key=lambda pair: -pair[1])
     return ranked, statistics.mean(aucs)

@@ -167,10 +167,22 @@ order is not what limits the score; randomness is not the fix, since the goal is
 | --- | --- | --- | --- | --- |
 | `effort` | login gaps scaled per account, p90/p10 46x | 0.781 | 0.944 | 46x in gaps gives 2.7x in growth: logins are not the lever |
 | `labtime` v1 | a research over a week waits for a lab upgrade | 0.756 | 0.914 | Top lab 8 to 13, research +53%, median jobs last 10 hours so it rarely fires |
+| `miltaste` | military share drawn per account, 5% to 58% | 0.848 | 0.778 | Worse than `moontaste` alone (0.869, 0.760) |
 | `labtime` v2 | research waits while share is under 12% and a lab can rise | 0.729 | 0.942 | Capital lab 27 by day 30, network still 0 at day 200: starves the research that opens the network |
 
 Research points a day are capped near 24 x 8 x (1 + pooled labs). 12% of a top score needs about 170, reachable only with
 the network and colony labs; the teacher's median account has no network level until day 300 under v2. Open.
+
+**Kept: `moontaste`.** Mid accounts mooned nearly every planet (9 on 9) against a real 5.5 on 10. Each account now wants
+its own share of its planets mooned; the top tenth wants them all. On the temperature 2 clone: AUC 0.800 to 0.760, HDS
+0.873 to 0.869. The draw runs a little low (median 4), so the moon band fell from 0.89 to 0.84. Open.
+
+## The yardstick was noisy (fixed 2 Nov)
+
+`hds.py`'s boosted model ran unseeded, with early stopping on a random split: byte-identical seasons read pooled AUC 0.749,
+0.756, 0.762, 0.765 and 0.778. The ±0.006 used above came from three readings and is too small; differences under about
+0.03 before this fix are not results. It now averages five seeded fits and identical seasons read identically. This fixes
+scorer noise only: the spread across season seeds is still unmeasured.
 
 ## The real bands had kept lifeform points (fixed 2 Nov)
 
