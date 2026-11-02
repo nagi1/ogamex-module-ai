@@ -432,7 +432,7 @@ impl Universe {
         for k in 0..objects {
             cat.candidate_features(&game.planet, k, &mut cands[k * LEARNER_CAND..k * LEARNER_CAND + CAND_DIM]);
             cands[k * LEARNER_CAND + CAND_DIM] = 0.0;
-            legal[k] = u8::from(world.legal(cat, a, k));
+            legal[k] = u8::from(world.committable(cat, a, k));
         }
         // A planet down to the fields its field-adding chain needs takes that chain's next step or waits, as the persona
         // does: one other building there takes the field the chain needed and the planet never grows again.
@@ -489,7 +489,7 @@ impl Universe {
     pub fn teacher(&mut self, a: usize) -> Option<usize> {
         let owner = self.world.account_of(a);
         let (world, cat) = (&self.world, &self.cat);
-        self.players[owner].miner().pick(world, cat, a).filter(|&k| world.legal(cat, a, k))
+        self.players[owner].miner().pick(world, cat, a).filter(|&k| world.committable(cat, a, k))
     }
 
     /// `hds.py`'s eight measures of an account at `midnight`, growth as ln(1 + growth).

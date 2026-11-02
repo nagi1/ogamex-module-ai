@@ -822,9 +822,9 @@ impl Seat {
             u.play(a, None);
             return self.advance(rules);
         }
-        let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && u.world.legal(cat, a, k));
+        let chosen = usize::try_from(action).ok().filter(|&k| k < cat.objects.len() && u.world.committable(cat, a, k));
         let pass = action == cat.objects.len() as i64;
-        let fallback = (!pass && chosen.is_none()).then(|| (0..cat.objects.len()).find(|&k| u.world.legal(cat, a, k))).flatten();
+        let fallback = (!pass && chosen.is_none()).then(|| (0..cat.objects.len()).find(|&k| u.world.committable(cat, a, k))).flatten();
         if !pass && chosen.is_none() { u.world.games[a].invalid += 1 }
         u.play(a, Some(chosen.or(fallback)));
         self.advance(rules);

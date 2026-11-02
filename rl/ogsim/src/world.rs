@@ -891,7 +891,7 @@ impl World {
     /// Account a commits its deciding queue to object k (`Catalogue::step` without running its clock ahead of the others).
     pub fn commit(&mut self, cat: &Catalogue, a: usize, k: usize) {
         if self.idle_now[a] { return self.wait(cat, a) }
-        debug_assert!(self.legal(cat, a, k), "account {a} cannot start object {k} now");
+        debug_assert!(self.committable(cat, a, k), "account {a} cannot commit to object {k} now");
         self.sync_peers(cat, a);
         self.games[a].planet.research_multiplier = self.hired(a).map(|o| o.research_multiplier).fold(1.0, f64::min);
         cat.decide(&mut self.games[a], Some(k));
@@ -929,6 +929,13 @@ impl World {
     }
 
     /// What the deciding queue may start: the economy's rule, and no upgrade the running shipyard forbids (UnitQueueService).
+    /// What a login may commit to: `legal` less the holds that only delay the start (a research holding the lab, a busy
+    /// yard holding its own upgrade). The host queues such a build and starts it when the hold ends, and the persona
+    /// commits to it; a learner offered only `legal` never raised a lab under running research (8 levels against 150).
+    pub fn committable(&self, cat: &Catalogue, a: usize, k: usize) -> bool {
+        !self.idle_now[a] && cat.objects[k].queue == self.games[a].queue && cat.legal(&self.games[a].planet, k)
+    }
+
     pub fn legal(&self, cat: &Catalogue, a: usize, k: usize) -> bool {
         !self.idle_now[a] && cat.queue_legal(&self.games[a], k) && !self.rules.get(a).is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
     }
