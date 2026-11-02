@@ -310,3 +310,8 @@ The world now flies joint attacks and defence, wreck fields, moon raids and plan
   candidate column. The clone copies it (100 % top-1 in 52 s) and every PPO arm from it sits at a fixed point. On the
   single-planet economy (25 Oct), with no such flag, PPO beat the player by +28 to +34 %. Test: arm `noadvice` drops the
   column in training and judging; `bc-noadvice.pt` clones from the state alone, is judged as `bcn0`, then PPO from it.
+
+- 2 Nov 22:30. g2 (KL .05, gamma .995) judged at 80: active median 20.6M, 11 planets. Same as the copy model (21.0M); stopped at a fixed point.
+  The judge script was edited while a queue was running it, so g2's scoring died. Rescored from the saved seasons. Never edit judge.sh under a running queue.
+  DAgger (`rl/ogrl/dagger_world.py`) starts from bc-noadvice: the clone plays, the persona labels every state it reaches. Smoke test: on its own states the clone matches the persona about 80% of the time, against 94% on the persona's own games.
+  Run d1: 4 rounds of 600k rows, on the 4070. dqueue.sh judges each round when no other judge is playing. Bar to beat: bc0 20.98M.
