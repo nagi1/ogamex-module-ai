@@ -64,6 +64,20 @@ pub struct FleetSettings {
     /// L2: wreck fields (fleet settings v6); an older export makes none.
     #[serde(default)]
     pub wreck: Option<WreckRules>,
+    /// Moving a planet (fleet settings v7); an older export cannot.
+    #[serde(default)]
+    pub relocation: Option<Relocation>,
+}
+
+/// `PlanetMoveService`: the dark matter price, the wait, the cooldown after a move or a cancel, the speed the ships fly
+/// over at, and the ships that stay behind.
+#[derive(Deserialize, Clone, Debug)]
+pub struct Relocation {
+    pub cost: i64,
+    pub duration: f64,
+    pub cooldown: f64,
+    pub fleet_speed: f64,
+    pub stay: Vec<u32>,
 }
 
 /// `WreckFieldService`: the loss floors a battle must pass to leave a wreck, its lifetime, the repair time clamp, the space

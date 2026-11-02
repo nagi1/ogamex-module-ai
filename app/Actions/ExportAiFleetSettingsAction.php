@@ -25,7 +25,7 @@ use ReflectionProperty;
  */
 class ExportAiFleetSettingsAction
 {
-    public const VERSION = 6;
+    public const VERSION = 7;
 
     /** Moon gear levels tabulated (sensor phalanx range, jump gate cooldown); no account builds either this high. */
     private const MOON_GEAR_LEVELS = 30;
@@ -58,6 +58,26 @@ class ExportAiFleetSettingsAction
             // L5: whether ACS missions may fly at all on this universe.
             'alliance_combat_system' => (bool) $settings->allianceCombatSystemOn(),
             'wreck' => $this->wreck($settings, $player),
+            'relocation' => $this->relocation($settings),
+        ];
+    }
+
+    /**
+     * Moving a planet (PlanetMoveService): its dark matter price, the wait before it moves, the cooldown after, the speed
+     * its ships fly over at, and the ships that stay behind.
+     *
+     * @return array<string, mixed>
+     */
+    private function relocation(SettingsService $settings): array
+    {
+        return [
+            'cost' => (int) $settings->get('planet_relocation_cost', 240000),
+            'duration' => (int) $settings->get('planet_relocation_duration', 86400),
+            // PlanetMoveService::getCooldownSecondsForPlanet and the moon's jump gate pause after a move.
+            'cooldown' => 86400,
+            'fleet_speed' => $settings->fleetSpeedPeaceful(),
+            // createShipTransferMission leaves these by name.
+            'stay' => array_map(static fn (string $name): int => ObjectService::getObjectByMachineName($name)->id, ['solar_satellite', 'crawler']),
         ];
     }
 

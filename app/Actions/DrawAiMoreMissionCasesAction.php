@@ -18,11 +18,13 @@ use OGame\GameMissions\AcsDefendMission;
 use OGame\GameMissions\AttackMission;
 use OGame\GameMissions\BattleEngine\PhpBattleEngine;
 use OGame\GameMissions\ColonisationMission;
+use OGame\GameMissions\DeploymentMission;
 use OGame\GameMissions\ExpeditionMission;
 use OGame\GameMissions\MissileMission;
 use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Http\Controllers\GalaxyController;
+use OGame\Http\Controllers\PlanetMoveController;
 use OGame\Models\BattleReport;
 use OGame\Models\BuddyRequest;
 use OGame\Models\DebrisField;
@@ -31,11 +33,13 @@ use OGame\Models\FleetMission;
 use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
+use OGame\Models\PlanetMove;
 use OGame\Models\Resources;
 use OGame\Models\WreckField;
 use OGame\Services\FleetMissionService;
 use OGame\Services\FleetUnionService;
 use OGame\Services\ObjectService;
+use OGame\Services\PlanetMoveService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
@@ -117,6 +121,7 @@ class DrawAiMoreMissionCasesAction
         'acs_attack' => AttackMission::class,
         'wreck' => AttackMission::class,
         'moon_attack' => AttackMission::class,
+        'relocate' => DeploymentMission::class,
     ];
 
     private const SPEEDS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0];
@@ -130,6 +135,7 @@ class DrawAiMoreMissionCasesAction
         'acs_attack' => ['fuel_short', 'missing_units', 'not_mates'],
         'wreck' => ['no_dock', 'general', 'expire', 'second_battle'],
         'moon_attack' => ['fuel_short', 'missing_units'],
+        'relocate' => ['dm_short', 'occupied', 'fleet_active', 'dm_spent'],
     ];
 
     private const MAX_STOCK = 5_000_000;
@@ -236,6 +242,7 @@ class DrawAiMoreMissionCasesAction
                     'acs_attack' => $this->acsAttack($ids, $start, $caseSeed, $perturbation),
                     'wreck' => $this->wreck($ids, $start, $caseSeed, $perturbation),
                     'moon_attack' => $this->moonAttack($ids, $start, $caseSeed, $perturbation),
+                    'relocate' => $this->relocate($ids, $start, $caseSeed, $perturbation),
                     default => $this->moonDestruction($ids, $start, $caseSeed, $perturbation),
                 };
         } finally {
@@ -1198,6 +1205,115 @@ class DrawAiMoreMissionCasesAction
                 return ['battle' => $report === null ? null : $this->battleReport($report), 'wreck_after' => $this->wreckField($coordinate)];
             },
         );
+    }
+
+    /**
+     * A planet move through PlanetMoveController and, a day later, PlanetMoveService::processDueMoves: the refusals, the
+     * planet and its moon at the new slot, the dark matter paid, the ships flying over, and a raid that was on its way
+     * turning back. `dm_spent` takes the dark matter away during the wait, so the move is cancelled when it falls due.
+     *
+     * @param  list<int>  $ids
+     * @return array<string, mixed>
+     */
+    private function relocate(array $ids, int $start, int $caseSeed, string|null $perturbation): array
+    {
+        [$owner, $raider, $neighbour] = array_slice($this->random->shuffleArray($ids), 0, 3);
+        [$planetId, $raidId, $neighbourId] = array_map(fn (int $id): int => $this->freshPlayer($id)->planets->allPlanets()[0]->getPlanetId(), [$owner, $raider, $neighbour]);
+        $this->drawPlayer($owner);
+        $this->drawPlayer($raider);
+        $cost = (int) app(SettingsService::class)->get('planet_relocation_cost', 240000);
+        DB::table('users')->where('id', $owner)->update(['planet_current' => $planetId, 'dark_matter' => $perturbation === 'dm_short' ? $this->random->getInt(0, $cost - 1) : $cost + $this->logUniform(500_000)]);
+        $columns = $this->zeroUnits();
+        foreach (array_slice($this->random->shuffleArray($this->flyingShips()), 0, $this->random->getInt(0, 3)) as $ship) {
+            $columns[$ship->machine_name] = $this->logUniform(200);
+        }
+        foreach (['solar_satellite', 'crawler'] as $stays) {
+            $columns[$stays] = $this->random->getInt(0, 1) * $this->logUniform(50);
+        }
+        DB::table('planets')->where('id', $planetId)->update($columns + ['time_last_update' => $start]);
+        $this->forget();
+        $moonId = null;
+        if ($this->random->getInt(0, 1) === 1) {
+            $moonId = app(PlanetServiceFactory::class)->createMoonForPlanet($this->freshPlanet($planetId), $this->logUniform(2_000_000), 20, $this->random->getInt(10, 20))->getPlanetId();
+            $this->forget();
+            $this->stockMoon($moonId, $start);
+            DB::table('planets')->where('id', $moonId)->update(['jump_gate' => $this->random->getInt(0, 1)]);
+        }
+        $from = $this->freshPlanet($planetId)->getPlanetCoordinates();
+        $to = $perturbation === 'occupied' ? $this->freshPlanet($neighbourId)->getPlanetCoordinates() : $this->emptySlot($planetId, 1, 15);
+        $this->forget();
+
+        $raid = null;
+        if ($perturbation === 'fleet_active' || $this->random->getInt(1, 3) === 1) {
+            $raid = $this->someShips();
+            $this->stockOrigin($raidId, $raid, [0, 0, 0], $this->fuel($this->freshPlanet($raidId), $raid, $from, 0, 1.0), null, $start);
+            $this->forget();
+        }
+        $relocation = [
+            'planet' => $this->planetState($planetId), 'moon' => $moonId === null ? null : $this->planetState($moonId),
+            'moon_gate' => $moonId === null ? 0 : $this->freshPlanet($moonId)->getObjectLevel('jump_gate'),
+            'player' => $this->playerState($owner), 'dark_matter' => (int) $this->freshPlayer($owner)->getUser()->dark_matter,
+            'to' => [$to->galaxy, $to->system, $to->position],
+        ];
+        $input = $this->input($planetId, null, $to, PlanetType::Planet, $owner, null, new UnitCollection(), [0, 0, 0], 1.0, 0);
+        $sent = null;
+        $raidService = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($raider)]);
+        // With `fleet_active` the raid is already flying when the move is asked for (refused); otherwise it leaves after,
+        // at the slowest speed, so it is still on its way when the move falls due.
+        if ($raid !== null && $perturbation === 'fleet_active') {
+            $relocation['raid'] = ['origin' => $this->planetState($raidId), 'player' => $this->playerState($raider), 'units' => (object) $this->counts($raid)];
+            $sent = $raidService->createNewFromPlanet($this->freshPlanet($raidId), $from, PlanetType::Planet, AttackMission::getTypeId(), $raid, new Resources(0, 0, 0, 0), 1.0, 0);
+            $relocation['raid'] += ['departure' => $sent->time_departure, 'arrival' => $sent->time_arrival];
+        }
+        $response = app()->call([app(PlanetMoveController::class), 'move'], [
+            'request' => Request::create('/', 'POST', ['galaxy' => $to->galaxy, 'system' => $to->system, 'position' => $to->position]),
+            'player' => $this->freshPlayer($owner),
+        ]);
+        $error = (string) ($response->getData(true)['error'] ?? '');
+        if ($error !== '') {
+            return ['input' => $input, 'relocation' => $relocation, 'dispatch' => ['accepted' => false, 'error' => $error], 'arrival' => null, 'return' => null];
+        }
+        $move = PlanetMove::query()->where('planet_id', $planetId)->latest('id')->firstOrFail();
+        if ($raid !== null) {
+            // It leaves a minute before the move falls due, so it is still on its way then.
+            SimulatedTime::freezeAt(Date::createFromTimestamp($start + (int) $move->time_arrive - (int) $move->time_start - 60));
+            $relocation['raid'] = ['origin' => $this->planetState($raidId), 'player' => $this->playerState($raider), 'units' => (object) $this->counts($raid)];
+            $sent = $raidService->createNewFromPlanet($this->freshPlanet($raidId), $from, PlanetType::Planet, AttackMission::getTypeId(), $raid, new Resources(0, 0, 0, 0), 1.0, 0);
+            $relocation['raid'] += ['departure' => $sent->time_departure, 'arrival' => $sent->time_arrival];
+        }
+        if ($perturbation === 'dm_spent') {
+            DB::table('users')->where('id', $owner)->update(['dark_matter' => 0]);
+        }
+        // The service stamps and picks due moves by the wall clock (time()), so the case runs the move itself at the
+        // simulated second its wait ends.
+        $due = $start + (int) $move->time_arrive - (int) $move->time_start;
+        SimulatedTime::freezeAt(Date::createFromTimestamp($due));
+        $before = $this->updatedState($planetId);
+        app()->call([app(PlanetMoveService::class), 'processMove'], ['move' => $move->fresh()]);
+        $this->forget();
+        $planet = Planet::query()->find($planetId);
+        $transfers = FleetMission::query()->whereIn('planet_id_from', array_filter([$planetId, $moonId]))->where('mission_type', 4)->where('processed', 0)->get();
+        $arrival = [
+            'time' => $due,
+            'target_before' => $before,
+            'target_after' => $this->planetState($planetId),
+            'coordinates' => [$planet->galaxy, $planet->system, $planet->planet],
+            'temp_max' => $planet->temp_max,
+            'moon_after' => $moonId === null ? null : $this->planetState($moonId),
+            'dark_matter' => (int) $this->freshPlayer($owner)->getUser()->dark_matter,
+            'transfers' => $transfers->map(fn (FleetMission $m): array => ['from' => $m->planet_id_from] + $this->flight($m))->values()->all(),
+        ];
+        $raidHome = null;
+        if ($sent !== null) {
+            SimulatedTime::freezeAt(Date::createFromTimestamp((int) $sent->time_arrival));
+            $raidService->processDueMissionEventsForMissionId($sent->id);
+            $this->forget();
+            $back = FleetMission::query()->where('parent_id', $sent->id)->first();
+            $raidHome = $back === null ? null : $this->flight($back);
+        }
+        $arrival['raid_return'] = $raidHome;
+
+        return ['input' => $input, 'relocation' => $relocation, 'dispatch' => ['accepted' => true, 'error' => null, 'departure' => $start, 'arrival' => $due], 'arrival' => $arrival, 'return' => null];
     }
 
     /** One to three kinds of flying ship, a few hundred at most of each. */

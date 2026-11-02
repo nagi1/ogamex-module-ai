@@ -89,7 +89,7 @@ impl World {
     }
 
     /// `collectRepairedShipsAtomic`: the repairing field's ships repaired so far land on planet p; the rest stay in repair.
-    pub fn collect_wreck(&mut self, p: usize, now: f64) -> Result<i64, &'static str> {
+    pub fn collect_wreck(&mut self, cat: &Catalogue, p: usize, now: f64) -> Result<i64, &'static str> {
         let fields = self.wrecks.get_mut(&p).ok_or("no wreck field")?;
         let i = fields.iter().position(|f| f.state == WreckState::Repairing).ok_or(if fields.is_empty() { "no wreck field" } else { "repairs not started" })?;
         let (done, left) = fields[i].repaired(now);
@@ -97,12 +97,12 @@ impl World {
             true => { fields.remove(i); }
             false => fields[i].ships = left,
         }
-        Ok(self.wreck_lands(p, now, &done))
+        Ok(self.wreck_lands(cat, p, now, &done))
     }
 
     /// CleanupWreckFields run at `at`: untouched fields past their lifetime are gone, and a field repairing for longer
     /// than the lifetime lands what was repaired on planet p.
-    pub fn sweep_wrecks(&mut self, p: usize, at: f64) {
+    pub fn sweep_wrecks(&mut self, cat: &Catalogue, p: usize, at: f64) {
         let Some(lifetime) = self.rules[p].settings.wreck.as_ref().map(WreckRules::lifetime) else { return };
         let Some(fields) = self.wrecks.get_mut(&p) else { return };
         fields.retain(|f| f.state == WreckState::Repairing || f.expires >= at);
@@ -110,14 +110,15 @@ impl World {
         fields.retain(|f| !(f.state == WreckState::Repairing && f.started < at - lifetime));
         for field in due {
             let (done, _) = field.repaired(at);
-            self.wreck_lands(p, at, &done);
+            self.wreck_lands(cat, p, at, &done);
         }
     }
 
-    fn wreck_lands(&mut self, p: usize, at: f64, ships: &[(u32, i64)]) -> i64 {
+    fn wreck_lands(&mut self, cat: &Catalogue, p: usize, at: f64, ships: &[(u32, i64)]) -> i64 {
         for &(id, n) in ships {
             if let Some(u) = self.rules[p].units.index(id as i64) { self.yards[p].counts[u] += n as u64 }
         }
+        self.sync_units(cat, p);
         let total = ships.iter().map(|s| s.1).sum();
         if total > 0 { self.wreck_log.push((p, at, total)) }
         total

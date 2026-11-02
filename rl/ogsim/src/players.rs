@@ -63,6 +63,8 @@ pub struct Ledger {
     pub joins: usize,
     /// Wreck fields: ships repaired at the space dock and taken back.
     pub repaired: i64,
+    /// Colonies asked to move next to the home planet.
+    pub relocations: usize,
     /// How many events of the world's log have been read.
     read: usize,
 }
@@ -855,12 +857,28 @@ pub fn tend_wrecks(w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger
     let now = w.games[a].t;
     for p in w.planets_of(a) {
         if !w.wrecks.contains_key(&p) { continue }
-        w.sweep_wrecks(p, (now / 3600.0).floor() * 3600.0);
+        w.sweep_wrecks(cat, p, (now / 3600.0).floor() * 3600.0);
         if w.wrecks[&p].iter().any(|f| f.state == WreckState::Repairing && now >= f.completes) {
-            ledger.repaired += w.collect_wreck(p, now).unwrap_or(0);
+            ledger.repaired += w.collect_wreck(cat, p, now).unwrap_or(0);
         }
         let _ = w.start_repairs(cat, p, now);
     }
+}
+
+/// Planet moves: with the dark matter for it, an account moves a colony standing outside its home system into a free
+/// slot there, the nearest first, so the colony is supplied and defended from home: why players pay for a move (gate 3).
+/// One move at a time; the host refuses it while the colony builds or a fleet is out, and the account asks again later.
+pub fn relocate_colony(w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> bool {
+    let Some(cost) = w.rules[a].settings.relocation.as_ref().map(|r| r.cost) else { return false };
+    if w.dark_matter[a] < cost || !w.moves.is_empty() && w.moves.keys().any(|&p| w.account_of(p) == a) { return false }
+    let home = w.coords[a];
+    let Some(colony) = w.planets_of(a).into_iter().filter(|&p| p != a && w.moon_at[p].is_none()).find(|&p| w.coords[p].galaxy != home.galaxy || w.coords[p].system != home.system) else { return false };
+    let mut free: Vec<Coord> = (1..=15).map(|position| Coord { position, ..home }).filter(|&c| !w.coords.contains(&c) && !w.moves.values().any(|m| m.0 == c)).collect();
+    free.sort_by_key(|c| (c.position - home.position).abs());
+    let Some(&to) = free.first() else { return false };
+    let asked = w.relocate(cat, colony, to).is_ok();
+    ledger.relocations += usize::from(asked);
+    asked
 }
 
 /// L5: an alliance member sends cargo ships to join a mate's raid when the mate's report shows more plunder than the
@@ -2471,6 +2489,29 @@ mod tests {
             let raided = world.events.iter().any(|e| e.kind == EventKind::Fight && e.target == moon && e.gained.iter().sum::<f64>() > 0.0);
             assert_eq!(raided, habit, "the moon is raided only with the habit");
         }
+    }
+
+    /// Planet moves: with the dark matter, an account moves a colony from another system into a free slot of its home
+    /// system; the move lands a day later and the price is paid then. Without the dark matter nothing is asked.
+    #[test]
+    fn an_account_moves_a_far_colony_into_its_home_system() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let cost = world.rules[0].settings.relocation.as_ref().expect("fleet settings v7").cost;
+        let home = world.coords[0];
+        let colony = world.add_planet(&cat, 0, world.games[0].planet.config, Coord { galaxy: home.galaxy, system: home.system + 40, position: 9 }, 0.0);
+        let mut ledger = Ledger::default();
+        world.dark_matter[0] = cost - 1;
+        assert!(!relocate_colony(&mut world, &cat, 0, &mut ledger), "short of dark matter");
+        world.dark_matter[0] = cost + 5;
+        assert!(relocate_colony(&mut world, &cat, 0, &mut ledger), "the colony is asked to move");
+        assert!(!relocate_colony(&mut world, &cat, 0, &mut ledger), "one move at a time");
+        while world.move_log.is_empty() && world.moved_at.is_empty() {
+            let a = world.next_decision(&cat).expect("the world plays on");
+            world.wait(&cat, a);
+        }
+        let at = world.coords[colony];
+        assert_eq!((at.galaxy, at.system, world.dark_matter[0]), (home.galaxy, home.system, 5), "the colony stands in the home system, paid for");
+        assert_eq!(world.move_log.len(), 1);
     }
 
     /// M4: a fleeter's warships deploy to its capital's moon; with a gate on two moons the fleet jumps away from the first
