@@ -380,6 +380,8 @@ pub struct Miner {
     /// Row 94 arm: the idle lab takes its research without keeping the next building's price back (a player keeps the
     /// lab running; the building waits). Without it the capital's metal never covered both and the lab sat idle for weeks.
     pub lab_first: bool,
+    /// `labahead`: the lab goes up between researches while a level pays for itself on the next one (`lab_ahead`).
+    pub lab_ahead: bool,
     /// A grown account works towards the research network and raises its colonies' labs to the capital's (`network_step`).
     pub network: bool,
     /// The lab walks the requirements of what it wants, and a rich account keeps the cheapest research moving (`next_research`).
@@ -512,6 +514,24 @@ fn colony_lab(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
         && w.legal(cat, a, lab) && cat.wait_seconds(planet, lab) == 0.0).then_some(lab)
 }
 
+/// The lab level a capital raises before its next research, which waits for it: the host holds the lab while any research
+/// runs, so research started back to back leaves it at its level for good (a miner held lab 8 for a whole season, its
+/// research taking 3,000 hours). A player raises it while the level's build is shorter than what it saves the shortest
+/// research the lab can start (gate 3); which object sets research time and both durations come from the catalogue (gate 1).
+fn lab_ahead(w: &World, cat: &Catalogue, a: usize) -> Option<usize> {
+    let &(lab, _) = cat.modifiers[1].first()?;
+    let (game, planet) = (&w.games[a], &w.games[a].planet);
+    // The building queue asks the host, research included; the research queue waits only for a building queue that is free.
+    let startable = match game.queue { 0 => w.legal(cat, a, lab), _ => cat.legal(planet, lab) && game.free[0] <= game.t };
+    if a != w.account_of(a) || !startable || cat.wait_seconds(planet, lab) > 0.0 { return None }
+    let mut raised = planet.clone();
+    raised.levels[lab] += 1;
+    cat.refresh(&mut raised);
+    let research = (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1 && cat.legal(planet, k));
+    let saved = research.map(|k| cat.build_seconds(planet, k) - cat.build_seconds(&raised, k)).fold(f64::INFINITY, f64::min);
+    (saved.is_finite() && cat.build_seconds(planet, lab) < saved).then_some(lab)
+}
+
 fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
     let capital = w.account_of(a);
     capital != a && cat.sets_research_time(k) && cat.research_network.is_none_or(|n| w.games[capital].planet.levels[n] == 0)
@@ -519,7 +539,7 @@ fn idle_lab(w: &World, cat: &Catalogue, a: usize, k: usize) -> bool {
 
 impl Miner {
     pub fn new(seed: u64) -> Miner {
-        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, expo_ship: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() }
+        Miner { rng: seed, cargo_share: 0.1, probes: 1, harvesters: 0, fighters: 0, eager: false, military_share: 0.06, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, expo_ship: false, lab_first: false, lab_ahead: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() }
     }
 
     /// The economy's pick for the deciding queue (None lets the login pass; at a login with nothing to build there is no
@@ -584,6 +604,9 @@ impl Miner {
             return chain;
         }
         let queue = w.games[a].queue;
+        if let Some(lab) = self.lab_ahead.then(|| lab_ahead(w, cat, a)).flatten() {
+            return (queue == 0).then_some(lab);
+        }
         if self.network {
             if let Some(lab) = colony_lab(w, cat, a).filter(|_| queue == 0) { return Some(lab) }
             if let Some(step) = network_step(w, cat, a).filter(|_| a == w.account_of(a)) { return step }
@@ -1410,7 +1433,7 @@ pub struct Raider {
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
-        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, expo_ship: false, lab_first: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
+        let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, expo_ship: false, lab_first: false, lab_ahead: false, network: false, tech_tree: false, merchant: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
         Raider { miner, hostile: true, moon_raids: false, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
     }
 
@@ -2080,6 +2103,25 @@ mod tests {
         world.games[0].planet.res = [1e15; 3];
         assert!(surplus(&world, &cat, 0), "a store of far more than its mines make is");
         assert_eq!(network_step(&world, &cat, 0), None, "an account with no colonies has no network to read them");
+    }
+
+    #[test]
+    fn a_long_research_waits_for_the_lab_level_that_shortens_it() {
+        let Some((cat, mut world)) = bare(1) else { return };
+        let Some(&(lab, _)) = cat.modifiers[1].first() else { return };
+        let game = &mut world.games[0];
+        for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1) { game.planet.levels[k] = 10 }
+        (game.planet.levels[lab], game.planet.res, game.queue) = (1, [1e15; 3], 0);
+        cat.refresh(&mut game.planet);
+        assert_eq!(lab_ahead(&world, &cat, 0), Some(lab), "a minutes-long lab level before a research of weeks");
+        world.games[0].queue = 1;
+        world.games[0].free[0] = world.games[0].t + 3600.0;
+        assert_eq!(lab_ahead(&world, &cat, 0), None, "the research does not wait on a building queue that is busy");
+        let Some(k) = (0..cat.objects.len()).find(|&k| cat.objects[k].queue == 1) else { return };
+        let game = &mut world.games[0];
+        (game.queue, game.free[0]) = (0, game.t);
+        game.pending.push((game.t + 3600.0, k));
+        assert_eq!(lab_ahead(&world, &cat, 0), None, "the host holds the lab while a research runs");
     }
 
     #[test]

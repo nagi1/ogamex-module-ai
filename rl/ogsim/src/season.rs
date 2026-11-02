@@ -324,6 +324,7 @@ impl Universe {
             m.factory = on("factory");
             m.balance = on("balance");
             m.lab_first = on("labfirst");
+            m.lab_ahead = on("labahead");
             m.network = on("netchain");
             m.tech_tree = on("techtree");
             m.merchant = on("merchant");
