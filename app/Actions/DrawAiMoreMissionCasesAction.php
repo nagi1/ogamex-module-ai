@@ -4,10 +4,12 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Support\SimulatedTime;
+use OGame\Console\Commands\Scheduler\CleanupWreckFields;
 use OGame\Enums\CharacterClass;
 use OGame\Factories\GameMissionFactory;
 use OGame\Factories\PlanetServiceFactory;
@@ -30,12 +32,14 @@ use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
+use OGame\Models\WreckField;
 use OGame\Services\FleetMissionService;
 use OGame\Services\FleetUnionService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
+use OGame\Services\WreckFieldService;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
 use ReflectionMethod;
@@ -111,6 +115,7 @@ class DrawAiMoreMissionCasesAction
         'moon_destruction' => MoonDestructionMission::class,
         'acs_defend' => AcsDefendMission::class,
         'acs_attack' => AttackMission::class,
+        'wreck' => AttackMission::class,
     ];
 
     private const SPEEDS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0];
@@ -122,6 +127,7 @@ class DrawAiMoreMissionCasesAction
         'moon_destruction' => ['fuel_short', 'missing_units', 'no_deathstar', 'no_moon', 'target_is_planet'],
         'acs_defend' => ['fuel_short', 'missing_units', 'not_mates'],
         'acs_attack' => ['fuel_short', 'missing_units', 'not_mates'],
+        'wreck' => ['no_dock', 'general', 'expire', 'second_battle'],
     ];
 
     private const MAX_STOCK = 5_000_000;
@@ -226,6 +232,7 @@ class DrawAiMoreMissionCasesAction
                     'missile' => $this->missile($ids, $start, $caseSeed, $perturbation),
                     'acs_defend' => $this->acsDefend($ids, $start, $caseSeed, $perturbation),
                     'acs_attack' => $this->acsAttack($ids, $start, $caseSeed, $perturbation),
+                    'wreck' => $this->wreck($ids, $start, $caseSeed, $perturbation),
                     default => $this->moonDestruction($ids, $start, $caseSeed, $perturbation),
                 };
         } finally {
@@ -998,6 +1005,148 @@ class DrawAiMoreMissionCasesAction
         ];
     }
 
+    /**
+     * A raid on a planet holding a fleet, with a space dock drawn for both sides, then the owner's wreck timeline: repairs
+     * started (refused without a dock), the repaired ships collected part way or after, a second raid while the wreck is
+     * repaired, and the hourly cleanup that expires an untouched wreck or brings the repaired ships home.
+     *
+     * @param  list<int>  $ids
+     * @return array<string, mixed>
+     */
+    private function wreck(array $ids, int $start, int $caseSeed, string|null $perturbation): array
+    {
+        [$raider, $owner] = array_slice($this->random->shuffleArray($ids), 0, 2);
+        [$raidId, $targetId] = array_map(fn (int $id): int => $this->freshPlayer($id)->planets->allPlanets()[0]->getPlanetId(), [$raider, $owner]);
+        $this->drawPlayer($raider);
+        $this->drawPlayer($owner);
+        // A General brings its own wreck home; a quarter of the raids fly as one so that path is drawn often.
+        if ($perturbation === 'general' || $this->random->getInt(1, 4) === 1) {
+            DB::table('users')->where('id', $raider)->update(['character_class' => CharacterClass::GENERAL->value]);
+        }
+        $dock = $perturbation === 'no_dock' ? 0 : $this->random->getInt(0, 15);
+        $columns = $this->zeroUnits();
+        foreach (['metal', 'crystal', 'deuterium'] as $resource) {
+            $columns[$resource] = $this->logUniform(self::MAX_STOCK);
+        }
+        foreach (array_slice($this->random->shuffleArray(ObjectService::getShipObjects()), 0, $this->random->getInt(1, 3)) as $ship) {
+            $columns[$ship->machine_name] = $this->logUniform(400);
+        }
+        foreach (array_slice($this->random->shuffleArray(ObjectService::getDefenseObjects()), 0, $this->random->getInt(0, 2)) as $defence) {
+            $columns[$defence->machine_name] = $this->logUniform(100);
+        }
+        DB::table('planets')->where('id', $targetId)->update($columns + ['space_dock' => $dock, 'time_last_update' => $start]);
+        DB::table('planets')->where('id', $raidId)->update(['space_dock' => $this->random->getInt(0, 15)]);
+        $this->forget();
+        $coordinate = $this->freshPlanet($targetId)->getPlanetCoordinates();
+        $origin = $this->freshPlanet($raidId);
+        $raid = $this->someShips();
+        $speed = $this->pick(self::SPEEDS);
+        $this->stockOrigin($raidId, $raid, [0, 0, 0], $this->fuel($origin, $raid, $coordinate, 0, $speed), null, $start);
+        $this->forget();
+        foreach ([$raidId, $targetId] as $planetId) {
+            $this->freshPlanet($planetId)->update();
+        }
+        $this->forget();
+
+        $input = $this->input($raidId, $targetId, $coordinate, PlanetType::Planet, $raider, $owner, $raid, [0, 0, 0], $speed, 0)
+            + ['dock' => $dock, 'raider_dock' => $this->freshPlanet($raidId)->getObjectLevel('space_dock')];
+        $service = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($raider)]);
+        app()->instance(Randomizer::class, new Randomizer(new Mt19937($caseSeed)));
+        try {
+            $sent = $service->createNewFromPlanet($this->freshPlanet($raidId), $coordinate, PlanetType::Planet, AttackMission::getTypeId(), $raid, new Resources(0, 0, 0, 0), $speed, 0);
+        } catch (Exception $refusal) {
+            return ['input' => $input, 'dispatch' => ['accepted' => false, 'error' => $refusal->getMessage()], 'arrival' => null, 'return' => null];
+        }
+        $dispatch = ['accepted' => true, 'error' => null, 'departure' => $sent->time_departure, 'arrival' => $sent->time_arrival, 'fuel' => (int) $sent->deuterium_consumption, 'holding_seconds' => 0, 'origin_after' => $this->planetState($raidId)];
+        $hit = (int) $sent->time_arrival;
+        SimulatedTime::freezeAt(Date::createFromTimestamp($hit));
+        $targetBefore = $this->updatedState($targetId);
+        $reports = (int) (BattleReport::query()->max('id') ?? 0);
+        $service->processDueMissionEventsForMissionId($sent->id);
+        $this->forget();
+        $report = BattleReport::query()->where('id', '>', $reports)->orderBy('id')->first();
+        $back = FleetMission::query()->where('parent_id', $sent->id)->first();
+        $arrival = [
+            'time' => $hit,
+            'target_before' => $targetBefore,
+            'target_after' => $this->planetState($targetId),
+            'debris_after' => $this->debris($coordinate),
+            'battle' => $report === null ? null : $this->battleReport($report),
+            'wreck_after' => $this->wreckField($coordinate),
+            'return_mission' => $back === null ? null : $this->flight($back),
+        ];
+        $home = null;
+        if ($back !== null) {
+            $home = $this->comeHome($service, $back, $raidId);
+            $home['wreck_field'] = $this->wreckField($origin->getPlanetCoordinates());
+        }
+
+        return ['input' => $input, 'dispatch' => $dispatch, 'arrival' => $arrival, 'return' => $home, 'steps' => $this->wreckSteps($owner, $targetId, $coordinate, $hit, $dock, $perturbation, $raidId, $raider)];
+    }
+
+    /**
+     * The owner's moves on the wreck after the raid, each with the wreck and the planet after it.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function wreckSteps(int $owner, int $targetId, Coordinate $coordinate, int $hit, int $dock, string|null $perturbation, int $raidId, int $raider): array
+    {
+        $lifetime = app(SettingsService::class)->wreckFieldLifetimeHours() * 3600;
+        $steps = [];
+        $step = function (int $at, string $action, callable $act) use (&$steps, $targetId, $coordinate): void {
+            SimulatedTime::freezeAt(Date::createFromTimestamp($at));
+            $before = $this->updatedState($targetId);
+            try {
+                $act();
+                $error = null;
+            } catch (Exception $refusal) {
+                $error = $refusal->getMessage();
+            }
+            $this->forget();
+            $steps[] = ['at' => $at, 'action' => $action, 'error' => $error, 'planet_before' => $before, 'planet_after' => $this->planetState($targetId), 'wreck' => $this->wreckField($coordinate)];
+        };
+        $service = fn (): WreckFieldService => new WreckFieldService($this->freshPlayer($owner), app(SettingsService::class));
+        $cleanup = static fn () => Artisan::call(CleanupWreckFields::class);
+        if ($perturbation === 'expire') {
+            $step($hit + $lifetime + $this->random->getInt(1, 7200), 'cleanup', $cleanup);
+
+            return $steps;
+        }
+        $begun = $hit + $this->random->getInt(0, 7200);
+        $step($begun, 'start', function () use ($service, $coordinate, $dock): void {
+            if ($dock < 1) {
+                throw new Exception('space dock required');
+            }
+            $wreck = $service();
+            if (!$wreck->loadForCoordinates($coordinate)) {
+                throw new Exception('no wreck field');
+            }
+            $wreck->startRepairs($dock);
+        });
+        if ($perturbation === 'second_battle') {
+            $raid = $this->someShips();
+            $this->stockOrigin($raidId, $raid, [0, 0, 0], $this->fuel($this->freshPlanet($raidId), $raid, $coordinate, 0, 10.0), null, $begun);
+            $this->forget();
+            $again = app()->makeWith(FleetMissionService::class, ['player' => $this->freshPlayer($raider)]);
+            SimulatedTime::freezeAt(Date::createFromTimestamp($begun));
+            $sent = $again->createNewFromPlanet($this->freshPlanet($raidId), $coordinate, PlanetType::Planet, AttackMission::getTypeId(), $raid, new Resources(0, 0, 0, 0), 10.0, 0);
+            $step((int) $sent->time_arrival, 'raid', function () use ($again, $sent): void {
+                $again->processDueMissionEventsForMissionId($sent->id);
+            });
+            $steps[count($steps) - 1]['units'] = (object) $this->counts($raid);
+            $steps[count($steps) - 1]['departure'] = $begun;
+        }
+        $step($begun + $this->random->getInt(0, 15 * 3600), 'collect', function () use ($service, $coordinate, $targetId): void {
+            $result = $service()->collectRepairedShipsAtomic($coordinate, $targetId);
+            if (!($result['success'] ?? false)) {
+                throw new Exception((string) ($result['message'] ?? 'not collected'));
+            }
+        });
+        $step($begun + $lifetime + $this->random->getInt(1, 7200), 'cleanup', $cleanup);
+
+        return $steps;
+    }
+
     /** One to three kinds of flying ship, a few hundred at most of each. */
     private function someShips(): UnitCollection
     {
@@ -1331,9 +1480,13 @@ class DrawAiMoreMissionCasesAction
     /** @return array<string, mixed>|null */
     private function wreckField(Coordinate $at): array|null
     {
-        $field = \OGame\Models\WreckField::query()->where('galaxy', $at->galaxy)->where('system', $at->system)->where('planet', $at->position)->first();
+        $field = WreckField::query()->where('galaxy', $at->galaxy)->where('system', $at->system)->where('planet', $at->position)->first();
 
-        return $field === null ? null : ['owner' => $field->owner_player_id, 'status' => $field->status, 'ships' => $field->ship_data];
+        return $field === null ? null : [
+            'owner' => $field->owner_player_id, 'status' => $field->status, 'ships' => $field->ship_data,
+            'expires_at' => $field->expires_at?->timestamp, 'repair_started_at' => $field->repair_started_at?->timestamp,
+            'repair_completed_at' => $field->repair_completed_at?->timestamp, 'space_dock_level' => $field->space_dock_level,
+        ];
     }
 
     private function freshPlayer(int $id): PlayerService

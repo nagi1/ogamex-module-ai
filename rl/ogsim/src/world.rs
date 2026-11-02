@@ -20,11 +20,13 @@ use std::sync::Arc;
 use crate::combat::{self, Battle, CombatCatalogue};
 use crate::economy::{as_stored, next_random, weighted, Books, Catalogue, Game, PlanetConfig, WEIGHTS};
 use crate::expedition::{self, Draws};
-use crate::fleet::{self, Coord, FleetCatalogue, FleetSettings, SystemState};
+use crate::fleet::{self, Coord, FleetCatalogue, FleetSettings, SystemState, WreckRules};
 use crate::strike::{self, StrikeRules};
 use crate::units::{Shipyard, Units};
 
 mod strikes;
+mod wrecks;
+pub use wrecks::{Wreck, WreckState};
 
 /// The largest moon the host makes (x = 20 over 2 000 000 debris), so that deathstars can always destroy one.
 const MOON_DIAMETER_CAP: i64 = 8944;
@@ -387,6 +389,11 @@ pub struct World {
     pub gear_log: Vec<(usize, f64, bool)>,
     /// L6: every halving (slot, second, object, dark matter paid); a build halved once is completed by the next.
     pub halving_log: Vec<(usize, f64, usize, i64)>,
+    /// L2: the wreck fields per planet slot, oldest first; a General's losses riding home, by fleet id; and the repaired
+    /// ships each collection landed (slot, second, ships).
+    pub wrecks: HashMap<usize, Vec<Wreck>>,
+    pub carried: HashMap<usize, Vec<(u32, i64)>>,
+    pub wreck_log: Vec<(usize, f64, i64)>,
     halved: HashSet<(usize, u64)>,
     /// Per capital, the second its account joined the world's alliance, or None (the season draws membership); the
     /// host lets ACS defend fly only between buddies or members of one alliance.
@@ -407,7 +414,7 @@ impl World {
         for g in games.iter_mut() { g.in_world = true }
         let next = games.iter_mut().map(|g| cat.peek(g)).collect();
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15 }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -1157,6 +1164,7 @@ impl World {
         if self.fleets[f].returning {
             let fleet = self.fleets.swap_remove(f);
             self.land(cat, fleet.owner, at, &fleet.ships, fleet.cargo);
+            if let Some(ships) = self.carried.remove(&fleet.id) { self.add_wreck(self.ground(fleet.owner), ships, at) }
             self.log(EventKind::Return, at, &fleet, Outcome::Done, |e| e.gained = fleet.cargo);
             return;
         }
@@ -1450,6 +1458,17 @@ impl World {
         let ground = self.ground(target);
         for r in 0..3 { self.debris[ground][r] += outcome.debris[r] as f64 }
         self.fields[ground] = true;
+        let at = self.fleets[f].next();
+        if plunder {
+            // AttackMission: the defender's lost ships leave a wreck at its planet; a General's own ride home with it.
+            if let Some(ships) = self.wreckage(cat, ground, &defender_rules, &fought, &outcome.defender_lost) { self.add_wreck(ground, ships, at) }
+            let start: combat::Units = self.fleets[f].ships.iter().copied().collect();
+            let lost: combat::Units = start.iter().map(|(&id, &n)| (id, n - outcome.attacker_left.get(&id).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();
+            let home = self.ground(owner);
+            if attacker_rules.settings.wreck.as_ref().is_some_and(|w| w.carries_wreck_home) && !outcome.attacker_left.is_empty() {
+                if let Some(ships) = self.wreckage(cat, home, &attacker_rules, &start, &lost).filter(|s| !s.is_empty()) { self.carried.insert(self.fleets[f].id, ships); }
+            }
+        }
         self.fleets[f].ships = outcome.attacker_left.iter().map(|(&id, &n)| (id, n)).collect();
         let fleet = self.fleets[f].clone();
         let result = match outcome.winner {
@@ -2262,7 +2281,24 @@ mod tests {
             #[serde(default)] defend_return: Option<Again>,
             /// ACS attack: each fleet's flight home and landing, the first attack's then the partner's.
             #[serde(default)] returns: Vec<Option<Homeward>>,
+            /// Wreck: the owner's moves on the field after the raid.
+            #[serde(default)] steps: Vec<WreckStep>,
         }
+
+        #[derive(Deserialize)]
+        struct WreckStep { at: f64, action: String, error: Option<String>, planet_after: Option<State>, wreck: Option<HostWreck> }
+
+        #[derive(Deserialize)]
+        struct HostWreck {
+            status: String,
+            #[serde(default)] ships: Vec<WreckShip>,
+            expires_at: Option<f64>,
+            repair_started_at: Option<f64>,
+            repair_completed_at: Option<f64>,
+        }
+
+        #[derive(Deserialize)]
+        struct WreckShip { machine_name: String, quantity: i64 }
 
         #[derive(Deserialize)]
         struct Homeward { flight: Again, home: Landing }
@@ -2310,6 +2346,9 @@ mod tests {
             #[serde(default)] raid: Option<RaidInput>,
             /// ACS attack: the fleet sent to join the union.
             #[serde(default)] join: Option<Join>,
+            /// Wreck: the space dock levels of the target and the raider.
+            #[serde(default)] dock: Option<usize>,
+            #[serde(default)] raider_dock: Option<usize>,
         }
 
         #[derive(Deserialize)]
@@ -2350,6 +2389,7 @@ mod tests {
             #[serde(default)] planets_after: Option<usize>,
             #[serde(default)] new_planet: Option<NewPlanet>,
             #[serde(default)] battle: Option<BattleAnswer>,
+            #[serde(default)] wreck_after: Option<HostWreck>,
             #[serde(default)] espionage: Option<Spy>,
             /// Moon destruction: the fight's seed, the two rolls, the moon's diameter, whether it stands afterwards.
             #[serde(default)] abm_before: Option<[i64; 2]>,
@@ -2421,7 +2461,7 @@ mod tests {
         }
 
         #[derive(Deserialize)]
-        struct Back { time: f64, origin_after: Option<State> }
+        struct Back { time: f64, origin_after: Option<State>, #[serde(default)] wreck_field: Option<HostWreck> }
 
         /// The fleet settings and combat tables of one character class: the class changes fuel and loot, and the export
         /// writes the plain files for its own player's class and `-class2`/`-class3` for the others.
@@ -2512,6 +2552,7 @@ mod tests {
             let (cases_file, econ_file) = match only.as_str() {
                 "acs_defend" => ("acs-cases-u1.json", "units-parity/econ-u1.json"),
                 "acs_attack" => ("acs-attack-cases-u1.json", "units-parity/econ-u1.json"),
+                "wreck" => ("wreck-cases-u1.json", "units-parity/econ-u1.json"),
                 "colonise" | "expedition" => ("more-mission-cases-u1.json", "units-parity/econ-u1-colonies.json"),
                 "missile" | "moon_destruction" => ("more-mission-cases-u1.json", "units-parity/econ-u1.json"),
                 _ => ("mission-cases-u1.json", "units-parity/econ-u1.json"),
@@ -2603,6 +2644,7 @@ mod tests {
                 "colonise" => return play_colonise(cat, case, index, setup),
                 "acs_defend" => return play_acs_defend(cat, case, index),
                 "acs_attack" => return play_acs_attack(cat, case, index),
+                "wreck" => return play_wreck(cat, case, index),
                 "expedition" => return play_expedition(cat, case, index, setup),
                 _ => {}
             }
@@ -2903,6 +2945,108 @@ mod tests {
                 }
             }
             Some(true)
+        }
+
+        /// A wreck case: account 0 raids account 1's planet (both with a drawn space dock); the wreck the fight leaves, a
+        /// General's wreck landing at home, then the owner's repair start, collection and the hourly cleanup at the
+        /// host's seconds, each followed by the planet and its first wreck field.
+        fn play_wreck(cat: &Catalogue, case: &Case, index: usize) -> Option<bool> {
+            // A second raid during repairs needs the host's second fight, which the case does not keep.
+            if case.steps.iter().any(|s| s.action == "raid") { return None }
+            let (target, defender) = (case.input.target.as_ref()?, case.input.target_player.as_ref()?);
+            let configs = [config_of(cat, case.input.origin.id)?, config_of(cat, target.id)?];
+            let players = [&case.input.origin_player, defender];
+            let rules = players.iter().map(|p| rules_for(cat, p.class)).collect::<Option<Vec<_>>>()?;
+            let dock = rules[1].settings.wreck.as_ref()?.dock_object;
+            let mut world = World::new(cat, &configs, 1e6, 0.0, 1);
+            world.arm(rules, vec![coords(&case.input.origin), coords(target)]);
+            let departure = case.dispatch.departure?;
+            let k = cat.objects.iter().position(|o| o.id == dock).expect("a space dock in the catalogue");
+            for (a, ((player, planet), level)) in players.iter().zip([&case.input.origin, target]).zip([case.input.raider_dock, case.input.dock]).enumerate() {
+                for (id, &level) in &player.research {
+                    let r = cat.objects.iter().position(|o| o.id == id.parse::<i64>().unwrap() && o.queue == 1).expect("a research in the catalogue");
+                    world.games[a].planet.levels[r] = level;
+                }
+                world.games[a].planet.levels[k] = level? as u32;
+                let mut held = planet.ships.clone();
+                held.extend(planet.defence.clone());
+                for (id, amount) in units_of(&held) {
+                    let u = world.rules[a].units.index(id as i64).expect("a unit in the catalogue");
+                    world.yards[a].counts[u] = amount as u64;
+                }
+                world.games[a].planet.res = planet.resources;
+                world.games[a].planet.settle();
+                world.games[a].t = departure;
+                world.games[a].login_times = vec![departure];
+                cat.refresh(&mut world.games[a].planet);
+            }
+            world.dispatch(cat, 0, 1, Mission::Attack, &units_of(&case.input.units), case.input.cargo, case.input.speed).unwrap_or_else(|e| panic!("case {index}: the world refused the raid: {e}"));
+            let arrival = case.arrival.as_ref()?;
+            if let Some(battle) = &arrival.battle {
+                world.recorded = Some(combat::Recorded {
+                    engine: combat::EngineResult { rounds: battle.rounds, attacker_left: counted(&battle.attacker_left), defender_left: counted(&battle.defender_left), allies_left: Vec::new(), partners_left: Vec::new() },
+                    repaired: counted(&battle.repaired),
+                    moon_roll: if battle.moon_created { battle.moon_chance } else { battle.moon_chance + 1 },
+                });
+            }
+            world.catch_up(cat, 1, arrival.time);
+            world.games[1].planet.settle();
+            run_until(cat, &mut world, arrival.time);
+            stock(arrival.target_after.as_ref(), &world, 1, index, "after the raid");
+            wreck(&world, 1, arrival.wreck_after.as_ref(), index, "after the raid");
+            // The raider's landing and the owner's moves in time order: each moves the clocks on.
+            let mut events: Vec<(f64, Option<&WreckStep>)> = case.steps.iter().map(|s| (s.at, Some(s))).collect();
+            if let Some(back) = &case.back { events.push((back.time, None)) }
+            events.sort_by(|x, y| x.0.total_cmp(&y.0));
+            for (at, step) in events {
+                let Some(step) = step else {
+                    let back = case.back.as_ref()?;
+                    world.catch_up(cat, 0, at);
+                    world.games[0].planet.settle();
+                    run_until(cat, &mut world, at);
+                    stock(back.origin_after.as_ref(), &world, 0, index, "back home");
+                    wreck(&world, 0, back.wreck_field.as_ref(), index, "at the raider's planet");
+                    continue;
+                };
+                world.catch_up(cat, 1, at);
+                world.games[1].planet.settle();
+                run_until(cat, &mut world, at);
+                let done = match step.action.as_str() {
+                    "start" => world.start_repairs(cat, 1, at).map(|_| 0),
+                    "collect" => world.collect_wreck(1, at),
+                    _ => { world.sweep_wrecks(1, at); Ok(0) }
+                };
+                let when = format!("after {} at {at}", step.action);
+                assert_eq!(done.is_err(), step.error.is_some(), "case {index} {when}: world {done:?} host {:?}", step.error);
+                stock(step.planet_after.as_ref(), &world, 1, index, &when);
+                wreck(&world, 1, step.wreck.as_ref(), index, &when);
+            }
+            Some(true)
+        }
+
+        /// The host's first wreck field at a planet against the world's.
+        fn wreck(w: &World, p: usize, host: Option<&HostWreck>, case: usize, when: &str) {
+            let ours = w.wrecks.get(&p).and_then(|f| f.first());
+            let (Some(host), Some(ours)) = (host, ours) else {
+                assert_eq!(host.is_some(), ours.is_some(), "case {case} {when}: wreck field host {} world {ours:?}", host.map_or("none".into(), |h| h.status.clone()));
+                return;
+            };
+            let names = unit_names();
+            let mut theirs: Vec<(u32, i64)> = host.ships.iter().map(|s| (names[&s.machine_name], s.quantity)).filter(|s| s.1 > 0).collect();
+            theirs.sort();
+            let mut mine: Vec<(u32, i64)> = ours.ships.iter().copied().filter(|s| s.1 > 0).collect();
+            mine.sort();
+            let state = match ours.state { WreckState::Active => "active", WreckState::Repairing => "repairing", WreckState::Blocked => "blocked" };
+            assert_eq!((state, mine), (host.status.as_str(), theirs), "case {case} {when}: wreck field");
+            assert_eq!(Some(ours.expires), host.expires_at, "case {case} {when}: wreck expiry");
+            if ours.state == WreckState::Repairing {
+                assert_eq!((Some(ours.started), Some(ours.completes)), (host.repair_started_at, host.repair_completed_at), "case {case} {when}: repair times");
+            }
+        }
+
+        fn unit_names() -> HashMap<String, u32> {
+            let units: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{DATA}/units-parity/units-u1.json")).expect("the units export")).expect("json");
+            units["units"].as_array().expect("units").iter().map(|u| (u["machine_name"].as_str().unwrap().to_string(), u["id"].as_u64().unwrap() as u32)).collect()
         }
 
         /// An ACS defend case: account 0 holds at its mate's planet (account 1) while account 2's attack lands there. The

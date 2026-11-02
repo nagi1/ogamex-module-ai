@@ -61,6 +61,39 @@ pub struct FleetSettings {
     /// an older export reads as off, so no ACS mission flies on tables that do not say it may.
     #[serde(default)]
     pub alliance_combat_system: bool,
+    /// L2: wreck fields (fleet settings v6); an older export makes none.
+    #[serde(default)]
+    pub wreck: Option<WreckRules>,
+}
+
+/// `WreckFieldService`: the loss floors a battle must pass to leave a wreck, its lifetime, the repair time clamp, the space
+/// dock and the share of lost ships it repairs by level, the ships that never wreck, and whether this player's own losses
+/// come home as a wreck (the General).
+#[derive(Deserialize, Clone, Debug)]
+pub struct WreckRules {
+    pub min_loss: i64,
+    pub min_fleet_percentage: f64,
+    pub lifetime_hours: f64,
+    pub repair_min_minutes: i64,
+    pub repair_max_hours: i64,
+    pub dock_object: i64,
+    pub percentage: Vec<f64>,
+    pub excluded: Vec<u32>,
+    pub carries_wreck_home: bool,
+}
+
+impl WreckRules {
+    /// `calculateRepairDuration`: sqrt(ships x 30) x 10 seconds inside the configured clamp.
+    pub fn repair_seconds(&self, ships: i64) -> f64 {
+        let min = (self.repair_min_minutes.max(0) * 60) as f64;
+        let hours = if self.repair_max_hours <= 0 { 12 } else { self.repair_max_hours };
+        let max = min.max((hours * 3600) as f64);
+        ((ships.max(0) as f64 * 30.0).sqrt() * 10.0).round().clamp(min, max)
+    }
+
+    pub fn lifetime(&self) -> f64 {
+        self.lifetime_hours * 3600.0
+    }
 }
 
 /// `HalvingService`: dark matter per half hour left (at least `min_cost`, at most the queue's cap), and per queue the most a

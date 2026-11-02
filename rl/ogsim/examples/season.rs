@@ -66,7 +66,7 @@ fn main() {
         since,
         login_at: vec![0; accounts],
         counted_login: vec![f64::NEG_INFINITY; accounts],
-        read: [0; 4],
+        read: [0; 5],
         midnight: DAY,
         days,
         seed,
@@ -158,7 +158,7 @@ struct Season<'a, W: Write> {
     counted_login: Vec<f64>,
     /// How many events of the world's log have been read.
     /// How far the world's event, moon gear and halving logs have been read.
-    read: [usize; 4],
+    read: [usize; 5],
     /// The next midnight no line has been written for.
     midnight: f64,
     days: usize,
@@ -553,7 +553,7 @@ mod health_tests {
 }
 
 /// Reads the events the world wrote since the last call into their day and account.
-fn scan(w: &World, read: &mut [usize; 4], roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
+fn scan(w: &World, read: &mut [usize; 5], roles: &[usize], per_day: &mut [Vec<Tally>], days: usize, delivered: &mut Vec<[f64; 3]>) {
     delivered.resize(w.games.len(), [0.0; 3]);
     for &(slot, time, jump) in &w.gear_log[read[1]..] {
         let tally = &mut per_day[((time / DAY) as usize).min(days - 1)][w.account_of(slot)];
@@ -568,6 +568,10 @@ fn scan(w: &World, read: &mut [usize; 4], roles: &[usize], per_day: &mut [Vec<Ta
         per_day[((time / DAY) as usize).min(days - 1)][w.account_of(slot)].acs_attack += 1;
     }
     read[3] = w.union_log.len();
+    for &(slot, time, _) in &w.wreck_log[read[4]..] {
+        per_day[((time / DAY) as usize).min(days - 1)][w.account_of(slot)].wreck_repaired += 1;
+    }
+    read[4] = w.wreck_log.len();
     while read[0] < w.events.len() {
         let e = &w.events[read[0]];
         read[0] += 1;
@@ -648,6 +652,8 @@ struct Tally {
     acs_defend: u32,
     /// L5: fleets that fought as a raid union's partner.
     acs_attack: u32,
+    /// Wreck fields: repaired ships taken back at the space dock.
+    wreck_repaired: u32,
     /// M4: phalanx scans and jump gate jumps.
     phalanx: u32,
     jump: u32,
@@ -682,6 +688,7 @@ impl Tally {
             "moon_shot": self.moon_shot,
             "acs_defend": self.acs_defend,
             "acs_attack": self.acs_attack,
+            "wreck_repaired": self.wreck_repaired,
             "phalanx": self.phalanx,
             "jump": self.jump,
             "halved": self.halved,

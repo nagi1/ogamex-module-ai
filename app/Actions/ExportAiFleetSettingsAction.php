@@ -13,6 +13,7 @@ use OGame\Services\OfficerService;
 use OGame\Services\PhalanxService;
 use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
+use OGame\Services\WreckFieldService;
 use ReflectionClassConstant;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -24,7 +25,7 @@ use ReflectionProperty;
  */
 class ExportAiFleetSettingsAction
 {
-    public const VERSION = 5;
+    public const VERSION = 6;
 
     /** Moon gear levels tabulated (sensor phalanx range, jump gate cooldown); no account builds either this high. */
     private const MOON_GEAR_LEVELS = 30;
@@ -56,6 +57,32 @@ class ExportAiFleetSettingsAction
             'halving' => $this->halving(),
             // L5: whether ACS missions may fly at all on this universe.
             'alliance_combat_system' => (bool) $settings->allianceCombatSystemOn(),
+            'wreck' => $this->wreck($settings, $player),
+        ];
+    }
+
+    /**
+     * L2: when a battle leaves a wreck field and what the space dock does with it (WreckFieldService): the loss floors,
+     * the field's lifetime, the repair time clamp, the dock and the share of lost ships it can repair per level, the ships
+     * that never wreck, and whether this player's own losses come home as a wreck (the General's perk).
+     *
+     * @return array<string, mixed>
+     */
+    private function wreck(SettingsService $settings, PlayerService $player): array
+    {
+        $service = new WreckFieldService($player, $settings);
+
+        return [
+            'min_loss' => $settings->wreckFieldMinResourcesLoss(),
+            'min_fleet_percentage' => $settings->wreckFieldMinFleetPercentage(),
+            'lifetime_hours' => $settings->wreckFieldLifetimeHours(),
+            'repair_min_minutes' => $settings->wreckFieldRepairMinMinutes(),
+            'repair_max_hours' => $settings->wreckFieldRepairMaxHours(),
+            'dock_object' => ObjectService::getObjectByMachineName('space_dock')->id,
+            'percentage' => array_map(static fn (int $level): float => $service->getRecoverableWreckFieldPercentage(max(1, $level)), range(0, self::MOON_GEAR_LEVELS)),
+            // WreckFieldService::calculateShipsForWreckField skips these by name.
+            'excluded' => array_map(static fn (string $name): int => ObjectService::getObjectByMachineName($name)->id, ['espionage_probe', 'solar_satellite']),
+            'carries_wreck_home' => app(CharacterClassService::class)->isGeneral($player->getUser()),
         ];
     }
 

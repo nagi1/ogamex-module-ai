@@ -14,7 +14,7 @@ use crate::economy::{own_row, Baseline, Catalogue, Planet, WEIGHTS};
 use crate::fleet::{self, Coord, SystemState};
 use crate::score;
 use crate::units::UnitKind;
-use crate::world::{Decision, EventKind, Fleet, Mission, Outcome, Rules, SpyReport, World, UNIT_QUEUE};
+use crate::world::{Decision, EventKind, Fleet, Mission, Outcome, Rules, SpyReport, World, WreckState, UNIT_QUEUE};
 
 pub(crate) const SLOTS: usize = 4;
 pub(crate) const NEIGHBOURS: usize = 5;
@@ -61,6 +61,8 @@ pub struct Ledger {
     /// L5: holds sent to a mate's planet under attack, and fleets sent to join a mate's raid.
     pub defends: usize,
     pub joins: usize,
+    /// Wreck fields: ships repaired at the space dock and taken back.
+    pub repaired: i64,
     /// How many events of the world's log have been read.
     read: usize,
 }
@@ -845,6 +847,20 @@ pub fn defend_mate(w: &mut World, cat: &Catalogue, a: usize, mate: impl Fn(usize
         }
     }
     false
+}
+
+/// Wreck fields: at a login the owner of a planet with a wreck and a space dock starts the repairs and takes the ships
+/// back once they are done, as players do after losing a fleet (gate 3). The hourly cleanup has run in between.
+pub fn tend_wrecks(w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) {
+    let now = w.games[a].t;
+    for p in w.planets_of(a) {
+        if !w.wrecks.contains_key(&p) { continue }
+        w.sweep_wrecks(p, (now / 3600.0).floor() * 3600.0);
+        if w.wrecks[&p].iter().any(|f| f.state == WreckState::Repairing && now >= f.completes) {
+            ledger.repaired += w.collect_wreck(p, now).unwrap_or(0);
+        }
+        let _ = w.start_repairs(cat, p, now);
+    }
 }
 
 /// L5: an alliance member sends cargo ships to join a mate's raid when the mate's report shows more plunder than the
@@ -2394,6 +2410,38 @@ mod tests {
         assert_eq!(world.union_log.len(), 1, "one partner fought in the union");
         let home = world.events.iter().find(|e| e.kind == EventKind::Return && e.owner == 0).unwrap();
         assert!(home.gained.iter().sum::<f64>() > 0.0, "the partner brings home its share of the plunder");
+    }
+
+    /// Wreck fields: a raid that wipes out a planet's fleet leaves a wreck; the owner with a space dock starts the repairs at
+    /// its next login and, once they are done, takes the repaired share of the lost ships back. Without a dock nothing starts.
+    #[test]
+    fn a_player_repairs_the_wreck_of_its_lost_fleet_at_the_space_dock() {
+        let Some((cat, mut world)) = bare(5) else { return eprintln!("no catalogue; skipped") };
+        let wreck = world.rules[1].settings.wreck.clone().expect("fleet settings v6");
+        let fighter = Kit::of(&world, &cat, 0).expect("a fighter hull").fighter;
+        assert!(world.set_units(&cat, 0, fighter, 100_000) && world.set_units(&cat, 1, fighter, 1_000), "both hold fighters");
+        world.games[0].planet.res = [1e9; 3];
+        world.dispatch(&cat, 0, 1, Mission::Attack, &[(fighter, 100_000)], [0.0; 3], 10.0).expect("the raid flies");
+        while !world.events.iter().any(|e| e.kind == EventKind::Fight) {
+            let a = world.next_decision(&cat).expect("the world plays on");
+            world.wait(&cat, a);
+        }
+        let field = world.wrecks.get(&1).and_then(|f| f.first()).expect("the lost fleet leaves a wreck").clone();
+        let kept = (1_000.0 * wreck.percentage[1] / 100.0).floor() as i64;
+        assert_eq!(field.ships, vec![(fighter, kept)], "the dock's share of the lost fighters");
+        let mut ledger = Ledger::default();
+        world.games[1].t = world.events.last().unwrap().time;
+        tend_wrecks(&mut world, &cat, 1, &mut ledger);
+        assert_eq!(world.wrecks[&1][0].state, WreckState::Active, "no repairs without a space dock");
+        let dock = cat.objects.iter().position(|o| o.id == wreck.dock_object).expect("a space dock in the catalogue");
+        world.games[1].planet.levels[dock] = 1;
+        tend_wrecks(&mut world, &cat, 1, &mut ledger);
+        let repairing = world.wrecks[&1][0].clone();
+        assert_eq!(repairing.state, WreckState::Repairing, "the owner starts the repairs");
+        world.games[1].t = repairing.completes;
+        tend_wrecks(&mut world, &cat, 1, &mut ledger);
+        assert!(world.wrecks[&1].is_empty() && ledger.repaired == kept, "the repaired fighters are back");
+        assert_eq!(on_shelf(&world, 1, fighter), kept);
     }
 
     /// M4: a fleeter's warships deploy to its capital's moon; with a gate on two moons the fleet jumps away from the first
