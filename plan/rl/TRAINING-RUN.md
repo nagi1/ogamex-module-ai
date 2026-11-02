@@ -254,3 +254,25 @@ old file is `real-bands-with-lifeforms.json`. `detector-*.json` were trained on 
 
 Learner settings are not experiments (NORTH-STAR §10). Fidelity gaps (replay) are read alongside and do not block
 training; the rule fixes go in between rounds, and a changed world means a rerun of step A.
+
+## train4: the finished world (2 Nov, `storage/rl/ogsim/runs/train4`)
+
+The world now flies joint attacks and defence, wreck fields, moon raids and planet moves. On it, 10 seeds x 365 days:
+
+| Player | HDS | pooled AUC |
+| --- | --- | --- |
+| rule (teacher) | 0.898 | 0.791 |
+| clone `bc0`, sampled, after the clock fix | 0.880 | 0.775 |
+
+- **Per-account skill** (`skill=LO:HI`, each account its own sampling heat) does not help. On the nine shared healthy
+  seeds the plain clone scored 0.883 / 0.752; one heat of 2 for all scored 0.857 / 0.771, spread 0.5-4 0.872 / 0.772,
+  and spread 1-8 0.849 / 0.762. Not trained on.
+- **Clock fault fixed** (`16d3f5f8`): a slot whose next event moved later jumped there in one step past the world's
+  schedule. One seed in ten failed the health check on it. The colonise and expedition case replays had been failing
+  since 30 Oct (missing page load at the landing); all 14 missions are exact again.
+- **Realism reward hacked** (round 1, `collapsed/`): realism 0.3 with the train3 detector and no anchor, from the
+  clone at heat 2 or 4. By update 320 both arms stopped building: HDS 0.84 -> 0.30, median score 6.9 M -> 0.14 M,
+  one planet. Most real accounts barely grow, so the detector reads doing nothing as human. The realism term needs an
+  anchor or a floor on growth.
+- **Round 2** (running): `g0` growth alone with KL anchor 0.05 (4070); `r3` realism 0.3 from this run's
+  `detector-0.json` with anchor 0.3, and `r1` realism 0.1 with anchor 0.1 (3090). Judged every 80 updates.
