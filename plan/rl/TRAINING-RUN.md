@@ -516,3 +516,9 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   250.5M this morning by the two fixes alone.
 - `labahead` on the fixed world: 265.8M against 268.8M, research unchanged (10.9%): rejected. The lab is busy every day and the
   capital's lab level is not what holds research at 11%.
+- **Greedy ES stopped (es1).** Checkpoints 5 and 10 judge to the same unit as bc-t2 greedy (265,306,554): ten generations
+  flipped no greedy decision, the advice input's margin is far wider than ES steps. ES now runs sampled only (`es2`, from bc0,
+  30 seed pairs, judged sampled by `esjudge2.sh`), where a small weight change moves the probabilities and so the score.
+  The no-advice clone is judged on the fixed world to see whether ES can work on a policy that decides by itself.
+- ES no longer idles the machine between generations: finals read the tail of each season (0.09 s, was minutes on one core),
+  and a generation's seasons all play at once (threads = seasons).
