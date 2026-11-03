@@ -34,22 +34,38 @@ pub const LEARNER_STATE: usize = STATE_DIM + ACCOUNT_NAMES.len();
 pub const LEARNER_CAND: usize = CAND_DIM + 1;
 
 #[derive(Clone)]
-struct Layer { weight: Vec<Vec<f32>>, bias: Vec<f32> }
+struct Layer { weight: Vec<f32>, bias: Vec<f32>, inputs: usize }
 
 impl Layer {
     fn load(v: &serde_json::Value, name: &str) -> Result<Self, String> {
-        let weight = v[format!("{name}.weight")].as_array().ok_or(format!("{name} missing"))?.iter().map(floats).collect();
-        Ok(Layer { weight, bias: floats(&v[format!("{name}.bias")]) })
+        let rows: Vec<Vec<f32>> = v[format!("{name}.weight")].as_array().ok_or(format!("{name} missing"))?.iter().map(floats).collect();
+        Ok(Layer { inputs: rows.first().map_or(0, Vec::len), weight: rows.concat(), bias: floats(&v[format!("{name}.bias")]) })
+    }
+
+    /// Output o's weights on inputs `from..from + len` (row-major, one flat buffer so the dot products vectorise).
+    fn row(&self, o: usize, from: usize, len: usize) -> &[f32] {
+        &self.weight[o * self.inputs + from..o * self.inputs + from + len]
     }
 
     fn apply(&self, input: &[f32]) -> Vec<f32> {
-        self.weight.iter().zip(&self.bias).map(|(row, b)| (row.iter().zip(input).map(|(w, x)| w * x).sum::<f32>() + b).max(0.0)).collect()
+        (0..self.bias.len()).map(|o| (dot(self.row(o, 0, self.inputs), input) + self.bias[o]).max(0.0)).collect()
     }
 
     /// A network's last layer has no ReLU after it.
     fn output(&self, input: &[f32]) -> f32 {
-        self.weight[0].iter().zip(input).map(|(w, x)| w * x).sum::<f32>() + self.bias[0]
+        dot(self.row(0, 0, self.inputs), input) + self.bias[0]
     }
+}
+
+/// A dot product in eight lanes: a plain `zip().sum()` is one serial chain the compiler may not reorder, and model
+/// inference was ~90% of a season's time (4 Nov: 300 s against 28 s for the scripted players over 30 days).
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    let mut lanes = [0.0f32; 8];
+    let (whole, rest) = (a.len() / 8 * 8, a.len().min(b.len()));
+    for (x, y) in a[..whole].chunks_exact(8).zip(b[..whole].chunks_exact(8)) {
+        for i in 0..8 { lanes[i] += x[i] * y[i] }
+    }
+    lanes.iter().sum::<f32>() + a[whole..rest].iter().zip(&b[whole..rest]).map(|(x, y)| x * y).sum::<f32>()
 }
 
 fn floats(v: &serde_json::Value) -> Vec<f32> {
@@ -118,7 +134,7 @@ impl Policy {
         let mut at = 0;
         let layers = out.state_net.iter_mut().chain(std::iter::once(&mut out.cand_net)).chain(out.joint.iter_mut());
         for layer in layers {
-            for w in layer.weight.iter_mut().flatten().chain(layer.bias.iter_mut()) {
+            for w in layer.weight.iter_mut().chain(layer.bias.iter_mut()) {
                 *w += noise[at] * scale;
                 at += 1;
             }
@@ -128,7 +144,7 @@ impl Policy {
 
     /// How many weights `nudged` reads.
     pub fn scoring_weights(&self) -> usize {
-        self.state_net.iter().chain(std::iter::once(&self.cand_net)).chain(&self.joint).map(|l| l.weight.iter().map(Vec::len).sum::<usize>() + l.bias.len()).sum()
+        self.state_net.iter().chain(std::iter::once(&self.cand_net)).chain(&self.joint).map(|l| l.weight.len() + l.bias.len()).sum()
     }
 
     /// The state's hidden layer and the score of every legal row; `cands` is [K, C] flat.
@@ -136,12 +152,13 @@ impl Policy {
         let scaled = |x: &[f32], mean: &[f32], std: &[f32]| x.iter().zip(mean).zip(std).map(|((v, m), s)| (v - m) / s).collect::<Vec<f32>>();
         let mut s = scaled(state, &self.norm[0], &self.norm[1]);
         for layer in &self.state_net { s = layer.apply(&s) }
+        // joint.0 reads [state, candidate]: its state half is the same for every row, so it is summed once per decision.
+        let (first, width) = (&self.joint[0], self.norm[2].len());
+        let shared: Vec<f32> = (0..first.bias.len()).map(|o| dot(first.row(o, 0, s.len()), &s) + first.bias[o]).collect();
         let rows = (0..legal.len()).filter(|&row| legal[row] > 0).map(|row| {
-            let width = self.norm[2].len();
             let c = self.cand_net.apply(&scaled(&cands[row * width..(row + 1) * width], &self.norm[2], &self.norm[3]));
-            let mut x: Vec<f32> = s.iter().chain(&c).copied().collect();
-            for layer in &self.joint[..2] { x = layer.apply(&x) }
-            (row, self.joint[2].output(&x))
+            let x: Vec<f32> = shared.iter().enumerate().map(|(o, h)| (h + dot(first.row(o, s.len(), c.len()), &c)).max(0.0)).collect();
+            (row, self.joint[2].output(&self.joint[1].apply(&x)))
         }).collect();
         (s, rows)
     }
