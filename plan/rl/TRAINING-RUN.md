@@ -524,3 +524,7 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   and a generation's seasons all play at once (threads = seasons).
 - No-advice clone on the fixed world, sampled: 60.3M median (military 52%, hoard 37B) against 268.8M: not a base for ES.
 - Sampled ES (es2) checkpoint 5: 268.4M against bc0's 268.8M on the judge seeds: flat; its training medians (271-275M) were the fresh seeds' luck. Judged every 5 generations; flat through 20 means ES finds nothing around this clone, and the next step is a direct headroom search over the teacher's play.
+- **First learned gain over the clone (3 Nov 05:45).** Sampled ES (es2), checkpoint 10: median 275.4M against bc0's 268.8M on the
+  judge's seeds. Paired by account: mean ln ratio +0.044 (seed-bootstrap 95% CI +0.029 to +0.059), every one of the 10 seeds up,
+  71% of 320 accounts up. Composition unchanged (economy 62%, research 11%, military 29%): the gain is play, not a shifted share.
+  ES carries on; checkpoints are judged every 5 generations.
