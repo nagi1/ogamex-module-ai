@@ -142,6 +142,9 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     // `value-out=FILE`: at every build decision, the deciding account, the day and the state the learner reads there, as
     // raw little-endian f32; `ogrl.train_value` joins them with the points each account ends the season with.
     let mut values = arms.iter().find_map(|arm| arm.strip_prefix("value-out=")).map(|path| BufWriter::new(File::create(path).expect("the value file")));
+    // `champion-label` (DAgger): the champion's seats record its look-ahead as labels but play the policy's own pick, so
+    // the labels are for the states the student reaches, not only the champion's.
+    let label_only = arms.iter().any(|arm| arm == "champion-label");
     let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _, _)| owner % stride == offset);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -191,7 +194,10 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
             _ if build && is_champion(owner) => champion.map(|(_, _, hours, rollouts, width)| {
                 let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref());
                 if let Some(file) = labels.as_mut() { write_label(file, &found) }
-                found.pick
+                match (&policy, label_only) {
+                    (Some(p), true) => season.u.choose(p, a, heat[owner], draw.as_mut().map(|d| &mut d[owner])),
+                    _ => found.pick,
+                }
             }),
             Some(p) if build => Some(season.u.choose(nudged.as_ref().map_or(p, |all| &all[owner]), a, heat[owner], draw.as_mut().map(|d| &mut d[owner]))),
             None if build && teacher_pick => Some(season.u.teacher(a)),
