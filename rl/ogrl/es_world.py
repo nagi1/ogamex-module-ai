@@ -45,13 +45,21 @@ def unflat(model: dict, theta: np.ndarray) -> dict:
     return out
 
 
-def finals(path: Path) -> dict[int, tuple[float, bool]]:
-    """Per account, ln(1 + final host score) and whether it still plays at the end."""
-    last = {}
-    for line in path.open():
-        r = json.loads(line)
-        if "planets" in r:
-            last[r["account"]] = r
+def finals(path: Path, accounts: int) -> dict[int, tuple[float, bool]]:
+    """Per account, ln(1 + final host score) and whether it still plays at the end. The last day's lines close the file, so
+    only its tail is read: parsing the whole 100 MB season left the machine idle for minutes each generation."""
+    last: dict[int, dict] = {}
+    size = path.stat().st_size
+    with path.open("rb") as f:
+        tail = 1 << 21
+        while len(last) < accounts and tail < 2 * size:
+            f.seek(max(0, size - tail))
+            last = {}
+            for line in f.read().splitlines()[1:] if size > tail else f.read().splitlines():
+                if b'"planets"' in line:
+                    r = json.loads(line)
+                    last[r["account"]] = r
+            tail *= 4
     return {a: (math.log1p(r["score"]["total"]), not r.get("inactive")) for a, r in last.items()}
 
 
@@ -67,7 +75,7 @@ def generation(args, gen_dir: Path, seeds: list[int]) -> dict[tuple[int, int], d
     arms = ARMS + (["sampled"] if args.sampled else []) + [f"policy={gen_dir / 'policy.json'}", f"jobs={gen_dir / 'jobs.txt'}", f"threads={args.procs}"]
     subprocess.run([args.bin, str(DATA), str(args.days), str(args.accounts), "0", str(DATA / "units-parity/econ-u1-colonies.json"), str(gen_dir / "unused.jsonl"), *arms],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"OMP_NUM_THREADS": "1"})
-    done = {key: finals(out) for key, out in outs.items()}
+    done = {key: finals(out, args.accounts) for key, out in outs.items()}
     for out in outs.values():
         out.unlink()
     return done
