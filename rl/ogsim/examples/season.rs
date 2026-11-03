@@ -160,6 +160,12 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     let champion_errands = arms.iter().any(|arm| arm == "champion-errands");
     let mut errand_labels = arms.iter().find_map(|arm| arm.strip_prefix("champion-errand-out=")).map(|path| BufWriter::new(File::create(path).expect("the errand label file")));
     let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _, _)| owner % stride == offset);
+    // `champion-from=DAY` and, with `champion-label`, `champion-every=N`: the look-ahead runs from that day on and at a
+    // hashed 1 in N of the seat's decisions; the rest play the policy. A label costs ~70 rollout sets a late day, and
+    // DAgger needs the states sampled, not every one (3 Nov: a full-year label round took ~12 h).
+    let search_from = arms.iter().find_map(|arm| arm.strip_prefix("champion-from=")).map_or(0.0, |d| d.parse::<f64>().expect("champion-from=DAY") * 86_400.0);
+    let search_every = arms.iter().find_map(|arm| arm.strip_prefix("champion-every=")).map_or(1, |n| n.parse::<u64>().expect("champion-every=N")).max(1);
+    let mut asked = vec![0u64; accounts];
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -203,9 +209,13 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         let plays = season.u.plays(a);
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
+        let searched = is_champion(owner) && season.u.world.games[a].t >= search_from && (!label_only || {
+            asked[owner] += 1;
+            splitmix(seed ^ (owner as u64) << 40 ^ asked[owner]) % search_every == 0
+        });
         if let Some(file) = values.as_mut().filter(|_| build) { write_state(file, &season.u, a) }
         let pick = match &policy {
-            _ if build && is_champion(owner) => champion.map(|(_, _, hours, rollouts, width)| {
+            _ if build && searched => champion.map(|(_, _, hours, rollouts, width)| {
                 let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref(), solo);
                 if let Some(file) = labels.as_mut() { write_label(file, &found) }
                 match (&policy, label_only) {
@@ -217,7 +227,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };
-        if champion_errands && plays && a == owner && is_champion(owner) {
+        if champion_errands && plays && a == owner && searched {
             let (_, _, hours, rollouts, _) = champion.expect("champion-errands needs champion=");
             let found = season.u.lookahead_errand(a, pick, hours, rollouts, solo);
             if let Some(file) = errand_labels.as_mut() { write_errand_label(file, &found) }
@@ -897,4 +907,12 @@ fn median(values: &[f64]) -> f64 {
         0 => 0.0,
         n => sorted[n / 2],
     }
+}
+
+/// A well-mixed 64-bit hash (SplitMix64's finaliser): which of a seat's decisions the champion samples.
+fn splitmix(x: u64) -> u64 {
+    let mut z = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }
