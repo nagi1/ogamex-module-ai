@@ -312,6 +312,19 @@ const UNION_DELAY: f64 = 0.30;
 /// Row 66: planets a player holds in a galaxy before it colonises the next one within its reach (`colony_site`).
 const PLANETS_PER_GALAXY: usize = 3;
 
+/// The logs `World::take_logs` moved out.
+pub struct Logs {
+    events: Vec<Event>,
+    unit_log: Vec<(usize, f64, u32, u64, u64)>,
+    officer_log: Vec<(usize, f64, String, i64)>,
+    gear_log: Vec<(usize, f64, bool)>,
+    halving_log: Vec<(usize, f64, usize, i64)>,
+    wreck_log: Vec<(usize, f64, i64)>,
+    move_log: Vec<(usize, f64)>,
+    union_log: Vec<(usize, f64)>,
+    launch_log: Vec<(Fleet, f64)>,
+}
+
 #[derive(Clone)]
 pub struct World {
     pub games: Vec<Game>,
@@ -907,6 +920,26 @@ impl World {
     }
 
     pub fn jolt(&mut self) { self.draw(0, 1); }
+
+    /// Moves out the logs nothing in play reads, and the events before `keep_from`, so a copy made now is cheap (late in a
+    /// season the logs are most of a copy's cost); `put_logs` puts them back exactly.
+    pub fn take_logs(&mut self, keep_from: usize) -> Logs {
+        let tail = self.events.split_off(keep_from.min(self.events.len()));
+        Logs {
+            events: std::mem::replace(&mut self.events, tail),
+            unit_log: std::mem::take(&mut self.unit_log), officer_log: std::mem::take(&mut self.officer_log),
+            gear_log: std::mem::take(&mut self.gear_log), halving_log: std::mem::take(&mut self.halving_log),
+            wreck_log: std::mem::take(&mut self.wreck_log), move_log: std::mem::take(&mut self.move_log),
+            union_log: std::mem::take(&mut self.union_log), launch_log: std::mem::take(&mut self.launch_log),
+        }
+    }
+
+    pub fn put_logs(&mut self, mut logs: Logs) {
+        logs.events.append(&mut self.events);
+        self.events = logs.events;
+        (self.unit_log, self.officer_log, self.gear_log, self.halving_log) = (logs.unit_log, logs.officer_log, logs.gear_log, logs.halving_log);
+        (self.wreck_log, self.move_log, self.union_log, self.launch_log) = (logs.wreck_log, logs.move_log, logs.union_log, logs.launch_log);
+    }
 
     /// Fresh dice for a copy of the world: a look-ahead must not read the draws the real world will make.
     pub fn reseed(&mut self, salt: u64) { self.rng ^= salt.wrapping_mul(0xa076_1d64_78bd_642f) }

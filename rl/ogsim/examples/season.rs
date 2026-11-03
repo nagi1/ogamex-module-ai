@@ -77,6 +77,14 @@ fn write_label(file: &mut impl Write, found: &ogsim::season::Lookahead) {
     }
 }
 
+/// One look-ahead errand as raw little-endian f32: state, candidates, legal flags and worths (NaN where none).
+fn write_errand_label(file: &mut impl Write, found: &ogsim::season::ErrandLookahead) {
+    let legal = found.legal.iter().map(|&l| f32::from(l));
+    for x in found.state.iter().copied().chain(found.cands.iter().copied()).chain(legal).chain(found.worths.iter().copied()) {
+        file.write_all(&x.to_le_bytes()).expect("write an errand label");
+    }
+}
+
 /// The account deciding at slot a, the day, and the state the learner reads at its capital, as raw little-endian f32.
 fn write_state(file: &mut impl Write, u: &Universe, a: usize) {
     let owner = u.world.account_of(a);
@@ -145,6 +153,12 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     // `champion-label` (DAgger): the champion's seats record its look-ahead as labels but play the policy's own pick, so
     // the labels are for the states the student reaches, not only the champion's.
     let label_only = arms.iter().any(|arm| arm == "champion-label");
+    // `champion-solo`: in the champion's rollouts the other accounts only run their economies (`Universe::lookahead`).
+    let solo = arms.iter().any(|arm| arm == "champion-solo");
+    // `champion-errands`: the champion's seats also choose their fleet errand by look-ahead (`Universe::lookahead_errand`);
+    // `champion-errand-out=FILE` records those decisions as the build labels are recorded (state, candidates, legal, worths).
+    let champion_errands = arms.iter().any(|arm| arm == "champion-errands");
+    let mut errand_labels = arms.iter().find_map(|arm| arm.strip_prefix("champion-errand-out=")).map(|path| BufWriter::new(File::create(path).expect("the errand label file")));
     let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _, _)| owner % stride == offset);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -192,7 +206,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         if let Some(file) = values.as_mut().filter(|_| build) { write_state(file, &season.u, a) }
         let pick = match &policy {
             _ if build && is_champion(owner) => champion.map(|(_, _, hours, rollouts, width)| {
-                let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref());
+                let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref(), solo);
                 if let Some(file) = labels.as_mut() { write_label(file, &found) }
                 match (&policy, label_only) {
                     (Some(p), true) => season.u.choose(p, a, heat[owner], draw.as_mut().map(|d| &mut d[owner])),
@@ -203,7 +217,20 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
         };
-        if errand_policy.is_some() && plays && a == owner && owner < fleet_model {
+        if champion_errands && plays && a == owner && is_champion(owner) {
+            let (_, _, hours, rollouts, _) = champion.expect("champion-errands needs champion=");
+            let found = season.u.lookahead_errand(a, pick, hours, rollouts, solo);
+            if let Some(file) = errand_labels.as_mut() { write_errand_label(file, &found) }
+            let row = match (label_only, errand_model.as_ref()) {
+                (true, Some(p)) => match draw.as_mut().map(|d| &mut d[owner]) {
+                    Some(rng) => p.sample(&found.state, &found.cands, &found.legal, 1.0, rng).0,
+                    None => p.best(&found.state, &found.cands, &found.legal),
+                },
+                (true, None) => season.u.errand_teacher(a, &found.offered),
+                (false, _) => found.row,
+            };
+            season.u.run_errand(a, &found.offered, row);
+        } else if errand_policy.is_some() && plays && a == owner && owner < fleet_model {
             let (offered, state, cands, legal) = season.u.observe_errands(a);
             let model = errand_nudged.as_ref().map(|all| &all[owner]).or(errand_model.as_ref());
             let row = match (model, draw.as_mut().map(|d| &mut d[owner])) {
@@ -217,6 +244,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     }
     season.flush(f64::INFINITY);
     if let Some(file) = labels.as_mut() { file.flush().expect("flush the labels") }
+    if let Some(file) = errand_labels.as_mut() { file.flush().expect("flush the errand labels") }
     if let Some(file) = values.as_mut() { file.flush().expect("flush the value states") }
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
     if arms.iter().any(|arm| arm == "levels") {

@@ -83,6 +83,12 @@ pub struct Raid {
 }
 
 impl Ledger {
+    /// How far into the world's event log this ledger has read.
+    pub fn read(&self) -> usize { self.read }
+
+    /// The cursor moved back by `by` events, for a copy of the world whose log starts `by` events later.
+    pub fn rebase(&mut self, by: usize) { self.read = self.read.saturating_sub(by) }
+
     /// Reads the events the world wrote since the last call: a fight settles a raid (its loot, whether anything that can
     /// fly stood on the target, what the raider lost), a recycler's arrival books the harvest.
     fn scan(&mut self, w: &World, cat: &Catalogue) {

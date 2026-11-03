@@ -20,17 +20,17 @@ import torch
 from .model import CandidateScorer
 
 
-def records(paths: list[str], s_dim: int, c_dim: int) -> tuple[np.ndarray, int]:
+def records(paths: list[str], s_dim: int, c_dim: int, k_given: int | None = None) -> tuple[np.ndarray, int]:
     """Every whole record (a file a season is still writing ends mid-record), and K: the row count for which every
     legal flag is 0 or 1 and each record's last (the wait row) is 1."""
     files = [np.fromfile(p, dtype="<f4") for p in paths]
-    for k in range(2, 400):
+    for k in [k_given] if k_given else range(2, 400):
         width = s_dim + k * (c_dim + 2)
         rows = np.concatenate([f[: len(f) // width * width] for f in files]).reshape(-1, width)
         if not len(rows):
             continue
         legal = rows[:, s_dim + k * c_dim: s_dim + k * c_dim + k]
-        if np.isin(legal, (0.0, 1.0)).all() and (legal[:, -1] == 1).all():
+        if np.isin(legal, (0.0, 1.0)).all() and (k_given or (legal[:, -1] == 1).all()):
             return rows, k
     raise ValueError("no row count fits the label files")
 
@@ -45,13 +45,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--batch", type=int, default=1024)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--k", type=int, help="rows per decision when not the build menu (the errand menu: 32, wait first)")
     ap.add_argument("--width", type=int, help="a wider network than --init's, trained from its normalisation")
     args = ap.parse_args(argv)
     started = time.time()
 
     saved = torch.load(args.init, map_location="cpu", weights_only=False)
     s_dim, c_dim = saved["state_dim"], saved["cand_dim"]
-    rows, k = records(args.labels, s_dim, c_dim)
+    rows, k = records(args.labels, s_dim, c_dim, args.k)
     state = rows[:, :s_dim]
     cands = rows[:, s_dim: s_dim + k * c_dim].reshape(-1, k, c_dim)
     legal = rows[:, s_dim + k * c_dim: s_dim + k * c_dim + k] > 0

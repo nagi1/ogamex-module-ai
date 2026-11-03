@@ -191,6 +191,16 @@ pub struct Lookahead {
     pub worths: Vec<f32>,
 }
 
+/// A look-ahead errand: the offer, what the errand model reads, each row's worth (NaN where none) and the row chosen.
+pub struct ErrandLookahead {
+    pub offered: Vec<Errand>,
+    pub state: Vec<f32>,
+    pub cands: Vec<f32>,
+    pub legal: Vec<u8>,
+    pub worths: Vec<f32>,
+    pub row: usize,
+}
+
 #[derive(Clone)]
 pub struct Universe {
     pub cat: Arc<Catalogue>,
@@ -528,7 +538,9 @@ impl Universe {
     /// With a `prior`, only its `width` best rows are tried beside the persona's pick and waiting (AlphaZero's policy
     /// prior narrows its search the same way). With a `critic`, a rollout's end is scored by its value head (the season's
     /// end as it expects it) instead of the worth at the horizon, which favours what pays back within `hours`.
-    pub fn lookahead(&mut self, a: usize, hours: f64, rollouts: u64, prior: Option<(&Policy, usize)>, critic: Option<&Policy>) -> Lookahead {
+    /// With `solo` the other accounts only run their economies in a rollout (fleets already flying still land): a world held
+    /// still while the account weighs its move, 8-27x cheaper than playing every persona (3 Nov).
+    pub fn lookahead(&mut self, a: usize, hours: f64, rollouts: u64, prior: Option<(&Policy, usize)>, critic: Option<&Policy>, solo: bool) -> Lookahead {
         let k = self.cat.objects.len() + 1;
         let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
         let persona = self.teacher(a);
@@ -540,14 +552,47 @@ impl Universe {
         }
         let mut worths = vec![f32::NAN; k];
         if rows.len() == 1 { return Lookahead { pick: None, state, cands, legal, worths } }
+        let found = self.rollout_worths(a, &rows, &|u: &mut Universe, row| u.play(a, Some((row < k - 1).then_some(row))), hours, rollouts, critic, solo);
+        rows.iter().zip(&found).for_each(|(&row, &w)| worths[row] = w as f32);
+        let first = rows.iter().position(|&row| Some(row) == persona.or(Some(k - 1))).unwrap_or(0);
+        let best = (0..rows.len()).fold(first, |best, i| if found[i] > found[best] { i } else { best });
+        Lookahead { pick: Some(rows[best]).filter(|&row| row < k - 1), state, cands, legal, worths }
+    }
+
+    /// The champion's errand at slot a's login (the fleet half of its play): every errand offered is run in copies of the
+    /// world, followed by the login's `build` as the season plays it, and scored as `lookahead` scores a build; the scripted
+    /// mix's own errand wins every tie. Hands back the offer, what the errand model reads and every row's worth.
+    pub fn lookahead_errand(&mut self, a: usize, build: Option<Option<usize>>, hours: f64, rollouts: u64, solo: bool) -> ErrandLookahead {
+        let (offered, state, cands, legal) = self.observe_errands(a);
+        let teacher = self.errand_teacher(a, &offered);
+        let rows: Vec<usize> = (0..offered.len()).collect();
+        let mut worths = vec![f32::NAN; legal.len()];
+        if rows.len() == 1 { return ErrandLookahead { offered, state, cands, legal, worths, row: 0 } }
+        let found = self.rollout_worths(a, &rows, &|u: &mut Universe, row| { u.run_errand(a, &offered, row); u.play(a, build) }, hours, rollouts, None, solo);
+        rows.iter().zip(&found).for_each(|(&row, &w)| worths[row] = w as f32);
+        let row = (0..rows.len()).fold(teacher, |best, i| if found[i] > found[best] { i } else { best });
+        ErrandLookahead { offered, state, cands, legal, worths, row }
+    }
+
+    /// The worth of slot a's account after each of `rows` is played by `first` in copies of the world and every account
+    /// then plays on for `hours` (with `solo`, the others only run their economies), mean of `rollouts` fresh-dice copies,
+    /// one thread per row. Scored by the critic's value head at the end when given, else points at price plus stock.
+    fn rollout_worths(&mut self, a: usize, rows: &[usize], first: &(dyn Fn(&mut Universe, usize) + Sync), hours: f64, rollouts: u64, critic: Option<&Policy>, solo: bool) -> Vec<f64> {
+        let k = self.cat.objects.len() + 1;
         let (owner, end) = (self.world.account_of(a), self.world.games[a].t + hours * 3600.0);
+        // The copies carry only the events some ledger has not read yet, and none of the logs play never reads.
+        let unread = self.ledgers.iter().map(Ledger::read).min().unwrap_or(0);
+        let logs = self.world.take_logs(unread);
+        let base = &*self;
         let worth = |row: usize| -> f64 {
             (0..rollouts).map(|r| {
-                let mut u = self.clone();
+                let mut u = base.clone();
+                u.ledgers.iter_mut().for_each(|ledger| ledger.rebase(unread));
                 u.world.reseed(r + 1);
-                u.play(a, Some((row < k - 1).then_some(row)));
+                first(&mut u, row);
                 while let Some(b) = u.next_decision() {
                     if u.world.games[b].t >= end { break }
+                    if solo && u.world.account_of(b) != owner { u.world.wait(&u.cat, b); continue }
                     u.plays(b);
                     u.play(b, None);
                 }
@@ -561,14 +606,12 @@ impl Universe {
                 }
             }).sum::<f64>() / rollouts as f64
         };
-        let found: Vec<f64> = std::thread::scope(|scope| {
+        let found = std::thread::scope(|scope| {
             let jobs: Vec<_> = rows.iter().map(|&row| scope.spawn(move || worth(row))).collect();
             jobs.into_iter().map(|job| job.join().expect("a rollout")).collect()
         });
-        rows.iter().zip(&found).for_each(|(&row, &w)| worths[row] = w as f32);
-        let first = rows.iter().position(|&row| Some(row) == persona.or(Some(k - 1))).unwrap_or(0);
-        let best = (0..rows.len()).fold(first, |best, i| if found[i] > found[best] { i } else { best });
-        Lookahead { pick: Some(rows[best]).filter(|&row| row < k - 1), state, cands, legal, worths }
+        self.world.put_logs(logs);
+        found
     }
 
     /// The persona's own build at slot a, asked as the model is asked: the learner's teacher.
@@ -682,5 +725,31 @@ mod tests {
         let totals = |u: &Universe| (0..16).map(|a| (score::of(&u.world, a).total, u.world.stock(a) as i64)).collect::<Vec<_>>();
         assert_eq!(totals(&plain), totals(&copied));
         assert!(totals(&copy) != totals(&plain), "fresh dice change the copy's future");
+    }
+
+    /// A look-ahead moves the world's logs out while it copies: the world it leaves must play on exactly as one never asked.
+    #[test]
+    fn a_lookahead_leaves_the_world_as_it_found_it() {
+        let econ = format!("{DATA}/units-parity/econ-u1-colonies.json");
+        let arms: Vec<String> = "moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler moonfeed standing labfirst moontaste netchain merchant techtree doctrine acsdefend acsattack wrecks moonraid relocate keyed class=3 expofull"
+            .split(' ').map(String::from).collect();
+        let cat = Arc::new(Universe::catalogue(DATA, &econ, &arms).expect("the catalogue"));
+        let colonisation = Colonisation::load(&econ).ok().map(Arc::new);
+        let fresh = || Universe::new(Arc::clone(&cat), colonisation.clone(), DATA, 8, 16, 5, &arms);
+        let (mut plain, mut asked) = (fresh(), fresh());
+        run(&mut plain, 8.0);
+        let mut looked = 0;
+        while let Some(b) = asked.next_decision() {
+            if asked.world.games[b].t >= 8.0 * 86_400.0 { break }
+            asked.plays(b);
+            if asked.world.account_of(b) == 0 && asked.world.decision_kind(b) == crate::world::Decision::Build && looked < 40 {
+                asked.lookahead(b, 2.0, 1, None, None, looked % 2 == 0);
+                looked += 1;
+            }
+            asked.play(b, None);
+        }
+        assert!(looked > 0);
+        let totals = |u: &Universe| (0..16).map(|a| (score::of(&u.world, a).total, u.world.stock(a) as i64, u.world.events.len())).collect::<Vec<_>>();
+        assert_eq!(totals(&plain), totals(&asked));
     }
 }
