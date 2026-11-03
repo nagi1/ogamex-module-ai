@@ -4,6 +4,9 @@ The season's `champion-out=FILE` writes every look-ahead decision as raw little-
 [K, C], legal [K], worths [K] (NaN where illegal). The target at a decision is a softmax over the legal rows of each
 row's worth relative to the best row's, so a row 1% (`--tau`) poorer than the best gets e^-1 of its weight: the
 student learns the champion's ranking, not only its argmax (AlphaZero trains on visit counts for the same reason).
+Each decision is weighted by its stakes, the worth a uniform legal pick gives up against the best (advantage-weighted
+imitation): three in four decisions have their two best rows within 1%, inside two rollouts' noise, and trained equally
+they drowned the few that decide a season, such as the deuterium synthesizer before the robot factory (3 Nov).
 
     python -m ogrl.train_exit --init best.pt --out exit.pt --labels a.f32 b.f32 [--epochs 20] [--device cuda]
 """
@@ -65,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     logits = np.where(legal, relative / args.tau, -np.inf)
     target = np.exp(logits - logits.max(axis=1, keepdims=True))
     target /= target.sum(axis=1, keepdims=True)
+    stakes = -np.where(legal, relative, 0.0).sum(1) / legal.sum(1)
+    weight = stakes / stakes.mean()
 
     device = torch.device(args.device)
     width = args.width or saved["width"]
@@ -74,23 +79,25 @@ def main(argv: list[str] | None = None) -> int:
     else:
         model.set_normalisation(*(saved["model"][name] for name in ("state_mean", "state_std", "cand_mean", "cand_std")))
     t = lambda x, dtype=torch.float32: torch.as_tensor(np.ascontiguousarray(x), dtype=dtype, device=device)
-    data = [t(state), t(cands), t(legal, torch.bool), t(target), t(target.argmax(1), torch.long), t(np.where(legal, relative, 0.0))]
+    data = [t(state), t(cands), t(legal, torch.bool), t(target), t(target.argmax(1), torch.long), t(np.where(legal, relative, 0.0)), t(weight)]
     n = len(state)
     order = np.random.default_rng(0).permutation(n)
     held, train = order[: max(1, n // 10)], order[max(1, n // 10):]
     va = [d[held] for d in data]
 
-    def judge() -> tuple[float, float, float]:
-        """Held-out loss, agreement with the champion's pick, and regret: the worth the student's pick gives up
-        against the champion's, as a share (half the decisions have two rows within 0.01%, so agreement undersells)."""
+    weighty = va[6] > 1.0
+
+    def judge() -> tuple[float, float, float, float]:
+        """Held-out weighted loss, agreement with the champion's pick, regret (the worth the student's pick gives up
+        against the champion's, as a share) and regret on the decisions of above-average stakes."""
         with torch.inference_mode():
             out, _ = model(*va[:3])
-            loss = -(va[3] * torch.log_softmax(out, 1).clamp_min(-1e4)).sum(1).mean().item()
-            regret = -va[5].gather(1, out.argmax(1, keepdim=True)).mean().item()
-            return loss, (out.argmax(1) == va[4]).float().mean().item(), regret
+            loss = -(va[6] * (va[3] * torch.log_softmax(out, 1).clamp_min(-1e4)).sum(1)).mean().item()
+            given_up = -va[5].gather(1, out.argmax(1, keepdim=True)).squeeze(1)
+            return loss, (out.argmax(1) == va[4]).float().mean().item(), given_up.mean().item(), given_up[weighty].mean().item()
 
-    loss0, top0, regret0 = judge()
-    print(f"rows {n:,} (held out {len(held):,}), candidates {k}; start: held-out loss {loss0:.4f}, agrees with the champion {top0:.1%}, regret {regret0:.3%}", flush=True)
+    loss0, top0, regret0, high0 = judge()
+    print(f"rows {n:,} (held out {len(held):,}), candidates {k}; start: held-out loss {loss0:.4f}, agrees with the champion {top0:.1%}, regret {regret0:.3%}, high-stakes regret {high0:.3%}", flush=True)
     opt = torch.optim.Adam([p for name, p in model.named_parameters() if not name.startswith("value")], lr=args.lr)
     for epoch in range(args.epochs):
         model.train()
@@ -98,14 +105,14 @@ def main(argv: list[str] | None = None) -> int:
         for at in range(0, len(train), args.batch):
             idx = torch.as_tensor(train[at: at + args.batch], device=device)
             out, _ = model(data[0][idx], data[1][idx], data[2][idx])
-            loss = -(data[3][idx] * torch.log_softmax(out, 1).clamp_min(-1e4)).sum(1).mean()
+            loss = -(data[6][idx] * (data[3][idx] * torch.log_softmax(out, 1).clamp_min(-1e4)).sum(1)).mean()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             opt.step()
             total += loss.item() * len(idx)
-        held_loss, top1, regret = judge()
-        print(f"epoch {epoch + 1}: train loss {total / len(train):.4f}, held-out loss {held_loss:.4f}, agrees with the champion {top1:.1%}, regret {regret:.3%}", flush=True)
+        held_loss, top1, regret, high = judge()
+        print(f"epoch {epoch + 1}: train loss {total / len(train):.4f}, held-out loss {held_loss:.4f}, agrees with the champion {top1:.1%}, regret {regret:.3%}, high-stakes regret {high:.3%}", flush=True)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
