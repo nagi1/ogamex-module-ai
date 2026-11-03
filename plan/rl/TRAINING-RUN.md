@@ -528,3 +528,4 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   judge's seeds. Paired by account: mean ln ratio +0.044 (seed-bootstrap 95% CI +0.029 to +0.059), every one of the 10 seeds up,
   71% of 320 accounts up. Composition unchanged (economy 62%, research 11%, military 29%): the gain is play, not a shifted share.
   ES carries on; checkpoints are judged every 5 generations.
+- es2 checkpoint 15: 276.9M; paired +5.4% over bc0 (CI +4.2..+6.6%, 10/10 seeds, 74% of accounts), +1.0% over checkpoint 10 (CI +0.2..+1.9%). Still climbing, more slowly.
