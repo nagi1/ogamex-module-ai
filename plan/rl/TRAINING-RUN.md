@@ -535,3 +535,11 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   the learner (rl-diagnostics §3): the model decides builds, research and yard orders, while every fleet errand (expedition,
   raid, save) is still the script's, and expeditions were the largest lever measured (-95% off). Next: the errand door judged
   with the scripted mix and with `bc-errand` (first 21 accounts) on the fixed world, before ES moves to the errand model.
+- The errand door is faithful once accounts keep their persona and only raiders are offered raids and recalls are fleet saves:
+  scripted errands through the door vs the scripted path, -0.25% (CI -1.3..+0.7%).
+- es3 checkpoint 10: 278.4M, +0.9% over es2 checkpoint 15 (CI +0.1..+1.7%, 7/10 seeds). Stopped there to free the machine;
+  kept as `best-es3-s10.pt`, the fixed build model from now on.
+- **Errand ES launched (3 Nov 09:45, `eserr`).** `es_world --errand` holds the es3-s10 builds fixed (sampled) and evolves
+  `bc-errand` as the fleet errand model of the first 21 accounts, which alone vote (60 seeds, sigma 0.08). Judged by
+  `eserrjudge.sh` against two baselines under the same builds: scripted errands (`door-teacher-es3`) and the untrained clone
+  (`eserr-s0`).
