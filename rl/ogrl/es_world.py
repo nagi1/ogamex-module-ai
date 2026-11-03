@@ -64,7 +64,7 @@ def generation(args, gen_dir: Path, seeds: list[int]) -> dict[tuple[int, int], d
             outs[(seed, sign)] = out
             jobs.append(f"{seed} {out} es={gen_dir / f'noise-{seed}.f32'}:{sign}:{args.sigma}")
     (gen_dir / "jobs.txt").write_text("\n".join(jobs) + "\n")
-    arms = ARMS + [f"policy={gen_dir / 'policy.json'}", f"jobs={gen_dir / 'jobs.txt'}", f"threads={args.procs}"]
+    arms = ARMS + (["sampled"] if args.sampled else []) + [f"policy={gen_dir / 'policy.json'}", f"jobs={gen_dir / 'jobs.txt'}", f"threads={args.procs}"]
     subprocess.run([args.bin, str(DATA), str(args.days), str(args.accounts), "0", str(DATA / "units-parity/econ-u1-colonies.json"), str(gen_dir / "unused.jsonl"), *arms],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"OMP_NUM_THREADS": "1"})
     done = {key: finals(out) for key, out in outs.items()}
@@ -85,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--gens", type=int, default=1000)
     ap.add_argument("--days", type=int, default=365)
     ap.add_argument("--accounts", type=int, default=64)
+    ap.add_argument("--sampled", action="store_true", help="play the policy sampled, as the judge does; the + and - season share each account's draws")
     args = ap.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
