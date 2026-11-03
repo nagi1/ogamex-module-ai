@@ -70,9 +70,12 @@ def generation(args, gen_dir: Path, seeds: list[int]) -> dict[tuple[int, int], d
         for sign in (1, -1):
             out = gen_dir / f"s{seed}{'+' if sign > 0 else '-'}.jsonl"
             outs[(seed, sign)] = out
-            jobs.append(f"{seed} {out} es={gen_dir / f'noise-{seed}.f32'}:{sign}:{args.sigma}")
+            jobs.append(f"{seed} {out} {'es-errand' if args.errand else 'es'}={gen_dir / f'noise-{seed}.f32'}:{sign}:{args.sigma}")
     (gen_dir / "jobs.txt").write_text("\n".join(jobs) + "\n")
-    arms = ARMS + (["sampled"] if args.sampled else []) + [f"policy={gen_dir / 'policy.json'}", f"jobs={gen_dir / 'jobs.txt'}", f"threads={args.procs}"]
+    # `--errand`: the trained weights are the fleet errand model of the first `--fleet` accounts; the builds stay `--errand`'s.
+    plays = ([f"policy={args.errand}", f"errand-policy={gen_dir / 'policy.json'}", f"fleet-model={args.fleet}"] if args.errand
+             else [f"policy={gen_dir / 'policy.json'}"])
+    arms = ARMS + (["sampled"] if args.sampled else []) + plays + [ f"jobs={gen_dir / 'jobs.txt'}", f"threads={args.procs}"]
     subprocess.run([args.bin, str(DATA), str(args.days), str(args.accounts), "0", str(DATA / "units-parity/econ-u1-colonies.json"), str(gen_dir / "unused.jsonl"), *arms],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"OMP_NUM_THREADS": "1"})
     done = {key: finals(out, args.accounts) for key, out in outs.items()}
@@ -93,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--gens", type=int, default=1000)
     ap.add_argument("--days", type=int, default=365)
     ap.add_argument("--accounts", type=int, default=64)
+    ap.add_argument("--errand", help="a build policy (json) to hold fixed while ES trains --init as the fleet errand model")
+    ap.add_argument("--fleet", type=int, default=21, help="with --errand: the first N accounts fly the errand model and vote")
     ap.add_argument("--sampled", action="store_true", help="play the policy sampled, as the judge does; the + and - season share each account's draws")
     args = ap.parse_args(argv)
     out = Path(args.out)
@@ -124,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         for seed in seeds:
             up, down = done[(seed, 1)], done[(seed, -1)]
             for a, (score, playing) in up.items():
-                if not playing or a not in down:
+                if not playing or a not in down or (args.errand and a >= args.fleet):
                     continue
                 votes.append(score - down[a][0])
                 rows.append(noise[seed][a])

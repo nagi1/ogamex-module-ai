@@ -82,20 +82,23 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     let policy = arms.iter().find_map(|arm| arm.strip_prefix("policy=")).map(|path| Policy::load(path).expect("the policy weights"));
     // `es=NOISE:SIGN:SIGMA` (with `policy=`): account a plays the policy nudged by SIGN x SIGMA x row a of NOISE, raw little-endian
     // f32 [accounts, weights] (`ogrl.es_world`). The antithetic season plays the opposite sign on the same seed.
-    let nudged: Option<Vec<Policy>> = arms.iter().find_map(|arm| arm.strip_prefix("es=")).zip(policy.as_ref()).map(|(spec, base)| {
+    let nudge = |spec: &str, base: &Policy| -> Vec<Policy> {
         let mut parts = spec.split(':');
-        let (file, sign, sigma) = (parts.next().expect("es=NOISE:SIGN:SIGMA"), parts.next().expect("sign").parse::<f32>().expect("sign"), parts.next().expect("sigma").parse::<f32>().expect("sigma"));
+        let (file, sign, sigma) = (parts.next().expect("NOISE:SIGN:SIGMA"), parts.next().expect("sign").parse::<f32>().expect("sign"), parts.next().expect("sigma").parse::<f32>().expect("sigma"));
         let raw = std::fs::read(file).expect("the noise file");
         let noise: Vec<f32> = raw.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
         let n = base.scoring_weights();
         assert_eq!(noise.len(), accounts * n, "noise is [accounts, {n}]");
         (0..accounts).map(|a| base.nudged(&noise[a * n..(a + 1) * n], sign * sigma)).collect()
-    });
+    };
+    let nudged: Option<Vec<Policy>> = arms.iter().find_map(|arm| arm.strip_prefix("es=")).zip(policy.as_ref()).map(|(spec, base)| nudge(spec, base));
     // `errand-policy=<weights>` flies the fleets of the first `fleet-model=N` accounts by a trained errand model;
     // `errand-policy=teacher` asks the scripted mix through the same door, so the door is measured apart from the model.
     let errand_policy = arms.iter().find_map(|arm| arm.strip_prefix("errand-policy="));
     let errand_model = errand_policy.filter(|&path| path != "teacher").map(|path| Policy::load(path).expect("the errand weights"));
     let fleet_model = arms.iter().find_map(|arm| arm.strip_prefix("fleet-model=")).map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
+    // `es-errand=NOISE:SIGN:SIGMA` (with `errand-policy=`): as `es=`, for the errand model each fleet account flies.
+    let errand_nudged: Option<Vec<Policy>> = arms.iter().find_map(|arm| arm.strip_prefix("es-errand=")).zip(errand_model.as_ref()).map(|(spec, base)| nudge(spec, base));
     // `skill=LO:HI` gives each account its own sampling heat, log-uniform in [LO, HI]: real players range from sharp to loose.
     let heat: Vec<f32> = match arms.iter().find_map(|arm| arm.strip_prefix("skill=")).and_then(|r| r.split_once(':')) {
         Some((lo, hi)) => {
@@ -154,7 +157,8 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         };
         if errand_policy.is_some() && plays && a == owner && owner < fleet_model {
             let (offered, state, cands, legal) = season.u.observe_errands(a);
-            let row = match (&errand_model, draw.as_mut().map(|d| &mut d[owner])) {
+            let model = errand_nudged.as_ref().map(|all| &all[owner]).or(errand_model.as_ref());
+            let row = match (model, draw.as_mut().map(|d| &mut d[owner])) {
                 (Some(p), Some(rng)) => p.sample(&state, &cands, &legal, 1.0, rng).0,
                 (Some(p), None) => p.best(&state, &cands, &legal),
                 (None, _) => season.u.errand_teacher(a, &offered),
