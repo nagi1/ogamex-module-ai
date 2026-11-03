@@ -21,13 +21,14 @@ from .model import CandidateScorer
 
 
 def records(paths: list[str], s_dim: int, c_dim: int) -> tuple[np.ndarray, int]:
-    """Every record, and K: the only row count for which each record's last legal flag (the wait row) is 1."""
-    raw = np.concatenate([np.fromfile(p, dtype="<f4") for p in paths])
+    """Every whole record (a file a season is still writing ends mid-record), and K: the row count for which every
+    legal flag is 0 or 1 and each record's last (the wait row) is 1."""
+    files = [np.fromfile(p, dtype="<f4") for p in paths]
     for k in range(2, 400):
         width = s_dim + k * (c_dim + 2)
-        if len(raw) % width:
+        rows = np.concatenate([f[: len(f) // width * width] for f in files]).reshape(-1, width)
+        if not len(rows):
             continue
-        rows = raw.reshape(-1, width)
         legal = rows[:, s_dim + k * c_dim: s_dim + k * c_dim + k]
         if np.isin(legal, (0.0, 1.0)).all() and (legal[:, -1] == 1).all():
             return rows, k
@@ -44,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--batch", type=int, default=1024)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--width", type=int, help="a wider network than --init's, trained from its normalisation")
     args = ap.parse_args(argv)
     started = time.time()
 
@@ -54,6 +56,9 @@ def main(argv: list[str] | None = None) -> int:
     cands = rows[:, s_dim: s_dim + k * c_dim].reshape(-1, k, c_dim)
     legal = rows[:, s_dim + k * c_dim: s_dim + k * c_dim + k] > 0
     worths = rows[:, s_dim + k * (c_dim + 1):].astype(np.float64)
+    # A decision with one legal row is not looked ahead, and a row the prior pruned has no worth: train on the rest.
+    keep = (legal & np.isfinite(worths)).sum(1) >= 2
+    state, cands, legal, worths = state[keep], cands[keep], legal[keep] & np.isfinite(worths[keep]), worths[keep]
     best = np.nanmax(np.where(legal, worths, np.nan), axis=1, keepdims=True)
     relative = (worths - best) / np.maximum(np.abs(best), 1.0)
     logits = np.where(legal, relative / args.tau, -np.inf)
@@ -61,23 +66,30 @@ def main(argv: list[str] | None = None) -> int:
     target /= target.sum(axis=1, keepdims=True)
 
     device = torch.device(args.device)
-    model = CandidateScorer(s_dim, c_dim, saved["width"]).to(device)
-    model.load_state_dict(saved["model"])
+    width = args.width or saved["width"]
+    model = CandidateScorer(s_dim, c_dim, width).to(device)
+    if width == saved["width"]:
+        model.load_state_dict(saved["model"])
+    else:
+        model.set_normalisation(*(saved["model"][name] for name in ("state_mean", "state_std", "cand_mean", "cand_std")))
     t = lambda x, dtype=torch.float32: torch.as_tensor(np.ascontiguousarray(x), dtype=dtype, device=device)
-    data = [t(state), t(cands), t(legal, torch.bool), t(target), t(target.argmax(1), torch.long)]
+    data = [t(state), t(cands), t(legal, torch.bool), t(target), t(target.argmax(1), torch.long), t(np.where(legal, relative, 0.0))]
     n = len(state)
     order = np.random.default_rng(0).permutation(n)
     held, train = order[: max(1, n // 10)], order[max(1, n // 10):]
     va = [d[held] for d in data]
 
-    def judge() -> tuple[float, float]:
+    def judge() -> tuple[float, float, float]:
+        """Held-out loss, agreement with the champion's pick, and regret: the worth the student's pick gives up
+        against the champion's, as a share (half the decisions have two rows within 0.01%, so agreement undersells)."""
         with torch.inference_mode():
             out, _ = model(*va[:3])
             loss = -(va[3] * torch.log_softmax(out, 1).clamp_min(-1e4)).sum(1).mean().item()
-            return loss, (out.argmax(1) == va[4]).float().mean().item()
+            regret = -va[5].gather(1, out.argmax(1, keepdim=True)).mean().item()
+            return loss, (out.argmax(1) == va[4]).float().mean().item(), regret
 
-    loss0, top0 = judge()
-    print(f"rows {n:,} (held out {len(held):,}), candidates {k}; start: held-out loss {loss0:.4f}, agrees with the champion {top0:.1%}", flush=True)
+    loss0, top0, regret0 = judge()
+    print(f"rows {n:,} (held out {len(held):,}), candidates {k}; start: held-out loss {loss0:.4f}, agrees with the champion {top0:.1%}, regret {regret0:.3%}", flush=True)
     opt = torch.optim.Adam([p for name, p in model.named_parameters() if not name.startswith("value")], lr=args.lr)
     for epoch in range(args.epochs):
         model.train()
@@ -91,12 +103,12 @@ def main(argv: list[str] | None = None) -> int:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             opt.step()
             total += loss.item() * len(idx)
-        held_loss, top1 = judge()
-        print(f"epoch {epoch + 1}: train loss {total / len(train):.4f}, held-out loss {held_loss:.4f}, agrees with the champion {top1:.1%}", flush=True)
+        held_loss, top1, regret = judge()
+        print(f"epoch {epoch + 1}: train loss {total / len(train):.4f}, held-out loss {held_loss:.4f}, agrees with the champion {top1:.1%}, regret {regret:.3%}", flush=True)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({**saved, "model": {name: v.detach().cpu() for name, v in model.state_dict().items()}, "iteration": 0}, out)
+    torch.save({**saved, "width": width, "model": {name: v.detach().cpu() for name, v in model.state_dict().items()}, "iteration": 0}, out)
     print(f"wrote {out} ({time.time() - started:.0f}s)")
     return 0
 

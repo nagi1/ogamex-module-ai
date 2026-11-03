@@ -70,4 +70,8 @@ side score; aim at strong PvE intelligence.
 | 3 Nov | World copy, `lookahead`, `champion=` arm, strength ladder | test passes; 10-day champion 7-13x the script on its seats |
 | 3 Nov | Full-season match, champion 8:0:12:2 vs best-es3-s10 (sampled, expofull), seeds 1-3 (`champ-h12r2`) | running, ~3 days of play per 5 min with the machine full |
 | 3 Nov | Label pipeline smoke: 3 days, 8 seats, 799 decisions; the best model agrees with the champion on 30.4% | works; GPU training 6 s |
-| 3 Nov | ExIt labels iteration 1: 30 days, champion 4:1:12:2, seeds 101-106 (`exit-it1`) | running |
+| 3 Nov | ExIt labels iteration 1: 30 days, champion 4:1:12:2, seeds 101-106 (`exit-it1`) | stopped at ~18k decisions: labels are myopic (below) |
+| 3 Nov | Label read: half the decisions have the two best rows within 0.01%, so agreement is the wrong measure; regret (worth given up against the champion's pick) is used. The best model picks robot factory / astrophysics / shipyard / lab most; the champion picks metal mine / energy tech / crystal mine / stores | regret 1.57%, median 0, top 5% of decisions carry 53% |
+| 3 Nov | Student w256 cloned from the 12 h labels, 30-day judge vs best-es3 on seeds 1-10 (`paired_days.py`) | **day 3 x3.9 (10/10 seeds), day 10 x0.96, day 30 x0.22 (0/10)**: it learned "mines now" and never builds the facilities that pay later. Not kept |
+| 3 Nov | Side score so far (champion seats vs the same seats under best-es3, seeds 1-3) | day 10 x4.1, day 20 x6.4, day 30 x3.4: the champion's lead also shrinks after day 20 |
+| 3 Nov | Root cause: a 12 h rollout scored by worth at the horizon favours what pays back inside 12 h. Fix (AlphaZero's value network): `champion-value=` scores a rollout's end by a critic's estimate of the season's end; `value-out=` records states, `ogrl.train_value` trains the critic on the GPU | data running (`value-es3`, 12 seasons) |

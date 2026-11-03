@@ -146,6 +146,21 @@ impl Policy {
         (s, rows)
     }
 
+    /// The value head's estimate at a state: what `ogrl.train_value` taught it, the log of the points the account ends
+    /// the season with.
+    pub fn value(&self, state: &[f32]) -> f32 {
+        let mut s: Vec<f32> = state.iter().zip(&self.norm[0]).zip(&self.norm[1]).map(|((v, m), d)| (v - m) / d).collect();
+        for layer in &self.state_net { s = layer.apply(&s) }
+        self.value[1].output(&self.value[0].apply(&s))
+    }
+
+    /// The legal rows, best score first.
+    pub fn ranked(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> Vec<usize> {
+        let mut rows = self.scores(state, cands, legal).1;
+        rows.sort_by(|x, y| y.1.total_cmp(&x.1));
+        rows.into_iter().map(|r| r.0).collect()
+    }
+
     /// The legal row with the highest score.
     pub fn best(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> usize {
         self.scores(state, cands, legal).1.into_iter().max_by(|x, y| x.1.total_cmp(&y.1)).map_or(legal.len() - 1, |best| best.0)
@@ -510,12 +525,19 @@ impl Universe {
     /// whose account ends worth the most (points at price plus its stock) wins. The persona's own pick wins every tie.
     /// Also hands back what the learner reads at this decision and every row's worth (NaN where illegal), the labels
     /// a student is cloned from (expert iteration).
-    pub fn lookahead(&mut self, a: usize, hours: f64, rollouts: u64) -> Lookahead {
+    /// With a `prior`, only its `width` best rows are tried beside the persona's pick and waiting (AlphaZero's policy
+    /// prior narrows its search the same way). With a `critic`, a rollout's end is scored by its value head (the season's
+    /// end as it expects it) instead of the worth at the horizon, which favours what pays back within `hours`.
+    pub fn lookahead(&mut self, a: usize, hours: f64, rollouts: u64, prior: Option<(&Policy, usize)>, critic: Option<&Policy>) -> Lookahead {
         let k = self.cat.objects.len() + 1;
         let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
         let persona = self.teacher(a);
         self.observe(a, persona, &mut state, &mut cands, &mut legal);
-        let rows: Vec<usize> = (0..k).filter(|&row| legal[row] > 0).collect();
+        let mut rows: Vec<usize> = (0..k).filter(|&row| legal[row] > 0).collect();
+        if let Some((policy, width)) = prior {
+            let top: Vec<usize> = policy.ranked(&state, &cands, &legal).into_iter().take(width).collect();
+            rows.retain(|&row| top.contains(&row) || Some(row) == persona || row == k - 1);
+        }
         let mut worths = vec![f32::NAN; k];
         if rows.len() == 1 { return Lookahead { pick: None, state, cands, legal, worths } }
         let (owner, end) = (self.world.account_of(a), self.world.games[a].t + hours * 3600.0);
@@ -529,7 +551,14 @@ impl Universe {
                     u.plays(b);
                     u.play(b, None);
                 }
-                score::of(&u.world, owner).total as f64 * 1000.0 + u.world.stock(owner)
+                match critic {
+                    Some(critic) => {
+                        let (mut end_state, mut end_cands, mut end_legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
+                        u.observe(owner, None, &mut end_state, &mut end_cands, &mut end_legal);
+                        critic.value(&end_state) as f64
+                    }
+                    None => score::of(&u.world, owner).total as f64 * 1000.0 + u.world.stock(owner),
+                }
             }).sum::<f64>() / rollouts as f64
         };
         let found: Vec<f64> = std::thread::scope(|scope| {

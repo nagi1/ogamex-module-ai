@@ -77,6 +77,17 @@ fn write_label(file: &mut impl Write, found: &ogsim::season::Lookahead) {
     }
 }
 
+/// The account deciding at slot a, the day, and the state the learner reads at its capital, as raw little-endian f32.
+fn write_state(file: &mut impl Write, u: &Universe, a: usize) {
+    let owner = u.world.account_of(a);
+    let k = u.cat.objects.len() + 1;
+    let (mut state, mut cands, mut legal) = (vec![0.0; ogsim::season::LEARNER_STATE], vec![0.0; k * ogsim::season::LEARNER_CAND], vec![0; k]);
+    u.observe(owner, None, &mut state, &mut cands, &mut legal);
+    for x in [owner as f32, (u.world.games[a].t / DAY) as f32].into_iter().chain(state) {
+        file.write_all(&x.to_le_bytes()).expect("write a value state");
+    }
+}
+
 /// One season, written to `out_path`, its summary printed.
 #[allow(clippy::too_many_arguments)]
 fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisation>>, data: &str, days: usize, accounts: usize, seed: u64, out_path: &str, arms: &[String]) {
@@ -116,16 +127,22 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         }
         None => vec![1.0; accounts],
     };
-    // `champion=STRIDE:OFFSET:HOURS:ROLLOUTS`: the accounts whose index is OFFSET modulo STRIDE build by look-ahead
-    // (`Universe::lookahead`) instead of the policy or their persona: the strong player candidates are matched against.
+    // `champion=STRIDE:OFFSET:HOURS:ROLLOUTS[:WIDTH]`: the accounts whose index is OFFSET modulo STRIDE build by
+    // look-ahead (`Universe::lookahead`) instead of the policy or their persona: the strong player candidates are matched
+    // against. With WIDTH and `policy=`, the look-ahead tries only the policy's WIDTH best rows (and the persona's, and waiting).
     let champion = arms.iter().find_map(|arm| arm.strip_prefix("champion=")).map(|spec| {
-        let p: Vec<f64> = spec.split(':').map(|x| x.parse().expect("champion=STRIDE:OFFSET:HOURS:ROLLOUTS")).collect();
-        (p[0] as usize, p[1] as usize, p[2], p[3] as u64)
+        let p: Vec<f64> = spec.split(':').map(|x| x.parse().expect("champion=STRIDE:OFFSET:HOURS:ROLLOUTS[:WIDTH]")).collect();
+        (p[0] as usize, p[1] as usize, p[2], p[3] as u64, p.get(4).map_or(0, |&w| w as usize))
     });
     // `champion-out=FILE`: every look-ahead decision appended as raw little-endian f32 (state, candidates, legal, worths),
     // the labels `ogrl.train_exit` clones a student from.
     let mut labels = arms.iter().find_map(|arm| arm.strip_prefix("champion-out=")).map(|path| BufWriter::new(File::create(path).expect("the label file")));
-    let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _)| owner % stride == offset);
+    // `champion-value=WEIGHTS`: the look-ahead scores a rollout's end by this model's value head (`ogrl.train_value`).
+    let critic = arms.iter().find_map(|arm| arm.strip_prefix("champion-value=")).map(|path| Policy::load(path).expect("the value weights"));
+    // `value-out=FILE`: at every build decision, the deciding account, the day and the state the learner reads there, as
+    // raw little-endian f32; `ogrl.train_value` joins them with the points each account ends the season with.
+    let mut values = arms.iter().find_map(|arm| arm.strip_prefix("value-out=")).map(|path| BufWriter::new(File::create(path).expect("the value file")));
+    let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _, _)| owner % stride == offset);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -169,9 +186,10 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         let plays = season.u.plays(a);
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
+        if let Some(file) = values.as_mut().filter(|_| build) { write_state(file, &season.u, a) }
         let pick = match &policy {
-            _ if build && is_champion(owner) => champion.map(|(_, _, hours, rollouts)| {
-                let found = season.u.lookahead(a, hours, rollouts);
+            _ if build && is_champion(owner) => champion.map(|(_, _, hours, rollouts, width)| {
+                let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref());
                 if let Some(file) = labels.as_mut() { write_label(file, &found) }
                 found.pick
             }),
@@ -193,6 +211,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     }
     season.flush(f64::INFINITY);
     if let Some(file) = labels.as_mut() { file.flush().expect("flush the labels") }
+    if let Some(file) = values.as_mut() { file.flush().expect("flush the value states") }
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
     if arms.iter().any(|arm| arm == "levels") {
         let planets: Vec<_> = (0..accounts).map(|a| {
