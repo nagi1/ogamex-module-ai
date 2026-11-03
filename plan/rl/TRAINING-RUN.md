@@ -530,3 +530,8 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   ES carries on; checkpoints are judged every 5 generations.
 - es2 checkpoint 15: 276.9M; paired +5.4% over bc0 (CI +4.2..+6.6%, 10/10 seeds, 74% of accounts), +1.0% over checkpoint 10 (CI +0.2..+1.9%). Still climbing, more slowly.
 - es2 converged: checkpoint 20 is +5.5% over bc0 but +0.05% over checkpoint 15 (CI -0.8..+0.9%). Stopped; best model kept as `best-es2-s15.pt`. es3 (sigma 0.04, from checkpoint 15) takes the machine; `pair.py BASE NEW` gives the paired reading for any two arm judges.
+- **Build-model ES plateau at ~+5.5%.** The finer run (es3, sigma 0.04 from es2 checkpoint 15) checkpoint 5: +5.5% over bc0,
+  +0.07% over es2 checkpoint 15 (CI -1.1..+1.0%). Two noise scales converge on the same number, so the limit is upstream of
+  the learner (rl-diagnostics §3): the model decides builds, research and yard orders, while every fleet errand (expedition,
+  raid, save) is still the script's, and expeditions were the largest lever measured (-95% off). Next: the errand door judged
+  with the scripted mix and with `bc-errand` (first 21 accounts) on the fixed world, before ES moves to the errand model.
