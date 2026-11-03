@@ -523,3 +523,4 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
 - ES no longer idles the machine between generations: finals read the tail of each season (0.09 s, was minutes on one core),
   and a generation's seasons all play at once (threads = seasons).
 - No-advice clone on the fixed world, sampled: 60.3M median (military 52%, hoard 37B) against 268.8M: not a base for ES.
+- Sampled ES (es2) checkpoint 5: 268.4M against bc0's 268.8M on the judge seeds: flat; its training medians (271-275M) were the fresh seeds' luck. Judged every 5 generations; flat through 20 means ES finds nothing around this clone, and the next step is a direct headroom search over the teacher's play.
