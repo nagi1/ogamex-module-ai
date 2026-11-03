@@ -522,3 +522,4 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   The no-advice clone is judged on the fixed world to see whether ES can work on a policy that decides by itself.
 - ES no longer idles the machine between generations: finals read the tail of each season (0.09 s, was minutes on one core),
   and a generation's seasons all play at once (threads = seasons).
+- No-advice clone on the fixed world, sampled: 60.3M median (military 52%, hoard 37B) against 268.8M: not a base for ES.
