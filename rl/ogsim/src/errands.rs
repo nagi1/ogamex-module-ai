@@ -109,8 +109,16 @@ fn incoming(w: &World, a: usize) -> Option<f64> {
     w.fleets.iter().filter(|f| f.target == a && f.mission == Mission::Attack && !f.returning && f.arrive > now).map(|f| f.arrive).min_by(f64::total_cmp)
 }
 
+/// Account a's fleet save still flying out: a transport with an empty hold to another account (`save_plan`'s errand). A
+/// player recalls that once the danger has passed; offering any fleet recalled expeditions, colony ships and moon shots
+/// at nearly every login (the door's accounts lost 2.5% and four moons in eleven).
+fn saved_fleet(w: &World, a: usize) -> Option<usize> {
+    w.fleets.iter().position(|f| f.owner == a && !f.returning && f.mission == Mission::Transport && f.cargo == [0.0; 3]
+        && w.account_of(f.target) != w.account_of(a))
+}
+
 fn outbound(w: &World, a: usize) -> bool {
-    w.fleets.iter().any(|f| f.owner == a && !f.returning)
+    saved_fleet(w, a).is_some()
 }
 
 /// Every errand this login may choose, the last one always `wait`.
@@ -198,7 +206,7 @@ pub fn apply(w: &mut World, cat: &Catalogue, a: usize, errand: Errand) -> Result
             w.dispatch(cat, a, away, Mission::Transport, &ships, [0.0; 3], speed)
         }
         Kind::Recall => {
-            let f = w.fleets.iter().position(|f| f.owner == a && !f.returning).ok_or("no fleet out")?;
+            let f = saved_fleet(w, a).ok_or("no fleet save out")?;
             w.recall(a, f)
         }
         Kind::Order => {
