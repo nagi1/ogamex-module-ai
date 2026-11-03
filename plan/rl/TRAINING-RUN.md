@@ -529,3 +529,4 @@ Read from the raw season lines of the Discoverer world (bc0, seeds 1-10), then c
   71% of 320 accounts up. Composition unchanged (economy 62%, research 11%, military 29%): the gain is play, not a shifted share.
   ES carries on; checkpoints are judged every 5 generations.
 - es2 checkpoint 15: 276.9M; paired +5.4% over bc0 (CI +4.2..+6.6%, 10/10 seeds, 74% of accounts), +1.0% over checkpoint 10 (CI +0.2..+1.9%). Still climbing, more slowly.
+- es2 converged: checkpoint 20 is +5.5% over bc0 but +0.05% over checkpoint 15 (CI -0.8..+0.9%). Stopped; best model kept as `best-es2-s15.pt`. es3 (sigma 0.04, from checkpoint 15) takes the machine; `pair.py BASE NEW` gives the paired reading for any two arm judges.
