@@ -39,7 +39,7 @@ pub(crate) fn weighted(r: [f64; 3]) -> f64 {
 }
 
 /// What the players did, for the table and the checks.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Ledger {
     pub raids: Vec<Raid>,
     /// Weighted deuterium paid at dispatch by every fleet.
@@ -69,6 +69,7 @@ pub struct Ledger {
     read: usize,
 }
 
+#[derive(Clone)]
 pub struct Raid {
     pub attacker: usize,
     pub target: usize,
@@ -328,6 +329,7 @@ pub(crate) fn save_plan(w: &World, cat: &Catalogue, a: usize, remaining: f64) ->
 }
 
 /// Today's player rule, and the odd ship bought with stock that would otherwise sit idle or overflow.
+#[derive(Clone)]
 pub struct Miner {
     rng: u64,
     /// Hold wanted, as a share of the stock's weight in cargo ships.
@@ -1424,6 +1426,7 @@ pub(crate) fn field_reserve(w: &World, cat: &Catalogue, a: usize) -> Option<Opti
 
 /// Keeps probes, spies the nearest accounts, raids the ones whose loot pays for the trip and whose guns are small,
 /// and sends recyclers to the debris.
+#[derive(Clone)]
 pub struct Raider {
     pub miner: Miner,
     /// A twin world turns raiding off to show what the same accounts do in peace.
@@ -1589,6 +1592,7 @@ fn fleet_home_first(w: &mut World, cat: &Catalogue, a: usize, target: usize, lan
 
 /// Watches for hostile fleets bound for its capital and sends its ships out of reach; once the attack has landed it
 /// recalls them, so they are home in the time they had flown instead of after the whole round trip.
+#[derive(Clone)]
 pub struct FleetSaver {
     pub miner: Miner,
     /// Attacks (attacker, arrival bits) already answered.
@@ -1700,6 +1704,7 @@ fn gate_ships(w: &World, s: usize, carried: &[u32]) -> Vec<(u32, i64)> {
 }
 
 /// One of the three, for a world that mixes them.
+#[derive(Clone)]
 pub enum Player {    Miner(Miner),
     Raider(Raider),
     Saver(FleetSaver),

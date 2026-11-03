@@ -312,6 +312,7 @@ const UNION_DELAY: f64 = 0.30;
 /// Row 66: planets a player holds in a galaxy before it colonises the next one within its reach (`colony_site`).
 const PLANETS_PER_GALAXY: usize = 3;
 
+#[derive(Clone)]
 pub struct World {
     pub games: Vec<Game>,
     /// Per slot, the capital slot of its account; every slot is its own account until a colony joins one.
@@ -906,6 +907,9 @@ impl World {
     }
 
     pub fn jolt(&mut self) { self.draw(0, 1); }
+
+    /// Fresh dice for a copy of the world: a look-ahead must not read the draws the real world will make.
+    pub fn reseed(&mut self, salt: u64) { self.rng ^= salt.wrapping_mul(0xa076_1d64_78bd_642f) }
 
     /// One draw for slot a's account and `purpose`: the shared stream, or with `keyed` the account's own.
     fn draw(&mut self, a: usize, purpose: u64) -> u64 {

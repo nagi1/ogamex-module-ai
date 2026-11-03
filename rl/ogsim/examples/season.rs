@@ -69,6 +69,14 @@ fn main() {
     }
 }
 
+/// One look-ahead decision as raw little-endian f32: state, candidates, legal flags and worths (NaN where illegal).
+fn write_label(file: &mut impl Write, found: &ogsim::season::Lookahead) {
+    let legal = found.legal.iter().map(|&l| f32::from(l));
+    for x in found.state.iter().copied().chain(found.cands.iter().copied()).chain(legal).chain(found.worths.iter().copied()) {
+        file.write_all(&x.to_le_bytes()).expect("write a label");
+    }
+}
+
 /// One season, written to `out_path`, its summary printed.
 #[allow(clippy::too_many_arguments)]
 fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisation>>, data: &str, days: usize, accounts: usize, seed: u64, out_path: &str, arms: &[String]) {
@@ -108,6 +116,16 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         }
         None => vec![1.0; accounts],
     };
+    // `champion=STRIDE:OFFSET:HOURS:ROLLOUTS`: the accounts whose index is OFFSET modulo STRIDE build by look-ahead
+    // (`Universe::lookahead`) instead of the policy or their persona: the strong player candidates are matched against.
+    let champion = arms.iter().find_map(|arm| arm.strip_prefix("champion=")).map(|spec| {
+        let p: Vec<f64> = spec.split(':').map(|x| x.parse().expect("champion=STRIDE:OFFSET:HOURS:ROLLOUTS")).collect();
+        (p[0] as usize, p[1] as usize, p[2], p[3] as u64)
+    });
+    // `champion-out=FILE`: every look-ahead decision appended as raw little-endian f32 (state, candidates, legal, worths),
+    // the labels `ogrl.train_exit` clones a student from.
+    let mut labels = arms.iter().find_map(|arm| arm.strip_prefix("champion-out=")).map(|path| BufWriter::new(File::create(path).expect("the label file")));
+    let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _)| owner % stride == offset);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -140,6 +158,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         seen_planet: vec![false; accounts],
         over_cap: 0,
         // A build model plays every account; an errand model only the fleets of the first `fleet-model` accounts.
+        champion: (0..accounts).map(is_champion).collect(),
         controlled: if policy.is_some() { accounts } else if errand_model.is_some() { fleet_model } else { 0 },
     };
 
@@ -151,6 +170,11 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         if plays { season.touch(owner, a) }
         let build = plays && season.u.world.decision_kind(a) == Decision::Build;
         let pick = match &policy {
+            _ if build && is_champion(owner) => champion.map(|(_, _, hours, rollouts)| {
+                let found = season.u.lookahead(a, hours, rollouts);
+                if let Some(file) = labels.as_mut() { write_label(file, &found) }
+                found.pick
+            }),
             Some(p) if build => Some(season.u.choose(nudged.as_ref().map_or(p, |all| &all[owner]), a, heat[owner], draw.as_mut().map(|d| &mut d[owner]))),
             None if build && teacher_pick => Some(season.u.teacher(a)),
             _ => None,
@@ -168,6 +192,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         season.u.play(a, pick);
     }
     season.flush(f64::INFINITY);
+    if let Some(file) = labels.as_mut() { file.flush().expect("flush the labels") }
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
     if arms.iter().any(|arm| arm == "levels") {
         let planets: Vec<_> = (0..accounts).map(|a| {
@@ -243,8 +268,9 @@ struct Season<'a, W: Write> {
     excess: Vec<[f64; 3]>,
     seen_planet: Vec<bool>,
     over_cap: usize,
-    /// The accounts a model plays (the first this many).
+    /// The accounts a model plays (the first this many), and the accounts the look-ahead player builds for.
     controlled: usize,
+    champion: Vec<bool>,
 }
 
 impl<W: Write> Season<'_, W> {
@@ -345,7 +371,8 @@ impl<W: Write> Season<'_, W> {
                 "account": a,
                 "persona": PERSONAS[self.u.roles[a]].0,
                 "class": self.u.cat.planets[self.u.world.games[a].planet.config].character_class,
-                "controlled": a < self.controlled,
+                "controlled": a < self.controlled && !self.champion[a],
+                "champion": self.champion[a],
                 "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
                            "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
                            "production_drop_warning": production_drop},

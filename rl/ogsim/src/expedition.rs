@@ -58,6 +58,7 @@ impl<F: FnMut(i64, i64) -> i64> Draws for F {
 }
 
 /// PHP's `Random\Engine\Mt19937` (the standard MT19937 stream) behind `Randomizer`'s range, shuffle and pick.
+#[derive(Clone)]
 pub struct Mt19937 {
     state: [u32; 624],
     index: usize,

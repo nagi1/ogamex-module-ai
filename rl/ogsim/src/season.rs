@@ -167,6 +167,16 @@ impl Policy {
     }
 }
 
+/// A look-ahead decision: the pick (None waits), what the learner reads there and each row's worth.
+pub struct Lookahead {
+    pub pick: Option<usize>,
+    pub state: Vec<f32>,
+    pub cands: Vec<f32>,
+    pub legal: Vec<u8>,
+    pub worths: Vec<f32>,
+}
+
+#[derive(Clone)]
 pub struct Universe {
     pub cat: Arc<Catalogue>,
     pub world: World,
@@ -494,6 +504,44 @@ impl Universe {
         Some(row).filter(|&row| row < k - 1)
     }
 
+    /// The look-ahead player's build at slot a: the rollout algorithm, one step of policy improvement over the persona.
+    /// Each legal build, and waiting, is committed in `rollouts` copies of the world with fresh dice (the same dice for
+    /// every pick, so picks are compared on equal luck); every account then plays its persona for `hours`, and the pick
+    /// whose account ends worth the most (points at price plus its stock) wins. The persona's own pick wins every tie.
+    /// Also hands back what the learner reads at this decision and every row's worth (NaN where illegal), the labels
+    /// a student is cloned from (expert iteration).
+    pub fn lookahead(&mut self, a: usize, hours: f64, rollouts: u64) -> Lookahead {
+        let k = self.cat.objects.len() + 1;
+        let (mut state, mut cands, mut legal) = (vec![0.0; LEARNER_STATE], vec![0.0; k * LEARNER_CAND], vec![0; k]);
+        let persona = self.teacher(a);
+        self.observe(a, persona, &mut state, &mut cands, &mut legal);
+        let rows: Vec<usize> = (0..k).filter(|&row| legal[row] > 0).collect();
+        let mut worths = vec![f32::NAN; k];
+        if rows.len() == 1 { return Lookahead { pick: None, state, cands, legal, worths } }
+        let (owner, end) = (self.world.account_of(a), self.world.games[a].t + hours * 3600.0);
+        let worth = |row: usize| -> f64 {
+            (0..rollouts).map(|r| {
+                let mut u = self.clone();
+                u.world.reseed(r + 1);
+                u.play(a, Some((row < k - 1).then_some(row)));
+                while let Some(b) = u.next_decision() {
+                    if u.world.games[b].t >= end { break }
+                    u.plays(b);
+                    u.play(b, None);
+                }
+                score::of(&u.world, owner).total as f64 * 1000.0 + u.world.stock(owner)
+            }).sum::<f64>() / rollouts as f64
+        };
+        let found: Vec<f64> = std::thread::scope(|scope| {
+            let jobs: Vec<_> = rows.iter().map(|&row| scope.spawn(move || worth(row))).collect();
+            jobs.into_iter().map(|job| job.join().expect("a rollout")).collect()
+        });
+        rows.iter().zip(&found).for_each(|(&row, &w)| worths[row] = w as f32);
+        let first = rows.iter().position(|&row| Some(row) == persona.or(Some(k - 1))).unwrap_or(0);
+        let best = (0..rows.len()).fold(first, |best, i| if found[i] > found[best] { i } else { best });
+        Lookahead { pick: Some(rows[best]).filter(|&row| row < k - 1), state, cands, legal, worths }
+    }
+
     /// The persona's own build at slot a, asked as the model is asked: the learner's teacher.
     pub fn teacher(&mut self, a: usize) -> Option<usize> {
         let owner = self.world.account_of(a);
@@ -567,5 +615,43 @@ fn unit(rng: &mut u64) -> f64 {
 fn shuffle<T>(values: &mut [T], rng: &mut u64) {
     for i in (1..values.len()).rev() {
         values.swap(i, (next_random(rng) % (i as u64 + 1)) as usize);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../../storage/rl/ogsim/r8w");
+
+    /// Plays the universe by its personas until `days` have passed.
+    fn run(u: &mut Universe, days: f64) {
+        while let Some(b) = u.next_decision() {
+            if u.world.games[b].t >= days * 86_400.0 { break }
+            u.plays(b);
+            u.play(b, None);
+        }
+    }
+
+    /// A look-ahead plays copies of the world: whatever a copy does must not reach the world it was copied from.
+    #[test]
+    fn a_copy_of_the_world_leaves_the_original_untouched() {
+        let econ = format!("{DATA}/units-parity/econ-u1-colonies.json");
+        let arms: Vec<String> = "moonstack reach expedition colonies ships cap lab classes feed factory balance satellites doubler moonfeed standing labfirst moontaste netchain merchant techtree doctrine acsdefend acsattack wrecks moonraid relocate keyed class=3 expofull"
+            .split(' ').map(String::from).collect();
+        let cat = Arc::new(Universe::catalogue(DATA, &econ, &arms).expect("the catalogue"));
+        let colonisation = Colonisation::load(&econ).ok().map(Arc::new);
+        let fresh = || Universe::new(Arc::clone(&cat), colonisation.clone(), DATA, 14, 16, 3, &arms);
+        let (mut plain, mut copied) = (fresh(), fresh());
+        run(&mut plain, 6.0);
+        run(&mut copied, 6.0);
+        let mut copy = copied.clone();
+        copy.world.reseed(7);
+        run(&mut copy, 12.0);
+        run(&mut plain, 12.0);
+        run(&mut copied, 12.0);
+        let totals = |u: &Universe| (0..16).map(|a| (score::of(&u.world, a).total, u.world.stock(a) as i64)).collect::<Vec<_>>();
+        assert_eq!(totals(&plain), totals(&copied));
+        assert!(totals(&copy) != totals(&plain), "fresh dice change the copy's future");
     }
 }
