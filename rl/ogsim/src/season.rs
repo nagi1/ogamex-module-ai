@@ -301,8 +301,10 @@ impl Universe {
         // `fleet-model=N`: the first N accounts' fleet errands are a model's, so their persona keeps only the economy and
         // its yard (its archetype's doctrine stays), as the errand world does.
         let fleet_model = arms.iter().find_map(|arm| arm.strip_prefix("fleet-model=")).map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
-        for (a, player) in players.iter_mut().enumerate().take(fleet_model) {
-            *player = Player::Miner(Miner::new(seed.wrapping_mul(100).wrapping_add(a as u64)));
+        // The persona stays (a saver still saves, its yard and doctrine stay); only a raider's own raids stop, as the model
+        // now decides them. Reset to a plain miner, these accounts lost 4% against the same personas played by script.
+        for player in players.iter_mut().take(fleet_model) {
+            if let Player::Raider(raider) = player { raider.hostile = false }
         }
         let stack = on("stack") || on("yardstack") || on("moonstack");
         // Late-game arm: each persona's yard fills its archetype's fleet and defence templates (`rl/scripts/doctrine_json.py`).
@@ -448,8 +450,9 @@ impl Universe {
     /// The errand choice at slot a's login: the errands offered (row 0 waits), and the state, candidate rows and legal
     /// flags the errand model reads, padded to `errands::MAX_CANDIDATES` rows.
     pub fn observe_errands(&mut self, a: usize) -> (Vec<Errand>, Vec<f32>, Vec<f32>, Vec<u8>) {
+        let raids = self.raids(a);
         let (world, cat) = (&mut self.world, &self.cat);
-        let offered = errands::candidates(world, cat, a);
+        let offered = errands::candidates(world, cat, a, raids);
         let state = errands::account_features(world, cat, a).to_vec();
         let mut cands = vec![0.0; errands::MAX_CANDIDATES * errands::CAND_DIM];
         let mut legal = vec![0; errands::MAX_CANDIDATES];
@@ -460,9 +463,15 @@ impl Universe {
         (offered, state, cands, legal)
     }
 
+    /// Whether slot a's account raids: its persona is a raider (the errand menu offers spying and raids only then).
+    fn raids(&self, a: usize) -> bool {
+        matches!(self.players[self.world.account_of(a)], Player::Raider(_))
+    }
+
     /// The row of `offered` the scripted mix would take at slot a: the errand model's teacher.
     pub fn errand_teacher(&mut self, a: usize, offered: &[Errand]) -> usize {
-        let pick = errands::teacher_choice(&mut self.world, &self.cat, a);
+        let raids = self.raids(a);
+        let pick = errands::teacher_choice(&mut self.world, &self.cat, a, raids);
         offered.iter().position(|&e| e == pick).unwrap_or(0)
     }
 

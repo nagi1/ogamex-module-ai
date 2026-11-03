@@ -122,7 +122,9 @@ pub const MAX_CANDIDATES: usize = 32;
 pub const TEACHER_ORDER: [Kind; 7] = [Kind::Save, Kind::Recall, Kind::Recycle, Kind::Raid, Kind::Spy, Kind::Order, Kind::Wait];
 
 /// Every errand this login may choose, `wait` first (row 0: the exporters, the metrics and the PHP encoder assume it).
-pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
+/// Spying and raids are offered to an account that raids (`raids`), as the scripted players only raid as raiders: offered
+/// to every account, a miner's logins went to 20 times the raids for no loot and half the moons.
+pub fn candidates(w: &mut World, cat: &Catalogue, a: usize, raids: bool) -> Vec<Errand> {
     let mut out = vec![Errand { kind: Kind::Wait, target: None, unit: None, size: Size::Want }];
     if w.account_of(a) == a {
         if let Some(kit) = Kit::of(w, cat, a) {
@@ -138,8 +140,8 @@ pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
             targets.extend(juicy.iter().take(players::RICH_TARGETS).map(|&(t, _)| t));
             for target in targets {
                 let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < players::REPORT_HOURS * 3600.0);
-                if !fresh && on_shelf(w, a, kit.probe) >= 1 { out.push(Errand::at(Kind::Spy, target)) }
-                if fresh && raid_plan(w, cat, a, target, kit).is_some() { out.push(Errand::at(Kind::Raid, target)) }
+                if raids && !fresh && on_shelf(w, a, kit.probe) >= 1 { out.push(Errand::at(Kind::Spy, target)) }
+                if raids && fresh && raid_plan(w, cat, a, target, kit).is_some() { out.push(Errand::at(Kind::Raid, target)) }
                 if harvest_plan(w, cat, a, target).is_some() { out.push(Errand::at(Kind::Recycle, target)) }
             }
         }
@@ -166,8 +168,8 @@ pub fn candidates(w: &mut World, cat: &Catalogue, a: usize) -> Vec<Errand> {
 
 /// The errand the scripted mix would take here (the behaviour-cloning label): the first candidate in
 /// `TEACHER_ORDER`. `wait` when the login has nothing better to do.
-pub fn teacher_choice(w: &mut World, cat: &Catalogue, a: usize) -> Errand {
-    let offered = candidates(w, cat, a);
+pub fn teacher_choice(w: &mut World, cat: &Catalogue, a: usize, raids: bool) -> Errand {
+    let offered = candidates(w, cat, a, raids);
     TEACHER_ORDER.iter().find_map(|&kind| offered.iter().copied().find(|e| e.kind == kind)).unwrap_or(Errand { kind: Kind::Wait, target: None, unit: None, size: Size::Want })
 }
 
@@ -354,7 +356,7 @@ mod tests {
         }).collect();
         let mut ledger = Ledger::default();
         while let Some(a) = w.next_decision(&cat) {
-            let offered = candidates(&mut w, &cat, a);
+            let offered = candidates(&mut w, &cat, a, true);
             choose(&mut w, &cat, a, &offered);
             match players[a].act(&mut w, &cat, a, &mut ledger) {
                 Some(k) => w.commit(&cat, a, k),

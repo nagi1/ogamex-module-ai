@@ -399,7 +399,7 @@ impl VecWorld {
             self.tickets += 1;
             self.deciding[w] = (a, self.tickets);
             if self.errands {
-                self.offered[w] = errands::candidates(&mut self.worlds[w], &cat, a);
+                self.offered[w] = errands::candidates(&mut self.worlds[w], &cat, a, true);
             }
             return;
         }
@@ -541,7 +541,7 @@ impl VecWorld {
         if self.errands {
             let cat = Arc::clone(&self.catalogue);
             return self.deciding.iter().enumerate().map(|(w, &(a, _))| {
-                let teacher = errands::teacher_choice(&mut self.worlds[w], &cat, a);
+                let teacher = errands::teacher_choice(&mut self.worlds[w], &cat, a, true);
                 self.offered[w].iter().position(|e| *e == teacher).map_or(0, |i| i as i64)
             }).collect();
         }
