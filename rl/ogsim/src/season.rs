@@ -142,6 +142,37 @@ impl Policy {
         out
     }
 
+    /// The scoring weights in `nudged`'s order, as one vector.
+    pub fn params(&self) -> Vec<f32> {
+        self.state_net.iter().chain(std::iter::once(&self.cand_net)).chain(&self.joint).flat_map(|l| l.weight.iter().chain(&l.bias).copied()).collect()
+    }
+
+    /// The policy with these scoring weights (`params`' order); the normalisation and value head stay.
+    pub fn with_params(&self, theta: &[f32]) -> Policy {
+        let zero = vec![0.0; theta.len()];
+        let mut out = self.nudged(&zero, 0.0);
+        let mut at = 0;
+        let layers = out.state_net.iter_mut().chain(std::iter::once(&mut out.cand_net)).chain(out.joint.iter_mut());
+        for layer in layers {
+            for w in layer.weight.iter_mut().chain(layer.bias.iter_mut()) {
+                *w = theta[at];
+                at += 1;
+            }
+        }
+        out
+    }
+
+    /// The weights file `load` reads, from the file this policy came from with its scoring layers replaced.
+    pub fn to_json(&self, template: &serde_json::Value) -> serde_json::Value {
+        let mut out = template.clone();
+        let names = ["state_net.0", "state_net.2", "cand_net.0", "joint.0", "joint.2", "joint.4"];
+        for (name, layer) in names.iter().zip(self.state_net.iter().chain(std::iter::once(&self.cand_net)).chain(&self.joint)) {
+            out[format!("{name}.weight")] = serde_json::json!(layer.weight.chunks(layer.inputs).collect::<Vec<_>>());
+            out[format!("{name}.bias")] = serde_json::json!(layer.bias);
+        }
+        out
+    }
+
     /// How many weights `nudged` reads.
     pub fn scoring_weights(&self) -> usize {
         self.state_net.iter().chain(std::iter::once(&self.cand_net)).chain(&self.joint).map(|l| l.weight.len() + l.bias.len()).sum()
@@ -250,6 +281,13 @@ pub struct Universe {
     /// The share of its planets each account wants mooned, when accounts differ in that: real mid players hold 1 to 12 moons
     /// on about 10 planets, and the top tenth a moon on almost every planet.
     moon_taste: Option<Vec<f64>>,
+    /// The policy that plays the look-ahead account's own later builds inside a rollout (sampled), instead of its persona.
+    /// A rollout improves on the policy that plays it, and late the persona is weaker than the best model (4 Nov).
+    pub rollout_policy: Option<Arc<Policy>>,
+    /// The season's end in seconds: a rollout's end is then scored as its worth plus the account's hourly production
+    /// until that end, the points it would close the season with if nothing changed. Worth alone is the next hours'
+    /// production, which late no build moves: the 12 h champion with best-es3 rollouts lost to best-es3 (4 Nov).
+    pub value_to_end: Option<f64>,
 }
 
 impl Universe {
@@ -394,7 +432,7 @@ impl Universe {
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
             quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
-            advise: !on("noadvice"), moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"), wrecks: on("wrecks"), relocations: on("relocate"),
+            rollout_policy: None, value_to_end: None, advise: !on("noadvice"), moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"), wrecks: on("wrecks"), relocations: on("relocate"),
             jolt: arms.iter().find_map(|arm| arm.strip_prefix("jolt=")).map(|d| d.parse::<f64>().expect("jolt=DAY") * DAY),
             skip: arms.iter().find_map(|arm| arm.strip_prefix("skip=")).map(|v| {
                 let (a, d) = v.split_once(':').expect("skip=ACCOUNT:DAY");
@@ -607,11 +645,13 @@ impl Universe {
                 u.ledgers.iter_mut().for_each(|ledger| ledger.rebase(unread));
                 u.world.reseed(r + 1);
                 first(&mut u, row);
+                let mut draw = (r + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ row as u64;
                 while let Some(b) = u.next_decision() {
                     if u.world.games[b].t >= end { break }
                     if solo && u.world.account_of(b) != owner { u.world.wait(&u.cat, b); continue }
-                    u.plays(b);
-                    u.play(b, None);
+                    let own_build = u.plays(b) && u.world.account_of(b) == owner && u.world.decision_kind(b) == crate::world::Decision::Build;
+                    let pick = u.rollout_policy.clone().filter(|_| own_build).map(|p| u.choose(&p, b, 1.0, Some(&mut draw)));
+                    u.play(b, pick);
                 }
                 match critic {
                     Some(critic) => {
@@ -619,7 +659,8 @@ impl Universe {
                         u.observe(owner, None, &mut end_state, &mut end_cands, &mut end_legal);
                         critic.value(&end_state) as f64
                     }
-                    None => score::of(&u.world, owner).total as f64 * 1000.0 + u.world.stock(owner),
+                    None => score::of(&u.world, owner).total as f64 * 1000.0 + u.world.stock(owner)
+                        + u.value_to_end.map_or(0.0, |close| u.world.hourly(owner) * (close - end).max(0.0) / 3600.0),
                 }
             }).sum::<f64>() / rollouts as f64
         };

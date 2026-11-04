@@ -632,6 +632,11 @@ impl World {
         stored + flying
     }
 
+    /// The account's mine production per hour across its planets, weighted as `stock` weighs resources.
+    pub fn hourly(&self, capital: usize) -> f64 {
+        self.planets_of(capital).iter().map(|&slot| weighted(self.games[slot].planet.rate)).sum()
+    }
+
     /// Research is the account's: a level that landed on the capital's lab is copied to its other planets at that
     /// second, so their production, requirements and fleets read it. Their research queue never runs.
     fn share_research(&mut self, cat: &Catalogue, capital: usize) {

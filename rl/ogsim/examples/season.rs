@@ -172,6 +172,10 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         let (day, hours) = spec.split_once(':').expect("champion-late=DAY:HOURS");
         (day.parse::<f64>().expect("a day") * 86_400.0, hours.parse::<f64>().expect("hours"))
     });
+    // `champion-base`: the rollouts play the look-ahead account's own later builds with `policy=` (sampled), not its persona.
+    if arms.iter().any(|arm| arm == "champion-base") {
+        universe.rollout_policy = Some(Arc::new(policy.clone().expect("champion-base needs policy=")));
+    }
     let horizon = move |t: f64, hours: f64| late.filter(|&(from, _)| t >= from).map_or(hours, |(_, h)| h);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
