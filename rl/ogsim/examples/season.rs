@@ -166,6 +166,13 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     let search_from = arms.iter().find_map(|arm| arm.strip_prefix("champion-from=")).map_or(0.0, |d| d.parse::<f64>().expect("champion-from=DAY") * 86_400.0);
     let search_every = arms.iter().find_map(|arm| arm.strip_prefix("champion-every=")).map_or(1, |n| n.parse::<u64>().expect("champion-every=N")).max(1);
     let mut asked = vec![0u64; accounts];
+    // `champion-late=DAY:HOURS`: from that day on the look-ahead plays HOURS instead of the spec's. A 12 h champion is even
+    // with best-es3 by day 120 (4 Nov): late, research and colonies pay back over days, beyond a 12 h window.
+    let late = arms.iter().find_map(|arm| arm.strip_prefix("champion-late=")).map(|spec| {
+        let (day, hours) = spec.split_once(':').expect("champion-late=DAY:HOURS");
+        (day.parse::<f64>().expect("a day") * 86_400.0, hours.parse::<f64>().expect("hours"))
+    });
+    let horizon = move |t: f64, hours: f64| late.filter(|&(from, _)| t >= from).map_or(hours, |(_, h)| h);
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -216,6 +223,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         if let Some(file) = values.as_mut().filter(|_| build) { write_state(file, &season.u, a) }
         let pick = match &policy {
             _ if build && searched => champion.map(|(_, _, hours, rollouts, width)| {
+                let hours = horizon(season.u.world.games[a].t, hours);
                 let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref(), solo);
                 if let Some(file) = labels.as_mut() { write_label(file, &found) }
                 match (&policy, label_only) {
@@ -229,6 +237,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         };
         if champion_errands && plays && a == owner && searched {
             let (_, _, hours, rollouts, _) = champion.expect("champion-errands needs champion=");
+            let hours = horizon(season.u.world.games[a].t, hours);
             let found = season.u.lookahead_errand(a, pick, hours, rollouts, solo);
             if let Some(file) = errand_labels.as_mut() { write_errand_label(file, &found) }
             let row = match (label_only, errand_model.as_ref()) {
