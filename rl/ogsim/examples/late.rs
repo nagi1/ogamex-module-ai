@@ -22,7 +22,7 @@ use ogsim::season::{Policy, Universe, DAY};
 use ogsim::world::{Colonisation, Decision};
 
 #[derive(Clone)]
-enum Spec { Persona, Model(Arc<Policy>, bool), Champ(Arc<Policy>, f64, u64, usize, bool, usize), Each(Arc<Vec<Policy>>), Switch(f64, Box<Spec>, Box<Spec>) }
+enum Spec { Persona, Model(Arc<Policy>, bool), Champ(Arc<Policy>, f64, u64, usize, bool, usize), Each(Arc<Vec<Policy>>), Switch(f64, Box<Spec>, Box<Spec>), With(Vec<String>, Box<Spec>) }
 
 fn spec(text: &str) -> Spec {
     let parts: Vec<&str> = text.split(':').collect();
@@ -36,6 +36,12 @@ fn spec(text: &str) -> Spec {
         "switch" => {
             let (first, then) = text.splitn(3, ':').nth(2).expect("switch:DAY:FIRST|THEN").split_once('|').expect("FIRST|THEN");
             Spec::Switch(parts[1].parse::<f64>().expect("a day") * DAY, Box::new(spec(first)), Box::new(spec(then)))
+        }
+        // `with:T1+T2:SPEC`: SPEC with the personas' tactic switches changed for every account (`tactics`).
+        "with" => {
+            let mut rest = text.splitn(3, ':').skip(1);
+            let tactics = rest.next().expect("with:TACTICS:SPEC").split('+').map(String::from).collect();
+            Spec::With(tactics, Box::new(spec(rest.next().expect("with:TACTICS:SPEC"))))
         }
         other => panic!("unknown candidate {other}"),
     }
@@ -51,6 +57,7 @@ fn advance(u: &mut Universe, until: f64, midnight: &mut f64, pending: Option<usi
         let owner = u.world.account_of(a);
         let plays = u.plays(a);
         let build = plays && u.world.decision_kind(a) == Decision::Build;
+        let how = match how { Spec::With(_, inner) => &**inner, other => other };
         let how = match how { Spec::Switch(day, first, then) => match t < *day { true => &**first, false => &**then }, other => other };
         let pick = match how {
             _ if !build => None,
@@ -62,7 +69,7 @@ fn advance(u: &mut Universe, until: f64, midnight: &mut f64, pending: Option<usi
             }
             Spec::Champ(base, ..) => Some(u.choose(base, a, 1.0, Some(&mut draws[owner]))),
             Spec::Each(all) => Some(u.choose(&all[owner], a, 1.0, Some(&mut draws[owner]))),
-            Spec::Switch(..) => unreachable!("a switch picks its side first"),
+            Spec::Switch(..) | Spec::With(..) => unreachable!("unwrapped above"),
         };
         u.play(a, pick);
         next = u.next_decision();
@@ -90,7 +97,7 @@ fn main() {
 
     // Per seed, per candidate: each account's (points at START, points at the end, hourly production at the end), None
     // where it quit. Production is the leading measure: a late investment shows in it within days, in points only later.
-    let results: Vec<Vec<Vec<Option<(f64, f64, f64, f64, f64)>>>> = std::thread::scope(|scope| {
+    let results: Vec<Vec<Vec<Option<(f64, f64, f64, f64, f64, f64, f64)>>>> = std::thread::scope(|scope| {
         let jobs: Vec<_> = seeds.iter().map(|&seed| {
             let (cat, colonisation, cands, args) = (Arc::clone(&cat), colonisation.clone(), &cands, &args);
             scope.spawn(move || {
@@ -104,6 +111,7 @@ fn main() {
                 std::thread::scope(|inner| {
                     let runs: Vec<_> = cands.iter().map(|(name, how)| {
                         let (mut u, mut draws, mut midnight, before) = (base.clone(), draws.clone(), midnight, before.clone());
+                        if let Spec::With(names, _) = how { tactics(&mut u, names) }
                         if let Spec::Champ(rollout_base, _, _, _, to_end, _) = how {
                             u.rollout_policy = Some(Arc::clone(rollout_base));
                             u.value_to_end = to_end.then_some(365.0 * DAY);
@@ -111,7 +119,7 @@ fn main() {
                         inner.spawn(move || {
                             advance(&mut u, (start + window) * DAY, &mut midnight, pending, how, &mut draws);
                             eprintln!("seed {seed}: {name} done at {:.0}s", began.elapsed().as_secs_f64());
-                            (0..accounts).map(|a| (!u.gone[a]).then(|| (before[a], score::of(&u.world, a).total as f64, u.world.hourly(a), u.world.planets_of(a).len() as f64, score::of(&u.world, a).research as f64))).collect::<Vec<_>>()
+                            (0..accounts).map(|a| (!u.gone[a]).then(|| (before[a], score::of(&u.world, a).total as f64, u.world.hourly(a), u.world.planets_of(a).len() as f64, score::of(&u.world, a).research as f64, score::of(&u.world, a).military as f64, u.world.stock(a)))).collect::<Vec<_>>()
                         })
                     }).collect();
                     runs.into_iter().map(|r| r.join().expect("a candidate")).collect::<Vec<_>>()
@@ -143,9 +151,9 @@ fn main() {
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
         let up = per_seed.iter().filter(|&&x| x > 0.0).count();
         print!("{name:>12}: vs {} points x{:.3} (seeds up {up}/{}), production x{:.3}, own growth x{:.2}", cands[0].0, mean(&per_seed).exp(), per_seed.len(), mean(&hourly).exp(), mean(&growth).exp());
-        let alive: Vec<&(f64, f64, f64, f64, f64)> = results.iter().flat_map(|seed| seed[c].iter().flatten()).collect();
-        let avg = |f: &dyn Fn(&(f64, f64, f64, f64, f64)) -> f64| alive.iter().map(|x| f(x)).sum::<f64>() / alive.len().max(1) as f64;
-        print!(", planets {:.1}, research {:.1}M, points {:.1}M", avg(&|x| x.3), avg(&|x| x.4) / 1e6, avg(&|x| x.1) / 1e6);
+        let alive: Vec<&(f64, f64, f64, f64, f64, f64, f64)> = results.iter().flat_map(|seed| seed[c].iter().flatten()).collect();
+        let avg = |f: &dyn Fn(&(f64, f64, f64, f64, f64, f64, f64)) -> f64| alive.iter().map(|x| f(x)).sum::<f64>() / alive.len().max(1) as f64;
+        print!(", planets {:.1}, research {:.1}M, military {:.1}M, points {:.1}M, unspent {:.1}G", avg(&|x| x.3), avg(&|x| x.4) / 1e6, avg(&|x| x.5) / 1e6, avg(&|x| x.1) / 1e6, avg(&|x| x.6) / 1e9);
         if !seat_seed.is_empty() { print!(", look-ahead seats x{:.3}", mean(&seat_seed).exp()) }
         println!();
     }
@@ -241,5 +249,29 @@ fn evolve(out: &str, args: &[String], cat: Arc<ogsim::economy::Catalogue>, colon
         println!("{line}");
         use std::io::Write;
         writeln!(std::fs::OpenOptions::new().create(true).append(true).open(format!("{out}/es.jsonl")).expect("the log"), "{line}").expect("write the log");
+    }
+}
+
+/// Turns the personas' tactic switches on (`name`) or off (`-name`) for every account, as `Universe::new` sets them
+/// from the world's arms: `cap` stops the yard's surplus spending at the persona's military share.
+fn tactics(u: &mut Universe, names: &[String]) {
+    for player in u.players.iter_mut() {
+        let m = player.miner();
+        for name in names {
+            let (on, flag) = name.strip_prefix('-').map_or((true, name.as_str()), |f| (false, f));
+            let field = match flag {
+                "cap" => &mut m.cap,
+                "yard" => &mut m.yard,
+                "ships" => &mut m.ships,
+                "expofull" => &mut m.expo_full,
+                "exposhield" => &mut m.expo_ship,
+                "doubler" => &mut m.doubler,
+                "feed" => &mut m.feed,
+                "factory" => &mut m.factory,
+                "satellites" => &mut m.satellites,
+                other => panic!("unknown tactic {other}"),
+            };
+            *field = on;
+        }
     }
 }
