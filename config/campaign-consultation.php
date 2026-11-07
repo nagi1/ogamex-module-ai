@@ -10,7 +10,7 @@ return [
     'mode' => env('AI_CAMPAIGN_CONSULTATION_MODE', 'off'),
 
     'provider' => env('AI_CAMPAIGN_CONSULTATION_PROVIDER', 'deepseek'),
-    'model' => env('AI_CAMPAIGN_CONSULTATION_MODEL', 'deepseek-v4-pro'),
+    'model' => env('AI_CAMPAIGN_CONSULTATION_MODEL', 'deepseek-flash'),
     'timeout_seconds' => (int) env('AI_CAMPAIGN_CONSULTATION_TIMEOUT_SECONDS', 20),
     'maximum_reason_characters' => (int) env('AI_CAMPAIGN_CONSULTATION_MAXIMUM_REASON_CHARACTERS', 400),
     'maximum_evidence_ids' => (int) env('AI_CAMPAIGN_CONSULTATION_MAXIMUM_EVIDENCE_IDS', 8),

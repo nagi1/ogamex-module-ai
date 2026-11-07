@@ -81,7 +81,7 @@ final class AiSettings
         ],
         'campaign' => [
             'provider' => 'deepseek',
-            'model' => 'deepseek-v4-pro',
+            'model' => 'deepseek-flash',
         ],
         'routing' => [
             'enabled' => false,
@@ -101,7 +101,7 @@ final class AiSettings
                     ['provider' => 'openai', 'model' => 'gpt-5.6-luna'],
                 ],
                 'campaign_consultation' => [
-                    ['provider' => 'deepseek', 'model' => 'deepseek-v4-pro'],
+                    ['provider' => 'deepseek', 'model' => 'deepseek-flash'],
                 ],
                 'conformance' => [
                     ['provider' => 'deepseek', 'model' => 'deepseek-flash'],
