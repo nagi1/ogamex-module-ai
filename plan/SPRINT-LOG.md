@@ -16,3 +16,8 @@ Owner additions (7 Nov), also in the lane notes of `AGENTS.md` and `WORK-ORDER.m
 ### Tells list (ranked)
 
 ### Day 1 reports
+- 7 Nov DOCS: `11c3ede6` AGENTS.md rewritten (76 lines: north star, ten rules, three gates, lane table + ADVISOR row and owner notes).
+- 7 Nov DOCS: `4d9cbe28` plan/PLAY-CARD.md (five questions, Q2 adds messages/alliance offers or threats, 20-row bot table), this log, WORK-ORDER ADVISOR row and notes.
+- 7 Nov DOCS: archive commit (the one adding these lines): 2195 files `git mv`'d to plan/archive/, plan/rl/SOCIAL-PLAN.md moved unedited.
+- 7 Nov DOCS: `find plan -maxdepth 1` = plan, CONSULTANT-GUIDE-2026-11-07.md, PLAY-CARD.md, SPRINT-LOG.md, WORK-ORDER.md, archive, details (cognition-gates only), rl (STRONG-PLAYER-PLAN only): 7 entries.
+- 7 Nov DOCS: blocked: none. Open: ADVISOR "Runs" column left "set by the owner" (only PHP lane may run pest); PLAY-CARD account names to be filled by WORLD after the reseed.
