@@ -23,9 +23,15 @@ class ErrandPolicyModel
     {
     }
 
-    /** The configured errand model (`ai.rl.errand_model`), or null when none is set or it is not a wide one. */
+    /**
+     * The configured errand model (`ai.rl.errand_model`), or null when none is set, it is not a wide one, or the fleet
+     * errands are switched to the scripted raider (`ai.rl.fleet_errands` = scripted).
+     */
     public static function configured(): self|null
     {
+        if (config('ai.rl.fleet_errands') === 'scripted') {
+            return null;
+        }
         $path = config('ai.rl.errand_model');
         if (!is_string($path) || $path === '' || !is_file($path)) {
             return null;

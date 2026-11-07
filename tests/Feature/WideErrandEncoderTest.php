@@ -262,6 +262,16 @@ test('a model picks only a row it was offered, and the login runs that very cand
     expect($trace->selected)->toBe($expected === null ? $trace->selected : $engine->candidates[$expected]);
 });
 
+// The play universe flies the scripted raider (WORK-ORDER §2): with the fleet errands switched to it, a configured model
+// is not loaded and the login runs the engine's own errand.
+test('fleet errands switched to the scripted raider ignore a configured model', function (): void {
+    config(['ai.rl.errand_model' => errandV3ModelFile(errandV3Fixture()['small_policy']), 'ai.rl.fleet_errands' => 'model']);
+    expect(ErrandPolicyModel::configured())->toBeInstanceOf(ErrandPolicyModel::class);
+
+    config(['ai.rl.fleet_errands' => 'scripted']);
+    expect(ErrandPolicyModel::configured())->toBeNull();
+});
+
 // The encoder reuses the plans the engine just read (LoginPlans) instead of asking each planner again; the columns are the
 // ones a fresh ask gives, row for row.
 test('the errand reuses the engine\'s plans and encodes exactly what fresh plans encode', function (): void {
