@@ -43,7 +43,7 @@ betray_strength_ratio: 2.0
 # a private pact and a shared war on it. One alliance owning the server is what makes the rest gang up.
 coalition_share: 0.5
 
-# A war ends by peace, not a timer (wiki War: "peace or surrender"; 2006 board interviews: hostilities "diminished" and
+# A war ends by peace, not a timer (wiki War: peace, or one side yielding; 2006 board interviews: hostilities "diminished" and
 # "no real bitterness" once the fighting stopped, grudges.yaml). Once it has stood this many hours and the grievance the two
 # sides still hold against each other (both ways, grudges fading) is under this line, the declarer announces peace. A new
 # raid raises the grievance again and a new war follows at war_grievance: the gap between the two lines is the truce.
@@ -62,3 +62,8 @@ war_max_strength_ratio: 4.0
 # An alliance does not declare a war while it is already at war with this many alliances, as declarer or target: a second
 # front against two blocs at once loses both (the judge on 9444). A coalition war (conspire) is not counted.
 max_open_wars: 1
+
+# A player does not raid a member of an alliance whose points are more than this many times their own side's (their alliance,
+# or themselves when solo), unless that alliance is at war with them: raiding one member provokes all of them (alliance
+# guides: "attacking you means potentially provoking your entire alliance"). 0 turns it off.
+deterrence_ratio: 3.0

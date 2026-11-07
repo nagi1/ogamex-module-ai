@@ -22,6 +22,11 @@ beforeEach(function (): void {
     foreach (['laser_technology' => 12, 'energy_technology' => 6, 'ion_technology' => 4, 'weapon_technology' => 3, 'shielding_technology' => 2, 'plasma_technology' => 7] as $machineName => $level) {
         $this->playerSetResearchLevel($machineName, $level);
     }
+
+    // Every doctrine leads with the two domes (00b227fa), and a planet may hold one of each, so the walls below already
+    // hold them: the tests are about the ratio between the other units.
+    $this->planetAddUnit('small_shield_dome', 1);
+    $this->planetAddUnit('large_shield_dome', 1);
 });
 
 // A balanced wall (100 light lasers anchor) at its ratio except Gauss Cannon: the one component the

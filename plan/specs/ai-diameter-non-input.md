@@ -25,6 +25,17 @@ the next reader knows the silence was deliberate, and so a modder knows which kn
 the host confirms a real mechanic: a new value in `resources/behavior/`, read by the planner —
 never a literal inside the engine.
 
+## The one confirmed mechanic: a moon strike
+
+The host does consume one diameter: `MoonDestructionMission` sets the chance a Death Star strike destroys a moon,
+and the chance the Death Stars die, from the moon's size (the same two formulas WIK-196 quotes). The galaxy view
+shows a moon's size to every player, so pricing a strike on it reads nothing a real player lacks. The guard
+therefore lets four named files read it: `Domain/Choice/WideErrandEncoder.php` (prices a strike), the mission
+referees `Actions/DrawAiMissionCasesAction.php` and `Actions/DrawAiMoreMissionCasesAction.php` (record what the host
+wrote), and `Actions/ReplayAiWorldAction.php` (writes the column a colony is created with). A planet's diameter is
+still never a build or growth input, and a second test fails if a listed file stops reading the size, so the list
+cannot go stale and hide a new read.
+
 ## How the deferral is enforced
 
 `tests/Feature/Ai/DiameterIsNotAnAiInputTest.php` scans the surfaces the engine reads —

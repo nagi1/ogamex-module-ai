@@ -29,9 +29,13 @@ test('a neighbour who writes again inside the conversation window is still cappe
 });
 
 test('a neighbour who writes after the conversation window closed is answered again', function (): void {
+    // Two turns fill the first conversation; the third message comes after its replies expired. Each one asks for
+    // something: a bare hello inside a day of our own reply is a pleasantry the account deliberately leaves unanswered
+    // (RunAiConversationCycleAction, 9471), and this test is about the window, not that.
     $situation = Situation::of($this)
         ->directMessage('hey, are you active? want to trade?')->session()
-        ->directMessage('hey, we share a system. no attacks between us')->minutesLater(400)->session();
+        ->directMessage('hey, still there? want to trade?')->minutesLater(45)->session()
+        ->directMessage('hey, want to trade metal for crystal?')->minutesLater(400)->session();
 
-    expect(sentReplies($this->currentUserId))->toBe(2, 'expected the second message answered once the first conversation had ended, but ' . $situation->account());
+    expect(sentReplies($this->currentUserId))->toBe(3, 'expected the third message answered once the first conversation had ended, but ' . $situation->account());
 });

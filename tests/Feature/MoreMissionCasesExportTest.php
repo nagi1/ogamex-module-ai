@@ -11,13 +11,17 @@ uses(IsolatedAccountTestCase::class);
 // plan/rl/WORLD-SIM-PLAN.md, W6/W8: colonise, expedition, missile and moon destruction answered by the host, each case
 // the host's own dispatch, arrival and return on the drawn sides, replayable from its seed, leaving the world untouched.
 
+/** The W6/W8 missions the arrival checks below are written for; the later ones (ACS, wreck, moon raid, relocation) draw three sides. */
+const MORE_MISSION_CASES_W6 = ['colonise', 'expedition', 'missile', 'moon_destruction'];
+
 /**
  * @param  list<PlayerService>  $accounts
+ * @param  list<string>  $missions
  * @return array<string, mixed>
  */
-function moreMissionCasesDraw(array $accounts, int $count, int $seed): array
+function moreMissionCasesDraw(array $accounts, int $count, int $seed, array $missions = MORE_MISSION_CASES_W6): array
 {
-    return json_decode((string) json_encode(app(DrawAiMoreMissionCasesAction::class)->handle($accounts, $count, array_keys(DrawAiMoreMissionCasesAction::MISSIONS), 4, $seed)), true);
+    return json_decode((string) json_encode(app(DrawAiMoreMissionCasesAction::class)->handle($accounts, $count, $missions, 4, $seed)), true);
 }
 
 /** @return list<mixed> every table a mission writes */
@@ -50,7 +54,7 @@ test('every mission is dispatched, arrives and returns as the host plays it', fu
     $file = moreMissionCasesDraw([$this->planetService->getPlayer(), $this->createForeignPlanet()->getPlayer()], 40, 7);
 
     expect($file['cases'])->toHaveCount(40)
-        ->and(array_count_values(array_column($file['cases'], 'mission')))->toBe(array_fill_keys(array_keys(DrawAiMoreMissionCasesAction::MISSIONS), 10));
+        ->and(array_count_values(array_column($file['cases'], 'mission')))->toBe(array_fill_keys(MORE_MISSION_CASES_W6, 10));
     foreach ($file['cases'] as $case) {
         $label = "case {$case['index']} {$case['mission']}";
         expect($case)->toHaveKeys(['mission', 'mission_type', 'case_seed', 'perturbation', 'input', 'dispatch', 'arrival', 'return'], $label)
@@ -74,11 +78,13 @@ test('every mission is dispatched, arrives and returns as the host plays it', fu
 });
 
 test('the draw is reproducible from its seed and rolls every write back', function (): void {
-    $accounts = [$this->planetService->getPlayer(), $this->createForeignPlanet()->getPlayer()];
+    // Every mission, so three sides: an ACS needs an owner, a mate and a raider.
+    $accounts = [$this->planetService->getPlayer(), $this->createForeignPlanet()->getPlayer(), $this->createForeignPlanet()->getPlayer()];
+    $missions = array_keys(DrawAiMoreMissionCasesAction::MISSIONS);
     $before = moreMissionCasesWorld();
 
-    $first = moreMissionCasesDraw($accounts, 12, 11);
-    $second = moreMissionCasesDraw($accounts, 12, 11);
+    $first = moreMissionCasesDraw($accounts, count($missions), 11, $missions);
+    $second = moreMissionCasesDraw($accounts, count($missions), 11, $missions);
 
     expect(moreMissionCasesWithoutIds($first))->toEqual(moreMissionCasesWithoutIds($second))
         ->and(moreMissionCasesWorld())->toEqual($before);

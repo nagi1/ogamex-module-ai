@@ -13,7 +13,7 @@
 #   tensions that had diminished after several crashes; KIA KAHA "was started up to target Mara.Dim" with "no mutual
 #   hate". Grudges are about the fighting, and they go quiet when it does.
 # - ogame.fandom.com/wiki/War: a war is declared on the diplomacy board, bashing opens 12 hours later, and it ends by
-#   peace or surrender, not by a timer. Wars stay alliance rows (alliance-war.yaml); this file only fades the
+#   peace or by one side giving up, not by a timer. Wars stay alliance rows (alliance-war.yaml); this file only fades the
 #   individual grudge under them.
 # The numbers are a reading of those accounts, not a stated rule of the game.
 grace_hours: 24

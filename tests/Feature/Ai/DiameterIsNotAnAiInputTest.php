@@ -52,6 +52,22 @@ const AI_DIAMETER_GUARD_TOKEN = 'diameter';
 
 const AI_DIAMETER_GUARD_READ_PROBE = '<?php';
 
+/**
+ * The host confirms one mechanic on diameter: a moon's size sets the chance a Death Star strike destroys it, and the
+ * chance the Death Stars die (MoonDestructionMission; WIK-196 quotes the same two formulas). The galaxy view shows
+ * that size to every player, so these files may name it, and no other:
+ * - WideErrandEncoder prices a moon strike on the moon's size, as MoonDestructionMission does;
+ * - the mission referees record what the host wrote (a new colony's row, the moon before a strike);
+ * - the world replay writes the host column a colony is created with.
+ * None of them reads a planet's diameter to choose what to build.
+ */
+const AI_DIAMETER_GUARD_MOON_STRIKE_FILES = [
+    'app/Domain/Choice/WideErrandEncoder.php',
+    'app/Actions/DrawAiMissionCasesAction.php',
+    'app/Actions/DrawAiMoreMissionCasesAction.php',
+    'app/Actions/ReplayAiWorldAction.php',
+];
+
 function aiDiameterGuardRoot(): string
 {
     return dirname(__DIR__, 3);
@@ -81,7 +97,7 @@ function aiDiameterGuardFiles(string $moduleRoot): array
  */
 function aiDiameterGuardFilesIn(string $directory): array
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return [];
     }
 
@@ -91,7 +107,7 @@ function aiDiameterGuardFilesIn(string $directory): array
     );
 
     foreach ($entries as $entry) {
-        if (! $entry->isFile()) {
+        if (!$entry->isFile()) {
             continue;
         }
 
@@ -147,13 +163,25 @@ function aiDiameterGuardOffenders(array $files, string $token): array
 }
 
 test('the AI engine reads planet state but never a planet diameter', function (): void {
-    $files = aiDiameterGuardFiles(aiDiameterGuardRoot());
+    $root = aiDiameterGuardRoot();
+    $allowed = array_map(static fn (string $relative): string => $root . DIRECTORY_SEPARATOR . $relative, AI_DIAMETER_GUARD_MOON_STRIKE_FILES);
+    $files = array_values(array_diff(aiDiameterGuardFiles($root), $allowed));
 
     // The probe proves the scan reads file contents; without it an empty result could simply
     // mean the paths were wrong.
     expect($files)->not->toBe([]);
     expect(aiDiameterGuardOffenders($files, AI_DIAMETER_GUARD_READ_PROBE))->not->toBe([]);
     expect(aiDiameterGuardOffenders($files, AI_DIAMETER_GUARD_TOKEN))->toBe([]);
+});
+
+test('the moon strike exception names files that exist and still read the moon size', function (): void {
+    // A stale entry would let a future planet-diameter read hide behind a file name that no longer means anything.
+    foreach (AI_DIAMETER_GUARD_MOON_STRIKE_FILES as $relative) {
+        $path = aiDiameterGuardRoot() . DIRECTORY_SEPARATOR . $relative;
+
+        expect(is_file($path))->toBeTrue($relative)
+            ->and(aiDiameterGuardOffenders([$path], AI_DIAMETER_GUARD_TOKEN))->toBe([$path], $relative);
+    }
 });
 
 test('the guard flags a source file that reads a planet diameter', function (): void {

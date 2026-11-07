@@ -9,9 +9,9 @@ use OGame\Models\Enums\PlanetType;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
+use OGame\Models\User;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
-use OGame\Models\User;
 use OGame\Services\PlayerService;
 
 /**
@@ -124,8 +124,11 @@ class StageAiAccountAction
             // A station only this kind of body holds is what the body is for (a moon's phalanx and gate), so it keeps only the
             // raiser's field: under the full reserve the moon bought fourteen base levels and no gate.
             $ownStation = $object->valid_planet_types === [$planet->getPlanetType()];
+            // The raiser itself may take the last field, since it gives fields back; a level it still waits on keeps that last
+            // field for it, or the body fills on the way (the mid-game test filled every field when the planet drew a small size).
             $fieldsNeeded = match (true) {
-                ($owed[$object->machine_name] ?? 0) > $level => 1,
+                ($owed[$object->machine_name] ?? 0) === PHP_INT_MAX => 1,
+                ($owed[$object->machine_name] ?? 0) > $level => 2,
                 $ownStation => 2,
                 default => $reserve + 1,
             };

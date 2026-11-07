@@ -34,7 +34,7 @@ test('the export holds the universe settings the fleet equations read', function
 
     $export = app(ExportAiFleetSettingsAction::class)->handle($this->planetService->getPlayer());
 
-    expect($export['version'])->toBe(1)
+    expect($export['version'])->toBe(7)
         ->and($export['number_of_galaxies'])->toBe($values['number_of_galaxies'])
         ->and($export['number_of_systems'])->toBe($values['number_of_systems'])
         ->and($export['ignore_empty_systems'])->toBe((bool) $values['ignore_empty_systems_on'])

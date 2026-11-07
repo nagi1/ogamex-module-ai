@@ -9,11 +9,11 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * Why a player leaves a strong club's members alone: "attacking you means potentially provoking your entire alliance".
  * A target whose alliance is more than `deterrence_ratio` times the raider's own side in points, and who is not an
- * enemy of the raider, is not raided (farm.yaml). Against an enemy, the war decides.
+ * enemy of the raider, is not raided (alliance-war.yaml). Against an enemy, the war decides.
  */
 class AllianceDeterrence
 {
-    private const FILE = '/resources/behavior/farm.yaml';
+    private const FILE = '/resources/behavior/alliance-war.yaml';
 
     public function deters(int $raiderId, int $targetOwnerId): bool
     {

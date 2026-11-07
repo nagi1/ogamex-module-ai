@@ -23,8 +23,3 @@ avoid_signals:
 
 # The doctrine scouts before it commits a cargo fleet.
 scout_before_attack: true
-
-# A player does not raid a member of an alliance whose points are more than this many times their own side's (their alliance,
-# or themselves when solo), unless that alliance is at war with them: raiding one member provokes all of them (alliance
-# guides: "attacking you means potentially provoking your entire alliance"). 0 turns it off.
-deterrence_ratio: 3.0

@@ -82,6 +82,14 @@ class AdvanceAiAlliancePoliticsAction
     /** @var array<string, string|null> FAtiMA's chosen exchange per "club:partner" */
     private array $felt = [];
 
+    /**
+     * Members, founders and points read once per pass (a pass asked the host 18k times, 19 s on 33 clubs). Off while the
+     * cycles move accounts between clubs, so a split or a gather never reads a roster it just changed.
+     *
+     * @var array<string, mixed>|null
+     */
+    private array|null $read = null;
+
     public function __construct(private readonly AllianceTreaties $treaties)
     {
     }
@@ -175,7 +183,7 @@ class AdvanceAiAlliancePoliticsAction
     }
 
     /**
-     * A war ends when it has run its course, not on a timer (wiki: peace or surrender): once it has stood the minimum and
+     * A war ends when it has run its course, not on a timer (wiki: peace, or one side yielding): once it has stood the minimum and
      * what the two sides still hold against each other, both ways, has faded under the peace line, the founder who
      * declared it announces peace. A war a coalition is fighting on a dominant alliance stays until that one shrinks.
      */
@@ -683,6 +691,7 @@ class AdvanceAiAlliancePoliticsAction
         $this->inside = [];
         $this->felt = [];
         $this->leaders = [];
+        $this->read = [];
         $this->minds = (bool) config('ai.cognition.social.minds', false) ? app(SocialMinds::class) : null;
         $this->thinking = $this->minds?->gatewayAnswers() ?? false;
         $this->daily = $pass && $this->thinking && Cache::add('ai:social-minds:day:' . (int) floor($this->hour() / 24.0), true, now()->addDays(2));
@@ -1156,6 +1165,17 @@ class AdvanceAiAlliancePoliticsAction
      * @param list<int> $accounts the enabled AI accounts
      */
     private function cycle(array $accounts): int
+    {
+        $this->read = null;
+        try {
+            return $this->cycleClubs($accounts);
+        } finally {
+            $this->read = [];
+        }
+    }
+
+    /** @param list<int> $accounts */
+    private function cycleClubs(array $accounts): int
     {
         $moves = $this->riseUp($accounts);
         $clubs = array_values(array_filter(Alliance::query()->orderBy('id')->pluck('id')->map(static fn ($id): int => (int) $id)->all(), fn (int $club): bool => $this->members($club) !== []));
@@ -1714,7 +1734,21 @@ class AdvanceAiAlliancePoliticsAction
      */
     private function founder(int $allianceId): int
     {
-        return (int) Alliance::query()->whereKey($allianceId)->value('founder_user_id');
+        return $this->once('founder:' . $allianceId, static fn (): int => (int) Alliance::query()->whereKey($allianceId)->value('founder_user_id'));
+    }
+
+    /**
+     * @template T
+     * @param callable(): T $read
+     * @return T
+     */
+    private function once(string $key, callable $read): mixed
+    {
+        if ($this->read === null) {
+            return $read();
+        }
+
+        return array_key_exists($key, $this->read) ? $this->read[$key] : ($this->read[$key] = $read());
     }
 
     /** One club's public points over another's. */
@@ -1769,13 +1803,13 @@ class AdvanceAiAlliancePoliticsAction
 
     private function points(int $allianceId): float
     {
-        return (float) Highscore::query()->whereIn('player_id', $this->members($allianceId))->sum('general');
+        return $this->once('points:' . $allianceId, fn (): float => (float) Highscore::query()->whereIn('player_id', $this->members($allianceId))->sum('general'));
     }
 
     /** @return list<int> */
     private function members(int $allianceId): array
     {
-        return User::query()->where('alliance_id', $allianceId)->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+        return $this->once('members:' . $allianceId, static fn (): array => User::query()->where('alliance_id', $allianceId)->pluck('id')->map(static fn ($id): int => (int) $id)->all());
     }
 
     /** The leader's own wording of one announcement; the model words it when it is on, and the authored line is the fallback. */
