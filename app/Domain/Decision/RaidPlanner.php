@@ -152,7 +152,7 @@ class RaidPlanner
         // A detached instance (no cache), so the claims of this login's earlier orders come off in memory only.
         $origin = app(LoginReservations::class)->withoutClaims($origin);
 
-        $target = $this->target($report);
+        $target = $this->target($report, $player);
         if ($target === null) {
             return $this->reject('no_target', $playerId, $reportId);
         }
@@ -700,11 +700,12 @@ class RaidPlanner
     /**
      * The target planet as the report saw it, never the live planet: a player plans against the last
      * report and meets the truth at dispatch (architecture review 2.5). Null when the planet is gone or the
-     * report could not see the fleet or the defence.
+     * report could not see the fleet or the defence. Its owner carries the research the report read (or the
+     * account's own), never the defender's live research.
      */
-    private function target(EspionageReport $report): ?PlanetService
+    private function target(EspionageReport $report, PlayerService $observer): ?PlanetService
     {
-        return app(ReportedPlanet::class)->of($report);
+        return app(ReportedPlanet::class)->seenBy($report, $observer);
     }
 
     /**

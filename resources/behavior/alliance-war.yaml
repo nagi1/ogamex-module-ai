@@ -7,6 +7,11 @@
 # near-equal alliances of two traded four battles and never declared (9406).
 war_grievance: 0.8
 
+# The grievance is read per this many members of the aggrieved alliance: the sum is divided by max(1, members / this).
+# Two raids anger a club of six; among a hundred and sixty members they are noise, and a war nobody still fights ends.
+# Six is the median alliance of the 64-account reference worlds (runs nt2, dk: 6.4 members), so they read as before.
+reference_members: 6
+
 # The leader's words. {tag} is the other alliance's tag. Players read these; the module wrote them from the decision.
 lines:
   war_broadcast: ["We are at war with [{tag}]. Their planets and moons are targets; join every ACS on them.", "War with [{tag}]. Hit their planets and moons, join every ACS you see.", "[{tag}] is the enemy now. Probe them, hit them, and join the ACS on their moons."]
@@ -14,6 +19,9 @@ lines:
   war_external: "War: [{tag}]"
   pact_offer: ["We are both at war with [{tag}]. Non-aggression between us until it is over?", "[{tag}] is hitting us both. NAP until they are dealt with?", "Same enemy, [{tag}]. Want to leave each other alone and focus on them?"]
   flank_offer: ["We have our hands full with [{tag}]. NAP between us so neither of us fights two wars?", "[{tag}] is the war we are fighting. Leave each other alone, we have no time for a second front?", "We are busy with [{tag}]. Non-aggression with you, so we can finish that first?"]
+  court_offer: ["We have no quarrel with you. Non-aggression between us and [{tag}]?", "Our fleets stay off your planets if yours stay off ours. NAP with [{tag}]?", "Good neighbours live longer. A NAP between us and [{tag}]?"]
+  threat_ultimatum: ["Your alliance [{tag}] sits in our space and is too weak to hold it. You have {other} days to come to terms with us, or our fleets will.", "[{tag}] is in our way. {other} days to talk to us, then we come for your planets."]
+  tribute_ultimatum: ["[{tag}] pays us a share of its mines by transport from now on, or it is war. The first delivery is due within {other} days.", "Protection is not free. Send us resources within {other} days and [{tag}] stays safe; otherwise we come for your planets."]
   pact_accept: ["Agreed. No fleet of ours flies at [{tag}].", "Deal. We stay off you, [{tag}] is the target.", "Ok, NAP. Our fleets stay clear of [{tag}]."]
   betrayal_broadcast: "Our pact with [{tag}] is over. They are a target from today; hit them before they regroup."
   conspiracy_offer: "[{tag}] holds half the universe. A pact between us and war on them together; not a word to our members until the fleets fly."
@@ -21,7 +29,11 @@ lines:
   pact_refuse: "No pact. [{tag}] has hit us too often for that."
   war_declared_on_us: "[{tag}] has declared war on us. Their planets and moons are targets; join every ACS on them."
   peace_broadcast: "The war with [{tag}] is over. Stand down; no fleet of ours flies at them unless they hit us again."
+  pact_leak_broadcast: "Word is out: [{tag}] and [{other}] have had a secret pact all along. Count them as one side."
+  betrayal_leak_broadcast: "Word is out: [{tag}] broke a secret pact with [{other}] and kept quiet about it. Remember that before signing anything with them."
   betrayal_to_leader: "The war that made us partners is finished, and so is our pact. [{tag}] and we are at war."
+  pact_cancel_broadcast: "We have cancelled our pact with [{tag}]. It holds {hours} more hours: no fleet flies at them before the notice runs out."
+  pact_cancel_to_leader: ["We are cancelling our pact with [{tag}]. The notice is {hours} hours; after that we are at war.", "[{tag}]: this is our notice. The NAP ends in {hours} hours."]
 
 # A leader who betrays (persona taste, alliance-ambition.yaml) breaks a pact only once no war is left open and its
 # alliance has this many times the partner's points: players turn on a weaker partner, not on an equal.

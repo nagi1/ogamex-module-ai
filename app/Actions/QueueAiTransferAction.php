@@ -243,7 +243,8 @@ class QueueAiTransferAction implements QueueAiTransfer
         return $fuel > $fleet->getTotalFuelCapacity($player) ? null : $fuel;
     }
 
-    private function transportFleet(PlayerService $player, PlanetService $source, Resources $shipment): ?UnitCollection
+    /** Just enough of the source's holds, biggest first, to carry the shipment; null when its cargo hulls cannot. */
+    public function transportFleet(PlayerService $player, PlanetService $source, Resources $shipment): ?UnitCollection
     {
         $fleet = new UnitCollection();
         $remaining = $shipment->sum();

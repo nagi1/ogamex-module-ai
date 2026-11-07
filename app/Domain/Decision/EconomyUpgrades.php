@@ -6,7 +6,7 @@ use Modules\AI\Contracts\ExperienceEngine;
 use Modules\AI\Contracts\PrefetchesExperience;
 use Modules\AI\Domain\Experience\ExperienceQuery;
 use Modules\AI\Domain\Experience\RankedExperience;
-use Modules\AI\Domain\Research\ResearchCostRule;
+use Modules\AI\Domain\Research\ResearchCeiling;
 use Modules\AI\Domain\Routine\RoutineProfile;
 use Modules\AI\Enums\AiBuildingExperienceFeature;
 use Modules\AI\Enums\AiExperienceCaseFamily;
@@ -14,10 +14,11 @@ use Modules\AI\Enums\AiExperienceFeatureVersion;
 use Modules\AI\Enums\AiExperienceRulesetVersion;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiRuntimeSettings;
+use Modules\AI\Support\HostProduction;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
-use OGame\Models\Resource;
 use OGame\Models\Enums\PlanetType;
+use OGame\Models\Resource;
 use OGame\Models\Resources;
 use OGame\Services\BuildingQueueService;
 use OGame\Services\ObjectService;
@@ -308,15 +309,13 @@ class EconomyUpgrades
 
     /**
      * The level past which the object is no longer bought for its own sake: the few levels of the
-     * catalogue rule, and for a technology the price rule names a ceiling (its own level is the only
-     * useful one) that ceiling instead, so the account stops buying a technology the game has no use
+     * catalogue rule, and for a research paid in energy alone the highest level any object requires
+     * of it (ResearchCeiling) instead, so the account stops buying a technology the game has no use
      * for another level of.
      */
     private function ambitionCeiling(GameObject $object): int
     {
-        $useful = $object->type === GameObjectType::Research
-            ? app(ResearchCostRule::class)->maximumUsefulLevel($object->machine_name)
-            : null;
+        $useful = app(ResearchCeiling::class)->of($object);
 
         return $useful === null ? self::AMBITION_LEVELS : min(self::AMBITION_LEVELS, $useful);
     }
@@ -619,8 +618,8 @@ class EconomyUpgrades
         // 100% is what makes the comparison a property of the building rather than of today's energy.
         $weights = $this->scarcityWeights($planet);
 
-        return $this->metalEquivalent($planet->getObjectProduction($machineName, $level + 1, true), $weights)
-            - $this->metalEquivalent($planet->getObjectProduction($machineName, $level, true), $weights);
+        return $this->metalEquivalent(HostProduction::at($planet, $machineName, $level + 1), $weights)
+            - $this->metalEquivalent(HostProduction::at($planet, $machineName, $level), $weights);
     }
 
     /**

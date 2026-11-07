@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Social;
 
+use Modules\AI\Domain\Persona\SkillQuantile;
 use Modules\AI\Enums\AiToMStance;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
@@ -67,7 +68,7 @@ class AllianceChoice
         foreach ($this->openCandidates($playerId) as $alliance) {
             $club = $this->clubFit($alliance);
 
-            if (! $this->fits($account, $club, $policy['fit'])) {
+            if (!$this->fits($account, $club, $policy['fit'])) {
                 continue;
             }
 
@@ -154,7 +155,7 @@ class AllianceChoice
         // member belongs to nothing that can ever grow, which is the state where the whole
         // cohort sits still and the lane the scorecard's alliance aspect measures asks nobody
         // (ALLY-001). Seeded clubs are created shut, so this is the common live case.
-        if (! $club->is_open) {
+        if (!$club->is_open) {
             return false;
         }
 
@@ -371,7 +372,9 @@ class AllianceChoice
     private function band(int $playerId): int|null
     {
         // The pace the club or applicant states comes from its own profile row.
-        return AiProfile::query()->where('player_id', $playerId)->first()?->activity_band?->value;
+        $profile = AiProfile::query()->where('player_id', $playerId)->first();
+
+        return $profile === null ? null : app(SkillQuantile::class)->activityBand($profile)?->value;
     }
 
     private function fits(array $account, array $club, array $fit): bool

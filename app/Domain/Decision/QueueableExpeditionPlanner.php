@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Actions\QueueAiExpeditionAction;
+use Modules\AI\Domain\Persona\SkillQuantile;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
@@ -91,8 +92,10 @@ class QueueableExpeditionPlanner
         // and the gate refuses it (measured live 4 Oct 2026: player 42 refused for this five times in six
         // hours). A slot an open intent already holds is committed, as the spy planner nets off its open
         // probes; a body that cannot dispatch now is not the account's last expedition ever.
+        // With the skill spread on, a weaker player keeps fewer of the host's slots busy (skill.yaml); the
+        // expeditions it does send are the host's own.
         $committed = $player->getExpeditionSlotsInUse() + $this->openExpeditionIntents($playerId);
-        if ($committed >= $player->getExpeditionSlotsMax()) {
+        if ($committed >= app(SkillQuantile::class)->expeditionSlots($profile, $player->getExpeditionSlotsMax())) {
             return null;
         }
 

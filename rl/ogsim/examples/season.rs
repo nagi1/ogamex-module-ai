@@ -14,13 +14,16 @@
 //!
 //!     cargo run --release --example season -- <data dir> <days> <accounts> <seed> <catalogue> <out JSONL>
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
 use ogsim::players::{account_value, YardStall};
 use ogsim::score;
-use ogsim::season::{Policy, Universe, DAY, PERSONAS, SAVER};
+use ogsim::season::{errand_pool, pilots, Pilot, Policy, Universe, DAY, PERSONAS, SAVER};
 use ogsim::economy::{next_random, Baseline, Books};
 use ogsim::units::UnitKind;
 use ogsim::world::{Colonisation, Decision, Event, EventKind, Mission, World};
@@ -122,8 +125,12 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     // `errand-policy=<weights>` flies the fleets of the first `fleet-model=N` accounts by a trained errand model;
     // `errand-policy=teacher` asks the scripted mix through the same door, so the door is measured apart from the model.
     let errand_policy = arms.iter().find_map(|arm| arm.strip_prefix("errand-policy="));
-    let errand_model = errand_policy.filter(|&path| path != "teacher").map(|path| Policy::load(path).expect("the errand weights"));
-    let fleet_model = arms.iter().find_map(|arm| arm.strip_prefix("fleet-model=")).map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
+    let errand_model = errand_policy.filter(|&path| path != "teacher").map(|path| Policy::load_errand(path, arms.iter().any(|arm| arm == "wide")).expect("the errand weights and feature version"));
+    // `errand-pool=A,B,teacher` with `errand-split=LO-HI:K,...`: accounts LO..=HI fly pool entry K (league opponents,
+    // never perturbed); the first `fleet-model` accounts stay `errand-policy=`'s (`season::pilots`).
+    let pilot = pilots(arms, accounts);
+    let pool = errand_pool(arms).expect("the errand pool's weights and feature version");
+    let per_login = arms.iter().find_map(|arm| arm.strip_prefix("errands=")).map_or(1, |n| n.parse::<usize>().expect("errands=N"));
     // `es-errand=NOISE:SIGN:SIGMA` (with `errand-policy=`): as `es=`, for the errand model each fleet account flies.
     let errand_nudged: Option<Vec<Policy>> = arms.iter().find_map(|arm| arm.strip_prefix("es-errand=")).zip(errand_model.as_ref()).map(|(spec, base)| nudge(spec, base));
     // `skill=LO:HI` gives each account its own sampling heat, log-uniform in [LO, HI]: real players range from sharp to loose.
@@ -157,8 +164,20 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     let solo = arms.iter().any(|arm| arm == "champion-solo");
     // `champion-errands`: the champion's seats also choose their fleet errand by look-ahead (`Universe::lookahead_errand`);
     // `champion-errand-out=FILE` records those decisions as the build labels are recorded (state, candidates, legal, worths).
-    let champion_errands = arms.iter().any(|arm| arm == "champion-errands");
-    let mut errand_labels = arms.iter().find_map(|arm| arm.strip_prefix("champion-errand-out=")).map(|path| BufWriter::new(File::create(path).expect("the errand label file")));
+    // `champion-errands-only`: the same, but builds stay the policy's (build look-ahead found no late headroom, 4 Nov).
+    let errands_only = arms.iter().any(|arm| arm == "champion-errands-only");
+    let champion_errands = errands_only || arms.iter().any(|arm| arm == "champion-errands");
+    let mut errand_labels = arms.iter().find_map(|arm| arm.strip_prefix("champion-errand-out=")).map(|path| {
+        // The width too: the errand menu offers `wait` first and pads the rest, so a reader cannot infer it the way a
+        // build label's last (always legal) row lets it.
+        // The column names too, so a trainer reads the widths and warm-starts by name (`wide` appends to every list).
+        let wide = arms.iter().any(|arm| arm == "wide");
+        let schema = serde_json::json!({"errand_feature_version": ogsim::errands::feature_version(wide), "candidates": ogsim::errands::max_candidates(wide),
+            "state": ogsim::errands::state_names(wide), "candidate": ogsim::errands::cand_columns(wide),
+            "kinds": &ogsim::errands::KIND_NAMES[..if wide { ogsim::errands::KIND_NAMES.len() } else { ogsim::errands::NARROW_KINDS }]});
+        std::fs::write(format!("{path}.schema.json"), schema.to_string()).expect("the errand label schema");
+        BufWriter::new(File::create(path).expect("the errand label file"))
+    });
     let is_champion = move |owner: usize| champion.is_some_and(|(stride, offset, _, _, _)| owner % stride == offset);
     // `champion-from=DAY` and, with `champion-label`, `champion-every=N`: the look-ahead runs from that day on and at a
     // hashed 1 in N of the seat's decisions; the rest play the policy. A label costs ~70 rollout sets a late day, and
@@ -177,6 +196,11 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         universe.rollout_policy = Some(Arc::new(policy.clone().expect("champion-base needs policy=")));
     }
     let horizon = move |t: f64, hours: f64| late.filter(|&(from, _)| t >= from).map_or(hours, |(_, h)| h);
+    let dump = arms.iter().find_map(|arm| arm.strip_prefix("errand-dump=")).map(|spec| {
+        let mut parts = spec.split(':');
+        let day = parts.next().and_then(|d| d.parse::<f64>().ok()).expect("errand-dump=DAY[:ROWS[:KIND]]");
+        (day, parts.next().map_or(2, |n| n.parse::<usize>().expect("errand-dump ROWS")), parts.next().map(String::from))
+    });
 
     if let Some(dir) = std::path::Path::new(&out_path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).expect("the output directory");
@@ -208,11 +232,24 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         excess: vec![[0.0; 3]; accounts],
         seen_planet: vec![false; accounts],
         over_cap: 0,
-        // A build model plays every account; an errand model only the fleets of the first `fleet-model` accounts.
+        // A build model plays every account; an errand model only the fleets its pilot names (`season::pilots`).
         champion: (0..accounts).map(is_champion).collect(),
-        controlled: if policy.is_some() { accounts } else if errand_model.is_some() { fleet_model } else { 0 },
+        controlled: pilot.iter().map(|p| policy.is_some() || match *p {
+            Pilot::Learner => errand_model.is_some(),
+            Pilot::Pool(k) => pool[k].is_some(),
+            Pilot::Persona => false,
+        }).collect(),
+        // `battles` or `levels`: every attack's fight, one line each, beside the season's lines (`World::fight_log`).
+        battles: arms.iter().any(|arm| arm == "battles" || arm == "levels")
+            .then(|| BufWriter::new(File::create(format!("{out_path}.battles.jsonl")).expect("the battles file"))),
+        social: arms.iter().any(|arm| arm == "social").then(ogsim::social::Tally::default),
+        out_path: out_path.to_string(),
     };
 
+    // `tally`: how often each errand (kind and fleet plan) was chosen and offered, to `<out>.errands.json`.
+    let mut tally = arms.iter().any(|arm| arm == "tally").then(BTreeMap::<String, [u64; 2]>::new);
+    // With `errand-pool=` too, the errands chosen per pilot, to `<out>.errands-by-pilot.json`: each group's own picks.
+    let mut by_pilot = (tally.is_some() && !pool.is_empty()).then(BTreeMap::<String, BTreeMap<String, u64>>::new);
     let start = std::time::Instant::now();
     while let Some(a) = season.u.next_decision() {
         let owner = season.u.world.account_of(a);
@@ -226,7 +263,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         });
         if let Some(file) = values.as_mut().filter(|_| build) { write_state(file, &season.u, a) }
         let pick = match &policy {
-            _ if build && searched => champion.map(|(_, _, hours, rollouts, width)| {
+            _ if build && searched && !errands_only => champion.map(|(_, _, hours, rollouts, width)| {
                 let hours = horizon(season.u.world.games[a].t, hours);
                 let found = season.u.lookahead(a, hours, rollouts, policy.as_ref().filter(|_| width > 0).map(|p| (p, width)), critic.as_ref(), solo);
                 if let Some(file) = labels.as_mut() { write_label(file, &found) }
@@ -242,46 +279,126 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
         if champion_errands && plays && a == owner && searched {
             let (_, _, hours, rollouts, _) = champion.expect("champion-errands needs champion=");
             let hours = horizon(season.u.world.games[a].t, hours);
-            let found = season.u.lookahead_errand(a, pick, hours, rollouts, solo);
-            if let Some(file) = errand_labels.as_mut() { write_errand_label(file, &found) }
-            let row = match (label_only, errand_model.as_ref()) {
-                (true, Some(p)) => match draw.as_mut().map(|d| &mut d[owner]) {
-                    Some(rng) => p.sample(&found.state, &found.cands, &found.legal, 1.0, rng).0,
-                    None => p.best(&found.state, &found.cands, &found.legal),
-                },
-                (true, None) => season.u.errand_teacher(a, &found.offered),
-                (false, _) => found.row,
+            // `errands=N` here too: each of the login's errands is searched (and labelled) until the pick is wait.
+            for _ in 0..per_login {
+                let found = season.u.lookahead_errand(a, pick, hours, rollouts, solo);
+                if let Some(file) = errand_labels.as_mut() { write_errand_label(file, &found) }
+                let row = match (label_only, errand_model.as_ref()) {
+                    (true, Some(p)) => match draw.as_mut().map(|d| &mut d[owner]) {
+                        Some(rng) => p.sample(&found.state, &found.cands, &found.legal, 1.0, rng).0,
+                        None => p.best(&found.state, &found.cands, &found.legal),
+                    },
+                    (true, None) => season.u.errand_teacher(a, &found.offered),
+                    (false, _) => found.row,
+                };
+                season.u.run_errand(a, &found.offered, row);
+                if row == 0 { break }
+            }
+        } else if plays && a == owner && match pilot[owner] { Pilot::Learner => errand_policy.is_some(), Pilot::Pool(_) => true, Pilot::Persona => false } {
+          // `errands=N`: up to N errands a login, until the pick is the wait row (a player raids, spies and saves in one
+          // login; one errand a login held raiders to a median of one raid a day, LATE-GAME-TACTICS-USAGE.md).
+          for _ in 0..per_login {
+            let model = match pilot[owner] {
+                Pilot::Pool(k) => pool[k].as_ref(),
+                _ => errand_nudged.as_ref().map(|all| &all[owner]).or(errand_model.as_ref()),
             };
-            season.u.run_errand(a, &found.offered, row);
-        } else if errand_policy.is_some() && plays && a == owner && owner < fleet_model {
-            let (offered, state, cands, legal) = season.u.observe_errands(a);
-            let model = errand_nudged.as_ref().map(|all| &all[owner]).or(errand_model.as_ref());
+            // The scripted teacher reads only the offer: the model's state and candidate rows are built when read.
+            // One menu for the loop's offer, pick and run: nothing between them moves what it reads.
+            let menu = season.u.menu(a);
+            let (offered, state, cands, legal) = match model.is_none() && dump.is_none() {
+                true => (season.u.offer_errands(a, &menu), Vec::new(), Vec::new(), Vec::new()),
+                false => season.u.observe_errands_in(a, &menu),
+            };
+            // `errand-dump=DAY[:ROWS[:KIND]]`: the first model login from DAY on offering at least ROWS rows (and a row of
+            // KIND, e.g. `Raid`) is written as the PHP same-situation parity reads it (`<out>.errand-dump.json`), and the
+            // season ends there.
+            if dump.as_ref().is_some_and(|(day, rows, kind)| season.u.world.games[a].t >= day * DAY && offered.len() >= *rows
+                && kind.as_ref().is_none_or(|kind| offered.iter().any(|e| format!("{:?}", e.kind) == *kind))) {
+                write_errand_dump(season.u, a, &offered, &state, &cands, &legal, seed, &format!("{out_path}.errand-dump.json"));
+                std::process::exit(0);
+            }
             let row = match (model, draw.as_mut().map(|d| &mut d[owner])) {
                 (Some(p), Some(rng)) => p.sample(&state, &cands, &legal, 1.0, rng).0,
                 (Some(p), None) => p.best(&state, &cands, &legal),
-                (None, _) => season.u.errand_teacher(a, &offered),
+                (None, _) => season.u.errand_teacher_in(a, &menu, &offered),
             };
-            season.u.run_errand(a, &offered, row);
+            if let Some(t) = tally.as_mut() {
+                let mut seen = std::collections::BTreeSet::new();
+                for e in &offered { if seen.insert(format!("{:?}/{:?}", e.kind, e.plan)) { t.entry(format!("{:?}/{:?}", e.kind, e.plan)).or_default()[1] += 1 } }
+                if let Some(e) = offered.get(row) { t.entry(format!("{:?}/{:?}", e.kind, e.plan)).or_default()[0] += 1 }
+            }
+            if let (Some(t), Some(e)) = (by_pilot.as_mut(), offered.get(row)) {
+                *t.entry(format!("{:?}", pilot[owner])).or_default().entry(format!("{:?}", e.kind)).or_default() += 1;
+            }
+            season.u.run_errand_in(a, &menu, &offered, row);
+            if row == 0 { break }
+          }
         }
         season.u.play(a, pick);
     }
+    if let Some(t) = &tally {
+        std::fs::write(format!("{out_path}.errands.json"), serde_json::to_string(&t.iter().map(|(k, v)| (k.clone(), json!({"chosen": v[0], "offered": v[1]}))).collect::<serde_json::Map<_, _>>()).unwrap()).expect("the errand tally");
+    }
+    if let Some(t) = &by_pilot {
+        std::fs::write(format!("{out_path}.errands-by-pilot.json"), serde_json::to_string(t).unwrap()).expect("the errand tally by pilot");
+    }
     season.flush(f64::INFINITY);
+    season.write_battles();
+    if let Some(file) = season.battles.as_mut() { file.flush().expect("flush the battles") }
     if let Some(file) = labels.as_mut() { file.flush().expect("flush the labels") }
     if let Some(file) = errand_labels.as_mut() { file.flush().expect("flush the errand labels") }
     if let Some(file) = values.as_mut() { file.flush().expect("flush the value states") }
     // Diagnosis: every account's planets as the season leaves them (fields, rate, levels by host id), beside the lines.
     if arms.iter().any(|arm| arm == "levels") {
+        // Enough of the state for `ai:rl-import-sim` to rebuild the account in PHP: coordinates, ships and defence (a fleet
+        // still out counts at the body it left), resources, moons, class and dark matter.
+        let w = &season.u.world;
+        let mut flying: HashMap<usize, BTreeMap<u32, i64>> = HashMap::new();
+        for f in &w.fleets { for &(id, n) in &f.ships { *flying.entry(f.owner).or_default().entry(id).or_default() += n } }
+        let body = |slot: usize| {
+            let planet = &w.games[slot].planet;
+            let levels: serde_json::Map<String, serde_json::Value> = season.u.cat.objects.iter().zip(&planet.levels)
+                .filter(|(_, &l)| l > 0).map(|(o, &l)| (o.id.to_string(), json!(l))).collect();
+            let mut units: BTreeMap<u32, i64> = w.rules[slot].units.units.iter().zip(&w.yards[slot].counts)
+                .filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
+            for (&id, &n) in flying.get(&slot).into_iter().flatten() { *units.entry(id).or_default() += n }
+            let at = w.coords[slot];
+            json!({"fields": season.u.cat.fields_used(planet), "cap": season.u.cat.field_cap(planet), "rate": planet.rate,
+                   "position": season.u.cat.planets[planet.config].position, "galaxy": at.galaxy, "system": at.system,
+                   "res": planet.res, "levels": levels, "units": units})
+        };
         let planets: Vec<_> = (0..accounts).map(|a| {
-            let slots: Vec<_> = season.u.world.planets_of(a).into_iter().map(|slot| {
-                let planet = &season.u.world.games[slot].planet;
-                let levels: serde_json::Map<String, serde_json::Value> = season.u.cat.objects.iter().zip(&planet.levels)
-                    .filter(|(_, &l)| l > 0).map(|(o, &l)| (o.id.to_string(), json!(l))).collect();
-                json!({"fields": season.u.cat.fields_used(planet), "cap": season.u.cat.field_cap(planet), "rate": planet.rate,
-                       "position": season.u.cat.planets[planet.config].position, "levels": levels})
+            let slots: Vec<_> = w.planets_of(a).into_iter().filter(|&slot| w.moon_at[slot].is_none()).map(|slot| {
+                let mut entry = body(slot);
+                if let Some(moon) = w.moon_of[slot] { entry["moon"] = body(moon) }
+                entry
             }).collect();
-            json!({"account": a, "inactive": season.u.gone[a], "total": score::of(&season.u.world, a).total, "planets": slots})
+            json!({"account": a, "inactive": season.u.gone[a], "total": score::of(w, a).total, "day": days,
+                   "class": season.u.cat.planets[w.games[a].planet.config].character_class, "dark_matter": w.dark_matter[a],
+                   "alliance": w.alliance_at[a].is_some(), "alliance_id": w.alliance_at[a].map(|_| w.alliance_id[a]), "persona": ogsim::season::PERSONAS[season.u.roles[a]].0, "planets": slots})
         }).collect();
         std::fs::write(format!("{out_path}.levels.json"), serde_json::to_string(&planets).expect("levels json")).expect("write the levels");
+    }
+    if let Some(tally) = season.social.take() {
+        let at = days as f64 * DAY;
+        let w = &mut season.u.world;
+        let active: Vec<bool> = (0..accounts).map(|a| !w.inactive(&season.u.cat, a, at)).collect();
+        let club = tally.clubs().to_vec();
+        let points: Vec<f64> = (0..accounts).map(|a| score::of(w, a).total as f64).collect();
+        let gauges = tally.gauges(&active, &club, &points);
+        std::fs::write(format!("{out_path}.social.json"), serde_json::to_string(&gauges).expect("social json")).expect("write the social gauges");
+    }
+    if season.u.world.relations.on {
+        let mut log: Vec<String> = season.u.world.relations.log.iter().map(|e| serde_json::to_string(e).expect("diplomacy event")).collect();
+        log.push(serde_json::json!({"kind": "tribute_total", "paid": season.u.world.relations.tribute_paid}).to_string());
+        if let Some(v) = &season.u.world.relations.probe {
+            log.push(serde_json::json!({"kind": "probe", "variant": v, "club": season.u.world.relations.probe_club, "share": season.u.world.relations.probe_share}).to_string());
+        }
+        std::fs::write(format!("{out_path}.diplomacy.jsonl"), log.join("\n") + "\n").expect("write the diplomacy log");
+        if !season.u.world.relations.decisions.is_empty() {
+            let rows: Vec<String> = season.u.world.relations.decisions.iter().map(|d| d.to_string()).collect();
+            std::fs::write(format!("{out_path}.decisions.jsonl"), rows.join("\n") + "\n").expect("write the decisions");
+        }
     }
     let lines = season.lines;
     let frozen_days = season.frozen_days;
@@ -292,6 +409,9 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     let over_cap = season.over_cap;
     let seconds = start.elapsed().as_secs_f64();
     drop(season);
+    let gates = universe.ledgers.iter().fold([0usize; 8], |mut t, l| { for i in 0..8 { t[i] += l.raid_gates[i] } t });
+    let no_plan = universe.ledgers.iter().fold([0usize; 3], |mut t, l| { for i in 0..3 { t[i] += l.no_plan[i] } t });
+    let _ = std::fs::write(format!("{out_path}.gates.json"), json!({"raid_gates": gates, "no_plan": no_plan}).to_string());
 
     let count = |role: usize| universe.roles.iter().filter(|&&r| r == role).count();
     let quit_days: Vec<f64> = universe.quit.iter().flatten().map(|d| d / DAY).collect();
@@ -345,8 +465,13 @@ struct Season<'a, W: Write> {
     seen_planet: Vec<bool>,
     over_cap: usize,
     /// The accounts a model plays (the first this many), and the accounts the look-ahead player builds for.
-    controlled: usize,
+    controlled: Vec<bool>,
     champion: Vec<bool>,
+    battles: Option<BufWriter<File>>,
+    /// `social`: the season's social gauges (`ogsim::social`), written to `<out>.social.json` at its end.
+    social: Option<ogsim::social::Tally>,
+    /// The season's output path, for the read-outs written along the way.
+    out_path: String,
 }
 
 impl<W: Write> Season<'_, W> {
@@ -356,9 +481,70 @@ impl<W: Write> Season<'_, W> {
             let d = (self.midnight / DAY) as usize - 1;
             scan(&self.u.world, &mut self.read, &self.u.roles, &mut self.per_day, self.days, &mut self.delivered);
             self.write_day(d, snapshot_time(until, self.midnight));
+            if self.social.is_some() {
+                let at = (d + 1) as f64 * DAY;
+                let active = (0..self.u.roles.len()).filter(|&a| !self.u.world.inactive(&self.u.cat, a, at)).count();
+                let w = &self.u.world;
+                let clubs = (0..self.u.roles.len()).map(|a| w.alliance_at[a].is_some_and(|join| at >= join).then(|| w.alliance_id[a])).collect();
+                if let Some(t) = self.social.as_mut() { t.day(active, clubs) }
+                // Every 16 days the read-outs so far (a long season cut by its timeout keeps them): the diplomacy log
+                // and the social gauges as of that day.
+                if (d + 1) % 16 == 0 {
+                    if let Some(t) = &self.social {
+                        let n = self.u.roles.len();
+                        let cat = &self.u.cat;
+                        let w = &mut self.u.world;
+                        let act: Vec<bool> = (0..n).map(|a| !w.inactive(cat, a, at)).collect();
+                        let points: Vec<f64> = (0..n).map(|a| score::of(w, a).total as f64).collect();
+                        let mut g = serde_json::to_value(t.gauges(&act, t.clubs(), &points)).expect("gauges");
+                        g["day"] = json!(d + 1);
+                        let _ = std::fs::write(format!("{}.social.json", self.out_path), g.to_string());
+                    }
+                    if self.u.world.relations.on {
+                        let r = &self.u.world.relations;
+                        if !r.decisions.is_empty() {
+                            let rows: Vec<String> = r.decisions.iter().map(|d| d.to_string()).collect();
+                            let _ = std::fs::write(format!("{}.decisions.jsonl", self.out_path), rows.join("\n") + "\n");
+                        }
+                        let mut log: Vec<String> = r.log.iter().map(|e| serde_json::to_string(e).expect("event")).collect();
+                        if let Some(v) = &r.probe { log.push(json!({"kind": "probe", "variant": v, "club": r.probe_club, "share": r.probe_share, "day": d + 1}).to_string()) }
+                        let _ = std::fs::write(format!("{}.diplomacy.jsonl", self.out_path), log.join("\n") + "\n");
+                    }
+                }
+            }
+            self.write_battles();
             self.u.day_end(self.midnight);
             self.lines += self.u.world.games.len();
             self.midnight += DAY;
+        }
+    }
+
+    /// The fights the world logged since the last call, one JSON line each; the log is emptied so it never grows.
+    fn write_battles(&mut self) {
+        let fights = std::mem::take(&mut self.u.world.fight_log);
+        if let Some(t) = self.social.as_mut() {
+            // Hostility: a lone attack on someone who is not a mate at that second (a mate's planet is a moon shot).
+            let (w, top) = (&self.u.world, 10.0 / self.u.rank.len().max(1) as f64);
+            let club = |a: usize, at: f64| w.alliance_at[a].is_some_and(|join| at >= join).then(|| w.alliance_id[a]);
+            for f in fights.iter().filter(|f| !f.union && !w.mates(f.owner, f.target, f.time)) {
+                let (x, y) = (w.account_of(f.owner), w.account_of(f.target));
+                t.fight(x, y, (club(x, f.time), club(y, f.time)), self.u.rank[y] <= top + 1e-9);
+            }
+        }
+        let Some(file) = self.battles.as_mut() else { return };
+        let ids = |units: &ogsim::combat::Units| -> BTreeMap<String, i64> { units.iter().filter(|(_, &n)| n > 0).map(|(id, &n)| (id.to_string(), n)).collect() };
+        for fight in fights {
+            // An attack on an alliance mate's planet is a moon shot (players::moon_shot), not a fight for loot.
+            let mate_target = self.u.world.mates(fight.owner, fight.target, fight.time);
+            let line = json!({
+                "seed": self.seed, "day": (fight.time / DAY).floor() as usize + 1, "time": fight.time,
+                "mission": if fight.union { "acs_attack" } else { "attack" }, "attacker": fight.owner, "defender": fight.target,
+                "target_moon": fight.moon, "attacker_units": ids(&fight.attacker), "defender_units": ids(&fight.defender),
+                "attacker_lost": ids(&fight.attacker_lost), "defender_lost": ids(&fight.defender_lost),
+                "outcome": match fight.winner { ogsim::combat::Winner::Attacker => "attacker", ogsim::combat::Winner::Defender => "defender", ogsim::combat::Winner::Draw => "draw" },
+                "loot": fight.loot, "mate_target": mate_target,
+            });
+            writeln!(file, "{line}").expect("write a battle");
         }
     }
 
@@ -447,7 +633,7 @@ impl<W: Write> Season<'_, W> {
                 "account": a,
                 "persona": PERSONAS[self.u.roles[a]].0,
                 "class": self.u.cat.planets[self.u.world.games[a].planet.config].character_class,
-                "controlled": a < self.controlled && !self.champion[a],
+                "controlled": self.controlled[a] && !self.champion[a],
                 "champion": self.champion[a],
                 "health": {"frozen": frozen, "invalid_stock": invalid_stock, "unbalanced": unbalanced,
                            "clock_ahead": clock_ahead, "unexplained_over_cap": unexplained_over_cap,
@@ -928,4 +1114,90 @@ fn splitmix(x: u64) -> u64 {
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     z ^ (z >> 31)
+}
+
+/// Arm `errand-dump`: slot a's errand choice point exactly as the season built it (state, rows, legal mask), with what
+/// PHP needs to rebuild the same situation (plan/rl/STRONG-PLAYER-PLAN.md, "same-situation parity"): each row's kind,
+/// target and the fleets or order it starts (read off a clone of the world the errand is applied to, so the season's own
+/// world is untouched), the account's reports and the targets' debris, inactivity and moons, its incoming attacks, last
+/// fight and slots, and its bodies in the `levels` layout with the ships on the shelf only (nothing in flight).
+#[allow(clippy::too_many_arguments)]
+fn write_errand_dump(u: &Universe, a: usize, offered: &[ogsim::errands::Errand], state: &[f32], cands: &[f32], legal: &[u8], seed: u64, path: &str) {
+    use ogsim::errands;
+    let (w, cat) = (&u.world, &u.cat);
+    let menu = u.menu(a);
+    let now = w.games[a].t;
+    let width = errands::cand_dim(w.wide);
+    let mut probe = w.clone();
+    let coord = |slot: usize| json!({"galaxy": w.coords[slot].galaxy, "system": w.coords[slot].system, "position": w.coords[slot].position, "moon": w.moon_at[slot].is_some()});
+    let units_of = |slot: usize, counts: &[u64]| -> serde_json::Map<String, serde_json::Value> {
+        w.rules[slot].units.units.iter().zip(counts).filter(|(_, &n)| n > 0).map(|(unit, &n)| (unit.id.to_string(), json!(n))).collect()
+    };
+    let levels_of = |levels: &[u32], research: bool| -> serde_json::Map<String, serde_json::Value> {
+        cat.objects.iter().zip(levels).filter(|(o, &l)| (o.queue == 1) == research && l > 0).map(|(o, &l)| (o.id.to_string(), json!(l))).collect()
+    };
+    let report = |target: usize| w.reports.iter().rev().find(|r| r.owner == a && r.target == target).map(|r| json!({
+        "age_seconds": now - r.time, "resources": r.resources, "debris": r.debris,
+        "ships": r.ships.as_deref().map(|c| units_of(target, c)), "defence": r.defence.as_deref().map(|c| units_of(target, c)),
+        "buildings": r.buildings.as_deref().filter(|l| l.len() == cat.objects.len()).map(|l| levels_of(l, false)),
+        "research": r.research.as_deref().filter(|l| l.len() == cat.objects.len()).map(|l| levels_of(l, true)),
+    }));
+    let fleet_json = |f: &ogsim::world::Fleet| json!({
+        "from": f.owner, "from_coord": coord(f.owner), "target": f.target, "to": {"galaxy": f.to.galaxy, "system": f.to.system, "position": f.to.position},
+        "to_moon": f.moon, "mission": f.mission as u32, "flight_seconds": f.arrive - f.departed,
+        "ships": f.ships.iter().map(|&(id, n)| (id.to_string(), json!(n))).collect::<serde_json::Map<_, _>>(),
+    });
+    let rows: Vec<serde_json::Value> = offered.iter().enumerate().map(|(row, &e)| {
+        let mut after = w.clone();
+        let (mut fleets, orders) = (after.fleets.len(), after.yards[a].orders.len());
+        let mut applied = errands::apply_in(&mut after, cat, a, e, &menu);
+        // A row offered with every fleet slot taken (the narrow menu does not ask) still shows its fleet: the same
+        // errand on a clone whose own fleets have landed, marked `freed`.
+        let freed = applied == Err("maximum number of fleets");
+        if freed {
+            after = w.clone();
+            after.fleets.retain(|f| w.account_of(f.owner) != a);
+            fleets = after.fleets.len();
+            applied = errands::apply_in(&mut after, cat, a, e, &menu);
+        }
+        let launched: Vec<_> = after.fleets.get(fleets..).unwrap_or(&[]).iter().map(fleet_json).collect();
+        let ordered: Vec<_> = after.yards[a].orders.get(orders..).unwrap_or(&[]).iter().map(|o| json!({"unit": w.rules[a].units.units[o.unit].id, "amount": o.amount})).collect();
+        let target = e.target.map(|t| {
+            let planet = w.moon_at[t].unwrap_or(t);
+            json!({"slot": t, "coord": coord(t), "account": w.account_of(t), "inactive": probe.inactive(cat, t, now), "debris": w.debris[t], "field": w.fields[t],
+                   "report": report(t), "moon_report": w.moon_of[t].and_then(report), "moon_diameter": w.moons[planet].then(|| w.moon_holds[planet].diameter)})
+        });
+        json!({"row": row, "kind": format!("{:?}", e.kind), "plan": format!("{:?}", e.plan), "size": format!("{:?}", e.size),
+               "unit": e.unit.map(|i| w.rules[a].units.units[i].id), "target": target, "applied": applied.err().unwrap_or("ok"), "freed": freed,
+               "launched": launched, "ordered": ordered, "features": &cands[row * width..(row + 1) * width]})
+    }).collect();
+    let body = |slot: usize| {
+        let planet = &w.games[slot].planet;
+        let at = w.coords[slot];
+        // The world's own coordinate (what every distance reads), not the donor planet's position the `levels` dump writes.
+        json!({"galaxy": at.galaxy, "system": at.system, "position": at.position, "config_position": cat.planets[planet.config].position, "slot": slot, "res": planet.res, "cap": planet.cap,
+               "levels": levels_of(&planet.levels, false).into_iter().chain(levels_of(&planet.levels, true)).collect::<serde_json::Map<_, _>>(),
+               "units": units_of(slot, &w.yards[slot].counts), "temperature": cat.planets[planet.config].temperature})
+    };
+    let planets: Vec<_> = w.planets_of(a).into_iter().filter(|&slot| w.moon_at[slot].is_none()).map(|slot| {
+        let mut entry = body(slot);
+        if let Some(moon) = w.moon_of[slot] { entry["moon"] = body(moon); entry["moon"]["diameter"] = json!(w.moon_holds[slot].diameter) }
+        entry
+    }).collect();
+    let mine = |f: &&ogsim::world::Fleet| w.account_of(f.owner) == a;
+    let dump = json!({
+        "seed": seed, "day": now / DAY, "t": now, "slot": a, "persona": PERSONAS[u.roles[a]].0, "raids": menu.raids, "wide": w.wide, "late": w.late,
+        "state_names": errands::state_names(w.wide), "candidate_names": errands::cand_columns(w.wide),
+        "state": state, "legal": legal, "rows": rows,
+        "incoming_seconds": w.fleets.iter().filter(|f| f.target == a && f.mission == Mission::Attack && !f.returning && f.arrive > now).map(|f| f.arrive - now).collect::<Vec<_>>(),
+        "last_attacked_seconds": w.last_attacked.get(&a).map(|&at| now - at),
+        "idle": w.decision_kind(a) == Decision::Idle, "home_debris": w.debris[a], "home_field": w.fields[a],
+        "fleet_slots": w.fleet_slots(cat, a), "fleets_out": w.fleets.iter().filter(mine).filter(|f| f.mission != Mission::Missile).count(),
+        "expedition_slots": w.expedition_slots(cat, a), "expeditions_out": w.fleets.iter().filter(mine).filter(|f| f.mission == Mission::Expedition).count(),
+        "officers": w.hired(a).count(),
+        "account": {"account": a, "inactive": false, "total": score::of(w, a).total, "day": now / DAY,
+                    "class": cat.planets[w.games[a].planet.config].character_class, "dark_matter": w.dark_matter[a], "planets": planets,
+                    "officers": w.officers[a].iter().filter(|(_, &until)| until > now).map(|(key, &until)| (key.clone(), json!(until - now))).collect::<serde_json::Map<_, _>>()},
+    });
+    std::fs::write(path, serde_json::to_string(&dump).expect("errand dump json")).expect("write the errand dump");
 }

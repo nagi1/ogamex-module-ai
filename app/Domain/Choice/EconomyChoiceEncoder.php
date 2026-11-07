@@ -8,6 +8,7 @@ use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Enums\GamePhase;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\HostProduction;
 use OGame\GameObjects\Models\Enums\GameObjectType;
 use OGame\Models\Highscore;
 use OGame\Models\Resources;
@@ -254,8 +255,8 @@ class EconomyChoiceEncoder
             if ($object->machine_name !== $machineName) {
                 continue;
             }
-            $now = $planet->getObjectProduction($machineName, $level, true);
-            $next = $planet->getObjectProduction($machineName, $level + 1, true);
+            $now = HostProduction::at($planet, $machineName, $level);
+            $next = HostProduction::at($planet, $machineName, $level + 1);
 
             return [
                 ($next->metal->get() + $next->crystal->get() + $next->deuterium->get()) - ($now->metal->get() + $now->crystal->get() + $now->deuterium->get()),

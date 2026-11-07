@@ -11,14 +11,21 @@ North-star plan N4 (plan/rl/NORTH-STAR-PLAN.md §6). Reads one or more season fi
   indistinguishable. Target ≤ 0.60. The measures with the largest permutation importance are *what gives
   us away*, and they order the planner's next rows.
 
-Plus the hard-constraint violations (§4), which must be 0: a week whose logins touch fewer than 18 hours
-of the day, a dark stretch of 6 h or more, two actions less than 10 s apart.
+Plus the hard-constraint violations (§4), which must be 0: a week whose logins touch 18 or more hours of the
+day (the host's bot signal, `ServerAdministrationController::getBotActivitySignals`, flags fleet departures over
+18 distinct hours in 7 days; logins are a stricter proxy since every departure happens at one), an active day with no dark stretch of 6 h (the host flags an account that never sleeps; ESCALATIONS
+26 Oct, item 5), two actions less than 10 s apart.
 
     .venv-rl/bin/python rl/scripts/hds.py season-1.jsonl season-2.jsonl season-3.jsonl
     .venv-rl/bin/python rl/scripts/hds.py --self-test      # proves the yardstick before it judges
 
 The self-test splits the real sample in half and scores one half as "ours": HDS must come out near 0.80
 and the AUC near 0.5, or the measures leak.
+
+`--war-cells` adds the war cells of war_cells.py (attack odds, attacker/defender loss ratio, attack-fleet hull roles by
+value tier, satellites and defence per planet; real bands from the OGMEM battle archive), printed in their own section
+and saved under `war`. They never enter HDS, the AUC or the verdict, so benches with and without the flag compare.
+With `--self-test` the flag also runs their own leave-one-out self-test.
 """
 from __future__ import annotations
 
@@ -40,6 +47,7 @@ from sklearn.model_selection import GroupKFold, StratifiedKFold
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from real_bands import MEASURES, MIN_CELL, age_bucket_of, band_of, bucket_of  # noqa: E402  (same file)
 from census import print_health  # noqa: E402
+import war_cells  # noqa: E402
 
 DEFAULT_BANDS = Path(__file__).resolve().parents[4] / "storage/rl/ogsim/real-bands.json"
 GROWTH_EVERY = 10          # the growth measure is read every tenth day (§4)
@@ -47,10 +55,9 @@ WEEK = 7                   # the hard constraints are weekly
 MIN_HOURS_TOUCHED = 18
 MAX_DARK_HOURS = 6.0
 MIN_GAP_SECONDS = 10.0
-# §4's three hard constraints. Two have an exact rule; "a dark period shorter than 6 h" does not: a human
-# sleeps, so a real account is dark 7-9 h a night and the count can never be 0. It is reported apart and not
-# gated (see ESCALATIONS.md, 26 Oct) until the planner says what it means.
-GATED = ("login_hours_under_18", "action_under_10s")
+# §4's three hard constraints, as the planner settled them (ESCALATIONS.md, 26 Oct, item 5): every calendar day an
+# account plays holds a dark stretch of at least 6 h; a day without one is a violation.
+GATED = ("login_hours_18_or_more", "action_under_10s", "day_without_6h_dark")
 HDS_TARGET, AUC_TARGET = 0.75, 0.60
 # A season whose scores are the simulator's stub may not be compared against real totals: a made-up split
 # would read as a distance that is not there. Only the counts a player can see are scored.
@@ -140,13 +147,28 @@ def violations(rows: list[dict]) -> dict[str, int]:
             # logins_today holds seconds within its own day: offset by the day or a week reads as one long
             # backwards jump between days and every night looks like a missed constraint.
             stamps = sorted((day["day"] - 1) * 86_400 + s for day in chunk for s in day["logins_today"])
-            if len({int(s // 3600) for s in stamps}) < MIN_HOURS_TOUCHED:
-                out["login_hours_under_18"] += 1
+            # The host flags spread, not its absence: a human who sleeps touches fewer hours.
+            if len({int(s % 86_400 // 3600) for s in stamps}) >= MIN_HOURS_TOUCHED:
+                out["login_hours_18_or_more"] += 1
             gaps = [b - a for a, b in zip(stamps, stamps[1:])]
-            if gaps and max(gaps) >= MAX_DARK_HOURS * 3600:
-                out["dark_period_6h"] += 1
             out["action_under_10s"] += sum(1 for gap in gaps if gap < MIN_GAP_SECONDS)
+        out["day_without_6h_dark"] += days_without_dark_stretch(days)
     return dict(out)
+
+
+def days_without_dark_stretch(days: list[dict]) -> int:
+    """Active days touched by no login-free stretch of MAX_DARK_HOURS. A night is one stretch even when it crosses
+    midnight (21:00-04:00 is 7 h), so stretches run over the account's whole timeline and count for every day they
+    touch; a day with no login at all is dark throughout."""
+    stamps = sorted((day["day"] - 1) * 86_400 + s for day in days for s in day["logins_today"])
+    if not days:
+        return 0
+    edges = [(days[0]["day"] - 1) * 86_400, *stamps, days[-1]["day"] * 86_400]
+    dark: set[int] = set()
+    for a, b in zip(edges, edges[1:]):
+        if b - a >= MAX_DARK_HOURS * 3600:
+            dark.update(range(int(a // 86_400) + 1, int((b - 1e-9) // 86_400) + 2))
+    return sum(1 for day in days if day["day"] not in dark)
 
 
 def real_vectors(bands: dict, cell: str) -> list[list[float]]:
@@ -308,11 +330,16 @@ def main() -> int:
     parser.add_argument("--save", type=Path, help="write the scorecard here, to use as a --baseline later")
     parser.add_argument("--baseline", type=Path, help="compare with a saved scorecard; exit 1 when it regresses")
     parser.add_argument("--self-test", action="store_true", help="prove the yardstick on the real sample")
+    parser.add_argument("--war-cells", action="store_true",
+                        help="also score the war cells (OGMEM battles), reported apart from HDS/AUC")
+    parser.add_argument("--war-real", type=Path, default=war_cells.DEFAULT_REAL,
+                        help="ogmem-strategies.json holding the real `battles`")
     args = parser.parse_args()
 
     bands = json.loads(args.bands.read_text())
     if args.self_test:
-        return self_test(bands)
+        status = self_test(bands)
+        return status | (war_cells.self_test(args.war_real) if args.war_cells else 0)
     if not args.season:
         parser.error("give at least one season file, or --self-test")
 
@@ -331,6 +358,10 @@ def main() -> int:
     print("hard constraints:", counts or "none violated")
     result = report(cells, bands, "this season", args.save, measures)
     result["violations"] = counts
+    if args.war_cells:
+        result["war"] = war_cells.judge(args.season, rows, args.war_real)
+        if args.save:
+            args.save.write_text(json.dumps(result, indent=1))
 
     failed = any(counts.get(key) for key in GATED)
     comparable = bool(result["cells"]) and result["hds"] > 0

@@ -1,0 +1,10 @@
+# Arm `skill` (rl/ogsim/src/tuning.rs `skill_draw` / `expedition_use`; SOCIAL-PLAN.md, 7 Nov). Players differ in how
+# well they play: each AI account holds one skill quantile q in 0..1, drawn once from its own seed and kept on its
+# profile, and q acts only through what a player's skill acts through, never a game rule:
+# * attendance: q places the account in its archetype's activity mix (AiPersonaFactory) by the mix's cumulative
+#   shares, and its diligence inside that band by where it sits in the band's share (the strong are the active);
+# * expedition slots kept busy: ceil(slots * (floor + (1 - floor) * q^power)), at least one, at most the host's.
+# The host's expeditions themselves are untouched. Off by default (AI_POPULATION_SKILL). The simulator's unit test
+# `skill_constants_match_the_module_yaml` reads this file, so the two numbers cannot drift.
+expedition_use_floor: 0.10
+expedition_use_power: 6.0

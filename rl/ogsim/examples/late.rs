@@ -1,7 +1,9 @@
 //! Late-game bench (owner, 4 Nov: late game first, no run over ten minutes). Each seed's world is played by the personas
 //! to day START once, then copied per candidate; every copy plays the same WINDOW days from the identical position with
 //! the same dice, so the paired log-ratio of each account's points against the first candidate is the candidate's
-//! late-game effect alone.
+//! late-game effect alone. The war-report option counts player attack/moon-destruction fights, rank-1 involvement,
+//! assigned-team matchups, battle debris and ACS join arrivals; rank 1 is fixed at START. Team assignments are not
+//! proof of membership at the time of a fight, and none of these counts is a victory score.
 //!
 //!     late <data> <catalogue.json> START WINDOW SEEDS(1,2,3) cand=NAME=SPEC... [world arms]
 //!
@@ -19,7 +21,7 @@ use std::time::Instant;
 
 use ogsim::score;
 use ogsim::season::{Policy, Universe, DAY};
-use ogsim::world::{Colonisation, Decision};
+use ogsim::world::{Colonisation, Decision, EventKind, Mission};
 
 #[derive(Clone)]
 enum Spec { Persona, Model(Arc<Policy>, bool), Champ(Arc<Policy>, f64, u64, usize, bool, usize), Each(Arc<Vec<Policy>>), Switch(f64, Box<Spec>, Box<Spec>), With(Vec<String>, Box<Spec>) }
@@ -107,6 +109,13 @@ fn main() {
                 let mut midnight = DAY;
                 let pending = advance(&mut base, start * DAY, &mut midnight, None, &Spec::Persona, &mut draws);
                 let before: Vec<f64> = (0..accounts).map(|a| score::of(&base.world, a).total as f64).collect();
+                let accept_before = base.ledgers.iter().fold([0usize; 4], |mut t, x| { for i in 0..4 { t[i] += x.war_accept_refused[i] } t });
+                let request_before = base.ledgers.iter().fold([0usize; 2], |mut t, x| { t[0] += x.war_request_refused[0]; t[1] += x.war_request_refused[1]; t });
+                let refused_before = base.ledgers.iter().fold([0usize; 6], |mut t, x| { for i in 0..6 { t[i] += x.war_launch_refused[i] } t });
+                let messages_before = base.ledgers.iter().fold((0usize, 0usize, 0usize), |(r, a, l), x| (r + x.war_requests, a + x.war_acceptances, l + x.war_launches));
+                let observations_before = base.ledgers.iter().fold((0usize, 0usize, 0usize), |(f, r, o), x| (f + x.war_ready_logins, r + x.war_reports, o + x.war_opportunities));
+                let boss = (0..accounts).max_by(|&a, &b| before[a].total_cmp(&before[b])).expect("an account");
+                let war_report = args.iter().any(|a| a == "war-report");
                 eprintln!("seed {seed}: day {start} reached at {:.0}s", began.elapsed().as_secs_f64());
                 std::thread::scope(|inner| {
                     let runs: Vec<_> = cands.iter().map(|(name, how)| {
@@ -118,6 +127,35 @@ fn main() {
                         }
                         inner.spawn(move || {
                             advance(&mut u, (start + window) * DAY, &mut midnight, pending, how, &mut draws);
+                            if war_report {
+                                let fights: Vec<_> = u.world.events.iter().filter(|e| e.time >= start * DAY && e.time < (start + window) * DAY && e.kind == EventKind::Fight && matches!(e.mission, Mission::Attack | Mission::MoonDestroy)).collect();
+                                let cross_team = fights.iter().filter(|e| u.world.alliance_id[u.world.account_of(e.owner)] != u.world.alliance_id[u.world.account_of(e.target)]).count();
+                                let boss_spies = u.world.events.iter().filter(|e| e.time >= start * DAY && e.time < (start + window) * DAY && e.kind == EventKind::Arrival && e.mission == Mission::Espionage && u.world.account_of(e.target) == boss && u.world.account_of(e.owner) != boss).count();
+                                let boss_fights = fights.iter().filter(|e| u.world.account_of(e.owner) == boss || u.world.account_of(e.target) == boss).count();
+                                for (body, moon) in [("planet", false), ("moon", true)] {
+                                    let reports: Vec<_> = u.world.reports.iter().filter(|r| r.time >= start * DAY && r.time < (start + window) * DAY && u.world.account_of(r.target) == boss && u.world.account_of(r.owner) != boss && u.world.moon_at[r.target].is_some() == moon).collect();
+                                    let revealed = reports.iter().filter(|r| r.ships.is_some()).count();
+                                    let defence = reports.iter().filter(|r| r.defence.is_some()).count();
+                                    let research = reports.iter().filter(|r| r.research.is_some()).count();
+                                    let full = reports.iter().filter(|r| r.ships.is_some() && r.defence.is_some() && r.research.is_some()).count();
+                                    let military = reports.iter().filter(|r| r.ships.as_ref().is_some_and(|ships| ships.iter().enumerate().any(|(i, &n)| n > 0 && u.world.rules[r.target].units.kind.get(i) == Some(&ogsim::units::UnitKind::MilitaryShip)))).count();
+                                    eprintln!("seed {seed} {name}: boss_{body}_reports={} ships_visible={} defence_visible={} research_visible={} full={} military_visible={}", reports.len(), revealed, defence, research, full, military);
+                                }
+                                let destroyed: i64 = fights.iter().flat_map(|e| e.debris).sum();
+                                let joins = u.world.union_log.iter().filter(|(_, t)| *t >= start * DAY && *t < (start + window) * DAY).count();
+                                let messages = u.ledgers.iter().fold((0usize, 0usize, 0usize), |(r, a, l), x| (r + x.war_requests, a + x.war_acceptances, l + x.war_launches));
+                                let observations = u.ledgers.iter().fold((0usize, 0usize, 0usize), |(f, r, o), x| (f + x.war_ready_logins, r + x.war_reports, o + x.war_opportunities));
+                                eprintln!("seed {seed} {name}: war ready_logins={} usable_fleet_reports={} outmatched_choices={}", observations.0 - observations_before.0, observations.1 - observations_before.1, observations.2 - observations_before.2);
+                                eprintln!("seed {seed} {name}: war requests={} accepts={} coordinated_launches={}", messages.0 - messages_before.0, messages.1 - messages_before.1, messages.2 - messages_before.2);
+                                let now_r = u.ledgers.iter().fold([0usize; 6], |mut t, x| { for i in 0..6 { t[i] += x.war_launch_refused[i] } t });
+                                let r: Vec<usize> = (0..6).map(|i| now_r[i] - refused_before[i]).collect();
+                                let acc = u.ledgers.iter().fold([0usize; 4], |mut t, x| { for i in 0..4 { t[i] += x.war_accept_refused[i] } t });
+                                eprintln!("seed {seed} {name}: accept refused report_gone={} lands_after_leader={} no_fuel={} strength={}", acc[0] - accept_before[0], acc[1] - accept_before[1], acc[2] - accept_before[2], acc[3] - accept_before[3]);
+                                let req = u.ledgers.iter().fold([0usize; 2], |mut t, x| { t[0] += x.war_request_refused[0]; t[1] += x.war_request_refused[1]; t });
+                                eprintln!("seed {seed} {name}: request skipped no_fuel={} no_mate={}", req[0] - request_before[0], req[1] - request_before[1]);
+                                eprintln!("seed {seed} {name}: launch refused expired_unread={} ships_away={} acceptance_over_1h={} report_gone={} recheck_failed={} dispatch_refused={}", r[0], r[1], r[2], r[3], r[4], r[5]);
+                                eprintln!("seed {seed} {name}: war fights={} cross_assigned_teams={} boss={} boss_spies={} boss_fights={} debris={} ACS_join_arrivals={}", fights.len(), cross_team, boss, boss_spies, boss_fights, destroyed, joins);
+                            }
                             eprintln!("seed {seed}: {name} done at {:.0}s", began.elapsed().as_secs_f64());
                             (0..accounts).map(|a| (!u.gone[a]).then(|| (before[a], score::of(&u.world, a).total as f64, u.world.hourly(a), u.world.planets_of(a).len() as f64, score::of(&u.world, a).research as f64, score::of(&u.world, a).military as f64, u.world.stock(a)))).collect::<Vec<_>>()
                         })
@@ -255,9 +293,11 @@ fn evolve(out: &str, args: &[String], cat: Arc<ogsim::economy::Catalogue>, colon
 /// Turns the personas' tactic switches on (`name`) or off (`-name`) for every account, as `Universe::new` sets them
 /// from the world's arms: `cap` stops the yard's surplus spending at the persona's military share.
 fn tactics(u: &mut Universe, names: &[String]) {
+    // `fuelkeep` is the world's switch, not a persona's: the capital's spending keeps strike fuel.
+    for name in names.iter().filter(|n| n.trim_start_matches('-') == "fuelkeep") { u.world.fuel_keep = !name.starts_with('-') }
     for player in u.players.iter_mut() {
         let m = player.miner();
-        for name in names {
+        for name in names.iter().filter(|n| n.trim_start_matches('-') != "fuelkeep") {
             let (on, flag) = name.strip_prefix('-').map_or((true, name.as_str()), |f| (false, f));
             let field = match flag {
                 "cap" => &mut m.cap,

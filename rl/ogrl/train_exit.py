@@ -14,12 +14,15 @@ they drowned the few that decide a season, such as the deuterium synthesizer bef
 from __future__ import annotations
 
 import argparse
+import json
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
 
+from . import default_device
+from .errand_schema import LEGACY_VERSION, load_errand, read_header, widen_checkpoint
 from .model import CandidateScorer
 
 
@@ -38,6 +41,28 @@ def records(paths: list[str], s_dim: int, c_dim: int, k_given: int | None = None
     raise ValueError("no row count fits the label files")
 
 
+def validate_errand_schema(saved: dict, paths: list[str]) -> tuple[int, dict, int]:
+    """Check the errand labels' sidecars agree on their feature version, width and column names, and return (candidate
+    width, names, version): the errand menu offers `wait` first and pads the rest, so `records` cannot infer K from a
+    legal last row. A sidecar without names is today's (version 2) header."""
+    if "target_ratio_observed_or_estimated" not in saved.get("names", {}).get("candidate", []):
+        raise ValueError("errand checkpoint has old or missing feature names")
+    headers = []
+    for path in paths:
+        header = read_header(path)
+        if header is None or header.get("version") is None or int(header["version"]) < LEGACY_VERSION:
+            raise ValueError(f"{path}: errand labels need feature version {LEGACY_VERSION} or later")
+        if not header.get("candidates"):
+            raise ValueError(f"{path}: errand labels need their candidate width in the schema")
+        headers.append(header)
+    if len({h["candidates"] for h in headers}) > 1:
+        raise ValueError("errand label files disagree on the candidate width")
+    if any((h["version"], h["state"], h["candidate"]) != (headers[0]["version"], headers[0]["state"], headers[0]["candidate"]) for h in headers):
+        raise ValueError("errand label files disagree on the feature version or column names")
+    first = headers[0]
+    return first["candidates"], {"state": first["state"], "candidate": first["candidate"]}, int(first["version"])
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--init", required=True, help="checkpoint to start from (its width and normalisation are kept)")
@@ -47,15 +72,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--batch", type=int, default=1024)
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=default_device())
     ap.add_argument("--k", type=int, help="rows per decision when not the build menu (the errand menu: 32, wait first)")
     ap.add_argument("--width", type=int, help="a wider network than --init's, trained from its normalisation")
     args = ap.parse_args(argv)
     started = time.time()
 
     saved = torch.load(args.init, map_location="cpu", weights_only=False)
+    errand_k = None
+    if saved.get("queue") == 2 or args.k == 32:
+        errand_k, label_names, label_version = validate_errand_schema(saved, args.labels)
+        # Labels from a wider simulator: the checkpoint widens by column name (new columns at weight 0, same old scores).
+        saved = widen_checkpoint(load_errand(args.init), label_names, label_version)
     s_dim, c_dim = saved["state_dim"], saved["cand_dim"]
-    rows, k = records(args.labels, s_dim, c_dim, args.k)
+    rows, k = records(args.labels, s_dim, c_dim, args.k or errand_k)
     state = rows[:, :s_dim]
     cands = rows[:, s_dim: s_dim + k * c_dim].reshape(-1, k, c_dim)
     legal = rows[:, s_dim + k * c_dim: s_dim + k * c_dim + k] > 0

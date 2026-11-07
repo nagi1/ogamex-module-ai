@@ -16,7 +16,6 @@ use OGame\Services\MessageService;
 use OGame\Services\SettingsService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlayerService;
-use ReflectionMethod;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);

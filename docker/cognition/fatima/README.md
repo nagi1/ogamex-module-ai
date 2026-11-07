@@ -27,6 +27,8 @@ Deliberate changes against the vendored fork:
 | `Applications/FAtiMAHTTPServer/FAtiMAHTTPServer.csproj` retargeted `netcoreapp3.0` → `net8.0` | `netcoreapp3.0` is EOL with no supported runtime image |
 | `Applications/CiFSeeder/` added | CiF assets must be authored through the API; hand-written JSON loads as an empty exchange set |
 | `Wrappers/WebServer` gained instance state, a belief write and the CiF social-exchange resources | the vendored surface was read-only for character state and exposed no CiF at all; an external swappable driver needs both, and neither is reachable any other way |
+| `Applications/SocialSeeder/` added; `Wrappers/WebServer/SocialRoutes.cs` serves `/social/appraise` and `/social/exchange` | the social routes of `plan/rl/SOCIAL-ENGINES-CONTRACT.md` (see below) |
+| `EmotionalAppraisalAsset` serializes emotion dispositions | upstream dropped them on save, so every authored decay/threshold fell back to `(1, 0)`; written only when authored, so older assets serialize unchanged |
 | Root `docker-compose.yml` and `FAtiMA-Toolkit/Dockerfile` removed | Both defined a competing stack; this directory's `Dockerfile` and the cognition Compose file are authoritative |
 
 Build output (`bin/`, `obj/`, `Binaries/`) is excluded via `.gitignore` and is never
@@ -202,3 +204,39 @@ tracked from the character's own autobiographic memory.
 6. **Decision making is not ours.** The engine's `EmotionalDecisionMakingAsset`
    proposes actions; module utility policy stays authoritative. Only affect,
    intentions and social importance are consumed.
+
+## Social routes (`/social/appraise`, `/social/exchange`)
+
+Batched (`{"items":[...]}` -> `{"results":[...]}`), stateless, additive: every older route answers byte-identically
+(verified over 961 requests against the previous image, GUIDs and `Decide` tie shuffles normalised).
+
+Data: `scenarios/ogame-social.json`, generated through the toolkit API by `Applications/SocialSeeder` from
+`resources/behavior/social-persona.yaml` (one scenario per archetype; regenerate after editing the YAML):
+
+```bash
+docker run --rm -v "$PWD/toolkit:/src:ro" -v "$PWD/../../../resources/behavior:/beh:ro" -v /tmp/soc:/out -w /work \
+  mcr.microsoft.com/dotnet/sdk:8.0 sh -c 'cp -a /src/. /work/ &&
+    dotnet build /work/FAtiMA-Toolkit/Applications/SocialSeeder/SocialSeeder.csproj -c Release -v q --nologo &&
+    dotnet /work/FAtiMA-Toolkit/Applications/SocialSeeder/bin/Release/net8.0/SocialSeeder.dll /beh/social-persona.yaml /out/ogame-social.json'
+```
+
+What FAtiMA evaluates per persona: OCC appraisal rules whose values are computed in rule conditions (`Math`) from
+the 12 traits (`Trait(SELF, X)`), the relationship beliefs towards the actor (`Trust/Liking/Fear/Respect/Debt`) and
+the event size; per-archetype emotion dispositions (decay, threshold) and the `Safe(SELF)` goal; decision rules
+(layer `Belief`) that move the relationship beliefs; CiF exchanges `Ignore, OfferPact, RefusePact, Betray,
+DemandTribute, Submit, Revolt, Gift, Threaten, DefendAlly` whose volitions sum trait, relationship, emotion, context
+and social-importance (`SI`) influence rules, ranked by decision rules (layer `Exchange`).
+
+- appraise item: `{persona, state?, event, actor?, intensity, actor_relation?:{trust,...}}` or `events:[{event, actor,
+  intensity, tick}]`, `now?`. Out: `{emotions, dominant, mood, relations, state}`.
+- exchange item: `{persona, state?, other, relation?, context?:{pact, offered_pact, demand, ally_in_danger,
+  power_ratio}, options?, events?, now?}`. Out: `{choice, scores (CiF volition), ranking, social_importance, state}`.
+- `persona`: an archetype name, or `{archetype?, traits}` (traits drive the rules; dispositions come from the named
+  or nearest archetype).
+- `state` (returned updated, send it back next time): `tick, mood, goals, relations{player:{trust,liking,fear,
+  respect,debt}}, emotions[{type, intensity, target, memory, age, decay, ...}], memories[{id, event, actor, tick}]`.
+  Emotions decay by the toolkit's own half-life between ticks. FAtiMA restores an emotion's decay origin at tick 0, so
+  the character clock restarts at 0 per request and the world tick is carried in `state.tick`.
+
+Limits: `EmotionIntensity` is not per target, so exchange emotion terms read the character's latest emotion of that
+type; CiF influence values are integers, so relationship terms are graded thresholds; one prospect emotion per event.

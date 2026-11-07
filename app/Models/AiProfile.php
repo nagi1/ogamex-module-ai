@@ -22,6 +22,7 @@ use Modules\AI\Enums\AiStockpileStrategy;
  * @property AiEconomicRole|null $economic_role
  * @property int $persona_version
  * @property int $random_seed
+ * @property float|null $skill_quantile
  * @property bool $enabled
  * @property array<string, mixed>|null $settings
  */

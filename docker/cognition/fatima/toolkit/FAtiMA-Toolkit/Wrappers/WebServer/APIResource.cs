@@ -33,7 +33,10 @@ namespace WebServer
         STATE,
         // Added by OGameX: the CiF social-exchange surface was not reachable at all.
         SOCIALEXCHANGES,
-        SOCIALEXCHANGE
+        SOCIALEXCHANGE,
+        // Added by OGameX: the batched social routes /social/appraise and /social/exchange (SocialRoutes.cs).
+        APPRAISE,
+        EXCHANGE
     }
 
     public class APIResource
@@ -215,7 +218,30 @@ namespace WebServer
             ValidOperations = new string[] { "POST" },
         };
 
-        public static APIResource[] Set = { ADMINKEY, SCENARIOS , KEY, INSTANCES, TICK, ACTIONS, CHARACTERS, EMOTIONS, PERCEPTIONS, DECISIONS, WORLDMODEL, BELIEFS, MEMORIES, STATE, SOCIALEXCHANGES, SOCIALEXCHANGE };
+        //social/appraise  (added by OGameX)
+        //POST {"items":[{persona, state?, event|events, intensity, actor_relation, now?}]} appraises visible
+        //social events with the authored OgameSocial personas and returns emotions, mood and the updated state.
+        public static APIResource APPRAISE = new APIResource()
+        {
+            Type = APIResourceType.APPRAISE,
+            Execute = SocialRoutes.HandleAppraise,
+            URLFormat = "/social/appraise",
+            URLSegmentSize = 2,
+            ValidOperations = new string[] { "POST" },
+        };
+
+        //social/exchange  (added by OGameX)
+        //POST {"items":[{persona, state?, other, relation, context?, options}]} ranks Comme il Faut exchanges.
+        public static APIResource EXCHANGE = new APIResource()
+        {
+            Type = APIResourceType.EXCHANGE,
+            Execute = SocialRoutes.HandleExchange,
+            URLFormat = "/social/exchange",
+            URLSegmentSize = 2,
+            ValidOperations = new string[] { "POST" },
+        };
+
+        public static APIResource[] Set = { ADMINKEY, SCENARIOS , KEY, INSTANCES, TICK, ACTIONS, CHARACTERS, EMOTIONS, PERCEPTIONS, DECISIONS, WORLDMODEL, BELIEFS, MEMORIES, STATE, SOCIALEXCHANGES, SOCIALEXCHANGE, APPRAISE, EXCHANGE };
 
         public static APIResource FromString(string type)
         {

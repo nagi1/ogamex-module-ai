@@ -18,7 +18,7 @@ RUN tar -xzf /tmp/psychsim.tar.gz -C /tmp \
     && mv /tmp/psychsim-56ef6e95a9f22dab3a4c216f34494363c78b621f /psychsim \
     && rm /tmp/psychsim.tar.gz
 
-COPY server.py ./
+COPY server.py social_partner.py verify.py ./
 
 # The served process has no provider or embedding library and no Qt UI, so it
 # cannot call a model and cannot open a window.

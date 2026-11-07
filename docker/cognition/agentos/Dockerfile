@@ -12,7 +12,7 @@ COPY package.json ./
 # installed: this image has nothing that could call a generative model.
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 
-COPY local-embedding-manager.mjs server.mjs ./
+COPY local-embedding-manager.mjs social-recall.mjs server.mjs ./
 
 EXPOSE 8080
 

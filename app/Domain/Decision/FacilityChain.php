@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Support\HostProduction;
 use OGame\Factories\GameMissionFactory;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Calculations\CalculationType;
@@ -51,6 +52,12 @@ use OGame\Services\PlayerService;
  */
 class FacilityChain
 {
+    /** @var array<int, array<int, int>> queued levels per planet, for the duration of one public call */
+    private array $queued = [];
+
+    /** @var array<int, array<string, list<GameObject>>> producers per planet and resource, for the duration of one public call */
+    private array $producers = [];
+
     /** The resources a planet mines; energy is absent because capacity has its own rule ahead of the chain. */
     private const MINED_RESOURCES = ['metal', 'crystal', 'deuterium'];
 
@@ -63,6 +70,8 @@ class FacilityChain
     /** @return list<BuildCandidate> the unmet prerequisites of the one ambition in hand, easiest unlock first */
     public function pending(PlanetService $planet): array
     {
+        $this->queued = [];
+        $this->producers = [];
         $ordered = [];
         $producers = [];
 
@@ -195,6 +204,8 @@ class FacilityChain
      */
     public function wallPending(PlanetService $planet): array
     {
+        $this->queued = [];
+        $this->producers = [];
         // Own pass, ahead of the economy: the facilities the wall waits on are a fix, not a choice.
         $ordered = [];
         $producers = [];
@@ -230,6 +241,8 @@ class FacilityChain
      */
     public function stationPending(PlanetService $planet): array
     {
+        $this->queued = [];
+        $this->producers = [];
         // A moon has a handful of fields and its own two stations, and which of them the account is owed
         // is the moon block's answer (RV-008/RV-009), so the planet's stations stay off a moon.
         if ($planet->getPlanetType() === PlanetType::Moon) {
@@ -342,6 +355,8 @@ class FacilityChain
      */
     public function stationFieldBudget(PlanetService $planet): int
     {
+        $this->queued = [];
+        $this->producers = [];
         if ($planet->getPlanetType() === PlanetType::Moon) {
             return 0;
         }
@@ -595,6 +610,14 @@ class FacilityChain
     /** @return list<GameObject> the objects the host itself reports as producing this resource */
     private function producersOf(string $resource, PlanetService $planet): array
     {
+        // Asked once per requirement per resource, it walked every producing object each time (STRONG-PLAYER-PLAN, 4 Nov);
+        // the answer is fixed for one planet inside one public call.
+        return $this->producers[$planet->getPlanetId()][$resource] ??= $this->producersOfUncached($resource, $planet);
+    }
+
+    /** @return list<GameObject> */
+    private function producersOfUncached(string $resource, PlanetService $planet): array
+    {
         $producers = [];
 
         foreach (ObjectService::getGameObjectsWithProduction() as $object) {
@@ -602,7 +625,7 @@ class FacilityChain
                 continue;
             }
 
-            if ($planet->getObjectProduction($object->machine_name, 1, true)->{$resource}->get() <= 0.0) {
+            if (HostProduction::at($planet, $object->machine_name, 1)->{$resource}->get() <= 0.0) {
                 continue;
             }
 
@@ -631,6 +654,21 @@ class FacilityChain
     }
 
     /**
+     * The highest level each object stands queued at on this planet, read once per public call: a late account walks
+     * every ambition's requirements on every body, and one query per requirement held a day-256 session at seconds
+     * (STRONG-PLAYER-PLAN, 4 Nov). The queue does not change inside one call, so the read is reset at each entry point.
+     *
+     * @return array<int, int>
+     */
+    private function queuedLevels(PlanetService $planet): array
+    {
+        return $this->queued[$planet->getPlanetId()] ??= BuildingQueue::query()
+            ->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)
+            ->groupBy('object_id')->selectRaw('object_id, max(object_level_target) as level')
+            ->pluck('level', 'object_id')->map(static fn ($level): int => (int) $level)->all();
+    }
+
+    /**
      * How far this account already is with one prerequisite.
      *
      * The host keeps a planet's levels on the planet and a technology's on the player, so asking the
@@ -644,8 +682,7 @@ class FacilityChain
         // same step was asked again on every login and the host queued the next level each time (9338: jump gate levels
         // two to four queued behind the first, a phalanx at level two).
         if (!$isResearch) {
-            $queued = (int) BuildingQueue::query()->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)
-                ->where('object_id', ObjectService::getObjectByMachineName($machineName)->id)->max('object_level_target');
+            $queued = $this->queuedLevels($planet)[ObjectService::getObjectByMachineName($machineName)->id] ?? 0;
 
             return max($planet->getObjectLevel($machineName), $queued);
         }
@@ -772,20 +809,17 @@ class FacilityChain
         // own graph, so a mod-added capital is climbed to with no edit here.
         $warHull = $fleetless ? null : $this->warHullPending($planet);
 
-        usort(
-            $objects,
-            fn (GameObject $left, GameObject $right): int => [
-                $left->machine_name !== $warHull,
-                $fleetless && !$this->isFlyingHull($left, $player),
-                $left->price->resources->sum(),
-            ] <=> [
-                $right->machine_name !== $warHull,
-                $fleetless && !$this->isFlyingHull($right, $player),
-                $right->price->resources->sum(),
-            ],
-        );
+        // Each object's key is computed once: the comparator recomputed a hull's speed and price on every
+        // comparison, a tenth of a late login (STRONG-PLAYER-PLAN, 4 Nov). The sort is stable, so the order is the same.
+        $keys = array_map(fn (GameObject $object): array => [
+            $object->machine_name !== $warHull,
+            $fleetless && !$this->isFlyingHull($object, $player),
+            $object->price->resources->sum(),
+        ], $objects);
+        $order = array_keys($objects);
+        usort($order, static fn (int $left, int $right): int => $keys[$left] <=> $keys[$right]);
 
-        return $objects;
+        return array_map(static fn (int $index): GameObject => $objects[$index], $order);
     }
 
     /**

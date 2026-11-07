@@ -1,0 +1,55 @@
+# Social persona: who a player is socially (SOCIAL-WORLD-DRAFT.md, part 7). Read by the simulator (rl/ogsim
+# src/persona.rs) and, from phase E, by the module. Pure data: no game object is named here.
+#
+# A person is 12 continuous traits in 0..1. Each account is born near one archetype (drawn by `share`), with gaussian
+# noise of `spread` per trait, clamped to 0..1. The traits then drift with experience (`drift`).
+#
+# Grounding: moral foundations (Haidt: care, fairness, loyalty, authority, liberty) and the dark triad
+# (machiavellianism = cunning, narcissism ≈ dominance + ambition, psychopathy ≈ cruelty − forgiveness).
+# Shares are a prior to be tuned against real-server outcomes (SOCIAL-STEP1-AUDIT.md): an honest majority, a
+# betraying minority (Peskov 2020: lies are rare), about 30% who keep to themselves.
+
+traits:
+  ambition: wants to rise in rank, points and power
+  honesty: says what it means and keeps its word (honour); low means hypocrisy comes easily
+  loyalty: stands by its alliance, leader and partners at its own cost
+  cruelty: harms the weak without need; low means mercy
+  cunning: plans, deceives and manipulates (machiavellianism)
+  courage: fights when outmatched; low means it yields or flees
+  generosity: gives resources and help without a return
+  dominance: wants others under its control (tyranny, colonialism)
+  freedom: refuses to be controlled (resistance, revolt)
+  authority: respects hierarchy and obeys the leader
+  forgiveness: lets grudges go once amends are made
+  vindictiveness: repays harm, long after
+
+spread: 0.08
+
+archetypes:
+  #                ambition honesty loyalty cruelty cunning courage generosity dominance freedom authority forgiveness vindictiveness
+  knight:          { share: 0.09, traits: [0.5, 0.9, 0.85, 0.15, 0.3, 0.85, 0.6, 0.3, 0.6, 0.6, 0.6, 0.5] }
+  merchant:        { share: 0.08, traits: [0.6, 0.6, 0.4, 0.2, 0.6, 0.3, 0.3, 0.3, 0.6, 0.4, 0.6, 0.3] }
+  tyrant:          { share: 0.03, traits: [0.9, 0.3, 0.3, 0.8, 0.6, 0.7, 0.1, 0.95, 0.3, 0.2, 0.1, 0.8] }
+  fox:             { share: 0.04, traits: [0.8, 0.15, 0.25, 0.4, 0.95, 0.4, 0.2, 0.6, 0.6, 0.2, 0.4, 0.5] }
+  free_resister:   { share: 0.06, traits: [0.4, 0.75, 0.7, 0.2, 0.4, 0.9, 0.5, 0.1, 0.95, 0.2, 0.3, 0.7] }
+  loyal_vassal:    { share: 0.10, traits: [0.3, 0.8, 0.95, 0.2, 0.2, 0.6, 0.6, 0.2, 0.3, 0.9, 0.6, 0.4] }
+  opportunist:     { share: 0.07, traits: [0.75, 0.3, 0.2, 0.45, 0.7, 0.4, 0.2, 0.5, 0.7, 0.3, 0.5, 0.4] }
+  wise_unifier:    { share: 0.04, traits: [0.6, 0.85, 0.8, 0.1, 0.6, 0.7, 0.7, 0.5, 0.5, 0.6, 0.8, 0.3] }
+  coward:          { share: 0.06, traits: [0.3, 0.6, 0.5, 0.2, 0.3, 0.1, 0.4, 0.1, 0.4, 0.7, 0.7, 0.2] }
+  zealot:          { share: 0.03, traits: [0.6, 0.8, 0.95, 0.6, 0.3, 0.95, 0.3, 0.6, 0.4, 0.8, 0.1, 0.9] }
+  mediator:        { share: 0.04, traits: [0.4, 0.85, 0.6, 0.1, 0.5, 0.5, 0.7, 0.2, 0.5, 0.5, 0.9, 0.1] }
+  lone_wolf:       { share: 0.12, traits: [0.6, 0.6, 0.1, 0.4, 0.5, 0.6, 0.2, 0.3, 0.95, 0.1, 0.4, 0.6] }
+  mercenary:       { share: 0.04, traits: [0.7, 0.4, 0.15, 0.5, 0.6, 0.7, 0.1, 0.4, 0.8, 0.3, 0.5, 0.4] }
+  agent_of_chaos:  { share: 0.02, traits: [0.5, 0.2, 0.1, 0.7, 0.7, 0.6, 0.1, 0.4, 0.9, 0.05, 0.2, 0.6] }
+  newcomer:        { share: 0.12, traits: [0.5, 0.7, 0.6, 0.2, 0.2, 0.4, 0.5, 0.2, 0.5, 0.6, 0.7, 0.3] }
+  mentor:          { share: 0.06, traits: [0.4, 0.85, 0.75, 0.1, 0.4, 0.6, 0.9, 0.2, 0.5, 0.6, 0.8, 0.2] }
+
+# How experience moves the traits (a slow learning rate per event, clamped to 0..1).
+drift:
+  betrayed: { loyalty: -0.06, forgiveness: -0.05, vindictiveness: +0.05, cunning: +0.03 }
+  helped: { loyalty: +0.03, generosity: +0.02 }
+  victory: { ambition: +0.02, dominance: +0.02, courage: +0.02 }
+  defeat: { courage: -0.03, forgiveness: +0.01 }
+  dominated: { freedom: +0.04, vindictiveness: +0.03 }
+  betrayal_unpunished: { honesty: -0.04, cunning: +0.03 }
+  betrayal_exposed: { cunning: -0.02, honesty: +0.02 }

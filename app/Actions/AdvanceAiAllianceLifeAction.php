@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Exception;
 use Modules\AI\Domain\Social\AllianceAmbition;
 use Modules\AI\Domain\Social\AllianceChoice;
+use Modules\AI\Domain\Social\SocialMinds;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use OGame\Models\Alliance;
@@ -87,7 +88,8 @@ class AdvanceAiAllianceLifeAction
         foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->pluck('player_id') as $playerId) {
             $allianceId = User::query()->whereKey($playerId)->value('alliance_id');
 
-            if ($allianceId === null || Alliance::query()->whereKey($allianceId)->value('founder_user_id') === $playerId) {
+            // A member a schism or uprising moved stands in its band's club (diplomacy.rs `pinned`).
+            if ($allianceId === null || Alliance::query()->whereKey($allianceId)->value('founder_user_id') === $playerId || app(SocialMinds::class)->pinnedTo($playerId) !== 0) {
                 continue;
             }
 
@@ -159,7 +161,7 @@ class AdvanceAiAllianceLifeAction
      */
     private function releaseMisfit(int $playerId, int $allianceId): bool
     {
-        if (! AllianceMember::query()->where('alliance_id', $allianceId)->where('user_id', $playerId)->exists()) {
+        if (!AllianceMember::query()->where('alliance_id', $allianceId)->where('user_id', $playerId)->exists()) {
             $user = User::query()->find($playerId);
 
             if ($user === null) {
@@ -241,7 +243,7 @@ class AdvanceAiAllianceLifeAction
      * The tag is the founder's own name, not a module list: a club takes its founder's
      * identity, and the host enforces 3-8 chars and uniqueness.
      */
-    private function tagFor(int $founderId): string
+    public function tagFor(int $founderId): string
     {
         $username = (string) User::query()->whereKey($founderId)->value('username');
         $base = substr(strtoupper((string) preg_replace('/[^A-Z0-9]/', '', $username)) . 'CLUB', 0, 6);
@@ -260,7 +262,7 @@ class AdvanceAiAllianceLifeAction
         return $base;
     }
 
-    private function foundAlliance(int $founderId, string $tag): int
+    public function foundAlliance(int $founderId, string $tag): int
     {
         try {
             $alliance = app(AllianceService::class)->createAlliance($founderId, $tag, ucfirst(strtolower($tag)) . ' Pact');
@@ -268,7 +270,7 @@ class AdvanceAiAllianceLifeAction
             // A club receives applications only while the host marks it open. A club this pass
             // founds is the cohort's own place to apply, so it is opened here: a closed club is
             // invisible to the join half and the application lane never fires (ALLY-001).
-            if (! $alliance->is_open) {
+            if (!$alliance->is_open) {
                 $alliance->is_open = true;
                 $alliance->save();
             }
@@ -285,7 +287,8 @@ class AdvanceAiAllianceLifeAction
     {
         $user = User::query()->find($playerId);
 
-        if ($user === null || $user->alliance_id !== null) {
+        // An account on its way to its band's club (a schism, a nomad uprising) asks nobody else.
+        if ($user === null || $user->alliance_id !== null || app(SocialMinds::class)->pinnedTo($playerId) !== 0) {
             return true;
         }
 

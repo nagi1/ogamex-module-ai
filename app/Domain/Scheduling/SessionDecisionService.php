@@ -9,6 +9,7 @@ use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
+use Modules\AI\Domain\Login\LoginPlans;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Domain\Routine\RoutineProfile;
@@ -20,6 +21,7 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSchedule;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\HostProduction;
 use Modules\AI\Support\RandomSource;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\BuildingQueue;
@@ -66,6 +68,8 @@ class SessionDecisionService
 
     public function run(AiProfile $profile, AiWorkItem $workItem): DecisionTrace
     {
+        // A new login sees the planets as the host left them since the last one (HostProduction).
+        HostProduction::forget();
         $now = $this->clock->now();
         $routine = RoutineProfile::fromAiProfile($profile);
         $schedule = $this->scheduleFor($profile, $routine, $now);
@@ -79,10 +83,17 @@ class SessionDecisionService
         // and a save before an absence that never happens only parks a fleet that should be fighting.
         $upcomingAbsenceMinutes = max(0, (int) $plan->sessionEndsAt->diffInMinutes($this->nextDueTimeCalculator->fromSession($plan, $now)));
 
-        $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
-        $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;
-        // The login's errand: the engine's selection, or a choice policy's answer over the same ranked actions (plan/rl; off by default).
-        $trace = app(DecideAiErrandAction::class)->handle($profile, $perception, $this->decisionEngine->decide($profile, $perception, $decisionKey), $decisionKey);
+        // The plans the engine reads while deciding are this decision's alone: kept for the errand, dropped after it.
+        $plans = app(LoginPlans::class);
+        $plans->reset();
+        try {
+            $perception = $this->playerPerceptionBuilder->build($profile->player_id, $upcomingAbsenceMinutes);
+            $decisionKey = 'work:' . $workItem->id . ':generation:' . $schedule->generation;
+            // The login's errand: the engine's selection, or a choice policy's answer over the same ranked actions (plan/rl; off by default).
+            $trace = app(DecideAiErrandAction::class)->handle($profile, $perception, $this->decisionEngine->decide($profile, $perception, $decisionKey), $decisionKey);
+        } finally {
+            $plans->reset();
+        }
 
         // A material campaign event (a new phase, a held stronghold) consults once here and may
         // nudge the ranking before the final selection; off by default, so an ordinary session

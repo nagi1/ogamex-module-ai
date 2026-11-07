@@ -147,6 +147,23 @@ pub struct Event {
     pub fleet: usize,
 }
 
+/// One attack's fight as the season's `battles` file writes it: both sides at its start (the union's partners with the
+/// attacker, holding allies with the defender), what each lost before defence repair, the winner and the loot.
+#[derive(Clone, Debug)]
+pub struct FightLine {
+    pub time: f64,
+    pub owner: usize,
+    pub target: usize,
+    pub union: bool,
+    pub moon: bool,
+    pub attacker: combat::Units,
+    pub defender: combat::Units,
+    pub attacker_lost: combat::Units,
+    pub defender_lost: combat::Units,
+    pub winner: combat::Winner,
+    pub loot: [i64; 3],
+}
+
 /// What a moon has that a slot does not: its diameter, which the moon destruction rolls read. Its stock, units and
 /// buildings are its own slot's (`World::moon_of`).
 #[derive(Clone, Debug, Default)]
@@ -325,6 +342,149 @@ pub struct Logs {
     launch_log: Vec<(Fleet, f64)>,
 }
 
+/// The research-only part of `players::Kit::of` for one slot, keyed by the rules it read and the research levels.
+#[derive(Clone)]
+pub struct KitEntry {
+    /// Held, so the rules cannot be freed and another take their address.
+    pub rules: Arc<Rules>,
+    pub levels: Vec<u32>,
+    /// The movable ships but the probe and the harvesters (units index, host id), whether each shoots, and the cargo ship.
+    pub ships: Vec<(usize, u32, bool)>,
+    pub cargo: Option<u32>,
+}
+
+/// `World::kit_cache`: a lock so that a world read from many threads stays shareable; each world is stepped by one.
+#[derive(Default)]
+pub struct KitCache(pub std::sync::Mutex<crate::LookupMap<usize, KitEntry>>);
+
+impl Clone for KitCache {
+    fn clone(&self) -> KitCache {
+        KitCache(std::sync::Mutex::new(self.0.lock().expect("kit cache").clone()))
+    }
+}
+
+/// `World::research_cache`: per account, the planet levels its research map was read from and that map. A lock as
+/// `KitCache` is; the map is handed out as a clone, which keeps its layout and so its iteration order.
+#[derive(Default)]
+pub struct ResearchCache(std::sync::Mutex<Vec<Option<(Vec<u32>, crate::Levels)>>>);
+
+impl Clone for ResearchCache {
+    fn clone(&self) -> ResearchCache {
+        ResearchCache(std::sync::Mutex::new(self.0.lock().expect("research cache").clone()))
+    }
+}
+
+/// `players::others_by_distance` for one account, with what it read: the rules (their fleet settings), the slots'
+/// accounts and the coordinates of the account and of each other capital.
+#[derive(Clone)]
+pub struct NearEntry {
+    pub rules: Arc<Rules>,
+    pub slots: usize,
+    pub account: Vec<usize>,
+    pub at: Coord,
+    pub others: Vec<(usize, Coord)>,
+}
+
+/// `World::near_cache`: per account, its `NearEntry`; a lock as `KitCache` is.
+#[derive(Default)]
+pub struct NearCache(pub std::sync::Mutex<Vec<Option<NearEntry>>>);
+
+impl Clone for NearCache {
+    fn clone(&self) -> NearCache {
+        NearCache(std::sync::Mutex::new(self.0.lock().expect("near cache").clone()))
+    }
+}
+
+/// A slot clock (`World::next`, `World::idle_next`) that remembers the slots written, for `World::order`.
+#[derive(Clone, Default)]
+struct Clocks {
+    at: Vec<f64>,
+    changed: Vec<usize>,
+}
+
+impl std::fmt::Debug for Clocks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.at.fmt(f) }
+}
+
+impl From<Vec<f64>> for Clocks {
+    fn from(at: Vec<f64>) -> Clocks { Clocks { at, changed: Vec::new() } }
+}
+
+impl std::ops::Index<usize> for Clocks {
+    type Output = f64;
+    fn index(&self, a: usize) -> &f64 { &self.at[a] }
+}
+
+impl std::ops::IndexMut<usize> for Clocks {
+    fn index_mut(&mut self, a: usize) -> &mut f64 {
+        self.changed.push(a);
+        &mut self.at[a]
+    }
+}
+
+impl Clocks {
+    fn push(&mut self, t: f64) {
+        self.changed.push(self.at.len());
+        self.at.push(t);
+    }
+}
+
+/// A tournament tree over the slots: each node holds the earlier of its two children (by key, then index); a slot
+/// without a key (done) is out.
+#[derive(Clone, Default)]
+struct SlotOrder {
+    n: usize,
+    leaves: usize,
+    key: Vec<Option<f64>>,
+    node: Vec<u32>,
+}
+
+impl SlotOrder {
+    const NONE: u32 = u32::MAX;
+
+    fn rebuild(&mut self, n: usize) {
+        self.n = n;
+        self.leaves = n.next_power_of_two().max(1);
+        self.key = vec![None; n];
+        self.node = vec![Self::NONE; 2 * self.leaves];
+    }
+
+    fn earlier(&self, x: u32, y: u32) -> u32 {
+        match (x == Self::NONE, y == Self::NONE) {
+            (true, _) => y,
+            (_, true) => x,
+            _ => {
+                let (kx, ky) = (self.key[x as usize].unwrap_or(f64::INFINITY), self.key[y as usize].unwrap_or(f64::INFINITY));
+                match kx.total_cmp(&ky).then(x.cmp(&y)) { std::cmp::Ordering::Greater => y, _ => x }
+            }
+        }
+    }
+
+    /// Sets a leaf without walking up (`settle` after a rebuild).
+    fn set(&mut self, a: usize, key: Option<f64>) {
+        self.key[a] = key;
+        self.node[self.leaves + a] = if key.is_some() { a as u32 } else { Self::NONE };
+    }
+
+    fn settle(&mut self) {
+        for i in (1..self.leaves).rev() { self.node[i] = self.earlier(self.node[2 * i], self.node[2 * i + 1]) }
+    }
+
+    fn update(&mut self, a: usize, key: Option<f64>) {
+        self.set(a, key);
+        let mut i = (self.leaves + a) / 2;
+        while i >= 1 {
+            self.node[i] = self.earlier(self.node[2 * i], self.node[2 * i + 1]);
+            i /= 2;
+        }
+    }
+
+    fn first(&self) -> Option<usize> {
+        let top = self.node[1];
+        (top != Self::NONE).then_some(top as usize)
+    }
+}
+
 #[derive(Clone)]
 pub struct World {
     pub games: Vec<Game>,
@@ -337,13 +497,22 @@ pub struct World {
     /// Row 66: per capital, how many galaxies, nearest first, its player colonises in (`colony_site`); empty or 1 keeps
     /// every colony in the home galaxy. Players differ in how far they spread, so the season draws it per account.
     pub reach: Vec<u32>,
+    /// Arm `spread`: a colony takes the largest slot the host offers (its field range), and among equal sizes the galaxy
+    /// holding the fewest of the account's own planets, as the module's colony planner is to choose (no reach draw).
+    pub spread: bool,
+    /// Arm `paidlab`: the lab's cheapest-payable pick skips a research priced in energy only (graviton), which weighed
+    /// nothing and so was always cheapest: top10 accounts reached graviton 6-8 and bought 1.6M satellites for its energy
+    /// (4 Nov). A requirement path still reaches it (RES-001: research by return).
+    pub paid_lab: bool,
+    /// Ships sold at the scrap merchant this season (arm `scrap`).
+    pub scrapped: u64,
     /// Coordinates taken by planets outside the world (another player's colony), where nobody may colonise.
     pub taken: Vec<Coord>,
     /// The host's draw for the next colony, (temperature max, fields), handed over by the referee as `recorded` is;
     /// without it the colony takes one of the tabulated sites of that slot.
     pub recorded_colony: Option<(i64, i64)>,
     /// The second each account's clock moves next, kept beside the games so choosing the next one reads no catalogue.
-    next: Vec<f64>,
+    next: Clocks,
     /// One per account, in account order: the tables of that account's character class.
     pub rules: Vec<Arc<Rules>>,
     pub coords: Vec<Coord>,
@@ -401,9 +570,11 @@ pub struct World {
     /// Whether accounts also decide at logins where nothing can be built (see `decision_kind`).
     pub idle_logins: bool,
     /// The second of each slot's next login that no build decision serves; NEVER with `idle_logins` off and for colonies.
-    idle_next: Vec<f64>,
+    idle_next: Clocks,
     /// Whether the account that is deciding now has no build to decide.
     idle_now: Vec<bool>,
+    /// The world's second: the latest event `next_decision` has moved to. Time never runs back from it.
+    clock: f64,
     /// L4: the second each slot's jump gate is ready again (0: never used).
     pub gate_ready: Vec<f64>,
     /// Every phalanx scan and gate jump: (slot, second, whether a jump).
@@ -427,6 +598,12 @@ pub struct World {
     /// Per capital, the second its account joined the world's alliance, or None (the season draws membership); the
     /// host lets ACS defend fly only between buddies or members of one alliance.
     pub alliance_at: Vec<Option<f64>>,
+    /// Alliance identity by capital; membership and its start time remain in alliance_at.
+    pub alliance_id: Vec<usize>,
+    /// Public highscore order from the last daily refresh, for the experimental war scenario.
+    pub public_highscore: Vec<usize>,
+    /// The experimental multi-alliance scenario asks personas to avoid attacking allies.
+    pub alliances_distinct: bool,
     /// L5: every fleet that fought in a union beside its first: (slot, second).
     pub union_log: Vec<(usize, f64)>,
     rng: u64,
@@ -434,7 +611,55 @@ pub struct World {
     /// (which reorder the world's events) do not reshuffle every other account's luck. Off for the parity replays,
     /// which hand the host's seed over through `rng`.
     pub keyed: bool,
+    /// `eventdice` arm (with `keyed`): a fleet's dice come from its own mission's stream (and a return's from a stream
+    /// of its own), so a spy or a raid added now does not shift every later expedition's and battle's luck: common
+    /// random numbers per event kind (Veness et al. 2011, CRN in rollout planning). Off: one stream per account.
+    pub event_dice: bool,
+    /// Arm `warfleet`: a raider whose cheapest fighters cannot take a target sends its whole warship mix (`war_plan`).
+    pub war_fleet: bool,
+    /// Arm `raids`: the live module's raid rules (`players::spy_volley`, `players::module_plan`): probe volleys that
+    /// escalate on a redacted report, a launch grown from the whole warship stock until the forecast fight is won.
+    pub raids: bool,
+    /// Alliance diplomacy (arm `diplomacy`): wars and pacts between the clubs, and the hostile hits that feed them.
+    pub relations: crate::diplomacy::Relations,
+    /// Per account, the personas' tunable numbers (`tuning.rs`); empty = today's constants for everyone.
+    pub tune: Arc<Vec<crate::tuning::Tuning>>,
+    /// `fuelkeep` arm: a capital's spending keeps the deuterium its warships need to strike, as a fleeter's does.
+    pub fuel_keep: bool,
+    /// The last moment each account was online (it decided): what it has seen of its own event list, and so what it
+    /// can have told its alliance. Indexed by account.
+    pub online_at: Vec<f64>,
     drawn: HashMap<(usize, u64), u64>,
+    /// Arm `wide`: the errand menu offers every fleet capability (`errands.rs`), at its wider width and feature version.
+    pub wide: bool,
+    /// Arm `late`: the late-game tactics (plan 5 Nov "late-game tactics"): wide errand rows and teacher picks for gate and
+    /// night saves, ninja landings, moon spying and moon destruction by a pure destroyer stack, the wall breaker.
+    pub late: bool,
+    /// Arm `freshspy`: a raid needs a report newer than the account's own last attack on the body (the account read its
+    /// own combat report, so it knows the planet changed; LATE-GAME-TACTICS-USAGE.md: raiders probe before each hit).
+    pub fresh_spy: bool,
+    /// (account, body) → the second the account's last attack landed there (`fresh_spy`).
+    pub own_hits: HashMap<(usize, usize), f64>,
+    /// (owner, target) → the index in `reports` of the owner's last report on the target, kept while every report came
+    /// through `push_report` (`reports_indexed == reports.len()`); otherwise readers scan `reports`.
+    pub report_last: crate::LookupMap<(usize, usize), usize>,
+    /// owner → the indices in `reports` of its reports, in filing order (same condition as `report_last`).
+    pub reports_by_owner: crate::LookupMap<usize, Vec<usize>>,
+    pub reports_indexed: usize,
+    /// Per slot, what `Kit::of` reads of the rules and research alone, kept until the research or the rules change.
+    pub kit_cache: KitCache,
+    /// Arm `late`: the launch ids of the hidden saves (FS-010) flying, the deployments a recall may call back.
+    pub hidden_saves: Vec<usize>,
+    /// Diagnosis (`battles`, `levels`): every attack's fight, kept only when `keep_fights` is set.
+    pub keep_fights: bool,
+    pub fight_log: Vec<FightLine>,
+    /// The slots by their next move (`moves_at`), kept current from the clocks' changes: `next_decision` read every slot
+    /// at every event.
+    order: SlotOrder,
+    /// `research`'s maps, read again only when the account's levels move: it is asked tens of times per login.
+    research_cache: ResearchCache,
+    /// The other capitals by distance per account (`players::others_by_distance`), kept while nothing it read moves.
+    pub near_cache: NearCache,
 }
 
 impl World {
@@ -446,9 +671,9 @@ impl World {
             .collect();
         // Row 47: a world does not retire an account that has nothing to build (`Catalogue::next_event` reads this).
         for g in games.iter_mut() { g.in_world = true }
-        let next = games.iter_mut().map(|g| cat.peek(g)).collect();
+        let next = Clocks::from(games.iter_mut().map(|g| cat.peek(g)).collect::<Vec<f64>>());
         let n = configs.len();
-        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), keep_launches: false, launched: 0, deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: vec![NEVER; n], idle_now: vec![false; n], gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), moves: HashMap::default(), moved_at: HashMap::default(), move_log: Vec::new(), last_attacked: HashMap::default(), halved: HashSet::default(), alliance_at: vec![None; n], union_log: Vec::new(), reach: Vec::new(), rng: seed ^ 0x9e37_79b9_7f4a_7c15, keyed: false, drawn: HashMap::default() }
+        World { games, account: (0..n).collect(), colonies: vec![Vec::new(); n], colonisation: None, taken: Vec::new(), recorded_colony: None, next, rules: Vec::new(), coords: Vec::new(), yards: Vec::new(), fleets: Vec::new(), recorded: None, recorded_roll: None, unplaced: 0, reports: Vec::new(), fields: vec![false; n], debris: vec![[0.0; 3]; n], moons: vec![false; n], moon_holds: vec![MoonHold::default(); n], moon_of: vec![None; n], moon_at: vec![None; n], events: Vec::new(), dark_matter: vec![0; n], officers: vec![HashMap::default(); n], officer_log: Vec::new(), unit_log: Vec::new(), launch_log: Vec::new(), keep_launches: false, launched: 0, deep_space: HashMap::default(), rank1_points: 100_000, recorded_expedition: None, recorded_rolls: None, dice: 0, stream: expedition::Mt19937::new(0), idle_logins: false, idle_next: Clocks::from(vec![NEVER; n]), idle_now: vec![false; n], clock: 0.0, gate_ready: vec![0.0; n], gear_log: Vec::new(), halving_log: Vec::new(), wrecks: HashMap::default(), carried: HashMap::default(), wreck_log: Vec::new(), moves: HashMap::default(), moved_at: HashMap::default(), move_log: Vec::new(), last_attacked: HashMap::default(), halved: HashSet::default(), alliance_at: vec![None; n], alliance_id: vec![0; n], public_highscore: Vec::new(), alliances_distinct: false, union_log: Vec::new(), reach: Vec::new(), spread: false, paid_lab: false, scrapped: 0, rng: seed ^ 0x9e37_79b9_7f4a_7c15, keyed: false, event_dice: false, war_fleet: false, raids: false, relations: crate::diplomacy::Relations::default(), tune: Arc::new(Vec::new()), fuel_keep: false, online_at: vec![0.0; n], drawn: HashMap::default(), wide: false, late: false, fresh_spy: false, own_hits: HashMap::default(), report_last: Default::default(), reports_by_owner: Default::default(), reports_indexed: 0, kit_cache: KitCache::default(), hidden_saves: Vec::new(), keep_fights: false, fight_log: Vec::new(), order: SlotOrder::default(), research_cache: ResearchCache::default(), near_cache: NearCache::default() }
     }
 
     /// Places every account's planet at its coordinates with the ships and defence its config starts with, so fleets can
@@ -472,14 +697,48 @@ impl World {
         self.next[a].min(self.idle_next[a])
     }
 
+    /// The slot not done whose `moves_at` is earliest, the lower index on a tie (what a scan of every slot picks).
+    fn soonest_slot(&mut self) -> Option<usize> {
+        let n = self.games.len();
+        if self.order.n != n {
+            self.next.changed.clear();
+            self.idle_next.changed.clear();
+            self.order.rebuild(n);
+            for a in 0..n { self.order.set(a, (!self.games[a].done).then(|| self.next[a].min(self.idle_next[a]))) }
+            self.order.settle();
+        } else {
+            for a in self.next.changed.drain(..).chain(self.idle_next.changed.drain(..)) {
+                let key = (!self.games[a].done).then(|| self.next.at[a].min(self.idle_next.at[a]));
+                self.order.update(a, key);
+            }
+        }
+        loop {
+            let a = self.order.first()?;
+            if !self.games[a].done { return Some(a) }
+            self.order.update(a, None);
+        }
+    }
+
     /// Moves the world event by event until an account has something to decide (its index; `decision_kind` says whether
     /// that is a build, and `games[a].queue` is then the queue), or None when every account is done. A fleet due at the
     /// same second as an account's event goes first, and an account's own economy goes before its idle login.
     pub fn next_decision(&mut self, cat: &Catalogue) -> Option<usize> {
         loop {
-            let a = (0..self.games.len()).filter(|&a| !self.games[a].done).min_by(|&x, &y| self.moves_at(x).total_cmp(&self.moves_at(y)).then(x.cmp(&y)))?;
+            let a = self.soonest_slot()?;
+            // A slot's clock lags while nothing of it is due, and its next event is read from that lagging second: a hold
+            // another planet of the account lifted, a login redrawn after a dropped commit, a commit or wait at a capital's
+            // login. Such an event can fall before the world's second; it happens now, at the slot's own stock, not in the
+            // past where other planets already moved on (a deciding slot behind them read their clocks as ahead).
+            if self.moves_at(a) < self.clock {
+                let now = self.clock;
+                self.catch_up(cat, a, now);
+                self.next[a] = cat.peek(&mut self.games[a]).max(now);
+                self.idle_next[a] = self.idle_next[a].max(now);
+                continue;
+            }
             let fleet = (0..self.fleets.len()).min_by(|&x, &y| self.fleets[x].next().total_cmp(&self.fleets[y].next()));
             let due = self.moves.iter().map(|(&p, &(_, at))| (at, p)).min_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+            self.clock = self.clock.max(self.moves_at(a).min(fleet.map_or(f64::INFINITY, |f| self.fleets[f].next())).min(due.map_or(f64::INFINITY, |d| d.0)));
             if let Some((_, p)) = due.filter(|&(at, _)| at <= self.moves_at(a) && fleet.is_none_or(|f| at <= self.fleets[f].next())) {
                 self.move_due(cat, p);
                 continue;
@@ -495,6 +754,7 @@ impl World {
                 self.games[a].planet.settle();
                 self.next[a] = cat.peek(&mut self.games[a]);
                 self.idle_now[a] = true;
+                self.online_at[self.account[a]] = self.games[a].t;
                 return Some(a);
             }
             let deciding = self.step_account(cat, a);
@@ -503,6 +763,7 @@ impl World {
                 self.settle_yard(cat, a);
                 self.idle_now[a] = false;
                 self.pass_login(cat, a, self.games[a].t);
+                self.online_at[self.account[a]] = self.games[a].t;
                 return Some(a);
             }
         }
@@ -560,6 +821,15 @@ impl World {
             self.next[a] = due;
             return false;
         }
+        // What the account holds can also move the event earlier than the second it was scheduled for, behind the
+        // world's: a hold another planet lifted while this slot waited. Then it happens now, at the slot's own stock
+        // (as `next_decision` does for a lagging slot), not in the past where other planets already moved on.
+        if due < self.clock && self.games[a].t < self.clock {
+            let now = self.clock;
+            self.catch_up(cat, a, now);
+            self.next[a] = cat.peek(&mut self.games[a]).max(now);
+            return false;
+        }
         let holds = self.holding(cat, a);
         let deciding = cat.tick(&mut self.games[a]);
         if self.holding(cat, a) != holds {
@@ -592,6 +862,22 @@ impl World {
         self.planets_of(self.account[a]).into_iter().filter(|&s| s != a).flat_map(|s| self.holding(cat, s)).collect()
     }
 
+    /// Slot a's alliance at second `at`, None outside one.
+    pub fn club(&self, a: usize, at: f64) -> Option<usize> {
+        let account = self.account[a];
+        self.alliance_at.get(account).copied().flatten().is_some_and(|join| at >= join).then(|| self.alliance_id[account])
+    }
+
+    /// Whether slot a leaves slot b alone: an alliance mate, or a member of a club its own club holds a pact with.
+    pub fn spares(&self, a: usize, b: usize, at: f64) -> bool {
+        self.mates(a, b, at) || matches!((self.club(a, at), self.club(b, at)), (Some(x), Some(y)) if self.relations.bound(x, y))
+    }
+
+    /// Whether slot b belongs to a club slot a's club is at war with.
+    pub fn enemy(&self, a: usize, b: usize, at: f64) -> bool {
+        matches!((self.club(a, at), self.club(b, at)), (Some(x), Some(y)) if self.relations.at_war(x, y))
+    }
+
     /// The capital of slot a's account.
     pub fn account_of(&self, a: usize) -> usize {
         self.account[a]
@@ -601,6 +887,7 @@ impl World {
     pub fn mates(&self, a: usize, b: usize, at: f64) -> bool {
         let member = |s: usize| self.alliance_at.get(self.account[s]).copied().flatten().is_some_and(|join| at >= join);
         self.account[a] != self.account[b] && member(a) && member(b)
+            && self.alliance_id[self.account[a]] == self.alliance_id[self.account[b]]
     }
 
     /// Every planet slot of the account whose capital is `capital`, the capital first.
@@ -674,6 +961,7 @@ impl World {
         // And the same night: a colony drawing its own would log in while its account sleeps (69 "logins" a day).
         game.sleep_start = home.sleep_start;
         game.sleep_hours = home.sleep_hours;
+        game.pace = home.pace;
         for k in (0..cat.objects.len()).filter(|&k| cat.objects[k].queue == 1) {
             game.planet.levels[k] = home.planet.levels[k];
         }
@@ -946,6 +1234,12 @@ impl World {
         (self.wreck_log, self.move_log, self.union_log, self.launch_log) = (logs.wreck_log, logs.move_log, logs.union_log, logs.launch_log);
     }
 
+    /// The tunable numbers account a's persona plays by.
+    pub fn tn(&self, a: usize) -> &crate::tuning::Tuning {
+        static DEFAULT: std::sync::LazyLock<crate::tuning::Tuning> = std::sync::LazyLock::new(crate::tuning::Tuning::default);
+        self.tune.get(self.account_of(a)).unwrap_or(&DEFAULT)
+    }
+
     /// Fresh dice for a copy of the world: a look-ahead must not read the draws the real world will make.
     pub fn reseed(&mut self, salt: u64) { self.rng ^= salt.wrapping_mul(0xa076_1d64_78bd_642f) }
 
@@ -980,6 +1274,15 @@ impl World {
 
     pub fn legal(&self, cat: &Catalogue, a: usize, k: usize) -> bool {
         !self.idle_now[a] && cat.queue_legal(&self.games[a], k) && !self.rules.get(a).is_some_and(|r| r.units.blocks_upgrade(&self.yards[a], k))
+            && !(self.paid_lab && self.energy_only_past_need(cat, a, k))
+    }
+
+    /// Arm `paidlab`: a research priced in energy only (no metal, crystal or deuterium) past the highest level any object
+    /// of the catalogue requires of it. Its only use is that unlock (graviton for the deathstar), so a player stops there.
+    fn energy_only_past_need(&self, cat: &Catalogue, a: usize, k: usize) -> bool {
+        let level = self.games[a].planet.levels[k];
+        let free = cat.objects[k].queue == 1 && cat.objects[k].price.get(level as usize).is_some_and(|p| p.iter().all(|&r| r <= 0.0));
+        free && cat.objects.iter().flat_map(|o| o.requires.iter()).filter(|&&(j, _)| j == Some(k)).map(|&(_, l)| l).max().unwrap_or(0) <= level
     }
 
     /// Seconds of `from..to` during which the account's building queue was busy, summed over its planets and capped
@@ -990,9 +1293,18 @@ impl World {
     }
 
     /// Account a's research levels by host id, as the fleet and combat tables read them.
-    pub fn research(&self, cat: &Catalogue, a: usize) -> HashMap<u32, u32> {
+    pub fn research(&self, cat: &Catalogue, a: usize) -> crate::Levels {
         // Research is the account's (the capital researches); a colony's copy is refreshed only when it is caught up.
-        cat.objects.iter().zip(&self.games[self.account[a]].planet.levels).filter(|(o, _)| o.queue == 1).map(|(o, &l)| (o.id as u32, l)).collect()
+        let (account, planet_levels) = (self.account[a], &self.games[self.account[a]].planet.levels);
+        let mut cache = self.research_cache.0.lock().expect("research cache");
+        if let Some(Some((seen, levels))) = cache.get(account) {
+            if seen == planet_levels { return levels.clone() }
+        }
+        let mut levels = crate::Levels::with_capacity_and_hasher(cat.objects.len(), Default::default());
+        levels.extend(cat.objects.iter().zip(planet_levels).filter(|(o, _)| o.queue == 1).map(|(o, &l)| (o.id as u32, l)));
+        if cache.len() <= account { cache.resize(account + 1, None) }
+        cache[account] = Some((planet_levels.clone(), levels.clone()));
+        levels
     }
 
     /// Account a's expedition slots as `PlayerService::getExpeditionSlotsMax` counts them: the colonisation table's at its
@@ -1062,6 +1374,35 @@ impl World {
 
     /// The economy reads production from the units on the planet while the shipyard owns the counts, so the shipyard's
     /// are copied into the planet by host id whenever they may have changed; nothing else writes `planet.units`.
+    /// The planet's unit counts after a rule changed the yard directly (the scrap merchant).
+    /// Files a spy report and indexes it as its owner's last on its target.
+    fn push_report(&mut self, report: SpyReport) {
+        if self.reports_indexed == self.reports.len() {
+            self.report_last.insert((report.owner, report.target), self.reports.len());
+            self.reports_by_owner.entry(report.owner).or_default().push(self.reports.len());
+            self.reports_indexed += 1;
+        }
+        self.reports.push(report);
+    }
+
+    /// The owner's reports in filing order, through the index when it covers every report.
+    pub(crate) fn reports_of(&self, owner: usize) -> Box<dyn Iterator<Item = &SpyReport> + '_> {
+        if self.reports_indexed == self.reports.len() {
+            return Box::new(self.reports_by_owner.get(&owner).into_iter().flatten().map(|&i| &self.reports[i]));
+        }
+        Box::new(self.reports.iter().filter(move |r| r.owner == owner))
+    }
+
+    /// The owner's last report on the target, through the index when it covers every report.
+    pub(crate) fn last_report_of(&self, owner: usize, target: usize) -> Option<&SpyReport> {
+        if self.reports_indexed == self.reports.len() {
+            return self.report_last.get(&(owner, target)).map(|&i| &self.reports[i]);
+        }
+        self.reports.iter().rev().find(|r| r.owner == owner && r.target == target)
+    }
+
+    pub(crate) fn refresh_units(&mut self, cat: &Catalogue, a: usize) { self.sync_units(cat, a) }
+
     fn sync_units(&mut self, cat: &Catalogue, a: usize) {
         let Some(rules) = self.rules.get(a) else { return };
         let counts = &self.yards[a].counts;
@@ -1258,7 +1599,8 @@ impl World {
         // A union fights once, when its first fleet lands (AttackMission: only slot 1 processes the battle).
         let f = self.union_members(f).into_iter().chain([f]).min_by_key(|&g| self.fleets[g].id).filter(|_| !self.fleets[f].returning).unwrap_or(f);
         let at = self.fleets[f].next();
-        self.dice = (self.draw(self.fleets[f].owner, 1) >> 32) as u32;
+        let purpose = if self.event_dice { 1000 + 2 * self.fleets[f].mission as u64 + self.fleets[f].returning as u64 } else { 1 };
+        self.dice = (self.draw(self.fleets[f].owner, purpose) >> 32) as u32;
         self.stream = expedition::Mt19937::new(self.dice);
         if self.fleets[f].returning {
             let fleet = self.fleets.swap_remove(f);
@@ -1328,6 +1670,9 @@ impl World {
         let mut event = Event { kind, time, mission: fleet.mission, owner: fleet.owner, target: fleet.target, departed: fleet.departed, ships_lost: Vec::new(), target_lost: Vec::new(), present: Vec::new(), gained: [0.0; 3], salvaged: [0.0; 3], debris: [0; 3], moon_chance: 0, moon_created: false, outcome, seed: self.dice, fleet: fleet.id };
         fill(&mut event);
         if event.mission == Mission::Attack { self.last_attacked.insert(event.target, event.time); }
+        if self.fresh_spy && event.kind == EventKind::Arrival && event.mission == Mission::Attack {
+            self.own_hits.insert((self.account[event.owner], event.target), event.time);
+        }
         self.events.push(event);
     }
 
@@ -1414,6 +1759,22 @@ impl World {
             if !galaxies.contains(&g) { galaxies.push(g) }
         }
         let held = |x: i64| self.planets_of(capital).iter().filter(|&&p| self.coords[p].galaxy == x).count();
+        if self.spread {
+            // Largest slot first (the host's field range, its upper end), then the galaxy with fewest own planets.
+            let mut positions: Vec<i64> = (4..=15).filter(|p| table.position_levels.get(p).copied().unwrap_or(u32::MAX) <= level)
+                .filter(|&p| table.sites.iter().any(|s| s.donor == donor && s.position == p)).collect();
+            positions.sort_by_key(|p| std::cmp::Reverse(table.field_ranges.get(p).map_or(0, |r| r.1)));
+            galaxies.sort_by_key(|&x| held(x));
+            for position in positions {
+                for &galaxy in &galaxies {
+                    for system in near(settings.number_of_systems as i64, home.system) {
+                        let to = Coord { galaxy, system, position };
+                        if self.free_slot(to) { return Some(to) }
+                    }
+                }
+            }
+            return None;
+        }
         let within = reach.min(galaxies.len());
         galaxies[..within].sort_by_key(|&x| held(x) >= PLANETS_PER_GALAXY);
         for position in 4..=15 {
@@ -1522,7 +1883,7 @@ impl World {
         let holding = self.holding_at(f);
         let allies: Vec<combat::Units> = holding.iter().map(|&g| self.fleets[g].ships.iter().copied().collect()).collect();
         let members = if plunder { self.union_members(f) } else { Vec::new() };
-        let joined: Vec<(Arc<Rules>, HashMap<u32, u32>)> = members.iter().map(|&g| (Arc::clone(&self.rules[self.fleets[g].owner]), self.research(cat, self.fleets[g].owner))).collect();
+        let joined: Vec<(Arc<Rules>, crate::Levels)> = members.iter().map(|&g| (Arc::clone(&self.rules[self.fleets[g].owner]), self.research(cat, self.fleets[g].owner))).collect();
         let partners: Vec<combat::Partner> = members.iter().zip(&joined).map(|(&g, (rules, research))| {
             let fleet = &self.fleets[g];
             combat::Partner { combat: &rules.combat, ships: &fleet.ships, research, cargo: [fleet.cargo[0], fleet.cargo[1], fleet.cargo[2] + fleet.fuel / 2.0] }
@@ -1541,10 +1902,27 @@ impl World {
             seed,
         };
         let fought = combat::defender_units(&defender_rules.combat, &battle);
+        let at = self.fleets[f].next();
+        if plunder && self.relations.on && !self.mates(owner, target, at) {
+            self.relations.hit(self.account[owner], self.account[target], at / 3600.0);
+        }
+        let logged = (plunder && self.keep_fights).then(|| {
+            let mut sent: combat::Units = self.fleets[f].ships.iter().copied().collect();
+            for p in &partners { for &(id, n) in p.ships { *sent.entry(id).or_default() += n } }
+            let mut against: combat::Units = defender.iter().copied().collect();
+            for ally in &allies { for (&id, &n) in ally { *against.entry(id).or_default() += n } }
+            (sent, against, !partners.is_empty())
+        });
         let outcome = match self.recorded.take() {
             Some(fight) => combat::settle_in(&attacker_rules.combat, &defender_rules.combat, &battle, fight.engine, fight.repaired, fight.moon_roll, plunder),
             None => combat::fight_in(&attacker_rules.combat, &defender_rules.combat, &battle, plunder),
         };
+        if let Some((attacker, defender, union)) = logged {
+            self.fight_log.push(FightLine {
+                time: self.fleets[f].next(), owner, target, union, moon: self.moon_at[target].is_some() || self.fleets[f].moon, attacker, defender,
+                attacker_lost: outcome.attacker_lost.clone(), defender_lost: outcome.defender_lost.clone(), winner: outcome.winner, loot: outcome.loot,
+            });
+        }
         let allied = |id: u32| outcome.allies_left.iter().map(|left| left.get(&id).copied().unwrap_or(0)).sum::<i64>();
         for (u, unit) in defender_rules.units.units.iter().enumerate() {
             let id = unit.id as u32;
@@ -1760,7 +2138,7 @@ impl World {
             buildings: reveals(5, 3).then(|| levels(0)),
             research: reveals(7, 4).then(|| levels(1)),
         };
-        self.reports.push(report);
+        self.push_report(report);
         // The return flight's cargo is an integer column, so an odd fuel loses its half unit.
         self.games[owner].planet.books.fuel -= weighted([0.0, 0.0, (self.fleets[f].fuel / 2.0).floor()]);
         self.fleets[f].cargo[2] += (self.fleets[f].fuel / 2.0).floor();
@@ -1790,6 +2168,24 @@ impl World {
 mod tests {
     use super::*;
     use crate::economy::Baseline;
+
+    #[test]
+    fn alliances_distinguish_members_and_account_slots() {
+        let path = std::env::var("OGSIM_CATALOGUE").unwrap_or_else(|_| "../../../../storage/rl/ogsim/plain-eval.json".into());
+        let Ok(cat) = Catalogue::load(&path) else { return eprintln!("no catalogue at {path}; skipped") };
+        let mut world = World::new(&cat, &[0, 0, 0], 24.0, 0.0, 7);
+        world.alliance_at = vec![Some(0.0), Some(10.0), Some(0.0)];
+        world.alliance_id = vec![0, 0, 1];
+        world.account.push(1); // A second slot owned by account 1.
+        assert!(!world.mates(0, 1, 9.0));
+        assert!(world.mates(0, 1, 10.0));
+        assert!(world.mates(0, 3, 10.0));
+        assert!(!world.mates(1, 3, 10.0));
+        assert!(!world.mates(0, 2, 10.0));
+        assert!(!world.clone().mates(0, 2, 10.0));
+        world.alliance_at[1] = None;
+        assert!(!world.mates(0, 1, 11.0));
+    }
 
     /// A world of independent accounts plays each of them exactly as the one-account simulator does on its own.
     #[test]

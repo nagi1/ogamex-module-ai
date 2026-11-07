@@ -13,6 +13,7 @@
  *
  *   POST /recall  {scopeId, query, limit, memories:[{id, text, tags}]}
  *              -> {ranking:[{id, ...numeric evidence}], considered, discarded, partiallyRetrieved}
+ *   POST /social/recall  {items:[...]} -> {results:[...]}  (relationship memory, social-recall.mjs)
  *   GET  /health  -> {status}
  */
 import { createServer } from 'node:http';
@@ -20,6 +21,7 @@ import * as root from '@framers/agentos';
 import * as memory from '@framers/agentos/memory';
 import { InMemoryWorkingMemory } from '@framers/agentos/cognition/substrate/memory/InMemoryWorkingMemory';
 import { LocalEmbeddingManager } from './local-embedding-manager.mjs';
+import { socialRecall } from './social-recall.mjs';
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -189,6 +191,16 @@ function send(response, status, payload) {
 createServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
         send(response, 200, { status: 'ok' });
+
+        return;
+    }
+
+    if (request.method === 'POST' && request.url === '/social/recall') {
+        try {
+            send(response, 200, await socialRecall(await readBody(request)));
+        } catch (error) {
+            send(response, 400, { error: error instanceof Error ? error.message : 'bad request' });
+        }
 
         return;
     }

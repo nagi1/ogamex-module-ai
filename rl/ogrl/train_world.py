@@ -51,6 +51,7 @@ for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
 
 import argparse
 import contextlib
+import copy
 import json
 import queue as queue_module
 import threading
@@ -65,6 +66,7 @@ from torch.distributions import Categorical
 import ogsim
 
 from .econ import bootstrap_ci
+from .errand_schema import load_errand, resolve_names, widen_checkpoint
 from .model import CandidateScorer, parameter_count
 
 DATA = Path(__file__).resolve().parents[4] / "storage/rl/ogsim"
@@ -92,7 +94,19 @@ SEASON_ARMS = ("moonstack", "reach", "expedition", "colonies", "ships", "cap", "
                "acsdefend", "acsattack", "wrecks", "moonraid", "relocate", "keyed", "class=3")
 
 
+def ensure_fresh_sim() -> None:
+    """Refuses a Python `ogsim` older than the sim's sources: `SeasonWorld` ignores an arm it does not know, so a stale build
+    plays another world without a word (5 Nov: Stage C collected on the 4 Nov build, without `late` and `satcap`)."""
+    built = Path(ogsim.__file__).parent.glob("ogsim*.so")
+    built_at = max((f.stat().st_mtime for f in built), default=0.0)
+    sources = Path(__file__).resolve().parents[1] / "ogsim" / "src"
+    newest = max((f.stat().st_mtime for f in sources.rglob("*.rs")), default=0.0)
+    if newest > built_at:
+        raise SystemExit(f"ogsim is older than {sources}: rebuild it (cd rl/ogsim && maturin develop --release)")
+
+
 def season_world(args, seed: int, n_worlds: int) -> "ogsim.SeasonWorld":
+    ensure_fresh_sim()
     return ogsim.SeasonWorld(args.season_data, args.catalogue, n_worlds, list(args.arms), controlled=args.controlled,
                              accounts=args.accounts, days=int(args.horizon // 24), seed=seed, queue=args.queue,
                              detector=args.detector, stagger=args.stagger, **{"lambda": args.realism})
@@ -450,9 +464,8 @@ def learner(args, dims, model, shared, lock, version, slots: Slots, free_q, read
     model.to(device).train()
     anchor = None
     if args.init and args.kl_anchor > 0:
-        saved = torch.load(args.init, map_location="cpu", weights_only=False)
-        anchor = CandidateScorer(saved["state_dim"], saved["cand_dim"], saved["width"]).to(device).eval()
-        anchor.load_state_dict(saved["model"])
+        # The model is still its warm start here (widened by name when the init was narrower): anchor to that.
+        anchor = copy.deepcopy(model).to(device).eval()
         anchor.requires_grad_(False)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, eps=1e-5)
     # BC leaves the value head untrained: it learns alone first, on the head's own parameters, so the clone is not disturbed.
@@ -736,6 +749,13 @@ def main(argv: list[str] | None = None) -> None:
     names = dict(zip(("state", "candidate"), probe.feature_names()))
     del probe
     saved = torch.load(args.init, map_location="cpu", weights_only=False) if args.init else {}
+    if args.init and args.queue == 2:
+        # An errand warm start may be narrower than the simulator: widen it by column name (new columns at weight 0).
+        names = resolve_names(names, dims[0], dims[2])
+        try:
+            saved = widen_checkpoint(load_errand(args.init), names)
+        except ValueError as error:
+            raise SystemExit(f"errand checkpoint feature schema differs and cannot be widened: {error}")
     scale = args.reward_scale or saved.get("reward_scale")
     model = CandidateScorer(dims[0], dims[2], args.width)
     if not (args.init and scale):  # a year-long world costs minutes per game: a BC start brings its scale and normalisation

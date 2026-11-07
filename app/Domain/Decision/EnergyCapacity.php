@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Support\HostProduction;
 use OGame\Models\Resources;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
@@ -126,7 +127,7 @@ class EnergyCapacity
     {
         $level = $planet->getObjectLevel($machineName);
 
-        return (float) $planet->getObjectProduction($machineName, $level + 1, true)->energy->get()
-            - (float) $planet->getObjectProduction($machineName, $level, true)->energy->get();
+        return (float) HostProduction::at($planet, $machineName, $level + 1)->energy->get()
+            - (float) HostProduction::at($planet, $machineName, $level)->energy->get();
     }
 }

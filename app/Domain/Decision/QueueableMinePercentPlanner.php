@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Decision;
 
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\HostProduction;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
@@ -151,7 +152,7 @@ class QueueableMinePercentPlanner
                 continue;
             }
 
-            $production = $planet->getObjectProduction($object->machine_name, $level, true);
+            $production = HostProduction::at($planet, $object->machine_name, $level);
             $scale = self::FULL_PERCENT / $setting;
             $draw = -(float) $production->energy->get() * $scale;
             $output = (float) ($production->metal->get() + $production->crystal->get() + $production->deuterium->get()) * $scale;

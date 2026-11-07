@@ -5,6 +5,7 @@ namespace Modules\AI\Domain\Decision;
 use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
 use Modules\AI\Domain\Persona\SavingsGoal;
+use Modules\AI\Domain\Research\ResearchCeiling;
 use Modules\AI\Enums\AiStockpileStrategy;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
@@ -67,6 +68,7 @@ class QueueableBuildingPlanner
         private ReserveFloor $reserveFloor,
         private BuildingQueueService $buildingQueueService,
         private ResearchQueueService $researchQueueService,
+        private ResearchCeiling $researchCeiling,
     ) {
     }
 
@@ -942,7 +944,14 @@ class QueueableBuildingPlanner
      */
     private function queueableResearch(PlanetService $planet, BuildCandidate $candidate, ?float $reserveHours = ReserveFloor::RESEARCH_HOURS, bool $ignoringPrice = false): ?QueueableResearch
     {
-        $machineName = ObjectService::getObjectById($candidate->buildingId)->machine_name;
+        $technology = ObjectService::getObjectById($candidate->buildingId);
+        $machineName = $technology->machine_name;
+
+        // A level past the research's useful ceiling (a research paid in energy alone, above what any object requires)
+        // is withheld from the teacher and the model alike: it buys nothing but the satellites that pay for it.
+        if (!$this->researchCeiling->allows($technology, $planet->getPlayer()?->getResearchLevel($machineName) ?? 0)) {
+            return null;
+        }
 
         // A technology already in research anywhere on the account is not offered again: the host
         // would take the row and then cancel it, so the capability is withheld instead of the

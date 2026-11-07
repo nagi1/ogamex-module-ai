@@ -19,14 +19,16 @@ use Modules\AI\Domain\Decision\QueueableJumpGate;
 use Modules\AI\Domain\Decision\QueueableJumpGatePlanner;
 use Modules\AI\Domain\Decision\QueueableMinePercent;
 use Modules\AI\Domain\Decision\QueueableMinePercentPlanner;
+use Modules\AI\Domain\Decision\QueueableMissile;
+use Modules\AI\Domain\Decision\QueueableMissilePlanner;
+use Modules\AI\Domain\Decision\QueueableOfficer;
+use Modules\AI\Domain\Decision\QueueableOfficerPlanner;
 use Modules\AI\Domain\Decision\QueueablePhalanx;
 use Modules\AI\Domain\Decision\QueueablePhalanxPlanner;
 use Modules\AI\Domain\Decision\QueueableRaid;
 use Modules\AI\Domain\Decision\QueueableRecall;
 use Modules\AI\Domain\Decision\QueueableRecycle;
 use Modules\AI\Domain\Decision\QueueableRecyclePlanner;
-use Modules\AI\Domain\Decision\QueueableOfficer;
-use Modules\AI\Domain\Decision\QueueableOfficerPlanner;
 use Modules\AI\Domain\Decision\QueueableRelocation;
 use Modules\AI\Domain\Decision\QueueableRelocationPlanner;
 use Modules\AI\Domain\Decision\QueueableResearch;
@@ -57,6 +59,7 @@ use Modules\AI\Models\AiGoal;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
+use Modules\AI\Support\HostProduction;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\Planet;
 
@@ -192,6 +195,7 @@ class ScheduleAiIntentAction
         // The login's claims start empty and are cleared again when it ends, so a worker process that runs
         // the next account's login never carries this one's promised ships.
         app(LoginReservations::class)->reset();
+        HostProduction::forget();
 
         try {
             $this->schedule($profile, $sessionWorkItem, $trace);
@@ -988,8 +992,8 @@ class ScheduleAiIntentAction
 
     private function scheduleMissile(AiProfile $profile, AiWorkItem $sessionWorkItem): void
     {
-        $plan = app(\Modules\AI\Domain\Decision\QueueableMissilePlanner::class)->plan($profile->player_id);
-        if (!$plan instanceof \Modules\AI\Domain\Decision\QueueableMissile) {
+        $plan = app(QueueableMissilePlanner::class)->plan($profile->player_id);
+        if (!$plan instanceof QueueableMissile) {
             return;
         }
 

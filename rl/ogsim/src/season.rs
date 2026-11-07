@@ -43,15 +43,25 @@ impl Layer {
     }
 
     /// Output o's weights on inputs `from..from + len` (row-major, one flat buffer so the dot products vectorise).
+    #[inline(always)]
     fn row(&self, o: usize, from: usize, len: usize) -> &[f32] {
         &self.weight[o * self.inputs + from..o * self.inputs + from + len]
     }
 
+    #[inline(always)]
     fn apply(&self, input: &[f32]) -> Vec<f32> {
         (0..self.bias.len()).map(|o| (dot(self.row(o, 0, self.inputs), input) + self.bias[o]).max(0.0)).collect()
     }
 
+    /// `apply` into a buffer the caller reuses.
+    #[inline(always)]
+    fn apply_into(&self, input: &[f32], out: &mut Vec<f32>) {
+        out.clear();
+        for o in 0..self.bias.len() { out.push((dot(self.row(o, 0, self.inputs), input) + self.bias[o]).max(0.0)) }
+    }
+
     /// A network's last layer has no ReLU after it.
+    #[inline(always)]
     fn output(&self, input: &[f32]) -> f32 {
         dot(self.row(0, 0, self.inputs), input) + self.bias[0]
     }
@@ -59,6 +69,7 @@ impl Layer {
 
 /// A dot product in eight lanes: a plain `zip().sum()` is one serial chain the compiler may not reorder, and model
 /// inference was ~90% of a season's time (4 Nov: 300 s against 28 s for the scripted players over 30 days).
+#[inline(always)]
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut lanes = [0.0f32; 8];
     let (whole, rest) = (a.len() / 8 * 8, a.len().min(b.len()));
@@ -107,6 +118,45 @@ impl Detector {
     }
 }
 
+/// Who flies an account's fleet errands at its logins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pilot {
+    /// Its persona, by script.
+    Persona,
+    /// The learner: `errand-policy=` over the first `fleet-model=N` accounts, the only seats `es-errand=` perturbs.
+    Learner,
+    /// Entry K of `errand-pool=A,B,teacher` (`teacher`: the scripted mix through the model's door), never perturbed.
+    Pool(usize),
+}
+
+/// Per account, its `Pilot`. `errand-split=LO-HI:K,...` gives accounts LO..=HI to pool entry K; the first `fleet-model`
+/// accounts stay the learner's, and an account no range names keeps its persona. Without the two pool arms this is
+/// today's `fleet-model=N` exactly.
+pub fn pilots(arms: &[String], accounts: usize) -> Vec<Pilot> {
+    let arm = |name: &str| arms.iter().find_map(|arm| arm.strip_prefix(name));
+    let fleet_model = arm("fleet-model=").map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
+    let mut out: Vec<Pilot> = (0..accounts).map(|a| if a < fleet_model { Pilot::Learner } else { Pilot::Persona }).collect();
+    let pool = arm("errand-pool=").map_or(0, |list| list.split(',').count());
+    for range in arm("errand-split=").into_iter().flat_map(|spec| spec.split(',')) {
+        let (span, k) = range.split_once(':').expect("errand-split=LO-HI:K,...");
+        let (lo, hi) = span.split_once('-').unwrap_or((span, span));
+        let (lo, hi, k) = (lo.parse::<usize>().expect("errand-split LO"), hi.parse::<usize>().expect("errand-split HI"), k.parse::<usize>().expect("errand-split K"));
+        assert!(k < pool, "errand-split names pool entry {k}, errand-pool= has {pool}");
+        assert!(lo <= hi && hi < accounts, "errand-split range {lo}-{hi} outside the {accounts} accounts");
+        for p in out[lo..=hi].iter_mut().filter(|p| **p == Pilot::Persona) { *p = Pilot::Pool(k) }
+    }
+    out
+}
+
+/// `errand-pool=A,B,teacher`'s entries in order, each errand model loaded (`wide` for the wide menu's version); `None`
+/// is `teacher`.
+pub fn errand_pool(arms: &[String]) -> Result<Vec<Option<Policy>>, String> {
+    let wide = arms.iter().any(|arm| arm == "wide");
+    arms.iter().find_map(|arm| arm.strip_prefix("errand-pool=")).map_or(Ok(Vec::new()), |list| list.split(',')
+        .map(|path| if path == "teacher" { Ok(None) } else { Policy::load_errand(path, wide).map(Some).map_err(|e| format!("{path}: {e}")) })
+        .collect())
+}
+
 /// `ogrl.model.CandidateScorer` played in Rust, from `ogrl.export_policy`'s weights: a season writes its own lines, so
 /// `hds.py` judges a model exactly as it judges the personas.
 #[derive(Clone)]
@@ -115,6 +165,20 @@ pub struct Policy { norm: [Vec<f32>; 4], state_net: Vec<Layer>, cand_net: Layer,
 impl Policy {
     pub fn load(path: &str) -> Result<Self, String> {
         Self::parse(&weights(path)?)
+    }
+
+    /// Errand models must name the current feature semantics, not just match the tensor width.
+    /// With `wide`, the wide menu's (`errands::WIDE_FEATURE_VERSION`).
+    pub fn load_errand(path: &str, wide: bool) -> Result<Self, String> {
+        Self::parse_errand(&weights(path)?, wide)
+    }
+
+    fn parse_errand(v: &serde_json::Value, wide: bool) -> Result<Self, String> {
+        let version = crate::errands::feature_version(wide);
+        if v["_errand_feature_version"].as_u64() != Some(version) {
+            return Err(format!("errand policy requires feature version {version}; old or unversioned weights must be retrained"));
+        }
+        Self::parse(v)
     }
 
     pub fn parse(v: &serde_json::Value) -> Result<Self, String> {
@@ -180,17 +244,53 @@ impl Policy {
 
     /// The state's hidden layer and the score of every legal row; `cands` is [K, C] flat.
     fn scores(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> (Vec<f32>, Vec<(usize, f32)>) {
-        let scaled = |x: &[f32], mean: &[f32], std: &[f32]| x.iter().zip(mean).zip(std).map(|((v, m), s)| (v - m) / s).collect::<Vec<f32>>();
-        let mut s = scaled(state, &self.norm[0], &self.norm[1]);
-        for layer in &self.state_net { s = layer.apply(&s) }
+        // The same arithmetic in 256-bit registers where the CPU has them: `dot`'s eight lanes are one register, and
+        // without fused multiply-adds every product and sum rounds as before (bit-identical scores).
+        #[cfg(target_arch = "x86_64")]
+        if std::is_x86_feature_detected!("avx2") {
+            // SAFETY: the CPU was just found to support AVX2.
+            return unsafe { self.scores_avx2(state, cands, legal) };
+        }
+        self.scores_in(state, cands, legal)
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2")]
+    unsafe fn scores_avx2(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> (Vec<f32>, Vec<(usize, f32)>) {
+        self.scores_in(state, cands, legal)
+    }
+
+    #[inline(always)]
+    fn scores_in(&self, state: &[f32], cands: &[f32], legal: &[u8]) -> (Vec<f32>, Vec<(usize, f32)>) {
+        // Plain loops, not iterator adapters: the adapters are functions of their own the AVX2 copy would call.
+        #[inline(always)]
+        fn scaled_into(x: &[f32], mean: &[f32], std: &[f32], out: &mut Vec<f32>) {
+            out.clear();
+            for i in 0..x.len().min(mean.len()).min(std.len()) { out.push((x[i] - mean[i]) / std[i]) }
+        }
+        let mut s = Vec::with_capacity(state.len());
+        scaled_into(state, &self.norm[0], &self.norm[1], &mut s);
+        let mut next = Vec::new();
+        for layer in &self.state_net {
+            layer.apply_into(&s, &mut next);
+            std::mem::swap(&mut s, &mut next);
+        }
         // joint.0 reads [state, candidate]: its state half is the same for every row, so it is summed once per decision.
         let (first, width) = (&self.joint[0], self.norm[2].len());
-        let shared: Vec<f32> = (0..first.bias.len()).map(|o| dot(first.row(o, 0, s.len()), &s) + first.bias[o]).collect();
-        let rows = (0..legal.len()).filter(|&row| legal[row] > 0).map(|row| {
-            let c = self.cand_net.apply(&scaled(&cands[row * width..(row + 1) * width], &self.norm[2], &self.norm[3]));
-            let x: Vec<f32> = shared.iter().enumerate().map(|(o, h)| (h + dot(first.row(o, s.len(), c.len()), &c)).max(0.0)).collect();
-            (row, self.joint[2].output(&self.joint[1].apply(&x)))
-        }).collect();
+        let mut shared: Vec<f32> = Vec::with_capacity(first.bias.len());
+        for o in 0..first.bias.len() { shared.push(dot(first.row(o, 0, s.len()), &s) + first.bias[o]) }
+        // One set of buffers for every row: the arithmetic is `apply`'s, only the allocations are shared.
+        let (mut z, mut c, mut x, mut h) = (Vec::with_capacity(width), Vec::new(), Vec::with_capacity(shared.len()), Vec::new());
+        let mut rows = Vec::with_capacity(legal.len());
+        for row in 0..legal.len() {
+            if legal[row] == 0 { continue }
+            scaled_into(&cands[row * width..(row + 1) * width], &self.norm[2], &self.norm[3], &mut z);
+            self.cand_net.apply_into(&z, &mut c);
+            x.clear();
+            for o in 0..shared.len() { x.push((shared[o] + dot(first.row(o, s.len(), c.len()), &c)).max(0.0)) }
+            self.joint[1].apply_into(&x, &mut h);
+            rows.push((row, self.joint[2].output(&h)));
+        }
         (s, rows)
     }
 
@@ -262,6 +362,8 @@ pub struct Universe {
     /// Row 82: an active account that has held its world's top tenth for `RECRUIT_DAYS` day ends joins an alliance.
     recruit: bool,
     top_days: Vec<u32>,
+    /// Time-limited messages for the experimental alliance war scenario.
+    war_requests: Vec<players::WarRequest>,
     /// Per account, its place in the last highscore as a share of the world, inactives ranked too, as `hds.py` reads it.
     pub rank: Vec<f64>,
     moon_shots: bool,
@@ -274,6 +376,9 @@ pub struct Universe {
     acs_attack: bool,
     wrecks: bool,
     relocations: bool,
+    /// `wide` with an errand model: these accounts' alliance errands, moon shots and expeditions are the errand
+    /// model's (`errands::Menu`), so the login does not also play them by script.
+    errand_kinds: Vec<bool>,
     /// Leverage probes: `jolt=D` spends one draw of the world's dice at day D's end and changes nothing else; `skip=A:D`
     /// makes account A pass on its persona's build at its first login after day D. Their gap is a decision's signal over its noise.
     jolt: Option<f64>,
@@ -303,25 +408,53 @@ impl Universe {
             .unwrap_or_else(|| vec![600.0, 1800.0, 3600.0, 7200.0, 21600.0]);
         // Row 23's ceiling arm: no gaps at all is the economy's own "always there" path.
         if arms.iter().any(|arm| arm == "always-online") { cat.login_gaps.clear() }
+        // The energy-only research ceiling also counts what the units require (the deathstar's graviton level).
+        let rules = Rules::load(&cat, &format!("{data}/units-parity/units-u1.json"), &format!("{data}/fleet-settings-u1.json"), &format!("{data}/combat-u1.json"))?;
+        let needs: Vec<(usize, u32)> = rules.units.units.iter().flat_map(|u| u.requires.iter()).filter_map(|&(k, l)| Some((k?, l))).collect();
+        cat.set_ceilings(&needs);
         Ok(cat)
     }
 
     pub fn new(cat: Arc<Catalogue>, colonisation: Option<Arc<Colonisation>>, data: &str, days: usize, accounts: usize, seed: u64, arms: &[String]) -> Self {
         let on = |name: &str| arms.iter().any(|arm| arm == name);
-        let rules = Arc::new(Rules::load(&cat,
+        // `realexpo` (off by default): expedition finds take the original game's factor draw (`expedition::real_find`).
+        let real_expo = |mut r: Rules| { if let Some(e) = r.expedition.as_mut() { e.real_factor = on("realexpo") } r };
+        let rules = Arc::new(real_expo(Rules::load(&cat,
             &format!("{data}/units-parity/units-u1.json"),
             &format!("{data}/fleet-settings-u1.json"),
-            &format!("{data}/combat-u1.json")).expect("the units, fleet and combat exports"));
+            &format!("{data}/combat-u1.json")).expect("the units, fleet and combat exports")));
 
         // One shipyard table per home planet: a colony site has none, so a season starts its accounts on homes.
         let homes = rules.units.planets.len();
         let mut configs: Vec<usize> = (0..accounts).map(|a| a % homes).collect();
+        // The personas are drawn first (their own stream, untouched by the homes), so a class can follow the persona.
+        let mut rng = seed ^ 0x5eed_1234;
+        // Arm `personas=M:R:S`: the miner, raider and saver shares instead of PERSONAS' (a war world: `personas=0:1:0`).
+        let shares: Vec<f64> = arms.iter().find_map(|arm| arm.strip_prefix("personas="))
+            .map_or_else(|| PERSONAS.iter().map(|p| p.1).collect(), |v| v.split(':').map(|x| x.parse().expect("personas=M:R:S")).collect());
+        assert_eq!(shares.len(), PERSONAS.len(), "personas=M:R:S");
+        let mut roles: Vec<usize> = (0..PERSONAS.len())
+            .flat_map(|r| std::iter::repeat(r).take((accounts as f64 * shares[r]).round() as usize))
+            .collect();
+        while roles.len() < accounts { roles.push(0) }
+        roles.truncate(accounts);
+        shuffle(&mut roles, &mut rng);
+        let mut order: Vec<usize> = (0..accounts).collect();
+        shuffle(&mut order, &mut rng);
         // `class=N`: an account plays class N, as a player picks it. It starts on the class-N donor home nearest its own home's
         // temperature, so the class's production rows, research time and fleet rules all come with it. The classes are
-        // the donors' own (gate 1).
-        if let Some(class) = arms.iter().find_map(|arm| arm.strip_prefix("class=")).map(|n| n.parse::<u32>().expect("class=N")) {
+        // the donors' own (gate 1). `personaclass` (off by default) picks the class by persona instead, as players pick
+        // the class their play profits from: a raider the host's class 2, a miner class 1, a saver (expeditions) class 3
+        // (`CharacterClass` ids, the donors' `character_class`); it overrides `class=N`.
+        let one_class = arms.iter().find_map(|arm| arm.strip_prefix("class=")).map(|n| n.parse::<u32>().expect("class=N"));
+        let by_persona = |role: usize| match role { RAIDER => 2, SAVER => 3, _ => 1 };
+        let class_of: Option<Vec<u32>> = match on("personaclass") {
+            true => Some(roles.iter().map(|&r| by_persona(r)).collect()),
+            false => one_class.map(|class| vec![class; accounts]),
+        };
+        if let Some(class_of) = class_of {
             let of = |c: usize| (cat.planets[c].character_class, cat.planets[c].temperature);
-            for config in configs.iter_mut() {
+            for (config, &class) in configs.iter_mut().zip(&class_of) {
                 let own = of(*config).1;
                 if let Some(home) = (0..homes).filter(|&h| of(h).0 == Some(class)).min_by(|&x, &y| (of(x).1 - own).abs().total_cmp(&(of(y).1 - own).abs())) { *config = home }
             }
@@ -329,6 +462,8 @@ impl Universe {
         let mut world = World::new(&cat, &configs, days as f64 * 24.0, 0.0, seed);
         world.colonisation = colonisation;
         // Row 66: how many galaxies each account colonises in, 1 to 7 alike - an assumption, as the alliance draw is.
+        world.spread = on("spread");
+        world.paid_lab = on("paidlab");
         if on("reach") {
             let mut draw = seed ^ 0x5eed_6a1a;
             world.reach = (0..world.games.len()).map(|_| 1 + (next_random(&mut draw) % 7) as u32).collect();
@@ -340,21 +475,12 @@ impl Universe {
         let coords: Vec<Coord> = (0..accounts as i64).map(|a| Coord { galaxy: 1 + a % 3, system: 1 + (a * 167) % systems, position: 4 + a % 9 }).collect();
         world.arm(vec![Arc::clone(&rules); accounts], coords);
 
-        let mut rng = seed ^ 0x5eed_1234;
-        let mut roles: Vec<usize> = (0..PERSONAS.len())
-            .flat_map(|r| std::iter::repeat(r).take((accounts as f64 * PERSONAS[r].1).round() as usize))
-            .collect();
-        while roles.len() < accounts { roles.push(0) }
-        roles.truncate(accounts);
-        shuffle(&mut roles, &mut rng);
-        let mut order: Vec<usize> = (0..accounts).collect();
-        shuffle(&mut order, &mut rng);
         // Row 74: an account flies with its own character class's rules, from the host's export of that class.
         if on("classes") {
-            let class_rules = |class: u32| Arc::new(Rules::load(&cat,
+            let class_rules = |class: u32| Arc::new(real_expo(Rules::load(&cat,
                 &format!("{data}/units-parity/units-u1.json"),
                 &format!("{data}/fleet-settings-u1-class{class}.json"),
-                &format!("{data}/combat-u1-class{class}.json")).expect("a class's combat export"));
+                &format!("{data}/combat-u1-class{class}.json")).expect("a class's combat export")));
             let by_class: Vec<(u32, Arc<Rules>)> = vec![(2, class_rules(2)), (3, class_rules(3))];
             for a in 0..accounts {
                 let class = cat.planets[configs[a]].character_class;
@@ -365,20 +491,36 @@ impl Universe {
         }
         // Half the accounts stop playing, each at its own quit day: a quitter's last login is the day it leaves.
         let mut quit: Vec<Option<f64>> = vec![None; accounts];
-        for &a in &order[..accounts / 2] {
-            quit[a] = Some(-unit(&mut rng).ln() * QUIT_MEAN_DAYS * DAY);
+        // Arm `churn=SHARE:MEAN`: SHARE of the accounts quit, at an exponential day of mean MEAN, so quitting goes on all
+        // season and late quitters leave grown accounts behind as farms (REAL-SERVER-PLAYER-PROFILE.md #2, #6).
+        let (share, mean) = arms.iter().find_map(|arm| arm.strip_prefix("churn=")).map_or((0.5, QUIT_MEAN_DAYS), |v| {
+            let (s, m) = v.split_once(':').expect("churn=SHARE:MEAN");
+            (s.parse::<f64>().expect("churn share"), m.parse::<f64>().expect("churn mean"))
+        });
+        let quitters = ((accounts as f64 * share).round() as usize).min(accounts);
+        for &a in &order[..quitters] {
+            quit[a] = Some(-unit(&mut rng).ln() * mean * DAY);
         }
         // Row 15: an account still playing at day 3 joins an alliance, at a drawn day; a quitter never joins.
         let mut alliance_at: Vec<Option<f64>> = vec![None; accounts];
         // Row 92 arm: membership follows standing, decided at each day's highscore instead of drawn up front.
-        let standing = on("standing").then(|| (0..accounts).map(|_| unit(&mut rng)).collect::<Vec<f64>>());
+        let standing = (on("standing") && !on("noalliance")).then(|| (0..accounts).map(|_| unit(&mut rng)).collect::<Vec<f64>>());
         for a in (0..accounts).filter(|_| standing.is_none()) {
             let quits = quit[a].unwrap_or(f64::INFINITY);
             if quits <= 3.0 * DAY || next_random(&mut rng) % 100 >= ALLIANCE_SHARE { continue }
             let join = 3.0 * DAY + -unit(&mut rng).ln() * ALLIANCE_MEAN_DAYS * DAY;
             if join < quits { alliance_at[a] = Some(join) }
         }
+        // Arm `noalliance`: nobody joins one, so every account is every other's enemy.
+        if on("noalliance") { alliance_at.iter_mut().for_each(|j| *j = None) }
         world.alliance_at = alliance_at;
+        // Explicit experimental teams; absent this arm, the historical single alliance stays unchanged.
+        if let Some(teams) = arms.iter().find_map(|arm| arm.strip_prefix("alliances=")) {
+            let teams: usize = teams.parse().expect("alliances=N");
+            assert!(teams > 0, "alliances must be positive");
+            world.alliance_id = (0..accounts).map(|a| a % teams).collect();
+            world.alliances_distinct = true;
+        }
 
         let mut players: Vec<Player> = (0..accounts).map(|a| {
             let s = seed.wrapping_mul(100).wrapping_add(a as u64);
@@ -388,12 +530,12 @@ impl Universe {
                 _ => Player::Miner(Miner::new(s)),
             }
         }).collect();
-        // `fleet-model=N`: the first N accounts' fleet errands are a model's, so their persona keeps only the economy and
-        // its yard (its archetype's doctrine stays), as the errand world does.
-        let fleet_model = arms.iter().find_map(|arm| arm.strip_prefix("fleet-model=")).map_or(0, |n| n.parse::<usize>().expect("fleet-model=N"));
+        // `fleet-model=N` (and `errand-split=`): these accounts' fleet errands are a model's, so their persona keeps only the
+        // economy and its yard (its archetype's doctrine stays), as the errand world does.
+        let flown: Vec<bool> = pilots(arms, accounts).iter().map(|p| *p != Pilot::Persona).collect();
         // The persona stays (a saver still saves, its yard and doctrine stay); only a raider's own raids stop, as the model
         // now decides them. Reset to a plain miner, these accounts lost 4% against the same personas played by script.
-        for player in players.iter_mut().take(fleet_model) {
+        for (player, _) in players.iter_mut().zip(&flown).filter(|(_, &f)| f) {
             if let Player::Raider(raider) = player { raider.hostile = false }
         }
         let stack = on("stack") || on("yardstack") || on("moonstack");
@@ -401,8 +543,23 @@ impl Universe {
         let doctrine: HashMap<String, players::Doctrine> = if on("doctrine") {
             serde_json::from_str(&std::fs::read_to_string(format!("{data}/doctrine.json")).expect("the doctrine export")).expect("doctrine.json")
         } else { HashMap::default() };
+        // `params=` / `params-es=` (tuning.rs): the personas' tunable numbers, per account; none = today's constants.
+        let tuned = arms.iter().any(|arm| arm.starts_with("params=") || arm.starts_with("params-es="));
+        let mut tunes = crate::tuning::Tuning::for_accounts(arms, accounts).expect("params");
+        // `skill` (tuning.rs): one skill quantile per account; it sets the expedition slots kept busy here and, with `bands`,
+        // the account's presence band below.
+        let skill = on("skill").then(|| crate::tuning::skill_draw(seed, accounts));
+        for (t, &q) in tunes.iter_mut().zip(skill.iter().flatten()) { t.expedition_use = crate::tuning::expedition_use(q) }
         for (a, player) in players.iter_mut().enumerate() {
             let m = player.miner();
+            if tuned {
+                let t = &tunes[a];
+                match PERSONAS[roles[a]].0 {
+                    "raider" => { m.military_share = t.raider_military_share; m.cargo_share = t.raider_cargo_share; m.fighters = t.raider_fighters.round() as i64 }
+                    "miner" => m.cargo_share = t.miner_cargo_share,
+                    _ => m.cargo_share = t.saver_cargo_share,
+                }
+            }
             m.doctrine = doctrine.get(PERSONAS[roles[a]].0).cloned().unwrap_or_default();
             m.consolidate = on("consolidate") || stack;
             m.reserve = on("reserve") || stack;
@@ -420,19 +577,76 @@ impl Universe {
             m.network = on("netchain");
             m.tech_tree = on("techtree");
             m.merchant = on("merchant");
+            m.scrap = on("scrap");
+            m.trim = on("trim");
             m.satellites = on("satellites");
             m.doubler = on("doubler");
             m.expo_full = on("expofull");
             m.expo_ship = on("exposhield");
+            m.expedition_errand = on("wide") && flown[a];
+            m.sat_cap = on("satcap");
+            m.war_share = on("warshare");
+            m.post_count = on("postcount");
+            m.moon_post = on("minerpost");
+            m.ds_anchor = on("anchor");
         }
         for player in players.iter_mut() {
             if let Player::Raider(raider) = player { raider.moon_raids = on("moonraid") }
         }
         world.keyed = on("keyed");
+        world.event_dice = on("eventdice");
+        world.war_fleet = on("warfleet");
+        world.raids = on("raids");
+        if tuned || skill.is_some() { world.tune = Arc::new(tunes) }
+        world.wide = on("wide");
+        world.late = on("late");
+        world.fresh_spy = on("freshspy");
+        world.keep_fights = on("battles") || on("levels") || on("social");
+        world.relations = crate::diplomacy::Relations::new(on("diplomacy"));
+        if on("diplomacy") && on("persona") {
+            let personas = crate::persona::Personas::load();
+            let traits = (0..accounts).map(|a| personas.draw(seed, a).1).collect();
+            world.relations.persona = Some((personas, traits));
+            world.relations.rng = seed.wrapping_mul(0x2545_f491_4f6c_dd1d) | 1;
+        }
+        world.relations.cycles = on("cycles");
+        world.relations.probe = arms.iter().find_map(|arm| arm.strip_prefix("probe=")).map(String::from);
+        world.relations.bc = arms.iter().find_map(|arm| arm.strip_prefix("bc=")).map(crate::diplomacy::BcTree::load);
+        world.relations.minds = crate::mind::Minds::new(on("diplomacy") && on("minds"), accounts);
+        if on("diplomacy") { world.relations.draw_betrayers(&roles.iter().map(|&r| PERSONAS[r].0).collect::<Vec<_>>(), seed) }
+        world.fuel_keep = on("fuelkeep");
+        // `bands`: each account plays the module's own activity band (`RoutineProfile::presenceBand`, drawn by archetype
+        // in `AiPersonaFactory`; persona miner -> Miner, raider -> Raider, saver -> Fleeter), placed in it by its own
+        // diligence, so the simulated world holds the casual and hardcore players the deployed accounts are. The shared
+        // real gaps give about `awake / mean gap` logins a day; the account waits that many times its target sessions.
+        // Arm `dark9`: the module's own night (SessionPlanner::CORE_DARK_MINUTES = 540): nine dark hours a day, not 6-8.
+        if on("dark9") { for g in world.games.iter_mut() { g.sleep_hours = 9.0 } }
+        if on("bands") && !cat.login_gaps.is_empty() {
+            // [casual, regular, active, hardcore] weights and their sessions-per-day bands, as the module states them.
+            const MIX: [[f64; 4]; 3] = [[10.0, 55.0, 30.0, 5.0], [5.0, 25.0, 55.0, 15.0], [5.0, 25.0, 55.0, 15.0]];
+            const SESSIONS: [(f64, f64); 4] = [(1.0, 3.0), (3.0, 7.0), (7.0, 12.0), (12.0, 18.0)];
+            let mean_gap = cat.login_gaps.iter().sum::<f64>() / cat.login_gaps.len() as f64;
+            let mut rng = seed ^ 0x9ACE;
+            let mut unit = || (crate::economy::next_random(&mut rng) >> 11) as f64 / (1u64 << 53) as f64;
+            for a in 0..accounts {
+                let mix = MIX[roles[a].min(2)];
+                // With `skill` the account's quantile places it: its band by the mix's cumulative shares, its diligence by
+                // where it sits inside that band's share (the band shares stay the module's; the strong are the active).
+                let q = skill.as_ref().map(|s| s[a]);
+                let mut pick = q.unwrap_or_else(&mut unit) * mix.iter().sum::<f64>();
+                let band = mix.iter().position(|&w| { if pick < w { return true } pick -= w; false }).unwrap_or(3);
+                let inside = match q { Some(_) => (pick / mix[band]).clamp(0.0, 1.0), None => unit() };
+                let (fewest, most) = SESSIONS[band];
+                let sessions = fewest + ((most - fewest) * inside).round();
+                let base = (24.0 - world.games[a].sleep_hours) * 3600.0 / mean_gap;
+                world.games[a].pace = base / sessions;
+            }
+        }
         Universe {
             cat, world, roles, players, ledgers: (0..accounts).map(|_| Ledger::default()).collect(),
-            quit, gone: vec![false; accounts], standing, recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
+            quit, gone: vec![false; accounts], standing, war_requests: Vec::new(), recruit: on("recruit"), top_days: vec![0; accounts], rank: vec![0.5; accounts],
             rollout_policy: None, value_to_end: None, advise: !on("noadvice"), moon_shots: on("moonstack"), moon_feed: on("moonfeed"), acs_defend: on("acsdefend"), acs_attack: on("acsattack"), wrecks: on("wrecks"), relocations: on("relocate"),
+            errand_kinds: flown.iter().map(|&f| f && on("wide")).collect(),
             jolt: arms.iter().find_map(|arm| arm.strip_prefix("jolt=")).map(|d| d.parse::<f64>().expect("jolt=DAY") * DAY),
             skip: arms.iter().find_map(|arm| arm.strip_prefix("skip=")).map(|v| {
                 let (a, d) = v.split_once(':').expect("skip=ACCOUNT:DAY");
@@ -469,20 +683,25 @@ impl Universe {
         // Row 64: alliance members shoot moons for each other at their logins (membership is the season's data).
         if self.moon_shots && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
             let wants: Vec<bool> = (0..self.accounts()).map(|b| self.wants_moon(b)).collect();
-            let (alliance_at, gone) = (self.world.alliance_at.clone(), &self.gone);
-            players::moon_shot(&mut self.world, &self.cat, a, |b| wants[b] && alliance_at[b].is_some_and(|join| t >= join) && !gone[b], &mut self.ledgers[owner]);
+            let (alliance_at, alliance_id, gone) = (self.world.alliance_at.clone(), self.world.alliance_id.clone(), &self.gone);
+            let mate = |b: usize| wants[b] && alliance_at[b].is_some_and(|join| t >= join) && alliance_id[b] == alliance_id[owner] && !gone[b];
+            match self.errand_kinds[owner] {
+                true => players::moon_shot_stock(&mut self.world, &self.cat, a, mate),
+                false => { players::moon_shot(&mut self.world, &self.cat, a, mate, &mut self.ledgers[owner]); }
+            }
             if wants[owner] {
                 let wall = self.players[owner].miner().doctrine.defence.clone();
                 players::ready_for_moon(&mut self.world, &self.cat, a, self.moon_feed, &wall);
             }
         }
-        if self.acs_defend && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
+        if self.acs_defend && a == owner && !self.errand_kinds[owner] && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
             let gone = &self.gone;
             players::defend_mate(&mut self.world, &self.cat, a, |b| !gone[b], &mut self.ledgers[owner]);
         }
         if self.acs_attack && a == owner && self.world.alliance_at[owner].is_some_and(|join| t >= join) {
             let gone = &self.gone;
-            players::join_raid(&mut self.world, &self.cat, a, |b| !gone[b], &mut self.ledgers[owner]);
+            if self.world.alliances_distinct { players::coordinate_war(&mut self.world, &self.cat, a, &mut self.war_requests, &mut self.ledgers[owner]) }
+            if !self.errand_kinds[owner] { players::join_raid(&mut self.world, &self.cat, a, |b| !gone[b], &mut self.ledgers[owner]); }
         }
         if self.wrecks && a == owner {
             players::tend_wrecks(&mut self.world, &self.cat, a, &mut self.ledgers[owner]);
@@ -540,17 +759,30 @@ impl Universe {
     /// The errand choice at slot a's login: the errands offered (row 0 waits), and the state, candidate rows and legal
     /// flags the errand model reads, padded to `errands::MAX_CANDIDATES` rows.
     pub fn observe_errands(&mut self, a: usize) -> (Vec<Errand>, Vec<f32>, Vec<f32>, Vec<u8>) {
-        let raids = self.raids(a);
+        let menu = self.menu(a);
+        self.observe_errands_in(a, &menu)
+    }
+
+    /// `observe_errands` with the login's `menu` (one errand loop reads it once: nothing in the loop moves it before
+    /// the errand runs).
+    pub fn observe_errands_in(&mut self, a: usize, menu: &errands::Menu) -> (Vec<Errand>, Vec<f32>, Vec<f32>, Vec<u8>) {
         let (world, cat) = (&mut self.world, &self.cat);
-        let offered = errands::candidates(world, cat, a, raids);
-        let state = errands::account_features(world, cat, a).to_vec();
-        let mut cands = vec![0.0; errands::MAX_CANDIDATES * errands::CAND_DIM];
-        let mut legal = vec![0; errands::MAX_CANDIDATES];
+        let (rows, width) = (errands::max_candidates(world.wide), errands::cand_dim(world.wide));
+        let offered = errands::candidates_in(world, cat, a, menu);
+        let state = errands::account_features(world, cat, a);
+        let mut cands = vec![0.0; rows * width];
+        let mut legal = vec![0; rows];
         for (row, &errand) in offered.iter().enumerate() {
-            cands[row * errands::CAND_DIM..(row + 1) * errands::CAND_DIM].copy_from_slice(&errands::candidate_features(world, cat, a, errand));
+            cands[row * width..(row + 1) * width].copy_from_slice(&errands::candidate_features_in(world, cat, a, errand, menu));
             legal[row] = 1;
         }
         (offered, state, cands, legal)
+    }
+
+    /// `observe_errands`' offer alone, for a login whose errand nobody reads features for (the scripted teacher picks
+    /// from the offer): the state and candidate rows are a third of an errand loop's time.
+    pub fn offer_errands(&mut self, a: usize, menu: &errands::Menu) -> Vec<Errand> {
+        errands::candidates_in(&mut self.world, &self.cat, a, menu)
     }
 
     /// Whether slot a's account raids: its persona is a raider (the errand menu offers spying and raids only then).
@@ -558,17 +790,57 @@ impl Universe {
         matches!(self.players[self.world.account_of(a)], Player::Raider(_))
     }
 
+    /// What the errand menu reads of the season at slot a: whether it raids and, wide, its mates and moon shots.
+    pub fn menu(&self, a: usize) -> errands::Menu {
+        let mut menu = errands::Menu::narrow(self.raids(a));
+        if !self.world.wide { return menu }
+        let (w, owner) = (&self.world, self.world.account_of(a));
+        let t = w.games[a].t;
+        let joined = |b: usize| w.alliance_at[b].is_some_and(|join| t >= join);
+        menu.alive = self.gone.iter().map(|&g| !g).collect();
+        if joined(owner) {
+            menu.shot_at = (0..self.accounts()).map(|b| self.wants_moon(b) && joined(b) && w.alliance_id[b] == w.alliance_id[owner] && !self.gone[b]).collect();
+        }
+        menu.station = matches!(self.players[owner], Player::Saver(_));
+        menu
+    }
+
     /// The row of `offered` the scripted mix would take at slot a: the errand model's teacher.
     pub fn errand_teacher(&mut self, a: usize, offered: &[Errand]) -> usize {
-        let raids = self.raids(a);
-        let pick = errands::teacher_choice(&mut self.world, &self.cat, a, raids);
+        let menu = self.menu(a);
+        self.errand_teacher_in(a, &menu, offered)
+    }
+
+    /// `errand_teacher` with the login's `menu`.
+    pub fn errand_teacher_in(&mut self, a: usize, menu: &errands::Menu, offered: &[Errand]) -> usize {
+        // Wide, the offer is the one the caller just read (the menu is long): the narrow teacher keeps its own pass.
+        let pick = match self.world.wide {
+            true => errands::teacher_among(&self.world, &self.cat, a, menu, offered),
+            false => errands::teacher_choice_in(&mut self.world, &self.cat, a, menu),
+        };
         offered.iter().position(|&e| e == pick).unwrap_or(0)
     }
 
     /// Runs the errand at row `row` of `offered`; a row that is not offered, or one the world refuses, counts as invalid.
     pub fn run_errand(&mut self, a: usize, offered: &[Errand], row: usize) {
-        let done = offered.get(row).map(|&e| errands::apply(&mut self.world, &self.cat, a, e));
+        let menu = self.menu(a);
+        self.run_errand_in(a, &menu, offered, row)
+    }
+
+    /// `run_errand` with the login's `menu`.
+    pub fn run_errand_in(&mut self, a: usize, menu: &errands::Menu, offered: &[Errand], row: usize) {
+        let done = offered.get(row).map(|&e| errands::apply_in(&mut self.world, &self.cat, a, e, menu));
         if !matches!(done, Some(Ok(()))) { self.world.games[a].invalid += 1 }
+        // Wide, a raider whose raid a defence turns away keeps a missile salvo from then on, as `Raider::raid` does.
+        let owner = self.world.account_of(a);
+        if self.world.wide && menu.raids && a == owner {
+            if let (Some(kit), Player::Raider(raider)) = (players::Kit::of(&self.world, &self.cat, a), &self.players[owner]) {
+                if raider.miner.missiles == 0 {
+                    let targets = players::nearest(&mut self.world, &self.cat, a, players::NEIGHBOURS);
+                    if targets.into_iter().any(|t| players::salvo_due(&self.world, &self.cat, a, t, kit)) { self.players[owner].miner().missiles = self.world.tn(a).missile_salvo.round() as i64 }
+                }
+            }
+        }
     }
 
     /// The model's build at slot a: an object, or `None` to pass. With `draw` it samples as it does in training.
@@ -702,13 +974,37 @@ impl Universe {
         self.world.rank1_points = totals.iter().copied().max().unwrap_or(0);
         let mut ranked: Vec<usize> = (0..n).collect();
         ranked.sort_by_key(|&a| std::cmp::Reverse(totals[a]));
+        if self.world.alliances_distinct { self.world.public_highscore.clone_from(&ranked) }
         for (place, &a) in ranked.iter().enumerate() { self.rank[a] = (place + 1) as f64 / n as f64 }
+        if self.world.relations.on {
+            let w = &self.world;
+            let club: Vec<Option<usize>> = (0..n).map(|a| w.club(a, midnight)).collect();
+            let points: Vec<f64> = totals.iter().map(|&t| t as f64).collect();
+            let betrays = w.relations.betrays.clone();
+            let view = crate::diplomacy::View { hour: midnight / 3600.0, club: &club, points: &points, betrays: &betrays };
+            self.world.relations.pass(&view);
+            // Tribute: each vassal member sends a share of its home stock to the overlord's strongest member.
+            let bonds: Vec<(usize, usize)> = self.world.relations.tribute.iter().map(|(&v, &(o, _))| (v, o)).collect();
+            for (v, o) in bonds {
+                let Some(lord) = (0..n).filter(|&a| club[a] == Some(o)).max_by_key(|&a| totals[a]) else { continue };
+                for a in (0..n).filter(|&a| club[a] == Some(v) && a != lord) {
+                    // Sent as a transport from the member's home planet, as a real vassal pays: no cargo ships, no tribute.
+                    let paid = self.world.games[a].planet.res.map(|r| (r * crate::diplomacy::TRIBUTE_SHARE).floor());
+                    if crate::players::ship_from_home(&mut self.world, &self.cat, a, lord, paid, [0.0; 3]) {
+                        self.world.relations.tribute_paid += crate::economy::weighted(paid);
+                    }
+                }
+            }
+        }
         if let Some(draws) = &self.standing {
             for (rank, &a) in ranked.iter().enumerate() {
                 let p = rank as f64 / n as f64;
                 // Membership follows today's standing both ways: an alliance drops a member that falls away.
                 let playing = self.world.games[a].horizon > midnight && midnight >= 3.0 * DAY;
-                let placed = playing && draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p;
+                // A member the politics moved (a schism, a nomad band) stands in its new club while it plays.
+                let pinned = self.world.relations.pinned.get(&a).copied();
+                if let Some(club) = pinned { self.world.alliance_id[a] = club }
+                let placed = playing && (pinned.is_some() || draws[a] < 1.0 - ALLIANCE_STANDING_SLOPE * p);
                 if placed != self.world.alliance_at[a].is_some() { self.world.alliance_at[a] = placed.then_some(midnight) }
             }
         }
@@ -761,6 +1057,37 @@ mod tests {
             u.plays(b);
             u.play(b, None);
         }
+    }
+
+    #[test]
+    fn war_highscore_tracks_the_daily_public_ranking() {
+        let econ = format!("{DATA}/units-parity/econ-u1-colonies.json");
+        let arms = vec![String::from("alliances=2")];
+        let cat = Arc::new(Universe::catalogue(DATA, &econ, &arms).expect("the catalogue"));
+        let colonisation = Colonisation::load(&econ).ok().map(Arc::new);
+        let mut u = Universe::new(cat, colonisation, DATA, 2, 8, 3, &arms);
+        let mut expected: Vec<usize> = (0..u.accounts()).collect();
+        expected.sort_by_key(|&a| std::cmp::Reverse(score::of(&u.world, a).total));
+        assert!(u.world.public_highscore.is_empty());
+        u.day_end(DAY);
+        assert_eq!(u.world.public_highscore, expected);
+    }
+
+    #[test]
+    fn errand_policy_rejects_old_or_unversioned_features() {
+        let mut value = serde_json::json!({});
+        assert!(Policy::parse_errand(&value, false).is_err());
+        value["_errand_feature_version"] = serde_json::json!(1);
+        assert!(Policy::parse_errand(&value, false).is_err());
+        value["_errand_feature_version"] = serde_json::json!(crate::errands::FEATURE_VERSION);
+        for name in ["state_net.0", "state_net.2", "cand_net.0", "joint.0", "joint.2", "joint.4", "value.0", "value.2", "value.4"] {
+            value[format!("{name}.weight")] = serde_json::json!([[0.0]]);
+            value[format!("{name}.bias")] = serde_json::json!([0.0]);
+        }
+        assert!(Policy::parse_errand(&value, false).is_ok());
+        assert!(Policy::parse_errand(&value, true).is_err(), "a narrow model does not read the wide menu");
+        value["_errand_feature_version"] = serde_json::json!(crate::errands::WIDE_FEATURE_VERSION);
+        assert!(Policy::parse_errand(&value, true).is_ok());
     }
 
     /// A look-ahead plays copies of the world: whatever a copy does must not reach the world it was copied from.

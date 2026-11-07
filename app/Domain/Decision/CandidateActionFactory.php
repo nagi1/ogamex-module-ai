@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Login\LoginPlans;
 use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiCandidateReason;
@@ -158,7 +159,7 @@ class CandidateActionFactory
             return [];
         }
 
-        if ($this->queueableFleetSavePlanner->proactivePlan($perception->playerId, $perception->upcomingAbsenceMinutes) === null) {
+        if (app(LoginPlans::class)->keep(QueueableFleetSavePlanner::class . '::proactivePlan', [$perception->playerId, $perception->upcomingAbsenceMinutes], $this->queueableFleetSavePlanner->proactivePlan($perception->playerId, $perception->upcomingAbsenceMinutes)) === null) {
             return [];
         }
 
@@ -203,7 +204,7 @@ class CandidateActionFactory
             return [];
         }
 
-        if ($this->queueableExpeditionPlanner->plan($perception->playerId) === null) {
+        if (app(LoginPlans::class)->keep(QueueableExpeditionPlanner::class, [$perception->playerId], $this->queueableExpeditionPlanner->plan($perception->playerId)) === null) {
             return [];
         }
 
@@ -267,7 +268,7 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> A jump needs no fleet slot: ships on a ready gate-moon under threat, or a ready partner nearer the enemy. */
     private function eligibleJumpGateCandidates(PerceptionSnapshot $perception): array
     {
-        if ($this->queueableJumpGatePlanner->plan($perception->playerId) === null) {
+        if (app(LoginPlans::class)->keep(QueueableJumpGatePlanner::class, [$perception->playerId], $this->queueableJumpGatePlanner->plan($perception->playerId)) === null) {
             return [];
         }
 
@@ -283,7 +284,7 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> Missiles need no fleet slot: a silo with missiles and a fresh defended target in range. */
     private function eligibleMissileCandidates(PerceptionSnapshot $perception): array
     {
-        if (app(QueueableMissilePlanner::class)->plan($perception->playerId) === null) {
+        if (app(LoginPlans::class)->keep(QueueableMissilePlanner::class, [$perception->playerId], app(QueueableMissilePlanner::class)->plan($perception->playerId)) === null) {
             return [];
         }
 
@@ -315,7 +316,7 @@ class CandidateActionFactory
     /** @return array<int, CandidateAction> */
     private function eligibleDefendCandidates(PerceptionSnapshot $perception): array
     {
-        if ($perception->fleetSlotsFree < 1 || $this->queueableDefendPlanner->plan($perception->playerId) === null) {
+        if ($perception->fleetSlotsFree < 1 || app(LoginPlans::class)->keep(QueueableDefendPlanner::class, [$perception->playerId], $this->queueableDefendPlanner->plan($perception->playerId)) === null) {
             return [];
         }
 
@@ -335,7 +336,7 @@ class CandidateActionFactory
             return [];
         }
 
-        $plan = $this->queueableRecyclePlanner->plan($perception->playerId);
+        $plan = app(LoginPlans::class)->keep(QueueableRecyclePlanner::class, [$perception->playerId], $this->queueableRecyclePlanner->plan($perception->playerId));
         if (!$plan instanceof QueueableRecycle) {
             return [];
         }
@@ -393,7 +394,7 @@ class CandidateActionFactory
             // grand test at 154 of 181 raid selections producing no work item at all, a third of
             // every decision made. Asking here keeps the candidate list to raids that will actually
             // be queued, and the drop is recorded so the trace can show it rather than hide it.
-            if (!$this->raidPlanner->plan($perception->playerId, (int) $report['report_id']) instanceof QueueableRaid) {
+            if (!app(LoginPlans::class)->keep(RaidPlanner::class, [$perception->playerId, (int) $report['report_id']], $this->raidPlanner->plan($perception->playerId, (int) $report['report_id'])) instanceof QueueableRaid) {
                 $rejections[$reportKey] = AiCandidateRejectionReason::RaidNotViable->value;
                 continue;
             }
@@ -485,7 +486,7 @@ class CandidateActionFactory
      */
     private function phalanxCandidate(PerceptionSnapshot $perception): CandidateGeneration
     {
-        if (!$this->queueablePhalanxPlanner->plan($perception->playerId) instanceof QueueablePhalanx) {
+        if (!app(LoginPlans::class)->keep(QueueablePhalanxPlanner::class, [$perception->playerId], $this->queueablePhalanxPlanner->plan($perception->playerId)) instanceof QueueablePhalanx) {
             return app()->makeWith(CandidateGeneration::class, [
                 'candidates' => [],
                 'rejections' => [],

@@ -93,3 +93,79 @@ services:
       start_period: 10s
       retries: 3
     restart: unless-stopped
+
+  # Extra FAtiMA replicas for the social gateway only (internal network, no host ports). Same image as fatima, never
+  # built here: after rebuilding the fatima image, `up -d fatima3 fatima4 fatima5 fatima6` moves them onto it.
+  fatima3: &fatima-replica
+    image: ogamex-ai-cognition-fatima:net8
+    pull_policy: never
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-m", "3", "http://127.0.0.1:8000/scenarios"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+  fatima4: *fatima-replica
+  fatima5: *fatima-replica
+  fatima6: *fatima-replica
+
+  # AgentOS replicas for the gateway (Node answers one item at a time, ~150 items/s each; measured 6 Nov).
+  agentos2: &agentos-replica
+    image: ogamex-ai-cognition-agentos:0.10.16
+    pull_policy: never
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+  agentos3: *agentos-replica
+  agentos4: *agentos-replica
+
+  # PsychSim replicas for the gateway: /social/partner takes ~1.3 s per item at horizon 2 (measured 6 Nov).
+  psychsim2: &psychsim-replica
+    image: ogamex-ai-cognition-psychsim:1.0.0
+    pull_policy: never
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+  psychsim3: *psychsim-replica
+  psychsim4: *psychsim-replica
+  psychsim5: *psychsim-replica
+  psychsim6: *psychsim-replica
+  psychsim7: *psychsim-replica
+  psychsim8: *psychsim-replica
+
+  # One front door for every engine: proxy, batch fan-out, answer cache (see gateway/README.md).
+  gateway:
+    build:
+      context: ./gateway
+    image: ogamex-ai-cognition-gateway:1.0.0
+    ports:
+      - "${AI_GATEWAY_BIND:-0.0.0.0}:${AI_GATEWAY_PORT:-8099}:8099"
+    environment:
+      # FAtiMA sessions are stateful: the gateway uses dedicated replicas so it never interleaves with the
+      # live PHP module's sessions on fatima/fatima2.
+      FATIMA_URLS: ${AI_GATEWAY_FATIMA_URLS:-http://fatima3:8000,http://fatima4:8000,http://fatima5:8000,http://fatima6:8000}
+      PSYCHSIM_URLS: ${AI_GATEWAY_PSYCHSIM_URLS:-http://psychsim:8080,http://psychsim2:8080,http://psychsim3:8080,http://psychsim4:8080,http://psychsim5:8080,http://psychsim6:8080,http://psychsim7:8080,http://psychsim8:8080}
+      CBRKIT_URLS: ${AI_GATEWAY_CBRKIT_URLS:-http://cbrkit:8080}
+      AGENTOS_URLS: ${AI_GATEWAY_AGENTOS_URLS:-http://agentos:8080,http://agentos2:8080,http://agentos3:8080,http://agentos4:8080}
+    volumes:
+      - gateway-cache:/cache
+      # Read only to learn which image each replica runs (the cache key); nothing is ever written.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - fatima3
+      - fatima4
+      - fatima5
+      - fatima6
+    restart: unless-stopped
+
+volumes:
+  gateway-cache:

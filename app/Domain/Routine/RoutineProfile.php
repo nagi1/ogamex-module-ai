@@ -4,11 +4,10 @@ namespace Modules\AI\Domain\Routine;
 
 use DateTimeZone;
 use Exception;
-use Modules\AI\Domain\Persona\PersonaTaste;
+use Modules\AI\Domain\Persona\SkillQuantile;
 use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiProfileSettings;
-use Modules\AI\Support\RandomSource;
 
 readonly class RoutineProfile
 {
@@ -34,10 +33,13 @@ readonly class RoutineProfile
             $timezone = AiProfileSettings::DEFAULT_TIMEZONE;
         }
 
+        // The band and the diligence inside it are the account's own; with the skill spread on, its skill places both.
+        [$band, $diligence] = app(SkillQuantile::class)->attendance($profile);
+
         return app()->makeWith(self::class, [
             'timezone' => $timezone,
             'sessionMinutes' => max(self::MINIMUM_MINUTES, (int) ($settings[AiProfileSettings::SESSION_MINUTES] ?? self::DEFAULT_SESSION_MINUTES)),
-            'sessionsPerDay' => self::sessionsPerDay($profile->activity_band, PersonaTaste::fromSeed((int) $profile->random_seed, app(RandomSource::class))->diligence),
+            'sessionsPerDay' => self::sessionsPerDay($band, $diligence),
         ]);
     }
 

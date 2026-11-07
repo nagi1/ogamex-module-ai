@@ -139,7 +139,7 @@ class QueueAiExpeditionAction implements QueueAiExpedition
      * cargo (carry the find) and a probe — never the whole stock (EXP-002). Roles
      * the body does not own are simply absent, and each hull flies once.
      */
-    private function disposableFleet(PlayerService $player, PlanetService $origin): ?UnitCollection
+    public function disposableFleet(PlayerService $player, PlanetService $origin): ?UnitCollection
     {
         $planner = app(QueueableExpeditionPlanner::class);
 

@@ -1,15 +1,17 @@
 <?php
 
 use Modules\AI\Actions\AdvanceAiAlliancePoliticsAction;
+use Modules\AI\Contracts\AllianceTreaties;
 use Modules\AI\Domain\Decision\Enemies;
+use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Enums\AiAllianceStance;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiAllianceRelation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
-use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use OGame\Models\Alliance;
+use OGame\Models\ChatMessage;
 use OGame\Models\Highscore;
 use OGame\Models\Planet;
 use OGame\Models\Resources;
@@ -185,19 +187,31 @@ test('an offer a leader refused is not made again', function (): void {
         app(AdvanceAiAlliancePoliticsAction::class)->handle();
     }
 
-    expect(OGame\Models\ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $partnerLeader->id)->count())->toBe(1);
+    expect(ChatMessage::query()->where('sender_id', $this->currentUserId)->where('recipient_id', $partnerLeader->id)->count())->toBe(1);
 });
 
-test('a betraying leader with no war left turns on the partner it has outgrown', function (int $seed, int $partnerPoints, bool $betrayed): void {
+test('a betraying leader with no war left gives the partner it has outgrown notice, and is at war once it runs out', function (int $seed, int $partnerPoints, bool $betrayed): void {
     $ours = allianceWarLeader($this->currentUserId, 'OURS', $seed);
     $partnerLeader = User::factory()->create();
     $partner = allianceWarLeader($partnerLeader->id, 'PART');
     allianceWarAt($ours->id, $partner->id, AiAllianceStance::Nap);
     allianceWarPoints($this->currentUserId, 10_000);
     allianceWarPoints($partnerLeader->id, $partnerPoints);
+    $treaties = app(AllianceTreaties::class);
 
     app(AdvanceAiAlliancePoliticsAction::class)->handle();
 
+    // Notice (DIPLOMACY-BETRAYAL P1): the pact still binds, so neither side's fleets fly at the other.
+    expect($treaties->inNotice($ours->id, $partner->id))->toBe($betrayed)
+        ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap))->toBe([$partner->id])
+        ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->toBe([]);
+
+    $this->travel(47)->hours();
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->toBe([]);
+
+    $this->travel(2)->hours();
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
     expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War) === [$partner->id])->toBe($betrayed)
         ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap) === [])->toBe($betrayed);
 })->with([
@@ -289,6 +303,38 @@ test('a war whose grudges have faded is ended, while a hot or a fresh one stands
     'forgotten and old' => ['0.1000', 72, true],
     'forgotten but only hours old' => ['0.1000', 2, false],
     'still hot' => ['0.8000', 72, false],
+]);
+
+// A bloc reads its grudges per reference_members (alliance-war.yaml): a 160-member alliance stayed at war over two raids
+// a season long and never fought another (rl w500n seed 1). Two raids on a bloc of 24 are no war, and a war it no longer
+// fights ends, where the same grudges hold a club of two at war.
+test('a few raids among many members neither start nor hold a war', function (int $mates, bool $war, bool $holds): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $members = [$this->currentUserId];
+    for ($i = 0; $i < $mates; $i++) {
+        $members[] = allianceWarMember($ours->id)->id;
+    }
+    $theirs = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'THEM', 'Them');
+    $raider = allianceWarMember($theirs->id);
+    allianceWarGrudge($members[0], $raider->id, '0.5000');
+    allianceWarGrudge($members[1], (int) $theirs->founder_user_id, '0.5000');
+
+    expect(app(AdvanceAiAlliancePoliticsAction::class)->handle())->toBe($war ? 1 : 0)
+        ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War) !== [])->toBe($war);
+
+    // The fighting stopped: the grudges have faded to 0.2 each, under the peace line for a club of two, not for a bloc.
+    AiRelationship::query()->update(['threat' => '0.2000']);
+    AiAllianceRelation::query()->delete();
+    AiAllianceRelation::query()->create([
+        'alliance_id' => $ours->id, 'other_alliance_id' => $theirs->id, 'stance' => AiAllianceStance::War,
+        'cause' => 'grievance', 'declared_by' => $this->currentUserId, 'started_at' => now()->subHours(72),
+    ]);
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War) !== [])->toBe($holds);
+})->with([
+    'a club of two' => [1, true, true],
+    'a bloc of twenty-four' => [23, false, false],
 ]);
 
 // Allies are expected to support each other in war-time (alliance guide): a partner's enemy takes one raid, not two.

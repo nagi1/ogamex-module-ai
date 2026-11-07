@@ -187,6 +187,14 @@ namespace EmotionalAppraisal
         {
             dataHolder.SetValue("Description", Description);
             dataHolder.SetValue("AppraisalRules", m_appraisalDerivator);
+
+            // Added by OGameX: upstream never serialized emotion dispositions, so an authored decay rate or
+            // threshold was silently lost on save and every emotion fell back to the default (1, 0). Written
+            // only when authored, so assets without dispositions serialize exactly as before.
+            if (m_emotionDispositions.Count > 0)
+                dataHolder.SetValue("EmotionDispositions", m_emotionDispositions.Values.Select(d => d.ToDto()).ToArray());
+            if (m_defaultEmotionalDisposition.Decay != 1 || m_defaultEmotionalDisposition.Threshold != 0)
+                dataHolder.SetValue("DefaultEmotionDisposition", m_defaultEmotionalDisposition.ToDto());
         }
 
         /// <summary>
@@ -218,6 +226,13 @@ namespace EmotionalAppraisal
             m_occAffectDerivator = new OCCAffectDerivationComponent();
             m_emotionDispositions = new Dictionary<string, EmotionDisposition>();
             m_defaultEmotionalDisposition = new EmotionDisposition("*", 1, 0);
+
+            // Added by OGameX: see GetObjectData. Absent fields keep the upstream defaults.
+            if (dataHolder.ContainsField("EmotionDispositions"))
+                foreach (var d in dataHolder.GetValue<EmotionDispositionDTO[]>("EmotionDispositions") ?? new EmotionDispositionDTO[0])
+                    m_emotionDispositions[d.Emotion] = new EmotionDisposition(d);
+            if (dataHolder.ContainsField("DefaultEmotionDisposition"))
+                m_defaultEmotionalDisposition = new EmotionDisposition(dataHolder.GetValue<EmotionDispositionDTO>("DefaultEmotionDisposition"));
         }
 
         private void UpdateEmotions(IAppraisalFrame frame, Dictionary<string, Goal> goals, IEmotionalState emotionalState, AM am)

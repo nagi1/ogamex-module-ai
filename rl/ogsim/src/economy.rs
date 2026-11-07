@@ -203,6 +203,32 @@ pub struct PlanetConfig {
     pub units: Vec<u64>,
     /// Per `Catalogue::units`, the host's answers for what that unit does to this planet's production.
     pub unit_production: Vec<UnitProduction>,
+    /// Which objects and units of the tables above produce anything, read once on first use (the tables never change
+    /// after load): `production` runs for every candidate of every decision and used to scan every object and unit.
+    pub prod_index: std::sync::OnceLock<ProdIndex>,
+}
+
+/// The producers of a planet config's tables, in the order `production` adds them up.
+#[derive(Clone, Default)]
+pub struct ProdIndex {
+    /// Objects with a production row (plain or by research), ascending.
+    producers: Vec<usize>,
+    /// Units the host can put to use (an energy or own table), ascending.
+    units: Vec<usize>,
+    /// Per object, the (unit, entry of its `producers`) that change its row, by unit then entry.
+    changes: Vec<Vec<(usize, usize)>>,
+    /// Per object k, the rows (positions in `producers`) whose value reads k's level: k's own and those whose research
+    /// combo names k (`raised`).
+    dependents: Vec<Vec<usize>>,
+    /// Per object k, the units in use whose bound counts k's level.
+    bounded_by: Vec<Vec<usize>>,
+}
+
+/// What `refresh` makes of a planet with one object a level up (`Catalogue::raised`).
+pub(crate) struct Raised {
+    pub(crate) cap: [f64; 3],
+    pub(crate) energy_max: f64,
+    pub(crate) energy_used: f64,
 }
 
 /// One unit's production tables on one planet, every row indexed by the count the host puts to use: the held count,
@@ -241,6 +267,11 @@ pub struct Catalogue {
     /// Seconds between one login of an account and the next, measured on the planner's own accounts; empty means the account
     /// is always there and refills its queue the instant it frees.
     pub login_gaps: Vec<f64>,
+    /// Per object, the highest level worth having when it is priced in energy alone (no metal, crystal or deuterium):
+    /// the highest level any object or unit requires of it (WIK-175, WIK-139: graviton's one level unlocks the
+    /// deathstar; further levels only cost the energy of thousands of satellites). None for every other object.
+    /// PHP twin: Modules/AI/app/Domain/Research/ResearchCeiling.php. Set by `set_ceilings` once the units are known.
+    pub ceiling: Vec<Option<u32>>,
 }
 
 /// One host answer to replay: a planet config at these levels holding these units, and what the host made of it.
@@ -378,6 +409,9 @@ pub struct Game {
     /// When the player sleeps: the hour of day the dark window starts and how many hours it lasts (drawn per account, so
     /// two accounts do not share a night). A player logs in outside it or not at all.
     pub sleep_start: f64,
+    /// How many times the shared login gap this player waits: 1 for an active player, more for a casual one (the
+    /// `pace=` world arm draws it per account; real universes hold both).
+    pub pace: f64,
     pub sleep_hours: f64,
     /// (end second, object index) of the builds under way, earliest first; the level lands when the clock reaches it.
     pub pending: Vec<(f64, usize)>,
@@ -499,6 +533,7 @@ impl Catalogue {
                 energy: u.energy.clone(),
                 producers: u.producers.iter().filter_map(|p| index.get(&p.id).map(|&k| (k, p.rows.clone()))).collect(),
             }).collect(),
+            prod_index: Default::default(),
         }).collect();
 
         let unit_ids = raw.units.clone();
@@ -509,7 +544,7 @@ impl Catalogue {
         if first_moon == planets.len() {
             let moons: Vec<PlanetConfig> = planets.iter().map(|c| PlanetConfig {
                 moon: true, field_max: 1, basic: [0.0; 4], resources: [0.0; 3], levels: vec![0; count],
-                production: vec![None; count], production_research: vec![None; count], units: vec![0; raw.units.len()], unit_production: Vec::new(),
+                production: vec![None; count], production_research: vec![None; count], units: vec![0; raw.units.len()], unit_production: Vec::new(), prod_index: Default::default(),
                 ..c.clone()
             }).collect();
             planets.extend(moons);
@@ -520,7 +555,25 @@ impl Catalogue {
             levels: per_object(&p.levels, &index, count).into_iter().map(|l| l.unwrap_or(0)).collect(),
             units: unit_ids.iter().map(|id| p.units.get(&id.to_string()).copied().unwrap_or(0)).collect(),
             answer: p.answer,
-        }).collect(), login_gaps: Vec::new() })
+        }).collect(), login_gaps: Vec::new(), ceiling: Vec::new() }.with_ceilings(&[]))
+    }
+
+    /// `ceiling` from the objects' own requirements plus `unit_needs` ((object index, level) a unit requires).
+    pub fn with_ceilings(mut self, unit_needs: &[(usize, u32)]) -> Self {
+        self.set_ceilings(unit_needs);
+        self
+    }
+
+    pub fn set_ceilings(&mut self, unit_needs: &[(usize, u32)]) {
+        let mut need = vec![0u32; self.objects.len()];
+        let own = self.objects.iter().flat_map(|o| o.requires.iter()).filter_map(|&(k, l)| Some((k?, l)));
+        for (k, l) in own.chain(unit_needs.iter().copied()) {
+            need[k] = need[k].max(l);
+        }
+        self.ceiling = self.objects.iter().enumerate().map(|(k, o)| {
+            let energy_only = o.price.first().is_some_and(|p| p.iter().all(|&r| r <= 0.0)) && o.energy_price.first().is_some_and(|&e| e > 0.0);
+            energy_only.then_some(need[k])
+        }).collect();
     }
 
     /// M3: the config a moon raised over a planet of the account whose capital has config `home` plays on.
@@ -543,7 +596,7 @@ impl Catalogue {
         let mut seed = login_seed | 1;
         let sleep_start = (next_random(&mut seed) % 24) as f64;
         let sleep_hours = 6.0 + (next_random(&mut seed) % 3) as f64;
-        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, in_world: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, sleep_hours, pending: Vec::new(), account_pending: Vec::new(), history: Vec::new(), trace: None }
+        Game { planet, t: 0.0, horizon: horizon_hours * 3600.0, bonus_hours, invested: 0.0, done: false, in_world: false, invalid: 0, queue: 0, free: [0.0; 2], commit: [None; 2], login_times: Vec::new(), login_rng: login_seed, session_end: 0.0, last_action: f64::NEG_INFINITY, sleep_start, pace: 1.0, sleep_hours, pending: Vec::new(), account_pending: Vec::new(), history: Vec::new(), trace: None }
     }
 
     /// The host's production row of object k at `level` under the planet's research levels and units, if k produces
@@ -589,50 +642,99 @@ impl Catalogue {
         held.min(bound) as usize
     }
 
-    /// Rates, energy and factor from the levels (PlanetService::updateResourceProductionStatsInner); with
-    /// `full_factor` the factor is forced to 100%, the nominal output a player reads off the resource page.
-    pub(crate) fn production(&self, planet: &Planet, full_factor: bool) -> ([f64; 3], f64, f64, f64) {
-        let c = &self.planets[planet.config];
+    fn prod_index<'a>(&self, c: &'a PlanetConfig) -> &'a ProdIndex {
+        c.prod_index.get_or_init(|| {
+            let producers: Vec<usize> = (0..c.production.len()).filter(|&k| c.production[k].is_some() || c.production_research[k].is_some()).collect();
+            let units: Vec<usize> = (0..c.unit_production.len()).filter(|&u| !(c.unit_production[u].energy.is_empty() && c.unit_production[u].own.is_none())).collect();
+            let count = c.production.len();
+            let mut changes = vec![Vec::new(); count];
+            for (u, unit) in c.unit_production.iter().enumerate() {
+                for (e, (p, _)) in unit.producers.iter().enumerate() {
+                    if let Some(list) = changes.get_mut(*p) { list.push((u, e)) }
+                }
+            }
+            let mut dependents = vec![Vec::new(); count];
+            for (at, &i) in producers.iter().enumerate() {
+                dependents[i].push(at);
+                if let Some((by, _)) = &c.production_research[i] {
+                    for &r in by {
+                        if r != i && r < count && !dependents[r].contains(&at) { dependents[r].push(at) }
+                    }
+                }
+            }
+            let mut bounded_by = vec![Vec::new(); count];
+            for &u in &units {
+                for &(k, _) in c.unit_production[u].usable.iter().flatten() {
+                    if k < count && !bounded_by[k].contains(&u) { bounded_by[k].push(u) }
+                }
+            }
+            ProdIndex { producers, units, changes, dependents, bounded_by }
+        })
+    }
+
+    /// Producer k's row at the planet's levels with the units in use (`in_use`) changing it (`add_unit_change`).
+    #[inline]
+    fn producer_row(&self, c: &PlanetConfig, index: &ProdIndex, planet: &Planet, in_use: &[usize], k: usize) -> [f64; 4] {
+        let side = self.research_grid_level + 1;
+        let level = planet.levels[k] as usize;
+        let mut row = match (&c.production[k], &c.production_research[k]) {
+            (_, Some((by, grid))) => {
+                let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
+                let level = level.min(grid.len() - 1);
+                grid[level][combo.min(grid[level].len() - 1)]
+            }
+            (Some(rows), None) => rows[level.min(rows.len() - 1)],
+            (None, None) => unreachable!(),
+        };
+        for &(u, e) in &index.changes[k] {
+            let n = in_use[u];
+            if n == 0 { continue }
+            let changes = &c.unit_production[u].producers[e].1;
+            for (component, change) in changes[level.min(changes.len() - 1)].iter().enumerate() {
+                if change.is_empty() { continue }
+                row[component] += change[n.min(change.len() - 1)];
+            }
+        }
+        row
+    }
+
+    /// The units in use and every producer row, in the order `finish_rows` adds them up: buildings, then producing units.
+    fn fill_rows(&self, c: &PlanetConfig, index: &ProdIndex, planet: &Planet, rows: &mut Vec<[f64; 4]>, in_use: &mut Vec<usize>) {
+        rows.clear();
+        in_use.clear();
+        in_use.resize(c.unit_production.len(), 0);
+        for &u in &index.units {
+            in_use[u] = self.units_in_use(planet, u);
+        }
+        for &k in &index.producers {
+            rows.push(self.producer_row(c, index, planet, in_use, k));
+        }
+        // Units that produce are producers like any building, counted at the number the host puts to use.
+        for &u in &index.units {
+            let n = in_use[u];
+            if n == 0 { continue }
+            if let Some(own) = c.unit_production[u].own.as_ref() { rows.push(own_row(own, n)) }
+        }
+    }
+
+    /// Rates, energy and factor from the rows `fill_rows` made.
+    fn finish_rows(&self, c: &PlanetConfig, index: &ProdIndex, planet: &Planet, rows: &[[f64; 4]], in_use: &[usize], full_factor: bool) -> ([f64; 3], f64, f64, f64) {
         let mut made = [0.0; 3];
         let (mut energy_max, mut energy_used) = (c.basic[3].max(0.0), (-c.basic[3]).max(0.0));
-        let side = self.research_grid_level + 1;
-        let row = |k: usize, rows: &Vec<[f64; 4]>| {
-            let mut row = match &c.production_research[k] {
-                Some((by, grid)) => {
-                    let combo = by.iter().fold(0usize, |at, &r| at * side + (planet.levels[r] as usize).min(side - 1));
-                    let level = (planet.levels[k] as usize).min(grid.len() - 1);
-                    grid[level][combo.min(grid[level].len() - 1)]
-                }
-                None => rows[(planet.levels[k] as usize).min(rows.len() - 1)],
-            };
-            self.add_unit_change(planet, k, planet.levels[k] as usize, &mut row);
-            row
-        };
-        let none: Vec<[f64; 4]> = Vec::new();
-        let producers = || (0..c.production.len()).filter_map(|k| match (&c.production[k], &c.production_research[k]) {
-            (Some(rows), _) => Some((k, rows)),
-            (None, Some(_)) => Some((k, &none)),
-            _ => None,
-        });
-        // Units that produce are producers like any building, counted at the number the host puts to use.
-        let units = || (0..c.unit_production.len()).filter_map(|u| {
-            let n = self.units_in_use(planet, u);
-            (n > 0).then_some((u, n))
-        });
-        let own = || units().filter_map(|(u, n)| c.unit_production[u].own.as_ref().map(|rows| own_row(rows, n)));
-        let rows: Vec<[f64; 4]> = producers().map(|(k, rows)| row(k, rows)).chain(own()).collect();
-        for &row in &rows {
+        for &row in rows {
             if row[3] > 0.0 { energy_max += row[3] } else { energy_used -= row[3] }
             for r in 0..3 { made[r] += row[r] }
         }
-        for (u, n) in units() {
+        for &u in &index.units {
+            let n = in_use[u];
+            if n == 0 { continue }
             let energy = &c.unit_production[u].energy;
             if energy.is_empty() { continue }
             let [produced, used] = energy[n.min(energy.len() - 1)];
             energy_max += produced;
             energy_used += used;
         }
-        for &row in &rows {
+        for &row in rows {
             if row[3] > 0.0 && row[2] < 0.0 && -row[2] > c.basic[2] + made[2] && planet.res[2] <= 0.0 {
                 energy_max -= row[3];
             }
@@ -647,8 +749,23 @@ impl Catalogue {
         (rate, energy_max, energy_used, factor)
     }
 
-    pub fn refresh(&self, planet: &mut Planet) {
-        let (rate, energy_max, energy_used, factor) = self.production(planet, false);
+    /// Rates, energy and factor from the levels (PlanetService::updateResourceProductionStatsInner); with
+    /// `full_factor` the factor is forced to 100%, the nominal output a player reads off the resource page.
+    pub(crate) fn production(&self, planet: &Planet, full_factor: bool) -> ([f64; 3], f64, f64, f64) {
+        let c = &self.planets[planet.config];
+        let index = self.prod_index(c);
+        // The rows and the units in use go into buffers the thread keeps: production runs for every candidate of
+        // every decision.
+        thread_local!(static ROWS: std::cell::RefCell<(Vec<[f64; 4]>, Vec<usize>)> = const { std::cell::RefCell::new((Vec::new(), Vec::new())) });
+        let (mut rows, mut in_use) = ROWS.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
+        self.fill_rows(c, index, planet, &mut rows, &mut in_use);
+        let out = self.finish_rows(c, index, planet, &rows, &in_use, full_factor);
+        ROWS.with(|cell| *cell.borrow_mut() = (rows, in_use));
+        out
+    }
+
+    /// The store caps the storage rows give at the planet's levels.
+    fn caps(&self, planet: &Planet) -> [f64; 3] {
         let c = &self.planets[planet.config];
         let mut cap = [0.0; 3];
         for (k, rows) in c.storage.iter().enumerate() {
@@ -656,7 +773,43 @@ impl Catalogue {
             let row = rows[(planet.levels[k] as usize).min(rows.len() - 1)];
             for r in 0..3 { cap[r] += row[r] }
         }
-        *planet = Planet { rate, cap, energy_max, energy_used, factor, ..planet.clone() };
+        cap
+    }
+
+    /// For each object of `ks`, what `refresh` makes of the planet with that object one level up. The planet's rows are
+    /// made once; each raise remakes only the rows that read the object's level (all of them when it moves a unit's
+    /// bound), and the sums run over the rows in `production`'s order, so every result is `refresh`'s to the bit.
+    pub(crate) fn raised(&self, p: &Planet, ks: &[usize]) -> Vec<Raised> {
+        let c = &self.planets[p.config];
+        let index = self.prod_index(c);
+        let (mut rows, mut in_use) = (Vec::new(), Vec::new());
+        self.fill_rows(c, index, p, &mut rows, &mut in_use);
+        let (mut rows_k, mut in_use_k) = (Vec::with_capacity(rows.len()), Vec::new());
+        let mut n = p.clone();
+        ks.iter().map(|&k| {
+            n.levels[k] += 1;
+            let bound_moves = index.bounded_by[k].iter().any(|&u| self.units_in_use(&n, u) != in_use[u]);
+            let (_, energy_max, energy_used, _) = if bound_moves {
+                self.fill_rows(c, index, &n, &mut rows_k, &mut in_use_k);
+                self.finish_rows(c, index, &n, &rows_k, &in_use_k, false)
+            } else {
+                rows_k.clear();
+                rows_k.extend_from_slice(&rows);
+                for &at in &index.dependents[k] {
+                    rows_k[at] = self.producer_row(c, index, &n, &in_use, index.producers[at]);
+                }
+                self.finish_rows(c, index, &n, &rows_k, &in_use, false)
+            };
+            let cap = self.caps(&n);
+            n.levels[k] -= 1;
+            Raised { cap, energy_max, energy_used }
+        }).collect()
+    }
+
+    pub fn refresh(&self, planet: &mut Planet) {
+        let (rate, energy_max, energy_used, factor) = self.production(planet, false);
+        let cap = self.caps(planet);
+        (planet.rate, planet.cap, planet.energy_max, planet.energy_used, planet.factor) = (rate, cap, energy_max, energy_used, factor);
     }
 
     /// Accrual at the stored rates, each resource stopping at its cap (PlanetService::updateResourcesUntil). A stock
@@ -726,6 +879,7 @@ impl Catalogue {
         if !self.stands_on(planet, k) { return "wrong type" }
         if planet.levels[k] as usize >= o.price.len() { return "max level" }
         if !self.requirements_met(&planet.levels, k) { return "needs" }
+        if self.ceiling.get(k).copied().flatten().is_some_and(|c| planet.levels[k] >= c) { return "past need" }
         if o.consumes_field && self.fields_used(planet) >= self.field_cap(planet) { return "no fields" }
         // ObjectService: a building reads the energy the planet makes, research what it has free. Neither is spent.
         let energy = if o.queue == 0 { planet.energy_max } else { planet.energy_max - planet.energy_used };
@@ -835,7 +989,7 @@ impl Catalogue {
         while game.login_times.last().is_some_and(|&last| if later { last <= x } else { last < x }) {
             let gap = self.login_gaps[(next_random(&mut game.login_rng) % self.login_gaps.len() as u64) as usize];
             let last = *game.login_times.last().unwrap();
-            game.login_times.push(awake(game, last + gap.max(MIN_GAP)));
+            game.login_times.push(awake(game, last + (gap * game.pace).max(MIN_GAP)));
         }
         let at = game.login_times.partition_point(|&t| if later { t <= x } else { t < x });
         game.login_times[at]
@@ -851,7 +1005,8 @@ impl Catalogue {
     }
 
     fn finish(&self, game: &mut Game) {
-        self.advance_to(game, game.horizon, false);
+        // A world event (a fleet landing, a colony founded) may have carried a retired account's planet past its horizon.
+        self.advance_to(game, game.horizon.max(game.t), false);
         game.done = true;
     }
 
@@ -913,12 +1068,14 @@ impl Catalogue {
         // economy-only `VecEnv` keeps `finish`, where a finished game is the end of an episode.
         if game.in_world && best.1.is_none() && game.commit.iter().all(|k| k.is_none())
             && game.pending.is_empty() && !self.login_gaps.is_empty() {
-            return (self.login(game, game.t + MIN_GAP, false).min(game.horizon), None);
+            return (self.login(game, game.t + MIN_GAP, false).min(game.horizon.max(game.t)), None);
         }
-        // A landing build changes rates and stores, so a plan made before it is re-timed after it.
+        // A landing build changes rates and stores, so a plan made before it is re-timed after it. A clock a world event
+        // carried past the horizon ends where it is: the horizon behind it would run it back (and un-produce its stock).
+        let horizon = game.horizon.max(game.t);
         match game.pending.first() {
-            Some(&(end, _)) if end < best.0.min(game.horizon) => (end, None),
-            _ if best.0 >= game.horizon => (game.horizon, None),
+            Some(&(end, _)) if end < best.0.min(horizon) => (end, None),
+            _ if best.0 >= horizon => (horizon, None),
             _ => best,
         }
     }
@@ -1120,48 +1277,60 @@ impl Catalogue {
             Baseline::Random => Some(legal[(next_random(rng) % legal.len() as u64) as usize]),
             Baseline::Soonest => min_by(legal.iter().map(|&k| (k, self.wait_seconds(p, k) * 1e6 + cost(k))).collect()),
             Baseline::Player => {
-                let pick = self.baseline(p, queue, Baseline::Payback, rng)?;
+                // Each legal object one level up, refreshed once on a scratch copy: the payback pick and the stores read it.
+                let afters = self.raised(p, &legal);
+                let pick = self.payback(p, &legal, &afters)?;
                 let busy_hours = (self.wait_seconds(p, pick) + self.build_seconds(p, pick)) / 3600.0;
                 let overflow = (0..3).filter(|&r| p.res[r] + p.rate[r].max(0.0) * busy_hours >= p.cap[r]).collect::<Vec<_>>();
-                let store = legal.iter().filter_map(|&k| {
-                    let mut n = p.clone();
-                    n.levels[k] += 1;
-                    self.refresh(&mut n);
+                let store = legal.iter().zip(&afters).filter_map(|(&k, n)| {
                     let relief: f64 = overflow.iter().map(|&r| n.cap[r] - p.cap[r]).sum();
                     (relief > 0.0).then(|| (k, -relief / cost(k)))
                 }).collect::<Vec<_>>();
                 min_by(store).or(Some(pick))
             }
             Baseline::Payback => {
-                let after = |k: usize| { let mut n = p.clone(); n.levels[k] += 1; self.refresh(&mut n); n };
-                let nominal = |q: &Planet| weighted(self.production(q, true).0);
-                let power: Vec<(usize, f64)> = legal.iter().filter_map(|&k| {
-                    let n = after(k);
-                    let delta = (n.energy_max - n.energy_used) - (p.energy_max - p.energy_used);
-                    (delta > 0.0).then(|| (k, cost(k) / delta))
-                }).collect();
-                if p.factor < 1.0 && !power.is_empty() {
-                    return min_by(power);
-                }
-                let producers: Vec<(usize, f64)> = legal.iter().filter_map(|&k| {
-                    let gain = nominal(&after(k)) - nominal(p);
-                    (gain > 0.0).then(|| (k, cost(k) / gain))
-                }).collect();
-                if !producers.is_empty() {
-                    return min_by(producers);
-                }
-                let stores: Vec<(usize, f64)> = legal.iter().filter_map(|&k| {
-                    let gain = weighted(after(k).cap) - weighted(p.cap);
-                    (gain > 0.0).then(|| (k, -gain / cost(k)))
-                }).collect();
-                if !stores.is_empty() {
-                    return min_by(stores);
-                }
-                min_by(legal.iter().map(|&k| (k, cost(k))).collect())
+                let afters = self.raised(p, &legal);
+                self.payback(p, &legal, &afters)
             }
         }
     }
+
+    /// For each object of `legal`, what `refresh` makes of the planet with that object one level up.
+    /// `Baseline::Payback` over `legal`, with `afters` from `raised`.
+    fn payback(&self, p: &Planet, legal: &[usize], afters: &[Raised]) -> Option<usize> {
+        let cost = |k: usize| weighted(self.objects[k].price[p.levels[k] as usize]);
+        let min_by = |keys: Vec<(usize, f64)>| keys.into_iter().min_by(|a, b| a.1.total_cmp(&b.1)).map(|(k, _)| k);
+        let nominal = |q: &Planet| weighted(self.production(q, true).0);
+        let power: Vec<(usize, f64)> = legal.iter().zip(afters).filter_map(|(&k, n)| {
+            let delta = (n.energy_max - n.energy_used) - (p.energy_max - p.energy_used);
+            (delta > 0.0).then(|| (k, cost(k) / delta))
+        }).collect();
+        if p.factor < 1.0 && !power.is_empty() {
+            return min_by(power);
+        }
+        let now = nominal(p);
+        let mut n = p.clone();
+        let producers: Vec<(usize, f64)> = legal.iter().filter_map(|&k| {
+            n.levels[k] += 1;
+            let gain = nominal(&n) - now;
+            n.levels[k] -= 1;
+            (gain > 0.0).then(|| (k, cost(k) / gain))
+        }).collect();
+        if !producers.is_empty() {
+            return min_by(producers);
+        }
+        let stores: Vec<(usize, f64)> = legal.iter().zip(afters).filter_map(|(&k, n)| {
+            let gain = weighted(n.cap) - weighted(p.cap);
+            (gain > 0.0).then(|| (k, -gain / cost(k)))
+        }).collect();
+        if !stores.is_empty() {
+            return min_by(stores);
+        }
+        min_by(legal.iter().map(|&k| (k, cost(k))).collect())
+    }
 }
+
+/// What `refresh` makes of a planet raised one level (`Catalogue::raised`).
 
 impl Game {
     pub fn value(&self) -> f64 {

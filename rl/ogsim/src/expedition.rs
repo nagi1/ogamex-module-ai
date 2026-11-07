@@ -224,6 +224,10 @@ pub struct Rules {
     pub ship_types_max: i64,
     pub ship_split: (f64, f64),
     pub fight: FightRules,
+    /// `realexpo` arm (off by default, never in the export): resource and ship finds follow the original game's factor
+    /// draw (`real_find`) instead of the host's bracket draw times its variant multiplier.
+    #[serde(skip)]
+    pub real_factor: bool,
 }
 
 impl Rules {
@@ -296,7 +300,7 @@ pub struct Sent<'a> {
 }
 
 /// `UnitCollection::getTotalCargoCapacity` less the cargo the mission carries.
-pub fn free_hold(catalogue: &CombatCatalogue, fleet: &Units, research: &HashMap<u32, u32>, carried: [i64; 3]) -> i64 {
+pub fn free_hold(catalogue: &CombatCatalogue, fleet: &Units, research: &crate::Levels, carried: [i64; 3]) -> i64 {
     catalogue.capacity(fleet, research) - carried.iter().sum::<i64>()
 }
 
@@ -444,9 +448,41 @@ fn max_find(rules: &Rules, sent: &Sent, reward: f64, draws: &mut dyn Draws) -> i
     (amount as f64 * reward) as i64
 }
 
-fn resources_found(rules: &Rules, sent: &Sent, draws: &mut dyn Draws) -> Found {
+/// The original game's factor ranges for a normal, large and huge find, in the order of the variants' weights (89/10/1).
+const REAL_FACTORS: [(i64, i64); 3] = [(10, 50), (50, 100), (100, 200)];
+/// The factor that reaches the bracket's largest find: the bracket is the cap times 200.
+const REAL_FACTOR_TOP: f64 = 200.0;
+
+/// `realexpo` arm: the original game's find, `factor x min(expedition points, cap(top1))` with the factor drawn 10-50
+/// (89%), 50-100 (10%) or 100-200 (1%), so the host's bracket (`cap x 200`) is the ceiling of the 1% huge find, not
+/// the normal one (plan/research/ogame/EXPEDITION-VS-RAID-INCOME.md section 1, keywalker wiki "missionen:expedition",
+/// EN board t810634; mean 0.179 of the bracket against the host's 0.668). The structure cap stays off as in the host
+/// (the sim's free-hold cut stays), and the class multiplier and the doubler's x2 apply as v7 does (EN t813878). The
+/// weights are the export's variant weights; no variant multiplier comes on top.
+fn real_find(rules: &Rules, sent: &Sent, reward: f64, draws: &mut dyn Draws) -> i64 {
+    let weights: Vec<i64> = rules.variants.iter().map(|v| v.0).collect();
+    let (low, high) = REAL_FACTORS[weighted(&weights, draws).min(REAL_FACTORS.len() - 1)];
+    let factor = draws.int(low, high);
+    let largest = rules.find_brackets.iter().find(|(below, _)| sent.rank1_points < *below).or(rules.find_brackets.last()).map_or(0, |b| b.1);
+    let mut amount = (largest as f64 * factor as f64 / REAL_FACTOR_TOP * rules.class_resource_multiplier) as i64;
+    if sent.fleet.get(&rules.find_doubler).copied().unwrap_or(0) > 0 {
+        amount *= 2;
+    }
+    (amount as f64 * reward) as i64
+}
+
+/// The largest find of one resource or ship outcome: the host's (bracket draw times variant) or, under `realexpo`, the
+/// original game's factor draw.
+fn find_most(rules: &Rules, sent: &Sent, reward: f64, draws: &mut dyn Draws) -> i64 {
+    if rules.real_factor {
+        return real_find(rules, sent, reward, draws);
+    }
     let multiplier = variant_multiplier(rules, draws);
-    let most = (max_find(rules, sent, rules.reward_multiplier.resources, draws) as f64 * multiplier as f64) as i64;
+    (max_find(rules, sent, reward, draws) as f64 * multiplier as f64) as i64
+}
+
+fn resources_found(rules: &Rules, sent: &Sent, draws: &mut dyn Draws) -> Found {
+    let most = find_most(rules, sent, rules.reward_multiplier.resources, draws);
     let kind = draws.int(0, 2) as usize;
     let mut found = Found::of(Kind::Resources);
     let wanted = most as f64 * rules.resource_shares[kind];
@@ -468,8 +504,7 @@ fn ships_found(rules: &Rules, catalogue: &CombatCatalogue, sent: &Sent, draws: &
     if possible.is_empty() {
         return Found { rolled: Kind::Ships, ..Found::of(Kind::Nothing) };
     }
-    let multiplier = variant_multiplier(rules, draws);
-    let most = (max_find(rules, sent, rules.reward_multiplier.ships, draws) as f64 * multiplier as f64) as i64;
+    let most = find_most(rules, sent, rules.reward_multiplier.ships, draws);
     let budget = sent.free_hold.min(most).max(0);
     let types = draws.int(1, rules.ship_types_max).min(possible.len() as i64) as usize;
     draws.shuffle(&mut possible);
@@ -531,7 +566,7 @@ fn player_tier(npc: &Npc, fleet: &Units) -> u32 {
 
 /// `generateEnemyFleet`: the battle size, the value share with its variance, 1-2 combat ships, a probe, cargo ships for
 /// the rest, and the bonus ships on top.
-fn enemy(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32>, sent: &Sent, kind: Kind, draws: &mut dyn Draws) -> Enemy {
+fn enemy(rules: &Rules, catalogue: &CombatCatalogue, research: &crate::Levels, sent: &Sent, kind: Kind, draws: &mut dyn Draws) -> Enemy {
     let npc = &rules.fight.npc;
     let model = &npc.kinds[kind.enemy().expect("an enemy kind")];
     let value: i64 = catalogue.price_of(sent.fleet).iter().sum();
@@ -573,7 +608,7 @@ fn enemy(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32
 }
 
 /// The weapon, shielding and armour levels as the engine's research map.
-fn tech_map(rules: &Rules, tech: [u32; 3]) -> HashMap<u32, u32> {
+fn tech_map(rules: &Rules, tech: [u32; 3]) -> crate::Levels {
     rules.fight.tech_research.iter().copied().zip(tech).collect()
 }
 
@@ -595,7 +630,7 @@ pub fn settle_fight(rules: &Rules, catalogue: &CombatCatalogue, sent: &Sent, ene
 }
 
 /// The dice up to a fight: everything that does not need the engine is settled, a fight is returned as its enemy.
-pub fn roll(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32>, sent: &Sent, draws: &mut dyn Draws) -> Roll {
+pub fn roll(rules: &Rules, catalogue: &CombatCatalogue, research: &crate::Levels, sent: &Sent, draws: &mut dyn Draws) -> Roll {
     let rolled = pick_outcome(rules, draws);
     let found = match rolled {
         Kind::Resources => resources_found(rules, sent, draws),
@@ -611,13 +646,13 @@ pub fn roll(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, 
 }
 
 /// A whole arrival from the draws: `roll`, and a fight run through the host's Rust battle engine with a seed from `draws`.
-pub fn arrive(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32>, sent: &Sent, draws: &mut dyn Draws) -> Found {
+pub fn arrive(rules: &Rules, catalogue: &CombatCatalogue, research: &crate::Levels, sent: &Sent, draws: &mut dyn Draws) -> Found {
     arrive_with(rules, catalogue, research, sent, draws, None)
 }
 
 /// `arrive`, with a fight the referee already settled (the engine's result from the player's side, as the host's PHP
 /// engine produced it) instead of a fresh one.
-pub fn arrive_with(rules: &Rules, catalogue: &CombatCatalogue, research: &HashMap<u32, u32>, sent: &Sent, draws: &mut dyn Draws, recorded: Option<EngineResult>) -> Found {
+pub fn arrive_with(rules: &Rules, catalogue: &CombatCatalogue, research: &crate::Levels, sent: &Sent, draws: &mut dyn Draws, recorded: Option<EngineResult>) -> Found {
     match roll(rules, catalogue, research, sent, draws) {
         Roll::Done(found) => found,
         Roll::Fight(enemy) => {
@@ -764,7 +799,7 @@ mod tests {
     fn replay(case: &Case, peaceful: i64, catalogues: &mut HashMap<u32, (CombatCatalogue, Rules)>) -> Vec<String> {
         let (dispatch, arrival) = (&case.dispatch, case.arrival.as_ref().expect("an accepted case has an arrival"));
         let (catalogue, rules) = catalogues.entry(case.input.origin_player.class).or_insert_with(|| files(case.input.origin_player.class));
-        let research: HashMap<u32, u32> = case.input.origin_player.research.iter().map(|(id, &l)| (id.parse().unwrap(), l)).collect();
+        let research: crate::Levels = case.input.origin_player.research.iter().map(|(id, &l)| (id.parse().unwrap(), l)).collect();
         let fleet = units(&case.input.units);
         let flight = dispatch.arrival.unwrap() - dispatch.departure.unwrap();
         let sent = Sent {
@@ -878,7 +913,7 @@ mod tests {
         let dir = std::env::var("OGSIM_EXPEDITION_DATA").unwrap_or_else(|_| DATA.to_string());
         let path = format!("{dir}/combat-u1.json");
         let (Ok(catalogue), Ok(rules)) = (CombatCatalogue::load(&path), Rules::load(&path)) else { return eprintln!("no expedition catalogue; skipped") };
-        let research: HashMap<u32, u32> = [(109, 8), (110, 8), (111, 8), (114, 6)].into_iter().collect();
+        let research: crate::Levels = [(109, 8), (110, 8), (111, 8), (114, 6)].into_iter().collect();
         let fleet: Units = rules.ship_levels.iter().flatten().take(4).map(|&id| (id, 300)).collect();
         let hold = free_hold(&catalogue, &fleet, &research, [0; 3]);
         let sent = Sent { fleet: &fleet, carried: [0; 3], free_hold: hold, rank1_points: 3_000_000, flight_seconds: 1500, holding_seconds: 7200 };

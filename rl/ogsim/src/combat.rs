@@ -117,7 +117,7 @@ struct Unit {
 pub struct CombatCatalogue {
     max_level: u32,
     pub rules: CombatRules,
-    units: HashMap<u32, Unit>,
+    units: crate::LookupMap<u32, Unit>,
     non_combatants: HashSet<u32>,
     debris_collector: Option<u32>,
     pub missions: Missions,
@@ -129,7 +129,7 @@ pub type Units = BTreeMap<u32, i64>;
 pub struct Partner<'a> {
     pub combat: &'a CombatCatalogue,
     pub ships: &'a [(u32, i64)],
-    pub research: &'a HashMap<u32, u32>,
+    pub research: &'a crate::Levels,
     /// What it carries into the fight, half fuel included.
     pub cargo: [f64; 3],
 }
@@ -138,12 +138,12 @@ pub struct Battle<'a> {
     pub attacker: &'a [(u32, i64)],
     /// The fleets that joined the attacker's union, in the order they joined; empty for a lone attack.
     pub partners: &'a [Partner<'a>],
-    pub attacker_research: &'a HashMap<u32, u32>,
+    pub attacker_research: &'a crate::Levels,
     /// What the fleet carries into the fight, half fuel included; a fractional deuterium survives to the same decimals
     /// the host's `Resources` does.
     pub attacker_cargo: [f64; 3],
     pub defender: &'a [(u32, i64)],
-    pub defender_research: &'a HashMap<u32, u32>,
+    pub defender_research: &'a crate::Levels,
     /// ACS defend fleets holding at the target, in the order the engine lists them after the planet's own. The host
     /// values every defending fleet at the planet owner's research (RustBattleEngine::prepareBattleInput).
     pub allies: &'a [Units],
@@ -226,7 +226,7 @@ impl CombatCatalogue {
     /// past the export's grid reads the edge cell, the way the economy's unit grids do: a season can research a
     /// technology further than the combat export tabulates (row 24 C found shields at 21 against a grid of 0-20), and a
     /// fight is still a fight there.
-    fn cell(&self, table: &RawTable, research: &HashMap<u32, u32>) -> i64 {
+    fn cell(&self, table: &RawTable, research: &crate::Levels) -> i64 {
         let index = table.by.iter().fold(0usize, |index, r| {
             let level = research.get(r).copied().unwrap_or(0);
             index * (self.max_level as usize + 1) + (level.min(self.max_level)) as usize
@@ -244,29 +244,34 @@ impl CombatCatalogue {
         !self.non_combatants.contains(&id)
     }
 
+    /// The host's rapid fire of `shooter` against `target` (the catalogue's own table), 0 when it has none.
+    pub fn rapidfire(&self, shooter: u32, target: u32) -> i64 {
+        self.units.get(&shooter).and_then(|u| u.rapidfire.get(&target.to_string())).and_then(|v| v.as_i64()).unwrap_or(0)
+    }
+
     /// One unit's attack power at these research levels, as the engine's input states it.
-    pub fn attack(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+    pub fn attack(&self, id: u32, research: &crate::Levels) -> i64 {
         self.cell(&self.unit(id).properties.attack, research)
     }
 
     /// One unit's hull plating at these research levels, as the engine's input states it (a tenth of the structure).
-    pub fn hull(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+    pub fn hull(&self, id: u32, research: &crate::Levels) -> i64 {
         self.cell(&self.unit(id).properties.structural_integrity, research).div_euclid(10)
     }
 
     /// One unit's shield points at these research levels.
-    pub fn shield(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+    pub fn shield(&self, id: u32, research: &crate::Levels) -> i64 {
         self.cell(&self.unit(id).properties.shield, research)
     }
 
     /// One unit's cargo capacity at these research levels.
-    pub fn unit_capacity(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+    pub fn unit_capacity(&self, id: u32, research: &crate::Levels) -> i64 {
         self.cell(&self.unit(id).properties.capacity, research)
     }
 
     /// UnitCollection::getTotalFuelCapacity: the deuterium the fleet's tanks hold, which must cover its flight's fuel
     /// (the host refuses with "You don't have sufficient storage capacity!"). Without the table it is the cargo capacity.
-    pub fn fuel_capacity(&self, units: &Units, research: &HashMap<u32, u32>) -> i64 {
+    pub fn fuel_capacity(&self, units: &Units, research: &crate::Levels) -> i64 {
         units.iter().map(|(&id, &n)| {
             let properties = &self.unit(id).properties;
             self.cell(properties.fuel_capacity.as_ref().unwrap_or(&properties.capacity), research) * n
@@ -274,7 +279,7 @@ impl CombatCatalogue {
     }
 
     /// UnitCollection::getTotalCargoCapacity.
-    pub fn capacity(&self, units: &Units, research: &HashMap<u32, u32>) -> i64 {
+    pub fn capacity(&self, units: &Units, research: &crate::Levels) -> i64 {
         units.iter().map(|(&id, &n)| self.cell(&self.unit(id).properties.capacity, research) * n).sum()
     }
 
@@ -289,7 +294,7 @@ impl CombatCatalogue {
         total
     }
 
-    fn fleet_json(&self, fleet_mission_id: u32, owner_id: u32, units: &Units, research: &HashMap<u32, u32>) -> Value {
+    fn fleet_json(&self, fleet_mission_id: u32, owner_id: u32, units: &Units, research: &crate::Levels) -> Value {
         let units: Map<String, Value> = units
             .iter()
             .map(|(&id, &amount)| {
@@ -667,7 +672,7 @@ fn joint_loot(attacker: &CombatCatalogue, battle: &Battle, start: &Units, own_le
 
 /// What one side's surviving collectors haul out of a debris field: the host's share of each resource (a whole number),
 /// cut to what the collectors can carry (AttackMission::processArrival).
-fn collected(catalogue: &CombatCatalogue, survivors: &Units, research: &HashMap<u32, u32>, debris: [f64; 3]) -> [f64; 3] {
+fn collected(catalogue: &CombatCatalogue, survivors: &Units, research: &crate::Levels, debris: [f64; 3]) -> [f64; 3] {
     let Some(id) = catalogue.debris_collector else { return [0.0; 3] };
     let count = survivors.get(&id).copied().unwrap_or(0);
     let share = catalogue.rules.reaper_debris_percentage;
@@ -777,7 +782,7 @@ mod tests {
         value.as_object().map_or_else(Units::new, |m| m.iter().map(|(k, v)| (k.parse().unwrap(), v.as_i64().unwrap())).collect())
     }
 
-    fn research(levels: &HashMap<String, u32>) -> HashMap<u32, u32> {
+    fn research(levels: &HashMap<String, u32>) -> crate::Levels {
         levels.iter().map(|(k, &v)| (k.parse().unwrap(), v)).collect()
     }
 
@@ -803,8 +808,8 @@ mod tests {
     fn a_level_past_the_grid_reads_its_edge() {
         let (cat, _) = load();
         let grid = RawTable { by: vec![111], values: (0..=cat.max_level as i64).collect() };
-        let edge = cat.cell(&grid, &HashMap::from_iter([(111_u32, cat.max_level)]));
-        assert_eq!(cat.cell(&grid, &HashMap::from_iter([(111_u32, cat.max_level + 7)])), edge, "a level past the grid did not read its edge");
+        let edge = cat.cell(&grid, &crate::Levels::from_iter([(111_u32, cat.max_level)]));
+        assert_eq!(cat.cell(&grid, &crate::Levels::from_iter([(111_u32, cat.max_level + 7)])), edge, "a level past the grid did not read its edge");
     }
 
     fn load() -> (CombatCatalogue, Vec<Case>) {
@@ -817,8 +822,8 @@ mod tests {
     struct Owned {
         attacker: Vec<(u32, i64)>,
         defender: Vec<(u32, i64)>,
-        attacker_research: HashMap<u32, u32>,
-        defender_research: HashMap<u32, u32>,
+        attacker_research: crate::Levels,
+        defender_research: crate::Levels,
     }
 
     fn owned(case: &Case) -> Owned {

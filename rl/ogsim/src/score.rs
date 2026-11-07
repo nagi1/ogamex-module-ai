@@ -77,6 +77,21 @@ fn research(units: &Units, levels: &[u32]) -> i64 {
 }
 
 /// Ships in flight: every unprocessed mission of the account, floored once per score as the host does.
+/// The points of the civil ships the account holds (planets, moons, in flight): half of them is in `military`.
+pub fn civil(world: &World, account: usize) -> i64 {
+    let units = &world.rules[account].units;
+    let civil = |u: usize| units.kind[u] == UnitKind::CivilShip;
+    let worth = |u: usize, n: f64| units.units[u].price.iter().sum::<f64>() * n;
+    let mut all = 0.0;
+    for slot in world.planets_of(account).into_iter().flat_map(|s| std::iter::once(s).chain(world.moon_of[s])) {
+        all += world.yards[slot].counts.iter().enumerate().filter(|&(u, _)| civil(u)).map(|(u, &n)| worth(u, n as f64)).sum::<f64>();
+    }
+    for fleet in world.fleets.iter().filter(|f| world.account_of(f.owner) == account) {
+        all += fleet.ships.iter().filter_map(|&(id, n)| units.index(id as i64).filter(|&u| civil(u)).map(|u| worth(u, n as f64))).sum::<f64>();
+    }
+    points(all)
+}
+
 fn in_flight(world: &World, account: usize) -> (i64, i64, i64) {
     let units = &world.rules[account].units;
     let (mut all, mut economy, mut military) = (0.0f64, 0.0, 0.0);

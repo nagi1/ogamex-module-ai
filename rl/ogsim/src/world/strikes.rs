@@ -187,11 +187,16 @@ impl World {
         let mut counts = moon.map_or_else(|| vec![0; defender.units.units.len()], |m| self.yards[m].counts.clone());
         let mut stock = moon.map_or([0.0; 3], |m| self.games[m].planet.res);
         let held: Vec<(u32, i64)> = defender.units.units.iter().zip(&counts).filter(|(_, &n)| n > 0).map(|(u, &n)| (u.id as u32, n as i64)).collect();
+        let holding: Vec<usize> = moon.map_or_else(Vec::new, |m| (0..self.fleets.len()).filter(|&g| {
+            let h = &self.fleets[g];
+            h.mission == Mission::AcsDefend && h.target == m && !h.returning && h.arrive <= at && at < h.arrive + h.holding
+        }).collect());
+        let allies: Vec<combat::Units> = holding.iter().map(|&g| self.fleets[g].ships.iter().copied().collect()).collect();
         let ships = self.fleets[f].ships.clone();
         let mut cargo = self.fleets[f].cargo;
         cargo[2] += self.fleets[f].fuel / 2.0;
         let seed = self.stream.int(0, i64::MAX) as u64;
-        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, allies: &[], partners: &[], defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
+        let battle = Battle { attacker: &ships, attacker_research: &attacker_research, attacker_cargo: cargo, defender: &held, defender_research: &defender_research, allies: &allies, partners: &[], defender_stock: stock, defender_engineer: false, moon_exists: true, seed };
         let engine = match self.recorded.take() {
             Some(fight) => fight.engine,
             None => {
@@ -203,6 +208,14 @@ impl World {
         let rolls = self.recorded_rolls.take().unwrap_or_else(|| [0, 1].map(|_| self.stream.int(1, roll_max as i64)));
         let result = strike::resolve_moon_destruction(strike, &attacker.combat, &defender.combat, &battle, engine, self.moon_holds[target].diameter, rolls);
 
+        for (&g, left) in holding.iter().zip(&result.allies_left) {
+            self.ally_fought(cat, g, left);
+            let held = weighted(self.fleets[g].cargo);
+            self.games[self.fleets[g].owner].planet.books.cargo_lost += held;
+            self.fleets[g].cargo = [0.0; 3];
+            self.fleets[g].fuel = 0.0;
+            self.fleets[g].returning = true;
+        }
         for r in 0..3 { stock[r] = as_stored(stock[r] - result.loot[r] as f64) }
         for (u, unit) in defender.units.units.iter().enumerate() {
             let id = unit.id as u32;
@@ -216,7 +229,8 @@ impl World {
         let lost: Vec<(u32, i64)> = ships.iter().map(|&(id, n)| (id, n - result.return_fleet.as_ref().and_then(|r| r.get(&id)).copied().unwrap_or(0))).filter(|s| s.1 > 0).collect();
         let outcome = match (result.verdict, result.moon_destroyed) {
             (_, true) => Outcome::MoonDestroyed,
-            (strike::Verdict::NotAttempted, _) if result.defender_left.is_empty() && result.return_fleet.is_some() => Outcome::Won,
+            (strike::Verdict::NotAttempted, _) if result.return_fleet.is_some() && (!result.defender_left.is_empty() || result.allies_left.iter().any(|fleet| !fleet.is_empty())) => Outcome::Draw,
+            (strike::Verdict::NotAttempted, _) if result.return_fleet.is_some() => Outcome::Won,
             (strike::Verdict::NotAttempted, _) => Outcome::Defeated,
             _ => Outcome::Won,
         };

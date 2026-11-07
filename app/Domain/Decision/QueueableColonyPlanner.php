@@ -200,7 +200,8 @@ class QueueableColonyPlanner
      * An experienced player colonises the bigger slots, not the first empty one:
      * the host's own field range for each position is the planet's size, so the
      * walk keeps the largest empty slot it sees and returns it. Among slots of
-     * equal size the system this account has seen least military in wins, and the
+     * equal size the galaxy holding fewest of the account's own planets wins,
+     * then the system this account has seen least military in, and the
      * per-account seed offsets the walk so two accounts do not claim the same
      * slot: an equal-size slot in an equally quiet system later in the walk
      * loses. The host answers reach (`canColonizePosition`) and emptiness (one
@@ -221,8 +222,18 @@ class QueueableColonyPlanner
         // needs a per-check branch.
         $systemsPerGalaxy = min($systems, max(1, intdiv($maxScans, 12 * $galaxies)));
 
+        // How many of the account's own planets each galaxy already holds: among slots of equal size an experienced
+        // player opens the galaxy it holds least of, so its colonies spread over the universe as real top players'
+        // do (top10 hold 11-13 planets in 5-6 galaxies) instead of filling the walk's first galaxy.
+        $held = [];
+        foreach ($player->planets->all() as $own) {
+            $galaxyHeld = $own->getPlanetCoordinates()->galaxy;
+            $held[$galaxyHeld] = ($held[$galaxyHeld] ?? 0) + 1;
+        }
+
         $best = null;
         $bestFields = -1;
+        $bestHeld = PHP_INT_MAX;
         $bestThreat = 0;
 
         for ($galaxyOffset = 0; $galaxyOffset < $galaxies; $galaxyOffset++) {
@@ -265,16 +276,22 @@ class QueueableColonyPlanner
                     // The size a planet at this position would get, from the host's
                     // own field range (mid positions report the widest range). The
                     // largest empty slot seen so far wins; among equal sizes the
-                    // quieter system wins, and an equal threat keeps the seeded
-                    // walk order as the tie-break.
+                    // galaxy holding fewest own planets, then the quieter system,
+                    // and an equal threat keeps the seeded walk order.
                     $fields = (int) $this->planetServiceFactory->planetData($position, false)['fields'][1];
                     if ($fields < $bestFields) {
                         continue;
                     }
 
-                    if ($fields > $bestFields || $threat < $bestThreat) {
+                    $ownHere = $held[$galaxy] ?? 0;
+                    if ($fields === $bestFields && $ownHere > $bestHeld) {
+                        continue;
+                    }
+
+                    if ($fields > $bestFields || $ownHere < $bestHeld || $threat < $bestThreat) {
                         $best = new Coordinate($galaxy, $systemWithOffset, $position);
                         $bestFields = $fields;
+                        $bestHeld = $ownHere;
                         $bestThreat = $threat;
                     }
                 }

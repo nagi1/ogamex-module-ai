@@ -1,0 +1,67 @@
+# Living minds (SOCIAL-ENGINES-CONTRACT.md, phase E): the numbers the live module (AdvanceAiAlliancePoliticsAction with
+# ai.cognition.social.minds on) and the simulator (rl/ogsim src/diplomacy.rs and src/mind.rs, arm `minds`) share. Plain
+# `key: number` lines with no trailing comment, so the simulator's constants test can read them.
+
+# Courtship: a leader weighs a pact with another club at most this often, with this many clubs a day.
+court_every_hours: 168
+court_candidates: 2
+
+# Ambition: a war of conquest (or of a refused tribute) is a campaign that runs at least this long before peace.
+conquest_hours: 168
+
+# Humans (SOCIAL-WORLD-DRAFT.md part 17 item 2; live only, the simulator has no humans): an AI leader threatens weaker
+# human-led clubs at most this many times a week, by ai.cognition.social.human_pressure (low, medium, high). Each threat
+# is an ultimatum: after ultimatum_hours it is war unless the club came to terms (a pact) or, with tribute on, paid.
+human_pressure_low: 0
+human_pressure_medium: 1
+human_pressure_high: 3
+ultimatum_hours: 72
+
+# A pact is kept secret when either leader is at least this cunning (persona trait); its betrayal is known to the victim
+# only and costs no public reputation.
+secret_cunning: 0.6
+
+# A pact ends by notice (FOREIGN-MINISTRY-REPEATED-GAMES: 24-72 h; DIPLOMACY-BETRAYAL P1): a leader that turns on its
+# partner cancels, the pact still binds this long, then war opens. Only a leader at least secret_cunning who remembers a
+# grievance toward the partner over its gratitude breaks one by surprise (war at once), and only that stains its record.
+pact_notice_hours: 48
+
+# Leaks, per day: each member of a secret pact's clubs lets it slip with this chance times its disloyalty (1 - loyalty);
+# each member of a club betrayed under a secret pact tells with this chance times its vindictiveness.
+leak_per_member_day: 0.002
+tell_per_victim_day: 0.02
+
+# Vassalage: share of a vassal member's stock paid each day, and the share of its overlord's points at which it revolts.
+tribute_share: 0.1
+revolt_ratio: 0.5
+
+# Governance: a member this ambitious holding this many times the standing leader's points plots; the coup succeeds when
+# the other members' mean authority is under the line. One attempt per club per cooldown, a new leader's tenure included.
+coup_ambition: 0.7
+coup_points_ratio: 1.5
+coup_authority: 0.5
+coup_cooldown_hours: 336
+
+# Memories a mind keeps to send (the most recent; AgentOS's consolidation decides what is still remembered).
+memory_cap: 60
+
+# Cycles (ai.cognition.social.cycles, arm `cycles`; Ibn Khaldun's asabiyya, Turchin's elite overproduction): a club's
+# cohesion is lost per day of peace and gained per day of war. Under the split line a club whose ambitious members
+# (coup_ambition) reach the elite share splits when its strongest one feels like revolting, and a leading club (ruler_lead
+# times the second) is overrun by a band of independents gathered by a charismatic one (ambition + dominance + courage
+# over charisma): one in uprising_share free spirits, at most uprising_band riders, once per uprising_every_hours.
+asabiyya_peace_decay: 0.01
+asabiyya_war_gain: 0.02
+asabiyya_split: 0.4
+elite_share: 0.15
+charisma: 2.0
+uprising_band: 10
+uprising_every_hours: 720
+ruler_lead: 1.5
+uprising_share: 4
+# A split needs at least schism_min_members; its head revolts above rebel_freedom when the engine is down; members below
+# follower_loyalty follow it; independents above rider_freedom ride with an uprising.
+schism_min_members: 6
+rebel_freedom: 0.6
+follower_loyalty: 0.5
+rider_freedom: 0.5

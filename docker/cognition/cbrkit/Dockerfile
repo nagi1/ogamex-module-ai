@@ -11,7 +11,7 @@ WORKDIR /driver
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
-COPY retriever.py eval_retriever.py ./
+COPY retriever.py eval_retriever.py social_api.py social_cases.json ./
 
 # cbrkit 1.6.0 builds its API settings and loads callables while importing
 # `cbrkit.api`, but `cbrkit serve` only assigns CBRKIT_RETRIEVER afterwards.
@@ -26,4 +26,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/openapi.json', timeout=3)"
 
-CMD ["cbrkit", "serve", "--host", "0.0.0.0", "--port", "8080"]
+# The served app is cbrkit.api's own app with one additive route (/social/similar); `cbrkit uvicorn` serves it the
+# way `cbrkit serve` serves the bare app.
+CMD ["cbrkit", "uvicorn", "social_api:app", "--host", "0.0.0.0", "--port", "8080"]

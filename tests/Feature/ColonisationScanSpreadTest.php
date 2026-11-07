@@ -5,7 +5,11 @@ use Modules\AI\Domain\Decision\QueueableColonyPlanner;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
+use OGame\Factories\PlanetServiceFactory;
+use OGame\Factories\PlayerServiceFactory;
+use OGame\Models\Planet\Coordinate;
 use OGame\Models\Resources;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -80,4 +84,31 @@ test('the scan plans nothing without a colony ship, an enabled profile or an acc
     colonisationScanProfile($orphaned);
 
     expect(app(QueueableColonyPlanner::class)->plan($orphaned))->toBeNull();
+});
+
+test('successive colonies open the galaxy the account holds fewest planets in', function (): void {
+    colonisationScanProfile($this->currentUserId);
+    $this->playerSetResearchLevel('astrophysics', 9);
+    $this->planetAddUnit('colony_ship', 1);
+    $this->planetAddResources(new Resources(0, 0, 100_000, 0));
+    $galaxies = app(SettingsService::class)->numberOfGalaxies();
+    $founded = min(3, $galaxies);
+
+    $opened = [];
+    for ($colony = 0; $colony < $founded; $colony++) {
+        $player = app(PlayerServiceFactory::class)->make($this->currentUserId, true);
+        $held = array_fill(1, $galaxies, 0);
+        foreach ($player->planets->all() as $own) {
+            $held[$own->getPlanetCoordinates()->galaxy]++;
+        }
+
+        $plan = app(QueueableColonyPlanner::class)->plan($this->currentUserId);
+
+        expect($plan)->toBeInstanceOf(QueueableColony::class)
+            ->and($held[$plan->galaxy])->toBe(min($held));
+        $opened[] = $plan->galaxy;
+        app(PlanetServiceFactory::class)->createAdditionalPlanetForPlayer($player, new Coordinate($plan->galaxy, $plan->system, $plan->position));
+    }
+
+    expect(array_unique($opened))->toHaveCount($founded);
 });

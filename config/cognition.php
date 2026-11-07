@@ -143,4 +143,24 @@ return [
         'connect_timeout_seconds' => (int) env('AI_COGNITION_PSYCHSIM_CONNECT_TIMEOUT_SECONDS', 2),
         'timeout_seconds' => (int) env('AI_COGNITION_PSYCHSIM_TIMEOUT_SECONDS', 5),
     ],
+
+    'social' => [
+        // Living minds (SOCIAL-ENGINES-CONTRACT.md, phase E): AI leaders' alliance politics read the four engines through
+        // the social gateway. Off by default; with it off, or the gateway not answering, the YAML rules stand alone.
+        'minds' => filter_var(env('AI_SOCIAL_MINDS', false), FILTER_VALIDATE_BOOLEAN),
+        'gateway_url' => env('AI_COGNITION_GATEWAY_URL', 'http://host.docker.internal:8099'),
+        'connect_timeout_seconds' => (int) env('AI_COGNITION_GATEWAY_CONNECT_TIMEOUT_SECONDS', 2),
+        // A batch fans out over every engine replica; FAtiMA appraisals for every leader take longer than one driver call.
+        'timeout_seconds' => (int) env('AI_COGNITION_GATEWAY_TIMEOUT_SECONDS', 60),
+        // Tribute paid by real transports from a vassal to a stronger overlord. Off by default: OGame's pushing rule
+        // forbids resources flowing to a higher-ranked account for nothing tangible, and whether protection counts as
+        // tangible is the server operator's call (SOCIAL-PLAN.md, 6 Nov). Vassals are still spared either way.
+        'tribute' => filter_var(env('AI_SOCIAL_TRIBUTE', false), FILTER_VALIDATE_BOOLEAN),
+        // How hard AI leaders may press human-led clubs (SOCIAL-WORLD-DRAFT.md part 17 item 2): low, medium or high, the
+        // weekly threats per leader in social-minds.yaml (human_pressure_*). Courtship toward humans is not capped.
+        'human_pressure' => env('AI_SOCIAL_HUMAN_PRESSURE', 'medium'),
+        // Cycles (social-minds.yaml, the simulator's arm `cycles`): asabiyya, schism and nomad uprisings move AI accounts
+        // between alliances through the host's own leave, found and join. Off by default; needs the minds on.
+        'cycles' => filter_var(env('AI_SOCIAL_CYCLES', false), FILTER_VALIDATE_BOOLEAN),
+    ],
 ];

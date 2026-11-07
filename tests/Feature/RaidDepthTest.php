@@ -25,9 +25,11 @@ use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use Modules\AI\Models\AiAffectState;
 use Modules\AI\Models\AiExperienceCase;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\AttackMission;
+use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
@@ -86,7 +88,7 @@ test('the raid planner flies at a war enemy whose pile does not clear the farm t
         'user_id' => $farUser->id, 'galaxy' => 5, 'system' => 10, 'planet' => 15,
         'metal' => 100, 'crystal' => 0, 'deuterium' => 0, 'time_last_update' => now()->subHour()->getTimestamp(),
     ]);
-    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+    AiRelationship::unguarded(fn () => AiRelationship::create([
         'player_id' => $this->currentUserId, 'other_player_id' => $farUser->id, 'threat' => '0.9000', 'revision' => 0,
     ]));
     $reportId = raidDepthReport($this->currentUserId, 5, 10, 15, ['metal' => 100, 'crystal' => 0, 'deuterium' => 0]);
@@ -505,7 +507,7 @@ test('a far raid is topped up with freighters until the fleet holds its fuel', f
         'user_id' => $farUser->id, 'galaxy' => 9, 'system' => 10, 'planet' => 15,
         'metal' => 10_000, 'crystal' => 10_000, 'deuterium' => 10_000, 'time_last_update' => now()->subHour()->getTimestamp(),
     ]);
-    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+    AiRelationship::unguarded(fn () => AiRelationship::create([
         'player_id' => $this->currentUserId, 'other_player_id' => $farUser->id, 'threat' => '0.9000', 'revision' => 0,
     ]));
     $reportId = raidDepthReport($this->currentUserId, 9, 10, 15, ['metal' => 10_000, 'crystal' => 10_000, 'deuterium' => 10_000], null, ['light_fighter' => 100]);
@@ -575,6 +577,40 @@ test('the subset estimator screens one draw by default and confirms wide on requ
 
     expect($estimator->estimateFleet($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), $fleet, 1)->samples)->toBe(1)
         ->and($estimator->estimateFleet($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), $fleet, 1, 50)->samples)->toBe(50);
+});
+
+// A late-game stack of tens of thousands against a report of hundreds of thousands of hulls once held a login inside the native
+// engine for minutes: the screen fights a shrunk copy of both sides, so the plan returns in a bounded time.
+test('the raid planner plans a fifty-thousand-unit fleet against a report of 300 thousand probes quickly', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddResources(new Resources(1_000_000, 1_000_000, 100_000_000));
+    $this->planetAddUnit('battle_ship', 30_000);
+    $this->planetAddUnit('large_cargo', 20_000);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(100_000_000, 100_000_000, 100_000_000));
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 100_000_000, 'crystal' => 100_000_000, 'deuterium' => 100_000_000], ships: ['espionage_probe' => 300_000]);
+
+    $started = hrtime(true);
+    $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
+
+    expect((hrtime(true) - $started) / 1e9)->toBeLessThan(1.0)
+        ->and($plan)->toBeInstanceOf(QueueableRaid::class);
+});
+
+// The shrunk fight decides the outcome; the haul of a win is still the whole fleet's hold, not the shrunk copy's.
+test('a shrunk screen still loots with the whole fleet hold', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $this->planetAddUnit('large_cargo', 50_000);
+    $foreign = $this->createForeignPlanet();
+    $foreign->addResources(new Resources(1_000_000_000, 1_000_000_000, 1_000_000_000));
+    $foreign->addUnit('rocket_launcher', 1);
+
+    $estimate = app(NativeRaidEstimator::class)->estimate($this->currentUserId, $this->currentPlanetId, $foreign->getPlanetId(), 1);
+
+    // 200 shrunk cargo hulls would carry 5 M; the whole fleet carries over a billion.
+    expect($estimate->pWin)->toBe(1.0)
+        ->and($estimate->p20Loot)->toBeGreaterThan(1_000_000_000.0);
 });
 
 // A fleet holding solar satellites must still be priced for flight: the
@@ -748,7 +784,7 @@ test('a won raid on an enemy moon flies as moon destruction with every deathstar
     $plan = app(RaidPlanner::class)->plan($this->currentUserId, $reportId);
 
     expect($plan)->toBeInstanceOf(QueueableRaid::class)
-        ->and($plan->missionType)->toBe(OGame\GameMissions\MoonDestructionMission::getTypeId())
+        ->and($plan->missionType)->toBe(MoonDestructionMission::getTypeId())
         ->and($plan->launchUnits['deathstar'] ?? 0)->toBe(2);
 });
 
@@ -812,7 +848,7 @@ test('at war an account raids its enemy first and the other targets wait', funct
 
     expect($raids(app(CandidateActionFactory::class)->create($snapshot($reports))))->toBe($reports);
 
-    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+    AiRelationship::unguarded(fn () => AiRelationship::create([
         'player_id' => $this->currentUserId, 'other_player_id' => $enemy->getPlayer()?->getId(), 'threat' => '0.9000', 'trust' => '-0.5000',
         'affinity' => '0.0000', 'revision' => 0, 'last_interaction_at' => now(), 'created_at' => now(), 'updated_at' => now(),
     ]));

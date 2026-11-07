@@ -1,0 +1,4823 @@
+{
+ "engine": "FAtiMA-Toolkit (OCC appraisal)",
+ "endpoint": {
+  "base_urls": [
+   "http://localhost:8092",
+   "http://localhost:8095"
+  ],
+  "sequence": [
+   "POST /scenarios {scenario, assets}",
+   "POST /scenarios/OgameCognition/instances/1/characters/<Character>/beliefs StimulusDesirability(SELF, Other), StimulusThreat(SELF, Other)",
+   "POST .../perceptions [Event(Action-End, Other, <Action>, <Character>)]",
+   "GET .../emotions (only emotions caused by that event, dominant = first, as FatimaCognitionSession)"
+  ]
+ },
+ "health": {
+  "http://localhost:8092": [
+   "ogamecognition"
+  ],
+  "http://localhost:8095": []
+ },
+ "image": "sha256:d36c1d211a5403cf9a43dac2eb08759a88fb894c89eed4c28e37487682fa0e33 ogamex-ai-cognition-fatima:net8",
+ "inputs_sha256": {
+  "ogame-cognition-assets.json": "faa2db0b43641c95d8e02a25b95bffd44f0db907132f6ad74fdec83819f033a5",
+  "ogame-cognition.json": "f3a986154f0fcd0c463c28c2242c6dba21e46c9912b6d50fcc687c24fe939aa8"
+ },
+ "recorded_at": "2026-11-06T13:25:59Z",
+ "grid": {
+  "key": "Character|Action|level",
+  "characters": {
+   "Miner": 1,
+   "Turtle": 1,
+   "Fleeter": 0.3,
+   "Trader": 0.7,
+   "Casual": 0.5,
+   "Raider": 0.3,
+   "Hybrid": 0.5
+  },
+  "actions": [
+   "Harm",
+   "Threaten",
+   "Aid"
+  ],
+  "levels": [
+   0.0,
+   0.05,
+   0.1,
+   0.15,
+   0.2,
+   0.25,
+   0.3,
+   0.35,
+   0.4,
+   0.45,
+   0.5,
+   0.55,
+   0.6,
+   0.65,
+   0.7,
+   0.75,
+   0.8,
+   0.85,
+   0.9,
+   0.95,
+   1.0
+  ],
+  "size": 441
+ },
+ "reading": {
+  "character": "the authored characters differ only in Safe(SELF) significance (how much a threat frightens); pick the one whose significance is nearest 1 - courage",
+  "Harm": "a hit taken / grievance / betrayal by a partner; level = the grievance toward that club, capped at 1 (a betrayal of an open pact = 1.0)",
+  "Threaten": "a visible menace (stronger club at war or feared); level = the threat held toward it, capped at 1",
+  "Aid": "help received (pact offered while at war, support sent); level = its size on 0..1",
+  "snap": "round the level to the nearest grid step (0.05)"
+ },
+ "cells": {
+  "Miner|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Miner|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Miner|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Miner|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Miner|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Miner|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Miner|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Miner|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Miner|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Miner|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Miner|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Miner|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Miner|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Miner|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Miner|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Miner|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Miner|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Miner|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Miner|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Miner|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Miner|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Miner|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Miner|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Miner|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Miner|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Miner|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Miner|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Miner|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Miner|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Miner|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Miner|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Miner|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Turtle|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Turtle|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Turtle|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Turtle|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Turtle|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Turtle|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Turtle|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Turtle|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Turtle|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Turtle|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Turtle|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Turtle|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Turtle|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Turtle|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Turtle|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Turtle|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Turtle|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Turtle|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Turtle|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Turtle|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Turtle|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Turtle|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Turtle|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Turtle|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Turtle|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Turtle|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Turtle|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Turtle|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Turtle|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Turtle|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Turtle|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Fleeter|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Fleeter|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Fleeter|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Fleeter|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Fleeter|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Fleeter|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Fleeter|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Fleeter|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Fleeter|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Fleeter|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Fleeter|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.015,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.015
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.045,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.045
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.075,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.075
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.105,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.105
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.135,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.135
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.165,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.165
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.195,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.195
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.225,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.225
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.255,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.255
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.285,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.285
+    }
+   ]
+  },
+  "Fleeter|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Fleeter|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Fleeter|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Fleeter|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Fleeter|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Fleeter|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Fleeter|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Fleeter|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Fleeter|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Fleeter|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Fleeter|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Trader|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Trader|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Trader|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Trader|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Trader|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Trader|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Trader|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Trader|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Trader|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Trader|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Trader|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Trader|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.07,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.07
+    }
+   ]
+  },
+  "Trader|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.14,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.14
+    }
+   ]
+  },
+  "Trader|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.21,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.21
+    }
+   ]
+  },
+  "Trader|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.28,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.28
+    }
+   ]
+  },
+  "Trader|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Trader|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.42,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.42
+    }
+   ]
+  },
+  "Trader|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.49,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.49
+    }
+   ]
+  },
+  "Trader|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.56,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.56
+    }
+   ]
+  },
+  "Trader|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.63,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.63
+    }
+   ]
+  },
+  "Trader|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Trader|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Trader|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Trader|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Trader|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Trader|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Trader|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Trader|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Trader|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Trader|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Trader|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Casual|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Casual|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Casual|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Casual|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Casual|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Casual|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Casual|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Casual|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Casual|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Casual|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Casual|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Casual|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.025,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.025
+    }
+   ]
+  },
+  "Casual|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.075,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.075
+    }
+   ]
+  },
+  "Casual|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.125,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.125
+    }
+   ]
+  },
+  "Casual|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.175,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.175
+    }
+   ]
+  },
+  "Casual|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.225,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.225
+    }
+   ]
+  },
+  "Casual|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.275,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.275
+    }
+   ]
+  },
+  "Casual|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.325,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.325
+    }
+   ]
+  },
+  "Casual|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.375,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.375
+    }
+   ]
+  },
+  "Casual|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.425,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.425
+    }
+   ]
+  },
+  "Casual|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.475,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.475
+    }
+   ]
+  },
+  "Casual|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Casual|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Casual|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Casual|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Casual|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Casual|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Casual|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Casual|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Casual|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Casual|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Casual|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Raider|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Raider|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Raider|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Raider|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Raider|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Raider|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Raider|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Raider|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Raider|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Raider|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Raider|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Raider|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.03,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.03
+    }
+   ]
+  },
+  "Raider|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.06,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.06
+    }
+   ]
+  },
+  "Raider|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.09,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.09
+    }
+   ]
+  },
+  "Raider|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.12,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.12
+    }
+   ]
+  },
+  "Raider|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Raider|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.18,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.18
+    }
+   ]
+  },
+  "Raider|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.21,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.21
+    }
+   ]
+  },
+  "Raider|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.24,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.24
+    }
+   ]
+  },
+  "Raider|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.27,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.27
+    }
+   ]
+  },
+  "Raider|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Raider|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Raider|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Raider|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Raider|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Raider|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Raider|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Raider|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Raider|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Raider|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Raider|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Hybrid|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Hybrid|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Hybrid|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Hybrid|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Hybrid|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Hybrid|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Hybrid|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Hybrid|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Hybrid|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Hybrid|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Hybrid|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.025,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.025
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.075,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.075
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.125,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.125
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.175,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.175
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.225,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.225
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.275,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.275
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.325,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.325
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.375,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.375
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.425,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.425
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.475,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.475
+    }
+   ]
+  },
+  "Hybrid|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Hybrid|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Hybrid|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Hybrid|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Hybrid|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Hybrid|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Hybrid|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Hybrid|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Hybrid|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Hybrid|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Hybrid|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Miner|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Miner|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Miner|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Miner|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Miner|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Miner|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Miner|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Miner|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Miner|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Miner|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Miner|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Miner|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Miner|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Miner|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Miner|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Miner|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Miner|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Miner|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Miner|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Miner|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Miner|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Miner|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Miner|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Miner|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Miner|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Miner|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Miner|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Miner|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Miner|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Miner|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Miner|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Turtle|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Turtle|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Turtle|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Turtle|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Turtle|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Turtle|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Turtle|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Turtle|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Turtle|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Turtle|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Turtle|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Turtle|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Turtle|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Turtle|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Turtle|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Turtle|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Turtle|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Turtle|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Turtle|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Turtle|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Turtle|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Turtle|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Turtle|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Turtle|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Turtle|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Turtle|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Turtle|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Turtle|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Turtle|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Turtle|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Turtle|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Turtle|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Fleeter|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Fleeter|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Fleeter|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Fleeter|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Fleeter|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Fleeter|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Fleeter|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Fleeter|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Fleeter|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Fleeter|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Fleeter|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.03,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.03
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.06,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.06
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.09,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.09
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.12,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.12
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.18,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.18
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.21,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.21
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.24,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.24
+    }
+   ]
+  },
+  "Fleeter|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.27,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.27
+    }
+   ]
+  },
+  "Fleeter|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Fleeter|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Fleeter|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Fleeter|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Fleeter|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Fleeter|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Fleeter|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Fleeter|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Fleeter|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Fleeter|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Fleeter|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Trader|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Trader|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Trader|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Trader|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Trader|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Trader|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Trader|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Trader|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Trader|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Trader|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Trader|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Trader|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.035,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.035
+    }
+   ]
+  },
+  "Trader|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.105,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.105
+    }
+   ]
+  },
+  "Trader|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.175,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.175
+    }
+   ]
+  },
+  "Trader|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.245,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.245
+    }
+   ]
+  },
+  "Trader|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.315,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.315
+    }
+   ]
+  },
+  "Trader|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.385,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.385
+    }
+   ]
+  },
+  "Trader|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.455,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.455
+    }
+   ]
+  },
+  "Trader|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.525,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.525
+    }
+   ]
+  },
+  "Trader|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.595,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.595
+    }
+   ]
+  },
+  "Trader|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.665,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.665
+    }
+   ]
+  },
+  "Trader|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Trader|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Trader|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Trader|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Trader|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Trader|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Trader|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Trader|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Trader|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Trader|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Trader|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Casual|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Casual|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Casual|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Casual|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Casual|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Casual|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Casual|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Casual|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Casual|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Casual|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Casual|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Casual|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Casual|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Casual|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Casual|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Casual|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Casual|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Casual|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Casual|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Casual|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Casual|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Casual|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Casual|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Casual|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Casual|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Casual|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Casual|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Casual|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Casual|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Casual|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Casual|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Raider|Harm|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Raider|Harm|0.10": {
+   "dominant": "Anger",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Raider|Harm|0.20": {
+   "dominant": "Anger",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Raider|Harm|0.30": {
+   "dominant": "Anger",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Raider|Harm|0.40": {
+   "dominant": "Anger",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Raider|Harm|0.50": {
+   "dominant": "Anger",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Raider|Harm|0.60": {
+   "dominant": "Anger",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Raider|Harm|0.70": {
+   "dominant": "Anger",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Raider|Harm|0.80": {
+   "dominant": "Anger",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Raider|Harm|0.90": {
+   "dominant": "Anger",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Raider|Harm|1.00": {
+   "dominant": "Anger",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Raider|Threaten|0.05": {
+   "dominant": "Fear",
+   "intensity": 0.015,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.015
+    }
+   ]
+  },
+  "Raider|Threaten|0.15": {
+   "dominant": "Fear",
+   "intensity": 0.045,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.045
+    }
+   ]
+  },
+  "Raider|Threaten|0.25": {
+   "dominant": "Fear",
+   "intensity": 0.075,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.075
+    }
+   ]
+  },
+  "Raider|Threaten|0.35": {
+   "dominant": "Fear",
+   "intensity": 0.105,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.105
+    }
+   ]
+  },
+  "Raider|Threaten|0.45": {
+   "dominant": "Fear",
+   "intensity": 0.135,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.135
+    }
+   ]
+  },
+  "Raider|Threaten|0.55": {
+   "dominant": "Fear",
+   "intensity": 0.165,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.165
+    }
+   ]
+  },
+  "Raider|Threaten|0.65": {
+   "dominant": "Fear",
+   "intensity": 0.195,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.195
+    }
+   ]
+  },
+  "Raider|Threaten|0.75": {
+   "dominant": "Fear",
+   "intensity": 0.225,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.225
+    }
+   ]
+  },
+  "Raider|Threaten|0.85": {
+   "dominant": "Fear",
+   "intensity": 0.255,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.255
+    }
+   ]
+  },
+  "Raider|Threaten|0.95": {
+   "dominant": "Fear",
+   "intensity": 0.285,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.285
+    }
+   ]
+  },
+  "Raider|Aid|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Raider|Aid|0.10": {
+   "dominant": "Gratitude",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Raider|Aid|0.20": {
+   "dominant": "Gratitude",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Raider|Aid|0.30": {
+   "dominant": "Gratitude",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Raider|Aid|0.40": {
+   "dominant": "Gratitude",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Raider|Aid|0.50": {
+   "dominant": "Gratitude",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Raider|Aid|0.60": {
+   "dominant": "Gratitude",
+   "intensity": 0.6,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.6
+    }
+   ]
+  },
+  "Raider|Aid|0.70": {
+   "dominant": "Gratitude",
+   "intensity": 0.7,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.7
+    }
+   ]
+  },
+  "Raider|Aid|0.80": {
+   "dominant": "Gratitude",
+   "intensity": 0.8,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.8
+    }
+   ]
+  },
+  "Raider|Aid|0.90": {
+   "dominant": "Gratitude",
+   "intensity": 0.9,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.9
+    }
+   ]
+  },
+  "Raider|Aid|1.00": {
+   "dominant": "Gratitude",
+   "intensity": 1.0,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 1.0
+    }
+   ]
+  },
+  "Hybrid|Harm|0.05": {
+   "dominant": "Anger",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Hybrid|Harm|0.15": {
+   "dominant": "Anger",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Hybrid|Harm|0.25": {
+   "dominant": "Anger",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Hybrid|Harm|0.35": {
+   "dominant": "Anger",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Hybrid|Harm|0.45": {
+   "dominant": "Anger",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Hybrid|Harm|0.55": {
+   "dominant": "Anger",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Hybrid|Harm|0.65": {
+   "dominant": "Anger",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Hybrid|Harm|0.75": {
+   "dominant": "Anger",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Hybrid|Harm|0.85": {
+   "dominant": "Anger",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Hybrid|Harm|0.95": {
+   "dominant": "Anger",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Anger",
+     "intensity": 0.95
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.00": {
+   "dominant": null,
+   "intensity": 0.0,
+   "mood": 0.0,
+   "emotions": []
+  },
+  "Hybrid|Threaten|0.10": {
+   "dominant": "Fear",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.20": {
+   "dominant": "Fear",
+   "intensity": 0.1,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.1
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.30": {
+   "dominant": "Fear",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.40": {
+   "dominant": "Fear",
+   "intensity": 0.2,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.2
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.50": {
+   "dominant": "Fear",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.60": {
+   "dominant": "Fear",
+   "intensity": 0.3,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.3
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.70": {
+   "dominant": "Fear",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.80": {
+   "dominant": "Fear",
+   "intensity": 0.4,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.4
+    }
+   ]
+  },
+  "Hybrid|Threaten|0.90": {
+   "dominant": "Fear",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Fear",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Hybrid|Threaten|1.00": {
+   "dominant": "Disappointment",
+   "intensity": 0.5,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Disappointment",
+     "intensity": 0.5
+    }
+   ]
+  },
+  "Hybrid|Aid|0.05": {
+   "dominant": "Gratitude",
+   "intensity": 0.05,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.05
+    }
+   ]
+  },
+  "Hybrid|Aid|0.15": {
+   "dominant": "Gratitude",
+   "intensity": 0.15,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.15
+    }
+   ]
+  },
+  "Hybrid|Aid|0.25": {
+   "dominant": "Gratitude",
+   "intensity": 0.25,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.25
+    }
+   ]
+  },
+  "Hybrid|Aid|0.35": {
+   "dominant": "Gratitude",
+   "intensity": 0.35,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.35
+    }
+   ]
+  },
+  "Hybrid|Aid|0.45": {
+   "dominant": "Gratitude",
+   "intensity": 0.45,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.45
+    }
+   ]
+  },
+  "Hybrid|Aid|0.55": {
+   "dominant": "Gratitude",
+   "intensity": 0.55,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.55
+    }
+   ]
+  },
+  "Hybrid|Aid|0.65": {
+   "dominant": "Gratitude",
+   "intensity": 0.65,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.65
+    }
+   ]
+  },
+  "Hybrid|Aid|0.75": {
+   "dominant": "Gratitude",
+   "intensity": 0.75,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.75
+    }
+   ]
+  },
+  "Hybrid|Aid|0.85": {
+   "dominant": "Gratitude",
+   "intensity": 0.85,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.85
+    }
+   ]
+  },
+  "Hybrid|Aid|0.95": {
+   "dominant": "Gratitude",
+   "intensity": 0.95,
+   "mood": 0.0,
+   "emotions": [
+    {
+     "type": "Gratitude",
+     "intensity": 0.95
+    }
+   ]
+  }
+ }
+}

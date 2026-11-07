@@ -20,7 +20,9 @@ use OGame\Enums\CharacterClass;
  */
 final class AiPersonaFactory
 {
-    public function __construct(private RandomSource $random) {}
+    public function __construct(private RandomSource $random)
+    {
+    }
 
     public function create(AiArchetype $archetype, AiSkillBand $skill, int $seed): AiPersona
     {
@@ -63,7 +65,7 @@ final class AiPersonaFactory
     }
 
     /** @return array<int, float> AiActivityBand value => weight */
-    private function activityDistribution(AiArchetype $archetype): array
+    public function activityDistribution(AiArchetype $archetype): array
     {
         return match ($archetype) {
             AiArchetype::Miner, AiArchetype::Hybrid => [AiActivityBand::Casual->value => 10, AiActivityBand::Regular->value => 55, AiActivityBand::Active->value => 30, AiActivityBand::Hardcore->value => 5],

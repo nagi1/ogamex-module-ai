@@ -14,6 +14,7 @@ use Modules\AI\Domain\Decision\QueueableSpyPlanner;
 use Modules\AI\Domain\Decision\QueueableUnitPlanner;
 use Modules\AI\Domain\Decision\SaveFailurePolicy;
 use Modules\AI\Domain\Lifecycle\AccountStateResolver;
+use Modules\AI\Domain\Login\LoginPlans;
 use Modules\AI\Enums\AiAccountState;
 use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiCapability;
@@ -408,9 +409,9 @@ class PlayerObservationService
         return [
             AiCapability::Build->value => $step instanceof QueueableBuilding,
             AiCapability::Research->value => $step instanceof QueueableResearch,
-            AiCapability::QueueUnits->value => $this->queueableUnitPlanner->plan($playerId, $player) !== null,
+            AiCapability::QueueUnits->value => app(LoginPlans::class)->keep(QueueableUnitPlanner::class, [$playerId], $this->queueableUnitPlanner->plan($playerId, $player)) !== null,
             AiCapability::Colonize->value => $this->queueableColonyPlanner->plan($playerId, $player) !== null,
-            AiCapability::Spy->value => $this->queueableSpyPlanner->plan($playerId, $player) !== null,
+            AiCapability::Spy->value => app(LoginPlans::class)->keep(QueueableSpyPlanner::class, [$playerId], $this->queueableSpyPlanner->plan($playerId, $player)) !== null,
             AiCapability::ThrottleMine->value => $this->queueableMinePercentPlanner->plan($playerId, $player) !== null,
         ];
     }
@@ -469,7 +470,7 @@ class PlayerObservationService
         // to. Offering it otherwise is how a trace claims an action the account cannot take.
         $saveable = $fleetMissions->currentPlayerUnderAttack()
             && $threatening
-            && $this->queueableFleetSavePlanner->plan($playerId, $player) !== null;
+            && app(LoginPlans::class)->keep(QueueableFleetSavePlanner::class, [$playerId], $this->queueableFleetSavePlanner->plan($playerId, $player)) !== null;
         $seed = AiProfile::query()->where('player_id', $playerId)->value('random_seed');
         $seed = $seed === null ? null : (int) $seed;
 

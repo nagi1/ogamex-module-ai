@@ -1,0 +1,358 @@
+{
+ "engine": "PsychSim (depth-one theory of mind, sequential cooperation dilemma)",
+ "endpoint": {
+  "url": "http://localhost:8094/evaluate",
+  "request": {
+   "temptation": "float"
+  },
+  "response": {
+   "decision": "cooperate|defect"
+  }
+ },
+ "health": {
+  "status": "ok"
+ },
+ "image": "sha256:c09ce3b748cc2e8d6e6985b859096d4be0469205cb5a63de18af89ffdc4239ea ogamex-ai-cognition-psychsim:1.0.0",
+ "inputs_sha256": {
+  "server.py": "a54ca5d237058303d8de5f0e5e61e63c7b2c831201c44a557fbfc9ee188fef80"
+ },
+ "recorded_at": "2026-11-06T13:26:26Z",
+ "grid": {
+  "key": "temptation (2 decimals)",
+  "temptations": [
+   0.0,
+   0.05,
+   0.1,
+   0.15,
+   0.2,
+   0.25,
+   0.3,
+   0.35,
+   0.4,
+   0.45,
+   0.5,
+   0.55,
+   0.6,
+   0.65,
+   0.7,
+   0.75,
+   0.8,
+   0.85,
+   0.9,
+   0.95,
+   1.0,
+   1.05,
+   1.1,
+   1.15,
+   1.2,
+   1.25,
+   1.3,
+   1.35,
+   1.4,
+   1.45,
+   1.5,
+   1.55,
+   1.6,
+   1.65,
+   1.7,
+   1.75,
+   1.8,
+   1.85,
+   1.9,
+   1.95,
+   2.0,
+   2.05,
+   2.1,
+   2.15,
+   2.2,
+   2.25,
+   2.3,
+   2.35,
+   2.4,
+   2.45,
+   2.5,
+   2.55,
+   2.6,
+   2.65,
+   2.7,
+   2.75,
+   2.8,
+   2.85,
+   2.9,
+   2.95,
+   3.0,
+   3.05,
+   3.1,
+   3.15,
+   3.2,
+   3.25,
+   3.3,
+   3.35,
+   3.4,
+   3.45,
+   3.5,
+   3.55,
+   3.6,
+   3.65,
+   3.7,
+   3.75,
+   3.8,
+   3.85,
+   3.9,
+   3.95,
+   4.0
+  ],
+  "size": 81
+ },
+ "observed_first_defect_at": 1.05,
+ "reading": {
+  "mapping": "the module's own (PsychSimTheoryOfMind): temptation = 2 x threat the account holds toward the counterparty (0..1); snap to the grid step",
+  "decision": "defect = the account models the counterparty as exploiting its cooperation: read it as 'not loyal', refuse its pact; cooperate = read as loyal enough to accept",
+  "limitation": "the served endpoint takes one scalar and returns one stance: no belief probability, no reputation (pacts broken/kept) and no points ratio as inputs. Mapping those into temptation would be the simulator's invention, not the engine's answer, so it is not recorded here"
+ },
+ "cells": {
+  "0.00": {
+   "decision": "cooperate"
+  },
+  "0.05": {
+   "decision": "cooperate"
+  },
+  "0.10": {
+   "decision": "cooperate"
+  },
+  "0.15": {
+   "decision": "cooperate"
+  },
+  "0.20": {
+   "decision": "cooperate"
+  },
+  "0.25": {
+   "decision": "cooperate"
+  },
+  "0.30": {
+   "decision": "cooperate"
+  },
+  "0.35": {
+   "decision": "cooperate"
+  },
+  "0.40": {
+   "decision": "cooperate"
+  },
+  "0.45": {
+   "decision": "cooperate"
+  },
+  "0.50": {
+   "decision": "cooperate"
+  },
+  "0.55": {
+   "decision": "cooperate"
+  },
+  "0.60": {
+   "decision": "cooperate"
+  },
+  "0.65": {
+   "decision": "cooperate"
+  },
+  "0.70": {
+   "decision": "cooperate"
+  },
+  "0.75": {
+   "decision": "cooperate"
+  },
+  "0.80": {
+   "decision": "cooperate"
+  },
+  "0.85": {
+   "decision": "cooperate"
+  },
+  "0.90": {
+   "decision": "cooperate"
+  },
+  "0.95": {
+   "decision": "cooperate"
+  },
+  "1.00": {
+   "decision": "cooperate"
+  },
+  "1.05": {
+   "decision": "defect"
+  },
+  "1.10": {
+   "decision": "defect"
+  },
+  "1.15": {
+   "decision": "defect"
+  },
+  "1.20": {
+   "decision": "defect"
+  },
+  "1.25": {
+   "decision": "defect"
+  },
+  "1.30": {
+   "decision": "defect"
+  },
+  "1.35": {
+   "decision": "defect"
+  },
+  "1.40": {
+   "decision": "defect"
+  },
+  "1.45": {
+   "decision": "defect"
+  },
+  "1.50": {
+   "decision": "defect"
+  },
+  "1.55": {
+   "decision": "defect"
+  },
+  "1.60": {
+   "decision": "defect"
+  },
+  "1.65": {
+   "decision": "defect"
+  },
+  "1.70": {
+   "decision": "defect"
+  },
+  "1.75": {
+   "decision": "defect"
+  },
+  "1.80": {
+   "decision": "defect"
+  },
+  "1.85": {
+   "decision": "defect"
+  },
+  "1.90": {
+   "decision": "defect"
+  },
+  "1.95": {
+   "decision": "defect"
+  },
+  "2.00": {
+   "decision": "defect"
+  },
+  "2.05": {
+   "decision": "defect"
+  },
+  "2.10": {
+   "decision": "defect"
+  },
+  "2.15": {
+   "decision": "defect"
+  },
+  "2.20": {
+   "decision": "defect"
+  },
+  "2.25": {
+   "decision": "defect"
+  },
+  "2.30": {
+   "decision": "defect"
+  },
+  "2.35": {
+   "decision": "defect"
+  },
+  "2.40": {
+   "decision": "defect"
+  },
+  "2.45": {
+   "decision": "defect"
+  },
+  "2.50": {
+   "decision": "defect"
+  },
+  "2.55": {
+   "decision": "defect"
+  },
+  "2.60": {
+   "decision": "defect"
+  },
+  "2.65": {
+   "decision": "defect"
+  },
+  "2.70": {
+   "decision": "defect"
+  },
+  "2.75": {
+   "decision": "defect"
+  },
+  "2.80": {
+   "decision": "defect"
+  },
+  "2.85": {
+   "decision": "defect"
+  },
+  "2.90": {
+   "decision": "defect"
+  },
+  "2.95": {
+   "decision": "defect"
+  },
+  "3.00": {
+   "decision": "defect"
+  },
+  "3.05": {
+   "decision": "defect"
+  },
+  "3.10": {
+   "decision": "defect"
+  },
+  "3.15": {
+   "decision": "defect"
+  },
+  "3.20": {
+   "decision": "defect"
+  },
+  "3.25": {
+   "decision": "defect"
+  },
+  "3.30": {
+   "decision": "defect"
+  },
+  "3.35": {
+   "decision": "defect"
+  },
+  "3.40": {
+   "decision": "defect"
+  },
+  "3.45": {
+   "decision": "defect"
+  },
+  "3.50": {
+   "decision": "defect"
+  },
+  "3.55": {
+   "decision": "defect"
+  },
+  "3.60": {
+   "decision": "defect"
+  },
+  "3.65": {
+   "decision": "defect"
+  },
+  "3.70": {
+   "decision": "defect"
+  },
+  "3.75": {
+   "decision": "defect"
+  },
+  "3.80": {
+   "decision": "defect"
+  },
+  "3.85": {
+   "decision": "defect"
+  },
+  "3.90": {
+   "decision": "defect"
+  },
+  "3.95": {
+   "decision": "defect"
+  },
+  "4.00": {
+   "decision": "defect"
+  }
+ }
+}

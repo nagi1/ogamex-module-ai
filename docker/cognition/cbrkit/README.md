@@ -53,6 +53,31 @@ The held-out measurement that decides whether the driver earns the hybrid defaul
 lives in `eval_retriever.py`; run it inside the container with
 `python /driver/eval_retriever.py`.
 
+## Social route: `POST /social/similar`
+
+Additive to `/retrieve` (whose answers are unchanged; the served app is `cbrkit.api.app` with one more route, see
+`social_api.py`). It retrieves past diplomatic decisions similar to a situation and returns what happened after them.
+
+```bash
+curl -s localhost:8091/social/similar -H 'content-type: application/json' -d '{"items":[
+  {"situation":{"decision":"pact","their_broken":2,"history":["pact+","betrayal-","peace+","war+"]},"k":5}]}'
+# -> {"results":[{"cases":[{"id":"<run>/ready-N#i","similarity":0.95,"outcome":{"label":"betrayed",...,"future":[...]}}]}]}
+```
+
+- Case base: `social_cases.json`, built by `Modules/AI/rl/scripts/social_cases.py` from the simulator's diplomacy logs
+  (`storage/rl/ogsim/runs/social/*/ready-*.jsonl.diplomacy.jsonl`) and baked into the image; rebuild the image after
+  regenerating it. A request may carry its own `casebase` (`{id: {situation, outcome}}`), as `/retrieve` does.
+- Situation: `decision` (pact, pact_refused, war, betrayal, peace, submit, revolt), `cause`, `day`, public record
+  (`my_/their_broken`, `_wars`, `_pacts`), the pair's own past (`pair_wars`, `pair_pacts`, `pair_betrayals`,
+  `pair_peaces`, `days_since_pair`) and `history`, the pair's last four events in order (`war+` = by the decider,
+  `betrayal-` = by the other club, `none` = padding). Only the features a query states are compared.
+- Outcome over the next 14 days: pact -> betrayed/kept, pact_refused -> war/no_war, war/betrayal/revolt ->
+  peace/submit/ongoing, peace -> war_again/held, submit -> revolt/held, plus `future` (the pair's events) and
+  `censored` when the season ended first.
+- Similarity is CBRKit's: `sim.attribute_value` with `generic.equality` (decision, cause), `numbers.linear` over each
+  numeric feature's range, `collections.sequence_mapping` (history), pooled by `sim.aggregator`; ranking and top-k by
+  `retrieval.build` + `retrieval.dropout`.
+
 ## Server deployment
 
 On a shared server, do not publish the port publicly. Either bind the service to the

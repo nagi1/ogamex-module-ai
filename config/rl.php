@@ -18,4 +18,6 @@ return [
     'seed' => (int) env('AI_RL_SEED', 0),
     // A JSON Lines file every choice point is appended to ("{pid}" is replaced by the process id).
     'record' => env('AI_RL_RECORD', null),
+    // An errand model trained in the simulator (feature version 3, ogrl.export_policy); unset keeps the engine's own errands.
+    'errand_model' => env('AI_RL_ERRAND_MODEL', null),
 ];

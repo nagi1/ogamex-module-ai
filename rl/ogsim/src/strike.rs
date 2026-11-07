@@ -281,6 +281,8 @@ pub struct MoonStrike {
     pub debris: [i64; 3],
     /// What stands on the moon after the fight; the moon repairs nothing.
     pub defender_left: Units,
+    /// Each allied holding fleet that survived the battle, in arrival order.
+    pub allies_left: Vec<Units>,
     /// The fleet that flies home, with the mission's original cargo; `None` flies nothing.
     pub return_fleet: Option<Units>,
 }
@@ -296,12 +298,15 @@ pub fn resolve_moon_destruction(rules: &StrikeRules, attacker: &CombatCatalogue,
     let repaired = roll_repairs(defender, &lost, battle.defender_engineer, &mut dice(battle.seed, repair_rate(defender, battle.defender_engineer)));
     let rounds = engine.rounds;
     let attacker_left = engine.attacker_left.clone();
-    let defender_left = engine.defender_left.clone();
+    let mut defender_left = engine.defender_left.clone();
+    let allies_left = engine.allies_left.clone();
+    for (&id, &n) in allies_left.iter().flatten() { *defender_left.entry(id).or_insert(0) -= n }
+    defender_left.retain(|_, n| *n > 0);
     // Looting is the plunder of a fight; hauling debris out of the field is an attack's alone, so the field is settled
     // without it (`MoonDestructionMission` appends the engine's debris as it is).
+    let won = !attacker_left.is_empty() && engine.defender_left.is_empty();
     let looted = settle_in(attacker, defender, battle, engine.clone(), repaired.clone(), 0, true);
     let field = settle_in(attacker, defender, battle, engine, repaired, 0, false);
-    let won = !attacker_left.is_empty() && defender_left.is_empty();
     let mut strike = MoonStrike {
         rounds,
         verdict: Verdict::NotAttempted,
@@ -311,6 +316,7 @@ pub fn resolve_moon_destruction(rules: &StrikeRules, attacker: &CombatCatalogue,
         loot: looted.loot,
         debris: field.debris,
         defender_left,
+        allies_left,
         return_fleet: Some(attacker_left.clone()).filter(|fleet| !fleet.is_empty()),
     };
     if !won {
@@ -339,7 +345,6 @@ pub fn resolve_moon_destruction(rules: &StrikeRules, attacker: &CombatCatalogue,
 mod tests {
     use super::*;
     use crate::combat::{CombatCatalogue, Units};
-    use crate::HashMap;
 
     const DATA: &str = "../../../../storage/rl/ogsim";
 
@@ -356,7 +361,7 @@ mod tests {
         value.as_object().map_or_else(Units::new, |m| m.iter().filter_map(|(id, n)| Some((id.parse().ok()?, n.as_i64()?))).filter(|&(_, n)| n > 0).collect())
     }
 
-    fn research(player: &Value) -> HashMap<u32, u32> {
+    fn research(player: &Value) -> crate::Levels {
         player["research"].as_object().unwrap().iter().map(|(id, level)| (id.parse().unwrap(), level.as_u64().unwrap() as u32)).collect()
     }
 

@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\Event;
 use Modules\AI\Actions\QueueAiBuildingAction;
 use Modules\AI\Actions\QueueAiColonyAction;
 use Modules\AI\Actions\QueueAiDefendAction;
-use Modules\AI\Actions\QueueAiJumpGateAction;
-use Modules\AI\Actions\QueueAiMissileAction;
 use Modules\AI\Actions\QueueAiExpeditionAction;
 use Modules\AI\Actions\QueueAiFleetSaveAction;
+use Modules\AI\Actions\QueueAiJumpGateAction;
 use Modules\AI\Actions\QueueAiMinePercentAction;
+use Modules\AI\Actions\QueueAiMissileAction;
 use Modules\AI\Actions\QueueAiPhalanxAction;
 use Modules\AI\Actions\QueueAiRaidAction;
 use Modules\AI\Actions\QueueAiRecallAction;
@@ -29,28 +29,30 @@ use Modules\AI\Console\Commands\AdvanceAiAllianceLife;
 use Modules\AI\Console\Commands\AdvanceAiCampaigns;
 use Modules\AI\Console\Commands\BondExistingAllianceMembers;
 use Modules\AI\Console\Commands\CreateAiRlUniverse;
+use Modules\AI\Console\Commands\EvalAiComposer;
 use Modules\AI\Console\Commands\ExplainAiDecision;
 use Modules\AI\Console\Commands\ExportAiRlCatalogue;
 use Modules\AI\Console\Commands\ExportAiRlCombatCatalogue;
 use Modules\AI\Console\Commands\ExportAiRlFleetSettings;
 use Modules\AI\Console\Commands\ExportAiRlUnitsCatalogue;
-use Modules\AI\Console\Commands\ReplayAiRlUnitOrders;
+use Modules\AI\Console\Commands\ExportAiTextReadings;
 use Modules\AI\Console\Commands\GenerateAiRlBattleCases;
 use Modules\AI\Console\Commands\GenerateAiRlFleetCases;
 use Modules\AI\Console\Commands\GenerateAiRlMissionCases;
 use Modules\AI\Console\Commands\GenerateAiRlMoreMissionCases;
-use Modules\AI\Console\Commands\RlScoreCasesCommand;
-use Modules\AI\Console\Commands\ExportAiTextReadings;
+use Modules\AI\Console\Commands\ImportAiRlSimState;
 use Modules\AI\Console\Commands\JudgeAiWorld;
-use Modules\AI\Console\Commands\EvalAiComposer;
 use Modules\AI\Console\Commands\ProposeAiDoctrine;
 use Modules\AI\Console\Commands\PruneAiRecords;
 use Modules\AI\Console\Commands\ReconcileLanguageRequests;
-use Modules\AI\Console\Commands\ReplayAiRlSchedule;
-use Modules\AI\Console\Commands\ReplayAiRlWorldTrace;
 use Modules\AI\Console\Commands\RecordAiScoreSamples;
+use Modules\AI\Console\Commands\ReplayAiRlSchedule;
+use Modules\AI\Console\Commands\ReplayAiRlUnitOrders;
+use Modules\AI\Console\Commands\ReplayAiRlWorldTrace;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
+use Modules\AI\Console\Commands\ReportHumanExperience;
+use Modules\AI\Console\Commands\RlScoreCasesCommand;
 use Modules\AI\Console\Commands\RunAiCampaign;
 use Modules\AI\Console\Commands\RunCognitionConformance;
 use Modules\AI\Console\Commands\RunDueAiWork;
@@ -61,6 +63,7 @@ use Modules\AI\Console\Commands\SimulateAiTime;
 use Modules\AI\Console\Commands\WriteAiHumanTexts;
 use Modules\AI\Console\Commands\WriteAiSocialVoices;
 use Modules\AI\Contracts\AffectEngine;
+use Modules\AI\Contracts\AllianceTreaties;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\CampaignConsultationGateway;
 use Modules\AI\Contracts\ChoicePolicy;
@@ -71,11 +74,11 @@ use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\QueueAiBuilding;
 use Modules\AI\Contracts\QueueAiColony;
 use Modules\AI\Contracts\QueueAiDefend;
-use Modules\AI\Contracts\QueueAiJumpGate;
-use Modules\AI\Contracts\QueueAiMissile;
 use Modules\AI\Contracts\QueueAiExpedition;
 use Modules\AI\Contracts\QueueAiFleetSave;
+use Modules\AI\Contracts\QueueAiJumpGate;
 use Modules\AI\Contracts\QueueAiMinePercent;
+use Modules\AI\Contracts\QueueAiMissile;
 use Modules\AI\Contracts\QueueAiPhalanx;
 use Modules\AI\Contracts\QueueAiRaid;
 use Modules\AI\Contracts\QueueAiRecall;
@@ -96,14 +99,18 @@ use Modules\AI\Domain\Decision\Policies\ArchetypePolicy;
 use Modules\AI\Domain\Decision\Policies\ArchetypePolicyRegistry;
 use Modules\AI\Domain\Decision\Policies\FleeterPolicy;
 use Modules\AI\Domain\Decision\Policies\HybridPolicy;
-use Modules\AI\Domain\Decision\Policies\RaiderPolicy;
 use Modules\AI\Domain\Decision\Policies\MinerPolicy;
+use Modules\AI\Domain\Decision\Policies\RaiderPolicy;
 use Modules\AI\Domain\Decision\Policies\TurtlePolicy;
+use Modules\AI\Domain\Login\LoginPlans;
+use Modules\AI\Domain\Login\LoginReservations;
 use Modules\AI\Enums\AiCampaignConsultationMode;
 use Modules\AI\Enums\AiCognitionDriver;
 use Modules\AI\Infrastructure\Cognition\FatimaClient;
 use Modules\AI\Infrastructure\Cognition\FatimaCognitionSession;
 use Modules\AI\Infrastructure\Cognition\PsychSimClient;
+use Modules\AI\Infrastructure\Diplomacy\AiAllianceRelationTreaties;
+use Modules\AI\Infrastructure\Diplomacy\EmpireAllianceTreaties;
 use Modules\AI\Infrastructure\Language\LaravelAiCampaignConsultationGateway;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Infrastructure\Language\NullCampaignConsultationGateway;
@@ -126,9 +133,10 @@ use Modules\AI\Support\FatimaScenarioTemplate;
 use Modules\AI\Support\LongTermMemorySelector;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
-use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SimulatedTime;
+use Modules\AI\Support\SocialCognitionSelector;
 use Modules\AI\Support\SystemAiClock;
+use Nwidart\Modules\Facades\Module;
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use OGame\Console\Commands\Scheduler\GenerateAllianceHighscores;
 use OGame\Console\Commands\Scheduler\GenerateHighscoreRanks;
@@ -169,6 +177,7 @@ class AIServiceProvider extends ModuleServiceProvider
         RecordAiScoreSamples::class,
         ReplayAiScenario::class,
         ReportAiPilot::class,
+        ReportHumanExperience::class,
         RunCognitionConformance::class,
         RunDueAiWork::class,
         RunLanguageConformance::class,
@@ -176,6 +185,7 @@ class AIServiceProvider extends ModuleServiceProvider
         SeedGrandTest::class,
         SimulateAiTime::class,
         CreateAiRlUniverse::class,
+        ImportAiRlSimState::class,
         ExportAiRlCatalogue::class,
         ExportAiRlCombatCatalogue::class,
         ExportAiRlFleetSettings::class,
@@ -262,7 +272,7 @@ class AIServiceProvider extends ModuleServiceProvider
         // host entrypoint now runs schedule:work.
         $schedule->call(static function (): void {
             $window = intdiv(now()->getTimestamp(), 300);
-            if (! Cache::add('ai:highscore-window:'.$window, 1, 600)) {
+            if (!Cache::add('ai:highscore-window:'.$window, 1, 600)) {
                 return;
             }
             foreach ([GenerateHighscores::class, GenerateAllianceHighscores::class, GenerateHighscoreRanks::class] as $command) {
@@ -286,7 +296,8 @@ class AIServiceProvider extends ModuleServiceProvider
 
         $this->app->bind(RunAiSession::class, RunAiSessionAction::class);
         // One login's claims on ships and fleet slots; reset at the start of every schedule pass.
-        $this->app->singleton(\Modules\AI\Domain\Login\LoginReservations::class);
+        $this->app->singleton(LoginReservations::class);
+        $this->app->singleton(LoginPlans::class);
         $this->app->bind(AffectEngine::class, fn (): AffectEngine => app(AffectEngineSelector::class)->resolve());
         $this->app->bind(ExperienceEngine::class, fn (): ExperienceEngine => app(ExperienceEngineSelector::class)->resolve());
         $this->app->bind(ContextBuilder::class, NativeContextBuilder::class);
@@ -298,6 +309,10 @@ class AIServiceProvider extends ModuleServiceProvider
             ? app(LaravelAiCampaignConsultationGateway::class)
             : app(NullCampaignConsultationGateway::class));
         $this->app->bind(SocialCognition::class, fn (): SocialCognition => app(SocialCognitionSelector::class)->resolve());
+        // Alliance treaties live on the Empire diplomacy board when that module is on, so AI and human leaders share one record.
+        $this->app->bind(AllianceTreaties::class, static fn (): AllianceTreaties => Module::has('Empire') && Module::isEnabled('Empire')
+            ? app(EmpireAllianceTreaties::class)
+            : app(AiAllianceRelationTreaties::class));
         // Affect and social cognition resolve the same session, so the module advances one
         // integrated character state rather than one per contract. The circuit breaker needs
         // the driver name, which a contextual binding supplies without the client having to

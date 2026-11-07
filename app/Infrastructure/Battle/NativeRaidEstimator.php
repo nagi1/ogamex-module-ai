@@ -12,6 +12,7 @@ use OGame\GameMissions\BattleEngine\RustBattleEngine;
 use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Resources;
 use OGame\Services\PlanetService;
+use OGame\Services\PlayerService;
 use OGame\Services\SettingsService;
 
 /**
@@ -34,6 +35,9 @@ use OGame\Services\SettingsService;
 class NativeRaidEstimator
 {
     private const SCREEN_SAMPLES = 50;
+
+    /** `players::forecast`: both sides scaled so the larger holds about this many units. */
+    private const FORECAST_UNITS = 200.0;
 
     private const CRYSTAL_WEIGHT = 1.5;
 
@@ -67,7 +71,7 @@ class NativeRaidEstimator
      * simulates what the report says, never the live planet), or an id, which loads the host's planet for
      * callers that judge their own bodies.
      */
-    private function screen(int $playerId, int $originPlanetId, int|PlanetService $target, ?UnitCollection $fleet, int $seed, int $samples): RaidEstimate
+    private function screen(int $playerId, int $originPlanetId, int|PlanetService $target, UnitCollection|null $fleet, int $seed, int $samples): RaidEstimate
     {
         $player = $this->playerServiceFactory->make($playerId, true);
         $origin = $this->planetServiceFactory->makeForPlayer($player, $originPlanetId, false);
@@ -92,23 +96,16 @@ class NativeRaidEstimator
             ]);
         }
 
-        $attacker = new AttackerFleet();
-        $attacker->units = $ships;
-        $attacker->player = $player;
-        $attacker->fleetMissionId = 0;
-        $attacker->ownerId = $playerId;
-        $attacker->cargoResources = new Resources();
-        $attacker->isInitiator = true;
-        $attacker->fleetMission = null;
-
         $defender = DefenderFleet::fromPlanet($target);
+        [$shrunk, $defender->units, $scale] = $this->shrink($ships, $defender->units);
+        $attacker = $this->attacker($shrunk, $player, $playerId);
 
         // The Rust engine is the one the universe fights with, so it is the only one the estimate runs.
         $engine = new RustBattleEngine([$attacker], $target, [$defender], $this->settings);
 
         // The screen is the one bounded pass the decision path may afford; the
         // confirmation is a wider sample on the winner only.
-        $sampled = $this->sample($engine, $seed, $samples);
+        $sampled = $this->sample($engine, $seed, $samples, $scale, $scale > 1.0 ? $this->lootIfWon($ships, $player, $playerId, $target) : null);
 
         return app()->makeWith(RaidEstimate::class, [
             'samples' => count($sampled['netProfits']),
@@ -126,7 +123,7 @@ class NativeRaidEstimator
      *
      * @return array{netProfits: list<float>, loots: list<float>, debris: list<float>, survived: int}
      */
-    private function sample(BattleEngine $engine, int $seed, int $samples): array
+    private function sample(BattleEngine $engine, int $seed, int $samples, float $scale, float|null $lootIfWon): array
     {
         $netProfits = [];
         $loots = [];
@@ -138,9 +135,10 @@ class NativeRaidEstimator
             // through the same sequence of draws.
             $result = $engine->simulateBattle($seed + $i, true);
 
-            $loots[] = $this->metalEquivalent($result->loot);
-            $debris[] = isset($result->debris) ? $this->metalEquivalent($result->debris) : 0.0;
-            $netProfits[] = $loots[$i] - $this->metalEquivalent($result->attackerResourceLoss);
+            // A shrunk fight carries a shrunk hold: a win takes what the whole fleet would carry home.
+            $loots[] = $lootIfWon === null ? $this->metalEquivalent($result->loot) : ($result->loot->sum() > 0 ? $lootIfWon : 0.0);
+            $debris[] = isset($result->debris) ? $scale * $this->metalEquivalent($result->debris) : 0.0;
+            $netProfits[] = $loots[$i] - $scale * $this->metalEquivalent($result->attackerResourceLoss);
 
             // getAmount(), not ->units === []: the round sanitizer keeps
             // zero-amount entries, so a wiped fleet reads as an empty amount.
@@ -148,6 +146,58 @@ class NativeRaidEstimator
         }
 
         return ['netProfits' => $netProfits, 'loots' => $loots, 'debris' => $debris, 'survived' => $survived];
+    }
+
+    /**
+     * Both sides scaled down so the larger holds about FORECAST_UNITS units (at least one of each), and the factor that
+     * scales losses and debris back: the engine's cost grows with the unit count, and a late-game stack of millions
+     * would hold a login inside one native call for minutes.
+     *
+     * @return array{0: UnitCollection, 1: UnitCollection, 2: float}
+     */
+    public function shrink(UnitCollection $attacking, UnitCollection $defending): array
+    {
+        $scale = max(1.0, max($attacking->getAmount(), $defending->getAmount()) / self::FORECAST_UNITS);
+
+        return [$this->shrunk($attacking, $scale), $this->shrunk($defending, $scale), $scale];
+    }
+
+    private function shrunk(UnitCollection $units, float $scale): UnitCollection
+    {
+        $out = new UnitCollection();
+        foreach ($units->units as $entry) {
+            if ($entry->amount > 0) {
+                $out->addUnit($entry->unitObject, (int) ceil($entry->amount / $scale));
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The whole fleet's haul from a won fight, asked of the host's engine against an empty defence: the loot share and
+     * the hold are the host's rules, not restated here.
+     */
+    private function lootIfWon(UnitCollection $ships, PlayerService $player, int $playerId, PlanetService $target): float
+    {
+        $defender = DefenderFleet::fromPlanet($target);
+        $defender->units = new UnitCollection();
+
+        return $this->metalEquivalent((new RustBattleEngine([$this->attacker($ships, $player, $playerId)], $target, [$defender], $this->settings))->simulateBattle(0, true)->loot);
+    }
+
+    private function attacker(UnitCollection $ships, PlayerService $player, int $playerId): AttackerFleet
+    {
+        $attacker = new AttackerFleet();
+        $attacker->units = $ships;
+        $attacker->player = $player;
+        $attacker->fleetMissionId = 0;
+        $attacker->ownerId = $playerId;
+        $attacker->cargoResources = new Resources();
+        $attacker->isInitiator = true;
+        $attacker->fleetMission = null;
+
+        return $attacker;
     }
 
     /**

@@ -20,7 +20,7 @@ use OGame\Services\PlayerService;
 class QueueableMissilePlanner
 {
     /** The host's machine name for the missile object, the one catalogue name the host's own mission also reads. */
-    private const MISSILE = 'interplanetary_missile';
+    public const MISSILE = 'interplanetary_missile';
 
     private const REPORT_FRESH_HOURS = 12;
 

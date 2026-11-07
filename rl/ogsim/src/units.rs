@@ -145,7 +145,7 @@ pub struct Units {
     pub cost: Vec<Option<Cost>>,
     /// Per economy planet config: (units held at the start, whether the owner's class may build each unit).
     pub planets: Vec<(Vec<u64>, Vec<bool>)>,
-    index: HashMap<i64, usize>,
+    index: crate::LookupMap<i64, usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -190,7 +190,7 @@ impl Units {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
         let raw: RawCatalogue = serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?;
         let object: HashMap<i64, usize> = economy.objects.iter().enumerate().map(|(k, o)| (o.id, k)).collect();
-        let index: HashMap<i64, usize> = raw.units.iter().enumerate().map(|(u, o)| (o.id, u)).collect();
+        let index: crate::LookupMap<i64, usize> = raw.units.iter().enumerate().map(|(u, o)| (o.id, u)).collect();
         let store_index: HashMap<i64, usize> = raw.stores.iter().enumerate().map(|(s, o)| (o.id, s)).collect();
         let units: Vec<Unit> = raw.units.iter().map(|u| Unit {
             id: u.id,
@@ -263,9 +263,11 @@ impl Units {
         if !self.requirements_met(planet, u) {
             return 0;
         }
-        // The host answers an owned limit before it looks at the price; the payment then fails whole or not at all.
+        // The host answers an owned limit before it looks at the price; the payment then fails whole or not at all. A unit
+        // still in the queue counts as owned (ObjectService::getObjectMaxBuildAmount, 5 Nov dome fix).
         if let Some(limit) = unit.owned_limit {
-            return limit.saturating_sub(yard.counts[u]);
+            let pending: u64 = yard.orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
+            return limit.saturating_sub(yard.counts[u] + pending);
         }
         let mut bounds: Vec<f64> = Vec::with_capacity(4);
         if let Some((s, slots)) = unit.store {
@@ -474,7 +476,7 @@ mod tests {
         let mut yard = units.shipyard(0);
         assert_eq!(units.order(&mut yard, &mut planet, 0, 1, 0, Some(1)), 0, "an upgrading time modifier blocks the order");
         assert_eq!(units.order(&mut yard, &mut planet, 1, 5, 0, None), 1, "an owned limit caps the order");
-        assert_eq!(units.order(&mut yard, &mut planet, 1, 5, 1, None), 1, "a queued unit does not count against an owned limit");
+        assert_eq!(units.order(&mut yard, &mut planet, 1, 5, 1, None), 0, "a queued unit counts against an owned limit");
         assert_eq!(units.order(&mut yard, &mut planet, 3, 9, 2, None), 5, "a store caps by slots");
         assert_eq!(units.order(&mut yard, &mut planet, 2, 9, 3, None), 0, "the store is full while the order is unfinished");
         planet.levels[0] = 0;

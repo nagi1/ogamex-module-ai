@@ -30,6 +30,21 @@ speed (log). Candidate: kind one-hot, distance, flight hours, fuel/stock, expect
 defence+fleet strength over our strength (log ratio), report age, target inactive flag, target resource log, target
 stock ratio, field size/capacity (recycle), seconds until the incoming attack lands (save), our fleet at home share.
 
+### Feature compatibility (4 November 2026)
+
+Rust errand feature version 2 replaces the hidden live target research used by the threat ratio with the research in
+the spy report, or the observer own technology as an explicit estimate when research was not revealed. The candidate
+column is now named target_ratio_observed_or_estimated. Tensor widths remain the same, but prior errand labels,
+checkpoints and policies are not comparable and must be regenerated or retrained. Training checks the saved feature
+names before an errand warm start; Rust rejects unversioned and older exported errand policies. Economy policies use a
+separate schema and are unaffected. The Python extension must be rebuilt before generating new errand data.
+
+Champion errand labels (`champion-errand-out=`) write one sidecar beside the file: `{"errand_feature_version": 2,
+"candidates": 32}`. The width has to be declared because the errand menu offers `wait` first and pads the rest, so a
+reader cannot infer it from a legal last row the way build labels allow; `train_exit` reads it there and no longer
+needs `--k` (`--k` still overrides). A missing sidecar, an older version or a missing width is refused by name
+rather than parsed.
+
 ## Reward and the value fix
 
 `Game::value` counts built value and stock. For fleet decisions an account's value also counts ships at their price

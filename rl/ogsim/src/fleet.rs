@@ -191,7 +191,7 @@ struct Unit {
 
 pub struct FleetCatalogue {
     max_level: u32,
-    units: HashMap<u32, Unit>,
+    units: crate::LookupMap<u32, Unit>,
 }
 
 impl FleetCatalogue {
@@ -207,7 +207,7 @@ impl FleetCatalogue {
     }
 
     /// The table cell for these levels, the first `by` research varying slowest (ExportAiCombatCatalogueAction).
-    pub fn speed(&self, id: u32, research: &HashMap<u32, u32>) -> i64 {
+    pub fn speed(&self, id: u32, research: &crate::Levels) -> i64 {
         let table = &self.unit(id).speed;
         let index = table.by.iter().fold(0usize, |index, r| {
             // Past the table reads its last level, as `CombatCatalogue::cell`: a year's play must not die on a rare top level.
@@ -222,7 +222,7 @@ impl FleetCatalogue {
     }
 
     /// UnitCollection::getSlowestUnitSpeed.
-    pub fn slowest_speed(&self, fleet: &[(u32, i64)], research: &HashMap<u32, u32>) -> i64 {
+    pub fn slowest_speed(&self, fleet: &[(u32, i64)], research: &crate::Levels) -> i64 {
         fleet.iter().map(|&(id, _)| self.speed(id, research)).min().unwrap_or(0)
     }
 }
@@ -275,7 +275,7 @@ pub fn flight_seconds(settings: &FleetSettings, mission: u32, distance: i64, slo
 }
 
 /// FleetMissionService::calculateConsumption.
-pub fn consumption(settings: &FleetSettings, catalogue: &FleetCatalogue, fleet: &[(u32, i64)], research: &HashMap<u32, u32>, distance: i64, holding_hours: i64, speed_percent: f64) -> i64 {
+pub fn consumption(settings: &FleetSettings, catalogue: &FleetCatalogue, fleet: &[(u32, i64)], research: &crate::Levels, distance: i64, holding_hours: i64, speed_percent: f64) -> i64 {
     let duration = duration_at(settings.fleet_speed, distance, catalogue.slowest_speed(fleet, research), speed_percent);
     // The host keeps an int here and falls back to 0.5 only when the flight is not longer than 10 speed-seconds.
     let speed_value = ((duration * settings.fleet_speed - 10) as f64).max(0.5);
@@ -366,7 +366,7 @@ mod tests {
             };
             for case in &group.cases {
                 total += 1;
-                let research: HashMap<u32, u32> = case.research.iter().map(|(k, &v)| (k.parse().unwrap(), v)).collect();
+                let research: crate::Levels = case.research.iter().map(|(k, &v)| (k.parse().unwrap(), v)).collect();
                 let distance = distance(&group.settings, coord(case.from), coord(case.to), &state);
                 let slowest = catalogue.slowest_speed(&case.fleet, &research);
                 let duration = flight_seconds(&group.settings, case.mission, distance, slowest, case.speed_percent);

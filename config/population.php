@@ -17,4 +17,7 @@ return [
     // Zero preserves each persona's waking-day cadence; a positive value is an explicit
     // accelerated-run control that still uses the normal session, planner and executor paths.
     'session_interval_seconds' => (int) env('AI_POPULATION_SESSION_INTERVAL_SECONDS', 0),
+    // Skill spread (behavior/skill.yaml, the simulator's arm `skill`): each account's own skill quantile sets how often it
+    // plays and how many of its expedition slots it keeps busy. Off by default.
+    'skill' => filter_var(env('AI_POPULATION_SKILL', false), FILTER_VALIDATE_BOOLEAN),
 ];

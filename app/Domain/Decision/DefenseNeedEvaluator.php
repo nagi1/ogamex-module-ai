@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Modules\AI\Domain\Persona\SkillQuantile;
 use Modules\AI\Enums\AiActivityBand;
 use Modules\AI\Models\AiProfile;
 use OGame\GameObjects\Models\Units\UnitCollection;
@@ -76,7 +77,7 @@ class DefenseNeedEvaluator
         // so they are part of the exposure the wall is sized to. The ships come from the host's own
         // collection, so a satellite, a cargo hull and a warship are all counted at the host's price
         // with no hull named here.
-        $exposure = $this->hourlyProduction($planet) * $this->absenceHours($profile->activity_band)
+        $exposure = $this->hourlyProduction($planet) * $this->absenceHours(app(SkillQuantile::class)->activityBand($profile))
             + $this->unitValue($planet->getShipUnits());
         if ($inbound) {
             $exposure += $this->metalEquivalent($planet->getResources());

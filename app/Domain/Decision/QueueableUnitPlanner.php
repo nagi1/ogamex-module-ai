@@ -2,13 +2,15 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Carbon\CarbonImmutable;
 use Modules\AI\Domain\Defense\AntiBallisticMissile;
 use Modules\AI\Domain\Doctrine\ArchetypeDoctrine;
-use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\ManagerDoctrine;
+use Modules\AI\Enums\AiThreatResponse;
 use Modules\AI\Enums\GamePhase;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Support\HostProduction;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ColonisationMission;
 use OGame\GameMissions\EspionageMission;
@@ -16,7 +18,6 @@ use OGame\GameObjects\Models\UnitObject;
 use OGame\GameObjects\Models\Units\UnitEntry;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
-use Carbon\CarbonImmutable;
 use OGame\Models\FleetMission;
 use OGame\Models\Message;
 use OGame\Models\Resources;
@@ -877,7 +878,7 @@ class QueueableUnitPlanner
             return null;
         }
 
-        $perUnit = (float) $planet->getObjectProduction($producer->machine_name, 1, true)->energy->get();
+        $perUnit = (float) HostProduction::at($planet, $producer->machine_name, 1)->energy->get();
         $affordable = ObjectService::getObjectMaxBuildAmount($producer->machine_name, $planet, true);
 
         // The units already in the yard are power the planet has paid for: a login that prices the same
@@ -1009,7 +1010,7 @@ class QueueableUnitPlanner
                 continue;
             }
 
-            $energy = (float) $planet->getObjectProduction($object->machine_name, 1, true)->energy->get();
+            $energy = (float) HostProduction::at($planet, $object->machine_name, 1)->energy->get();
             if ($energy <= 0.0) {
                 continue;
             }

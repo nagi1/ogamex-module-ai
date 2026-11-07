@@ -8,15 +8,22 @@ depth-one mental model of the account. The answer is the account's depth-one
 decision — cooperate when it models the counterparty as not exploiting its
 cooperation, defect when it models exploitation. Nothing here names a fleet,
 resource or promise, and the served process has no provider, embedding or Qt.
+
+``POST /social/partner`` (additive, batched) is the recursive partner model in
+``social_partner.py``; ``/evaluate`` and ``/health`` are unchanged.
 """
 
 import json
+import os
+from concurrent.futures import ProcessPoolExecutor
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import equalRow, makeTree, rewardKey, setToConstantMatrix
 from psychsim.world import World
+
+import social_partner
 
 NOT_DECIDED = 'none'
 COOPERATE = 'cooperate'
@@ -95,6 +102,9 @@ class Handler(BaseHTTPRequestHandler):
         self.respond(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.path == "/social/partner":
+            self.social_partner()
+            return
         if self.path != "/evaluate":
             self.respond(404, {"error": "not found"})
             return
@@ -104,6 +114,23 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(200, run(request))
         except (ValueError, json.JSONDecodeError, TypeError) as exc:
             self.respond(400, {"error": str(exc)})
+
+    def social_partner(self):
+        """Batch route: {"items": [...]} -> {"results": [...]}, items spread over worker processes."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            request = json.loads(self.rfile.read(length) or b"{}")
+            items = request.get("items") if isinstance(request, dict) else None
+            if not isinstance(items, list):
+                raise ValueError('body must be {"items": [...]}')
+        except (ValueError, json.JSONDecodeError, TypeError) as exc:
+            self.respond(400, {"error": str(exc)})
+            return
+        if len(items) > 1:
+            results = list(partner_pool().map(social_partner.answer, items))
+        else:
+            results = [social_partner.answer(item) for item in items]
+        self.respond(200, {"results": results})
 
     def respond(self, status, payload):
         body = json.dumps(payload).encode()
@@ -115,6 +142,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *_):
         pass
+
+
+_POOL = None
+
+
+def partner_pool():
+    """Worker processes for /social/partner batches (PSYCHSIM_WORKERS, default: every CPU)."""
+    global _POOL
+    if _POOL is None:
+        _POOL = ProcessPoolExecutor(max_workers=int(os.environ.get("PSYCHSIM_WORKERS", os.cpu_count() or 1)))
+    return _POOL
 
 
 if __name__ == "__main__":

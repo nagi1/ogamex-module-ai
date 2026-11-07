@@ -22,6 +22,7 @@ failing, the module uses `NativeLongTermMemory`.
 | Route | Body | Answer |
 | --- | --- | --- |
 | `POST /recall` | `{scopeId, query, limit, memories:[{id, text, tags}]}` | `{ranking:[{id, …numeric evidence}], considered, discarded, partiallyRetrieved}` |
+| `POST /social/recall` | `{items:[{scopeId, query, now, traits?, mood?, limit?, memories:[{id, text, tags, at, valence, arousal?, actor}]}]}` | `{results:[{ranking:[{id, actor, score, strength, stabilityDays, valence, flashbulb, regulated, gisted, …}], actors:{name:{grievance, gratitude, brokenPromises, keptPromises, remembered, forgotten, strongest}}, forgotten, partiallyRetrieved, consolidation}]}` (see `social-recall.mjs`) |
 | `GET /health` | — | `{status}` |
 
 **The driver stores nothing.** Each request carries the memories the module authorised for that

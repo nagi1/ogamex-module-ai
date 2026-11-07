@@ -17,6 +17,10 @@ pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 # Worlds stepped across every core: one process and one catalogue instead of one per actor (0.9 GB each, measured).
 rayon = { version = "1", optional = true }
 
+[dev-dependencies]
+# The season binary's allocator (examples/season.rs): measured faster than glibc's on its many small vectors.
+mimalloc = { version = "0.1", default-features = false }
+
 [features]
 default = []
 python = ["dep:pyo3", "dep:rayon"]
