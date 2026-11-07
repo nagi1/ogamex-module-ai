@@ -1,155 +1,76 @@
-# Nagi — AI module agent instructions
+# AI module: agent instructions
 
-The base contract for all work in `Modules/AI`, for every agent: the harness writer, DeepSeek agents,
-Copilot and the reviewer. Where an older file says otherwise, this file wins; where this file and
-`plan/HANDOFF.md` disagree on state or order, the handoff is newer.
+A new agent reads two files: this one and `plan/WORK-ORDER.md`. Nothing else is binding; `plan/archive/` is history.
 
-## Direction — 1 October 2026 (overrides any older phase or milestone instruction)
+## North star (frozen for 90 days from 7 Nov 2026)
 
-State of play, work order and owner actions: `plan/HANDOFF.md`. Read it before taking a row.
+> A human plays OGameX on a normal-speed server against 20 AI accounts and says at the end of the session: these are
+> real players, the best of them beat me, and I want to play again.
 
-The accounts did not play: no raids, one fleet save in a lifetime, no recyclers, no applications, no
-social exchanges (`plan/details/specs/play-coverage.md`). Until a cohort read shows every aspect of
-play moving, the work is making the existing engine play, not adding to it.
+Measured by humans only, on the play card (`plan/PLAY-CARD.md`). Every simulator number is an instrument, not the goal.
 
-- **Work order.** Take rows only from `python3 plan/tasks/task.py next` (P0 → P1 → P2, on the north-star
-  path). Every P3 row, the `WIK-*` corpus, `JEV-*`, the strategy-pipeline PHP rows and new cognition
-  work are **frozen** (`deferred`, reason in the row). Do not unfreeze one without the owner.
-- **North-star gate.** A code row's proof must name an `aspect:`, `situation:` or `invariant:` step
-  (or `harness:` for the loop itself); the ledger, the harness and the writer refuse anything else.
-  Before touching a row, say which aspect it moves and what an observer would see the account do.
-- **Behaviour before sources.** A slice starts from a step of the player's day and a situation that
-  proves it (`scripts/cohort-scenario.php`), never from a wiki page. New strategy is a YAML edit under
-  `resources/behavior/` that an existing planner reads; a new class needs a step no planner owns.
-- **Shrink before grow.** A class or data file nothing calls is deleted or wired before anything is
-  added beside it.
-- **Done means proven.** `task.py done CODE` runs the row's proof and refuses on a failure. A green
-  test alone is not done. Tools: `bash scripts/ogamex scorecard | situation NAME | economy PLAYER |
-  prove CODE | test-one Name`. The workflow is `.github/skills/ai-task-execute/SKILL.md`; follow it.
-- **Lanes.** The harness implements `impl` rows at P0–P2 that name a `file_ref`; rows with an empty
-  `file_ref` belong to the strong lane (the owner or the reviewer). Wiki ingestion runs only with
-  `HARNESS_INGEST=1`.
-- **Agents never share a file.** `task.py claim` locks the row and its files, the harness respects
-  those locks, tests queue on one lane through `scripts/ogamex`, and commits name their files
-  (`git add <files>`; never `-A`, `stash`, `reset`, `clean` or a force-push).
+## The ten rules (90 days, no changes; full text in `plan/CONSULTANT-GUIDE-2026-11-07.md` §3)
 
-## Owner direction — 6 October 2026 (adds to the Direction above; where it differs, this wins)
+1. **One north star.** Any change is written down and deferred to the quarterly review.
+2. **One brain, in PHP.** Behaviour lives in the module. The simulator keeps scripted players only as training opponents
+   and a regression check; no behaviour enters it before it exists in PHP. A feature written twice stops until its home
+   is decided.
+3. **Training and tuning frozen for 60 days.** No PPO, ES, evolution, knob sweeps or search-as-player. Served: economy
+   `best-es3-s10`; fleet errands fly on the scripted raider; social RL is cancelled. Reopens only when a play session
+   named a weakness and a 15-minute simulator test showed ≥ 10% headroom.
+4. **The arms die.** One reference-world file. Kept arms become the default and lose their flag; the rest are deleted.
+   Under 10 flags; persona numbers locked.
+5. **One page.** This file ≤ 80 lines, one work order ≤ 200 lines, one log (`plan/SPRINT-LOG.md`, one line per result
+   with date and commit hash). No new plan, research or handoff files.
+6. **The feedback loop is a human play session** with the five-question card. Questions 1 and 3 give the tells; the
+   tells list, ranked by frequency, is the only backlog.
+7. **Rules first.** Every new component is rules, judged by Rule 6. The economy model is the only learned component.
+8. **The judge rejects noise mechanically.** It prints `NOISE` and no number when the CI crosses zero or the effect is
+   below the MDE. ≥ 10 seeds; promotion seeds 11-60, quarantine 61-100 once. HDS is a smoke alarm: no drop over 0.05,
+   top and mid cells only.
+9. **One editor per file, nothing open overnight.** Lanes own disjoint files (table below). Everything is committed or
+   discarded at day end; a result without a commit hash does not exist.
+10. **No cheating, with a test.** Decisions use only what a real player can see. Every new decision path ships a test
+    that changing a rival's hidden state does not change the decision.
 
-The north star is one trained player that plays like a good professional human across the whole game, early, mid
-and late, and knows all of it: every object, ship, defence and technology, every mission (raid, spy, recycle, expedition,
-colonise, transport, deploy, missile, moon destruction), moons and the jump gate, battles and fleet saves, strategy,
-and the social side: alliances, diplomacy, trade, conversation.
+## The three gates (full statement: `plan/details/specs/cognition-gates.md`)
 
-- **Strategy source.** The strategies are the ones written down in the OGame wiki (ogame.fandom.com, all pages),
-  reached through the `WIK-*` corpus and its rows. A wiki strategy is YAML under `resources/behavior/` or
-  `resources/doctrine/` that an existing planner reads, never a new class (the behaviour-before-sources rule stays).
-  The `WIK-*` rows that name an `aspect:` are unfrozen for this; the rest stay frozen.
-- **Late game is first-class.** Late-game technique (astrophysics reach, nano and terraformer chains, moons, phalanx
-  and jump-gate play, deathstar-class fleets, debris and recycling, fleet saves under attack) and the social aspects
-  (alliance life, applications, aid, threats, chat) are judged by the same rule: what an observer sees the account do.
-- **Training follows the same star.** The model decides builds, research, yard orders (ships and defence) and the login
-  errand; a new choice kind is added behind the same seam (`app/Domain/Choice`), teacher-neutral, and each retrain is
-  followed by a closed-loop test and a long start-to-late-game run that reads which objects, missions, moons, battles
-  and alliances the account actually reached.
+- **Gate 1: no static, hardcoded AI.** Mods and modules add objects, so the object universe, kinds, prices and
+  requirements are read from the host (`ObjectService`, `app/GameObjects/`) at planning time. Adding an object to the
+  host makes it usable with no module edit. Code names no object; doctrine data under `resources/doctrine/` may (amended
+  3 Oct), an unknown object is skipped, and every manager keeps its derived rule as the fallback.
+- **Gate 2: relatively simple.** The smallest mechanism that closes the gap: one class, one loop, one sort key. No
+  single-implementation abstraction, no config for a constant, no optimisation without a measurement, no forwarding
+  layer. A slice deletes what it makes dead.
+- **Gate 3: what a good professional OGame player does.** Every mechanism is nameable as ordinary experienced play
+  (opening economy, prerequisites first, mining while short, a fleet save that can fail). Name it in the commit and test.
 
-## Learned economy policy (plan/rl)
+Gate 3 decides what the account does, Gate 1 how it is derived, Gate 2 how much machinery sits in between.
 
-Work on training data, the choice seam (`app/Domain/Choice`), `rl/` (Python) or the `ai:sim` RL options follows
-`.github/skills/ogame-rl-training/SKILL.md`. Its rules (host stays the referee, no object identity as a feature,
-seeded runs, teacher path untouched) are binding in addition to the gates below.
+## Lanes (sprint 7-10 Nov 2026; detail and daily tasks in `plan/WORK-ORDER.md` §1)
 
-## The three gates — non-negotiable
+| Lane | Owns (may edit) | Runs |
+| --- | --- | --- |
+| DOCS | `AGENTS.md`, `plan/**` | nothing |
+| SIM | `rl/ogsim/**`, `rl/ogrl/**`, `rl/scripts/**`, `storage/rl/**` | cargo, python; never pest |
+| PHP | `RaidPlanner`, `QueueableSpyPlanner`, `QueueableUnitPlanner`, `app/Domain/{Raid,Choice}/**`, `FleetSlots`, `resources/{behavior,doctrine}/**`, their tests, `config/rl.php` | pest via `bash scripts/ogamex test-one` (only lane) |
+| WORLD | `local-docker-dev/**`, `scripts/ogamex`, `scripts/*.sh`, `app/Console/Commands/**`, `database/seeders/**`, `plan/PLAY-CARD.md` | docker, artisan on `grand` |
+| ADVISOR | campaign consultation; conversation, reply and compose actions; `AdvanceAiAlliancePoliticsAction`; `config/{campaign-consultation,language,routing}.php`; `AiSettings`, `AiRuntimeSettings`, settings panel; `app/Domain/Advisor/**` | outside the lanes; no lane touches its files |
+| OWNER | host repo, merges, play sessions, decisions | everything |
 
-Every AI slice is checked against these before it is accepted. They are design constraints, not
-preferences. The full statement, including what each gate forbids and how a reviewer checks it, is in
-`plan/details/specs/cognition-gates.md`.
+Notes (owner additions, 7 Nov):
+- **The play universe runs every model:** economy, fleet, the scripted raider, the engine-driven social teacher, the
+  Empire UI, DeepSeek V4.1 Flash language (Flash only, Pro dropped) and the Jev classifier through its live API. All of
+  it through config only; defaults stay unchanged.
+- **ADVISOR** lets AI accounts optionally consult DeepSeek Flash in four areas: hard offence, diplomacy, conversation and
+  costly actions.
 
-- **Gate 1 — no static, hardcoded AI.** Mods, modules and future extensions add buildings, ships,
-  defence, technologies and premium officers, so the object universe, its kinds, prices and
-  requirements are read from the host at planning time and are never encoded as a source of truth in
-  module code or config. Adding an object to the host must make it usable by the existing module code
-  with no module edit. Module policy may express *taste* over host data; it must never be the reason a
-  capability is reachable or unreachable.
-  **Amended 3 Oct 2026 (owner, architecture diagnosis section 6):** doctrine *data* under
-  `resources/doctrine/` may name buildings, ships, defences and research (opening build orders, research
-  paths, fleet and defence templates), the way RTS AIs ship build lists. Code still names nothing, an
-  object a doctrine file does not know (or the host does not have) is skipped, and every manager keeps
-  its generic derived rule as the fallback, so a modded object stays reachable with no edit.
-- **Gate 2 — relatively simple, never over-engineered.** Take the smallest mechanism that closes the
-  gap: one class, one loop, one sort key. No abstraction with a single implementation, no config for a
-  value that never varies, no optimisation without a measurement, no layer that only forwards, and no
-  design that needs a paragraph to justify each of its parts. Delete what a slice makes dead. Enforced
-  by the standing gate in `plan/details/specs/overengineering-gate.md`, the Gate 2 reviewer agent, and
-  `bash scripts/ogamex gate`.
-- **Gate 3 — what a good professional OGame player does.** Fifteen years of ordinary play is the
-  reference behaviour, not an efficient game of our own: the opening economy and the facilities that
-  unlock the rest, prerequisites before the thing they unlock, the easiest unlock before the largest
-  one reachable, mining while short, and a fleet save that can also fail. Every mechanism must be
-  nameable as something an experienced player does; if it cannot be named, it is not ready.
+Working rules: one worktree per lane (`../ai-<lane>`, branch `sprint/<lane>`); no subagents; commit per deliverable with
+`git add <explicit files>`, never `-A`, stash, reset, clean or force-push; a file outside your lane is a need written in
+the day report, never an edit; end-of-day report ≤ 8 lines appended to `plan/SPRINT-LOG.md`.
 
-When they conflict: gate 3 decides what the account does, gate 1 decides how it is derived, and gate 2
+## Code and tests (unchanged house style)
 
-## Decision baseline
-
-Check these before any material design choice. A choice that fails one is not made.
-
-- **The goal** is accounts a human player cannot distinguish from other humans in ordinary play,
-  measured by what a player can observe — reaction latency to a probe or attack and whether a save ever
-  fails, the shape of the uptime across the day, the public hourly growth curve, the self-similarity of
-  the action sequence, and the breadth of social contact — never by message polish. Read
-  `plan/details/research/account-authenticity.md` and `plan/details/research/player-personas.md` before
-  designing anything behavioural.
-- **Deterministic play, scarce models.** Ordinary gameplay, event and memory processing, structured
-  case retrieval and AI-to-AI exchanges make zero generative calls; thousands of accounts must run on
-  rules. Authored dialogue comes before any optional language-model reply.
-- **The reference deployment** is a small VPS (2 vCPU, 2 GB RAM, no GPU) already running the app, the
-  queue workers, the database and Redis. Owner direction 16 Sep 2026: build the strongest account
-  first and optimise later; the profile is an optimisation target, not a gate (`plan/details/specs/budgets.md`).
-- **Memory** is adopted as mechanisms (decay from last access, weighted retrieval, write-time
-  importance from authored rules, citation pointers, validity windows, selective forgetting), never as
-  a product that pays for memory with generative calls (`plan/details/research/agent-memory-tooling.md`).
-
-## Code
-
-- Module-first: reuse OGameX extension points; never move AI policy, persistence or orchestration into
-  the host, and never restate a host rule the host already enforces.
-- Business logic lives in descriptive action classes. No forwarding-only methods or wrappers.
-- Resolve module actions, jobs, services, policies, drivers and domain payloads with `app()` or
-  `app()->makeWith()`, never `new`; bind defaults in `AIServiceProvider`. Laravel's anonymous migration
-  classes are the only exception.
-- Never write `else`, `else if` or `elseif`: early returns, lookup tables, strategies or `match`.
-- Small single-purpose methods, descriptive names, practical immutability, shallow control flow,
-  explicit failure handling. Enums for stable domain values.
-- No new dependency, abstraction or refactor without a demonstrated module need and, when material,
-  the owner's approval. Optimise only from a measurement.
-- Before changing a feature, read the comparable module and host code and the real schema; follow the
-  pattern there. Consult the official Filament v5 documentation before changing a Filament component.
-- Comments: one or two lines on *why* — a non-obvious invariant, a boundary, a trade-off, or why the
-  simpler-looking version is unsafe. Never narrate syntax; incident history goes in the commit message.
-
-## Tests and verification
-
-- Pest 5, native syntax, named datasets for repeated scenarios, Feature tests that drive the real
-  path (`tests/Unit` is not accepted). PAO and PCOV; never Xdebug. Mockery is prohibited; a narrow
-  container override is allowed only for an explicitly replaceable seam, named and justified.
-- Real OGameX models, services, database state, queues, locks and validation paths. Container work runs
-  only in `/home/nagi/code/ogamex-next/local-docker-dev`.
-- Every row: its own test and the tests naming the classes it touched (`bash scripts/ogamex test-one`),
-  `bash scripts/ogamex gate` clean, then its proof. Before a merge to `main`: the whole module suite
-  (`bash scripts/ogamex test`); Pint, module PHPStan, Rector dry-run and the 100% PCOV coverage pass
-  (`quality`, `coverage`) run when the owner asks for them.
-
-## Cognition drivers (frozen work; the rules still bind any change that touches them)
-
-- `plan/details/specs/phase-3-cognition.md` and `plan/details/research/phase-3-current-state.md` say
-  what shipped versus what was only proposed.
-- Never duplicate a capability a supported driver provides (FAtiMA/CiF, CBRKit, AgentOS, PsychSim): no
-  ported algorithm, no second implementation to compare against. Around a driver the module owns only
-  scope, attribution, permission, current-validity, validation, budgets, persistence, failure mapping
-  and wire translation; its proposals carry the weight ordinary module policy gives them.
-- The native engines (`NativeAffectEngine`, `NativeExperienceEngine`, `NativeSocialCognition`) stay the
-  default and the fallback. Drivers sit behind small module-owned contracts; no standalone framework,
-  generic planner or second player runtime.
-- Semantic retrieval, ML compression, Theory of Mind, strategic advice and deferred model batches need
-  their documented activation gates. Mem0 is rejected. Validate libraries and performance through
-  pinned real-adapter experiments, never claims.
+- Module-first: never move AI policy into the host or restate a host rule. Logic in descriptive action classes; resolve
+  with `app()`, never `new`. No `else`/`elseif`. Comments say why, in one or two lines.
+- Pest 5 Feature tests on real models and services; no Mockery, no `tests/Unit`. `bash scripts/ogamex gate` clean.
