@@ -269,6 +269,12 @@ class QueueableSpyPlanner
             if ($owner?->isAdmin() === true) {
                 continue;
             }
+            // The galaxy view marks an active owner under the host's newbie protection against our points (1:5 under
+            // 50,000, 1:10 up to 500,000, none above: PlayerService::protectsNewbie); a player does not spend probes on
+            // a body it may not attack.
+            if ($owner !== null && $owner->isNewbie($player)) {
+                continue;
+            }
             $origin = $this->closestOrigin($player, $idleOrigins, $planet, $fleetMissions, isset($rescout[$coordinateKey]));
             if ($origin === null) {
                 continue;
