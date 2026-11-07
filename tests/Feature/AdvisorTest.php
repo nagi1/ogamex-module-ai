@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Modules\AI\Actions\AdvanceAiAlliancePoliticsAction;
 use Modules\AI\Actions\BuildAiSettingsPanelAction;
+use Modules\AI\Actions\ConsultCampaignDecisionAction;
 use Modules\AI\Actions\RunAiConversationCycleAction;
 use Modules\AI\Ai\Agents\OgameMessageAgent;
 use Modules\AI\Domain\Advisor\Advisor;
@@ -12,8 +13,13 @@ use Modules\AI\Domain\Advisor\AdvisorAgent;
 use Modules\AI\Domain\Advisor\AdvisorArea;
 use Modules\AI\Domain\Advisor\AdvisorQuestion;
 use Modules\AI\Domain\Advisor\AdvisorReceipt;
+use Modules\AI\Domain\Decision\CandidateAction;
+use Modules\AI\Domain\Decision\DecisionTrace;
+use Modules\AI\Domain\Decision\ScoredCandidate;
+use Modules\AI\Domain\Perception\PerceptionSnapshot;
 use Modules\AI\Enums\AiAllianceStance;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
@@ -274,3 +280,81 @@ function hideOtherSideState(int $otherId, int $selfId): void
     ]));
     Message::unguarded(fn () => Message::create(['user_id' => $otherId, 'key' => 'espionage_report', 'espionage_report_id' => $report->id, 'subject' => '', 'body' => '']));
 }
+
+// Area 1: a defended target among the session's raid candidates. The advisor picks a target or holds.
+
+function offenseReport(int $selfId, int $ownerId, array $ships, int $position): int
+{
+    $report = EspionageReport::unguarded(fn (): EspionageReport => EspionageReport::create([
+        'planet_galaxy' => 1, 'planet_system' => 2, 'planet_position' => $position, 'planet_user_id' => $ownerId, 'planet_type' => 1,
+        'resources' => ['metal' => 50_000, 'crystal' => 20_000, 'deuterium' => 0], 'debris' => [], 'buildings' => [], 'research' => [],
+        'ships' => $ships, 'defense' => [], 'player_info' => [],
+    ]));
+    Message::unguarded(fn () => Message::create(['user_id' => $selfId, 'key' => 'espionage_report', 'espionage_report_id' => $report->id, 'subject' => '', 'body' => '']));
+
+    return (int) $report->id;
+}
+
+function offenseCandidate(AiCandidateActionType $type, float $score, array $parameters = []): ScoredCandidate
+{
+    return new ScoredCandidate(new CandidateAction($type, 'fixture', $parameters, ['resource_need' => 0.0, 'safety' => 0.0, 'target_confidence' => 0.0, 'travel_cost' => 0.0, 'recovery' => 0.0], []), $score, []);
+}
+
+function offenseTrace(int $playerId, array $scored): DecisionTrace
+{
+    return new DecisionTrace(app()->makeWith(PerceptionSnapshot::class, [
+        'playerId' => $playerId, 'observedAt' => CarbonImmutable::instance(now()), 'planets' => [], 'targetReports' => [], 'availableActions' => [],
+        'fleetsaveEligible' => false, 'recoveryFactor' => 0.0, 'sourceTimestamps' => [], 'inboundFleets' => [],
+    ]), $scored, $scored[0], [], 'offense-fixture');
+}
+
+function offenseDecision(int $playerId, int $targetId, array $ships): DecisionTrace
+{
+    $raid = offenseCandidate(AiCandidateActionType::Raid, 9.0, ['report_id' => offenseReport($playerId, $targetId, $ships, 8)]);
+
+    return app(ConsultCampaignDecisionAction::class)->handle(advisorProfile($playerId), offenseTrace($playerId, [$raid, offenseCandidate(AiCandidateActionType::Build, 5.0)]), 'offense');
+}
+
+test('offense advice can hold back from a defended target; observe and off keep the raid', function (string $mode, AiCandidateActionType $selected, int $receipts): void {
+    advisorMode(AdvisorArea::Offense, $mode);
+    $target = $this->createUser();
+    AdvisorAgent::fake([advisorAnswer('hold')]);
+
+    expect(offenseDecision($this->currentUserId, $target->id, ['light_fighter' => 40])->selected->candidate->type)->toBe($selected)
+        ->and(AdvisorReceipt::query()->count())->toBe($receipts);
+})->with([
+    'advice' => ['advice', AiCandidateActionType::Build, 1],
+    'observe' => ['observe', AiCandidateActionType::Raid, 1],
+    'off' => ['off', AiCandidateActionType::Raid, 0],
+]);
+
+test('an undefended farm is no big moment and is not consulted', function (): void {
+    advisorMode(AdvisorArea::Offense, 'advice');
+    $target = $this->createUser();
+    AdvisorAgent::fake()->preventStrayPrompts();
+
+    expect(offenseDecision($this->currentUserId, $target->id, [])->selected->candidate->type)->toBe(AiCandidateActionType::Raid);
+    AdvisorAgent::assertNeverPrompted();
+});
+
+test('the offense brief is byte-identical when only the target\'s hidden state changes', function (): void {
+    advisorMode(AdvisorArea::Offense, 'observe');
+    $target = $this->createUser();
+    $briefs = [];
+    AdvisorAgent::fake(function ($prompt) use (&$briefs): array {
+        $briefs[] = $prompt;
+
+        return advisorAnswer('hold');
+    });
+    $raid = offenseCandidate(AiCandidateActionType::Raid, 9.0, ['report_id' => offenseReport($this->currentUserId, $target->id, ['cruiser' => 10], 8)]);
+    $trace = offenseTrace($this->currentUserId, [$raid, offenseCandidate(AiCandidateActionType::Build, 5.0)]);
+    $profile = advisorProfile($this->currentUserId);
+
+    app(ConsultCampaignDecisionAction::class)->handle($profile, $trace, 'offense');
+    Cache::flush();
+    hideOtherSideState($target->id, $this->currentUserId);
+    app(ConsultCampaignDecisionAction::class)->handle($profile, $trace, 'offense');
+
+    expect($briefs)->toHaveCount(2)
+        ->and($briefs[1])->toBe($briefs[0]);
+});

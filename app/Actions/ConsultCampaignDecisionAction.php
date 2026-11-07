@@ -2,11 +2,16 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Domain\Advisor\Advisor;
+use Modules\AI\Domain\Advisor\AdvisorArea;
+use Modules\AI\Domain\Advisor\AdvisorFacts;
+use Modules\AI\Domain\Advisor\AdvisorQuestion;
 use Modules\AI\Domain\CampaignConsultation\CampaignConsultationEvidence;
 use Modules\AI\Domain\Decision\DecisionTrace;
 use Modules\AI\Domain\Decision\UtilityScorer;
 use Modules\AI\Enums\AiCampaignConsultationStatus;
 use Modules\AI\Enums\AiCampaignState;
+use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiStopReason;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationSignal;
@@ -15,6 +20,8 @@ use Modules\AI\Models\AiRelationship;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\AiRuntimeSettings;
 use Modules\AI\Support\PsychSimTheoryOfMind;
+use OGame\Models\EspionageReport;
+use OGame\Models\Message;
 
 /**
  * Consumes one open campaign-consultation signal against the decision a session just made.
@@ -40,6 +47,8 @@ class ConsultCampaignDecisionAction
 
     public function handle(AiProfile $profile, DecisionTrace $trace, string $decisionKey): DecisionTrace
     {
+        $trace = $this->adviseOffense($trace);
+
         $campaign = AiCampaign::query()
             ->where('state', AiCampaignState::Active)
             ->oldest('id')
@@ -123,5 +132,100 @@ class ConsultCampaignDecisionAction
             'collectedAt' => $this->clock->now(),
             'authorized' => true,
         ])];
+    }
+
+    /**
+     * Area 1 of the advisor (offense, off by default): when the session's raid candidates include a defended target
+     * (its own last spy report saw ships or defence), the advisor may pick which target to hit, or to hold and take
+     * the best other move. The options are exactly the candidates the planners already made legal, each with what
+     * the account's own report showed and its age; the rule's pick is the native selection. Any failure keeps it.
+     */
+    private function adviseOffense(DecisionTrace $trace): DecisionTrace
+    {
+        $advisor = app(Advisor::class);
+        if (!$advisor->enabled(AdvisorArea::Offense)) {
+            return $trace;
+        }
+
+        $playerId = $trace->perception->playerId;
+        $raids = [];
+        $hold = null;
+        foreach ($trace->candidates as $scored) {
+            $reportId = (int) ($scored->candidate->parameters['report_id'] ?? 0);
+            if ($scored->candidate->type === AiCandidateActionType::Raid && $reportId > 0) {
+                $raids['raid:' . $reportId] ??= $scored;
+            } elseif ($hold === null || $scored->score > $hold->score) {
+                $hold = $scored;
+            }
+        }
+
+        $reports = EspionageReport::query()
+            ->whereIn('id', array_map(static fn (string $id): int => (int) substr($id, 5), array_keys($raids)))
+            ->whereIn('id', Message::query()->where('user_id', $playerId)->whereNotNull('espionage_report_id')->select('espionage_report_id'))
+            ->get()->keyBy('id');
+        $options = [];
+        $defended = false;
+        $targets = [];
+        foreach ($raids as $id => $scored) {
+            $report = $reports->get((int) substr($id, 5));
+            if ($report === null) {
+                continue;
+            }
+
+            $ships = (int) array_sum(array_map('intval', (array) $report->ships));
+            $defense = (int) array_sum(array_map('intval', (array) $report->defense));
+            $defended = $defended || $ships + $defense > 0;
+            $targets[(int) $report->planet_user_id] = true;
+            $options[] = ['id' => $id, 'summary' => 'attack the planet at ' . $report->planet_galaxy . ':' . $report->planet_system . ':' . $report->planet_position, 'forecast' => [
+                'my_report_age_hours' => intdiv(max(0, now()->getTimestamp() - (int) $report->created_at?->getTimestamp()), 3600),
+                'resources_seen' => (int) array_sum(array_map('intval', array_intersect_key((array) $report->resources, array_flip(['metal', 'crystal', 'deuterium'])))),
+                'ships_seen' => $ships,
+                'defense_seen' => $defense,
+                'native_score' => round($scored->score, 1),
+            ]];
+        }
+
+        if (!$defended) {
+            return $trace;
+        }
+
+        if ($hold !== null) {
+            $options[] = ['id' => 'hold', 'summary' => 'attack nothing now: ' . strtolower($hold->candidate->type->name), 'forecast' => ['native_score' => round($hold->score, 1)]];
+        }
+
+        $selected = $trace->selected->candidate;
+        $rule = $selected->type === AiCandidateActionType::Raid ? 'raid:' . (int) ($selected->parameters['report_id'] ?? 0) : 'hold';
+        $facts = app(AdvisorFacts::class);
+        $battles = [];
+        foreach (array_keys($targets) as $owner) {
+            foreach ($facts->reports($playerId, $owner) as $item) {
+                if ($item['kind'] === 'own_battle_report') {
+                    $battles[] = $item;
+                }
+            }
+        }
+
+        $verdict = $advisor->consult(new AdvisorQuestion(
+            AdvisorArea::Offense,
+            $playerId,
+            'hard_target',
+            $options,
+            $rule,
+            ['me' => $facts->standing($playerId), 'targets' => array_map(fn (int $owner): array => ['player' => $owner] + $facts->standing($owner), array_keys($targets))],
+            $battles,
+        ));
+
+        $chosen = $verdict->choice === 'hold' ? $hold : ($raids[$verdict->choice] ?? null);
+        if ($chosen === null || $verdict->choice === $rule) {
+            return $trace;
+        }
+
+        return app()->makeWith(DecisionTrace::class, [
+            'perception' => $trace->perception,
+            'candidates' => $trace->candidates,
+            'selected' => $chosen,
+            'rejections' => $trace->rejections,
+            'inputHash' => $trace->inputHash,
+        ]);
     }
 }
