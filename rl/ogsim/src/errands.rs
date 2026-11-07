@@ -304,7 +304,11 @@ pub fn candidates_in(w: &mut World, cat: &Catalogue, a: usize, menu: &Menu) -> V
             for &target in &targets {
                 let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < players::REPORT_HOURS * 3600.0);
                 let hostile = !w.alliances_distinct || !w.spares(a, target, now);
-                if raids && hostile && !fresh && on_shelf(w, a, kit.probe) >= 1 { out.push(Errand::at(Kind::Spy, target)) }
+                // Arm `rescout`: a fresh redacted report is re-read once the whole next volley is home and none is out.
+                let rescout = raids && fresh && w.rescout && players::rescout_due(w, a, target)
+                    && on_shelf(w, a, kit.probe) >= players::spy_volley(w, a, target)
+                    && !w.fleets.iter().any(|f| f.owner == a && f.target == target && f.mission == Mission::Espionage);
+                if raids && hostile && (!fresh || rescout) && on_shelf(w, a, kit.probe) >= 1 { out.push(Errand::at(Kind::Spy, target)) }
                 if raids && hostile && fresh && raid_plan(w, cat, a, target, kit).is_some() { out.push(Errand::at(Kind::Raid, target)) }
                 if harvest_plan(w, cat, a, target).is_some() { out.push(Errand::at(Kind::Recycle, target)) }
             }

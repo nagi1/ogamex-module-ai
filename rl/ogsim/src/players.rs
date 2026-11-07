@@ -81,6 +81,21 @@ pub struct Ledger {
     pub raid_gates: [usize; 8],
     /// Of `raid_gates[2]` (no plan): the report lacks ships or defence (too few probes); too strong for the shelf; fuel.
     pub no_plan: [usize; 3],
+    /// Arm `guess`: raids looked at on a redacted report, of them planned on the estimate, launched; and the launched
+    /// ones' outcomes (won, draw, beaten) with their loot and loss (metal equivalent).
+    pub guess_gates: [usize; 3],
+    /// Diagnostic: espionage arrivals that met counter-espionage (a fight; every ledger reads the shared log, so the
+    /// season sum counts each once per ledger); scout looks with no idle probe while probes sit in the yard queue, or
+    /// none is queued (all out flying, or none ordered).
+    pub probe_diag: [usize; 3],
+    pub guess_outcomes: [usize; 3],
+    pub guess_value: [f64; 2],
+    guessed: HashSet<(usize, usize, u64)>,
+    /// Of `raid_gates[1]`: report past the intel window, inside the raid cooldown, beaten there before.
+    pub stale_split: [usize; 3],
+    /// `Raider::spy` under `raids` per target reached: fresh intel, probe out, no probe on the shelf, a volley short of
+    /// the wanted count, a full volley, a re-scout of a redacted report.
+    pub spy_gates: [usize; 6],
     /// Why an ally said no (diagnostic): leader's report stale or gone, lands after the leader, cannot fuel, strength test.
     pub war_accept_refused: [usize; 4],
     /// Why an outmatched leader asked nobody (diagnostic): cannot fuel the strike, no mate in the alliance to ask.
@@ -127,6 +142,11 @@ impl Ledger {
                     self.lost += e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>()
                         + e.target_lost.iter().map(|&(id, n)| price(e.target, id) * n as f64).sum::<f64>();
                     if e.outcome == Outcome::Defeated { self.beaten.insert((e.owner, e.target)); }
+                    if self.guessed.remove(&(e.owner, e.target, e.time.to_bits())) {
+                        self.guess_outcomes[match e.outcome { Outcome::Won => 0, Outcome::Defeated => 2, _ => 1 }] += 1;
+                        self.guess_value[0] += weighted(e.gained);
+                        self.guess_value[1] += e.ships_lost.iter().map(|&(id, n)| price(e.owner, id) * n as f64).sum::<f64>();
+                    }
                     let research = w.research(cat, e.target);
                     let stood = e.present.iter().any(|&(id, _)| movable(&w.rules[e.target], id, &research));
                     if let Some(r) = self.raids.iter_mut().find(|r| r.attacker == e.owner && r.target == e.target && r.arrive == e.time) {
@@ -134,6 +154,7 @@ impl Ledger {
                         r.saved = !stood;
                     }
                 }
+                (EventKind::Fight, Mission::Espionage) => self.probe_diag[0] += 1,
                 (EventKind::Arrival, Mission::Recycle) => {
                     for i in 0..3 { self.recycled[i] += e.gained[i] }
                 }
@@ -255,6 +276,10 @@ pub(crate) fn owned(w: &World, a: usize, id: u32) -> i64 {
     let queued: u64 = w.yards[a].orders.iter().filter(|o| o.unit == u).map(|o| o.amount - o.done).sum();
     let flying: i64 = w.fleets.iter().filter(|f| f.owner == a).flat_map(|f| f.ships.iter()).filter(|s| s.0 == id).map(|s| s.1).sum();
     (w.yards[a].counts[u] + queued) as i64 + flying
+}
+
+fn flying(w: &World, a: usize, id: u32) -> i64 {
+    w.fleets.iter().filter(|f| f.owner == a).flat_map(|f| f.ships.iter()).filter(|s| s.0 == id).map(|s| s.1).sum()
 }
 
 pub(crate) fn on_shelf(w: &World, a: usize, id: u32) -> i64 {
@@ -395,21 +420,50 @@ fn raid_plan_shelf_short(w: &World, cat: &Catalogue, a: usize, target: usize, ki
 /// stock gets `VOLLEY_PROBES` doubled per redacted report in a row (at most `VOLLEY_DOUBLINGS` times), since the host
 /// hides ships below 2 and defence below 3 probes plus the square of the espionage gap (EspionageMission).
 pub(crate) fn spy_volley(w: &World, a: usize, target: usize) -> i64 {
-    let floor = if w.planets_of(w.account_of(a)).len() < 2 { 1 } else { VOLLEY_PROBES };
+    let floor = volley_floor(w, a);
     let Some(report) = last_report(w, a, target) else { return floor };
     let complete = |r: &SpyReport| r.ships.is_some() && r.defence.is_some();
     if complete(report) { return floor }
     let shows = |section: &Option<Vec<u64>>| section.as_ref().is_some_and(|v| v.iter().any(|&n| n > 0));
     let defended = shows(&report.ships) || shows(&report.defence);
     if !defended && weighted(report.resources.map(|r| r.max(0) as f64)) < RICH_YIELD { return floor }
+    let redacted = redacted_streak(w, a, target, VOLLEY_DOUBLINGS + 1);
+    if w.rescout { return rescout_volley(floor, redacted) }
+    floor.max(VOLLEY_PROBES * 2_i64.pow(redacted.max(1) as u32 - 1))
+}
+
+/// Arm `rescout`: the volley after `redacted` redacted reports in a row. The last one was read by at least the floor's
+/// volley, so the next doubles from there too, up to `VOLLEY_PROBES` doubled `VOLLEY_DOUBLINGS` times.
+fn rescout_volley(floor: i64, redacted: usize) -> i64 {
+    if redacted == 0 { return floor }
+    (VOLLEY_PROBES << (redacted - 1)).max(floor << redacted).min(VOLLEY_PROBES << VOLLEY_DOUBLINGS)
+}
+
+/// The account's own reports on the target that came back redacted, newest first and in a row, counted up to `cap`.
+fn redacted_streak(w: &World, a: usize, target: usize, cap: usize) -> usize {
     let mine: Vec<&SpyReport> = w.reports_of(a).filter(|r| r.target == target).collect();
-    let redacted = mine.iter().rev().take(VOLLEY_DOUBLINGS + 1).take_while(|r| !complete(r)).count() as u32;
-    floor.max(VOLLEY_PROBES * 2_i64.pow(redacted.max(1) - 1))
+    mine.iter().rev().take(cap).take_while(|r| r.ships.is_none() || r.defence.is_none()).count()
+}
+
+/// Arm `rescout`: the last report is redacted, the body is worth a volley (`spy_volley` escalates on it) and the next
+/// volley is larger than the one that read it; once the largest has come back redacted too, the espionage gap is too
+/// wide for probes and the intel window decides.
+pub(crate) fn rescout_due(w: &World, a: usize, target: usize) -> bool {
+    let floor = volley_floor(w, a);
+    let redacted = redacted_streak(w, a, target, VOLLEY_DOUBLINGS + 2);
+    spy_volley(w, a, target) > floor && rescout_volley(floor, redacted) > rescout_volley(floor, redacted - 1)
+}
+
+/// One probe in the opening (no settled colony yet), `VOLLEY_PROBES` after (QueueableSpyPlanner::probeCount's floor).
+fn volley_floor(w: &World, a: usize) -> i64 {
+    if w.planets_of(w.account_of(a)).len() < 2 { 1 } else { VOLLEY_PROBES }
 }
 
 /// QueueableSpyPlanner's escalated volley, its doublings and the yield that makes a redacted report worth one.
 pub(crate) const VOLLEY_PROBES: i64 = 5;
 const VOLLEY_DOUBLINGS: usize = 3;
+/// QueueableUnitPlanner::PROBE_STOCK: the idle probes each planet keeps past the opening, flying ones not counted.
+const PROBE_STOCK: i64 = 15;
 const RICH_YIELD: f64 = 10_000.0;
 const RAID_CANDIDATES: usize = 20;
 /// RaidPlanner::lossTolerance for the raider archetype: the share of the loot it risks on the fight's tail.
@@ -421,13 +475,17 @@ const RAIDER_LOSS_TOLERANCE: f64 = 0.5;
 /// plus the raider's loss tolerance, or the stock cannot fuel it. The fleet is what the economy built, not a fixed count.
 pub(crate) fn module_plan(w: &World, cat: &Catalogue, a: usize, target: usize, kit: Kit) -> Option<RaidPlan> {
     let report = last_report(w, a, target)?;
-    let (Some(ships), Some(defence)) = (&report.ships, &report.defence) else { return None };
     let rules = &w.rules[a];
     let trules = &w.rules[target];
     let research = w.research(cat, a);
     let observed_research = report_research(cat, report, &research);
-    let mut mix = stack(trules, ships);
-    mix.extend(stack(trules, defence));
+    let (ships, defence) = match (&report.ships, &report.defence) {
+        (Some(ships), Some(defence)) => (ships.clone(), defence.clone()),
+        _ if w.guess => guessed_sections(w, a, target, report, &observed_research)?,
+        _ => return None,
+    };
+    let mut mix = stack(trules, &ships);
+    mix.extend(stack(trules, &defence));
     mix.retain(|&(id, _)| trules.combat.fights(id));
     let stock = report.resources.map(|r| r.max(0) as f64);
     let loot = stock.map(|r| r * rules.combat.rules.loot_percentage / 100.0);
@@ -464,6 +522,43 @@ pub(crate) fn module_plan(w: &World, cat: &Catalogue, a: usize, target: usize, k
     let fuel = fleet::consumption(&rules.settings, &rules.fleet, &fleet, &research, distance, 0, 10.0) as f64;
     if fuel > w.games[a].planet.res[2] || rules.combat.fuel_capacity(&fleet.iter().copied().collect(), &research) < fuel as i64 { return None }
     Some(RaidPlan { fleet, expected, attack, hull })
+}
+
+/// Arm `guess`: a redacted report's missing sections, filled with the worst case a player can read (ReportedPlanet::
+/// estimated): every public military point (the highscore's, the account's ships and defence at full price, civil ships
+/// at half) the visible sections do not explain stands on this body, in the mix the account's own last report that read
+/// the section saw here, or else as the cheapest unit of the missing kind that fights with a real weapon. The forecast
+/// fight and the profit gate then decide on that picture, as on a full report.
+/// ponytail: the highscore is read live; the host refreshes it on a schedule.
+pub(crate) fn guessed_sections(w: &World, a: usize, target: usize, report: &SpyReport, observed: &crate::Levels) -> Option<(Vec<u64>, Vec<u64>)> {
+    let rules = &w.rules[target];
+    let units = &rules.units;
+    let points = |counts: &[u64]| -> f64 {
+        counts.iter().enumerate().map(|(u, &n)| {
+            let price = units.units[u].price.iter().sum::<f64>() * n as f64;
+            if units.kind[u] == UnitKind::CivilShip { price * 0.5 } else { price }
+        }).sum()
+    };
+    let shown: f64 = [&report.ships, &report.defence].into_iter().flatten().map(|v| points(v)).sum();
+    let hidden = (crate::score::of(w, w.account_of(target)).military as f64 * 1000.0 - shown).max(0.0);
+    let mine: Vec<&SpyReport> = w.reports_of(a).filter(|r| r.target == target).collect();
+    let older = |pick: fn(&SpyReport) -> &Option<Vec<u64>>| mine.iter().rev().find_map(|r| pick(r).clone());
+    let blank = vec![0u64; units.units.len()];
+    let mut template = (
+        if report.ships.is_none() { older(|r| &r.ships).unwrap_or_else(|| blank.clone()) } else { blank.clone() },
+        if report.defence.is_none() { older(|r| &r.defence).unwrap_or_else(|| blank.clone()) } else { blank.clone() },
+    );
+    if points(&template.0) + points(&template.1) <= 0.0 {
+        let defence_missing = report.defence.is_none();
+        let kind = if defence_missing { UnitKind::Defence } else { UnitKind::MilitaryShip };
+        let cheapest = (0..units.units.len())
+            .filter(|&u| units.kind[u] == kind && rules.combat.fights(units.units[u].id as u32) && rules.combat.attack(units.units[u].id as u32, observed) > 1)
+            .min_by(|&x, &y| units.units[x].price.iter().sum::<f64>().total_cmp(&units.units[y].price.iter().sum::<f64>()))?;
+        if defence_missing { template.1[cheapest] = 1 } else { template.0[cheapest] = 1 }
+    }
+    let scale = hidden / (points(&template.0) + points(&template.1));
+    let fill = |seen: &Option<Vec<u64>>, guess: &[u64]| seen.clone().unwrap_or_else(|| guess.iter().map(|&n| (n as f64 * scale).ceil() as u64).collect());
+    Some((fill(&report.ships, &template.0), fill(&report.defence, &template.1)))
 }
 
 /// What a raid holds against the target's last report, at host prices: the attacker's own fleet over the value of every
@@ -1128,8 +1223,12 @@ impl Miner {
 
     fn order_ships(&self, w: &mut World, cat: &Catalogue, a: usize, pick: Option<usize>) {
         let keep = saving(w, cat, a, pick);
+        // Arm `raids`: probes are ordered from what the planet holds, not after the building being saved for
+        // (QueueableUnitPlanner::queueable asks only whether the yard can pay): a late account saving for a building
+        // dearer than its stock held no probe for months and its scouting stopped.
+        let probe = Kit::of(w, cat, a).filter(|_| w.raids).and_then(|kit| w.rules[a].units.index(kit.probe as i64));
         for (u, amount) in self.order_plans(w, cat, a) {
-            let amount = within(w, a, u, amount as u64, keep);
+            let amount = within(w, a, u, amount as u64, if Some(u) == probe { [0.0; 3] } else { keep });
             if amount > 0 { w.order_units(cat, a, u, amount); }
         }
     }
@@ -1149,7 +1248,7 @@ impl Miner {
         let (trips, slots) = if self.expeditions { expedition_cargo(w, cat, a, self.doubler).map_or((0, 0), |(n, slots)| (n * slots as i64, slots as i64)) } else { (0, 0) };
         let cargo = (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo + trips;
         let doubler = doubler_of(w, a, self.doubler).map_or((kit.probe, 0), |id| (id, slots));
-        for (id, want) in [(kit.probe, self.probes), (kit.cargo, cargo), (kit.harvester, self.harvesters), (kit.fighter, self.fighters), doubler] {
+        for (id, want) in [(kit.probe, self.probe_stock(w, a)), (kit.cargo, cargo), (kit.harvester, self.harvesters), (kit.fighter, self.fighters), doubler] {
             let at = kept.entry(id).or_insert(0);
             *at = at.saturating_add(want.max(0));
         }
@@ -1177,6 +1276,15 @@ impl Miner {
             .collect()
     }
 
+    /// The probes the yard keeps. Arm `raids`: QueueableUnitPlanner's stock, one in the opening and `PROBE_STOCK` after,
+    /// counted idle (`order_plans` leaves the flying ones out), whatever the persona's own count.
+    fn probe_stock(&self, w: &World, a: usize) -> i64 {
+        match w.raids {
+            true => if volley_floor(w, a) == 1 { 1 } else { PROBE_STOCK },
+            false => self.probes,
+        }
+    }
+
     /// The ships this rule wants at this login that the account does not have, as (catalogue index, amount): what the
     /// yard is told to build. Shared with the errand choice, whose `order` candidate is this rule's answer.
     pub(crate) fn order_plans(&self, w: &World, cat: &Catalogue, a: usize) -> Vec<(usize, i64)> {
@@ -1187,7 +1295,7 @@ impl Miner {
         let stock: f64 = w.games[a].planet.res.iter().sum();
         let (trips, slots) = if self.expeditions { expedition_cargo(w, cat, a, self.doubler).map_or((0, 0), |(n, slots)| (n * slots as i64, slots as i64)) } else { (0, 0) };
         let doubler = doubler_of(w, a, self.doubler).map_or((kit.probe, 0), |id| (id, slots));
-        let wants = [(kit.probe, self.probes), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo + trips), (kit.harvester, self.harvesters), (kit.fighter, self.fighters), doubler];
+        let wants = [(kit.probe, self.probe_stock(w, a)), (kit.cargo, (stock * self.cargo_share / hold as f64).ceil() as i64 + self.colony_cargo + trips), (kit.harvester, self.harvesters), (kit.fighter, self.fighters), doubler];
         // A player takes a new planet as soon as the host allows it: one colony ship, whose id the catalogue gives, paid
         // before the other ships (ordered last, the cargo and expedition ships spent its price at most logins it was due).
         let mut plans: Vec<(usize, i64)> = Vec::new();
@@ -1197,7 +1305,9 @@ impl Miner {
             }
         }
         plans.extend(wants.into_iter().filter_map(|(id, want)| {
-            let missing = want - owned(w, a, id);
+            // Arm `raids`: the probe stock is the idle one (QueueableUnitPlanner: shelf plus yard), so a volley in
+            // flight is replaced and the scout keeps reading while it is out.
+            let missing = want - if w.raids && id == kit.probe { owned(w, a, id) - flying(w, a, id) } else { owned(w, a, id) };
             let u = rules.units.index(id as i64)?;
             (missing > 0).then_some((u, missing))
         }));
@@ -2143,14 +2253,23 @@ impl Raider {
         if w.raids {
             // The module's scout: any report inside the intel window skips the target (QueueableSpyPlanner's fresh intel),
             // a probe still out does too; the next volley is `spy_volley`'s, and the yard keeps the probes it asks for.
-            if fresh || previous.is_some_and(|(t, _)| now - t < 2.0 * 3600.0) { return }
+            // Arm `rescout`: a redacted report the next volley can still read through is not settled intel.
+            let rescout = fresh && w.rescout && rescout_due(w, a, target);
+            if fresh && !rescout { ledger.spy_gates[0] += 1; return }
+            if previous.is_some_and(|(t, _)| now - t < 2.0 * 3600.0) { ledger.spy_gates[1] += 1; return }
             let wanted = spy_volley(w, a, target);
-            self.miner.probes = self.miner.probes.max(wanted);
-            let probes = on_shelf(w, a, kit.probe).min(wanted);
-            if probes < 1 { return }
+            let held = on_shelf(w, a, kit.probe);
+            // A re-scout waits for the whole volley: a short one is read redacted again (QueueableSpyPlanner).
+            if held < 1 || (rescout && held < wanted) {
+                ledger.spy_gates[2] += 1;
+                if held < 1 { ledger.probe_diag[if owned(w, a, kit.probe) > flying(w, a, kit.probe) { 1 } else { 2 }] += 1 }
+                return;
+            }
+            let probes = held.min(wanted);
             if send(w, cat, a, target, Mission::Espionage, &[(kit.probe, probes)], 10.0, ledger).is_ok() {
                 self.spied.insert(target, (now, probes));
                 ledger.spies += 1;
+                ledger.spy_gates[if rescout { 5 } else if probes < wanted { 3 } else { 4 }] += 1;
             }
             return;
         }
@@ -2188,7 +2307,15 @@ impl Raider {
     fn raid(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, kit: Kit, ledger: &mut Ledger) -> bool {
         let now = w.games[a].t;
         let Some(report) = last_report(w, a, target) else { ledger.raid_gates[0] += 1; return false };
-        if now - report.time > REPORT_HOURS * 3600.0 || self.hit.get(&target).is_some_and(|&t| now - t < w.tn(a).raid_cooldown_hours * 3600.0) || ledger.beaten.contains(&(a, target)) { ledger.raid_gates[1] += 1; return false }
+        let stale = now - report.time > REPORT_HOURS * 3600.0;
+        let cooling = self.hit.get(&target).is_some_and(|&t| now - t < w.tn(a).raid_cooldown_hours * 3600.0);
+        if stale || cooling || ledger.beaten.contains(&(a, target)) {
+            ledger.raid_gates[1] += 1;
+            ledger.stale_split[if stale { 0 } else if cooling { 1 } else { 2 }] += 1;
+            return false;
+        }
+        let redacted = report.ships.is_none() || report.defence.is_none();
+        if redacted && w.guess { ledger.guess_gates[0] += 1 }
         let Some(plan) = raid_plan(w, cat, a, target, kit).or_else(|| if w.war_fleet { war_plan(w, cat, a, target, kit, 10.0) } else { None }) else {
             ledger.raid_gates[2] += 1;
             let partial = last_report(w, a, target).is_some_and(|r| r.ships.is_none() || r.defence.is_none());
@@ -2198,6 +2325,7 @@ impl Raider {
             if defended_loot(w, cat, a, target) { self.strike(w, cat, a, target, ledger) }
             return false;
         };
+        if redacted { ledger.guess_gates[1] += 1 }
         let rules = Arc::clone(&w.rules[a]);
         let research = w.research(cat, a);
         let fuel = fleet::consumption(&rules.settings, &rules.fleet, &plan.fleet, &research, account_distance(w, a, target), 0, 10.0) as f64;
@@ -2212,6 +2340,10 @@ impl Raider {
         let had_fleet = stack(&w.rules[target], &w.yards[target].counts).iter().any(|&(id, _)| movable(&w.rules[target], id, &w.research(cat, target)));
         let Ok(arrive) = send(w, cat, a, target, Mission::Attack, &plan.fleet, 10.0, ledger) else { ledger.raid_gates[6] += 1; return false };
         ledger.raid_gates[7] += 1;
+        if redacted {
+            ledger.guess_gates[2] += 1;
+            ledger.guessed.insert((a, target, arrive.to_bits()));
+        }
         self.hit.insert(target, now);
         ledger.raids.push(Raid { attacker: a, target, arrive, loot: None, target_had_fleet: had_fleet, saved: false });
         true
@@ -3794,6 +3926,50 @@ mod tests {
         }
         world.reports.push(SpyReport { defence: Some(vec![0; ships.len()]), ..redacted(9.0) });
         assert_eq!(spy_volley(&world, 0, 1), 1, "a complete report resets the volley");
+    }
+
+    #[test]
+    fn guess_arm_fills_a_hidden_defence_with_the_unexplained_military_points() {
+        let (cat, mut world) = bare(5).expect("the player test catalogue");
+        let kit = Kit::of(&world, &cat, 0).expect("a probe and fighter");
+        assert!(world.set_units(&cat, 1, kit.fighter, 10));
+        let ships = world.yards[1].counts.clone();
+        let units = &world.rules[1].units;
+        let blank = vec![0u64; units.units.len()];
+        let research = world.research(&cat, 0);
+        let redacted = SpyReport { owner: 0, target: 1, time: 1.0, resources: [0; 3], debris: None, counter_chance: 0, defence: None, ships: Some(ships.clone()), buildings: None, research: None };
+        // The shown fighters are all the military points there are: nothing is hidden.
+        let (_, defence) = guessed_sections(&world, 0, 1, &redacted, &research).expect("an estimate");
+        assert_eq!(defence.iter().sum::<u64>(), 0, "every military point is explained");
+        // Hide the fighters from the report: their value comes back as defence, in the mix an older report read there.
+        let mut older = blank.clone();
+        let wall = (0..units.units.len()).find(|&u| units.kind[u] == UnitKind::Defence && world.rules[1].combat.attack(units.units[u].id as u32, &research) > 1).expect("a defence");
+        older[wall] = 1;
+        world.reports.push(SpyReport { ships: Some(blank.clone()), defence: Some(older), ..redacted.clone() });
+        let blind = SpyReport { ships: Some(blank.clone()), ..redacted };
+        let (_, defence) = guessed_sections(&world, 0, 1, &blind, &research).expect("an estimate");
+        let points = crate::score::of(&world, 1).military as f64 * 1000.0;
+        let each = units.units[wall].price.iter().sum::<f64>();
+        assert_eq!(defence[wall], (points / each).ceil() as u64, "the hidden points stand here as the wall last seen");
+    }
+
+    #[test]
+    fn rescout_arm_rereads_a_redacted_report_until_the_largest_volley() {
+        let (cat, mut world) = bare(5).expect("the player test catalogue");
+        world.rescout = true;
+        let kit = Kit::of(&world, &cat, 0).expect("a probe and fighter");
+        assert!(world.set_units(&cat, 1, kit.fighter, 3));
+        let ships = world.yards[1].counts.clone();
+        let redacted = |time: f64| SpyReport { owner: 0, target: 1, time, resources: [0; 3], debris: None, counter_chance: 0, defence: None, ships: Some(ships.clone()), buildings: None, research: None };
+        // Opening floor 1: 1 -> 5 -> 10 -> 20 -> 40, and a fifth redacted report (read by 40) ends the re-scouts.
+        for (n, want, due) in [(1, 5, true), (2, 10, true), (3, 20, true), (4, 40, true), (5, 40, false)] {
+            world.reports.push(redacted(n as f64));
+            assert_eq!(spy_volley(&world, 0, 1), want, "{n} redacted reports in a row");
+            assert_eq!(rescout_due(&world, 0, 1), due, "{n} redacted reports in a row");
+        }
+        assert_eq!(rescout_volley(VOLLEY_PROBES, 1), 10, "past the opening the first redacted volley of 5 is doubled");
+        world.reports.push(SpyReport { defence: Some(vec![0; ships.len()]), ..redacted(9.0) });
+        assert!(!rescout_due(&world, 0, 1), "a complete report is settled intel");
     }
 
     #[test]

@@ -2,8 +2,12 @@
 
 namespace Modules\AI\Domain\Raid;
 
+use Modules\AI\Actions\ExportAiCombatCatalogueAction;
 use OGame\Factories\PlanetServiceFactory;
+use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\EspionageReport;
+use OGame\Models\Highscore;
+use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\User;
 use OGame\Services\ObjectService;
@@ -22,8 +26,9 @@ use OGame\Services\PlayerService;
  * the live planet, which is where surprises, ninjas and lost fleets come from.
  *
  * The copy is never written: it is marked as not existing, so a stray save cannot reach the real row.
- * A report that could not see the fleet or the defence (too few probes) returns null: a player does
- * not raid blind, it sends more probes, which the spy planner's volley already does.
+ * A report that could not see the fleet or the defence (too few probes) returns null here; the raid
+ * planner reads it through `seenBy`, which fills the hidden section with the worst case a player can
+ * read (`estimated`) rather than refusing the raid outright.
  */
 class ReportedPlanet
 {
@@ -75,7 +80,112 @@ class ReportedPlanet
      */
     public function seenBy(EspionageReport $report, PlayerService $observer): PlanetService|null
     {
-        return $this->of($report, $this->pictured($report, $observer));
+        return $this->of($this->estimated($report, $observer), $this->pictured($report, $observer));
+    }
+
+    /**
+     * A redacted report with its hidden sections estimated, the way a player sizes a raid without a full report: every
+     * public military point (the highscore's: ships and defence at full price, civil ships at half) the visible sections
+     * do not explain is assumed to stand on this body, in the mix the account's own last report that read the section saw
+     * here, or else as the cheapest unit of the missing kind that fights with a real weapon. The worst case is the margin:
+     * the more is hidden, the larger the picture the battle forecast and the profit gate are run on. A full report comes
+     * back as it is; the estimate is a detached copy, never saved (`rl/ogsim` players::guessed_sections).
+     */
+    public function estimated(EspionageReport $report, PlayerService $observer): EspionageReport
+    {
+        if ($report->ships !== null && $report->defense !== null) {
+            return $report;
+        }
+
+        $shown = $this->militaryValue($report->ships ?? []) + $this->militaryValue($report->defense ?? []);
+        $points = (int) (Highscore::query()->where('player_id', (int) $report->planet_user_id)->value('military_built') ?? 0);
+        $hidden = max(0.0, $points * 1000 - $shown);
+
+        $ships = $report->ships === null ? $this->olderSection($report, $observer, 'ships') : [];
+        $defense = $report->defense === null ? $this->olderSection($report, $observer, 'defense') : [];
+        if ($this->militaryValue($ships) + $this->militaryValue($defense) <= 0.0) {
+            $kind = $report->defense === null ? ObjectService::getDefenseObjects() : ObjectService::getMilitaryShipObjects();
+            $cheapest = $this->cheapestFighter($kind, $observer);
+            if ($cheapest === null) {
+                return $report;
+            }
+            if ($report->defense === null) {
+                $defense = [$cheapest->machine_name => 1];
+            } else {
+                $ships = [$cheapest->machine_name => 1];
+            }
+        }
+
+        $scale = $hidden / ($this->militaryValue($ships) + $this->militaryValue($defense));
+        $scaled = static fn (array $section): array => array_map(static fn ($amount): int => (int) ceil((int) $amount * $scale), $section);
+
+        $estimate = $report->replicate();
+        $estimate->id = $report->id;
+        $estimate->exists = false;
+        $estimate->ships = $report->ships ?? $scaled($ships);
+        $estimate->defense = $report->defense ?? $scaled($defense);
+
+        return $estimate;
+    }
+
+    /**
+     * The section as the account's own newest report on this body that read it saw it, empty when none did.
+     *
+     * @return array<string, int>
+     */
+    private function olderSection(EspionageReport $report, PlayerService $observer, string $section): array
+    {
+        $own = Message::query()->where('user_id', $observer->getId())->whereNotNull('espionage_report_id')->select('espionage_report_id');
+        $older = EspionageReport::query()
+            ->whereIn('id', $own)
+            ->where('planet_galaxy', $report->planet_galaxy)
+            ->where('planet_system', $report->planet_system)
+            ->where('planet_position', $report->planet_position)
+            ->where('planet_type', $report->planet_type)
+            ->whereNotNull($section)
+            ->orderByDesc('id')
+            ->value($section);
+
+        return is_array($older) ? $older : (is_string($older) ? (array) json_decode($older, true) : []);
+    }
+
+    /**
+     * The highscore's military value of a report section: ships and defence at full price, civil ships at half.
+     *
+     * @param array<string, int> $section
+     */
+    private function militaryValue(array $section): float
+    {
+        $civil = array_map(static fn (UnitObject $ship): string => $ship->machine_name, ObjectService::getCivilShipObjects());
+        $value = 0.0;
+        foreach ($section as $machineName => $amount) {
+            $price = ObjectService::getObjectRawPrice((string) $machineName)->sum() * (int) $amount;
+            $value += in_array($machineName, $civil, true) ? $price / 2 : $price;
+        }
+
+        return $value;
+    }
+
+    /**
+     * The cheapest of these units the host's combat takes that carries a real weapon.
+     *
+     * @param array<UnitObject> $units
+     */
+    private function cheapestFighter(array $units, PlayerService $observer): UnitObject|null
+    {
+        $home = $observer->planets->first();
+        $sitsOut = $home === null ? [] : app(ExportAiCombatCatalogueAction::class)->nonCombatants($home);
+        $cheapest = null;
+        foreach ($units as $unit) {
+            if (in_array($unit->id, $sitsOut, true) || $unit->properties->attack->calculate($observer)->totalValue <= 1) {
+                continue;
+            }
+            if ($cheapest === null || ObjectService::getObjectRawPrice($unit->machine_name)->sum() < ObjectService::getObjectRawPrice($cheapest->machine_name)->sum()) {
+                $cheapest = $unit;
+            }
+        }
+
+        return $cheapest;
     }
 
     /** The report's owner with the research the report shows (the observer's own where it shows none); never saved. */

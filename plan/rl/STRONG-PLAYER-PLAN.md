@@ -1786,3 +1786,41 @@ Halite) improved the RULE BOT — loss review, many versions each beating the la
 - 6 Nov: war-mil60 / war-mil90 (raider_military_share 0.6 / 0.9 via params=, war-all world, seeds 1-10) running; compare with war-all on reality.py + paired.
 - 6 Nov: gates3 no-plan split (5 seasons war-all): partial report 194k, FIGHTERS SHORT 406k, fuel 15k. raid_plan sizes only Kit.fighter (cheapest shooter) → a raider's cruisers/battleships never count. war-mil60/90 (raider_military_share): no change (raid/day 0.28/0.23 vs 0.29; paired −0.016/+0.028 n.s.) — confirms the gate, not fleet size. Fix arm `warfleet` (World.war_fleet): raid_plan falls back to war_plan (whole warship mix, OGMEM odds floor 1.6). Running war-wf (war-all world) and base-wf (default world), seeds 1-10, speed2/war4.bin.
 - 6 Nov: OWNER STOP. war-wf/base-wf killed mid-run (partial, discard); 20-min loop cancelled. Code left in place: arms churn=, personas=, noalliance, warfleet; Ledger raid_gates/no_plan + OUT.gates.json; scripts/reality.py. Uncommitted.
+- 7 Nov (social session, owner asked to continue this handoff in parallel): reran the warfleet bench on war4.bin, seeds 1-10, LIMIT 1800 s: war-all2 / war-wf2 (churn=0:1 noalliance personas=0:1:0 [+warfleet]) and churn-base2 / base-wf2 ([warfleet]); old baseline traces were removed in the disk cleanup, so both sides rerun on the same binary.
+- 7 Nov: owner: use the best available models everywhere, social included. Added best-all: newest binary (social-size.bin) with deployed economy (train4/best-es3-s10) and fleet (es-late-c4/final-g16) policies plus the social model (live engine minds, cycles, skill, raids, notice breaks, dark9) and warfleet, churn=0:1, seeds 1-10, LIMIT 1800 s; compare with base-wf2 / war-wf2.
+- 7 Nov warfleet bench (war4.bin, seeds 1-10, all seasons complete): war-all2 -> war-wf2: raids/active-day 0.287 -> 0.414, loot/prod 0.005 -> 0.052, ships lost 0.45B -> 22B, r1 0.021 -> 0.023, r1/r10 1.10 -> 1.17, store 19 -> 23 d, HDS 0.695 -> 0.692; paired (model accounts) -0.079 ln, 3/10 up, CI [-0.134, -0.029]. Default world churn-base2 -> base-wf2: no change (-0.003 ln, CI crosses 0; HDS 0.860/0.861). Verdict: warfleet unlocks real fighting (+44% raids, 10x loot, 50x losses) but war destroys more than it takes, nobody dominates, and the fighters end weaker. Not a strength win; keep as the grinding-world arm. Next per handoff: probe escalation on partial reports, strongest-hunts-rivals.
+- 7 Nov best-all (social-size.bin, all deployed models + social minds + raids + warfleet + dark9, churn=0:1, alliances=6, seeds 1-10): loot/prod 0.226, raids/active-day 0.31, spy/day 1.11, r1 0.104, r1/r10 3.88, store 63 d (base-wf2 108 d), lost 34B, HDS 0.745 with 0 violations. Paired vs base-wf2 is not comparable (base world has quitters). Gates: partial report 662k and stale/cooldown 3.47M dominate; launched ~40k. Delegated: root cause of partial reports and stale/cooldown, faithful fix, war-world bench (war5.bin).
+- 7 Nov OWNER DIRECTION: a real player attacks without a complete report; the raider must decide under uncertainty (estimate the hidden fleet/defence from public highscore military points, older reports, typical levels; size with a margin for the uncertainty; expected loot - expected loss rule; test attacks). Sent to the spy-report worker; one rule set with PHP RaidPlanner.
+- 7 Nov: why raids fail on "partial report" and "stale/cooldown" (war world, `raids` arm, seeds 1-10, new counters in
+  OUT.gates.json: `stale_split` [stale, cooldown, beaten], `spy_gates` [fresh, probe out, no idle probe, short volley,
+  full volley, re-scout], `probe_diag`, `guess_gates`/`guess_outcomes`/`guess_value`). Root causes, in order:
+  (1) stale/cooldown is 97% STALE (6.3M of 6.5M; cooldown 77k, beaten 147k): reports age past 24 h because the scout has
+  no idle probe (no-probe 10.3M of 12M scout looks). Two port bugs in `raids`: the yard counted flying probes toward the
+  stock (QueueableUnitPlanner keeps 15 IDLE per planet past the opening) and, decisive, late accounts ordered no probe at
+  all because `order_ships` held every unit order behind the saving for a building dearer than the stock (debug, seed 1
+  acct 30 day 120: keep 38.8M metal vs 11M held, plans [(probe 15 → 0 payable)]; spying died after day ~100 for most
+  persona raiders). PHP's `queueable` asks only whether the yard can pay. Fixed inside `raids` (probe stock idle, probes
+  exempt from the build saving). (2) Partial reports persist because ANY report <24 h counted as fresh intel, so the
+  escalated volley flew only after the redacted report expired (same rule in QueueableSpyPlanner). New arm `rescout`:
+  a fresh redacted report on a defended/rich body is re-scouted as soon as the next, larger volley is idle (volley
+  doubles from the floor, cap 40; stops once the largest volley came back redacted). (3) Owner direction: a player does
+  not need a full report. New arm `guess` (`players::guessed_sections` = PHP `ReportedPlanet::estimated`): the hidden
+  section is the worst case a player can read — all public highscore military points the visible sections do not
+  explain stand on this body, in the mix of the account's own last report that read that section, else as the cheapest
+  real-weapon unit of the missing kind; the forecast fight and loss tolerance then decide as on a full report.
+  PHP ported: QueueableSpyPlanner re-scout + own-reports-only reads (it read OTHER players' reports at a coordinate — a
+  cheat; the sim already read own reports only), ReportedPlanet::estimated used by RaidPlanner (seenBy). Tests:
+  SpyDepthTest 16/16, ReportEstimateTest 5/5, cargo 143/143; RaidPlanner battle tests need FFI (absent on host).
+- 7 Nov results (speed2/war7.bin = war5.bin, war world churn=0:1 noalliance personas=0:1:0 warfleet raids, seeds 1-10,
+  dirs err4-side/war-f-*; raids3 = old port): raid/day 0.697 → 0.814 (probe fix) → 0.778 rescout / 0.897 guess / 0.891
+  both (war-wf2 without `raids` 0.414); spy/day 1.75 → 2.90 / 3.03 / 2.85 / 2.76 (real farmers 200-500); full volleys
+  221k → 360k; loot/prod 0.069 → 0.066 / 0.062 / 0.064 / 0.064; r1 share 0.026 / 0.026 / 0.026 / 0.027; r1/r10 1.22 for
+  all; ships lost 26.9B → 27.7 / 21.9 / 20.4 / 22.8 B; HDS 0.687 → 0.691 / 0.686 / 0.696 / 0.692. Guess: of 1.35M
+  redacted looks 16.2k planned on the estimate, 14.6k launched; 96.2% won, 2.9% draw, 0.9% beaten; loot 56.3B vs loss
+  2.2B (both: 14.6k, 95.9/3.2/0.8%, 44.7B vs 2.8B). Paired (vs f-raids): rescout all +0.040 n.s.; guess model
+  accounts (0-20) +0.025 n.s., persona raiders −0.144 (CI<0); both model +0.031 (8/10, CI [+0.008, +0.050]), persona
+  −0.172, all −0.105. Probe fix vs old port: all −0.023 n.s., model −0.059 (CI<0). Verdict: probe-stock fix and `guess`
+  are real (more spying, +10% raids, guessed raids win 96%); `rescout` is neutral; still no dominance (r1/r10 1.22):
+  raids move value between equals and the war destroys more than it decides. Next: target choice (hit the weakest
+  reported neighbour repeatedly / the leader hunts rivals), and a cheap test attack on targets whose estimate is too
+  uncertain (owner's fallback, not built yet).

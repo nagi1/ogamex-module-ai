@@ -597,6 +597,8 @@ impl Universe {
         world.event_dice = on("eventdice");
         world.war_fleet = on("warfleet");
         world.raids = on("raids");
+        world.rescout = on("rescout");
+        world.guess = on("guess");
         if tuned || skill.is_some() { world.tune = Arc::new(tunes) }
         world.wide = on("wide");
         world.late = on("late");

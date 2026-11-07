@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Illuminate\Database\Eloquent\Builder;
 use Modules\AI\Domain\Intel\IntelBook;
 use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Perception\ActivityIntelReader;
@@ -42,7 +43,14 @@ use OGame\Services\PlayerService;
  * A target the account already holds fresh intel on, or already has a probe in
  * flight toward, is skipped. Scouting is bounded: each neighbour is probed once
  * per intel window, and the account waits for its own probe to come back before
- * sending another instead of re-probing the same planets it cannot act on.
+ * sending another instead of re-probing the same planets it cannot act on. A
+ * fresh report the host redacted on a body worth a volley is not settled intel:
+ * the larger volley flies as soon as one base holds it, the way a player who
+ * reads "not enough probes" sends more at once, until the largest volley has
+ * come back redacted too.
+ *
+ * Only the account's own reports count, reached through its messages: another
+ * player's reports on the same coordinate are not something it can read.
  */
 class QueueableSpyPlanner
 {
@@ -82,12 +90,13 @@ class QueueableSpyPlanner
         $player ??= $this->playerServiceFactory->make($playerId, true);
 
         $refusals = app(RecentRefusals::class);
-        $skip = $this->freshIntelCoordinates($playerId)
+        [$fresh, $rescout] = $this->freshIntelCoordinates($player);
+        $skip = $fresh
             + $this->inFlightCoordinates($playerId)
             + $this->openSpyIntentCoordinates($playerId)
             // A probe the gate just refused is not a mission, so nothing else remembers the target.
             + $refusals->refusedTargets($playerId);
-        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId, AiWorkKind::Spy));
+        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId, AiWorkKind::Spy), $rescout);
         if ($selection === null) {
             return null;
         }
@@ -163,9 +172,10 @@ class QueueableSpyPlanner
      *
      * @param array<string, true> $skipCoordinates
      * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
+     * @param array<string, true> $rescout fresh redacted coordinates (g:s:p) whose volley flies only whole
      * @return array{0: PlanetService, 1: Planet}|null the origin and its target
      */
-    private function target(PlayerService $player, array $skipCoordinates, array $refusedOrigins): ?array
+    private function target(PlayerService $player, array $skipCoordinates, array $refusedOrigins, array $rescout = []): array|null
     {
         $idleOrigins = array_values(array_filter(
             $this->idleProbePlanets($player),
@@ -194,7 +204,7 @@ class QueueableSpyPlanner
             ->take(self::MAX_CANDIDATES)
             ->values();
 
-        $intel = $this->knownIntelByCoordinate($candidates);
+        $intel = $this->knownIntelByCoordinate($player->getId(), $candidates);
         $knownYield = $intel['yield'];
         // What the account remembers about these planets: the priority counter, read in one pass so a
         // target that paid before is not priced once per candidate.
@@ -220,7 +230,7 @@ class QueueableSpyPlanner
             if ($owner?->isAdmin() === true) {
                 continue;
             }
-            $origin = $this->closestOrigin($player, $idleOrigins, $planet, $fleetMissions);
+            $origin = $this->closestOrigin($player, $idleOrigins, $planet, $fleetMissions, isset($rescout[$coordinateKey]));
             if ($origin === null) {
                 continue;
             }
@@ -313,10 +323,11 @@ class QueueableSpyPlanner
      * The own planet with an idle probe closest to the target that can pay the flight, not the first in
      * collection order: a probe is fuel and time, so the nearest base that has the deuterium sends it.
      * No such base means the target is not scouted now, as a player with an empty tank does not queue it.
+     * A re-scout of a fresh redacted report flies whole or not at all: a short volley is redacted again.
      *
      * @param list<PlanetService> $origins
      */
-    private function closestOrigin(PlayerService $player, array $origins, Planet $target, FleetMissionService $fleetMissions): PlanetService|null
+    private function closestOrigin(PlayerService $player, array $origins, Planet $target, FleetMissionService $fleetMissions, bool $whole = false): PlanetService|null
     {
         $coordinate = new Coordinate((int) $target->galaxy, (int) $target->system, (int) $target->planet);
         $probe = ObjectService::getUnitObjectByMachineName(EspionageMission::getRequiredShipMachineNames()[0]);
@@ -328,6 +339,9 @@ class QueueableSpyPlanner
         // the host redacts, and the target is never seen (measured 8 Oct 2026: 579 of 591 volleys were one probe
         // while the homeworlds held 9 to 29). Only when no base holds the volley does the nearest one go short.
         $full = array_values(array_filter($origins, static fn (PlanetService $origin): bool => $origin->getObjectAmount($probe->machine_name) >= $needed));
+        if ($full === [] && $whole) {
+            return null;
+        }
         $origins = $full === [] ? $origins : $full;
 
         foreach ($origins as $origin) {
@@ -355,23 +369,25 @@ class QueueableSpyPlanner
      */
     private function probeCount(Planet $target, PlayerService $player): int
     {
-        // Past the opening every target may hold a fleet or a wall, so no volley is smaller than the one that reads
-        // them: a single probe came back redacted from almost every first visit (measured 8 Oct 2026: 448 of 481
-        // late-game volleys were one probe, 231 of 252 reports redacted).
-        $floor = app(GamePhaseMachine::class)->of($player) === GamePhase::Early ? 1 : self::ESCALATED_PROBES;
+        $floor = $this->floor($player);
 
-        return max($floor, $this->reportVolley($target));
+        return max($floor, $this->reportVolley($player->getId(), (int) $target->galaxy, (int) $target->system, (int) $target->planet, $floor));
     }
 
-    /** The volley the target's last report asks for, before the account's own floor. */
-    private function reportVolley(Planet $target): int
+    /**
+     * Past the opening every target may hold a fleet or a wall, so no volley is smaller than the one that reads
+     * them: a single probe came back redacted from almost every first visit (measured 8 Oct 2026: 448 of 481
+     * late-game volleys were one probe, 231 of 252 reports redacted).
+     */
+    private function floor(PlayerService $player): int
     {
-        $report = EspionageReport::query()
-            ->where('planet_galaxy', $target->galaxy)
-            ->where('planet_system', $target->system)
-            ->where('planet_position', $target->planet)
-            ->orderByDesc('id')
-            ->first(['resources', 'ships', 'defense']);
+        return app(GamePhaseMachine::class)->of($player) === GamePhase::Early ? 1 : self::ESCALATED_PROBES;
+    }
+
+    /** The volley the account's own last report on the coordinate asks for, before the account's own floor. */
+    private function reportVolley(int $playerId, int $galaxy, int $system, int $position, int $floor): int
+    {
+        $report = $this->ownReports($playerId, $galaxy, $system, $position)->first(['resources', 'ships', 'defense']);
 
         if ($report === null) {
             return 1;
@@ -388,17 +404,66 @@ class QueueableSpyPlanner
         // Each redacted report in a row doubles the volley: the host hides a defended planet from fewer than
         // three probes plus the square of the espionage gap, which the account cannot read, so it sends more
         // until the report comes back whole, the way a player does (capped by the probes the planet holds).
-        $redacted = EspionageReport::query()
-            ->where('planet_galaxy', $target->galaxy)
-            ->where('planet_system', $target->system)
-            ->where('planet_position', $target->planet)
-            ->orderByDesc('id')
-            ->limit(self::MAXIMUM_DOUBLINGS + 1)
+        return self::volleyAfter($floor, $this->redactedInARow($playerId, $galaxy, $system, $position, self::MAXIMUM_DOUBLINGS + 1));
+    }
+
+    /**
+     * The volley after this many redacted reports in a row. The last one was read by at least the floor's volley,
+     * so the next doubles from there too, up to the escalated volley doubled the maximum number of times.
+     */
+    private static function volleyAfter(int $floor, int $redacted): int
+    {
+        if ($redacted === 0) {
+            return $floor;
+        }
+
+        return min(max(self::ESCALATED_PROBES << ($redacted - 1), $floor << $redacted), self::ESCALATED_PROBES << self::MAXIMUM_DOUBLINGS);
+    }
+
+    /** The account's own reports on the coordinate that came back redacted, newest first and in a row, up to $cap. */
+    private function redactedInARow(int $playerId, int $galaxy, int $system, int $position, int $cap): int
+    {
+        return $this->ownReports($playerId, $galaxy, $system, $position)
+            ->limit($cap)
             ->get(['ships', 'defense'])
             ->takeWhile(fn (EspionageReport $seen): bool => $this->activityIntelReader->completenessFactor($seen->ships, $seen->defense) < 1.0)
             ->count();
+    }
 
-        return self::ESCALATED_PROBES * 2 ** max(0, $redacted - 1);
+    /**
+     * Whether a fresh redacted report is not settled intel: the body is worth a volley larger than the floor and
+     * the next volley is larger than the one that read it; once the largest has come back redacted too, the
+     * espionage gap is too wide for probes and the intel window decides.
+     */
+    private function rescoutDue(int $playerId, int $galaxy, int $system, int $position, int $floor): bool
+    {
+        if ($this->reportVolley($playerId, $galaxy, $system, $position, $floor) <= $floor) {
+            return false;
+        }
+        $redacted = $this->redactedInARow($playerId, $galaxy, $system, $position, self::MAXIMUM_DOUBLINGS + 2);
+
+        return self::volleyAfter($floor, $redacted) > self::volleyAfter($floor, $redacted - 1);
+    }
+
+    /**
+     * The account's own reports on a coordinate, newest first: the ones its messages link to.
+     *
+     * @return Builder<EspionageReport>
+     */
+    private function ownReports(int $playerId, int $galaxy, int $system, int $position): Builder
+    {
+        return EspionageReport::query()
+            ->whereIn('id', $this->ownReportIds($playerId))
+            ->where('planet_galaxy', $galaxy)
+            ->where('planet_system', $system)
+            ->where('planet_position', $position)
+            ->orderByDesc('id');
+    }
+
+    /** @return Builder<Message> the report ids the account's messages link to */
+    private function ownReportIds(int $playerId): Builder
+    {
+        return Message::query()->where('user_id', $playerId)->whereNotNull('espionage_report_id')->select('espionage_report_id');
     }
 
     /**
@@ -411,8 +476,8 @@ class QueueableSpyPlanner
     }
 
     /**
-     * The last-known loot of each candidate, as metal-equivalent, from its most
-     * recent report of any age. A never-probed planet scores zero here and is
+     * The last-known loot of each candidate, as metal-equivalent, from the account's
+     * own most recent report of any age. A never-probed planet scores zero here and is
      * ranked by closeness alone.
      *
      * Also says which of them the last report found defended (ships or defence standing), since the
@@ -421,7 +486,7 @@ class QueueableSpyPlanner
      * @param iterable<int, Planet> $candidates
      * @return array{yield: array<string, float>, defended: array<string, true>}
      */
-    private function knownIntelByCoordinate(iterable $candidates): array
+    private function knownIntelByCoordinate(int $playerId, iterable $candidates): array
     {
         $planets = is_array($candidates) ? $candidates : iterator_to_array($candidates);
         if ($planets === []) {
@@ -432,6 +497,7 @@ class QueueableSpyPlanner
         // candidate: the newest report per coordinate wins, so keep the first
         // (highest id) seen on the descending-id sweep.
         $reports = EspionageReport::query()
+            ->whereIn('id', $this->ownReportIds($playerId))
             ->where(function ($query) use ($planets): void {
                 foreach ($planets as $planet) {
                     $query->orWhere(function ($coordinate) use ($planet): void {
@@ -474,17 +540,19 @@ class QueueableSpyPlanner
     }
 
     /**
-     * The coordinates the account already holds fresh intel on, keyed g:s:p.
+     * The coordinates the account already holds fresh intel on, keyed g:s:p:type, and the fresh redacted ones it
+     * re-scouts instead (keyed g:s:p).
      *
      * A report is reached through the account's own messages, the host's link
      * from a probe to the report it produced, and only reports inside the intel
      * window count. The window matches the observation service's TTL so scouting
      * and raiding agree on what "recently probed" means.
      *
-     * @return array<string, true>
+     * @return array{0: array<string, true>, 1: array<string, true>}
      */
-    private function freshIntelCoordinates(int $playerId): array
+    private function freshIntelCoordinates(PlayerService $player): array
     {
+        $playerId = $player->getId();
         $reportIds = Message::query()
             ->where('user_id', $playerId)
             ->whereNotNull('espionage_report_id')
@@ -492,12 +560,25 @@ class QueueableSpyPlanner
             ->pluck('espionage_report_id');
 
         $coordinates = [];
+        $rescout = [];
+        $floor = null;
         // Keyed with the body: a fresh report on a planet said nothing about the moon beside it, which was never read.
-        foreach (EspionageReport::query()->whereIn('id', $reportIds)->get(['planet_galaxy', 'planet_system', 'planet_position', 'planet_type']) as $report) {
-            $coordinates["{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}:{$report->planet_type}"] = true;
+        foreach (EspionageReport::query()->whereIn('id', $reportIds)->orderByDesc('id')->get(['planet_galaxy', 'planet_system', 'planet_position', 'planet_type', 'ships', 'defense']) as $report) {
+            $key = "{$report->planet_galaxy}:{$report->planet_system}:{$report->planet_position}";
+            if (isset($coordinates["{$key}:{$report->planet_type}"]) || isset($rescout[$key])) {
+                continue;
+            }
+            if ($this->activityIntelReader->completenessFactor($report->ships, $report->defense) < 1.0) {
+                $floor ??= $this->floor($player);
+                if ($this->rescoutDue($playerId, (int) $report->planet_galaxy, (int) $report->planet_system, (int) $report->planet_position, $floor)) {
+                    $rescout[$key] = true;
+                    continue;
+                }
+            }
+            $coordinates["{$key}:{$report->planet_type}"] = true;
         }
 
-        return $coordinates;
+        return [$coordinates, $rescout];
     }
 
     /**

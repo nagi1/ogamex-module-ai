@@ -8,11 +8,14 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
+use OGame\Factories\PlanetServiceFactory;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;
 use OGame\Models\Planet;
+use OGame\Models\Planet\Coordinate;
+use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\FleetMissionService;
 use OGame\Services\MessageService;
@@ -24,7 +27,7 @@ uses(IsolatedAccountTestCase::class);
 test('the spy planner scouts a just-touched target only when no quiet one is left', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     // The only foreign planet is touched now: an account that acts every few minutes is still the
     // one that fights back, so it is read once the quiet bodies are.
@@ -50,7 +53,7 @@ test('the spy planner scouts a just-touched target only when no quiet one is lef
 test('the spy planner prefers the closer target', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     $near = $this->createForeignPlanet();
     spyDepthQuiet($near);
@@ -75,7 +78,7 @@ test('the spy planner prefers the closer target', function (): void {
 test('the spy planner prefers a target it knows is rich', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     $known = $this->createForeignPlanet();
     $unknown = $this->createForeignPlanet();
@@ -103,7 +106,7 @@ test('the spy planner prefers a target it knows is rich', function (): void {
 test('a probe promised to an open spy intent is not a second probe', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
     $this->createForeignPlanet();
 
     AiWorkItem::create([
@@ -121,7 +124,7 @@ test('a probe promised to an open spy intent is not a second probe', function ()
 test('a body that is not a planet is skipped, not probed', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     $debris = $this->createForeignPlanet();
     Planet::query()->whereKey($debris->getPlanetId())->update(['planet_type' => PlanetType::DebrisField->value]);
@@ -132,7 +135,7 @@ test('a body that is not a planet is skipped, not probed', function (): void {
 test('the spy planner escalates probes for a redacted report on a rich target', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 5);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     $target = $this->createForeignPlanet();
     spyDepthQuiet($target);
@@ -155,7 +158,7 @@ test('the spy planner escalates probes for a redacted report on a rich target', 
 test('the spy planner doubles the volley after each redacted report in a row', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 20);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     $target = $this->createForeignPlanet();
     spyDepthQuiet($target);
@@ -180,7 +183,7 @@ test('the spy planner doubles the volley after each redacted report in a row', f
 test('the spy planner does not escalate a redacted report on an empty target', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 5);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     $target = $this->createForeignPlanet();
     spyDepthQuiet($target);
@@ -203,7 +206,7 @@ test('the spy planner does not escalate a redacted report on an empty target', f
 test('the spy planner sends the probe from the closest own planet', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
     expect($this->secondPlanetService)->not->toBeNull();
     $this->secondPlanetService->addUnit('espionage_probe', 1);
 
@@ -291,14 +294,14 @@ test('the spy planner offers no probe from a planet that cannot pay the flight',
 
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
 
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
 
     expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeInstanceOf(QueueableSpy::class);
 });
 
 test('a volley flies from the base that holds it, not from a nearer one holding a single probe', function (): void {
     spyDepthProfile($this->currentUserId);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
     $this->planetAddUnit('espionage_probe', 1);
 
     $target = $this->createForeignPlanet();
@@ -312,12 +315,12 @@ test('a volley flies from the base that holds it, not from a nearer one holding 
     );
     Message::query()->where('espionage_report_id', $reportId)->update(['created_at' => now()->subHours(30)]);
 
-    $far = app(OGame\Factories\PlanetServiceFactory::class)->createAdditionalPlanetForPlayer(
+    $far = app(PlanetServiceFactory::class)->createAdditionalPlanetForPlayer(
         app(PlayerServiceFactory::class)->make($this->currentUserId, true),
-        new OGame\Models\Planet\Coordinate(($target->getPlanetCoordinates()->galaxy % 9) + 1, 400, 8),
+        new Coordinate(($target->getPlanetCoordinates()->galaxy % 9) + 1, 400, 8),
     );
     $far->addUnit('espionage_probe', 10);
-    $far->addResources(new OGame\Models\Resources(0, 0, 1_000_000, 0));
+    $far->addResources(new Resources(0, 0, 1_000_000, 0));
 
     $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
 
@@ -328,11 +331,11 @@ test('a volley flies from the base that holds it, not from a nearer one holding 
 test('past the opening a first visit flies a volley, not a single probe', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 10);
-    $this->planetAddResources(new OGame\Models\Resources(0, 0, 100000, 0));
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
     $home = $this->planetService->getPlanetCoordinates();
-    app(OGame\Factories\PlanetServiceFactory::class)->createAdditionalPlanetForPlayer(
+    app(PlanetServiceFactory::class)->createAdditionalPlanetForPlayer(
         app(PlayerServiceFactory::class)->make($this->currentUserId, true),
-        new OGame\Models\Planet\Coordinate($home->galaxy, $home->system, $home->position === 15 ? 14 : 15),
+        new Coordinate($home->galaxy, $home->system, $home->position === 15 ? 14 : 15),
     );
 
     $target = $this->createForeignPlanet();
@@ -342,4 +345,79 @@ test('past the opening a first visit flies a volley, not a single probe', functi
 
     expect($plan)->toBeInstanceOf(QueueableSpy::class)
         ->and($plan->probeCount)->toBe(5);
+});
+
+test('a fresh redacted report on a rich target is re-scouted at once with the next volley', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 4);
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+    $coordinates = $target->getPlanetCoordinates();
+    spyDepthRedactedReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0]);
+
+    // The re-scout flies whole or not at all: four probes would be read redacted again.
+    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
+
+    $this->planetAddUnit('espionage_probe', 1);
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->targetPosition)->toBe($coordinates->position)
+        ->and($plan->probeCount)->toBe(5);
+});
+
+test('a fresh complete report or a fresh redacted empty body is not re-scouted', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 40);
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
+
+    $complete = $this->createForeignPlanet();
+    $empty = $this->createForeignPlanet();
+    foreach ([$complete, $empty] as $planet) {
+        spyDepthQuiet($planet);
+    }
+    $c = $complete->getPlanetCoordinates();
+    $e = $empty->getPlanetCoordinates();
+    spyDepthReport($this->currentUserId, $c->galaxy, $c->system, $c->position, ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0]);
+    spyDepthRedactedReport($this->currentUserId, $e->galaxy, $e->system, $e->position, ['metal' => 0, 'crystal' => 0, 'deuterium' => 0]);
+
+    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+test('the re-scout stops once the largest volley came back redacted too', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 100);
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+    $coordinates = $target->getPlanetCoordinates();
+    foreach (range(1, 5) as $volley) {
+        spyDepthRedactedReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0]);
+    }
+
+    expect(app(QueueableSpyPlanner::class)->plan($this->currentUserId))->toBeNull();
+});
+
+test('another player\'s report on the coordinate is not read', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 40);
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
+
+    $target = $this->createForeignPlanet();
+    spyDepthQuiet($target);
+    $coordinates = $target->getPlanetCoordinates();
+    $other = User::factory()->create();
+    Planet::factory()->create(['user_id' => $other->id, 'galaxy' => 9, 'system' => 499, 'planet' => 15]);
+    foreach ([1, 2, 3] as $volley) {
+        spyDepthRedactedReport($other->id, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 100_000_000, 'crystal' => 0, 'deuterium' => 0]);
+    }
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and($plan->targetPosition)->toBe($coordinates->position)
+        ->and($plan->probeCount)->toBe(1);
 });
