@@ -3,6 +3,7 @@
 namespace Modules\AI\Domain\Choice;
 
 use JsonException;
+use Modules\AI\Models\AiProfile;
 
 /**
  * The errand model the simulator trains (plan/rl, `ogsim::season::Policy`), run in PHP: the same network on the same
@@ -25,11 +26,16 @@ class ErrandPolicyModel
 
     /**
      * The configured errand model (`ai.rl.errand_model`), or null when none is set, it is not a wide one, or the fleet
-     * errands are switched to the scripted raider (`ai.rl.fleet_errands` = scripted).
+     * errands are switched to the scripted raider: for every account (`ai.rl.fleet_errands` = scripted) or for this
+     * account's persona (`ai.rl.fleet_errands_scripted_personas`, archetype names).
      */
-    public static function configured(): self|null
+    public static function configured(AiProfile|null $profile = null): self|null
     {
         if (config('ai.rl.fleet_errands') === 'scripted') {
+            return null;
+        }
+        $scripted = (array) config('ai.rl.fleet_errands_scripted_personas', []);
+        if ($profile !== null && in_array(strtolower($profile->archetype->name), $scripted, true)) {
             return null;
         }
         $path = config('ai.rl.errand_model');

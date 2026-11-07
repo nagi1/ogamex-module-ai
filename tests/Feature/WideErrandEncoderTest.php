@@ -272,6 +272,36 @@ test('fleet errands switched to the scripted raider ignore a configured model', 
     expect(ErrandPolicyModel::configured())->toBeNull();
 });
 
+// One universe, two brains (owner, 7 Nov): the raiders fly the scripted raider, everyone else the errand model.
+test('a raider persona flies the scripted raider while a miner keeps the errand model', function (): void {
+    config(['ai.rl.errand_model' => errandV3ModelFile(errandV3Fixture()['small_policy']), 'ai.rl.fleet_errands' => 'model', 'ai.rl.fleet_errands_scripted_personas' => ['raider']]);
+    $raider = errandV3Account($this->currentUserId);
+    $miner = new AiProfile(['archetype' => AiArchetype::Miner]);
+
+    expect(ErrandPolicyModel::configured($raider))->toBeNull()
+        ->and(ErrandPolicyModel::configured($miner))->toBeInstanceOf(ErrandPolicyModel::class);
+
+    config(['ai.rl.fleet_errands_scripted_personas' => []]);
+    expect(ErrandPolicyModel::configured($raider))->toBeInstanceOf(ErrandPolicyModel::class);
+});
+
+// The split on a real login: the raider's errand is the engine's own decision, untouched by the model.
+test('a raider\'s login under the split keeps the engine\'s errand', function (): void {
+    $profile = errandV3Account($this->currentUserId);
+    $this->planetSetObjectLevel('shipyard', 6);
+    $this->playerSetResearchLevel('combustion_drive', 6);
+    $this->planetAddUnit('small_cargo', 40);
+    $this->planetAddUnit('light_fighter', 200);
+    $this->planetAddUnit('espionage_probe', 5);
+    $this->planetAddResources(new Resources(2_000_000, 1_000_000, 500_000));
+    errandV3Target($this->currentUserId);
+    config(['ai.rl.errand_model' => errandV3ModelFile(errandV3Fixture()['small_policy']), 'ai.rl.learner_share' => 1.0, 'ai.rl.record' => null, 'ai.rl.policy' => 'teacher', 'ai.rl.fleet_errands_scripted_personas' => ['raider']]);
+
+    ['perception' => $perception, 'trace' => $engine] = errandV3Encode($profile);
+
+    expect(app(DecideAiErrandAction::class)->handle($profile, $perception, $engine, 'test:errand-split'))->toBe($engine);
+});
+
 // The encoder reuses the plans the engine just read (LoginPlans) instead of asking each planner again; the columns are the
 // ones a fresh ask gives, row for row.
 test('the errand reuses the engine\'s plans and encodes exactly what fresh plans encode', function (): void {

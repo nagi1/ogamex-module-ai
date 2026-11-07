@@ -40,7 +40,7 @@ class DecideAiErrandAction
 
     public function handle(AiProfile $profile, PerceptionSnapshot $perception, DecisionTrace $trace, string $decisionKey): DecisionTrace
     {
-        $model = ErrandPolicyModel::configured();
+        $model = ErrandPolicyModel::configured($profile);
         if (($model === null && $this->policy->name() === 'teacher' && !$this->recorder->enabled()) || $perception->fleetsaveEligible || $perception->reactionWakeAt !== null) {
             return $trace;
         }

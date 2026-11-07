@@ -23,6 +23,12 @@ return [
     // Who picks the fleet errand: `model` (the errand model above when one is set) or `scripted` (the engine's own
     // scripted raider, whatever errand_model says). The play universe flies the scripted raider (WORK-ORDER §2).
     'fleet_errands' => env('AI_RL_FLEET_ERRANDS', 'model'),
+    // Personas (archetype names, comma separated, e.g. "raider") whose fleet errands fly on the scripted raider while
+    // every other account keeps the errand model: one universe, the split decided per account. Empty: nobody.
+    'fleet_errands_scripted_personas' => array_values(array_filter(array_map(
+        static fn (string $persona): string => strtolower(trim($persona)),
+        explode(',', (string) env('AI_RL_FLEET_ERRANDS_SCRIPTED_PERSONAS', '')),
+    ))),
     // The simulator's `hunt` arm: raiders probe the rivals whose fleet they can crash first (QueueableSpyPlanner).
     // Off by default: measured 7 Nov 2026 it lifted dominance but cost realism (plan/rl/STRONG-PLAYER-PLAN.md).
     'hunt' => (bool) env('AI_RL_HUNT', false),
