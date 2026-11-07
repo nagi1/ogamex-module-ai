@@ -298,11 +298,20 @@ class AIController extends OGameController
             'affect_decision_weight' => ['required', 'integer', 'min:0'],
             'experience_decision_weight' => ['required', 'integer', 'min:0'],
             'campaign_mode' => ['required', 'in:off,observe,advice'],
+            'advisor_offense_mode' => ['sometimes', 'in:off,observe,advice'],
+            'advisor_diplomacy_mode' => ['sometimes', 'in:off,observe,advice'],
+            'advisor_conversation_mode' => ['sometimes', 'in:off,observe,advice'],
+            'advisor_costly_mode' => ['sometimes', 'in:off,observe,advice'],
         ]);
 
         $settings = app(SettingsService::class);
 
         foreach (BuildAiSettingsPanelAction::LIVE_SETTINGS as $field => $meta) {
+            // A form without an advisor field leaves its mode alone, so the env default still applies.
+            if ($meta['type'] === 'select' && !$request->has($field)) {
+                continue;
+            }
+
             $settings->set($meta['key'], $this->castSetting($meta['type'], $request->input($field), $request->boolean($field)));
         }
 

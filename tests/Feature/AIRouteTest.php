@@ -232,6 +232,20 @@ test('staff can save a live setting', function (): void {
     expect(app(SettingsService::class)->get('ai_population_profile_cap'))->toBe('7');
 });
 
+test('staff can switch an advisor mode, and an unknown mode is refused', function (): void {
+    $form = [
+        'profile_cap' => '0', 'active_session_cap' => '0', 'dispatch_batch_size' => '10', 'session_action_cap' => '0',
+        'monthly_cost_usd' => '5', 'conversation_reply_ttl_minutes' => '60', 'affect_decision_weight' => '0',
+        'experience_decision_weight' => '0', 'campaign_mode' => 'off',
+    ];
+
+    $this->post(route('ai.settings'), $form + ['advisor_diplomacy_mode' => 'advice'])->assertSessionHas('success', 'Settings saved.');
+    $this->post(route('ai.settings'), $form + ['advisor_conversation_mode' => 'always'])->assertSessionHasErrors('advisor_conversation_mode');
+
+    expect(app(SettingsService::class)->get('ai_advisor_diplomacy_mode'))->toBe('advice')
+        ->and(app(SettingsService::class)->get('ai_advisor_conversation_mode'))->not->toBe('always');
+});
+
 test('a live setting with an invalid value is refused', function (): void {
     $this->post(route('ai.settings'), [
         'profile_cap' => '-1',
