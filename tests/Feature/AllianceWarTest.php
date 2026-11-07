@@ -112,6 +112,22 @@ test('a non-aggression pact keeps a grudge-holder from treating its partner as a
     expect(app(Enemies::class)->of($this->currentUserId))->not->toHaveKey((int) $theirs->founder_user_id);
 });
 
+// The live smoke run (SOCIAL-PLAN, 7 Nov): ten fresh pacts were broken by a grievance war at the instant they were signed.
+test('a grievance is no war on a pact partner: the pact ends by notice or a chosen betrayal, never by the war line', function (): void {
+    $ours = allianceWarLeader($this->currentUserId, 'OURS');
+    $mate = allianceWarMember($ours->id);
+    $theirs = app(AllianceService::class)->createAlliance(User::factory()->create()->id, 'THEM', 'Them');
+    $raider = allianceWarMember($theirs->id);
+    allianceWarGrudge($this->currentUserId, $raider->id);
+    allianceWarGrudge($mate->id, $raider->id);
+    allianceWarAt($ours->id, $theirs->id, AiAllianceStance::Nap);
+
+    app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    expect(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War))->toBe([])
+        ->and(AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap))->toBe([$theirs->id]);
+});
+
 function allianceWarAt(int $allianceId, int $otherAllianceId, AiAllianceStance $stance = AiAllianceStance::War): void
 {
     AiAllianceRelation::query()->create([

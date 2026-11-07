@@ -239,7 +239,10 @@ class AdvanceAiAlliancePoliticsAction
         foreach (Alliance::query()->whereKeyNot($alliance->id)->pluck('id') as $otherId) {
             $theirs = $this->members((int) $otherId);
             $mine = $this->grievance($members, $theirs);
-            if ($this->outmatched((int) $alliance->id, (int) $otherId) || $this->vassalBound((int) $alliance->id, (int) $otherId)) {
+            // A pact partner is not a war target: a pact ends by notice or by a betrayal the leader chooses (keepOrBreak), as
+            // the simulator's war step skips bound clubs (diplomacy.rs `!self.bound(c, o)`); the live run broke ten fresh pacts
+            // by grievance at the instant they were signed.
+            if ($this->outmatched((int) $alliance->id, (int) $otherId) || $this->bound((int) $alliance->id, (int) $otherId)) {
                 continue;
             }
 
@@ -1809,7 +1812,7 @@ class AdvanceAiAlliancePoliticsAction
     /** @return list<int> */
     private function members(int $allianceId): array
     {
-        return $this->once('members:' . $allianceId, static fn (): array => User::query()->where('alliance_id', $allianceId)->pluck('id')->map(static fn ($id): int => (int) $id)->all());
+        return array_values($this->once('members:' . $allianceId, static fn (): array => User::query()->where('alliance_id', $allianceId)->pluck('id')->map(static fn ($id): int => (int) $id)->all()));
     }
 
     /** The leader's own wording of one announcement; the model words it when it is on, and the authored line is the fallback. */

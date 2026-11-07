@@ -51,6 +51,7 @@ use Modules\AI\Console\Commands\ReplayAiRlUnitOrders;
 use Modules\AI\Console\Commands\ReplayAiRlWorldTrace;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
+use Modules\AI\Console\Commands\CheckSocialIntegrity;
 use Modules\AI\Console\Commands\ReportHumanExperience;
 use Modules\AI\Console\Commands\RlScoreCasesCommand;
 use Modules\AI\Console\Commands\RunAiCampaign;
@@ -178,6 +179,7 @@ class AIServiceProvider extends ModuleServiceProvider
         ReplayAiScenario::class,
         ReportAiPilot::class,
         ReportHumanExperience::class,
+        CheckSocialIntegrity::class,
         RunCognitionConformance::class,
         RunDueAiWork::class,
         RunLanguageConformance::class,
