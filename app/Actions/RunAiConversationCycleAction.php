@@ -4,9 +4,14 @@ namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Modules\AI\Domain\Advisor\Advisor;
+use Modules\AI\Domain\Advisor\AdvisorArea;
+use Modules\AI\Domain\Advisor\AdvisorFacts;
+use Modules\AI\Domain\Advisor\AdvisorQuestion;
+use Modules\AI\Domain\Advisor\AdvisorVerdict;
 use Modules\AI\Domain\Conversation\ContactImpactPolicy;
-use Modules\AI\Domain\Conversation\InboundSocialExchange;
 use Modules\AI\Domain\Conversation\ConversationRoutePolicy;
+use Modules\AI\Domain\Conversation\InboundSocialExchange;
 use Modules\AI\Enums\AiConversationReplyState;
 use Modules\AI\Enums\AiConversationRoute;
 use Modules\AI\Enums\AiObservationKind;
@@ -146,7 +151,10 @@ class RunAiConversationCycleAction
             return false;
         }
 
-        app(DeliverAiDirectReplyAction::class)->handle($playerId, $attackerId, $message);
+        $verdict = $this->advise('post_battle', $evaluated, $message, '');
+        if (!$verdict->is('silent')) {
+            app(DeliverAiDirectReplyAction::class)->handle($playerId, $attackerId, $verdict->text ?? $message);
+        }
 
         return true;
     }
@@ -229,7 +237,10 @@ class RunAiConversationCycleAction
             return false;
         }
 
-        app(DeliverAiAllianceReplyAction::class)->handle($playerId, (int) $message->alliance_id, $text, $message->id);
+        $verdict = $this->advise('alliance_chat', $evaluated, $text, (string) $message->message);
+        if (!$verdict->is('silent')) {
+            app(DeliverAiAllianceReplyAction::class)->handle($playerId, (int) $message->alliance_id, $verdict->text ?? $text, $message->id);
+        }
 
         return true;
     }
@@ -380,6 +391,18 @@ class RunAiConversationCycleAction
         app(EvaluateAiSocialExchangeAction::class)->handle($exchange->id, 0, $now);
 
         $reply = app(QueueAiSocialExchangeReplyAction::class)->handle($exchange->id, $this->replyExpiresAt($now));
+        if ($reply !== null && !$this->isPleasantry($exchange->type)) {
+            $verdict = $this->advise('direct_reply', $exchange->refresh(), $reply->message, (string) ChatMessage::query()->whereKey(AiObservation::query()->whereKey($exchange->source_observation_id)->value('source_id'))->value('message'));
+            if ($verdict->is('silent')) {
+                // An unsealed reply expires on its own: the account chose not to answer.
+                return;
+            }
+
+            if ($verdict->text !== null) {
+                $reply->update(['message' => $verdict->text]);
+            }
+        }
+
         $sealed = app(SealAiAuthoredReplyAction::class)->handle($reply->id ?? 0);
 
         if ($sealed === null) {
@@ -417,6 +440,53 @@ class RunAiConversationCycleAction
         }
 
         return app(ConversationRoutePolicy::class)->routeFor($exchange->type) === AiConversationRoute::Realization;
+    }
+
+    /**
+     * The conversation advisor's word (ai.campaign-consultation.advisor, off by default): send the answer the rules
+     * chose, or stay silent. In `advice` mode a line it wrote that keeps the authored line's names, tags and numbers
+     * replaces the authored one. Only a human counterparty is consulted unless account-to-account replies may reach
+     * the provider. The brief is what this account sees: the message, its own decision and feelings, the public
+     * highscore and its own reports on the other player.
+     */
+    private function advise(string $moment, AiSocialExchange $exchange, string $authored, string $theirMessage): AdvisorVerdict
+    {
+        $rule = new AdvisorVerdict('reply');
+        $playerId = (int) $exchange->player_id;
+        $otherId = (int) $exchange->counterparty_player_id;
+        if (!app(Advisor::class)->enabled(AdvisorArea::Conversation)
+            || (!app(AiRuntimeSettings::class)->languageAiToAi() && AiProfile::query()->where('player_id', $otherId)->where('enabled', true)->exists())) {
+            return $rule;
+        }
+
+        $facts = app(AdvisorFacts::class);
+        preg_match_all('/\[[^\]]+\]|\d+(?::\d+)*/u', $authored, $kept);
+
+        return app(Advisor::class)->consult(new AdvisorQuestion(
+            AdvisorArea::Conversation,
+            $playerId,
+            $moment,
+            [
+                ['id' => 'reply', 'summary' => 'answer: ' . $authored],
+                ['id' => 'silent', 'summary' => 'do not answer'],
+            ],
+            'reply',
+            array_filter([
+                'their_message' => mb_substr($theirMessage, 0, 600),
+                'what_they_did' => $exchange->type->name,
+                'my_decision' => $exchange->response?->name,
+                'me' => $facts->standing($playerId),
+                'them' => $facts->standing($otherId),
+                'my_feelings_toward_them' => $facts->feelings($playerId, $otherId, $authored),
+            ], static fn (mixed $value): bool => $value !== null && $value !== '' && $value !== []),
+            $facts->reports($playerId, $otherId),
+            [
+                'authored' => $authored,
+                'facts' => array_values(array_unique($kept[0])),
+                'language' => $facts->language($otherId),
+                'persona' => $facts->persona($playerId),
+            ],
+        ));
     }
 
     /**

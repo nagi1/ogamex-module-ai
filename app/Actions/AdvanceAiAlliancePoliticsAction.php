@@ -6,6 +6,10 @@ use Exception;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Classification\Choice;
 use Modules\AI\Contracts\AllianceTreaties;
+use Modules\AI\Domain\Advisor\Advisor;
+use Modules\AI\Domain\Advisor\AdvisorArea;
+use Modules\AI\Domain\Advisor\AdvisorFacts;
+use Modules\AI\Domain\Advisor\AdvisorQuestion;
 use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Domain\Social\AllianceAmbition;
 use Modules\AI\Domain\Social\SocialMinds;
@@ -56,6 +60,13 @@ class AdvanceAiAlliancePoliticsAction
 
     /** The window the human pressure cap counts threats in. */
     private const PRESSURE_WINDOW_HOURS = 168;
+
+    /** The legal answers to a pact offer, for the advisor. */
+    private const ANSWER_OFFER = ['accept' => 'sign the pact', 'decline' => 'refuse the pact'];
+
+    private const KEEP_OR_CANCEL = ['keep' => 'keep the pact', 'cancel' => 'cancel the pact by notice ({hours} h), then war'];
+
+    private const ANSWER_DEMAND = ['Submit' => 'pay the tribute and become their vassal', 'Revolt' => 'refuse and meet their war', 'Ignore' => 'ignore the demand (they read it as a refusal)'];
 
     /** @var array<string, mixed> */
     private array $policy = [];
@@ -369,7 +380,12 @@ class AdvanceAiAlliancePoliticsAction
             return false;
         }
 
-        if ($this->hates($founderId, $this->members((int) $theirs->id)) || $this->distrusts((int) $ours->id, (int) $theirs->id)) {
+        $refuses = $this->hates($founderId, $this->members((int) $theirs->id)) || $this->distrusts((int) $ours->id, (int) $theirs->id);
+        if ($cause === 'offered') {
+            $refuses = $this->advise('pact_offer', (int) $ours->id, (int) $theirs->id, self::ANSWER_OFFER, $refuses ? 'decline' : 'accept') === 'decline';
+        }
+
+        if ($refuses) {
             if ($answer) {
                 app(DeliverAiDirectReplyAction::class)->handle($founderId, (int) $theirs->founder_user_id, $this->line('pact_refuse', (string) $theirs->alliance_tag, $founderId, (int) $theirs->founder_user_id));
             }
@@ -433,6 +449,10 @@ class AdvanceAiAlliancePoliticsAction
             // same offer twenty times to one leader).
             $human = !in_array($partner->founder_user_id, $founders, true);
             if ($this->offeredTo($alliance, (int) $partner->founder_user_id) || in_array((int) $alliance->id, $this->treaties->pactOffersTo($partnerId), true)) {
+                continue;
+            }
+
+            if ($this->advise('pact_propose', (int) $alliance->id, $partnerId, ['offer' => 'offer them a pact against a common enemy', 'hold' => 'make no offer now'], 'offer') === 'hold') {
                 continue;
             }
 
@@ -520,7 +540,7 @@ class AdvanceAiAlliancePoliticsAction
         $strength = $this->points((int) $alliance->id);
 
         foreach ($this->partners((int) $alliance->id) as $partnerId) {
-            if ($strength >= $ratio * max(1.0, $this->points($partnerId))) {
+            if ($strength >= $ratio * max(1.0, $this->points($partnerId)) && $this->advise('partner', (int) $alliance->id, $partnerId, self::KEEP_OR_CANCEL, 'cancel') === 'cancel') {
                 return $this->turnOn($alliance, $partnerId);
             }
         }
@@ -785,8 +805,10 @@ class AdvanceAiAlliancePoliticsAction
         }
 
         foreach ($this->partners($club) as $partner) {
-            if ($this->acts($club, $partner, 'betray_now')) {
-                return $moves + $this->turnOn($alliance, $partner);
+            $betrays = $this->acts($club, $partner, 'betray_now');
+            if ($this->advise('partner', $club, $partner, self::KEEP_OR_CANCEL, $betrays ? 'cancel' : 'keep') === 'cancel') {
+                // The teacher's betrayal may be a surprise break; the advisor's own pick is only ever the notice.
+                return $moves + ($betrays ? $this->turnOn($alliance, $partner) : $this->giveNotice($alliance, $partner));
             }
         }
 
@@ -855,6 +877,10 @@ class AdvanceAiAlliancePoliticsAction
         }
 
         $choices = $minds->exchange(array_map(fn (array $o): array => [$this->leader($o[0]), $this->leader($o[1]), ['pact' => false, 'power_ratio' => $this->ratio($o[0], $o[1])], ['Ignore', 'OfferPact', 'Threaten']], $offers), $hour);
+        foreach ($offers as $i => [$club, $other]) {
+            $choices[$i] = $this->advise('court', $club, $other, ['OfferPact' => 'offer them a pact', 'Ignore' => 'make no offer now'], ($choices[$i] ?? null) === 'OfferPact' ? 'OfferPact' : 'Ignore');
+        }
+
         $wanted = array_values(array_filter($offers, static fn (int $i): bool => ($choices[$i] ?? null) === 'OfferPact', ARRAY_FILTER_USE_KEY));
         $wary = $minds->wary(array_map(fn (array $o): array => $this->pactSituation($o[0], $o[1]), $wanted));
         $proposed = array_filter($wanted, static fn (int $i): bool => !($wary[$i] ?? false), ARRAY_FILTER_USE_KEY);
@@ -906,7 +932,8 @@ class AdvanceAiAlliancePoliticsAction
 
             // An open war blocks a pact: such an offer only lapses.
             if ($this->thinking && !$this->treaties->related($club, $offererId)) {
-                $moves += $this->answerCourtship($offererId, $club, $this->acceptsCourtship($club, $offererId));
+                $accepts = $this->advise('pact_offer', $club, $offererId, self::ANSWER_OFFER, $this->acceptsCourtship($club, $offererId) ? 'accept' : 'decline') === 'accept';
+                $moves += $this->answerCourtship($offererId, $club, $accepts);
             } elseif (!$this->thinking) {
                 $moves += (int) $this->pactOffered($alliance, $offerer, 'offered', true);
             }
@@ -1008,8 +1035,22 @@ class AdvanceAiAlliancePoliticsAction
         $tribute = (bool) config('ai.cognition.social.tribute');
         $choices = $minds->exchange(array_map(fn (array $e): array => [$this->leader($e[0]), $this->leader($e[1]), ['pact' => false, 'power_ratio' => $this->ratio($e[0], $e[1])],
             $tribute || !in_array($e[1], $humans, true) ? ['Ignore', 'Threaten', 'DemandTribute'] : ['Ignore', 'Threaten']], $eyed), $this->hour());
+        foreach ($eyed as $i => [$club, $target]) {
+            $options = ['Ignore' => 'leave them be', 'Threaten' => 'threaten them, then war if they do not yield'];
+            if ($tribute || !in_array($target, $humans, true)) {
+                $options['DemandTribute'] = 'demand a daily tribute, war if refused';
+            }
+
+            $rule = (string) ($choices[$i] ?? 'Ignore');
+            $choices[$i] = $this->advise('press', $club, $target, $options, isset($options[$rule]) ? $rule : 'Ignore');
+        }
+
         $demands = array_filter($eyed, static fn (array $e, int $i): bool => ($choices[$i] ?? null) === 'DemandTribute' && !in_array($e[1], $humans, true), ARRAY_FILTER_USE_BOTH);
         $replies = array_combine(array_keys($demands), $minds->exchange(array_values(array_map(fn (array $e): array => [$this->leader($e[1]), $this->leader($e[0]), ['demand' => true, 'power_ratio' => $this->ratio($e[1], $e[0])], ['Submit', 'Revolt', 'Ignore']], $demands)), $this->hour()));
+        foreach ($demands as $i => [$club, $target]) {
+            $rule = (string) ($replies[$i] ?? 'Ignore');
+            $replies[$i] = $this->advise('tribute_demand', $target, $club, self::ANSWER_DEMAND, isset(self::ANSWER_DEMAND[$rule]) ? $rule : 'Ignore');
+        }
 
         $moves = 0;
         foreach ($eyed as $i => [$club, $target]) {
@@ -1815,6 +1856,44 @@ class AdvanceAiAlliancePoliticsAction
         return array_values($this->once('members:' . $allianceId, static fn (): array => User::query()->where('alliance_id', $allianceId)->pluck('id')->map(static fn ($id): int => (int) $id)->all()));
     }
 
+    /**
+     * The advisor's word on one diplomatic choice (ai.campaign-consultation.advisor, off by default): the teacher's
+     * choice is the default and the advisor may pick another legal option; off, a cap or any failure keeps the
+     * teacher's. The brief holds what the club's leader can see: both clubs' public members and points, the public war
+     * and broken-pact record, its own stance toward them, its own feelings and its own reports on their leader.
+     *
+     * @param array<string, string> $options id => what it does
+     */
+    private function advise(string $moment, int $club, int $other, array $options, string $rule): string
+    {
+        $advisor = app(Advisor::class);
+        $leader = $this->leader($club);
+        if (!$advisor->enabled(AdvisorArea::Diplomacy) || !AiProfile::query()->where('player_id', $leader)->where('enabled', true)->exists()) {
+            return $rule;
+        }
+
+        $facts = app(AdvisorFacts::class);
+        $theirLeader = $this->leader($other);
+        $hours = (string) (int) app(SocialMinds::class)->setting('pact_notice_hours');
+        $side = fn (int $id): array => ['tag' => (string) Alliance::query()->whereKey($id)->value('alliance_tag')] + $facts->club($id)
+            + ['open_wars' => count($this->treaties->counterparts($id, AiAllianceStance::War)), 'pacts_broken' => $this->treaties->pactsBroken($id)];
+
+        return $advisor->consult(new AdvisorQuestion(
+            AdvisorArea::Diplomacy,
+            $leader,
+            $moment,
+            array_map(static fn (string $id, string $summary): array => ['id' => $id, 'summary' => str_replace('{hours}', $hours, $summary)], array_keys($options), array_values($options)),
+            $rule,
+            [
+                'us' => $side($club),
+                'them' => $side($other),
+                'between_us' => $this->treaties->holds($club, $other, AiAllianceStance::War) ? 'war' : ($this->treaties->holds($club, $other, AiAllianceStance::Nap) ? 'pact' : 'none'),
+                'my_feelings_toward_their_leader' => $facts->feelings($leader, $theirLeader, $moment),
+            ],
+            $facts->reports($leader, $theirLeader),
+        ))->choice;
+    }
+
     /** The leader's own wording of one announcement; the model words it when it is on, and the authored line is the fallback. */
     private function line(string $key, string $tag, int $speakerId = 0, int $toPlayerId = 0, string $other = ''): string
     {
@@ -1826,6 +1905,9 @@ class AdvanceAiAlliancePoliticsAction
         $line = str_replace(['{tag}', '{other}', '{hours}'], [$tag, $other, $hours], $line);
         $profile = $speakerId > 0 ? AiProfile::query()->where('player_id', $speakerId)->where('enabled', true)->first() : null;
 
-        return $profile === null || $line === '' ? $line : app(ComposeAiLineAction::class)->handle($profile, 'alliance_politics.' . $key, $line, ['tag' => $tag, 'other' => $other], $toPlayerId > 0 ? $toPlayerId : null);
+        // With the diplomacy advisor applying, DeepSeek words the line in the persona's voice and the recipient's language.
+        $advised = app(Advisor::class)->applies(AdvisorArea::Diplomacy);
+
+        return $profile === null || $line === '' ? $line : app(ComposeAiLineAction::class)->handle($profile, 'alliance_politics.' . $key, $line, ['tag' => $tag, 'other' => $other], $toPlayerId > 0 ? $toPlayerId : null, $advised);
     }
 }

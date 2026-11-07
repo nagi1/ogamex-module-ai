@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Support;
 
+use Modules\AI\Domain\Advisor\AdvisorArea;
 use Modules\AI\Enums\AiCampaignConsultationMode;
 use OGame\Services\SettingsService;
 
@@ -218,5 +219,20 @@ final class AiRuntimeSettings
     public function campaignReconciliationMinutes(): int
     {
         return max(1, (int) $this->settings->get('ai_campaign_consultation_reconciliation_minutes', $this->intDefault('ai.campaign-consultation.reconciliation_minutes', 30)));
+    }
+
+    // -- Advisor ---------------------------------------------------------------------------
+
+    /** Each advisor area's mode; anything unknown reads as off, so the lane fails closed. */
+    public function advisorMode(AdvisorArea $area): AiCampaignConsultationMode
+    {
+        return AiCampaignConsultationMode::tryFrom(
+            (string) $this->settings->get('ai_advisor_' . $area->value . '_mode', $this->stringDefault('ai.campaign-consultation.advisor.modes.' . $area->value, AiCampaignConsultationMode::Off->value)),
+        ) ?? AiCampaignConsultationMode::Off;
+    }
+
+    public function advisorCostlyShare(): float
+    {
+        return max(0.0, (float) $this->settings->get('ai_advisor_costly_share', $this->floatDefault('ai.campaign-consultation.advisor.costly_share', 0.3)));
     }
 }

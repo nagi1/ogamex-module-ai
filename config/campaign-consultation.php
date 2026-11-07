@@ -53,4 +53,31 @@ return [
     ],
     'concurrency_cap' => (int) env('AI_CAMPAIGN_CONSULTATION_CONCURRENCY_CAP', 1),
     'reconciliation_minutes' => (int) env('AI_CAMPAIGN_CONSULTATION_RECONCILIATION_MINUTES', 30),
+
+    /*
+     * The advisor: DeepSeek Flash is consulted at a few big moments and only chooses among the legal
+     * options the rules computed (with their forecasts), or "none" to keep the rule's choice. Each
+     * area has its own mode, off | observe | advice, and every one is off by default. `observe`
+     * records the advice beside the rule's choice; `advice` applies it. Any timeout, failure, invalid
+     * answer or cap keeps the rule's choice. Area 1 (offense) rides the campaign lane above.
+     */
+    'advisor' => [
+        'modes' => [
+            'offense' => env('AI_ADVISOR_OFFENSE_MODE', 'off'),
+            'diplomacy' => env('AI_ADVISOR_DIPLOMACY_MODE', 'off'),
+            'conversation' => env('AI_ADVISOR_CONVERSATION_MODE', 'off'),
+            'costly' => env('AI_ADVISOR_COSTLY_MODE', 'off'),
+        ],
+        // Area 4: an action whose cost or risk is at least this share of the account's value is consulted.
+        'costly_share' => (float) env('AI_ADVISOR_COSTLY_SHARE', 0.3),
+        'timeout_seconds' => (int) env('AI_ADVISOR_TIMEOUT_SECONDS', 20),
+        'maximum_input_tokens' => (int) env('AI_ADVISOR_MAXIMUM_INPUT_TOKENS', 3_000),
+        'maximum_output_tokens' => (int) env('AI_ADVISOR_MAXIMUM_OUTPUT_TOKENS', 400),
+        'maximum_reason_characters' => 200,
+        'maximum_text_characters' => 300,
+        'daily_limits' => [
+            'universe' => ['attempts' => (int) env('AI_ADVISOR_UNIVERSE_DAILY_CALLS', 400), 'input_tokens' => 1_200_000, 'output_tokens' => 160_000],
+            'account' => ['attempts' => (int) env('AI_ADVISOR_ACCOUNT_DAILY_CALLS', 12), 'input_tokens' => 36_000, 'output_tokens' => 4_800],
+        ],
+    ],
 ];

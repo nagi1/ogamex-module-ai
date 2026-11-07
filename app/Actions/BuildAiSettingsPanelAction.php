@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Modules\AI\Domain\Advisor\AdvisorArea;
 use Modules\AI\Support\AiRuntimeSettings;
 use Modules\AI\Support\AiSettings;
 use Symfony\Component\Yaml\Yaml;
@@ -37,6 +38,10 @@ class BuildAiSettingsPanelAction
         'affect_decision_weight' => ['key' => 'ai_affect_decision_weight', 'type' => 'int'],
         'experience_decision_weight' => ['key' => 'ai_experience_decision_weight', 'type' => 'int'],
         'campaign_mode' => ['key' => 'ai_campaign_consultation_mode', 'type' => 'select'],
+        'advisor_offense_mode' => ['key' => 'ai_advisor_offense_mode', 'type' => 'select'],
+        'advisor_diplomacy_mode' => ['key' => 'ai_advisor_diplomacy_mode', 'type' => 'select'],
+        'advisor_conversation_mode' => ['key' => 'ai_advisor_conversation_mode', 'type' => 'select'],
+        'advisor_costly_mode' => ['key' => 'ai_advisor_costly_mode', 'type' => 'select'],
     ];
 
     /**
@@ -56,6 +61,10 @@ class BuildAiSettingsPanelAction
         'conversation_enabled' => 'llm',
         'conversation_reply_ttl_minutes' => 'llm',
         'campaign_mode' => 'llm',
+        'advisor_offense_mode' => 'advisor',
+        'advisor_diplomacy_mode' => 'advisor',
+        'advisor_conversation_mode' => 'advisor',
+        'advisor_costly_mode' => 'advisor',
         'affect_enrichment' => 'feel',
         'affect_decision_weight' => 'feel',
         'experience_decision_weight' => 'feel',
@@ -83,6 +92,10 @@ class BuildAiSettingsPanelAction
         'affect_decision_weight' => ['what' => 'How strongly the account\'s mood sways a decision.', 'why' => 'Raise it to make personality count more.', 'effect' => '0 = mood has no effect.', 'restart' => 'No. Picked up on the next read.'],
         'experience_decision_weight' => ['what' => 'How strongly remembered outcomes sway a decision.', 'why' => 'Raise it to make an account repeat what worked before.', 'effect' => '0 = memory has no effect.', 'restart' => 'No. Picked up on the next read.'],
         'campaign_mode' => ['what' => 'Whether campaign consultations may call a provider.', 'why' => 'Use observe to watch the advice, advice to act on it.', 'effect' => 'off = no consultations; observe = read-only; advice = suggestions may be acted on.', 'restart' => 'No. Picked up on the next read.'],
+        'advisor_offense_mode' => ['what' => 'Whether the advisor is asked about hard attacks: a big defended target, waves, ACS, moon destruction.', 'why' => 'Use observe to compare its pick with the rules, advice to let it pick.', 'effect' => 'off = rules only; observe = advice recorded, not applied; advice = its pick among the legal options is applied.', 'restart' => 'No. Picked up on the next read.'],
+        'advisor_diplomacy_mode' => ['what' => 'Whether the advisor is asked about pacts, notice, threats and tribute, and words the leader\'s messages.', 'why' => 'Use observe to compare its pick with the social teacher, advice to let it pick.', 'effect' => 'off = teacher only; observe = advice recorded, not applied; advice = its pick is applied and messages are written in the recipient\'s language.', 'restart' => 'No. Picked up on the next read.'],
+        'advisor_conversation_mode' => ['what' => 'Whether the advisor is asked before replying to a human, in alliance chat or after a battle.', 'why' => 'Use observe to compare, advice to let it stay silent or word the reply.', 'effect' => 'off = rules only; observe = advice recorded, not applied; advice = it may stay silent or word the reply.', 'restart' => 'No. Picked up on the next read.'],
+        'advisor_costly_mode' => ['what' => 'Whether the advisor is asked before an action that risks a large share of the account.', 'why' => 'Use observe to compare, advice to let it pick or wait.', 'effect' => 'off = rules only; observe = advice recorded, not applied; advice = its pick or a wait is applied.', 'restart' => 'No. Picked up on the next read.'],
     ];
 
     /**
@@ -173,6 +186,10 @@ class BuildAiSettingsPanelAction
             $this->int('affect_decision_weight', $runtime->affectDecisionWeight(), 10),
             $this->int('experience_decision_weight', $runtime->experienceDecisionWeight(), 20),
             ['field' => 'campaign_mode', 'type' => 'select', 'value' => $runtime->campaignMode()->value, 'default' => 'off', 'options' => ['off', 'observe', 'advice']],
+            ...array_map(
+                static fn (AdvisorArea $area): array => ['field' => 'advisor_' . $area->value . '_mode', 'type' => 'select', 'value' => $runtime->advisorMode($area)->value, 'default' => 'off', 'options' => ['off', 'observe', 'advice']],
+                AdvisorArea::cases(),
+            ),
         ];
     }
 

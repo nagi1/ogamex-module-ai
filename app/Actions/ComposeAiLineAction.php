@@ -5,6 +5,7 @@ namespace Modules\AI\Actions;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Modules\AI\Ai\Agents\OgameMessageAgent;
+use Modules\AI\Domain\Advisor\AdvisorFacts;
 use Modules\AI\Domain\Conversation\UsageBudgetLimit;
 use Modules\AI\Domain\Conversation\UsageBudgetLimits;
 use Modules\AI\Domain\Conversation\UsageReservationRequest;
@@ -33,11 +34,12 @@ class ComposeAiLineAction
 
     /**
      * @param array<string, scalar|null> $facts what the line may refer to; every non-empty value must survive into the text
+     * @param bool $advised an advisor area in `advice` mode asks for the wording even while general composition is off
      */
-    public function handle(AiProfile $profile, string $key, string $authored, array $facts = [], int|null $counterpartyId = null): string
+    public function handle(AiProfile $profile, string $key, string $authored, array $facts = [], int|null $counterpartyId = null, bool $advised = false): string
     {
         $settings = app(AiRuntimeSettings::class);
-        if (!$settings->languageEnabled() || !$settings->languageCompose()) {
+        if (!$settings->languageEnabled() || (!$settings->languageCompose() && !$advised)) {
             return $authored;
         }
 
@@ -49,7 +51,8 @@ class ComposeAiLineAction
         }
 
         $inner = $counterpartyId === null ? [] : app(ReadAiInnerStateAction::class)->handle((int) $profile->player_id, $counterpartyId, $authored);
-        $line = $this->ask($profile, $key, $authored, $facts, $inner, $cacheKey) ?? $authored;
+        $language = $counterpartyId === null ? null : app(AdvisorFacts::class)->language($counterpartyId);
+        $line = $this->ask($profile, $key, $authored, $facts, $inner, $cacheKey, $language) ?? $authored;
         Cache::put($cacheKey, $line, now()->addHours(6));
 
         return $line;
@@ -58,8 +61,9 @@ class ComposeAiLineAction
     /**
      * @param array<string, scalar> $facts
      * @param array<string, string|list<string>> $inner
+     * @param string|null $language the recipient's language code, so the line is written in it
      */
-    private function ask(AiProfile $profile, string $key, string $authored, array $facts, array $inner, string $cacheKey): string|null
+    private function ask(AiProfile $profile, string $key, string $authored, array $facts, array $inner, string $cacheKey, string|null $language): string|null
     {
         $ladder = app(ResolveAiProviderRouteAction::class)->handle(AiLanguageTaskKind::MessageComposition, $this->clock->now());
         if ($ladder->isEmpty()) {
@@ -88,7 +92,7 @@ class ComposeAiLineAction
                 'archetype' => strtolower((string) $profile->archetype?->name),
                 'maximumCharacters' => (string) self::MAXIMUM_CHARACTERS,
             ])->prompt(
-                json_encode(['situation' => $key, 'facts' => $facts, 'inner_state' => $inner, 'example_line' => $authored], JSON_THROW_ON_ERROR),
+                json_encode(array_filter(['situation' => $key, 'facts' => $facts, 'inner_state' => $inner, 'example_line' => $authored, 'write_in_language' => $language], static fn (mixed $value): bool => $value !== null), JSON_THROW_ON_ERROR),
                 provider: $ladder->toProviderMap(),
                 timeout: app(AiRuntimeSettings::class)->languageTimeoutSeconds(),
             );
