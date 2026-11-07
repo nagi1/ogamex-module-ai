@@ -960,6 +960,18 @@ impl Catalogue {
         labs.into_iter().take(n).sum()
     }
 
+    /// Row 47, for the report only: what the planet's lazy clock would have booked by `until` (capped at its horizon),
+    /// as [produced, wasted, stock] gained in metal-equivalent, on a copy - the game itself is not touched. A clock the
+    /// world has not moved since before midnight still produced through the night; its day line books that day.
+    pub fn accrued_until(&self, game: &Game, until: f64) -> [f64; 3] {
+        let until = until.min(game.horizon);
+        if game.done || until <= game.t { return [0.0; 3] }
+        let mut copy = game.clone();
+        self.advance_to(&mut copy, until, false);
+        let (before, after) = (&game.planet, &copy.planet);
+        [after.books.produced - before.books.produced, after.books.wasted - before.books.wasted, weighted(after.res) - weighted(before.res)]
+    }
+
     /// Lands every build that ends before `until` (at it too when `landing`; the horizon is a cliff for a build that ends on it), in order, accruing up to each end, then accrues up to `until`.
     pub(crate) fn advance_to(&self, game: &mut Game, until: f64, landing: bool) {
         while let Some(&(end, k)) = game.pending.first().filter(|(end, _)| if landing { *end <= until } else { *end < until }) {

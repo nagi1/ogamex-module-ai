@@ -576,8 +576,7 @@ impl<W: Write> Season<'_, W> {
             let stall = self.stall(a, &planets);
             // Row 23: the day's flows are the difference of two samples of the same second, so a line whose events
             // all fell inside it closes by construction and one the world moved without booking a flow does not.
-            let books = self.u.world.books(a);
-            let stock = self.u.world.stock(a);
+            let (books, stock) = settled(self.u, a, at);
             let (before, was) = self.since[a];
             let flows = flows_of(&before, &books);
             let unexplained = (stock - was) - (books.net() - before.net());
@@ -873,6 +872,20 @@ fn frozen_day(previous: Option<(f64, i64, f64)>, inactive: bool, logins: u32, pr
         !inactive && logins > 0 && produced <= 1e-6 && (stock - old_stock).abs() < 1e-6
             && score == old_score && (fleet - old_fleet).abs() < 1e-6
     })
+}
+
+/// Row 47: the account's books and stock as of midnight `at`. The world moves a planet's clock only at its own events,
+/// so one idle across midnight has not yet booked the hours before it; the line settles them on a copy (the next line
+/// starts from that, so nothing is counted twice) and the game itself, its decisions and outcomes, stay as they are.
+fn settled(u: &Universe, a: usize, at: f64) -> (Books, f64) {
+    let (mut books, mut stock) = (u.world.books(a), u.world.stock(a));
+    for s in (0..u.world.account.len()).filter(|&s| u.world.account[s] == a) {
+        let [produced, wasted, gained] = u.cat.accrued_until(&u.world.games[s], at);
+        books.produced += produced;
+        books.wasted += wasted;
+        stock += gained;
+    }
+    (books, stock)
 }
 
 fn snapshot_time(until: f64, midnight: f64) -> f64 {
