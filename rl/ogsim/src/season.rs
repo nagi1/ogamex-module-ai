@@ -602,6 +602,7 @@ impl Universe {
         world.bodies = on("bodies");
         world.slots = on("slots");
         world.newbie = on("newbie");
+        world.hunt = on("hunt");
         if tuned || skill.is_some() { world.tune = Arc::new(tunes) }
         world.wide = on("wide");
         world.late = on("late");
@@ -974,7 +975,10 @@ impl Universe {
     pub fn day_end(&mut self, midnight: f64) {
         if self.jolt.is_some_and(|day| midnight >= day) { self.jolt = None; self.world.jolt() }
         let n = self.accounts();
-        let totals: Vec<i64> = (0..n).map(|a| score::of(&self.world, a).total).collect();
+        let scores: Vec<score::Score> = (0..n).map(|a| score::of(&self.world, a)).collect();
+        let totals: Vec<i64> = scores.iter().map(|s| s.total).collect();
+        // Arm `hunt`: the highscore's military column is public, refreshed with the rest of the table.
+        if self.world.hunt { self.world.public_military = scores.iter().map(|s| s.military).collect() }
         // N6b: an expedition's find bracket reads the universe's rank-1 score, which the host's highscore refreshes daily.
         self.world.rank1_points = totals.iter().copied().max().unwrap_or(0);
         let mut ranked: Vec<usize> = (0..n).collect();

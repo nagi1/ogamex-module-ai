@@ -1852,3 +1852,25 @@ Halite) improved the RULE BOT — loss review, many versions each beating the la
   slots were the main brake on war (raids x4, loot/prod x2.5, r1/r10 1.2 → 1.56); dominance still far from real
   (r1/r10 5.5, share 0.17). The deployed errand model loses −0.27 in the harder world: retrain/tune it there next.
   Next: the leader hunting rivals' fleets (crashes, debris), and ACS/alliance focus for alliance dominance.
+- 7 Nov, the leader hunts rivals' fleets (arm `hunt`, binary speed2/war7.bin; war world churn=0:1 noalliance
+  personas=0:1:0 warfleet raids guess slots bodies newbie, seeds 1-10, dirs err4-side/war-h-base / war-h-hunt; base
+  reproduces war-g-all3c exactly, so defaults are unchanged). Visible info only: the public highscore's military column
+  (refreshed at day end), own reports (body where a fleet was seen parked; hour-of-day it was seen docked, ±2 h) and
+  the gain rule loot + harvestable debris − forecast loss (debris counted only on a report ≤ 3 h old and with a
+  harvester held, = RaidPlanner `p20Debris`/canHarvest); hunted bodies are re-probed after 3 h instead of 24 h; a crash
+  flies the whole warship stock when that loses less. Results base → hunt: r1 share 0.039 → 0.045, r1/r10 1.56 → 1.99,
+  raids/day 3.91 → 2.66, spy/day 8.7 → 8.3, fleet crashes/day (defender lost ≥ 1e7 of ships, `rl/scripts/crashes.py`)
+  1.43 → 3.68 (destroyed 14 → 43 B, attacker won 84% → 73%), loot/prod 0.163 → 0.272, ships lost 49 → 116 B, HDS 0.658
+  → 0.610; paired ln model −0.271 (0/10, CI [−0.35, −0.20]), persona −0.079 (CI < 0). hunt_gates (10 seasons): rival
+  looks 1.23M, hunt probes 259k, off-hour skips 241k, raids launched with debris 41.6k, of them on a parked fleet 10.2k.
+  Verdict: NOT adopted. It moves dominance the right way (r1/r10 +28%, crashes ×2.6) but the world burns twice the
+  ships, a quarter of crashes are lost (3 h-old reports miss returning fleets or ninjas), both groups end weaker and
+  HDS drops 0.05. Kept behind `hunt` (sim) and `ai.rl.hunt` / AI_RL_HUNT (PHP QueueableSpyPlanner, default off;
+  FleetHuntTest 4/4 incl. unseen-state invariance, SpyDepthTest unchanged; cargo 148/148). The deployed errand model
+  still loses in this world (−0.27 here too): retrain there is a separate step. Next if resumed: hunt only on a report
+  from the same login (probe then strike, as real hunters do), and a phalanx check before the crash.
+- 7 Nov, newbie protection check (host cf1eaf24 `PlayerService::protectsNewbie`): matches the real default. Sources:
+  OGame wiki Newbie Protection (local WIK-045: "0 to 50.000 points: 1:5 ratio; 50.000 to 500.000 points: 1:10") and
+  the live serverData newbieProtectionHigh 50,000 / newbieProtectionLimit 500,000 on 257 of 267 universes
+  (REAL-SERVER-PLAYER-PROFILE dump). Inactive players lose it (host isInactive guard). Not modelled: older universes'
+  flat 1:5 with a 5,000-point floor (WIK-045 legacy line), a per-universe override from settings.

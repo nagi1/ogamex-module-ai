@@ -417,7 +417,8 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     let guess_value = universe.ledgers.iter().fold([0f64; 2], |mut t, l| { for i in 0..2 { t[i] += l.guess_value[i] } t });
     let probe_diag = universe.ledgers.iter().fold([0usize; 3], |mut t, l| { for i in 0..3 { t[i] += l.probe_diag[i] } t });
     let spy_gates = universe.ledgers.iter().fold([0usize; 6], |mut t, l| { for i in 0..6 { t[i] += l.spy_gates[i] } t });
-    let _ = std::fs::write(format!("{out_path}.gates.json"), json!({"raid_gates": gates, "no_plan": no_plan, "stale_split": stale_split, "spy_gates": spy_gates, "guess_gates": guess_gates, "guess_outcomes": guess_outcomes, "guess_value": guess_value, "probe_diag": probe_diag}).to_string());
+    let hunt_gates = universe.ledgers.iter().fold([0usize; 5], |mut t, l| { for i in 0..5 { t[i] += l.hunt_gates[i] } t });
+    let _ = std::fs::write(format!("{out_path}.gates.json"), json!({"hunt_gates": hunt_gates, "raid_gates": gates, "no_plan": no_plan, "stale_split": stale_split, "spy_gates": spy_gates, "guess_gates": guess_gates, "guess_outcomes": guess_outcomes, "guess_value": guess_value, "probe_diag": probe_diag}).to_string());
 
     let count = |role: usize| universe.roles.iter().filter(|&&r| r == role).count();
     let quit_days: Vec<f64> = universe.quit.iter().flatten().map(|d| d / DAY).collect();

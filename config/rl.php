@@ -20,4 +20,7 @@ return [
     'record' => env('AI_RL_RECORD', null),
     // An errand model trained in the simulator (feature version 3, ogrl.export_policy); unset keeps the engine's own errands.
     'errand_model' => env('AI_RL_ERRAND_MODEL', null),
+    // The simulator's `hunt` arm: raiders probe the rivals whose fleet they can crash first (QueueableSpyPlanner).
+    // Off by default: measured 7 Nov 2026 it lifted dominance but cost realism (plan/rl/STRONG-PLAYER-PLAN.md).
+    'hunt' => (bool) env('AI_RL_HUNT', false),
 ];

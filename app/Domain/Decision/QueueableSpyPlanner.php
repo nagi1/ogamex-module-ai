@@ -20,6 +20,7 @@ use OGame\GameObjects\Models\Units\UnitCollection;
 use OGame\Models\Enums\PlanetType;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
+use OGame\Models\Highscore;
 use OGame\Models\Message;
 use OGame\Models\Planet;
 use OGame\Models\Planet\Coordinate;
@@ -51,6 +52,12 @@ use OGame\Services\PlayerService;
  *
  * Only the account's own reports count, reached through its messages: another
  * player's reports on the same coordinate are not something it can read.
+ *
+ * A player with a war fleet hunts the rivals whose fleet it can crash, read from
+ * the public highscore's military points, at the body where its own reports saw
+ * that fleet parked. A fleet moves, so a hunted body is re-read after a short
+ * window, at the hours the account's own reports saw the fleet at home (the
+ * fleet-save gap). The raid planner then counts the wreckage as gain.
  */
 class QueueableSpyPlanner
 {
@@ -67,6 +74,20 @@ class QueueableSpyPlanner
 
     /** Metal-equivalent loot that makes a redacted report worth a probe volley. */
     private const RICH_YIELD = 10_000.0;
+
+    /** A hunted rival's fleet moves: its body is re-read after this window (rl/ogsim players::HUNT_TTL_HOURS). */
+    private const HUNT_TTL_HOURS = 3;
+
+    private const HUNT_RIVALS = 3;
+
+    /** A rival is worth hunting from this share of the hunter's own warship value. */
+    private const HUNT_MIN_SHARE = 0.1;
+
+    /** The hunter only goes for a fleet its own is at least this many times (OGMEM p10 attacker over defender value). */
+    private const HUNT_ODDS_FLOOR = 1.6;
+
+    /** Own reports within this many hours of the clock tell whether the rival's fleet is usually home now. */
+    private const HUNT_HOUR_BAND = 2;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -91,12 +112,22 @@ class QueueableSpyPlanner
 
         $refusals = app(RecentRefusals::class);
         [$fresh, $rescout] = $this->freshIntelCoordinates($player);
+        $hunt = config('ai.rl.hunt') ? $this->huntBodies($player) : [];
+        foreach ($hunt as $key => $planet) {
+            [$due, $docked] = $this->huntDue($playerId, $planet);
+            if ($due) {
+                unset($fresh[$key]);
+            }
+            if (!$docked) {
+                $fresh[$key] = true;
+            }
+        }
         $skip = $fresh
             + $this->inFlightCoordinates($playerId)
             + $this->openSpyIntentCoordinates($playerId)
             // A probe the gate just refused is not a mission, so nothing else remembers the target.
             + $refusals->refusedTargets($playerId);
-        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId, AiWorkKind::Spy), $rescout);
+        $selection = $this->target($player, $skip, $refusals->refusedOrigins($playerId, AiWorkKind::Spy), $rescout, $hunt);
         if ($selection === null) {
             return null;
         }
@@ -173,9 +204,10 @@ class QueueableSpyPlanner
      * @param array<string, true> $skipCoordinates
      * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      * @param array<string, true> $rescout fresh redacted coordinates (g:s:p) whose volley flies only whole
+     * @param array<string, Planet> $hunt the rivals' bodies the account hunts, keyed g:s:p:type
      * @return array{0: PlanetService, 1: Planet}|null the origin and its target
      */
-    private function target(PlayerService $player, array $skipCoordinates, array $refusedOrigins, array $rescout = []): array|null
+    private function target(PlayerService $player, array $skipCoordinates, array $refusedOrigins, array $rescout = [], array $hunt = []): array|null
     {
         $idleOrigins = array_values(array_filter(
             $this->idleProbePlanets($player),
@@ -202,7 +234,14 @@ class QueueableSpyPlanner
             ->cursor()
             ->reject(static fn (Planet $planet): bool => self::skipped($skipCoordinates, $planet))
             ->take(self::MAX_CANDIDATES)
-            ->values();
+            ->values()
+            ->collect();
+        // A hunted rival's body is read wherever it lies, not only among the nearest.
+        foreach ($hunt as $planet) {
+            if (!self::skipped($skipCoordinates, $planet) && !$candidates->contains(static fn (Planet $seen): bool => $seen->id === $planet->id)) {
+                $candidates->push($planet);
+            }
+        }
 
         $intel = $this->knownIntelByCoordinate($player->getId(), $candidates);
         $knownYield = $intel['yield'];
@@ -241,6 +280,7 @@ class QueueableSpyPlanner
                 'origin' => $origin,
                 'enemy' => $enemy,
                 'enemy_moon' => $enemy && $breaker && (int) $planet->planet_type === PlanetType::Moon->value,
+                'hunt' => isset($hunt["{$coordinateKey}:{$planet->planet_type}"]),
                 'inactive' => $owner?->isInactive() ?? false,
                 'quiet' => !$this->activityIntelReader->activityAt($target),
                 'defended' => $fighter && isset($intel['defended'][$coordinateKey]),
@@ -261,10 +301,125 @@ class QueueableSpyPlanner
         // to be flown at something that shoots.
         // At war the enemy is read first, the moon holding its gate and phalanx first of all for an account that can break it:
         // a late empire raided by every neighbour still scouted the nearest farm, and no rival's fleet or moon was ever hit.
-        usort($scored, static fn (array $left, array $right): int => [$right['enemy_moon'], $right['enemy'], $right['defended'], $right['inactive'], $right['quiet'], $right['score']]
-            <=> [$left['enemy_moon'], $left['enemy'], $left['defended'], $left['inactive'], $left['quiet'], $left['score']]);
+        // A hunter reads the rival's parked fleet next: crashing it is how a leader pulls away from its peers.
+        usort($scored, static fn (array $left, array $right): int => [$right['enemy_moon'], $right['enemy'], $right['hunt'], $right['defended'], $right['inactive'], $right['quiet'], $right['score']]
+            <=> [$left['enemy_moon'], $left['enemy'], $left['hunt'], $left['defended'], $left['inactive'], $left['quiet'], $left['score']]);
 
         return [$scored[0]['origin'], $scored[0]['planet']];
+    }
+
+    /**
+     * The rivals' bodies this account hunts, keyed g:s:p:type: from the public highscore, the rivals whose military
+     * points its own warships can crash (at least a tenth of its warship value, at most that value over the odds floor),
+     * strongest first, and per rival the body where the account's own reports saw the largest fleet parked, else its
+     * homeworld. Never the rival's live fleet (rl/ogsim players::hunt_rivals).
+     *
+     * @return array<string, Planet>
+     */
+    private function huntBodies(PlayerService $player): array
+    {
+        $own = 0.0;
+        foreach ($player->planets->all() as $planet) {
+            foreach ($planet->getShipUnits()->units as $entry) {
+                $own += $this->warshipValue([$entry->unitObject->machine_name => $entry->amount]);
+            }
+        }
+        if ($own <= 0.0) {
+            return [];
+        }
+
+        $rivals = Highscore::query()
+            ->where('player_id', '!=', $player->getId())
+            ->whereNotIn('player_id', app(Enemies::class)->spared($player->getId()))
+            ->where('military_built', '>=', (int) ceil(self::HUNT_MIN_SHARE * $own / 1000))
+            ->where('military_built', '<=', (int) floor($own / self::HUNT_ODDS_FLOOR / 1000))
+            ->orderByDesc('military_built')
+            ->limit(self::HUNT_RIVALS * 2)
+            ->pluck('player_id');
+
+        $bodies = [];
+        foreach ($rivals as $rivalId) {
+            if (count($bodies) >= self::HUNT_RIVALS) {
+                break;
+            }
+            $owner = User::query()->find((int) $rivalId);
+            if ($owner === null || (bool) $owner->vacation_mode || $this->playerServiceFactory->make((int) $rivalId, true)->isInactive()) {
+                continue;
+            }
+            $owned = Planet::query()->where('user_id', (int) $rivalId)->where('destroyed', 0)->orderBy('id')->get();
+            if ($owned->isEmpty()) {
+                continue;
+            }
+            $best = null;
+            $bestValue = 0.0;
+            foreach ($owned as $planet) {
+                $report = $this->ownReports($player->getId(), (int) $planet->galaxy, (int) $planet->system, (int) $planet->planet)
+                    ->where('planet_type', (int) $planet->planet_type)
+                    ->first(['ships']);
+                $value = $report === null ? 0.0 : $this->warshipValue($report->ships ?? []);
+                if ($value > $bestValue) {
+                    [$best, $bestValue] = [$planet, $value];
+                }
+            }
+            $best ??= $owned->first(static fn (Planet $planet): bool => (int) $planet->planet_type === PlanetType::Planet->value) ?? $owned->first();
+            $bodies["{$best->galaxy}:{$best->system}:{$best->planet}:{$best->planet_type}"] = $best;
+        }
+
+        return $bodies;
+    }
+
+    /**
+     * Whether a hunted body is due a new read (no own report inside the short window) and whether the rival's fleet is
+     * usually parked there at this hour: an own report within the hour band saw warships there, or none was taken at
+     * this hour yet, so the hunter learns the rival's day by probing it (rl/ogsim players::docked_hour).
+     *
+     * @return array{0: bool, 1: bool}
+     */
+    private function huntDue(int $playerId, Planet $planet): array
+    {
+        $reports = $this->ownReports($playerId, (int) $planet->galaxy, (int) $planet->system, (int) $planet->planet)
+            ->where('planet_type', (int) $planet->planet_type)
+            ->limit(50)
+            ->get(['ships', 'created_at']);
+        $now = now();
+        $newest = $reports->first();
+        $due = $newest?->created_at === null || $newest->created_at->lt($now->copy()->subHours(self::HUNT_TTL_HOURS));
+        $minute = static fn ($time): int => (int) $time->format('G') * 60 + (int) $time->format('i');
+        $taken = false;
+        foreach ($reports as $report) {
+            $gap = abs($minute($report->created_at) - $minute($now));
+            if (min($gap, 1440 - $gap) > self::HUNT_HOUR_BAND * 60) {
+                continue;
+            }
+            // The column is null when the probes could not read the fleet, whatever the model's annotation says.
+            $ships = $report->getAttribute('ships');
+            if (is_array($ships) && $this->warshipValue($ships) > 0.0) {
+                return [$due, true];
+            }
+            $taken = $taken || is_array($ships);
+        }
+
+        return [$due, !$taken];
+    }
+
+    /**
+     * The warships of a report section or a fleet at host prices: military hulls with a real weapon (a probe is in the
+     * military catalogue but does not shoot).
+     *
+     * @param array<string, int> $section
+     */
+    private function warshipValue(array $section): float
+    {
+        $value = 0.0;
+        foreach (ObjectService::getMilitaryShipObjects() as $ship) {
+            $amount = (int) ($section[$ship->machine_name] ?? 0);
+            if ($amount <= 0 || $ship->properties->attack->rawValue <= 1) {
+                continue;
+            }
+            $value += ObjectService::getObjectRawPrice($ship->machine_name)->sum() * $amount;
+        }
+
+        return $value;
     }
 
     /**
