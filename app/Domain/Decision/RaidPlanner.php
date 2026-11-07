@@ -4,6 +4,10 @@ namespace Modules\AI\Domain\Decision;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Modules\AI\Domain\Advisor\Advisor;
+use Modules\AI\Domain\Advisor\AdvisorArea;
+use Modules\AI\Domain\Advisor\AdvisorFacts;
+use Modules\AI\Domain\Advisor\AdvisorQuestion;
 use Modules\AI\Domain\Attack\DailyAttackBudget;
 use Modules\AI\Domain\Login\GamePhaseMachine;
 use Modules\AI\Domain\Login\LoginReservations;
@@ -278,6 +282,10 @@ class RaidPlanner
 
         [$missionType, $launchUnits] = $this->missionFor($report, $origin, $launchUnits);
 
+        if ($this->advisorHolds($player, $playerId, $report, $launchUnits, $estimate, $fuel)) {
+            return $this->reject('advisor_wait', $playerId, $reportId);
+        }
+
         return app()->makeWith(QueueableRaid::class, [
             'originPlanetId' => $origin->getPlanetId(),
             'targetGalaxy' => (int) $report->planet_galaxy,
@@ -287,6 +295,35 @@ class RaidPlanner
             'missionType' => $missionType,
             'launchUnits' => $launchUnits,
         ]);
+    }
+
+    /**
+     * The optional advisor on a costly raid (area 4, off by default: `AI_ADVISOR_COSTLY_MODE`): a launch whose hulls are
+     * worth at least the configured share of the account's own points is a big moment, and the advisor may only answer
+     * "go" (the rule's choice) or "wait". Everything it reads is the account's own: its fleet, its forecast on its own
+     * report, its public points and its own reports on the target.
+     *
+     * @param array<string, int> $launchUnits
+     */
+    private function advisorHolds(PlayerService $player, int $playerId, EspionageReport $report, array $launchUnits, RaidEstimate $estimate, int $fuel): bool
+    {
+        $advisor = app(Advisor::class);
+        $cost = 0.0;
+        foreach ($launchUnits as $machineName => $amount) {
+            $cost += ObjectService::getObjectRawPrice($machineName)->sum() * $amount;
+        }
+        if (!$advisor->shouldConsult($cost, $player->getCachedGeneralScore() * 1000.0)) {
+            return false;
+        }
+
+        $targetId = (int) $report->planet_user_id;
+        $forecast = ['win_share' => round($estimate->pWin, 2), 'net_profit_p20' => (int) $estimate->p20NetProfit, 'loot_p20' => (int) $estimate->p20Loot, 'fuel' => $fuel, 'fleet_value' => (int) $cost];
+        $question = new AdvisorQuestion(AdvisorArea::Costly, $playerId, 'raid', [
+            ['id' => 'go', 'summary' => 'send the raid on ' . $report->planet_galaxy . ':' . $report->planet_system . ':' . $report->planet_position, 'forecast' => $forecast],
+            ['id' => 'wait', 'summary' => 'hold the fleet'],
+        ], 'go', ['fleet_value' => (int) $cost, 'own_points' => $player->getCachedGeneralScore()], app(AdvisorFacts::class)->reports($playerId, $targetId));
+
+        return $advisor->consult($question)->is('wait');
     }
 
     /**
