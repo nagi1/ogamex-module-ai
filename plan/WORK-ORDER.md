@@ -21,6 +21,14 @@ task, writes the need in its end-of-day report, and moves to the next task. It n
 | **PHP** | 1 | `app/Domain/Decision/RaidPlanner.php`, `app/Domain/Decision/QueueableSpyPlanner.php`, `app/Domain/Decision/QueueableUnitPlanner.php`, `app/Domain/Raid/**`, `app/Domain/Login/FleetSlots.php`, `app/Domain/Choice/**`, `resources/behavior/**`, `resources/doctrine/**`, module `tests/**` for those classes, `config/rl.php` | `rl/`, `plan/`, `local-docker-dev/`, host `app/Services/**` | pest through `bash scripts/ogamex test-one`, the only lane that runs pest |
 | **WORLD** | 1 | `local-docker-dev/**`, `scripts/ogamex`, `scripts/*.sh`, `app/Console/Commands/**`, `database/seeders/**` | `app/Domain/**`, `rl/`, `plan/` except `plan/PLAY-CARD.md` | docker, artisan on the `grand` universe |
 | **OWNER** | you | host repo (`app/Services/PlayerService.php` newbie bands), merges, play sessions, decisions | | everything |
+| **ADVISOR** | 1, outside the lanes | campaign consultation; the conversation, reply and compose actions; `AdvanceAiAlliancePoliticsAction`; `config/{campaign-consultation,language,routing}.php`; `AiSettings`, `AiRuntimeSettings` and the settings panel; `app/Domain/Advisor/**` | every lane's files | narrow tests only, `bash scripts/ogamex test-one <Name>` (serialised with the PHP lane); never the full suite |
+
+Lane notes (owner additions, 7 Nov):
+- **The play universe runs every model:** economy, fleet, the scripted raider, the engine-driven social teacher, the
+  Empire UI, DeepSeek V4.1 Flash language (Flash only, Pro dropped) and the Jev classifier through its live API. All of
+  it through config only; defaults stay unchanged.
+- **A separate ADVISOR agent runs outside the lanes.** It lets AI accounts optionally consult DeepSeek Flash in four
+  areas: hard offence, diplomacy, conversation and costly actions. No lane touches its files.
 
 Mechanics that make this hold:
 1. **One worktree per lane.** `git worktree add ../ai-<lane> -b sprint/<lane>` from `Modules/AI`. An agent works only in
