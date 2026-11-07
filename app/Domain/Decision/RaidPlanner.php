@@ -679,11 +679,12 @@ class RaidPlanner
     }
 
     /**
-     * Whether a raid this account decided but has not yet flown is already aimed at these coordinates.
+     * Whether a raid this account decided but has not yet flown is already aimed at this body.
      *
      * A refused dispatch is not a mission, so the host's own mission rows cannot see a raid that is
      * still waiting: the intent is the only trace of the fleet already on its way to that target, and
-     * the cooling a refusal buys only starts once the first of a batch has been refused.
+     * the cooling a refusal buys only starts once the first of a batch has been refused. A planet and
+     * its moon are two targets: a raid waiting for the one does not hold the other.
      */
     private function targetAlreadyOffered(int $playerId, EspionageReport $report): bool
     {
@@ -694,7 +695,8 @@ class RaidPlanner
             ->get(['payload'])
             ->contains(static fn (AiWorkItem $item): bool => (int) ($item->payload['target_galaxy'] ?? 0) === (int) $report->planet_galaxy
                 && (int) ($item->payload['target_system'] ?? 0) === (int) $report->planet_system
-                && (int) ($item->payload['target_position'] ?? 0) === (int) $report->planet_position);
+                && (int) ($item->payload['target_position'] ?? 0) === (int) $report->planet_position
+                && (int) ($item->payload['target_type'] ?? $report->planet_type) === (int) $report->planet_type);
     }
 
     /**
