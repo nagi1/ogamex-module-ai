@@ -1,9 +1,12 @@
 """Real-server gap gauges for season dirs (REAL-SERVER-PLAYER-PROFILE.md targets at 128-256 days in brackets).
 
     reality.py DIR [DIR ...]
+    reality.py --paired DIR_A DIR_B      (per gauge, B - A over the paired seeds, judged by verdict.judge: NOISE or a number)
 
 Per dir, mean over seasons: active share, inactive accounts over 100k points per active one, raider loot / own production
-(days 100-256), top-10% store in days of production, rank-1 share of points (all at day 256 unless noted).
+(from day 100/256 of the season on), top-10% store in days of production, rank-1 share of points (at the last day unless
+noted; mid is half the season). A season counts when it reached its side's last day (256 for the long world, 60 for the
+reference regression).
 """
 
 import glob
@@ -11,6 +14,9 @@ import json
 import statistics as st
 import sys
 from collections import defaultdict
+from pathlib import Path
+
+from verdict import judge
 
 
 def season(path):
@@ -22,21 +28,22 @@ def season(path):
             return None
         if "day" in r and "account" in r and "score" in r:
             rows[r["day"]][r["account"]] = r
-    if not rows or max(rows) < 256:
+    if not rows:
         return None
-    last = rows[max(rows)]
-    out = {}
-    for day in (128, 256):
+    end = max(rows)
+    last = rows[end]
+    out = {"end": end}
+    for name, day in (("mid", end // 2), ("end", end)):
         day_rows = list(rows.get(day, {}).values())
         if not day_rows:
             continue
         active = [r for r in day_rows if not r["inactive"]]
         farms = [r for r in day_rows if r["inactive"] and r["score"]["total"] > 100_000]
-        out[f"active{day}"] = len(active) / len(day_rows)
-        out[f"farms{day}"] = len(farms) / max(1, len(active))
+        out[f"active_{name}"] = len(active) / len(day_rows)
+        out[f"farms_{name}"] = len(farms) / max(1, len(active))
     loot, made = 0.0, 0.0
     for day, accs in rows.items():
-        if day < 100:
+        if day < end * 100 // 256:
             continue
         for r in accs.values():
             if r["persona"] == "raider" and not r["inactive"]:
@@ -71,15 +78,32 @@ def season(path):
     return out
 
 
+KEYS = ["active_mid", "active_end", "farms_mid", "farms_end", "raid_loot_x_prod", "r1_share", "r1_r10", "top10_store_days", "spy_day", "raid_day", "lost_bn"]
+
+
+def side(d):
+    """{seed: gauges} of the dir's seasons that reached the dir's last day."""
+    seasons = {int(Path(p).stem.split("-")[1]): season(p) for p in sorted(glob.glob(f"{d}/ready-*.jsonl")) if ".jsonl." not in p}
+    seasons = {k: v for k, v in seasons.items() if v}
+    end = max((v["end"] for v in seasons.values()), default=0)
+    return {k: v for k, v in seasons.items() if v["end"] == end}
+
+
 def main():
-    print("dir active128 active256 farms128 farms256 raid_loot_x_prod r1_share r1_r10 top10_store_days spy_day raid_day lost_bn  [real: .27 .27 .42 .42 .5-2 .17 5.5 1-2]")
+    if sys.argv[1] == "--paired":
+        a, b = side(sys.argv[2]), side(sys.argv[3])
+        seeds = sorted(set(a) & set(b))
+        for k in KEYS:
+            d = [b[s][k] - a[s][k] for s in seeds if k in a[s] and k in b[s]]
+            print(f"{k:18s} {judge(d)}")
+        return
+    print("dir n end " + " ".join(KEYS) + "  [real: .27 .27 .42 .42 .5-2 .17 5.5 1-2]")
     for d in sys.argv[1:]:
-        seasons = [s for s in (season(p) for p in sorted(glob.glob(f"{d}/ready-*.jsonl"))) if s]
+        seasons = list(side(d).values())
         if not seasons:
             print(d, "no finished seasons")
             continue
-        keys = ["active128", "active256", "farms128", "farms256", "raid_loot_x_prod", "r1_share", "r1_r10", "top10_store_days", "spy_day", "raid_day", "lost_bn"]
-        print(d.rstrip("/").split("/")[-1], f"n={len(seasons)}", " ".join(f"{st.mean(s.get(k, float('nan')) for s in seasons):.3g}" for k in keys))
+        print(d.rstrip("/").split("/")[-1], f"n={len(seasons)}", f"day={seasons[0]['end']}", " ".join(f"{st.mean(s.get(k, float('nan')) for s in seasons):.3g}" for k in KEYS))
 
 
 if __name__ == "__main__":
