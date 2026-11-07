@@ -3,6 +3,8 @@
 namespace Modules\AI\Actions;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Database\Query\Expression;
+use Illuminate\Support\Facades\DB;
 use Modules\AI\Models\AiRelationship;
 
 class RecordAiRelationshipInteractionAction
@@ -22,10 +24,14 @@ class RecordAiRelationshipInteractionAction
             return null;
         }
 
-        $relationship = AiRelationship::query()->firstOrCreate([
+        // Race-safe without a lock: two processes recording the same pair at once (fleet arrivals on page
+        // loads) both insert-ignore the empty row, then each applies its change in one atomic UPDATE, so
+        // neither a duplicate key nor a lost update can happen. An interaction older than the last one
+        // recorded is ignored, as before.
+        $now = now();
+        AiRelationship::query()->insertOrIgnore([
             'player_id' => $playerId,
             'other_player_id' => $otherPlayerId,
-        ], [
             'trust' => 0,
             'threat' => 0,
             'affinity' => 0,
@@ -34,37 +40,36 @@ class RecordAiRelationshipInteractionAction
             'last_interaction_at' => $observedAt,
             'last_observation_id' => $sourceObservationId,
             'revision' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
         ]);
 
-        if ($relationship->last_interaction_at?->greaterThan($observedAt)) {
-            return $relationship;
-        }
+        AiRelationship::query()
+            ->where('player_id', $playerId)
+            ->where('other_player_id', $otherPlayerId)
+            ->where(static fn ($query) => $query->whereNull('last_interaction_at')->orWhere('last_interaction_at', '<=', $observedAt))
+            ->update([
+                'trust' => $this->clamped('trust', $trustChange, -1),
+                'threat' => $this->clamped('threat', $threatChange, 0),
+                'affinity' => $this->clamped('affinity', $affinityChange, -1),
+                'respect' => $this->clamped('respect', $respectChange, 0),
+                'social_importance' => $this->clamped('social_importance', $socialImportanceChange, 0),
+                'last_interaction_at' => $observedAt,
+                'last_observation_id' => $sourceObservationId,
+                'revision' => DB::raw('revision + 1'),
+                'updated_at' => $now,
+            ]);
 
-        $relationship->update([
-            'trust' => $this->signedScore((float) $relationship->trust + $trustChange),
-            'threat' => $this->boundedScore((float) $relationship->threat + $threatChange),
-            'affinity' => $this->signedScore((float) $relationship->affinity + $affinityChange),
-            'respect' => $this->boundedScore((float) $relationship->respect + $respectChange),
-            'social_importance' => $this->boundedScore((float) $relationship->social_importance + $socialImportanceChange),
-            'last_interaction_at' => $observedAt,
-            'last_observation_id' => $sourceObservationId,
-            'revision' => $relationship->revision + 1,
-        ]);
-
-        return $relationship->refresh();
+        return AiRelationship::query()->where('player_id', $playerId)->where('other_player_id', $otherPlayerId)->first();
     }
 
     /**
-     * Trust and affinity run from hatred to friendship. Clamping them at zero made every grudge
-     * read as indifference, so no account could ever hold a relationship below zero (COVER-hatred).
+     * The column moved by the change and clamped in the same statement. Trust and affinity run from hatred to
+     * friendship (floor -1); clamping them at zero made every grudge read as indifference (COVER-hatred). The
+     * rest run from 0 to 1.
      */
-    private function signedScore(float $score): float
+    private function clamped(string $column, float $change, int $floor): Expression
     {
-        return min(1, max(-1, $score));
-    }
-
-    private function boundedScore(float $score): float
-    {
-        return min(1, max(0, $score));
+        return DB::raw(sprintf('LEAST(1, GREATEST(%d, %s + %F))', $floor, $column, $change));
     }
 }
