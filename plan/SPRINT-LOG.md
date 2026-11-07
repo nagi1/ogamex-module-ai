@@ -21,3 +21,4 @@ Owner additions (7 Nov), also in the lane notes of `AGENTS.md` and `WORK-ORDER.m
 - 7 Nov DOCS: archive commit (the one adding these lines): 2195 files `git mv`'d to plan/archive/, plan/rl/SOCIAL-PLAN.md moved unedited.
 - 7 Nov DOCS: `find plan -maxdepth 1` = plan, CONSULTANT-GUIDE-2026-11-07.md, PLAY-CARD.md, SPRINT-LOG.md, WORK-ORDER.md, archive, details (cognition-gates only), rl (STRONG-PLAYER-PLAN only): 7 entries.
 - 7 Nov DOCS: blocked: none. Open: ADVISOR "Runs" column left "set by the owner" (only PHP lane may run pest); PLAY-CARD account names to be filled by WORLD after the reseed.
+- 7 Nov DOCS: ADVISOR Runs set (coordinator): narrow tests only via `bash scripts/ogamex test-one <Name>`, serialised with the PHP lane; full suite stays with the PHP lane.

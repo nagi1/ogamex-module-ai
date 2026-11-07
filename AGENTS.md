@@ -55,7 +55,7 @@ Gate 3 decides what the account does, Gate 1 how it is derived, Gate 2 how much 
 | SIM | `rl/ogsim/**`, `rl/ogrl/**`, `rl/scripts/**`, `storage/rl/**` | cargo, python; never pest |
 | PHP | `RaidPlanner`, `QueueableSpyPlanner`, `QueueableUnitPlanner`, `app/Domain/{Raid,Choice}/**`, `FleetSlots`, `resources/{behavior,doctrine}/**`, their tests, `config/rl.php` | pest via `bash scripts/ogamex test-one` (only lane) |
 | WORLD | `local-docker-dev/**`, `scripts/ogamex`, `scripts/*.sh`, `app/Console/Commands/**`, `database/seeders/**`, `plan/PLAY-CARD.md` | docker, artisan on `grand` |
-| ADVISOR | campaign consultation; conversation, reply and compose actions; `AdvanceAiAlliancePoliticsAction`; `config/{campaign-consultation,language,routing}.php`; `AiSettings`, `AiRuntimeSettings`, settings panel; `app/Domain/Advisor/**` | outside the lanes; no lane touches its files |
+| ADVISOR | campaign consultation; conversation, reply and compose actions; `AdvanceAiAlliancePoliticsAction`; `config/{campaign-consultation,language,routing}.php`; `AiSettings`, `AiRuntimeSettings`, settings panel; `app/Domain/Advisor/**` | narrow tests only via `bash scripts/ogamex test-one <Name>`; full suite is PHP lane only |
 | OWNER | host repo, merges, play sessions, decisions | everything |
 
 Notes (owner additions, 7 Nov):
@@ -63,7 +63,7 @@ Notes (owner additions, 7 Nov):
   Empire UI, DeepSeek V4.1 Flash language (Flash only, Pro dropped) and the Jev classifier through its live API. All of
   it through config only; defaults stay unchanged.
 - **ADVISOR** lets AI accounts optionally consult DeepSeek Flash in four areas: hard offence, diplomacy, conversation and
-  costly actions.
+  costly actions. It runs outside the lanes; no lane touches its files.
 
 Working rules: one worktree per lane (`../ai-<lane>`, branch `sprint/<lane>`); no subagents; commit per deliverable with
 `git add <explicit files>`, never `-A`, stash, reset, clean or force-push; a file outside your lane is a need written in
