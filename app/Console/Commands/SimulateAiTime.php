@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -13,12 +14,17 @@ use Illuminate\Support\Facades\Schema;
 use Modules\AI\Domain\Choice\SocketChoicePolicy;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Enums\AiWorkState;
+use Modules\AI\Infrastructure\Cognition\SocialGatewayClient;
 use Modules\AI\Jobs\ProcessAiWork;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\SimulatedTime;
+use OGame\Factories\PlanetServiceFactory;
+use OGame\Factories\PlayerServiceFactory;
+use OGame\GameMissions\BattleEngine\RustBattleEngine;
 use OGame\Services\SettingsService;
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
+use stdClass;
 use Throwable;
 
 /**
@@ -42,12 +48,14 @@ use Throwable;
     {--from= : Start instant (default: where the last run on this database stopped, else the real now)}
     {--accounts= : Play only the first N enabled accounts}
     {--max-step=900 : Longest jump in simulated seconds when nothing is due}
+    {--quantum=0 : Round every jump up to this many simulated seconds, so work and landings due within one window run together (in parallel with --workers); 0 keeps every instant exact}
     {--maintenance=900 : Simulated seconds between campaign, alliance and score-sample passes}
     {--highscore-every=3600 : Simulated seconds between the three highscore generators (each walks every player; the real schedule runs them every 300 s)}
     {--max-wall= : Stop after this many real seconds and keep the state, so a later run continues}
     {--native-cognition : Opt-in only: skip the Fatima/CBRKit/AgentOS sidecars and the language lane and play on the native engines}
     {--ffi-probe : Diagnose the Rust segfault: call the library with an empty fight after every phase of every jump and print which phase last survived}
     {--workers=1 : Fork this many processes per simulated instant, each running a share of the due sessions against the sidecars at the same time}
+    {--overlap : With --workers, keep at most that many processes busy and let a long session run on while the clock moves to the next instant, as live workers do; an account never has two items running at once}
     {--keep-accelerated : Keep ai.population.session_interval_seconds instead of playing real routines}
     {--full-play : Data generation only: accounts never sleep, log in every ai.population.session_interval_seconds (600 when unset) and queue up to 50 actions per session, so a short run reaches the late game}
     {--max-errors=300 : Abort when this many errors pile up with no session having run (a broken build, not a result)}
@@ -64,6 +72,15 @@ class SimulateAiTime extends Command
 {
     private const PASSES_PER_INSTANT = 40;
 
+    /** Wall seconds an instant waits for its quick follow-ups (a session's orders) before the clock moves on. */
+    private const INSTANT_GRACE_SECONDS = 0.5;
+
+    /** Orders are tens of milliseconds each, so a forked worker takes a few of them; a session gets one of its own. */
+    private const ORDERS_PER_WORKER = 8;
+
+    /** Missions whose landing the defender reacts to: attack, joint attack, moon destruction and missiles. */
+    private const HOSTILE_MISSIONS = [1, 2, 9, 10];
+
     private const BATCH = 500;
 
     private const FULL_PLAY_INTERVAL_SECONDS = 600;
@@ -79,6 +96,20 @@ class SimulateAiTime extends Command
     private array $profile = [];
 
     private CarbonImmutable|null $nextHighscore = null;
+
+    private string|null $poolDirectory = null;
+
+    /** @var array<int, array{ids: list<int>, players: list<int>, file: string}> --overlap workers still running, by process id */
+    private array $pool = [];
+
+    /** @var array{sessions: int, other: int, errors: int} what finished --overlap workers ran, not yet counted in an hour */
+    private array $poolRan = ['sessions' => 0, 'other' => 0, 'errors' => 0];
+
+    /** @var array{0: int, 1: string}|null the maintenance pass running beside the workers: its process id and report file */
+    private array|null $maintenance = null;
+
+    /** Gateway failures counted in forked workers, which the parent's own counter never sees. */
+    private int $workerGatewayFailures = 0;
 
     public function handle(): int
     {
@@ -97,6 +128,7 @@ class SimulateAiTime extends Command
             return self::FAILURE;
         }
 
+        $this->analyzeTables();
         config(['queue.default' => 'sync']);
         if ($this->option('native-cognition')) {
             config([
@@ -111,6 +143,10 @@ class SimulateAiTime extends Command
         if (!$this->option('native-cognition')) {
             $this->probeSidecars();
         }
+        // The alliance lane runs in the maintenance pass below (--maintenance=60 is the live once-a-minute cadence);
+        // a session-triggered pass at every simulated minute cost more than the sessions themselves.
+        config(['ai.population.session_alliance_pass' => false]);
+        $this->shareCacheAcrossWorkers();
         if (!$this->option('keep-accelerated') && !$this->option('full-play')) {
             config(['ai.population.session_interval_seconds' => 0]);
         }
@@ -149,12 +185,25 @@ class SimulateAiTime extends Command
             SimulatedTime::freezeAt($now);
             $this->ffiProbe('jump ' . $jumps . ' after the clock moved to ' . $now->toIso8601String());
 
+            // A pass beside the workers runs on across jumps, as a slow scheduler pass does while time moves on; the
+            // next one starts only after it ended, so two passes never overlap.
+            $forked = false;
+            if ($this->workerCount() > 1 && $now->greaterThanOrEqualTo($nextMaintenance)) {
+                $this->collectMaintenance(true);
+                $this->maintenance = $this->forkMaintenance($this->maintenanceCommands($now));
+                $nextMaintenance = $now->addSeconds($maintenanceEvery);
+                $forked = true;
+            }
+
             // One commit per simulated instant instead of one per statement group: every session and order
             // writes dozens of rows, and each commit is an fsync. Inner transactions become savepoints.
             $drain = function () use ($players): array {
+                if ($this->overlapping()) {
+                    $this->timed('defenders before landings', fn () => $this->settleDefenders($players));
+                }
                 $this->timed('fleet arrivals', fn () => $this->runFleetArrivals());
 
-                return $this->timed('due work (all sessions and orders)', fn (): array => $this->drainDueWork($players));
+                return $this->timed('due work (all sessions and orders)', fn (): array => $this->overlapping() ? $this->drainOverlapping($players) : $this->drainDueWork($players));
             };
             // Forked workers each need their own connection, so the one-commit-per-instant wrapper only applies to a single process.
             $ran = $this->workerCount() > 1 ? $drain() : DB::transaction($drain);
@@ -165,8 +214,9 @@ class SimulateAiTime extends Command
 
             $this->ffiProbe('jump ' . $jumps . ' after due work');
 
-            if ($now->greaterThanOrEqualTo($nextMaintenance)) {
-                $this->runMaintenance($now);
+            $this->collectMaintenance(false);
+            if (!$forked && $this->workerCount() <= 1 && $now->greaterThanOrEqualTo($nextMaintenance)) {
+                $this->runMaintenance($this->maintenanceCommands($now), true);
                 $this->ffiProbe('jump ' . $jumps . ' after maintenance');
                 $nextMaintenance = $now->addSeconds($maintenanceEvery);
             }
@@ -197,6 +247,11 @@ class SimulateAiTime extends Command
             $jumps++;
         }
 
+        $this->collectMaintenance(true);
+        foreach ($this->settlePool() as $key => $count) {
+            $hour[$key] += $count;
+            $total[$key] += $count;
+        }
         if ($hourIndex >= 0) {
             $this->reportHour($start->addHours($hourIndex), $hour);
         }
@@ -212,6 +267,9 @@ class SimulateAiTime extends Command
             $this->line('RL: ' . SocketChoicePolicy::fallbacks() . ' choice(s) fell back to the planner (server down, slow or illegal answer)');
         }
         $this->reportErrors();
+        if (config('ai.cognition.social.minds')) {
+            $this->line('GATEWAY: ' . (SocialGatewayClient::failures() + $this->workerGatewayFailures) . ' social engine request(s) or item(s) failed (the alliance rules decided alone)');
+        }
         $this->line(sprintf('JUMPS: %d (average %.0f simulated seconds per jump)', $jumps, $start->diffInSeconds($stoppedAt) / max(1, $jumps)));
         $this->reportProfile();
         $wall = max(0.001, microtime(true) - $wallStart);
@@ -294,7 +352,7 @@ class SimulateAiTime extends Command
         config(['database.default' => 'ai_sim_memory']);
         DB::setDefaultConnection('ai_sim_memory');
         // Services that cached rows of the source connection start again from the copy.
-        foreach ([\OGame\Services\SettingsService::class, \OGame\Factories\PlayerServiceFactory::class, \OGame\Factories\PlanetServiceFactory::class] as $cached) {
+        foreach ([SettingsService::class, PlayerServiceFactory::class, PlanetServiceFactory::class] as $cached) {
             app()->forgetInstance($cached);
         }
         Artisan::call('migrate', ['--force' => true, '--database' => 'ai_sim_memory']);
@@ -313,6 +371,22 @@ class SimulateAiTime extends Command
         }
 
         return $copied;
+    }
+
+    /**
+     * A simulation copy is loaded in bulk, which leaves MySQL without index statistics: it then scanned the planets table
+     * for every player lookup, and a politics pass took 14 s instead of 6 s. Reading the statistics once costs a second.
+     */
+    private function analyzeTables(): void
+    {
+        if (!in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return;
+        }
+
+        $tables = Schema::getTableListing(DB::connection()->getDatabaseName(), false);
+        if ($tables !== []) {
+            DB::select('ANALYZE TABLE ' . implode(', ', array_map(static fn (string $table): string => '`' . $table . '`', $tables)));
+        }
     }
 
     private function saveSqlite(): void
@@ -394,8 +468,10 @@ class SimulateAiTime extends Command
      * Everything the real scheduler would fire during a stretch of minutes: campaign, alliance and
      * score-sample passes, language reconciliation and the three highscore generators the module
      * runs on the first tick of each five-minute window.
+     *
+     * @return list<string>
      */
-    private function runMaintenance(CarbonImmutable $now): void
+    private function maintenanceCommands(CarbonImmutable $now): array
     {
         $commands = [
             'ai:advance-campaigns',
@@ -412,13 +488,270 @@ class SimulateAiTime extends Command
             $this->nextHighscore = $now->addSeconds(max(300, (int) $this->option('highscore-every')));
         }
 
+        return $commands;
+    }
+
+    /**
+     * One commit per command when nothing runs beside it, as the drain has one per instant: a pass writes a row per
+     * account, and on a server that syncs every commit to disk that was 4 ms a row. Beside the workers a pass commits as
+     * it goes, so a long transaction never holds rows the sessions write.
+     *
+     * @param list<string> $commands
+     */
+    private function runMaintenance(array $commands, bool $oneCommit): void
+    {
         foreach ($commands as $command) {
             try {
-                $this->timed('maintenance: ' . $command, fn (): int => Artisan::call($command));
+                $this->timed('maintenance: ' . $command, fn (): int => $oneCommit ? DB::transaction(fn (): int => Artisan::call($command)) : Artisan::call($command));
             } catch (Throwable $exception) {
                 $this->noteError($command . ': ' . $exception->getMessage());
             }
         }
+    }
+
+    /**
+     * With workers the scheduler's passes run in their own process beside the instant's sessions and landings, as the
+     * live scheduler runs beside the queue workers; a politics pass then costs no wall time of its own.
+     *
+     * @param list<string> $commands
+     * @return array{0: int, 1: string}
+     */
+    private function forkMaintenance(array $commands): array
+    {
+        DB::purge();
+        app('cache')->forgetDriver();
+        app()->forgetInstance('cache.store');
+        $file = sys_get_temp_dir() . '/ai-sim-maintenance-' . getmypid() . '.json';
+        @unlink($file);
+        $pid = pcntl_fork();
+
+        if ($pid === 0) {
+            $this->errors = [];
+            $this->profile = [];
+            $gatewayBefore = SocialGatewayClient::failures();
+            $this->runMaintenance($commands, false);
+            file_put_contents($file, json_encode(['errors' => $this->errors, 'profile' => $this->profile, 'gateway' => SocialGatewayClient::failures() - $gatewayBefore]));
+            DB::purge();
+
+            exit(0);
+        }
+
+        return [$pid, $file];
+    }
+
+    /** Reap the pass running beside the workers once it ended, or wait for it. */
+    private function collectMaintenance(bool $wait): void
+    {
+        if ($this->maintenance === null) {
+            return;
+        }
+
+        [$pid, $file] = $this->maintenance;
+        if (pcntl_waitpid($pid, $status, $wait ? 0 : WNOHANG) === 0) {
+            return;
+        }
+
+        $this->maintenance = null;
+        $report = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+        @unlink($file);
+
+        if (!is_array($report)) {
+            $this->noteError("maintenance worker died without a report (status {$status})");
+
+            return;
+        }
+
+        foreach ($report['errors'] as $message => $count) {
+            $this->errors[$message] = ($this->errors[$message] ?? 0) + $count;
+        }
+        $this->workerGatewayFailures += (int) ($report['gateway'] ?? 0);
+        foreach ($report['profile'] as $phase => [$seconds, $calls]) {
+            $this->profile[$phase] ??= [0.0, 0];
+            $this->profile[$phase][0] += $seconds;
+            $this->profile[$phase][1] += $calls;
+        }
+    }
+
+    private function overlapping(): bool
+    {
+        return (bool) $this->option('overlap') && $this->workerCount() > 1;
+    }
+
+    /**
+     * The --overlap drain: hand every due item of an account with nothing running to a free worker, wait a moment for the
+     * quick follow-ups of this instant, then let the clock move on while long sessions finish. Waiting for the slowest
+     * session at every instant made a simulated hour cost sixty times one session.
+     *
+     * @param list<int> $players
+     * @return array{sessions: int, other: int, errors: int} what the workers that finished meanwhile ran
+     */
+    private function drainOverlapping(array $players): array
+    {
+        $attempted = [];
+        $graceEnds = microtime(true) + self::INSTANT_GRACE_SECONDS;
+
+        for ($pass = 0; $pass < self::PASSES_PER_INSTANT; $pass++) {
+            $busyIds = array_fill_keys(array_merge([], ...array_column($this->pool, 'ids')), true);
+            $busyPlayers = array_fill_keys(array_merge([], ...array_column($this->pool, 'players')), true);
+            $due = $this->dueQuery($players)
+                ->orderByRaw('kind = ? asc', [AiWorkKind::RunSession->value])
+                ->oldest('due_at')
+                ->limit(self::BATCH)
+                ->get(['id', 'kind', 'player_id'])
+                ->reject(fn (object $row): bool => isset($attempted[$row->id]) || isset($busyIds[$row->id]) || isset($busyPlayers[$row->player_id]))
+                ->unique('player_id')
+                ->values();
+
+            foreach ($due as $row) {
+                $attempted[$row->id] = true;
+            }
+            $this->dispatch($due->all());
+
+            while ($this->pool !== [] && microtime(true) < $graceEnds) {
+                if ($this->reapPool() === 0) {
+                    usleep(20000);
+                }
+            }
+
+            if ($due->isEmpty() && ($this->pool === [] || microtime(true) >= $graceEnds)) {
+                break;
+            }
+        }
+
+        $this->reapPool();
+        $ran = $this->poolRan;
+        $this->poolRan = ['sessions' => 0, 'other' => 0, 'errors' => 0];
+
+        return $ran;
+    }
+
+    /** @param array<int, stdClass> $rows */
+    private function dispatch(array $rows): void
+    {
+        $sessions = array_filter($rows, static fn (object $row): bool => (int) $row->kind === AiWorkKind::RunSession->value);
+        $orders = array_filter($rows, static fn (object $row): bool => (int) $row->kind !== AiWorkKind::RunSession->value);
+        $groups = [...array_chunk($orders, self::ORDERS_PER_WORKER), ...array_map(static fn (object $row): array => [$row], $sessions)];
+        $this->poolDirectory ??= sys_get_temp_dir() . '/ai-sim-pool-' . getmypid() . '-' . bin2hex(random_bytes(3));
+        @mkdir($this->poolDirectory);
+
+        foreach ($groups as $group) {
+            while (count($this->pool) >= $this->workerCount()) {
+                if ($this->reapPool() === 0) {
+                    usleep(10000);
+                }
+            }
+
+            DB::purge();
+            app('cache')->forgetDriver();
+            app()->forgetInstance('cache.store');
+            $file = $this->poolDirectory . '/' . bin2hex(random_bytes(6)) . '.json';
+            $pid = pcntl_fork();
+
+            if ($pid === 0) {
+                $this->errors = [];
+                $gatewayBefore = SocialGatewayClient::failures();
+                $result = $this->processRows($group);
+                file_put_contents($file, json_encode(['ran' => $result, 'errors' => $this->errors, 'gateway' => SocialGatewayClient::failures() - $gatewayBefore]));
+                DB::purge();
+
+                exit(0);
+            }
+
+            $this->pool[$pid] = ['ids' => array_map(static fn (object $row): int => (int) $row->id, $group), 'players' => array_map(static fn (object $row): int => (int) $row->player_id, $group), 'file' => $file];
+        }
+    }
+
+    /** Collect the --overlap workers that have finished; returns how many. */
+    private function reapPool(): int
+    {
+        $reaped = 0;
+
+        foreach ($this->pool as $pid => $job) {
+            if (pcntl_waitpid($pid, $status, WNOHANG) === 0) {
+                continue;
+            }
+
+            unset($this->pool[$pid]);
+            $reaped++;
+            $report = is_file($job['file']) ? json_decode((string) file_get_contents($job['file']), true) : null;
+            @unlink($job['file']);
+
+            if (!is_array($report)) {
+                $this->poolRan['errors']++;
+                $this->noteError("worker died without a report (status {$status})");
+
+                continue;
+            }
+
+            foreach (array_keys($this->poolRan) as $key) {
+                $this->poolRan[$key] += (int) ($report['ran'][$key] ?? 0);
+            }
+            foreach ($report['errors'] as $message => $count) {
+                $this->errors[$message] = ($this->errors[$message] ?? 0) + $count;
+            }
+            $this->workerGatewayFailures += (int) ($report['gateway'] ?? 0);
+        }
+
+        return $reaped;
+    }
+
+    /**
+     * An attack lands only after its defender is done with everything due by then: a reaction session and the fleet save
+     * it orders run before the battle, as they would have in real time, however long other sessions take.
+     *
+     * @param list<int> $players
+     */
+    private function settleDefenders(array $players): void
+    {
+        $defenders = DB::table('fleet_missions')
+            ->join('planets', 'planets.id', '=', 'fleet_missions.planet_id_to')
+            ->where('fleet_missions.processed', 0)->where('fleet_missions.canceled', 0)
+            ->where('fleet_missions.time_arrival', '<=', SimulatedTime::now()->getTimestamp())
+            ->whereIn('fleet_missions.mission_type', self::HOSTILE_MISSIONS)
+            ->distinct()->pluck('planets.user_id')->map(static fn ($id): int => (int) $id)
+            ->intersect($players)->all();
+        $defenders = array_values($defenders);
+        if ($defenders === []) {
+            return;
+        }
+
+        $attempted = [];
+        $watched = array_fill_keys($defenders, true);
+        for ($pass = 0; $pass < self::PASSES_PER_INSTANT; $pass++) {
+            while (array_filter($this->pool, static fn (array $job): bool => array_intersect_key(array_flip($job['players']), $watched) !== []) !== []) {
+                if ($this->reapPool() === 0) {
+                    usleep(10000);
+                }
+            }
+
+            $due = $this->dueQuery($defenders)->oldest('due_at')->get(['id', 'kind', 'player_id'])
+                ->reject(fn (object $row): bool => isset($attempted[$row->id]))->unique('player_id')->values();
+            if ($due->isEmpty()) {
+                return;
+            }
+
+            foreach ($due as $row) {
+                $attempted[$row->id] = true;
+            }
+            $this->dispatch($due->all());
+        }
+    }
+
+    /** @return array{sessions: int, other: int, errors: int} */
+    private function settlePool(): array
+    {
+        while ($this->pool !== []) {
+            if ($this->reapPool() === 0) {
+                usleep(20000);
+            }
+        }
+        $ran = $this->poolRan;
+        $this->poolRan = ['sessions' => 0, 'other' => 0, 'errors' => 0];
+        if ($this->poolDirectory !== null) {
+            @rmdir($this->poolDirectory);
+        }
+
+        return $ran;
     }
 
     /**
@@ -436,7 +769,7 @@ class SimulateAiTime extends Command
         for ($pass = 0; $pass < self::PASSES_PER_INSTANT; $pass++) {
             $due = $this->dueQuery($players)
                 ->orderByRaw('kind = ? asc', [AiWorkKind::RunSession->value])
-                ->orderBy('due_at')
+                ->oldest('due_at')
                 ->limit(self::BATCH)
                 ->get(['id', 'kind'])
                 ->reject(fn (object $row): bool => isset($attempted[$row->id]));
@@ -468,7 +801,7 @@ class SimulateAiTime extends Command
         }
 
         try {
-            $binding = \OGame\GameMissions\BattleEngine\RustBattleEngine::binding();
+            $binding = RustBattleEngine::binding();
             $pointer = $binding->fight_battle_rounds('{}');
             if ($pointer !== null) {
                 $binding->free_battle_result($pointer);
@@ -477,6 +810,22 @@ class SimulateAiTime extends Command
         } catch (Throwable $exception) {
             fwrite(STDERR, "FFI-PROBE threw {$label}: " . $exception->getMessage() . "\n");
         }
+    }
+
+    /**
+     * Forked workers only exclude each other through a store they all see: with the array store every worker held its own
+     * `ai:alliance-politics` lock and its own minute marker, so each ran a politics pass and the minds overwrote each other.
+     */
+    private function shareCacheAcrossWorkers(): void
+    {
+        if ($this->workerCount() <= 1 || config('cache.stores.' . config('cache.default') . '.driver') !== 'array') {
+            return;
+        }
+
+        config(['cache.default' => 'file']);
+        app('cache')->forgetDriver();
+        app()->forgetInstance('cache.store');
+        $this->warn('SIM: the array cache is per process; --workers uses the file cache so locks hold across workers.');
     }
 
     private function workerCount(): int
@@ -501,18 +850,25 @@ class SimulateAiTime extends Command
      */
     private function runRows(array $rows): array
     {
-        $workers = $this->workerCount();
+        // A session is CPU-bound planning for about a second, so even a handful of due rows is worth a fork: an
+        // instant with seven sessions ran them one after another while 31 workers stood idle.
+        $workers = min($this->workerCount(), count($rows));
 
-        if ($workers <= 1 || count($rows) < $workers * 2) {
+        if ($workers <= 1) {
             return $this->processRows($rows);
         }
 
-        // No open connection may cross the fork: a child closing a shared socket would cut the parent's session.
+        // No open connection may cross the fork: a child closing a shared socket would cut the parent's session. The cache
+        // store keeps its own handle on the connection past DB::purge(), and workers sharing that socket garbled each
+        // other's lock queries (SQLSTATE HY093 on cache_locks, fleet arrivals dropped), so the store is rebuilt as well.
         DB::purge();
+        app('cache')->forgetDriver();
+        app()->forgetInstance('cache.store');
         $directory = sys_get_temp_dir() . '/ai-sim-' . getmypid() . '-' . bin2hex(random_bytes(3));
         @mkdir($directory);
         $children = [];
 
+        $gatewayBefore = SocialGatewayClient::failures();
         foreach (range(0, $workers - 1) as $index) {
             $share = array_values(array_filter($rows, fn (int $position): bool => $position % $workers === $index, ARRAY_FILTER_USE_KEY));
             $pid = pcntl_fork();
@@ -520,7 +876,7 @@ class SimulateAiTime extends Command
             if ($pid === 0) {
                 $this->errors = [];
                 $result = $this->processRows($share);
-                file_put_contents("{$directory}/{$index}.json", json_encode(['ran' => $result, 'errors' => $this->errors]));
+                file_put_contents("{$directory}/{$index}.json", json_encode(['ran' => $result, 'errors' => $this->errors, 'gateway' => SocialGatewayClient::failures() - $gatewayBefore]));
                 DB::purge();
 
                 exit(0);
@@ -545,6 +901,7 @@ class SimulateAiTime extends Command
             foreach ($report['ran'] as $key => $count) {
                 $total[$key] += $count;
             }
+            $this->workerGatewayFailures += (int) ($report['gateway'] ?? 0);
             foreach ($report['errors'] as $message => $count) {
                 $this->errors[$message] = ($this->errors[$message] ?? 0) + $count;
             }
@@ -565,7 +922,7 @@ class SimulateAiTime extends Command
 
         foreach ($rows as $row) {
             try {
-                app()->makeWith(ProcessAiWork::class, ['workItemId' => (int) $row->id])->handle();
+                $this->processRow((int) $row->id);
                 $ran[(string) $row->kind === (string) AiWorkKind::RunSession->value ? 'sessions' : 'other']++;
             } catch (Throwable $exception) {
                 $ran['errors']++;
@@ -574,6 +931,34 @@ class SimulateAiTime extends Command
         }
 
         return $ran;
+    }
+
+    /**
+     * One commit per item: a forked worker has no per-instant transaction around it, and forty workers committing every
+     * row of every session queued on the server's disk syncs (an item took eleven worker-seconds). A failing item still
+     * commits what it wrote and its retry, exactly as it did when every row committed on its own. With --overlap a session's
+     * transaction would hold its planets' rows while fleets land on them, so there every row commits as it goes.
+     */
+    private function processRow(int $workItemId): void
+    {
+        if ($this->overlapping()) {
+            app()->makeWith(ProcessAiWork::class, ['workItemId' => $workItemId])->handle();
+
+            return;
+        }
+
+        $failure = null;
+        DB::transaction(function () use ($workItemId, &$failure): void {
+            try {
+                app()->makeWith(ProcessAiWork::class, ['workItemId' => $workItemId])->handle();
+            } catch (Throwable $exception) {
+                $failure = $exception;
+            }
+        });
+
+        if ($failure !== null) {
+            throw $failure;
+        }
     }
 
     /**
@@ -612,7 +997,7 @@ class SimulateAiTime extends Command
     }
 
     /** @param list<int> $players */
-    private function dueQuery(array $players): \Illuminate\Database\Query\Builder
+    private function dueQuery(array $players): Builder
     {
         $now = SimulatedTime::now();
 
@@ -667,9 +1052,17 @@ class SimulateAiTime extends Command
             $candidates[] = CarbonImmutable::createFromTimestamp((int) $nextArrival);
         }
 
-        $next = collect($candidates)->sortBy(fn (CarbonImmutable $at): int => $at->getTimestamp())->first();
+        $next = collect($candidates)->sortBy(fn (CarbonImmutable $at): int => $at->getTimestamp())->first() ?? $end;
+        $next = $next->lessThanOrEqualTo($now) ? $now->addSeconds(min($maxStep, 60)) : $next;
 
-        return $next->lessThanOrEqualTo($now) ? $now->addSeconds(min($maxStep, 60)) : $next;
+        // A busy hour had a jump every 4 simulated seconds with two or three items each, run one after another. On a grid
+        // the same work comes due together and the workers share it; nothing runs early, at most one quantum late.
+        $quantum = max(0, (int) $this->option('quantum'));
+        if ($quantum <= 1 || $next->greaterThanOrEqualTo($end)) {
+            return $next;
+        }
+
+        return CarbonImmutable::createFromTimestamp((int) (ceil($next->getTimestamp() / $quantum) * $quantum))->min($end);
     }
 
     /** @param array{sessions: int, other: int, errors: int} $hour */

@@ -2,13 +2,13 @@
 
 namespace Modules\AI\Actions;
 
+use Illuminate\Support\Facades\Cache;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Domain\Scheduling\SessionDecisionService;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\AiRuntimeSettings;
-use Illuminate\Support\Facades\Cache;
 use OGame\Models\User;
 use OGame\Services\PlayerGameStateService;
 
@@ -64,7 +64,7 @@ class RunAiSessionAction implements RunAiSession
 
         // The host scheduler misses cron-minute events (HARNESS-003), so the alliance lane would never
         // run; the first session each minute runs it, which is the cadence the schedule promises (ALLY-001).
-        if (Cache::add('ai:alliance-life:minute', true, 60)) {
+        if (config('ai.population.session_alliance_pass', true) && Cache::add('ai:alliance-life:minute', true, 60)) {
             app(AdvanceAiAllianceLifeAction::class)->handle();
         }
 

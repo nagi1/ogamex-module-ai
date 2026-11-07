@@ -54,6 +54,13 @@ class QueueableBuildingPlanner
     /** Candidates kept per choice; with the wait option the policy sees at most 32 rows. */
     private const CHOICE_CANDIDATES = 31;
 
+    /**
+     * A login books only the purchase its planet pays for within a day; one further out is planned again at a later login.
+     * A booking years ahead (a colony saving for a late astrophysics level) held the planet's slot forever and overflowed
+     * the work table's timestamp column past 2038.
+     */
+    private const BOOKING_HORIZON_HOURS = 24;
+
     /** The behaviour file that says how many fields a planet keeps for the stations only it can hold. */
     private const FIELD_BEHAVIOR_FILE = '/resources/behavior/planet-fields.yaml';
 
@@ -809,7 +816,11 @@ class QueueableBuildingPlanner
 
         $dueAt = $this->payableAt($planet, $this->priceWithReserve($planet, $candidate), $now);
 
-        return $dueAt === null ? null : [$this->step($planet, $candidate), $dueAt];
+        if ($dueAt === null || $dueAt->greaterThan($now->addHours(self::BOOKING_HORIZON_HOURS))) {
+            return null;
+        }
+
+        return [$this->step($planet, $candidate), $dueAt];
     }
 
     /** The price of one candidate plus the floor that must survive buying it. */

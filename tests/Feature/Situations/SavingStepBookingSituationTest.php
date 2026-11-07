@@ -47,3 +47,31 @@ test('a login books the step an account cannot pay for yet, for the instant it c
     expect((int) ($booking->payload['planet_id'] ?? 0))->toBe($colony)
         ->and($booking->kind)->toBeIn([AiWorkKind::BuildFirstBuilding, AiWorkKind::QueueResearch]);
 });
+
+// A step the planet's own mines bring within reach only weeks from now is not booked: such a booking (a colony saving for
+// a late astrophysics level) held the planet's slot for good and wrote a due time past the timestamp column's 2038 end.
+test('a login books no step its planet pays for only beyond a day from now', function (int $deuteriumPercent, int $temperature, bool $booked): void {
+    $situation = Situation::of($this)
+        ->colony()
+        ->levelEveryPlanet('metal_mine', 12)
+        ->levelEveryPlanet('crystal_mine', 12)
+        ->levelEveryPlanet('deuterium_synthesizer', 12)
+        ->levelEveryPlanet('solar_plant', 30)
+        ->levelEveryPlanet('robot_factory', 10)
+        ->levelEveryPlanet('research_lab', 10)
+        ->levelEveryPlanet('shipyard', 8)
+        ->research('energy_technology', 8)
+        ->research('computer_technology', 8)
+        ->drained()
+        ->hostileFleet(900);
+    // A throttled synthesizer on a scorching planet makes a trickle: the deuterium the next research needs is days away.
+    Planet::query()->where('user_id', $this->currentUserId)->update(['deuterium_synthesizer_percent' => $deuteriumPercent, 'temp_min' => $temperature, 'temp_max' => $temperature]);
+
+    $situation->session();
+
+    $bookings = AiWorkItem::query()->where('player_id', $this->currentUserId)->get()
+        ->filter(fn (AiWorkItem $item): bool => str_contains((string) $item->idempotency_key, ':saved:'));
+
+    expect($bookings->isNotEmpty())->toBe($booked)
+        ->and($bookings->filter(fn (AiWorkItem $item): bool => $item->due_at->greaterThan(now()->addDay())))->toBeEmpty();
+})->with(['within a day' => [10, 20, true], 'days away' => [1, 355, false]]);

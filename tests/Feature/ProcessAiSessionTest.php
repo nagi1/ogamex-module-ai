@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Cache;
 use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Contracts\ArchetypePolicyResolver;
 use Modules\AI\Contracts\RunAiSession;
@@ -85,3 +86,17 @@ test('a session drains the build queue of every planet, not only the current one
 
     expect(Planet::query()->findOrFail($colony->id)->metal_mine)->toBe(1);
 });
+
+// The live cadence (HARNESS-003): the first session each minute runs the alliance lane. ai:sim runs the lane in its own
+// maintenance pass and turns the session's turn off, so a simulated minute no longer costs a whole politics pass.
+test('a session runs the alliance lane once a minute unless the simulation owns that cadence', function (bool $sessionPass): void {
+    config(['ai.population.session_alliance_pass' => $sessionPass]);
+    Cache::forget('ai:alliance-life:minute');
+    AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Fleeter, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 42]);
+    $work = AiWorkItem::create(['player_id' => $this->currentUserId, 'kind' => AiWorkKind::RunSession, 'due_at' => now(), 'idempotency_key' => 'session-lane-' . $this->currentUserId, 'state' => AiWorkState::Pending]);
+
+    $this->app->makeWith(ProcessAiWork::class, ['workItemId' => $work->id])->handle();
+
+    expect($work->fresh()?->state)->toBe(AiWorkState::Completed)
+        ->and(Cache::has('ai:alliance-life:minute'))->toBe($sessionPass);
+})->with(['live' => [true], 'simulation' => [false]]);

@@ -11,6 +11,7 @@ use Modules\AI\Domain\Social\SocialPersona;
 use Modules\AI\Enums\AiAllianceStance;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Infrastructure\Cognition\SocialGatewayClient;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialMind;
@@ -96,8 +97,12 @@ test('with the gateway down the YAML rules decide while the minds still record',
     config(['ai.cognition.social.minds' => true]);
     Http::fake(['*' => Http::response('down', 503)]);
     [$ours, $partner, $partnerLeader] = socialMindsOutgrownPact($this->currentUserId, 2);
+    $failures = SocialGatewayClient::failures();
 
     app(AdvanceAiAlliancePoliticsAction::class)->handle();
+
+    // The run says the engines were not heard: the failure is counted, not swallowed.
+    expect(SocialGatewayClient::failures())->toBeGreaterThan($failures);
 
     expect(app(AllianceTreaties::class)->inNotice($ours->id, $partner->id))->toBeTrue()
         ->and(collect(socialMindsMemories($partnerLeader->id))->where('event', 'pact_cancelled')->where('actor', $this->currentUserId)->count())->toBe(1)

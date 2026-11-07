@@ -17,6 +17,9 @@ return [
     // Zero preserves each persona's waking-day cadence; a positive value is an explicit
     // accelerated-run control that still uses the normal session, planner and executor paths.
     'session_interval_seconds' => (int) env('AI_POPULATION_SESSION_INTERVAL_SECONDS', 0),
+    // The first session each minute runs the alliance lane, because the host scheduler misses cron-minute events
+    // (HARNESS-003). ai:sim owns its clock and runs the lane in its maintenance pass instead, so it turns this off.
+    'session_alliance_pass' => true,
     // Skill spread (behavior/skill.yaml, the simulator's arm `skill`): each account's own skill quantile sets how often it
     // plays and how many of its expedition slots it keeps busy. Off by default.
     'skill' => filter_var(env('AI_POPULATION_SKILL', false), FILTER_VALIDATE_BOOLEAN),
