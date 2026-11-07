@@ -72,7 +72,7 @@ function aiUsageReservationProcess(string $barrierPath, string $universeScope, i
 {
     return app()->makeWith(Process::class, [
         'command' => ['php', '-r', aiUsageReservationProcessScript()],
-        'cwd' => '/var/www',
+        'cwd' => base_path(),
         'env' => [
             'APP_ENV' => 'testing',
             'CACHE_DRIVER' => 'array',

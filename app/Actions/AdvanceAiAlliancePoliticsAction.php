@@ -1857,7 +1857,7 @@ class AdvanceAiAlliancePoliticsAction
     }
 
     /**
-     * The advisor's word on one diplomatic choice (ai.campaign-consultation.advisor, off by default): the teacher's
+     * The advisor's word on one choice of alliance politics (ai.campaign-consultation.advisor, off by default): the teacher's
      * choice is the default and the advisor may pick another legal option; off, a cap or any failure keeps the
      * teacher's. The brief holds what the club's leader can see: both clubs' public members and points, the public war
      * and broken-pact record, its own stance toward them, its own feelings and its own reports on their leader.
