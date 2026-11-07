@@ -70,7 +70,9 @@ fleeter:
 
 raider:
   probes_per_login: 12
-  raid_waves: 8
+  # A raider sends a wave through every fleet slot the host grants (a late raider holds well over a dozen), so only
+  # the slots cap it: 8 left four of a twelve-slot raider's slots empty (RaiderEverySlotSituationTest).
+  raid_waves: 40
   keep_slots_free: 1
   expedition: false
   transfer: true
