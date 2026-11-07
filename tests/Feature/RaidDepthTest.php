@@ -252,6 +252,22 @@ test('a target far below our own score is published unviable', function (): void
     expect($byReport[$reportId]['score_viable'])->toBeFalse();
 });
 
+test('a target above the newbie protection limit is viable however far below our score', function (): void {
+    raidDepthProfile($this->currentUserId);
+    Highscore::query()->where('player_id', $this->currentUserId)->update(['general' => 10_000_000]);
+    $rival = User::factory()->create();
+    Planet::factory()->create(['user_id' => $rival->id, 'galaxy' => 1, 'system' => 2, 'planet' => 3]);
+    Highscore::query()->updateOrCreate(['player_id' => $rival->id], ['general' => 600_000]);
+
+    $reportId = raidDepthReport($this->currentUserId, 1, 2, 3, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+    EspionageReport::query()->whereKey($reportId)->update(['planet_user_id' => $rival->id]);
+
+    $reports = app(PlayerObservationService::class)->ownedState($this->currentUserId)['target_reports'];
+    $byReport = array_column($reports, null, 'report_id');
+
+    expect($byReport[$reportId]['score_viable'])->toBeTrue();
+});
+
 test('an unknown own score filters no target', function (): void {
     raidDepthProfile($this->currentUserId);
 

@@ -294,7 +294,8 @@ pub fn candidates_in(w: &mut World, cat: &Catalogue, a: usize, menu: &Menu) -> V
             let now = w.games[a].t;
             // The walk reaches the nearest neighbours; a player also raids the richest target it has scouted, however far.
             // Same menu, wider: the nearest stay first, so the teacher's label and its fallback do not move.
-            let mut targets = nearest(w, cat, a, players::NEIGHBOURS);
+            // Arm `bodies`: the walk reaches every body the galaxy view shows, colonies and moons included.
+            let mut targets = if w.bodies { players::nearest_bodies(w, cat, a, players::NEIGHBOURS) } else { nearest(w, cat, a, players::NEIGHBOURS) };
             let mut juicy: Vec<(usize, f64)> = w.reports_of(a)
                 .filter(|r| now - r.time < players::REPORT_HOURS * 3600.0 && !targets.contains(&r.target))
                 .map(|r| (r.target, players::weighted(r.resources.map(|v| v as f64))))
@@ -304,12 +305,14 @@ pub fn candidates_in(w: &mut World, cat: &Catalogue, a: usize, menu: &Menu) -> V
             for &target in &targets {
                 let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < players::REPORT_HOURS * 3600.0);
                 let hostile = !w.alliances_distinct || !w.spares(a, target, now);
+                // Arm `newbie`: no raid on the galaxy view's newbie (the scout may still read it).
+                let raidable = hostile && !(w.newbie && players::protected_newbie(w, cat, a, target, now));
                 // Arm `rescout`: a fresh redacted report is re-read once the whole next volley is home and none is out.
                 let rescout = raids && fresh && w.rescout && players::rescout_due(w, a, target)
                     && on_shelf(w, a, kit.probe) >= players::spy_volley(w, a, target)
                     && !w.fleets.iter().any(|f| f.owner == a && f.target == target && f.mission == Mission::Espionage);
                 if raids && hostile && (!fresh || rescout) && on_shelf(w, a, kit.probe) >= 1 { out.push(Errand::at(Kind::Spy, target)) }
-                if raids && hostile && fresh && raid_plan(w, cat, a, target, kit).is_some() { out.push(Errand::at(Kind::Raid, target)) }
+                if raids && raidable && fresh && raid_plan(w, cat, a, target, kit).is_some() { out.push(Errand::at(Kind::Raid, target)) }
                 if harvest_plan(w, cat, a, target).is_some() { out.push(Errand::at(Kind::Recycle, target)) }
             }
             walked = targets;
@@ -390,7 +393,8 @@ fn widen(w: &mut World, cat: &Catalogue, a: usize, menu: &Menu, walked: &[usize]
             let fresh = last_report(w, a, target).is_some_and(|r| now - r.time < players::REPORT_HOURS * 3600.0);
             let hostile = !w.alliances_distinct || !w.spares(a, target, now);
             if !(hostile && fresh) { continue }
-            for plan in [Plan::War, Plan::WarSlow] {
+            let raidable = !(w.newbie && players::protected_newbie(w, cat, a, target, now));
+            for plan in [Plan::War, Plan::WarSlow].into_iter().filter(|_| raidable) {
                 if free && players::war_plan(w, cat, a, target, kit, plan.speed()).is_some() { out.push(Errand::with(Kind::Raid, target, plan)) }
             }
             if let Some(plan) = teacher_raid(w, cat, a, target, kit).filter(|_| free && players::phalanx_moon(w, cat, a, target).is_some()) {

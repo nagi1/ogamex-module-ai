@@ -1824,3 +1824,31 @@ Halite) improved the RULE BOT — loss review, many versions each beating the la
   raids move value between equals and the war destroys more than it decides. Next: target choice (hit the weakest
   reported neighbour repeatedly / the leader hunts rivals), and a cheap test attack on targets whose estimate is too
   uncertain (owner's fallback, not built yet).
+- 7 Nov, why nobody dominates (war world churn=0:1 noalliance personas=0:1:0 warfleet raids guess, seeds 1-10,
+  dirs err4-side/war-g-*; binary speed2/war6.bin). Step 0: battle tests run in docker with FFI (`docker run --rm
+  --network host -u 1000:1000 -e DB_DATABASE=ogamex-test-ffi ... ogamex-local-docker-dev:latest php -d pcov.enabled=0
+  vendor/bin/pest --parallel --testsuite=Modules --filter=...`): 389 raid/battle/fleet/spy tests pass, nothing broken by
+  a7c1a2b4 (2 failures on a brand-new database were Situation's alliance tag `'U' . id % 10000` under 3 characters for
+  small ids, not ours). Hypotheses read on battles.jsonl: (a) target choice spreading raids evenly is FALSE: 76% of
+  raids already hit accounts under half the raider's points, an attacker's top target takes 66% of its raids; (c)
+  symmetric losses FALSE: attackers win 96%, lose 2.2B against 82B on weaker targets; (b) the leader raids 1.8x the mean
+  but cannot fly more. Real blockers, three sim-only divergences from the module: (1) `Raider::act` stopped at a fixed
+  SLOTS=4 fleets while the account holds ~17 host slots (module: Login\FleetSlots); (2) the raider's candidates were the
+  capitals only, while 73% of the stock sits on colonies (module: QueueableSpyPlanner reads every planet and moon, no
+  bash cap in the sim); (3) no newbie protection in the sim (module: RaidPlanner isNewbie, PlayerObservationService
+  score_viable), and the host's isNewbie had no ceiling. Real servers (PUB serverData, 257 of 267 universes):
+  newbieProtectionHigh 50,000 / newbieProtectionLimit 500,000 = 1:5 under 50k, 1:10 to 500k, none above (WIK-045).
+  New arms `slots`, `bodies` (+ bash limit 6 per body per 24 h), `newbie` (bands above, also in the errand menu).
+  Host: PlayerService::protectsNewbie (bands) behind isNewbie/isStrong; module score_viable uses it.
+  Results vs war-g-base2 (r1 share / r1/r10 / raids/day / spy/day / loot/prod / ships lost B / HDS):
+  base 0.026 / 1.20 / 0.90 / 2.85 / 0.064 / 20.4 / 0.696; bodies 0.025 / 1.18 / 0.98 / 2.71 / 0.065 / 19.5 / 0.702;
+  slots 0.055 / 1.89 / 3.75 / 7.39 / 0.223 / 67.5 / 0.691; bodies+slots 0.042 / 1.45 / 4.35 / 7.88 / 0.16 / 34.5 / 0.713;
+  +newbie flat 1:5 (host's old rule) 0.038 / 1.63 / 3.57 / 8.51 / 0.154 / 45.9 / 0.656; **all three with the real bands
+  (war-g-all3c) 0.039 / 1.56 / 3.91 / 8.70 / 0.163 / 49.4 / 0.658**. Paired ln: slots alone model −1.26, persona −1.40
+  (crushes half the world to ~0 points: without protection the strong farm the small from day 1); all3c model −0.27
+  (CI<0, 0/10), persona +0.12 (CI>0). r1 income all3c: loot 9.7B on 15.5B production (base 2.4B); the leader flies
+  26k raids, 51B loot. HDS drops with `newbie` in the bottom cells only (bottom|64-256 grow to 0.9-1.7k against real
+  84-157: real bottoms are quitters, absent by owner rule), top10/mid cells unchanged or up. Verdict: the fixed four
+  slots were the main brake on war (raids x4, loot/prod x2.5, r1/r10 1.2 → 1.56); dominance still far from real
+  (r1/r10 5.5, share 0.17). The deployed errand model loses −0.27 in the harder world: retrain/tune it there next.
+  Next: the leader hunting rivals' fleets (crashes, debris), and ACS/alliance focus for alliance dominance.

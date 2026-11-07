@@ -75,6 +75,26 @@ test('the spy planner prefers the closer target', function (): void {
         ->and($plan->targetPosition)->toBe($near->getPlanetCoordinates()->position);
 });
 
+// The scout reads every body the galaxy view shows: a rival's colony next door is the nearest candidate even though its
+// owner's homeworld lies galaxies away (the simulator's `bodies` arm follows this candidate query).
+test('the spy planner scouts a rival colony next door before its far homeworld', function (): void {
+    spyDepthProfile($this->currentUserId);
+    $this->planetAddUnit('espionage_probe', 1);
+    $this->planetAddResources(new Resources(0, 0, 100000, 0));
+
+    $home = Planet::query()->findOrFail($this->currentPlanetId);
+    $taken = Planet::query()->where('galaxy', $home->galaxy)->where('system', $home->system)->pluck('planet')->all();
+    $free = collect(range(1, 15))->first(static fn (int $position): bool => !in_array($position, $taken, true));
+    $rival = User::factory()->create();
+    Planet::factory()->create(['user_id' => $rival->id, 'galaxy' => 5, 'system' => 10, 'planet' => 15, 'time_last_update' => now()->subMinutes(30)->getTimestamp()]);
+    Planet::factory()->create(['user_id' => $rival->id, 'galaxy' => $home->galaxy, 'system' => $home->system, 'planet' => $free, 'time_last_update' => now()->subMinutes(30)->getTimestamp()]);
+
+    $plan = app(QueueableSpyPlanner::class)->plan($this->currentUserId);
+
+    expect($plan)->toBeInstanceOf(QueueableSpy::class)
+        ->and([$plan->targetGalaxy, $plan->targetSystem, $plan->targetPosition])->toBe([(int) $home->galaxy, (int) $home->system, $free]);
+});
+
 test('the spy planner prefers a target it knows is rich', function (): void {
     spyDepthProfile($this->currentUserId);
     $this->planetAddUnit('espionage_probe', 1);

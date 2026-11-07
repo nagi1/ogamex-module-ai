@@ -91,8 +91,9 @@ pub struct Ledger {
     pub guess_outcomes: [usize; 3],
     pub guess_value: [f64; 2],
     guessed: HashSet<(usize, usize, u64)>,
-    /// Of `raid_gates[1]`: report past the intel window, inside the raid cooldown, beaten there before.
-    pub stale_split: [usize; 3],
+    /// Of `raid_gates[1]`: report past the intel window, inside the raid cooldown, beaten there before, the bashing
+    /// limit reached (arm `bodies`), a protected newbie (arm `newbie`).
+    pub stale_split: [usize; 5],
     /// `Raider::spy` under `raids` per target reached: fresh intel, probe out, no probe on the shelf, a volley short of
     /// the wanted count, a full volley, a re-scout of a redacted report.
     pub spy_gates: [usize; 6],
@@ -319,6 +320,46 @@ pub(crate) fn nearest(w: &mut World, cat: &Catalogue, a: usize, n: usize) -> Vec
     others.truncate(n);
     others
 }
+
+/// Arm `bodies`: the n bodies (planets and their moons) of other accounts nearest to account a's capital, the inactive
+/// accounts' before the rest, each group closest first: the module's candidate query (QueueableSpyPlanner) reads every
+/// planet and moon the galaxy view shows, not only the homeworlds.
+pub(crate) fn nearest_bodies(w: &mut World, cat: &Catalogue, a: usize, n: usize) -> Vec<usize> {
+    let now = w.games[a].t;
+    let mut keyed: Vec<(bool, i64, usize)> = Vec::new();
+    for owner in others_by_distance(w, a) {
+        let quiet = w.inactive(cat, owner, now);
+        for p in w.planets_of(owner) {
+            for body in std::iter::once(p).chain(w.moon_of[p]) {
+                keyed.push((!quiet, account_distance(w, a, body), body));
+            }
+        }
+    }
+    keyed.sort_unstable();
+    keyed.into_iter().take(n).map(|k| k.2).collect()
+}
+
+/// OGame's newbie protection (WIK-045; serverData `newbieProtectionHigh` 50,000 and `newbieProtectionLimit` 500,000 on
+/// 257 of 267 live universes): under the high mark a player is protected from anyone 5 times its points, up to the
+/// limit from anyone 10 times, and above the limit from nobody.
+pub(crate) const NEWBIE_HIGH: f64 = 50_000.0;
+pub(crate) const NEWBIE_LIMIT: f64 = 500_000.0;
+
+/// Whether a player on `weak` points is protected from one on `strong` points (PlayerService::protectsNewbie).
+pub(crate) fn newbie_protects(weak: f64, strong: f64) -> bool {
+    weak < NEWBIE_LIMIT && weak * if weak < NEWBIE_HIGH { 5.0 } else { 10.0 } < strong
+}
+
+/// Arm `newbie`: the galaxy view's newbie mark (PlayerService::isNewbie, RaidPlanner::protectedNewbie): the target's
+/// owner is active and protected from the raider's points (`newbie_protects`), so the raider leaves it alone.
+pub(crate) fn protected_newbie(w: &mut World, cat: &Catalogue, a: usize, target: usize, now: f64) -> bool {
+    let owner = w.account_of(target);
+    if w.inactive(cat, owner, now) { return false }
+    newbie_protects(score::of(w, owner).total as f64, score::of(w, w.account_of(a)).total as f64)
+}
+
+/// Attacks one account may land on one body in 24 h (RaidPlanner::BASHING_LIMIT, OGame's in-game bashing protection).
+pub(crate) const BASH_LIMIT: usize = 6;
 
 /// What one of a unit costs in metal equivalent, at the catalogue the account plays.
 pub(crate) fn unit_price(rules: &Rules, id: u32) -> f64 {
@@ -2195,12 +2236,14 @@ pub struct Raider {
     hit: HashMap<usize, f64>,
     /// Per target, the second the last salvo left.
     fired: HashMap<usize, f64>,
+    /// Arm `bodies`: per target body, the seconds the account's attacks left in the last 24 h (the bashing limit).
+    bashed: HashMap<usize, Vec<f64>>,
 }
 
 impl Raider {
     pub fn new(seed: u64) -> Raider {
         let miner = Miner { rng: seed, cargo_share: 0.2, probes: 4, harvesters: 3, fighters: 30, eager: true, military_share: 0.30, consolidate: false, reserve: false, yard: false, colony_cargo: 0, expeditions: false, colonies_first: false, ships: false, lab: false, cap: false, feed: false, factory: false, balance: false, satellites: false, doubler: false, expo_full: false, expo_ship: false, expedition_errand: false, sat_cap: false, war_share: false, post_count: false, moon_post: false, ds_anchor: false, lab_first: false, lab_ahead: false, network: false, tech_tree: false, merchant: false, scrap: false, trim: false, missiles: 0, interceptors: HashMap::default(), doctrine: Doctrine::default() };
-        Raider { miner, hostile: true, moon_raids: false, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default() }
+        Raider { miner, hostile: true, moon_raids: false, last: -1.0, spied: HashMap::default(), hit: HashMap::default(), fired: HashMap::default(), bashed: HashMap::default() }
     }
 
     pub fn act(&mut self, w: &mut World, cat: &Catalogue, a: usize, ledger: &mut Ledger) -> Option<usize> {
@@ -2210,7 +2253,7 @@ impl Raider {
         self.last = now;
         let Some(kit) = Kit::of(w, cat, a) else { return pick };
         // Arm `raids`: the module's scout weighs its 20 nearest candidates (QueueableSpyPlanner::MAX_CANDIDATES).
-        let mut targets = nearest(w, cat, a, if w.raids { RAID_CANDIDATES } else { NEIGHBOURS });
+        let mut targets = if w.raids && w.bodies { nearest_bodies(w, cat, a, RAID_CANDIDATES) } else { nearest(w, cat, a, if w.raids { RAID_CANDIDATES } else { NEIGHBOURS }) };
         if w.alliances_distinct {
             // Public highscore plus inactive marker: scout the strongest active rival even beyond nearby farms.
             let ranked = w.public_highscore.clone();
@@ -2226,7 +2269,7 @@ impl Raider {
             targets.retain(|t| !enemies.contains(t));
             for (i, e) in enemies.into_iter().enumerate() { targets.insert(i, e) }
         }
-        if self.moon_raids {
+        if self.moon_raids && !(w.raids && w.bodies) {
             if w.alliances_distinct {
                 targets = targets.into_iter().flat_map(|t| std::iter::once(t).chain(w.moon_of[t])).collect();
             } else {
@@ -2234,7 +2277,11 @@ impl Raider {
             }
         }
         for target in targets {
-            if w.fleets.iter().filter(|f| f.owner == a).count() >= SLOTS { break }
+            // Arm `slots`: the host's own fleet slots (Login\FleetSlots: maximum less the missions flying), not a fixed four.
+            if w.raids && w.slots {
+                let out = w.fleets.iter().filter(|f| f.mission != Mission::Missile && w.account_of(f.owner) == a).count();
+                if out >= w.fleet_slots(cat, a).unwrap_or(SLOTS) { break }
+            } else if w.fleets.iter().filter(|f| f.owner == a).count() >= SLOTS { break }
             self.recycle(w, cat, a, target, ledger);
             if w.alliances_distinct && w.spares(a, target, now) { continue }
             if self.destroy_moon(w, cat, a, target, ledger) { continue }
@@ -2306,12 +2353,18 @@ impl Raider {
     /// target cannot hurt.
     fn raid(&mut self, w: &mut World, cat: &Catalogue, a: usize, target: usize, kit: Kit, ledger: &mut Ledger) -> bool {
         let now = w.games[a].t;
+        let newbie = w.raids && w.newbie && last_report(w, a, target).is_some() && protected_newbie(w, cat, a, target, now);
         let Some(report) = last_report(w, a, target) else { ledger.raid_gates[0] += 1; return false };
         let stale = now - report.time > REPORT_HOURS * 3600.0;
         let cooling = self.hit.get(&target).is_some_and(|&t| now - t < w.tn(a).raid_cooldown_hours * 3600.0);
-        if stale || cooling || ledger.beaten.contains(&(a, target)) {
+        let bashed = w.raids && w.bodies && self.bashed.get_mut(&target).is_some_and(|times| {
+            times.retain(|&t| now - t < 24.0 * 3600.0);
+            times.len() >= BASH_LIMIT
+        });
+        let beaten = ledger.beaten.contains(&(a, target));
+        if stale || cooling || bashed || newbie || beaten {
             ledger.raid_gates[1] += 1;
-            ledger.stale_split[if stale { 0 } else if cooling { 1 } else { 2 }] += 1;
+            ledger.stale_split[if stale { 0 } else if cooling { 1 } else if beaten { 2 } else if bashed { 3 } else { 4 }] += 1;
             return false;
         }
         let redacted = report.ships.is_none() || report.defence.is_none();
@@ -2345,6 +2398,7 @@ impl Raider {
             ledger.guessed.insert((a, target, arrive.to_bits()));
         }
         self.hit.insert(target, now);
+        if w.raids && w.bodies { self.bashed.entry(target).or_default().push(now) }
         ledger.raids.push(Raid { attacker: a, target, arrive, loot: None, target_had_fleet: had_fleet, saved: false });
         true
     }
@@ -3103,6 +3157,51 @@ mod tests {
         let pick = field_reserve(&world, &cat, 0).expect("the reserve binds").expect("a chain object is startable");
         assert!(chain.iter().any(|c| c.0 == pick), "object {pick} is off the chain");
         assert!(cat.objects[pick].requires.iter().all(|&(k, l)| k.is_none_or(|k| world.games[0].planet.levels[k] >= l)), "a prerequisite comes first");
+    }
+
+    /// Arm `bodies`: the scout weighs every body the galaxy view shows, so a rival's colony next door comes before a
+    /// homeworld three galaxies away, which the capitals-only list never offered.
+    #[test]
+    fn the_nearest_bodies_include_a_rivals_colony_next_door() {
+        let Ok(mut cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        cat.login_gaps = vec![600.0, 3600.0];
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let rules = Arc::new(rules);
+        let mut world = World::new(&cat, &[0, 0, 0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::clone(&rules), Arc::clone(&rules), rules], vec![
+            Coord { galaxy: 3, system: 100, position: 8 }, Coord { galaxy: 6, system: 400, position: 8 }, Coord { galaxy: 4, system: 200, position: 8 },
+        ]);
+        let colony = world.add_planet(&cat, 1, 0, Coord { galaxy: 3, system: 101, position: 9 }, 0.0);
+        assert_eq!(nearest(&mut world, &cat, 0, 1), vec![2], "capitals only: the nearer homeworld");
+        assert_eq!(nearest_bodies(&mut world, &cat, 0, 3), vec![colony, 2, 1], "every body, closest first");
+    }
+
+    /// OGame's protection bands: 1:5 under 50,000 points, 1:10 up to 500,000, none above.
+    #[test]
+    fn newbie_protection_follows_the_live_servers_bands() {
+        assert!(newbie_protects(10_000.0, 50_001.0) && !newbie_protects(10_000.0, 50_000.0));
+        assert!(newbie_protects(100_000.0, 1_000_001.0) && !newbie_protects(100_000.0, 600_000.0));
+        assert!(!newbie_protects(500_000.0, 1e12), "above the limit nobody is protected");
+    }
+
+    /// Arm `newbie`: an active account under a fifth of the raider's points carries the galaxy view's newbie mark and
+    /// is left alone; the same account is fair game for a raider of its own size.
+    #[test]
+    fn an_active_account_under_a_fifth_of_the_raiders_points_is_a_protected_newbie() {
+        let Ok(cat) = Catalogue::load(&format!("{DATA}/units-parity/econ-u1-colonies.json")) else { return eprintln!("no catalogue; skipped") };
+        let Ok(rules) = Rules::load(&cat, &format!("{DATA}/units-parity/units-u1.json"), &format!("{DATA}/fleet-settings-u1.json"), &format!("{DATA}/combat-u1.json")) else { return eprintln!("no rules; skipped") };
+        let rules = Arc::new(rules);
+        let mut world = World::new(&cat, &[0, 0, 0], HOURS, 0.0, 5);
+        world.arm(vec![Arc::clone(&rules), Arc::clone(&rules), rules], vec![
+            Coord { galaxy: 1, system: 1, position: 4 }, Coord { galaxy: 1, system: 2, position: 4 }, Coord { galaxy: 1, system: 3, position: 4 },
+        ]);
+        let mine = cat.objects.iter().position(|o| o.queue == 0).expect("a building");
+        world.games[0].planet.levels[mine] = 20;
+        world.games[2].planet.levels[mine] = 19;
+        world.games[1].planet.levels[mine] = 2;
+        assert!(protected_newbie(&mut world, &cat, 0, 1, 0.0), "a tiny account is the big raider's newbie");
+        assert!(!protected_newbie(&mut world, &cat, 0, 2, 0.0), "a peer is not");
+        assert!(!protected_newbie(&mut world, &cat, 1, 0, 0.0), "the big account is never the small one's newbie");
     }
 
     /// Row 66: a capital with a reach of one colonises in its home galaxy; with a wider reach its next colony goes to the

@@ -599,6 +599,9 @@ impl Universe {
         world.raids = on("raids");
         world.rescout = on("rescout");
         world.guess = on("guess");
+        world.bodies = on("bodies");
+        world.slots = on("slots");
+        world.newbie = on("newbie");
         if tuned || skill.is_some() { world.tune = Arc::new(tunes) }
         world.wide = on("wide");
         world.late = on("late");

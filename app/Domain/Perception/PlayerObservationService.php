@@ -53,9 +53,6 @@ class PlayerObservationService
      */
     private const INTEL_TTL_HOURS = 24;
 
-    /** RAID-008: a target scoring under this fraction of ours is not worth the fleet. */
-    private const VIABILITY_SCORE_DIVISOR = 5;
-
     /** CL3: the storage horizon a colony's opening must repay inside, read from behaviour. */
     private const COLONY_POLICY_FILE = '/resources/behavior/colonisation.yaml';
 
@@ -302,10 +299,10 @@ class PlayerObservationService
     }
 
     /**
-     * A target scoring under ~⅕ of ours cannot defend economically, so the
-     * account does not farm newbies (RAID-008). An unknown own score filters
-     * nothing: a young universe has no score row yet, and skipping everything
-     * is worse than skipping nothing.
+     * The account does not farm newbies (RAID-008): a target under the host's newbie protection against our
+     * score (1:5 under 50,000 points, 1:10 up to 500,000, none above; PlayerService::protectsNewbie) is not
+     * viable. An unknown own score filters nothing: a young universe has no score row yet, and skipping
+     * everything is worse than skipping nothing.
      */
     private function scoreViable(int $ownScore, int $targetScore): bool
     {
@@ -313,7 +310,7 @@ class PlayerObservationService
             return true;
         }
 
-        return $targetScore >= intdiv($ownScore, self::VIABILITY_SCORE_DIVISOR);
+        return !PlayerService::protectsNewbie($targetScore, $ownScore);
     }
 
     /**

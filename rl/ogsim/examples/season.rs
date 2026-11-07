@@ -411,7 +411,7 @@ fn play(cat: Arc<ogsim::economy::Catalogue>, colonisation: Option<Arc<Colonisati
     drop(season);
     let gates = universe.ledgers.iter().fold([0usize; 8], |mut t, l| { for i in 0..8 { t[i] += l.raid_gates[i] } t });
     let no_plan = universe.ledgers.iter().fold([0usize; 3], |mut t, l| { for i in 0..3 { t[i] += l.no_plan[i] } t });
-    let stale_split = universe.ledgers.iter().fold([0usize; 3], |mut t, l| { for i in 0..3 { t[i] += l.stale_split[i] } t });
+    let stale_split = universe.ledgers.iter().fold([0usize; 5], |mut t, l| { for i in 0..5 { t[i] += l.stale_split[i] } t });
     let guess_gates = universe.ledgers.iter().fold([0usize; 3], |mut t, l| { for i in 0..3 { t[i] += l.guess_gates[i] } t });
     let guess_outcomes = universe.ledgers.iter().fold([0usize; 3], |mut t, l| { for i in 0..3 { t[i] += l.guess_outcomes[i] } t });
     let guess_value = universe.ledgers.iter().fold([0f64; 2], |mut t, l| { for i in 0..2 { t[i] += l.guess_value[i] } t });
