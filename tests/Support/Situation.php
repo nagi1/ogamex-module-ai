@@ -88,6 +88,7 @@ final class Situation
             'random_seed' => 20_007,
             'enabled' => true,
         ]);
+        $this->fixedPlanets();
         // A session is a login inside the account's waking day. The test clock starts at midnight, where a
         // login is the last one before a long night and rightly saves the fleet instead of using it.
         $this->awake();
@@ -795,6 +796,42 @@ final class Situation
     {
         Planet::query()->whereKey($this->neighbour?->getPlanetId())->update(['time_last_update' => now()->subDays($days)->timestamp]);
         $this->neighbour?->reloadPlanet();
+    }
+
+    /**
+     * The account's planets on fixed bodies. The host draws a new planet's slot, size and temperature from an
+     * unseeded generator, so one story ran on a 125-field planet in one run and a 250-field one in the next:
+     * a planet the planted levels had filled had nothing left to build, and the story failed about one run
+     * in a dozen. Each planet, oldest first, takes the next slot from 8 and the middle of that slot's field
+     * and temperature ranges, so every run of a story plays on the same planets.
+     */
+    private function fixedPlanets(): void
+    {
+        $planets = Planet::query()->where('user_id', $this->profile->player_id)->where('planet_type', 1)->orderBy('id')->get();
+        // Two passes, because a planet's fixed slot may be the one a sibling was drawn into: lift them all to
+        // slots the draw never uses (13 and up) first, then set each down on its own.
+        foreach ([13, 8] as $first) {
+            foreach ($planets as $index => $planet) {
+                $position = $first + $index;
+                $taken = Planet::query()->where('galaxy', $planet->galaxy)->where('system', $planet->system)->where('planet', $position)
+                    ->where('planet_type', 1)->where('user_id', '!=', $this->profile->player_id)->exists();
+                if ($taken || $position > 15) {
+                    throw new LogicException(sprintf('slot %d:%d:%d is not free for the account\'s planet', $planet->galaxy, $planet->system, $position));
+                }
+                $body = app(PlanetServiceFactory::class)->planetData($position, $index === 0);
+                $fields = intdiv($body['fields'][0] + $body['fields'][1], 2);
+                $temperature = intdiv($body['temperature'][0] + $body['temperature'][1], 2);
+                $planet->forceFill([
+                    'planet' => $position,
+                    'field_max' => $fields,
+                    'diameter' => (int) (36.14 * $fields + 5697.23),
+                    'temp_max' => $temperature,
+                    'temp_min' => $temperature - 40,
+                ])->save();
+            }
+        }
+        $this->host('planetService')->reloadPlanet();
+        $this->host('secondPlanetService')?->reloadPlanet();
     }
 
     /** Another active player, created once: the applicant, the one who writes. */

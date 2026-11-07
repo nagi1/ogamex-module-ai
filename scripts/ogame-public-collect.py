@@ -269,6 +269,23 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def payload_captured_at(raw_dir):
+    """The newest `timestamp` the saved payloads carry, as ISO UTC; None when none carries one."""
+    stamps = []
+    for filename in sorted(os.listdir(raw_dir)):
+        match = re.match(r"(.+)\.xml(?:\.gz)?$", filename)
+        payload = read_raw(raw_dir, match.group(1)) if match else None
+        try:
+            stamp = int(ET.fromstring(payload).get("timestamp")) if payload else None
+        except (ET.ParseError, TypeError, ValueError):
+            stamp = None
+        if stamp:
+            stamps.append(stamp)
+    if not stamps:
+        return None
+    return datetime.datetime.fromtimestamp(max(stamps), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def collect_one(host, out, highscore, salt):
     """Fetch one public universe, normalize it and write its manifest. Raises on a non-public host."""
     if not HOST.match(host):
@@ -307,7 +324,9 @@ def normalize_dir(offline_dir, out, salt):
         server_id = ET.fromstring(open(settings, "rb").read()).get("serverId") or server_id
     source_id = f"PUB-{server_id}"
     salt = salt or hashlib.sha256(source_id.encode()).hexdigest()
-    captured = now()
+    # Saved payloads were captured when the API published them, not when they are re-normalized: the
+    # newest payload timestamp is that instant, and it keeps two re-normalizations byte-identical.
+    captured = payload_captured_at(raw_dir) or now()
     counts = normalize(raw_dir, os.path.join(out, "sources", source_id), source_id, salt, captured)
     manifest = {
         "source_id": source_id, "universe": "", "access": "public OGame API (unauthenticated)",
