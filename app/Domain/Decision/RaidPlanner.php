@@ -280,7 +280,7 @@ class RaidPlanner
             return $this->reject('below_loot_tier', $playerId, $reportId);
         }
 
-        [$missionType, $launchUnits] = $this->missionFor($report, $origin, $launchUnits);
+        [$missionType, $launchUnits] = $strike ? $this->missionFor($report, $origin, $launchUnits) : [AttackMission::getTypeId(), $launchUnits];
 
         if ($this->advisorHolds($player, $playerId, $report, $launchUnits, $estimate, $fuel)) {
             return $this->reject('advisor_wait', $playerId, $reportId);
@@ -357,7 +357,8 @@ class RaidPlanner
     /**
      * A won fight on an enemy moon is flown as its destruction when the origin holds the hulls the host's
      * moon-destruction mission needs: a player with deathstars takes the moon that hosts the enemy's jump gate
-     * and phalanx rather than only its loot. All of those hulls fly, since each one raises the odds.
+     * and phalanx rather than only its loot. All of those hulls fly, since each one raises the odds. A neutral moon
+     * that is worth a raid is raided, not destroyed.
      *
      * @param array<string, int> $launchUnits
      * @return array{0: int, 1: array<string, int>}
