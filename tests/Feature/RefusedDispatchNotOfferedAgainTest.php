@@ -42,9 +42,11 @@ test('a field the gate just refused is not the harvest this session sends', func
     DebrisField::query()->delete();
     FleetMission::query()->delete();
 
+    // The kit moves the account's planet to a fixed slot, so the field and the refusal are read after it.
+    $situation = Situation::of($this);
     $home = $this->planetService->getPlanetCoordinates();
 
-    Situation::of($this)
+    $situation
         ->resources(1_000_000, 1_000_000, 1_000_000)
         ->ships('recycler', 2)
         ->debris(40_000, 20_000)
