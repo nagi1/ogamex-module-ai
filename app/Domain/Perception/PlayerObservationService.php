@@ -53,6 +53,17 @@ class PlayerObservationService
      */
     private const INTEL_TTL_HOURS = 24;
 
+    /**
+     * The economy speed the hours above are stated for. A faster universe builds a wall in minutes, so a report is read
+     * in this universe's hours: in the 1000x grand universe a report 5.5 real hours old (229 game days) still sent 16
+     * battleships onto three rocket launchers that had become 800, and attackers lost more than they took in 131 of 175
+     * raids (8 Nov 2026).
+     */
+    private const INTEL_REFERENCE_SPEED = 8.0;
+
+    /** However fast the universe, a report lives long enough for the raid its own login sends. */
+    private const INTEL_MINIMUM_SECONDS = 600;
+
     /** CL3: the storage horizon a colony's opening must repay inside, read from behaviour. */
     private const COLONY_POLICY_FILE = '/resources/behavior/colonisation.yaml';
 
@@ -225,7 +236,9 @@ class PlayerObservationService
     private function targetReports(int $playerId, PlayerService $player): array
     {
         $now = now();
-        $cutoff = $now->copy()->subHours(self::INTEL_TTL_HOURS);
+        $pace = max(1.0, $this->settings->economySpeed() / self::INTEL_REFERENCE_SPEED);
+        $ttlSeconds = max(self::INTEL_MINIMUM_SECONDS, (int) (self::INTEL_TTL_HOURS * 3600 / $pace));
+        $cutoff = $now->copy()->subSeconds($ttlSeconds);
 
         $messages = Message::query()
             ->where('user_id', $playerId)
@@ -261,7 +274,7 @@ class PlayerObservationService
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
         return $messages
-            ->map(function (Message $message) use ($reports, $nowTimestamp, $player, $ownScore, $targetScores, $fleetMissions): array {
+            ->map(function (Message $message) use ($reports, $nowTimestamp, $player, $ownScore, $targetScores, $fleetMissions, $pace, $ttlSeconds): array {
                 // The messages column is a foreign key to espionage_reports with
                 // no cascade, so every message here has a report by construction.
                 /** @var EspionageReport $report */
@@ -271,12 +284,12 @@ class PlayerObservationService
                 return [
                     'report_id' => (int) $message->espionage_report_id,
                     'observed_at' => (int) ($message->created_at->timestamp ?? 0),
-                    'expires_at' => (int) ($message->created_at?->addHours(self::INTEL_TTL_HOURS)->timestamp ?? 0),
+                    'expires_at' => (int) ($message->created_at?->addSeconds($ttlSeconds)->timestamp ?? 0),
                     // Freshness, downgraded by completeness: a resources-only probe
                     // cannot answer "raid it or not" even when fresh (INT-003).
                     'confidence' => $this->activityIntelReader->intelConfidence(
                         (int) ($message->created_at->timestamp ?? 0),
-                        $nowTimestamp,
+                        (int) ($message->created_at->timestamp + ($nowTimestamp - $message->created_at->timestamp) * $pace),
                         self::INTEL_TTL_HOURS,
                         'resources',
                     ) * $this->activityIntelReader->completenessFactor($report->ships, $report->defense),

@@ -42,6 +42,7 @@ use OGame\Models\User;
 use OGame\Services\MessageService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);
@@ -217,6 +218,24 @@ test('a report on an ordinary foreign planet is published attackable', function 
     $byReport = array_column($reports, null, 'report_id');
 
     expect($byReport[$reportId]['attack_permitted'])->toBeTrue();
+});
+
+// A fast universe builds a wall in minutes: a report 5.5 real hours old in the 1000x grand universe (229 game days)
+// still sent 16 battleships onto three rocket launchers that had become 800 (8 Nov 2026). A report is read in the
+// universe's own hours.
+test('in a 1000x universe a report an hour old is no longer a target, one a minute old is', function (): void {
+    raidDepthProfile($this->currentUserId);
+    $foreign = $this->createForeignPlanet();
+    $coordinates = $foreign->getPlanetCoordinates();
+    $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000]);
+    $this->partialMock(SettingsService::class, fn ($mock) => $mock->shouldReceive('economySpeed')->andReturn(1000));
+    $published = fn (): array => array_column(app(PlayerObservationService::class)->ownedState($this->currentUserId)['target_reports'], 'report_id');
+
+    $this->travel(1)->minutes();
+    expect($published())->toContain($reportId);
+
+    $this->travel(1)->hours();
+    expect($published())->not->toContain($reportId);
 });
 
 // W9-2: the recovery signal the scorer reads is published from the account's own
