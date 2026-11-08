@@ -86,6 +86,7 @@ test('the model lab asks the fleet model about an account in plain words and wri
 
     $before = [DB::table('ai_decision_traces')->count(), DB::table('ai_work_items')->count(), DB::table('fleet_missions')->count()];
     $response = $this->get('/admin/ai/models?player=' . $this->currentUserId);
+    $why = $this->get('/admin/ai/models/why/' . $this->currentUserId);
     unlink($path);
 
     expect($response->status())->toBe(200)
@@ -93,6 +94,9 @@ test('the model lab asks the fleet model about an account in plain words and wri
         ->toContain(__('t_ai.lab_card_missing'))
         ->toContain(__('t_ai.lab_why_heading', ['player' => $this->currentUserId, 'archetype' => 'Miner']))
         ->toContain(__('t_ai.lab_check_same'))
+        ->and($why->status())->toBe(200)
+        ->and($why->getContent())->toContain(__('t_ai.lab_why_heading', ['player' => $this->currentUserId, 'archetype' => 'Miner']))
+        ->not->toContain('<html')
         ->and($this->get('/admin/ai')->getContent())->toContain(route('ai.models'))
         ->and([DB::table('ai_decision_traces')->count(), DB::table('ai_work_items')->count(), DB::table('fleet_missions')->count()])->toBe($before);
 });

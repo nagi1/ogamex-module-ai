@@ -398,6 +398,18 @@ class AIController extends OGameController
         ]);
     }
 
+    /** One account's explanation as a page fragment: what the Why? buttons load in place. */
+    public function modelWhy(int $player): View
+    {
+        abort_unless((bool) config('ai.model_lab.enabled'), 404);
+        $profile = AiProfile::query()->where('player_id', $player)->firstOrFail();
+
+        /** @var view-string $view */
+        $view = 'ai::partials.lab-detail';
+
+        return view($view, ['d' => app(BuildAiModelLabAction::class)->explain($profile)]);
+    }
+
     private function tab(Request $request): string
     {
         $requested = $request->query('tab');

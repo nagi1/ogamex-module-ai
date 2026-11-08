@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use JsonException;
 use Modules\AI\Domain\Choice\ChoicePoint;
@@ -13,6 +14,7 @@ use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Login\LoginPlans;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
+use Modules\AI\Jobs\RefreshAiModelLabJob;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\Services\ObjectService;
@@ -42,28 +44,74 @@ class BuildAiModelLabAction
     ) {
     }
 
-    /** @return array<string, mixed> */
+    /** Where the background pass leaves every account's answers; the page reads it instead of asking 20 accounts live. */
+    public const CACHE_KEY = 'ai:model-lab:accounts';
+
+    /** How old the table may be before the page asks for a fresh pass. */
+    public const FRESH_SECONDS = 120;
+
+    /**
+     * The page: the account table from the last background pass (a stale or missing one asks for a new pass), and the
+     * opened account asked live, so a page view costs one account's login, not the whole population's.
+     *
+     * @return array<string, mixed>
+     */
     public function handle(int|null $playerId): array
     {
-        $fleetPath = (string) (config('ai.model_lab.fleet_model') ?: config('ai.rl.errand_model'));
-        $economyPath = (string) (config('ai.model_lab.economy_model') ?: config('ai.rl.economy_model'));
-        $fleet = is_file($fleetPath) ? ErrandPolicyModel::parse((string) file_get_contents($fleetPath)) : null;
-        $economy = is_file($economyPath) ? EconomyPolicyModel::parse((string) file_get_contents($economyPath)) : null;
-
-        $accounts = [];
-        $detail = null;
-        foreach (AiProfile::query()->orderBy('player_id')->get() as $profile) {
-            $open = $profile->player_id === $playerId;
-            $account = $this->account($profile, $fleet, $fleetPath, $economy, $economyPath, $open);
-            $accounts[] = $account;
-            $detail = $open ? $account : $detail;
+        [$fleet, $fleetPath, $economy, $economyPath] = $this->models();
+        $cached = Cache::get(self::CACHE_KEY);
+        $checkedAt = is_array($cached) ? (int) $cached['at'] : null;
+        if ($checkedAt === null || time() - $checkedAt > self::FRESH_SECONDS) {
+            RefreshAiModelLabJob::dispatch();
         }
+        $accounts = is_array($cached) ? (array) $cached['accounts'] : [];
+
+        $profile = $playerId === null ? null : AiProfile::query()->where('player_id', $playerId)->first();
+        $detail = $profile instanceof AiProfile ? $this->explain($profile) : null;
 
         return [
             'fleet' => $this->modelCard($fleet, $fleetPath, (bool) config('ai.rl.errand_model'), array_column($accounts, 'fleet')),
             'economy' => $this->modelCard($economy, $economyPath, config('ai.rl.policy') === 'model' && (bool) config('ai.rl.economy_model'), array_merge([], ...array_column($accounts, 'economy'))),
             'accounts' => $accounts,
+            'checked_seconds_ago' => $checkedAt === null ? null : max(0, time() - $checkedAt),
             'detail' => $detail,
+        ];
+    }
+
+    /**
+     * One account asked live, with everything the Why? panel shows.
+     *
+     * @return array<string, mixed>
+     */
+    public function explain(AiProfile $profile): array
+    {
+        [$fleet, $fleetPath, $economy, $economyPath] = $this->models();
+
+        return $this->account($profile, $fleet, $fleetPath, $economy, $economyPath, true);
+    }
+
+    /** The background pass: every account's answers (no explanations), kept for the page. */
+    public function refresh(): void
+    {
+        [$fleet, $fleetPath, $economy, $economyPath] = $this->models();
+        $accounts = [];
+        foreach (AiProfile::query()->orderBy('player_id')->get() as $profile) {
+            $accounts[] = $this->account($profile, $fleet, $fleetPath, $economy, $economyPath, false);
+        }
+        Cache::put(self::CACHE_KEY, ['at' => time(), 'accounts' => $accounts], now()->addDay());
+    }
+
+    /** @return array{0: ErrandPolicyModel|null, 1: string, 2: EconomyPolicyModel|null, 3: string} */
+    private function models(): array
+    {
+        $fleetPath = (string) (config('ai.model_lab.fleet_model') ?: config('ai.rl.errand_model'));
+        $economyPath = (string) (config('ai.model_lab.economy_model') ?: config('ai.rl.economy_model'));
+
+        return [
+            is_file($fleetPath) ? ErrandPolicyModel::parse((string) file_get_contents($fleetPath)) : null,
+            $fleetPath,
+            is_file($economyPath) ? EconomyPolicyModel::parse((string) file_get_contents($economyPath)) : null,
+            $economyPath,
         ];
     }
 

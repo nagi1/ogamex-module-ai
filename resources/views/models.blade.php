@@ -62,7 +62,13 @@
                             @endforeach
                         </div>
 
-                        {{-- Every account, one row. --}}
+                        {{-- Every account, one row, from the last background check. --}}
+                        @if ($lab['checked_seconds_ago'] === null)
+                            <p class="lede no" id="lab-pending">{{ __('t_ai.lab_pending') }}</p>
+                            <script>setTimeout(function () { location.reload(); }, 8000);</script>
+                        @else
+                            <p class="lede muted">{{ __('t_ai.lab_checked', ['seconds' => $lab['checked_seconds_ago']]) }}</p>
+                        @endif
                         <table class="defaultTable">
                             <tr>
                                 <th>{{ __('t_ai.lab_col_account') }}</th>
@@ -89,24 +95,33 @@
                                             @endforelse
                                         </td>
                                     @endif
-                                    <td><a class="btn_blue" href="{{ route('ai.models', ['player' => $account['player_id']]) }}#why">{{ __('t_ai.lab_why') }}</a></td>
+                                    <td><a class="btn_blue lab-why" href="{{ route('ai.models', ['player' => $account['player_id']]) }}#why" data-url="{{ route('ai.models.why', ['player' => $account['player_id']]) }}">{{ __('t_ai.lab_why') }}</a></td>
                                 </tr>
                             @endforeach
                         </table>
                         <p class="lede muted">{{ __('t_ai.lab_legend') }}</p>
 
-                        {{-- One account, in plain words. --}}
-                        @php($d = $lab['detail'])
-                        @if ($d !== null && $d['error'] === null)
-                            <p class="box_highlight textCenter no_buddies" id="why">{{ __('t_ai.lab_why_heading', ['player' => $d['player_id'], 'archetype' => $d['archetype']]) }}</p>
-
-                            @if ($d['fleet'] !== null)
-                                @include('ai::partials.lab-why', ['title' => __('t_ai.lab_col_fleet'), 'answer' => $d['fleet']])
+                        {{-- One account, in plain words: filled in place by the Why? buttons, or on a direct link. --}}
+                        <div id="why">
+                            @if ($lab['detail'] !== null)
+                                @include('ai::partials.lab-detail', ['d' => $lab['detail']])
                             @endif
-                            @foreach ($d['economy'] as $answer)
-                                @include('ai::partials.lab-why', ['title' => __('t_ai.lab_col_build') . ' · ' . $answer['where'], 'answer' => $answer])
-                            @endforeach
-                        @endif
+                        </div>
+                        <script>
+                            document.querySelectorAll('.ai-lab .lab-why').forEach(function (link) {
+                                link.addEventListener('click', function (event) {
+                                    event.preventDefault();
+                                    var panel = document.getElementById('why');
+                                    document.querySelectorAll('.ai-lab tr.open').forEach(function (row) { row.classList.remove('open'); });
+                                    link.closest('tr').classList.add('open');
+                                    panel.innerHTML = '<p class="lede muted">{{ __('t_ai.lab_asking') }}</p>';
+                                    panel.scrollIntoView({behavior: 'smooth'});
+                                    fetch(link.dataset.url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                                        .then(function (response) { return response.text(); })
+                                        .then(function (html) { panel.innerHTML = html; history.replaceState(null, '', link.href); });
+                                });
+                            });
+                        </script>
                     </div>
                 </div>
             </div>

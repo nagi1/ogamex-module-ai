@@ -43,6 +43,8 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
         Route::get('/account/{player}', [AIController::class, 'account'])->name('account');
         // The model lab is a dry run of the trained models on live state: a read, and a 404 unless config turns it on.
         Route::get('/models', [AIController::class, 'models'])->name('models');
+        // One account's explanation on its own, for the page's Why? buttons (no full page reload).
+        Route::get('/models/why/{player}', [AIController::class, 'modelWhy'])->name('models.why');
     });
 
 // The coalition campaign page is a read-only situation log: any logged-in player can read it,
