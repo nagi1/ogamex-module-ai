@@ -92,8 +92,8 @@ class AppraiseObservedBattleReportAction
             // as an AttackReceived fact so later recall can weigh a betrayal or an apology.
             // Only the side that was attacked holds it against the other: an account whose own probes or raid were shot
             // down lost the fight, but it was the aggressor (live 8 Nov: a miner told the players it had spied on to
-            // stop attacking it).
-            if ((int) $battleReport->planet_user_id === $observation->player_id) {
+            // stop attacking it). Probes seen off are spying, not an attack, so they leave no grievance either.
+            if ((int) $battleReport->planet_user_id === $observation->player_id && RecordObservedBattleReportAction::armed($battleReport)) {
                 $this->recordHostility($observation, $occurredAt);
             }
         }

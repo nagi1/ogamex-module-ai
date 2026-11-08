@@ -2,13 +2,13 @@
 
 namespace Modules\AI\Actions;
 
-use Modules\AI\Jobs\AppraiseAiBattleReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Modules\AI\Enums\AiCampaignConsultationTrigger;
 use Modules\AI\Enums\AiCampaignState;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiObservationSource;
+use Modules\AI\Jobs\AppraiseAiBattleReport;
 use Modules\AI\Models\AiCampaign;
 use Modules\AI\Models\AiCampaignConsultationSignal;
 use Modules\AI\Models\AiObservation;
@@ -16,6 +16,8 @@ use Modules\AI\Models\AiProfile;
 use Modules\AI\Support\AiClock;
 use OGame\Models\BattleReport;
 use OGame\Models\User;
+use OGame\Services\ObjectService;
+use RuntimeException;
 
 /**
  * Reduces one committed battle report into observations for the AIs that took part.
@@ -65,7 +67,11 @@ class RecordObservedBattleReportAction
     private function recordObservations(BattleReport $battleReport, int $defenderPlayerId, int $attackerPlayerId): int
     {
         $this->signalCampaignEvents($battleReport, $defenderPlayerId, $attackerPlayerId);
-        app(BreakAiCeasefireAction::class)->handle($attackerPlayerId, $defenderPlayerId);
+        // Spying is not an attack: probes shot down neither break a truce nor call the alliance to arms.
+        $armed = self::armed($battleReport);
+        if ($armed) {
+            app(BreakAiCeasefireAction::class)->handle($attackerPlayerId, $defenderPlayerId);
+        }
 
         /** @var array<int, int> $counterparties Each participant maps to the player it faced. */
         $counterparties = [
@@ -106,7 +112,9 @@ class RecordObservedBattleReportAction
         }
 
         $this->recordRaidLoot($battleReport, $attackerPlayerId, $participants);
-        $this->recordAllyUnderAttackObservations($battleReport, $defenderPlayerId, $attackerPlayerId);
+        if ($armed) {
+            $this->recordAllyUnderAttackObservations($battleReport, $defenderPlayerId, $attackerPlayerId);
+        }
 
         return $recorded;
     }
@@ -308,6 +316,30 @@ class RecordObservedBattleReportAction
     }
 
     /** @return array<string, mixed> */
+    /**
+     * Whether the attacker brought anything that shoots, by the host's own unit stats (no object is named): a report of
+     * probes alone is espionage seen off by the defence, not an attack (live 8 Nov: 147 of 184 "ally under attack" alarms
+     * in six hours were probes). A report that does not list the attacker's units is taken as an attack.
+     */
+    public static function armed(BattleReport $battleReport): bool
+    {
+        $attacker = is_array($battleReport->attacker) ? $battleReport->attacker : [];
+        if (!isset($attacker['units']) || !is_array($attacker['units'])) {
+            return true;
+        }
+        foreach ($attacker['units'] as $machineName => $amount) {
+            try {
+                if ((int) $amount > 0 && ObjectService::getUnitObjectByMachineName((string) $machineName)->properties->attack->rawValue > 0) {
+                    return true;
+                }
+            } catch (RuntimeException) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function attackerSide(BattleReport $battleReport): array
     {
         return is_array($battleReport->attacker) ? $battleReport->attacker : [];

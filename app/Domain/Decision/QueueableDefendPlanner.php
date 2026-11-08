@@ -15,6 +15,7 @@ use OGame\Models\BattleReport;
 use OGame\Models\FleetMission;
 use OGame\Models\Planet;
 use OGame\Models\User;
+use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerService;
 
@@ -30,6 +31,12 @@ use OGame\Services\PlayerService;
 class QueueableDefendPlanner
 {
     private const WINDOW_HOURS = 6;
+
+    /**
+     * The least share of the raider's fleet (at host prices) worth parking at an ally: below it the help changes no
+     * fight and only feeds the debris field (live 8 Nov: a third of the defences flew five ships or fewer).
+     */
+    private const MEANINGFUL_SHARE = 0.10;
 
     public function __construct(
         private PlayerServiceFactory $playerServiceFactory,
@@ -53,7 +60,7 @@ class QueueableDefendPlanner
             ->where('player_id', $playerId)
             ->where('kind', AiObservationKind::AllyUnderAttack)
             ->where('observed_at', '>=', now()->subHours(self::WINDOW_HOURS))
-            ->orderByDesc('observed_at')
+            ->latest('observed_at')
             ->pluck('source_id');
 
         if ($reportIds->isEmpty()) {
@@ -81,7 +88,7 @@ class QueueableDefendPlanner
                 continue;
             }
 
-            $source = $this->source($player, $target, $refusedOrigins);
+            $source = $this->source($player, $target, $refusedOrigins, $this->raiderValue((int) $reportId));
             if ($source === null) {
                 continue;
             }
@@ -103,7 +110,7 @@ class QueueableDefendPlanner
      *
      * @param array<int, true> $refusedOrigins own bodies the gate just refused a dispatch from
      */
-    private function source(PlayerService $player, PlanetService $target, array $refusedOrigins): ?PlanetService
+    private function source(PlayerService $player, PlanetService $target, array $refusedOrigins, float $raiderValue): ?PlanetService
     {
         foreach ($player->planets->all() as $source) {
             if (isset($refusedOrigins[$source->getPlanetId()])) {
@@ -111,7 +118,7 @@ class QueueableDefendPlanner
             }
 
             $fleet = $this->defendAction->heldFleet($source);
-            if ($fleet->units === []) {
+            if ($fleet->units === [] || $this->value($fleet->toArray()) < self::MEANINGFUL_SHARE * $raiderValue) {
                 continue;
             }
 
@@ -123,6 +130,27 @@ class QueueableDefendPlanner
         }
 
         return null;
+    }
+
+    /** The raider's fleet in the report, at host prices; a report that lists no units asks for no minimum. */
+    private function raiderValue(int $reportId): float
+    {
+        $attacker = BattleReport::query()->find($reportId)?->attacker;
+        $units = is_array($attacker) ? ($attacker['units'] ?? []) : [];
+
+        return is_array($units) ? $this->value($units) : 0.0;
+    }
+
+    /** @param array<mixed> $units machine name => amount */
+    private function value(array $units): float
+    {
+        $value = 0.0;
+        foreach ($units as $machineName => $amount) {
+            $price = ObjectService::getObjectRawPrice((string) $machineName);
+            $value += (int) $amount * ($price->metal->get() + $price->crystal->get() + $price->deuterium->get());
+        }
+
+        return $value;
     }
 
     /** A defence already sent (and not yet home) to this planet is not sent twice. */
