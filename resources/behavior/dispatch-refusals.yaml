@@ -9,3 +9,9 @@
 # cohort's DISPATCH_REFUSALS invariant counts, because a cooling shorter than that span lets the same
 # refusal be repeated inside the window the invariant measures, which is exactly the defect.
 cooling_minutes: 360
+
+# The span is a fleet's: it is stated for a universe up to this fleet speed and shrinks with a faster one, where the
+# missing fleet is home and the busy yard done in minutes (8 Nov 2026, 1000x: 1,033 of 1,039 raids dropped by a
+# six-hour cooling). It never goes below the minimum, so a refusal still is not repeated on the next login.
+reference_fleet_speed: 8
+minimum_minutes: 10

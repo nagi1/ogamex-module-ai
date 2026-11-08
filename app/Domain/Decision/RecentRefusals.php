@@ -2,11 +2,13 @@
 
 namespace Modules\AI\Domain\Decision;
 
+use Illuminate\Support\Collection;
 use Modules\AI\Enums\AiActionType;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Enums\AiReceiptState;
 use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Models\AiActionReceipt;
+use OGame\Services\SettingsService;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -165,7 +167,7 @@ class RecentRefusals
         return in_array($receipt->result['reason'] ?? null, self::TARGET_SIDE_REASONS, true);
     }
 
-    /** @return \Illuminate\Support\Collection<int, AiActionReceipt> */
+    /** @return Collection<int, AiActionReceipt> */
     private function recent(int $playerId)
     {
         return AiActionReceipt::query()
@@ -184,8 +186,18 @@ class RecentRefusals
     private function coolingMinutes(): int
     {
         $value = $this->policy()['cooling_minutes'] ?? null;
+        if (!is_numeric($value)) {
+            return 0;
+        }
 
-        return is_numeric($value) ? max(0, (int) $value) : 0;
+        // The hours are a fleet's hours: in a faster universe the fleet that was missing is home and the yard that was busy
+        // is done in minutes, so six real hours cooled every raid origin of a 1000x universe for months of game time (8 Nov
+        // 2026: 1,033 of 1,039 raids dropped, no attack flown for three hours).
+        $reference = (float) ($this->policy()['reference_fleet_speed'] ?? 1);
+        $speed = max(1.0, (float) app(SettingsService::class)->fleetSpeedWar());
+        $scaled = (int) round((float) $value * min(1.0, max(1.0, $reference) / $speed));
+
+        return max(0, (int) ($this->policy()['minimum_minutes'] ?? 0), $scaled);
     }
 
     /** @return array<string, mixed> */

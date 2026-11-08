@@ -4,6 +4,7 @@ use Modules\AI\Enums\AiWorkKind;
 use Modules\AI\Tests\Support\Situation;
 use OGame\Models\DebrisField;
 use OGame\Models\FleetMission;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__ . '/../Support/Situation.php';
@@ -89,3 +90,24 @@ test('a body refused for recycling does not send its recyclers again', function 
         ->session()
         ->expectNoWork(AiWorkKind::Recycle);
 });
+
+// The hours are a fleet's: at 1000x the fleet that was missing is home in minutes, so six real hours dropped 1,033 of
+// 1,039 raids of the grand universe (8 Nov 2026). A faster universe cools for its own span, never below the minimum.
+test('in a 1000x universe a body refused half an hour ago flies again, one refused a moment ago does not', function (int $minutesAgo, bool $flies): void {
+    DebrisField::query()->delete();
+    FleetMission::query()->delete();
+    // Only this process sees the faster universe: the setting itself is shared with the tests running beside this one.
+    $this->partialMock(SettingsService::class, fn ($mock) => $mock->shouldReceive('fleetSpeedWar')->andReturn(1000));
+
+    $situation = Situation::of($this)
+        ->resources(1_000_000, 1_000_000, 1_000_000)
+        ->ships('recycler', 2)
+        ->debris(40_000, 20_000)
+        ->refusedDispatch($this->currentPlanetId, reason: 'no_disposable_fleet', minutesAgo: $minutesAgo)
+        ->session();
+
+    $flies ? $situation->expectWork(AiWorkKind::Recycle) : $situation->expectNoWork(AiWorkKind::Recycle);
+})->with([
+    'half an hour ago' => [30, true],
+    'a moment ago' => [2, false],
+]);
