@@ -384,3 +384,24 @@ test('the classifier places a known exchange and ignores everything else', funct
     'empty message' => ['   ', null, []],
     'a greeting buried in a long message' => [str_repeat('hello ', 20), null, []],
 ]);
+
+// The answer to an offer this account made is that offer's answer, not a new offer: a refused truce ("no ceasefire. 11
+// hits, and now it's a truce?") was read as a truce request and refused back (8 Nov 2026).
+test('a refusal of the account\'s own truce offer is not answered as a new truce request', function (): void {
+    $other = $this->createUser();
+    enabledAiProfile($this->currentUserId);
+    $refusal = "no ceasefire. 11 hits, and now it's a truce?";
+    $sent = static fn (int $playerId): int => ChatMessage::query()->where('sender_id', $playerId)->count();
+
+    // Alone, the line reads as a truce request and is answered.
+    inboundMessage($this->currentUserId, $other->id, $refusal);
+    expect(runConversationCycle($this->currentUserId))->toBe(1)
+        ->and($sent($this->currentUserId))->toBe(1);
+
+    $stranger = $this->createUser();
+    $offer = ChatMessage::create(['sender_id' => $this->currentUserId, 'recipient_id' => $stranger->id, 'message' => 'can we call a truce. 4 raids and you still want more?']);
+    ChatMessage::create(['sender_id' => $stranger->id, 'recipient_id' => $this->currentUserId, 'message' => $refusal, 'reply_to_id' => $offer->id]);
+
+    expect(runConversationCycle($this->currentUserId))->toBe(1)
+        ->and($sent($this->currentUserId))->toBe(2);
+});
