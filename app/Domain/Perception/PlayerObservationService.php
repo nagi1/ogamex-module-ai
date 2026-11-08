@@ -89,8 +89,7 @@ class PlayerObservationService
         private SaveFailurePolicy $saveFailurePolicy,
         private AccountStateResolver $accountStateResolver,
         private RandomSource $randomSource,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{
@@ -198,7 +197,7 @@ class PlayerObservationService
         $parsed = Yaml::parseFile(module_path('AI', self::COLONY_POLICY_FILE));
         $hours = is_array($parsed) ? ($parsed['colonisation']['development_horizon_hours'] ?? null) : null;
 
-        if (!is_numeric($hours) || (float) $hours <= 0.0) {
+        if (! is_numeric($hours) || (float) $hours <= 0.0) {
             throw new RuntimeException('colonisation: the file must state development_horizon_hours.');
         }
 
@@ -288,8 +287,8 @@ class PlayerObservationService
                     // Freshness, downgraded by completeness: a resources-only probe
                     // cannot answer "raid it or not" even when fresh (INT-003).
                     'confidence' => $this->activityIntelReader->intelConfidence(
-                        (int) ($message->created_at->timestamp ?? 0),
-                        (int) ($message->created_at->timestamp + ($nowTimestamp - $message->created_at->timestamp) * $pace),
+                        $observedAt = (int) ($message->created_at->timestamp ?? 0),
+                        $observedAt + (int) (($nowTimestamp - $observedAt) * $pace),
                         self::INTEL_TTL_HOURS,
                         'resources',
                     ) * $this->activityIntelReader->completenessFactor($report->ships, $report->defense),
@@ -323,7 +322,7 @@ class PlayerObservationService
             return true;
         }
 
-        return !PlayerService::protectsNewbie($targetScore, $ownScore);
+        return ! PlayerService::protectsNewbie($targetScore, $ownScore);
     }
 
     /**
@@ -377,9 +376,9 @@ class PlayerObservationService
             return false;
         }
 
-        return !$targetPlayer->isInVacationMode()
-            && !$targetPlayer->isBanned()
-            && !$targetPlayer->isAdmin();
+        return ! $targetPlayer->isInVacationMode()
+            && ! $targetPlayer->isBanned()
+            && ! $targetPlayer->isAdmin();
     }
 
     /** @return array<int, array{id:int, resources:array<string, float|int>}> */
@@ -444,7 +443,7 @@ class PlayerObservationService
      */
     private function inboundThreat(int $playerId, bool $active, ?PlayerService $player): array
     {
-        if (!$active || $player === null) {
+        if (! $active || $player === null) {
             return [
                 'fleetsave_eligible' => false,
                 'fleetsave_skip_reason' => null,
@@ -548,7 +547,7 @@ class PlayerObservationService
      */
     private function recallState(int $playerId, bool $active, ?PlayerService $player): array
     {
-        if (!$active || $player === null) {
+        if (! $active || $player === null) {
             return ['recall_eligible' => false];
         }
 
@@ -563,6 +562,6 @@ class PlayerObservationService
 
         $fleetMissions = app()->makeWith(FleetMissionService::class, ['player' => $player]);
 
-        return ['recall_eligible' => $deploymentInFlight && !$fleetMissions->currentPlayerUnderAttack()];
+        return ['recall_eligible' => $deploymentInFlight && ! $fleetMissions->currentPlayerUnderAttack()];
     }
 }
