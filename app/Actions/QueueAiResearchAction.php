@@ -63,6 +63,12 @@ class QueueAiResearchAction implements QueueAiResearch
                 return AiActionResult::rejected(AiQueueActionReason::AlreadyResearching);
             }
 
+            // The host takes the row and cancels it the moment it starts when the planet cannot pay: 1,115 of 1,788
+            // research rows in three hours of the 1000x universe, the stock spent between the decision and the order.
+            if (!$planet->hasResources(ObjectService::getObjectPrice($technology->machine_name, $planet))) {
+                return AiActionResult::rejected(AiQueueActionReason::CannotAffordAtQueue);
+            }
+
             $this->researchQueueService->add($player, $planet, $researchId);
             $queueId = ResearchQueue::query()
                 ->where('planet_id', $planetId)

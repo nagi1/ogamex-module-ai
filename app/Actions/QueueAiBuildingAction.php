@@ -56,6 +56,12 @@ class QueueAiBuildingAction implements QueueAiBuilding
                 return AiActionResult::rejected(AiQueueActionReason::ShipyardBusy);
             }
 
+            // The host takes the row and cancels it the moment it starts when the planet cannot pay: 1,417 of 1,430
+            // cancelled rows in three hours of the 1000x universe, the stock spent between the decision and the order.
+            if (!$planet->hasResources(ObjectService::getObjectPrice($building->machine_name, $planet))) {
+                return AiActionResult::rejected(AiQueueActionReason::CannotAffordAtQueue);
+            }
+
             $this->buildingQueueService->add($planet, $buildingId);
             $queueId = BuildingQueue::query()
                 ->where('planet_id', $planetId)
