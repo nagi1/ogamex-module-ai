@@ -3,6 +3,7 @@
 namespace Modules\AI\Actions;
 
 use Modules\AI\Contracts\ChoicePolicy;
+use Modules\AI\Domain\Choice\ChoiceCandidate;
 use Modules\AI\Domain\Choice\ChoicePoint;
 use Modules\AI\Domain\Choice\ChoiceRecorder;
 use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
@@ -68,7 +69,9 @@ class DecideAiErrandAction
         }
 
         $candidate = $point->candidates[$chosen] ?? null;
-        $picked = $chosen === 0 || $candidate === null ? $this->quiet($trace) : $this->byType($trace, $candidate->objectId, $candidate->reason);
+        $errandTypes = array_filter(array_map(static fn (ChoiceCandidate $row): ?int => $row->objectId, $point->candidates), static fn (?int $type): bool => $type !== null);
+        $errands = array_keys(array_filter($trace->candidates, static fn (ScoredCandidate $scored): bool => in_array($scored->candidate->type->value, $errandTypes, true)));
+        $picked = $chosen === 0 || $candidate === null ? $this->quiet($trace, $errands) : $this->byType($trace, $candidate->objectId, $candidate->reason);
         if ($picked === null) {
             return $trace;
         }
@@ -85,7 +88,8 @@ class DecideAiErrandAction
         }
 
         $index = $point->candidates[$chosen]->objectId ?? null;
-        $picked = $index === null ? $this->quiet($trace) : $trace->candidates[$index];
+        $errands = array_values(array_filter(array_map(static fn (ChoiceCandidate $row): ?int => $row->objectId, $point->candidates), static fn (?int $index): bool => $index !== null));
+        $picked = $index === null ? $this->quiet($trace, $errands) : $trace->candidates[$index];
 
         return $picked === null ? $trace : $this->selecting($trace, $picked);
     }
@@ -101,8 +105,26 @@ class DecideAiErrandAction
         ]);
     }
 
-    private function quiet(DecisionTrace $trace): ?ScoredCandidate
+    /**
+     * The model's "wait" is a fleet that stays home, not a login that does nothing: in the simulator the account still
+     * builds and researches when its errand waits. So the login takes the engine's best action that is no fleet errand
+     * (a build, research, an officer...), and does nothing only when the engine offered none; a "do nothing" login skips
+     * the queue refill, which left miners on their starting stock all night (8 Nov 2026).
+     *
+     * @param list<int> $errands the trace indexes the errand choice offered as rows
+     */
+    private function quiet(DecisionTrace $trace, array $errands): ?ScoredCandidate
     {
+        $best = null;
+        foreach ($trace->candidates as $index => $scored) {
+            if (in_array($index, $errands, true) || $scored->candidate->type === AiCandidateActionType::DoNothing) {
+                continue;
+            }
+            $best = $best === null || $scored->score > $best->score ? $scored : $best;
+        }
+        if ($best !== null) {
+            return $best;
+        }
         foreach ($trace->candidates as $scored) {
             if ($scored->candidate->type === AiCandidateActionType::DoNothing) {
                 return $scored;

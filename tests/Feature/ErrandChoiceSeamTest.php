@@ -8,6 +8,7 @@ use Modules\AI\Domain\Choice\TeacherChoicePolicy;
 use Modules\AI\Domain\Decision\DecisionEngine;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiCandidateActionType;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Models\AiProfile;
 use OGame\Models\Resources;
@@ -74,7 +75,7 @@ test('a recorded errand names the engine\'s selection, and recording changes not
     expect($row['kind'])->toBe('errand')
         ->and($row['chosen'])->toBe($row['teacher'])
         ->and($row['legal'][$row['teacher']])->toBeTrue()
-        ->and($row['objects'][$row['teacher']])->toBe($engine->selected->candidate->type === \Modules\AI\Enums\AiCandidateActionType::DoNothing ? null : $engine->selected->candidate->type->value)
+        ->and($row['objects'][$row['teacher']])->toBe($engine->selected->candidate->type === AiCandidateActionType::DoNothing ? null : $engine->selected->candidate->type->value)
         ->and($row['state'])->toHaveCount(count(EconomyChoiceEncoder::stateNames()))
         ->and($row['cands'][0])->toHaveCount(count(EconomyChoiceEncoder::candidateNames()))
         ->and(count($row['cands']))->toBeGreaterThan(2);
@@ -89,6 +90,7 @@ test('an exploring policy only picks an action the engine ranked, and the select
 
     expect($row['policy'])->toBe('epsilon')
         ->and($row['legal'][$row['chosen']])->toBeTrue()
-        ->and($trace->selected->candidate->type->value)->toBe($picked ?? \Modules\AI\Enums\AiCandidateActionType::DoNothing->value)
         ->and(in_array($trace->selected, $engine->candidates, true))->toBeTrue();
+    // A picked errand is the login's action; a picked wait keeps the fleet home and the login spends itself elsewhere.
+    expect($picked === null ? !in_array($trace->selected->candidate->type->value, array_filter($row['objects']), true) : $trace->selected->candidate->type->value === $picked)->toBeTrue();
 });
