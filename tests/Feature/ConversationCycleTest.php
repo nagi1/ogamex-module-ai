@@ -404,4 +404,12 @@ test('a refusal of the account\'s own truce offer is not answered as a new truce
 
     expect(runConversationCycle($this->currentUserId))->toBe(1)
         ->and($sent($this->currentUserId))->toBe(2);
+
+    // An accepted truce is the offer's answer too, not a trade offer to haggle over ("what res, how much?").
+    $third = $this->createUser();
+    $secondOffer = ChatMessage::create(['sender_id' => $this->currentUserId, 'recipient_id' => $third->id, 'message' => 'truce? this is pointless for both of us']);
+    ChatMessage::create(['sender_id' => $third->id, 'recipient_id' => $this->currentUserId, 'message' => "deal, 24h. after that we'll see", 'reply_to_id' => $secondOffer->id]);
+
+    runConversationCycle($this->currentUserId);
+    expect($sent($this->currentUserId))->toBe(3);
 });

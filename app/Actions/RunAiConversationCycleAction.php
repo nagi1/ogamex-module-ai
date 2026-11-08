@@ -306,19 +306,20 @@ class RunAiConversationCycleAction
         $this->recordContact($observation, $classification->type, $classification->terms);
 
         // The answer to an offer this account made is that offer's answer, not a new offer: a refused truce ("no
-        // ceasefire. 11 hits, and now it's a truce?") was read as a truce request and refused back (8 Nov 2026).
-        if (!$this->answersOwnOffer($message, $playerId, $classification->type)) {
+        // ceasefire. 11 hits, and now it's a truce?") was read as a truce request and refused back, and an accepted one
+        // ("deal, 24h") as a trade offer and asked "what res, how much?" (8 Nov 2026).
+        if (!$this->answersOwnOffer($message, $playerId)) {
             $this->respond($exchange, $now);
         }
 
         return true;
     }
 
-    private function answersOwnOffer(ChatMessage $message, int $playerId, AiSocialExchangeType $type): bool
+    private function answersOwnOffer(ChatMessage $message, int $playerId): bool
     {
         $own = $message->reply_to_id === null ? null : ChatMessage::query()->whereKey($message->reply_to_id)->where('sender_id', $playerId)->first();
 
-        return $own !== null && $this->classify($own)?->type === $type;
+        return $own !== null && $this->classify($own) !== null;
     }
 
     /** The classifier's reading of the human message behind an observation; cached, so asking twice costs nothing. */
