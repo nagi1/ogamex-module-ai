@@ -70,4 +70,4 @@ foreach ($phase as $n => [$ms,$qq,$d,$c]) {
 foreach ($phase as $n => [$ms,$qq,$d,$c]) {
     printf("%-62s calls %4d  %8.2f ms/call  %6.1f queries/call  DB %4.0f%%  share %4.1f%%\n", $n, $c, $ms / $c, $qq / $c, $ms > 0 ? $d / $ms * 100 : 0, $ms / $tot * 100);
 }
-printf("TOTAL %.0f ms\n",$tot);
+printf("TOTAL %.0f ms\n", $tot);
