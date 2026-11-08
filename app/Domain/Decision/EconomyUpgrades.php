@@ -95,6 +95,9 @@ class EconomyUpgrades
      */
     private const HOURS_PER_DAY = 24.0;
 
+    /** The share of a store's capacity held before its next level is worth buying for an absence. */
+    private const STOCKED_SHARE = 0.5;
+
     /** Bounded so one remembered outcome cannot dominate the arithmetic. */
     private const MAXIMUM_CASES = 20;
 
@@ -595,6 +598,14 @@ class EconomyUpgrades
         // A storage that does not raise this resource, or a planet that does not produce it, has
         // nothing that can fill, so it is not a storage decision.
         if ($addedCapacity <= 0.0 || $productionPerHour <= 0.0) {
+            return null;
+        }
+
+        // A store that still holds an hour of output and is not yet half full is not what overflows: the account spends
+        // between visits, so the stock never climbs. A player raises the store when it is filling up. Without this a fast
+        // universe bought a warehouse level on most logins with the stock near empty -- a quarter of all builds, each
+        // dearer than the mine beside it, and no nanite factory anywhere (8 Nov 2026, 1000x).
+        if ($stored->get() < self::STOCKED_SHARE * $capacity->get() && $capacity->get() >= $productionPerHour) {
             return null;
         }
 

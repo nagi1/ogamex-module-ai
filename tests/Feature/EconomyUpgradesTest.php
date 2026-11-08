@@ -108,6 +108,28 @@ test('a warehouse about to fill is offered before the next upgrade', function ()
 });
 
 /**
+ * A store that holds more than an hour of output is raised when it is filling up, not on every login with the stock
+ * near empty: a fast universe bought a warehouse level on most logins, a quarter of all builds (8 Nov 2026, 1000x).
+ */
+test('a store with room for an hour of output is raised only once it is half full', function (): void {
+    $this->planetSetObjectLevel('solar_plant', 25);
+    $this->planetSetObjectLevel('metal_mine', 20);
+    $this->planetSetObjectLevel('crystal_mine', 20);
+    $this->planetSetObjectLevel('metal_store', 2);
+    economyRefresh($this->planetService);
+    $profile = economyProfile($this->currentUserId);
+    $ids = economyStorageIds($this->planetService);
+    $offered = fn (): array => array_map(static fn (BuildCandidate $candidate): int => $candidate->buildingId, app(EconomyUpgrades::class)->storage($this->planetService, $profile));
+
+    expect($this->planetService->metalStorage()->get())->toBeGreaterThan($this->planetService->getMetalProductionPerHour());
+    $this->planetDeductResources(new Resources($this->planetService->metal()->get(), 0, 0));
+    expect($offered())->not->toContain($ids['metal']);
+
+    $this->planetAddResources(new Resources($this->planetService->metalStorage()->get() * 0.6, 0, 0));
+    expect($offered())->toContain($ids['metal']);
+});
+
+/**
  * A warehouse that takes longer to build than it has until it overflows cannot catch that overflow,
  * so it is not offered: the one queue slot is better used elsewhere and the surplus is the spend
  * signal's to handle. Storage cost doubles each level while its build-time factor collapses, so at a
