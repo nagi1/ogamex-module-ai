@@ -177,3 +177,16 @@ test('reply queue and delivery reject invalid or no-longer-permitted work', func
     expect(app(DeliverAiSealedReplyAction::class)->handle($expiringReply->id))->toBeNull()
         ->and(AiConversationReply::query()->findOrFail($expiringReply->id)->state)->toBe(AiConversationReplyState::Expired);
 });
+
+// A notice and a reply fired by two events landed in the same second ("saw that :P", "ok, heard"): one line stands for both.
+test('an AI that just wrote to a player does not write a second line in the same minute', function (): void {
+    $recipient = $this->createUser();
+    AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => AiArchetype::Miner, 'skill_band' => AiSkillBand::Standard, 'random_seed' => 1, 'enabled' => true]);
+
+    expect(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $recipient->id, 'saw that :P'))->not->toBeNull()
+        ->and(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $recipient->id, 'ok, heard'))->toBeNull();
+
+    $this->travel(2)->minutes();
+
+    expect(app(DeliverAiDirectReplyAction::class)->handle($this->currentUserId, $recipient->id, 'ok, heard'))->not->toBeNull();
+});

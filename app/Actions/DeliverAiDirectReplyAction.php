@@ -9,6 +9,8 @@ use OGame\Services\ChatService;
 
 class DeliverAiDirectReplyAction
 {
+    private const ONE_LINE_SECONDS = 60;
+
     public function __construct(private ChatService $chatService)
     {
     }
@@ -29,6 +31,12 @@ class DeliverAiDirectReplyAction
             return null;
         }
 
+        // A player types one line, not two in the same second: a notice and a reply fired by two events landed together
+        // ("saw that :P" then "ok, heard", 8 Nov 2026). The first line stands for both until the other side answers.
+        if ($this->justSpoke($senderId, $recipientId)) {
+            return null;
+        }
+
         if ($replyToId !== null && !$this->replyBelongsToConversation($replyToId, $senderId, $recipientId)) {
             return null;
         }
@@ -38,6 +46,24 @@ class DeliverAiDirectReplyAction
         }
 
         return $this->chatService->sendDirectMessage($senderId, $recipientId, $message, $replyToId);
+    }
+
+    /** A line to this player in the last minute that they have not answered yet. */
+    private function justSpoke(int $senderId, int $recipientId): bool
+    {
+        $last = ChatMessage::query()
+            ->whereNull('alliance_id')
+            ->where('sender_id', $senderId)
+            ->where('recipient_id', $recipientId)
+            ->where('created_at', '>=', now()->subSeconds(self::ONE_LINE_SECONDS))
+            ->max('id');
+
+        return $last !== null && !ChatMessage::query()
+            ->whereNull('alliance_id')
+            ->where('sender_id', $recipientId)
+            ->where('recipient_id', $senderId)
+            ->where('id', '>', $last)
+            ->exists();
     }
 
     private function replyBelongsToConversation(int $replyToId, int $senderId, int $recipientId): bool
