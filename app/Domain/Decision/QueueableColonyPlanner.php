@@ -133,6 +133,15 @@ class QueueableColonyPlanner
         return null;
     }
 
+    /** Whether this body holds the ship the host's colonisation mission consumes. */
+    public function holdsShip(int $playerId, int $planetId): bool
+    {
+        $ship = ObjectService::getUnitObjectByMachineName(ColonisationMission::getRequiredShipMachineNames()[0]);
+
+        return collect($this->playerServiceFactory->make($playerId, true)->planets->all())
+            ->contains(fn (PlanetService $planet): bool => $planet->getPlanetId() === $planetId && $planet->getShipUnits()->getAmountByMachineName($ship->machine_name) > 0);
+    }
+
     /**
      * The host's own quote for the colony ship's flight, asked before the slot is offered: a plan the
      * gate would refuse for its fuel is no colony, and it is the same quote the gate asks.

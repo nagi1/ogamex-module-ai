@@ -718,6 +718,12 @@ class ScheduleAiIntentAction
             return;
         }
 
+        // No ship at the origin and none the yard can take now: the dispatch would only be refused (8 Nov 2026: 201 colony
+        // refusals in an hour for a ship that was not there). The account waits for the yard instead.
+        if (!$this->queueableColonyPlanner->holdsShip($profile->player_id, $plan->planetId)) {
+            return;
+        }
+
         $this->enqueue($profile, $sessionWorkItem, AiWorkKind::Colonize, [
             self::PAYLOAD_PLANET_ID => $plan->planetId,
             self::PAYLOAD_GALAXY => $plan->galaxy,
