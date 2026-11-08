@@ -16,6 +16,7 @@ use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
 use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Models\Planet;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
 use Tests\IsolatedAccountTestCase;
@@ -86,12 +87,22 @@ test('an old hit is not announced', function (): void {
 // Words that go with a fleet: the member who sends ships to hold at a mate says what and where.
 test('a member who sends a defence to a mate says how many ships and where', function (): void {
     [$allianceId, $speaker, $victim] = channelClubUnderAttack();
-    $planet = OGame\Models\Planet::factory()->create(['user_id' => $victim->id, 'galaxy' => 2, 'system' => 45, 'planet' => 7]);
+    $planet = Planet::factory()->create(['user_id' => $victim->id, 'galaxy' => 2, 'system' => 45, 'planet' => 7]);
 
     expect(app(SpeakInAllianceChannelAction::class)->announceDefend($speaker->id, $planet->id, 120))->toBeTrue();
 
     expect(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->toContain('120')->toContain($victim->username)
         ->and(app(SpeakInAllianceChannelAction::class)->announceDefend($speaker->id, $planet->id, 0))->toBeFalse();
+});
+
+// One ship is a ship: the channel said "1 ships holding" (8 Nov 2026).
+test('a member who sends one ship says one ship', function (): void {
+    [$allianceId, $speaker, $victim] = channelClubUnderAttack();
+    $planet = Planet::factory()->create(['user_id' => $victim->id, 'galaxy' => 2, 'system' => 45, 'planet' => 7]);
+
+    app(SpeakInAllianceChannelAction::class)->announceDefend($speaker->id, $planet->id, 1);
+
+    expect(ChatMessage::query()->where('alliance_id', $allianceId)->sole()->message)->not->toContain('1 ships');
 });
 
 test('a member who opens or joins an ACS says on whom and where', function (string $key): void {

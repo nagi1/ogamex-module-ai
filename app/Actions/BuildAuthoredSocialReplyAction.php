@@ -122,6 +122,8 @@ class BuildAuthoredSocialReplyAction
         }
 
         $line = $lines[(int) floor($this->randomSource->unitInterval($profile->random_seed, $key . ':' . $salt) * count($lines))];
+        // One ship is a ship: the chat said "1 ships holding" (8 Nov 2026).
+        $line = ($vars['ships'] ?? null) === '1' ? str_replace('{ships} ships', '{ships} ship', $line) : $line;
 
         return $vars === [] ? $line : strtr($line, array_combine(array_map(static fn (string $name): string => '{' . $name . '}', array_keys($vars)), $vars));
     }
