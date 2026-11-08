@@ -28,6 +28,7 @@ use Modules\AI\Actions\RunAiSessionAction;
 use Modules\AI\Console\Commands\AdvanceAiAllianceLife;
 use Modules\AI\Console\Commands\AdvanceAiCampaigns;
 use Modules\AI\Console\Commands\BondExistingAllianceMembers;
+use Modules\AI\Console\Commands\CheckSocialIntegrity;
 use Modules\AI\Console\Commands\CreateAiRlUniverse;
 use Modules\AI\Console\Commands\EvalAiComposer;
 use Modules\AI\Console\Commands\ExplainAiDecision;
@@ -51,7 +52,6 @@ use Modules\AI\Console\Commands\ReplayAiRlUnitOrders;
 use Modules\AI\Console\Commands\ReplayAiRlWorldTrace;
 use Modules\AI\Console\Commands\ReplayAiScenario;
 use Modules\AI\Console\Commands\ReportAiPilot;
-use Modules\AI\Console\Commands\CheckSocialIntegrity;
 use Modules\AI\Console\Commands\ReportHumanExperience;
 use Modules\AI\Console\Commands\RlScoreCasesCommand;
 use Modules\AI\Console\Commands\RunAiCampaign;
@@ -93,6 +93,7 @@ use Modules\AI\Contracts\QueueAiUnits;
 use Modules\AI\Contracts\RunAiSession;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Choice\EpsilonChoicePolicy;
+use Modules\AI\Domain\Choice\ModelChoicePolicy;
 use Modules\AI\Domain\Choice\SocketChoicePolicy;
 use Modules\AI\Domain\Choice\TeacherChoicePolicy;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
@@ -355,6 +356,7 @@ class AIServiceProvider extends ModuleServiceProvider
         $this->app->bind(ChoicePolicy::class, fn (): ChoicePolicy => match (config('ai.rl.policy', 'teacher')) {
             'epsilon' => app(EpsilonChoicePolicy::class),
             'socket' => app(SocketChoicePolicy::class),
+            'model' => app(ModelChoicePolicy::class),
             default => app(TeacherChoicePolicy::class),
         });
         $this->app->tag([

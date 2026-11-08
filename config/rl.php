@@ -6,7 +6,8 @@ return [
      * planner's own steps are used and nothing below is read.
      *
      * policy: teacher (the planner's own choice) | epsilon (the teacher, or a random legal candidate
-     * with probability `epsilon`) | socket (ask the policy server at `socket`, fall back to the teacher)
+     * with probability `epsilon`) | socket (ask the policy server at `socket`, fall back to the teacher) | model (the
+     * economy model below, run in PHP; the teacher wherever it is unset)
      */
     'policy' => env('AI_RL_POLICY', 'teacher'),
     'epsilon' => (float) env('AI_RL_EPSILON', 0.1),
@@ -20,6 +21,8 @@ return [
     'record' => env('AI_RL_RECORD', null),
     // An errand model trained in the simulator (feature version 3, ogrl.export_policy); unset keeps the engine's own errands.
     'errand_model' => env('AI_RL_ERRAND_MODEL', null),
+    // An economy model trained in the simulator (`ogsim::season`, 25 state / 14 candidate columns), read by the `model` policy.
+    'economy_model' => env('AI_RL_ECONOMY_MODEL', null),
     // Who picks the fleet errand: `model` (the errand model above when one is set) or `scripted` (the engine's own
     // scripted raider, whatever errand_model says). The play universe flies the scripted raider (WORK-ORDER §2).
     'fleet_errands' => env('AI_RL_FLEET_ERRANDS', 'model'),
