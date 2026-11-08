@@ -42,7 +42,7 @@ uses(CounterespionageModuleTestCase::class);
  */
 function counterespionageSpecPath(): string
 {
-    return dirname(__DIR__, 2) . '/plan/specs/counterespionage.md';
+    return dirname(__DIR__, 2) . '/plan/archive/specs/counterespionage.md';
 }
 
 function counterespionageSpec(): string

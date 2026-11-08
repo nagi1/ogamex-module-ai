@@ -11,11 +11,11 @@ uses(Tests\IsolatedAccountTestCase::class);
  * them. These tests pin that absence: the day an expedition-log branch, enum case or config key
  * appears, the plan has to name the behaviour data file a modder would edit.
  */
-if (! defined('AI_EXPEDITION_LOG_TOKEN')) {
+if (!defined('AI_EXPEDITION_LOG_TOKEN')) {
     define('AI_EXPEDITION_LOG_TOKEN', '/(?:expedition[_-]?logs?|logs?[_-]?expedition)/i');
 }
 
-if (! function_exists('aiExpeditionLogSourcePaths')) {
+if (!function_exists('aiExpeditionLogSourcePaths')) {
     /**
      * Every runtime source and configuration file that could carry an expedition-log rule.
      *
@@ -27,7 +27,7 @@ if (! function_exists('aiExpeditionLogSourcePaths')) {
         $paths = [];
 
         foreach ([$moduleRoot . '/app', $moduleRoot . '/config'] as $sourceRoot) {
-            if (! is_dir($sourceRoot)) {
+            if (!is_dir($sourceRoot)) {
                 continue;
             }
 
@@ -77,7 +77,7 @@ it('has no expedition-log case on the values the planner decides with', function
 });
 
 it('keeps the expedition-log spec note free of numeric mechanics', function () {
-    $specPath = dirname(__DIR__, 2) . '/plan/ogame/expedition-logs.md';
+    $specPath = dirname(__DIR__, 2) . '/plan/archive/ogame/expedition-logs.md';
 
     expect(is_file($specPath))->toBeTrue();
 

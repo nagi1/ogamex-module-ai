@@ -37,7 +37,8 @@ class ProposeAiDoctrineFromSourceAction
             return [];
         }
 
-        if (!$response instanceof StructuredAgentResponse) {
+        // laravel/ai 1.3 answers a structured agent with a StructuredAgentResponse even for plain text, its structure empty.
+        if (!$response instanceof StructuredAgentResponse || $response->toArray() === []) {
             return [];
         }
 

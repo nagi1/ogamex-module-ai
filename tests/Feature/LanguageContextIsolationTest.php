@@ -3,8 +3,6 @@
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\GenerateAiReplyAction;
 use Modules\AI\Actions\RecordAiMemoryFactAction;
-use Modules\AI\Enums\AiMemoryEvidenceKind;
-use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Ai\Agents\OgameConversationReplyAgent;
 use Modules\AI\Contracts\ContextBuilder;
 use Modules\AI\Contracts\LanguageGateway;
@@ -12,6 +10,8 @@ use Modules\AI\Domain\Conversation\LanguageRequest;
 use Modules\AI\Domain\Conversation\NativeContextBuilder;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiLanguageResultStatus;
+use Modules\AI\Enums\AiMemoryEvidenceKind;
+use Modules\AI\Enums\AiMemoryPredicate;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Infrastructure\Language\LaravelAiLanguageGateway;
 use Modules\AI\Support\AiClock;

@@ -61,13 +61,13 @@ final class SolarSystemSlot
 
         $path = dirname(__DIR__, 2) . self::LAYOUT_FILE;
 
-        if (! is_file($path)) {
+        if (!is_file($path)) {
             throw new RuntimeException('Solar system slot layout is missing: ' . $path);
         }
 
         $decoded = json_decode((string) file_get_contents($path), true);
 
-        if (! is_array($decoded)) {
+        if (!is_array($decoded)) {
             throw new RuntimeException('Solar system slot layout is not a JSON object: ' . $path);
         }
 
@@ -80,7 +80,7 @@ final class SolarSystemSlot
     {
         $layout = self::layout();
 
-        if (! array_key_exists($key, $layout) || ! is_int($layout[$key])) {
+        if (!array_key_exists($key, $layout) || !is_int($layout[$key])) {
             throw new RuntimeException('Solar system slot layout needs an integer "' . $key . '".');
         }
 

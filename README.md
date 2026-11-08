@@ -4,25 +4,37 @@ The `AI` module adds a home for persistent, believable AI players in OGameX.
 This repository contains the module only. OGameX remains responsible for game
 rules, legal state, validation, and execution.
 
-The module includes the Phase 1 building adapter and Phase 2 deterministic
-profiles, perception, session scheduling and recorded decision intents. Broader
-gameplay capabilities remain conditional on validated action adapters.
+## What it does today
 
-Phase 3 is implemented: source-backed facts, claims, relationships, commitments
-and affect, typed zero-LLM social protocols with authored replies, outcome-based
-experience, a sealed host delivery ledger, bounded context and atomic usage
-ledgers, a deterministic conversation cycle, and an optional provider escalation
-that is off by default. FAtiMA/CiF, CBRKit and AgentOS are implemented and opt-in
-behind module configuration, with the native path as the default and the fallback;
-none of them has cleared its activation gate yet. Ordinary gameplay, structured
-exchanges and AI-to-AI replies make no generative call.
+Every AI account is a full player: it builds, researches, raids, defends, colonises, sends
+expeditions, joins alliances, declares wars and pacts, and talks in private and in the alliance
+channel. Each login reads only what a real player could see (rule 10, no cheating), decides with
+the built-in rules, and executes through the normal OGameX actions.
 
-Phase 4 operability is implemented: admission caps with recorded stop reasons, a
-staff switch, redacted decision inspection, a read-only scenario replay,
-production-refusing test-universe seeding and a pilot report, all on the module's
-`admin/ai` page and its commands. What remains before a population grows is
-evidence, not code: the load measurements, the real-provider conformance artifact,
-the driver activation gates and a disclosed pilot. See [`plan/`](plan/README.md).
+- **Rules first.** The planners in `app/Domain/Decision` decide by default. They are the
+  reference behaviour the trained models were taught from.
+- **Two trained models, optional.** Both were trained in the Rust simulator (`rl/ogsim`) and run
+  natively in PHP. Neither is in this repository; point the settings below at the files.
+  - Fleet errands (raid, spy, expedition, wait): `AI_RL_ERRAND_MODEL=<path>/final-g16.policy.json`.
+    `AI_RL_FLEET_ERRANDS_SCRIPTED_PERSONAS=raider` keeps raiders on the scripted raider.
+  - Economy (what to build or research): `AI_RL_POLICY=model` and
+    `AI_RL_ECONOMY_MODEL=<path>/best-es3-s10.policy.json`. Any other choice stays with the rules.
+- **Social layer with no LLM.** Messages, truces, alliance politics and replies are authored and
+  rule-driven; an optional provider escalation exists and is off by default.
+- **Operability.** The `admin/ai` console shows every account, its decisions and stop reasons.
+  With `AI_MODEL_LAB_ENABLED=true` its *Model lab* tab shows, in plain words, what each trained
+  model would do for each account right now beside what the rules would do (a dry run, nothing
+  is queued).
+
+Configuration lives in `config/` (`rl.php`, `model_lab.php`, `population.php`, `cognition.php`, …);
+every switch is read from the environment and is off or neutral by default.
+
+### Faster universes
+
+Everything time-based is read in the universe's own hours, so the same accounts play a 1x and a
+1000x universe: dispatch-refusal cooling and espionage-report freshness shrink with the speed, and
+a warehouse is only raised once it is half full. The 1000x play universe used to tune this is the
+host's `local-docker-dev/docker-compose.grand.yml`.
 
 ## OGameX integration
 
@@ -86,7 +98,21 @@ bash scripts/ogamex test --filter=AI
 
 # Run any Artisan command in the OGameX application.
 bash scripts/ogamex artisan module:list
+
+# One test file by name (fast; the usual loop while fixing something).
+bash scripts/ogamex test-one ProcessAiWorkTest
 ```
+
+Watching a running universe (read-only):
+
+```bash
+bash scripts/ogamex pulse 10        # what every account did in the last 10 minutes, refusals, backlog
+bash scripts/ogamex stuck           # accounts failing the same way again and again
+bash scripts/ogamex account 7       # one account: planets, queues, fleets, recent work
+bash scripts/ogamex why 7           # what its next login will see and why it chose what it chose
+```
+
+`bash scripts/ogamex help` lists every command.
 
 Set `OGAMEX_ROOT` when the OGameX checkout is elsewhere:
 
@@ -148,6 +174,13 @@ must only build perception from information the player could legally know.
 The existing Rust battle engine remains the source of battle outcomes when
 combat simulation is introduced. Laravel remains responsible for orchestration,
 scheduling, perception, decision policy, memory, and execution through OGameX.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` checks out the OGameX host (`nagi1/ogamex-next`), places this
+repository at `Modules/AI`, starts the host's Docker Compose stack and runs Pint, PHPStan (with
+the module's own rules) and this module's Pest suite inside it. The host's own pipeline never runs
+module tests.
 
 ## Implementation plan
 

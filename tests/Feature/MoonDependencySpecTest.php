@@ -13,8 +13,8 @@ function aiMoonDependencySpecPath(): string
 
     $candidates = [];
     foreach ($repoRoots as $repoRoot) {
-        $candidates[] = $repoRoot . '/plan/specs/moon-dependency-tree.md';
-        $candidates[] = $repoRoot . '/modules/AI/plan/specs/moon-dependency-tree.md';
+        $candidates[] = $repoRoot . '/plan/archive/specs/moon-dependency-tree.md';
+        $candidates[] = $repoRoot . '/modules/AI/plan/archive/specs/moon-dependency-tree.md';
     }
 
     foreach ($candidates as $candidate) {

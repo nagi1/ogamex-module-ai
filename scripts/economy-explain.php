@@ -35,8 +35,12 @@ function explain_economy(int $playerId): array
     foreach ($player->planets->all() as $planet) {
         $id = $planet->getPlanetId();
         $resources = $planet->getResources();
-        $stock = sprintf('metal %s crystal %s deut %s', number_format($resources->metal->get()),
-            number_format($resources->crystal->get()), number_format($resources->deuterium->get()));
+        $stock = sprintf(
+            'metal %s crystal %s deut %s',
+            number_format($resources->metal->get()),
+            number_format($resources->crystal->get()),
+            number_format($resources->deuterium->get())
+        );
 
         if (DB::table('building_queues')->where('planet_id', $id)->where('processed', 0)->where('canceled', 0)->exists()) {
             $lines[] = "p{$id} building | {$stock}";

@@ -38,7 +38,7 @@ function aiMassAlliancePattern(): string
  */
 function aiMassAllianceFiles(string $root): array
 {
-    if (! is_dir($root)) {
+    if (!is_dir($root)) {
         return [];
     }
 
@@ -51,7 +51,7 @@ function aiMassAllianceFiles(string $root): array
     );
 
     foreach ($iterator as $file) {
-        if (! $file->isFile()) {
+        if (!$file->isFile()) {
             continue;
         }
 
@@ -99,7 +99,7 @@ function aiMassAllianceMentioned(string $root): array
     $offenders = [];
 
     foreach (aiMassAllianceFiles($root) as $file) {
-        if (! str_ends_with($file, '.php')) {
+        if (!str_ends_with($file, '.php')) {
             continue;
         }
 
@@ -113,7 +113,7 @@ function aiMassAllianceMentioned(string $root): array
 
 function aiMassAllianceRemove(string $directory): void
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return;
     }
 

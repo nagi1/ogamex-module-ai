@@ -82,7 +82,8 @@ class SeedAiTestUniverseAction
         private readonly AiClock $clock,
         private readonly PlayerServiceFactory $playerServiceFactory,
         private readonly AiPersonaFactory $personaFactory,
-    ) {}
+    ) {
+    }
 
     /**
      * @return list<array{player_id: int, archetype: string, created: bool}>

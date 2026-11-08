@@ -96,7 +96,7 @@ test('the module runtime holds no surrender colony branch or config key', functi
 });
 
 test('the surrender colony spec stays unverified documentation', function () {
-    $specPath = dirname(__DIR__, 3) . '/plan/specs/ogame/surrender-colony.md';
+    $specPath = dirname(__DIR__, 3) . '/plan/archive/specs/ogame/surrender-colony.md';
 
     expect(is_file($specPath))->toBeTrue();
 

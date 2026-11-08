@@ -38,7 +38,7 @@ class ResearchScreenModuleTestCase extends IsolatedAccountTestCase
 
 uses(ResearchScreenModuleTestCase::class);
 
-$specPath = dirname(__DIR__, 2) . '/plan/research/ogame/specs/research-screen.md';
+$specPath = dirname(__DIR__, 2) . '/plan/archive/research/ogame/specs/research-screen.md';
 
 it('keeps the research screen note free of any number the account could act on', function () use ($specPath) {
     expect(is_file($specPath))->toBeTrue();

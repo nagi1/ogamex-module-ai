@@ -2,8 +2,8 @@
 
 namespace Modules\AI\Domain\Decision;
 
-use Modules\AI\Models\AiProfile;
 use Illuminate\Support\Collection;
+use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\EspionageMission;
 use OGame\Models\FleetMission;

@@ -1,5 +1,7 @@
 includes:
     - ../../vendor/larastan/larastan/extension.neon
+    # Errors that predate CI (8 Nov 2026); new code may not add to it, and a fixed entry is removed from it.
+    - phpstan-baseline.neon
 
 parameters:
     level: 8

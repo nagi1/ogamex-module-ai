@@ -1,0 +1,77 @@
+name: CI
+
+# The module runs inside the OGameX host: it is checked out at Modules/AI of the host repository, the host's
+# Docker Compose stack is started (PHP with FFI for the Rust battle engine, MariaDB, Redis), and the module's own
+# checks run there. The host's pipeline never runs module tests.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      host_ref:
+        description: "OGameX host branch or SHA to test against"
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  module:
+    name: Pint, PHPStan and Pest
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out the OGameX host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: nagi1/ogamex-next
+          ref: ${{ github.event.inputs.host_ref || 'main' }}
+          path: host
+
+      - name: Check out this module at Modules/AI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: host/Modules/AI
+
+      - name: Start the host stack
+        working-directory: host
+        run: |
+          sed -i '/USER www/s/^/#/' ./Dockerfile
+          sudo chmod -R 777 .
+          docker compose -f docker-compose.yml up -d
+          timeout 300 bash -c 'until docker compose exec -T ogamex-app php artisan migrate:status > /dev/null 2>&1; do echo "Waiting for the application..."; sleep 5; done'
+          docker compose exec -T ogamex-app chmod -R 775 storage/
+          docker compose exec -T ogamex-app chown -R www-data:www-data storage/
+
+      # The host's tracked modules_statuses.json already lists the module as enabled, so its migrations run with the
+      # host's; the tests wire every module binding themselves (docs/development.md, Testing layers).
+      - name: Load the module and migrate
+        working-directory: host
+        run: |
+          docker compose exec -T ogamex-app composer dump-autoload --no-interaction
+          docker compose exec -T ogamex-app php artisan migrate --force --no-interaction
+
+      - name: Pint (PSR-12)
+        working-directory: host
+        run: docker compose exec -T ogamex-app ./vendor/bin/pint --test Modules/AI
+
+      - name: PHPStan (with the module's own rules)
+        working-directory: host
+        run: docker compose exec -T -w /var/www/Modules/AI ogamex-app ../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=2G --no-progress
+
+      - name: Pest (parallel, fail fast)
+        working-directory: host
+        run: docker compose exec -T ogamex-app ./vendor/bin/pest Modules/AI/tests --parallel --bail
+
+      - name: Container logs on failure
+        if: failure()
+        working-directory: host
+        run: docker compose logs --tail=200 ogamex-app

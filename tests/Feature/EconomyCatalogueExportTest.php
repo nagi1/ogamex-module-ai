@@ -49,7 +49,7 @@ test('every object that shortens build time is found by asking the host, and the
     $mine = ObjectService::getObjectByMachineName('metal_mine');
 
     foreach (catalogueTestObjects() as $object) {
-        if ($object->id === $mine->id || ! ObjectService::objectValidPlanetType($object->machine_name, $this->planetService)) {
+        if ($object->id === $mine->id || !ObjectService::objectValidPlanetType($object->machine_name, $this->planetService)) {
             continue;
         }
         $before = $this->planetService->getObjectLevel($object->machine_name);
@@ -78,7 +78,7 @@ test('every field-adding object is found by asking the host, and the base is the
     $adders = 0;
 
     foreach (catalogueTestObjects() as $object) {
-        if (! ObjectService::objectValidPlanetType($object->machine_name, $this->planetService)) {
+        if (!ObjectService::objectValidPlanetType($object->machine_name, $this->planetService)) {
             continue;
         }
         $before = $this->planetService->getObjectLevel($object->machine_name);
@@ -160,7 +160,7 @@ test('production_research lists exactly the researches that change a production 
     $player = $this->planetService->getPlayer();
 
     foreach (ObjectService::getGameObjectsWithProduction() as $producer) {
-        if (! in_array($producer->id, array_column($catalogue['objects'], 'id'), true)) {
+        if (!in_array($producer->id, array_column($catalogue['objects'], 'id'), true)) {
             continue;
         }
         $changing = [];

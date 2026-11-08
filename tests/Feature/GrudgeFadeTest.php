@@ -79,7 +79,7 @@ test('a player two others keep hitting wants a club even when their kind never w
         Modules\AI\Models\AiProfile::create(['player_id' => $this->currentUserId, 'archetype' => Modules\AI\Enums\AiArchetype::Turtle,
             'skill_band' => Modules\AI\Enums\AiSkillBand::Standard, 'random_seed' => $seed, 'enabled' => true]);
 
-        return ! app(Modules\AI\Domain\Social\AllianceAmbition::class)->wantsAlliance($this->currentUserId);
+        return !app(Modules\AI\Domain\Social\AllianceAmbition::class)->wantsAlliance($this->currentUserId);
     });
     foreach (range(1, $raiders) as $ignored) {
         grudge($this->currentUserId, User::factory()->create()->id, '0.9000', now()->toDateTimeString());

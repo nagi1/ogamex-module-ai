@@ -72,7 +72,7 @@ test('a poor account with the same yard orders no capital hull', function (): vo
 
     $plan = app(QueueableUnitPlanner::class)->plan($this->currentUserId);
 
-    expect($plan === null || ! str_starts_with($plan->reason, 'role:capital:'))->toBeTrue();
+    expect($plan === null || !str_starts_with($plan->reason, 'role:capital:'))->toBeTrue();
 });
 
 test('the dearest hull comes from the yard that unlocks it, not from the richest planet', function (): void {
@@ -142,7 +142,7 @@ function capitalDearestHullPrice(PlanetService $planet): float
             continue;
         }
 
-        if (! ObjectService::objectRequirementsMet($hull->machine_name, $planet)) {
+        if (!ObjectService::objectRequirementsMet($hull->machine_name, $planet)) {
             continue;
         }
 

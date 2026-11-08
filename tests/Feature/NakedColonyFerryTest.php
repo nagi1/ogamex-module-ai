@@ -4,9 +4,9 @@ use Modules\AI\Actions\QueueAiTransferAction;
 use Modules\AI\Contracts\QueueAiTransfer;
 use Modules\AI\Domain\Decision\QueueableTransfer;
 use Modules\AI\Domain\Decision\QueueableTransferPlanner;
-use Modules\AI\Models\AiProfile;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
+use Modules\AI\Models\AiProfile;
 use OGame\Models\Resources;
 use Tests\IsolatedAccountTestCase;
 

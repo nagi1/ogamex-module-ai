@@ -62,7 +62,7 @@ $orders = [];
 $inflight = [];
 $missing = [];
 foreach (['building_queues', 'research_queues', 'unit_queues'] as $table) {
-    if (! Schema::hasTable($table)) {
+    if (!Schema::hasTable($table)) {
         // Loud, not zero: silently reading a wrong table name is how a busy cohort looks dead.
         $missing[] = $table;
         $orders[$table] = 0;
@@ -492,7 +492,7 @@ $coverObjects = [];
 foreach (ObjectService::getObjects() as $object) {
     $isResearch = (is_object($object->type) ? $object->type->name : (string) $object->type) === 'Research';
     $table = $isResearch ? 'users_tech' : 'planets';
-    if (! Schema::hasColumn($table, $object->machine_name)) {
+    if (!Schema::hasColumn($table, $object->machine_name)) {
         continue;
     }
     if (DB::table($table)->whereIn('user_id', $playerIds)->where($object->machine_name, '>', 0)->doesntExist()) {
@@ -608,7 +608,7 @@ foreach (($argv ?? []) as $playerId) {
 
         $queued = [];
         foreach (['building_queues', 'research_queues', 'unit_queues'] as $table) {
-            if (! Schema::hasTable($table)) {
+            if (!Schema::hasTable($table)) {
                 continue;
             }
             $rows = DB::table($table)->where('planet_id', $planet->getPlanetId())->where('processed', 0)->count();

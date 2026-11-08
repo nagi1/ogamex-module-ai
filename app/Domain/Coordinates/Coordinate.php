@@ -33,7 +33,7 @@ final readonly class Coordinate
         }
 
         foreach ($parts as $part) {
-            if (! ctype_digit($part)) {
+            if (!ctype_digit($part)) {
                 throw new InvalidArgumentException(sprintf('"%s" has a part that is not a whole number.', $value));
             }
         }

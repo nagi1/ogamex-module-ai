@@ -115,7 +115,7 @@ final class AntiBallisticMissile
                 continue;
             }
 
-            if (! str_contains($line, self::ENTRY_SEPARATOR)) {
+            if (!str_contains($line, self::ENTRY_SEPARATOR)) {
                 continue;
             }
 

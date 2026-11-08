@@ -31,8 +31,15 @@ class SummarizeAiWorldAction
         // A world older than the relations table has no politics to report, which is itself the finding.
         $relations = $db->getSchemaBuilder()->hasTable('ai_alliance_relations') ? $db->table('ai_alliance_relations')->orderBy('started_at')->get() : [];
         foreach ($relations as $relation) {
-            $lines[] = sprintf('%s [%s] -> [%s] %s (%s)%s', $relation->started_at, $tags[$relation->alliance_id] ?? '?', $tags[$relation->other_alliance_id] ?? '?',
-                (int) $relation->stance === 1 ? 'war' : 'pact', $relation->cause, $relation->ended_at === null ? '' : ' ended ' . $relation->ended_at);
+            $lines[] = sprintf(
+                '%s [%s] -> [%s] %s (%s)%s',
+                $relation->started_at,
+                $tags[$relation->alliance_id] ?? '?',
+                $tags[$relation->other_alliance_id] ?? '?',
+                (int) $relation->stance === 1 ? 'war' : 'pact',
+                $relation->cause,
+                $relation->ended_at === null ? '' : ' ended ' . $relation->ended_at
+            );
         }
 
         $lines[] = '# Battles by side (attacker -> defender: count)';

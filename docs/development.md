@@ -500,8 +500,25 @@ by the runner rather than left to discipline:
 
 The application container ships neither `ps` nor `pkill`, so leftover workers are
 cleared by database session instead of by process listing. A healthy full suite is
-about 300 tests in thirteen seconds with four workers; a run that does not finish is a bug in
+about 2,100 tests in under two minutes with eight workers (8 Nov 2026); a run that does not finish is a bug in
 a test, not a capacity problem.
+
+### Continuous integration
+
+Every push and pull request to `main` runs `.github/workflows/ci.yml`. It checks out the host
+(`nagi1/ogamex-next`, `main` unless a `host_ref` is given to a manual run), places this repository
+at `Modules/AI`, starts the host's Docker Compose stack and runs, in order:
+
+1. `pint --test Modules/AI`
+2. PHPStan with `phpstan.neon` (the module's own rules included)
+3. `pest Modules/AI/tests --parallel --bail`
+
+PHPStan reads `phpstan-baseline.neon`, the 287 errors that predate CI (8 Nov 2026). New code may
+not add to it; when you fix a listed error, regenerate the baseline so the entry goes away:
+
+```bash
+cd Modules/AI && ../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=2G --generate-baseline=phpstan-baseline.neon
+```
 
 Before pushing a meaningful change, run the OGameX quality chain:
 

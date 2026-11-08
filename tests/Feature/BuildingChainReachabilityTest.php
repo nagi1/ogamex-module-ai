@@ -19,10 +19,10 @@ use OGame\Factories\PlayerServiceFactory;
 use OGame\GameMissions\ExpeditionMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\Enums\GameObjectType;
+use OGame\GameObjects\Models\UnitObject;
 use OGame\Models\BuildingQueue;
 use OGame\Models\ResearchQueue;
 use OGame\Models\Resources;
-use OGame\GameObjects\Models\UnitObject;
 use OGame\Services\ObjectService;
 use OGame\Services\PlanetService;
 use OGame\Services\PlayerGameStateService;
@@ -320,7 +320,7 @@ function chainCheapestUnmetAmbition(PlanetService $planet): GameObject
     // An account with no ship that can fly goes for a hull before any technology.
     $flying = static fn (GameObject $object): bool => $object instanceof UnitObject
         && $object->properties->speed->calculate($player)->totalValue > 0;
-    usort($objects, static fn (GameObject $left, GameObject $right): int => [! $flying($left), $left->price->resources->sum()] <=> [! $flying($right), $right->price->resources->sum()]);
+    usort($objects, static fn (GameObject $left, GameObject $right): int => [!$flying($left), $left->price->resources->sum()] <=> [!$flying($right), $right->price->resources->sum()]);
 
     foreach ($objects as $object) {
         foreach (ObjectService::getRecursiveRequirements($object->machine_name) as $machineName => $level) {

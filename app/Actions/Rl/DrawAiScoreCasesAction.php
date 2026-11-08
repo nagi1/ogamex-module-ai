@@ -366,7 +366,7 @@ class DrawAiScoreCasesAction
 
     private function freshPlanet(int $id): PlanetService
     {
-        return app(PlanetServiceFactory::class)->make($id, true) ?? throw new \RuntimeException("Planet {$id} not found.");
+        return app(PlanetServiceFactory::class)->make($id, true) ?? throw new RuntimeException("Planet {$id} not found.");
     }
 
     /** The host caches services per id; a rolled-back or host-written row must be read again. */

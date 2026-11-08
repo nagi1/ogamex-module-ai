@@ -64,12 +64,13 @@ $filesMentioning = static function (string $token, array $surfaces): array {
     $mentions = [];
 
     foreach ($surfaces as $surface) {
-        if (! is_dir($surface)) {
+        if (!is_dir($surface)) {
             continue;
         }
 
         foreach (File::allFiles($surface) as $file) {
-            $contents = (string) file_get_contents($file->getPathname());
+            // A parallel test plants and removes a fixture under app/ (TurtleDefenceStaleThresholdsTest): a file gone by now mentions nothing.
+            $contents = (string) @file_get_contents($file->getPathname());
 
             if (preg_match('/\b' . preg_quote($token, '/') . '\b/i', $contents) === 1) {
                 $mentions[] = $file->getPathname();

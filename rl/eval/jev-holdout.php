@@ -1,11 +1,13 @@
 <?php
+
 require dirname(__DIR__, 4) . '/vendor/autoload.php';
 $app = require dirname(__DIR__, 4) . '/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 use Illuminate\Support\Facades\DB;
-use Modules\AI\Actions\ReadAiHumanMessageAction;
 use Modules\AI\Actions\ClassifyInboundSocialExchangeAction;
+use Modules\AI\Actions\ReadAiHumanMessageAction;
 use OGame\Models\User;
+
 config(['ai.classification.enabled' => true]);
 $set = [
     ['hey there', 'greeting'], ['evening all', 'greeting'], ['cheers for the deut', 'thanks'],
@@ -21,14 +23,18 @@ $set = [
     ['im new pls dont farm me', 'ceasefire'], ['lets both hit [KOR] this week, they are inactive-ish', 'cooperation'],
     ['the pact is void after what your members did', 'pact_break'], ['gg, loved the free debris', 'taunt'],
 ];
-$map = ['Greeting'=>'greeting','Thanks'=>'thanks','Apology'=>'apology','Warning'=>'warning','CeasefireRequest'=>'ceasefire','CooperationRequest'=>'cooperation','TradeOffer'=>'trade','CompensationOffer'=>'apology','HelpRequest'=>'help_request'];
+$map = ['Greeting' => 'greeting','Thanks' => 'thanks','Apology' => 'apology','Warning' => 'warning','CeasefireRequest' => 'ceasefire','CooperationRequest' => 'cooperation','TradeOffer' => 'trade','CompensationOffer' => 'apology','HelpRequest' => 'help_request'];
 DB::beginTransaction();
-$h = User::factory()->create(); $j = $r = 0;
+$h = User::factory()->create();
+$j = $r = 0;
 foreach ($set as [$t, $w]) {
     $got = (string) app(ReadAiHumanMessageAction::class)->handle($h->id, $t)?->choice('act', 0.0);
     $rule = $map[app(ClassifyInboundSocialExchangeAction::class)->handle($t)?->type->name ?? ''] ?? 'none';
-    $j += (int) ($got === $w); $r += (int) ($rule === $w);
-    if ($got !== $w) echo "   miss: $t  want $w got $got\n";
+    $j += (int) ($got === $w);
+    $r += (int) ($rule === $w);
+    if ($got !== $w) {
+        echo "   miss: $t  want $w got $got\n";
+    }
 }
 printf("held-out: JEV %d/%d, matcher %d/%d\n", $j, count($set), $r, count($set));
 DB::rollBack();

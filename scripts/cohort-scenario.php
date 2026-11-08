@@ -321,8 +321,15 @@ function scenarios(): array
                 [$probes, $undoProbes] = lend_ships($context['planet'], 'espionage_probe', 3);
                 [$cargo, $undoCargo] = lend_ships($context['planet'], 'large_cargo', 10);
 
-                return [sprintf('inactive player %d at [%d:%d:%d] holds 600k; lent %s and %s', $target->user_id, $target->galaxy,
-                    $target->system, $target->position, $probes, $cargo),
+                return [sprintf(
+                    'inactive player %d at [%d:%d:%d] holds 600k; lent %s and %s',
+                    $target->user_id,
+                    $target->galaxy,
+                    $target->system,
+                    $target->position,
+                    $probes,
+                    $cargo
+                ),
                     [['restore', 'planets', $target->id, ['metal' => $target->metal, 'crystal' => $target->crystal,
                         'deuterium' => $target->deuterium, 'time_last_update' => $target->time_last_update]], $undoProbes, $undoCargo]];
             },
@@ -469,8 +476,15 @@ function drive_once(array $context, bool $workers, int $tick, CarbonImmutable $s
     }
     $ran = $workers ? 0 : run_own_work($context['players']);
 
-    return sprintf('tick %d: %d order(s) finished, %d fleet(s) arrived, %d item(s) made due, %d run here, %d work item(s) done so far',
-        $tick, $finished, $arrived, $due, $ran, engine_ran($context['players'], $since));
+    return sprintf(
+        'tick %d: %d order(s) finished, %d fleet(s) arrived, %d item(s) made due, %d run here, %d work item(s) done so far',
+        $tick,
+        $finished,
+        $arrived,
+        $due,
+        $ran,
+        engine_ran($context['players'], $since)
+    );
 }
 
 /**

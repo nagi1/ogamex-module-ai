@@ -43,7 +43,8 @@ class LaravelAiCampaignConsultationGateway implements CampaignConsultationGatewa
         // A plain text reply breaks the consultation lane's output contract: the brief requires
         // a structured envelope, so a non-structured answer is a provider failure, not a schema
         // mismatch.
-        if (!$response instanceof StructuredAgentResponse) {
+        // laravel/ai 1.3 answers a structured agent with a StructuredAgentResponse even for plain text, its structure empty.
+        if (!$response instanceof StructuredAgentResponse || $response->toArray() === []) {
             return $this->failed(new RuntimeException('The provider answered with a non-structured response.'), $request);
         }
 

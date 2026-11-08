@@ -34,7 +34,7 @@ function guardBehaviourFiles(string $moduleRoot): array
  */
 function guardYamlFiles(string $directory): array
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return [];
     }
 
@@ -46,7 +46,7 @@ function guardYamlFiles(string $directory): array
  */
 function guardFilesIn(string $directory): array
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return [];
     }
 
@@ -77,7 +77,7 @@ function guardCitationsOf(string $sourceId, string $moduleRoot): array
     $citations = [];
 
     foreach (guardBehaviourFiles($moduleRoot) as $path) {
-        if (! str_contains((string) file_get_contents($path), $sourceId)) {
+        if (!str_contains((string) file_get_contents($path), $sourceId)) {
             continue;
         }
 
@@ -102,7 +102,7 @@ function guardWriteFixture(string $moduleRoot, string $relativePath, string $con
 {
     $path = $moduleRoot . '/' . $relativePath;
 
-    if (! is_dir(dirname($path))) {
+    if (!is_dir(dirname($path))) {
         mkdir(dirname($path), 0777, true);
     }
 
@@ -111,7 +111,7 @@ function guardWriteFixture(string $moduleRoot, string $relativePath, string $con
 
 function guardRemoveTree(string $directory): void
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return;
     }
 

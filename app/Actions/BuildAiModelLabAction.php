@@ -143,7 +143,7 @@ class BuildAiModelLabAction
                 $state = $this->economy->account($profile, $player)['state'];
                 foreach ($this->planner->choiceSets($profile->player_id, $steps, $player) as $set) {
                     $point = $this->economy->point($profile->player_id, $state, $set, 'model-lab:' . $profile->player_id);
-                    $result['economy'][] = $this->economyChoice($economy, $economyPath, $point, $set['planet']->getPlanetName(), $open);
+                    $result['economy'][] = $this->economyChoice($economy, $economyPath, $point, $set['planet']->getPlanetCoordinates()->asString(), $open);
                 }
             }
         } catch (Throwable $exception) {

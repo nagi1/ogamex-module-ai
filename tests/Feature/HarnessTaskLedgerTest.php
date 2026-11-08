@@ -49,7 +49,7 @@ test('every row carries every column, its dependencies and the harness history',
         $payload = $this->getJson(route('ai.harness.tasks'))->json();
     });
 
-    $database = new PDO('sqlite:'.module_path('AI', 'plan/tasks/tasks.db'));
+    $database = new PDO('sqlite:'.module_path('AI', 'plan/archive/tasks/tasks.db'));
     $stored = (int) $database->query('SELECT COUNT(*) FROM tasks')->fetchColumn();
     $edges = (int) $database->query('SELECT COUNT(*) FROM dependencies')->fetchColumn();
 

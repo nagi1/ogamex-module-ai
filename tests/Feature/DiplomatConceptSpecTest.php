@@ -51,7 +51,7 @@ function diplomatConceptModuleRoot(): string
 
 function diplomatConceptSpecBody(): string
 {
-    $path = diplomatConceptModuleRoot() . '/plan/ai/diplomat-concept.md';
+    $path = diplomatConceptModuleRoot() . '/plan/archive/ai/diplomat-concept.md';
 
     return is_file($path) ? (string) file_get_contents($path) : '';
 }
@@ -63,7 +63,7 @@ function diplomatConceptSpecBody(): string
  */
 function diplomatReferencesUnder(string $directory): array
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return [];
     }
 
@@ -74,7 +74,7 @@ function diplomatReferencesUnder(string $directory): array
     $references = [];
 
     foreach ($files as $file) {
-        if (! $file->isFile() || $file->getExtension() !== 'php') {
+        if (!$file->isFile() || $file->getExtension() !== 'php') {
             continue;
         }
 
@@ -89,7 +89,7 @@ function diplomatReferencesUnder(string $directory): array
 }
 
 it('ships the Diplomat concept spec', function () {
-    expect(is_file(diplomatConceptModuleRoot() . '/plan/ai/diplomat-concept.md'))->toBeTrue();
+    expect(is_file(diplomatConceptModuleRoot() . '/plan/archive/ai/diplomat-concept.md'))->toBeTrue();
 });
 
 it('records the concept as community-wiki documentation the host must confirm', function () {

@@ -193,7 +193,7 @@ function headhuntGapRepositoryRoot(): ?string
 }
 
 it('records the unconfirmed headhunt mechanics as a research note instead of behaviour', function () {
-    $spec = headhuntGapPath('plan/specs/ogame/headhunt.md');
+    $spec = headhuntGapPath('plan/archive/specs/ogame/headhunt.md');
 
     expect(is_file($spec))->toBeTrue();
 

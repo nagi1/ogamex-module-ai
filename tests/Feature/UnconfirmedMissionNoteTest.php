@@ -7,7 +7,7 @@
 /** The note sits at the module root, beside the code it describes. */
 function unconfirmedMissionNotePath(): string
 {
-    return dirname(__DIR__, 2) . '/plan/specs/ogame/mission.md';
+    return dirname(__DIR__, 2) . '/plan/archive/specs/ogame/mission.md';
 }
 
 /** WIK-212 is a provenance identifier, not a mechanic value, so identifiers are stripped first. */

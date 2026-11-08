@@ -1,4 +1,5 @@
 <?php
+
 // JEV effectiveness on the alliance and war paths: labelled messages, pages and applications through the module's real
 // readers, the authored matcher as the baseline, then the human-leader flow end to end. Everything rolls back.
 require dirname(__DIR__, 4) . '/vendor/autoload.php';
@@ -188,7 +189,9 @@ try {
         $moved = $say($human->id, $leader->id, $text);
         $war = AiAllianceRelation::counterparts($ours->id, AiAllianceStance::War);
         $nap = AiAllianceRelation::counterparts($ours->id, AiAllianceStance::Nap);
-        $ok = match ($expect) { 'war' => $war === [$counterpart], 'nap' => $nap === [$counterpart], default => $war === [] && $nap === [] };
+        $ok = match ($expect) {
+            'war' => $war === [$counterpart], 'nap' => $nap === [$counterpart], default => $war === [] && $nap === []
+        };
         printf("   %-4s %-50s moved=%s %s\n", $ok ? 'ok' : 'FAIL', mb_strimwidth($text, 0, 50, '…'), $moved ? 'y' : 'n', $state());
     }
     $humanEnemy = isset(app(Enemies::class)->of($mate->id)[$humanMember->id]);

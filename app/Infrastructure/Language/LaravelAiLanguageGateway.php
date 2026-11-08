@@ -43,7 +43,8 @@ class LaravelAiLanguageGateway implements LanguageGateway
         // The SDK builds a StructuredAgentResponse only when the provider answered with a
         // structured envelope; a plain text reply breaks the lane's output contract and is
         // classified as a provider failure, not a schema mismatch.
-        if (!$response instanceof StructuredAgentResponse) {
+        // laravel/ai 1.3 answers a structured agent with a StructuredAgentResponse even for plain text, its structure empty.
+        if (!$response instanceof StructuredAgentResponse || $response->toArray() === []) {
             return $this->failedResult(new RuntimeException('The provider answered with a non-structured response.'), $request);
         }
 

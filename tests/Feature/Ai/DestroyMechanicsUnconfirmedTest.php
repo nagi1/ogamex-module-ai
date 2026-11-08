@@ -50,7 +50,7 @@ function destroyMechanicsModuleRoot(): string
  */
 function destroyMechanicsFiles(string $directory): array
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return [];
     }
 
@@ -60,7 +60,7 @@ function destroyMechanicsFiles(string $directory): array
     );
 
     foreach ($iterator as $file) {
-        if (! $file->isFile()) {
+        if (!$file->isFile()) {
             continue;
         }
 
@@ -171,7 +171,7 @@ function destroyMechanicsMentionsMoonDestruction(string $identifier): bool
 {
     $normalised = strtolower($identifier);
 
-    if (! str_contains($normalised, 'moon')) {
+    if (!str_contains($normalised, 'moon')) {
         return false;
     }
 
@@ -208,7 +208,7 @@ it('keeps destroy-moon tunables out of the module data files', function () {
 });
 
 it('records the destroy-moon source as unconfirmed in the module spec', function () {
-    $spec = destroyMechanicsModuleRoot() . '/plan/specs/destroy.md';
+    $spec = destroyMechanicsModuleRoot() . '/plan/archive/specs/destroy.md';
 
     expect(is_file($spec))->toBeTrue();
 

@@ -1,15 +1,15 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
-use Carbon\CarbonImmutable;
 use Modules\AI\Actions\BuildAuthoredSocialReplyAction;
 use Modules\AI\Actions\EvaluateAiSocialExchangeAction;
 use Modules\AI\Actions\RecordAiSocialExchangeAction;
-use Modules\AI\Enums\AiObservationKind;
-use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Ai\Agents\OgameVoiceAgent;
 use Modules\AI\Enums\AiArchetype;
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Models\AiObservation;

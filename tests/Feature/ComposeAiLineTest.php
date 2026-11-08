@@ -1,14 +1,14 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use Modules\AI\Actions\ComposeAiLineAction;
+use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Ai\Agents\OgameMessageAgent;
+use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiSkillBand;
-use Modules\AI\Models\AiProfile;
-use Carbon\CarbonImmutable;
-use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
-use Modules\AI\Enums\AiAffectEmotion;
 use Modules\AI\Models\AiAffectState;
+use Modules\AI\Models\AiProfile;
 use OGame\Models\User;
 use Tests\IsolatedAccountTestCase;
 

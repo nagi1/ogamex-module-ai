@@ -59,7 +59,7 @@ class AiNapGapModuleTestCase extends IsolatedAccountTestCase
         foreach ($this->phpFilesUnder($this->moduleRoot() . '/app/Enums') as $file) {
             $enum = $this->classForModuleFile($file);
 
-            if (! enum_exists($enum)) {
+            if (!enum_exists($enum)) {
                 continue;
             }
 
@@ -81,7 +81,7 @@ class AiNapGapModuleTestCase extends IsolatedAccountTestCase
 
             // Only a class the container can actually build counts: a file that declares no
             // class is not something an account can run.
-            if (! $this->namesNap($class) || ! class_exists($class)) {
+            if (!$this->namesNap($class) || !class_exists($class)) {
                 continue;
             }
 
@@ -101,7 +101,7 @@ class AiNapGapModuleTestCase extends IsolatedAccountTestCase
         foreach ($this->phpFilesUnder($this->moduleRoot() . '/config') as $file) {
             $config = require $file;
 
-            if (! is_array($config)) {
+            if (!is_array($config)) {
                 continue;
             }
 
@@ -136,7 +136,7 @@ class AiNapGapModuleTestCase extends IsolatedAccountTestCase
     /** @return list<string> */
     protected function phpFilesUnder(string $directory): array
     {
-        if (! is_dir($directory)) {
+        if (!is_dir($directory)) {
             return [];
         }
 
@@ -146,7 +146,7 @@ class AiNapGapModuleTestCase extends IsolatedAccountTestCase
         );
 
         foreach ($iterator as $file) {
-            if (! $file->isFile() || $file->getExtension() !== 'php') {
+            if (!$file->isFile() || $file->getExtension() !== 'php') {
                 continue;
             }
 
@@ -170,7 +170,7 @@ class AiNapGapModuleTestCase extends IsolatedAccountTestCase
     {
         $trackedFile = dirname(__DIR__, 5) . '/modules_statuses.json';
 
-        if (! is_file($trackedFile)) {
+        if (!is_file($trackedFile)) {
             return null;
         }
 

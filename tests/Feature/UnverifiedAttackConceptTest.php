@@ -8,7 +8,7 @@ const UNVERIFIED_ATTACK_CONCEPT = 'attack-doctrine';
 
 beforeEach(function () {
     $this->moduleRoot = dirname(__DIR__, 2);
-    $this->documentPath = $this->moduleRoot . '/plan/unverified-attack-concept.md';
+    $this->documentPath = $this->moduleRoot . '/plan/archive/unverified-attack-concept.md';
 });
 
 it('records the attack concept as unverified documentation', function () {
@@ -31,7 +31,7 @@ it('encodes no attack rule into the module runtime', function () {
     );
 
     foreach ($sources as $source) {
-        if (! $source->isFile()) {
+        if (!$source->isFile()) {
             continue;
         }
 

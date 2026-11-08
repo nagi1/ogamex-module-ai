@@ -24,7 +24,7 @@ $runtimeFiles = function (string $directory) use ($fixtureSeedingFileSuffix): ar
 
     /** @var SplFileInfo $entry */
     foreach ($entries as $entry) {
-        if (! $entry->isFile() || $entry->getExtension() !== 'php') {
+        if (!$entry->isFile() || $entry->getExtension() !== 'php') {
             continue;
         }
 

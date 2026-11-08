@@ -20,5 +20,6 @@ readonly class AiPersona
         public AiDefenseDoctrine $defenseDoctrine,
         public AiStockpileStrategy $stockpileStrategy,
         public AiEconomicRole $economicRole,
-    ) {}
+    ) {
+    }
 }

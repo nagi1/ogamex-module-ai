@@ -191,7 +191,7 @@ class ExportAiEconomyCatalogueAction
             // Without the exporting player's class slots: each class's combat export carries its own (`class_slots`).
             $maxExpeditions[] = $player->getExpeditionSlotsMax() - app(CharacterClassService::class)->getExpeditionSlotsBonus($player->getUser());
             for ($position = UniverseConstants::MIN_PLANET_POSITION; $position <= UniverseConstants::MAX_PLANET_POSITION; $position++) {
-                if (! isset($positionLevels[$position]) && $player->canColonizePosition($position)) {
+                if (!isset($positionLevels[$position]) && $player->canColonizePosition($position)) {
                     $positionLevels[$position] = $level;
                 }
             }
@@ -447,7 +447,7 @@ class ExportAiEconomyCatalogueAction
         $exported = array_map(static fn (GameObject $object): int => $object->id, $objects);
         $production = [];
         foreach (ObjectService::getGameObjectsWithProduction() as $producer) {
-            if (! in_array($producer->id, $exported, true)) {
+            if (!in_array($producer->id, $exported, true)) {
                 continue;
             }
             $production[(string) $producer->id] = $this->withLevels($planet, $objects, [], static function () use ($planet, $producer, $maxLevel): array {
@@ -496,7 +496,7 @@ class ExportAiEconomyCatalogueAction
         $exported = array_map(static fn (GameObject $object): int => $object->id, $buildings);
         $tabulated = [];
         foreach (ObjectService::getGameObjectsWithProduction() as $producer) {
-            if (! in_array($producer->id, $exported, true)) {
+            if (!in_array($producer->id, $exported, true)) {
                 continue;
             }
             $by = array_values(array_map(static fn (GameObject $r): int => $r->id, array_filter($research, fn (GameObject $r): bool => $this->researchMovesProduction($planet, $everything, $producer, $r, $maxLevel))));
@@ -805,7 +805,7 @@ class ExportAiEconomyCatalogueAction
         $exported = array_map(static fn (GameObject $object): int => $object->id, $objects);
         $moved = [];
         foreach (ObjectService::getGameObjectsWithProduction() as $producer) {
-            if (! in_array($producer->id, $exported, true)) {
+            if (!in_array($producer->id, $exported, true)) {
                 continue;
             }
             $change = fn (int $level): array => $this->withLevels($planet, $everything, [$producer->id => $level] + $full, function () use ($planet, $unit, $producer, $level, $full, $top): array {

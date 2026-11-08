@@ -3,6 +3,7 @@
 use Modules\AI\Actions\QueueAiRaidAction;
 use Modules\AI\Domain\Decision\AllianceUnionTargets;
 use Modules\AI\Models\AiRelationship;
+use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\FleetUnion;
@@ -11,7 +12,6 @@ use OGame\Models\User;
 use OGame\Services\AllianceService;
 use OGame\Services\MessageService;
 use OGame\Services\PlanetService;
-use OGame\Factories\PlayerServiceFactory;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);

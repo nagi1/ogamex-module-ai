@@ -106,7 +106,7 @@ class EnergyUnconstrainedModuleTestCase extends IsolatedAccountTestCase
         foreach ($this->snapshotConstructor()->getParameters() as $parameter) {
             $name = $parameter->getName();
 
-            if (array_key_exists($name, $arguments) || ! $this->isBuiltin($parameter)) {
+            if (array_key_exists($name, $arguments) || !$this->isBuiltin($parameter)) {
                 continue;
             }
 

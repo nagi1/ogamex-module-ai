@@ -1,6 +1,7 @@
 <?php
 
 use Modules\AI\Enums\AiWorkKind;
+use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Tests\Support\Situation;
 use OGame\Models\DebrisField;
 use OGame\Models\FleetMission;
@@ -29,8 +30,15 @@ test('a field the gate refused four hours ago is still not the harvest this sess
         ->ships('recycler', 2)
         ->debris(40_000, 20_000)
         ->refusedDispatch(galaxy: (int) $home->galaxy, system: (int) $home->system, position: (int) $home->position, reason: 'source_short_at_dispatch', minutesAgo: 240)
-        ->session()
-        ->expectNoWork(AiWorkKind::Recycle);
+        ->session();
+
+    // The session may fight a neighbour and harvest that new field; only the refused one stays cooled.
+    $refusedField = AiWorkItem::query()->where('player_id', $this->currentUserId)->where('kind', AiWorkKind::Recycle)->get()
+        ->filter(static fn (AiWorkItem $item): bool => ($item->payload['target_galaxy'] ?? null) === (int) $home->galaxy
+            && ($item->payload['target_system'] ?? null) === (int) $home->system
+            && ($item->payload['target_position'] ?? null) === (int) $home->position);
+
+    expect($refusedField)->toBeEmpty();
 });
 
 test('a body the gate refused four hours ago is not the origin this session flies from', function (): void {

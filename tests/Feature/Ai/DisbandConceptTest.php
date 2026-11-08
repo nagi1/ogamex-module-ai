@@ -11,7 +11,7 @@ $disbandClassesUnder = static function (array $roots): array {
     $matches = [];
 
     foreach ($roots as $root) {
-        if (! is_dir($root)) {
+        if (!is_dir($root)) {
             continue;
         }
 
@@ -20,7 +20,7 @@ $disbandClassesUnder = static function (array $roots): array {
         );
 
         foreach ($files as $file) {
-            if (! $file->isFile() || $file->getExtension() !== 'php') {
+            if (!$file->isFile() || $file->getExtension() !== 'php') {
                 continue;
             }
 
@@ -70,7 +70,7 @@ it('fails the guard as soon as a disband class exists', function () use ($disban
 });
 
 it('records disband as an unconfirmed, fact-only spec', function () use ($projectRoot): void {
-    $path = $projectRoot . '/plan/specs/ai/ogame-disband.md';
+    $path = $projectRoot . '/plan/archive/specs/ai/ogame-disband.md';
 
     expect(is_file($path))->toBeTrue();
 

@@ -72,7 +72,7 @@ class ReplayAiWorldAction
                 in_array($step['queue'], ['arrive', 'return'], true) => $this->land($step, $origin, $planets),
                 $step['queue'] === 'recall' => $this->recall($step, $origin),
                 $step['queue'] === 'officer' => $this->hire($step, $origin, (int) $planets[$p]['account']),
-                ! isset($this->ids[$key]) => ['start' => (int) $step['start'], 'queue' => $step['queue'], 'host_refusal' => 'the host has no planet there'],
+                !isset($this->ids[$key]) => ['start' => (int) $step['start'], 'queue' => $step['queue'], 'host_refusal' => 'the host has no planet there'],
                 $step['queue'] === 'launch' && (int) $step['mission'] === self::MISSILE => $this->fire($this->planet($this->ids[$key]), $step, $origin),
                 $step['queue'] === 'launch' => $this->launch($this->planet($this->ids[$key]), $step, $origin),
                 default => $schedule->step($this->planet($this->ids[$key]), $step, $origin, $yardBlockedBy),
@@ -127,8 +127,16 @@ class ReplayAiWorldAction
         $row = ['start' => (int) $step['t'], 'queue' => 'launch', 'mission' => (int) $step['mission'], 'sim_arrive' => (int) $step['arrive'] - (int) $step['t'],
             'sim_fuel' => (int) $step['fuel'], 'host_arrive' => null, 'host_fuel' => null, 'host_refusal' => null];
         try {
-            $mission = app()->makeWith(FleetMissionService::class, ['player' => $planet->getPlayer()])->createNewFromPlanet($planet, new Coordinate(...$step['to']), $this->targetType($step),
-                (int) $step['mission'], $units, new Resources(...[...$step['cargo'], 0]), (float) $step['speed'], (int) ($step['holding_hours'] ?? 0));
+            $mission = app()->makeWith(FleetMissionService::class, ['player' => $planet->getPlayer()])->createNewFromPlanet(
+                $planet,
+                new Coordinate(...$step['to']),
+                $this->targetType($step),
+                (int) $step['mission'],
+                $units,
+                new Resources(...[...$step['cargo'], 0]),
+                (float) $step['speed'],
+                (int) ($step['holding_hours'] ?? 0)
+            );
         } catch (Exception $refused) {
             return ['host_refusal' => $refused->getMessage()] + $row;
         }
@@ -155,7 +163,7 @@ class ReplayAiWorldAction
             'type' => $this->targetType($step)->value, 'missile_count' => array_sum(array_column($step['ships'], 1)), 'target_priority' => (int) $step['priority']]);
         $data = app(GalaxyController::class)->missileAttack($request, $player, app(PlanetServiceFactory::class), app(SettingsService::class))->getData(true);
         $this->forget();
-        if (! ($data['success'] ?? false)) {
+        if (!($data['success'] ?? false)) {
             return ['host_refusal' => (string) ($data['error'] ?? 'refused')] + $row;
         }
         $mission = FleetMission::query()->findOrFail((int) $data['mission_id']);
@@ -211,7 +219,7 @@ class ReplayAiWorldAction
         $row['host_at'] = $lands - $origin;
         $processed = FleetMission::query()->find($mission->id);
         $row['host_outcome'] = match (true) {
-            ! $processed?->processed => 'Pending',
+            !$processed?->processed => 'Pending',
             (bool) $processed->canceled => 'Cancelled',
             default => 'Done',
         };

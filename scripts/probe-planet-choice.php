@@ -15,17 +15,23 @@ foreach (AiProfile::query()->where('enabled', true)->orderBy('player_id')->limit
     $player = app(PlayerServiceFactory::class)->make($playerId, true);
     $plan = app(QueueableUnitPlanner::class)->plan($playerId);
 
-    printf("\nplayer %d: planner chose %s (%s)\n", $playerId,
+    printf(
+        "\nplayer %d: planner chose %s (%s)\n",
+        $playerId,
         $plan === null ? 'nothing' : 'planet '.$plan->planetId,
-        $plan === null ? '-' : $plan->reason);
+        $plan === null ? '-' : $plan->reason
+    );
 
     foreach ($player->planets->all() as $planet) {
         $planet->updateResources(false);
         $planet->updateResourceProductionStats(false);
         $need = app(DefenseNeedEvaluator::class)->evaluate($player, $planet);
-        printf("   planet %d %-10s defence=%-7d need=%s\n",
-            $planet->getPlanetId(), $planet->getPlanetName(),
+        printf(
+            "   planet %d %-10s defence=%-7d need=%s\n",
+            $planet->getPlanetId(),
+            $planet->getPlanetName(),
             $planet->getDefenseUnits()->getAmount(),
-            ($need === null ? 'covered' : number_format($need->defenceValue)).' composition='.(($c = app(DefenseCompositionPlanner::class)->plan($player, $planet, $need)) === null ? 'null' : $c->unit->machine_name.' x'.$c->amount));
+            ($need === null ? 'covered' : number_format($need->defenceValue)).' composition='.(($c = app(DefenseCompositionPlanner::class)->plan($player, $planet, $need)) === null ? 'null' : $c->unit->machine_name.' x'.$c->amount)
+        );
     }
 }

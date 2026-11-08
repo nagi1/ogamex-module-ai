@@ -42,7 +42,7 @@ class AiPolicyDataGuardTestCase extends IsolatedAccountTestCase
      */
     protected function policyDataFiles(string $directory, string $extension): array
     {
-        if (! is_dir($directory)) {
+        if (!is_dir($directory)) {
             return [];
         }
 

@@ -8,7 +8,7 @@
 
 beforeEach(function () {
     $this->sourceId = 'WIK-017';
-    $this->specPath = dirname(__DIR__, 2) . '/plan/specs/def-turtle.md';
+    $this->specPath = dirname(__DIR__, 2) . '/plan/archive/specs/def-turtle.md';
 
     expect(is_file($this->specPath))->toBeTrue();
 
@@ -34,7 +34,7 @@ it('cites the quoted figure once, and only inside the verbatim citation', functi
 
     $outsideCitation = array_filter(
         $lines,
-        fn (string $line): bool => ! str_starts_with(ltrim($line), '>'),
+        fn (string $line): bool => !str_starts_with(ltrim($line), '>'),
     );
 
     $prose = str_replace($this->sourceId, '', implode("\n", $outsideCitation));

@@ -154,7 +154,17 @@ class HarnessStatusController
 
     private function path(string $relative): string
     {
-        return module_path('AI', $relative);
+        $live = module_path('AI', $relative);
+        if (!str_starts_with($relative, 'plan/')) {
+            return $live;
+        }
+
+        // The harness's own records moved to plan/archive with the rest of the plan (7 Nov 2026); a file still
+        // written in place is read there, an archived one where it now lives (a glob is judged by its directory).
+        $archived = module_path('AI', 'plan/archive/' . substr($relative, strlen('plan/')));
+        $probe = static fn (string $path): string => str_contains($path, '*') ? dirname($path) : $path;
+
+        return file_exists($probe($live)) || !file_exists($probe($archived)) ? $live : $archived;
     }
 
     /**

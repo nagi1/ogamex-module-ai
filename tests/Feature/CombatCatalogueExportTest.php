@@ -1,21 +1,21 @@
 <?php
 
 use Modules\AI\Actions\ExportAiCombatCatalogueAction;
+use OGame\Factories\GameMissionFactory;
 use OGame\GameMissions\EspionageMission;
+use OGame\GameMissions\ExpeditionMission;
 use OGame\GameMissions\MissileMission;
 use OGame\GameMissions\MoonDestructionMission;
 use OGame\GameMissions\RecycleMission;
 use OGame\GameObjects\Models\Abstracts\GameObject;
 use OGame\GameObjects\Models\UnitObject;
-use OGame\Factories\GameMissionFactory;
-use OGame\GameMissions\ExpeditionMission;
 use OGame\Models\FleetMission;
 use OGame\Services\CharacterClassService;
 use OGame\Services\FleetMissionService;
 use OGame\Services\MessageService;
-use OGame\Services\SettingsService;
 use OGame\Services\ObjectService;
 use OGame\Services\PlayerService;
+use OGame\Services\SettingsService;
 use Tests\IsolatedAccountTestCase;
 
 uses(IsolatedAccountTestCase::class);

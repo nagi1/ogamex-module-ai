@@ -43,17 +43,33 @@ if ($profile === null) {
 
 $player = app(PlayerServiceFactory::class)->make($playerId);
 $lastLogin = (int) DB::table('users')->where('id', $playerId)->value('time');
-printf("ACCOUNT %d %s — %s, %s, %s; last activity %s\n", $playerId, $player->getUsername(), $profile->archetype->name,
-    $profile->skill_band->name, $profile->enabled ? 'enabled' : 'DISABLED', CarbonImmutable::createFromTimestamp($lastLogin)->diffForHumans());
+printf(
+    "ACCOUNT %d %s — %s, %s, %s; last activity %s\n",
+    $playerId,
+    $player->getUsername(),
+    $profile->archetype->name,
+    $profile->skill_band->name,
+    $profile->enabled ? 'enabled' : 'DISABLED',
+    CarbonImmutable::createFromTimestamp($lastLogin)->diffForHumans()
+);
 
 $name = static fn (int $objectId): string => ObjectService::getObjectById($objectId)->machine_name;
 $planetIds = [];
 foreach ($player->planets->all() as $planet) {
     $planetIds[] = $planet->getPlanetId();
     $at = $planet->getPlanetCoordinates();
-    printf("\n  planet %d [%d:%d:%d] metal %s crystal %s deut %s, fields %d/%d\n", $planet->getPlanetId(), $at->galaxy, $at->system, $at->position,
-        number_format((int) $planet->metal()->get()), number_format((int) $planet->crystal()->get()), number_format((int) $planet->deuterium()->get()),
-        $planet->getBuildingCount(), $planet->getPlanetFieldMax());
+    printf(
+        "\n  planet %d [%d:%d:%d] metal %s crystal %s deut %s, fields %d/%d\n",
+        $planet->getPlanetId(),
+        $at->galaxy,
+        $at->system,
+        $at->position,
+        number_format((int) $planet->metal()->get()),
+        number_format((int) $planet->crystal()->get()),
+        number_format((int) $planet->deuterium()->get()),
+        $planet->getBuildingCount(),
+        $planet->getPlanetFieldMax()
+    );
     $building = DB::table('building_queues')->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)->orderBy('time_start')->get();
     $research = DB::table('research_queues')->where('planet_id', $planet->getPlanetId())->where('processed', 0)->where('canceled', 0)->get();
     $units = DB::table('unit_queues')->where('planet_id', $planet->getPlanetId())->where('processed', 0)->get();
@@ -70,8 +86,15 @@ $classes = GameMissionFactory::getMissionClasses();
 $flying = DB::table('fleet_missions')->where('user_id', $playerId)->where('processed', 0)->where('canceled', 0)->orderBy('time_arrival')->get();
 echo "\n  fleets in flight: ".($flying->isEmpty() ? 'none' : '')."\n";
 foreach ($flying as $mission) {
-    printf("    %s to [%d:%d:%d], arrives in %d min%s\n", preg_replace('/Mission$/', '', class_basename($classes[(int) $mission->mission_type] ?? 'Unknown')),
-        $mission->galaxy_to, $mission->system_to, $mission->position_to, max(0, (int) round(($mission->time_arrival - time()) / 60)), $mission->parent_id ? ' (return)' : '');
+    printf(
+        "    %s to [%d:%d:%d], arrives in %d min%s\n",
+        preg_replace('/Mission$/', '', class_basename($classes[(int) $mission->mission_type] ?? 'Unknown')),
+        $mission->galaxy_to,
+        $mission->system_to,
+        $mission->position_to,
+        max(0, (int) round(($mission->time_arrival - time()) / 60)),
+        $mission->parent_id ? ' (return)' : ''
+    );
 }
 
 echo "\n  work in the last $minutes min (newest first):\n";

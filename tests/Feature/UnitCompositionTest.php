@@ -152,7 +152,7 @@ function compositionRichReport(int $playerId, ?array $defense = [], int $metal =
     $foreignPlayer = $foreign->getPlayer();
     expect($foreignPlayer)->not->toBeNull();
 
-    $report = new EspionageReport;
+    $report = new EspionageReport();
     $report->planet_galaxy = $foreign->getPlanetCoordinates()->galaxy;
     $report->planet_system = $foreign->getPlanetCoordinates()->system;
     $report->planet_position = $foreign->getPlanetCoordinates()->position;

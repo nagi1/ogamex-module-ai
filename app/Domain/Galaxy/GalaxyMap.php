@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Modules\AI\Domain\Galaxy;
 
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Modules\AI\Infrastructure\Battle\NativeRaidEstimator;
 use OGame\Models\EspionageReport;
 use OGame\Models\Message;

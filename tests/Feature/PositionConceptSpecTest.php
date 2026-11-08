@@ -14,7 +14,7 @@ use Tests\IsolatedAccountTestCase;
  */
 class PositionConceptSpecTestCase extends IsolatedAccountTestCase
 {
-    public const SPEC_PATH = 'plan/specs/position-concept.md';
+    public const SPEC_PATH = 'plan/archive/specs/position-concept.md';
 
     // The range is the one the plan's acceptance line states — a single slot digit, or the lower
     // teens. A literal above that range is outside what this guard claims to catch.

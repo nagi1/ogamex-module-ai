@@ -30,7 +30,7 @@ function solarSystemModuleRoot(): string
  */
 function solarSystemFilesUnder(string $directory, array $extensions): array
 {
-    if (! is_dir($directory)) {
+    if (!is_dir($directory)) {
         return [];
     }
 
@@ -40,7 +40,7 @@ function solarSystemFilesUnder(string $directory, array $extensions): array
     );
 
     foreach ($iterator as $file) {
-        if (! in_array(strtolower($file->getExtension()), $extensions, true)) {
+        if (!in_array(strtolower($file->getExtension()), $extensions, true)) {
             continue;
         }
 
@@ -98,7 +98,7 @@ function solarSystemKeyIsForbidden(string $key): bool
         return true;
     }
 
-    if (! in_array($last, SOLAR_SYSTEM_QUALIFIED_KEYS, true)) {
+    if (!in_array($last, SOLAR_SYSTEM_QUALIFIED_KEYS, true)) {
         return false;
     }
 

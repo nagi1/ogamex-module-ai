@@ -86,4 +86,3 @@ it('normalizes saved public API payloads into typed, pseudonymized records and a
         exec('rm -rf ' . escapeshellarg($a) . ' ' . escapeshellarg($b));
     }
 });
-

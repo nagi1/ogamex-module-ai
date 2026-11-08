@@ -21,7 +21,7 @@ class GuardConstructionQueue
     public function handle(mixed $snapshot): array
     {
         // An empty payload carries no evidence about the queue, so it is unknown as well.
-        if (! is_array($snapshot) || $snapshot === []) {
+        if (!is_array($snapshot) || $snapshot === []) {
             return [
                 'decision' => self::DECISION_HOLD,
                 'reason' => self::REASON_CONSTRUCTION_QUEUE_UNKNOWN,

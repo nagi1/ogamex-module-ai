@@ -84,7 +84,7 @@ $lateRows = DB::table('ai_work_items')->whereIn('player_id', $players)
     ->get(['kind', 'player_id', 'due_at'])
     ->reject(fn ($row): bool => (int) $row->kind === AiWorkKind::RunSession->value
         && ($profile = $profiles->get($row->player_id)) !== null
-        && ! $planner->isAwake($profile, $now)
+        && !$planner->isAwake($profile, $now)
         && $planner->isAwake($profile, CarbonImmutable::parse($row->due_at)));
 $oldest = $lateRows->min('due_at');
 
@@ -109,8 +109,11 @@ if ($json) {
 }
 
 printf("PULSE last %d min, %d accounts: %d sessions on %d accounts\n", $minutes, $pulse['accounts'], $pulse['sessions'], $pulse['accounts_with_session']);
-printf("  backlog: %d work item(s) more than a minute late%s\n", $pulse['backlog']['late'],
-    $pulse['backlog']['oldest_late_seconds'] > 300 ? ', oldest '.round($pulse['backlog']['oldest_late_seconds'] / 60).' min — live verdicts read worker lag' : '');
+printf(
+    "  backlog: %d work item(s) more than a minute late%s\n",
+    $pulse['backlog']['late'],
+    $pulse['backlog']['oldest_late_seconds'] > 300 ? ', oldest '.round($pulse['backlog']['oldest_late_seconds'] / 60).' min — live verdicts read worker lag' : ''
+);
 $decisions = max(1, array_sum($chosen));
 echo '  sessions chose: '.implode(', ', array_map(fn ($k, $v) => $k.' '.round($v * 100 / $decisions).'%', array_keys($chosen), $chosen))."\n";
 echo '  host orders: '.implode(', ', array_map(fn ($k, $v) => "$k $v", array_keys($orders), $orders))."\n";

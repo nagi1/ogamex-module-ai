@@ -38,7 +38,8 @@ class JudgeAiWorld extends Command
             return self::FAILURE;
         }
 
-        if (!$judgement instanceof StructuredAgentResponse) {
+        // laravel/ai 1.3 answers a structured agent with a StructuredAgentResponse even for plain text, its structure empty.
+        if (!$judgement instanceof StructuredAgentResponse || $judgement->toArray() === []) {
             $this->error('The judge answered without structure.');
 
             return self::FAILURE;

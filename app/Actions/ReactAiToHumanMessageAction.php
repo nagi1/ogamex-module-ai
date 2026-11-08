@@ -11,8 +11,8 @@ use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSchedule;
-use Modules\AI\Models\AiWorkItem;
 use Modules\AI\Models\AiTextReading;
+use Modules\AI\Models\AiWorkItem;
 use OGame\Models\ChatMessage;
 use OGame\Models\Planet;
 

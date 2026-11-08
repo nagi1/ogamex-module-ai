@@ -1,0 +1,1423 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\User\>\|OGame\\Models\\User\:\:\$time\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/AdvanceAiAllianceLifeAction.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>time" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/AdvanceAiAllianceLifeAction.php
+
+		-
+			message: '#^Anonymous function should return float but returns float\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Cannot access property \$founder_user_id on OGame\\Models\\Alliance\|null\.$#'
+			identifier: property.nonObject
+			count: 11
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Cannot access property \$id on OGame\\Models\\Alliance\|null\.$#'
+			identifier: property.nonObject
+			count: 13
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\AdvanceAiAlliancePoliticsAction\:\:feared\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Parameter \#1 \$alliance of method Modules\\AI\\Actions\\AdvanceAiAlliancePoliticsAction\:\:goToWar\(\) expects OGame\\Models\\Alliance, OGame\\Models\\Alliance\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between int and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Modules\\AI\\Domain\\Social\\SocialMinds\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/AdvanceAiAlliancePoliticsAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\AdvanceAiCampaignStateAction\:\:completedOnTime\(\) has parameter \$objectives with generic class Illuminate\\Database\\Eloquent\\Collection but does not specify its types\: TKey, TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Actions/AdvanceAiCampaignStateAction.php
+
+		-
+			message: '#^Parameter \#1 \$key of method Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\),Illuminate\\Database\\Eloquent\\Model\>\:\:contains\(\) expects \(callable\(Illuminate\\Database\\Eloquent\\Model, int\|string\)\: bool\)\|Illuminate\\Database\\Eloquent\\Model\|int\|string, Closure\(Modules\\AI\\Models\\AiCampaignObjective\)\: bool given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/AdvanceAiCampaignStateAction.php
+
+		-
+			message: '#^Access to an undefined property Modules\\AI\\Models\\AiOperationLog\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/BuildAiCampaignControlAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\BuildAiCampaignControlAction\:\:campaigns\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{id\: int, state\: int, starts_at\: string\|null, ends_at\: string\|null\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/BuildAiCampaignControlAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\BuildAiCampaignControlAction\:\:recent\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{operation\: string, status\: string, result\: string\|null, started_at\: mixed\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/BuildAiCampaignControlAction.php
+
+		-
+			message: '#^Access to an undefined property Modules\\AI\\Models\\AiOperationLog\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/BuildAiOperationsPanelAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\BuildAiOperationsPanelAction\:\:runs\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{operation\: string, status\: string, result\: string\|null, started_at\: mixed\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/BuildAiOperationsPanelAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\BuildAiPlayerRosterAction\:\:handle\(\) should return array\{rows\: list\<array\<string, mixed\>\>, search\: string, state\: string, alerts_only\: bool\} but returns array\{rows\: array\<int, non\-empty\-array\<string, mixed\>\>, search\: string, state\: string, alerts_only\: bool\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/BuildAiPlayerRosterAction.php
+
+		-
+			message: '#^Parameter \#1 \$playerIds of method Modules\\AI\\Actions\\BuildAiPlayerRosterAction\:\:countsByPlayer\(\) expects list\<int\>, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 3
+			path: app/Actions/BuildAiPlayerRosterAction.php
+
+		-
+			message: '#^Cannot access property \$name on Modules\\AI\\Enums\\AiSocialResponse\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/BuildAuthoredSocialReplyAction.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Modules\\AI\\Enums\\AiArchetype\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/BuildAuthoredSocialReplyAction.php
+
+		-
+			message: '#^Instanceof between Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties and Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Actions/CheckSocialIntegrityAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\CheckSocialIntegrityAction\:\:between\(\) has parameter \$others with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/CheckSocialIntegrityAction.php
+
+		-
+			message: '#^Use an early return, match expression, strategy, or lookup table instead of else\.$#'
+			identifier: ai.elseForbidden
+			count: 1
+			path: app/Actions/CheckSocialIntegrityAction.php
+
+		-
+			message: '#^Offset ''d''\|''h''\|''m''\|''mo''\|''w'' might not exist on array\{h\: 1, d\: 24, w\: 168, mo\: 720\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: app/Actions/ClassifyInboundSocialExchangeAction.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Responses\\StructuredAgentResponse and Laravel\\Ai\\Responses\\StructuredAgentResponse will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Actions/ComposeAiLineAction.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Modules\\AI\\Enums\\AiArchetype\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/ComposeAiLineAction.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Actions/ConsultCampaignDecisionAction.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<Modules\\AI\\Domain\\Decision\\QueueableBuilding\|Modules\\AI\\Domain\\Decision\\QueueableResearch\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Actions/DecideAiEconomyStepsAction.php
+
+		-
+			message: '#^Parameter \#2 \$recipientIds of method Modules\\AI\\Actions\\GuardAiOutboundTextAction\:\:passes\(\) expects list\<int\>, array\<int\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/DeliverAiAllianceReplyAction.php
+
+		-
+			message: '#^Cannot access property \$galaxy on OGame\\Models\\Planet\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Cannot access property \$planet on OGame\\Models\\Planet\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Cannot access property \$system on OGame\\Models\\Planet\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Cannot access property \$temp_max on OGame\\Models\\Planet\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Offset ''message'' on array\{success\: false, error\: true, message\: string\}\|array\{success\: true, error\: false, message\: string, collected_ships\: array\<int, array\<string, mixed\>\>, remaining_ships\: array\<int, array\<string, mixed\>\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Offset ''success'' on array\{success\: false, error\: true, message\: string\}\|array\{success\: true, error\: false, message\: string, collected_ships\: array\<int, array\<string, mixed\>\>, remaining_ships\: array\<int, array\<string, mixed\>\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{0\: OGame\\Models\\FleetMission, 1\?\: OGame\\Models\\FleetMission\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Use an early return, match expression, strategy, or lookup table instead of else\.$#'
+			identifier: ai.elseForbidden
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Illuminate\\Support\\Carbon\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/DrawAiMoreMissionCasesAction.php
+
+		-
+			message: '#^Cannot call method canColonizePosition\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Cannot call method getExpeditionSlotsMax\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Cannot call method getMaxPlanetAmount\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Cannot call method getResearchLevel\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Cannot call method getUser\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Cannot call method setResearchLevel\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:productionResearch\(\) should return array\<string, array\{by\: list\<int\>, rows\: list\<list\<list\<float\>\>\>\}\> but returns array\<int, array\{by\: non\-empty\-list\<int\>, rows\: list\<list\<list\<float\>\>\>\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:storage\(\) should return array\<string, list\<list\<float\>\>\> but returns array\<int, list\<array\{float, float, float\}\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{planet\: int, position\: int, temp_max\: int, fields\: int\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 3
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#2 \$everything of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:assertStorageIgnoresResearch\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#2 \$everything of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:movers\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#2 \$objects of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:timeModifiers\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#3 \$everything of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:planet\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#3 \$objects of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:object\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#3 \$research of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:assertStorageIgnoresResearch\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\ResearchObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#3 \$research of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:unitProbes\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\ResearchObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#3 \$timed of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:timeModifiers\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\ResearchObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#4 \$candidates of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:timeModifiers\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#4 \$everything of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:unitProduction\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#4 \$research of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:planet\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\ResearchObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#5 \$everything of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:site\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Parameter \#6 \$research of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:site\(\) expects list\<OGame\\GameObjects\\Models\\Abstracts\\GameObject\>, array\<OGame\\GameObjects\\Models\\ResearchObject\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ExportAiEconomyCatalogueAction.php
+
+		-
+			message: '#^Access to an undefined property Modules\\AI\\Models\\AiRelationship\:\:\$updated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/FadeAiGrudgesAction.php
+
+		-
+			message: '#^Access to an undefined property Modules\\AI\\Models\\AiSocialExchange\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/InitiateAiSocialContactAction.php
+
+		-
+			message: '#^Unable to resolve the template type TMapWithKeysValue in call to method Illuminate\\Database\\Eloquent\\Collection\<int,Modules\\AI\\Models\\AiSocialExchange\>\:\:mapWithKeys\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Actions/InitiateAiSocialContactAction.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Responses\\StructuredAgentResponse and Laravel\\Ai\\Responses\\StructuredAgentResponse will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Actions/ProposeAiDoctrineFromSourceAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ProposeAiDoctrineFromSourceAction\:\:checked\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/ProposeAiDoctrineFromSourceAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ProposeAiDoctrineFromSourceAction\:\:handle\(\) should return list\<array\{archetype\: string, key\: string, steps\: list\<array\{object\: string, value\: float\}\>, quote\: string, checked\: bool\}\> but returns list\<array\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/ProposeAiDoctrineFromSourceAction.php
+
+		-
+			message: '#^Possibly invalid array key type string\|null\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: app/Actions/QueueAiFleetSaveAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\QueueAiRaidAction\:\:handle\(\) has parameter \$launchUnits with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/QueueAiRaidAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ReactAiToHumanMessageAction\:\:readers\(\) should return list\<Modules\\AI\\Models\\AiProfile\> but returns array\<int, Modules\\AI\\Models\\AiProfile\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/ReactAiToHumanMessageAction.php
+
+		-
+			message: '#^Access to an undefined property Modules\\AI\\Models\\AiAffectState\:\:\$emotion\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/ReadAiInnerStateAction.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: mixed$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Actions/ReadAiInnerStateAction.php
+
+		-
+			message: '#^Parameter \#1 \$value of static method Illuminate\\Database\\Connection\:\:raw\(\) expects float\|int\|literal\-string, non\-falsy\-string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/RecordAiRelationshipInteractionAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\RecordObservedBattleReportAction\:\:attackerSide\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/RecordObservedBattleReportAction.php
+
+		-
+			message: '#^Binary operation "\+" between float\|int\|string and int results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 2
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Cannot access property \$planets on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Cannot call method getId\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Cannot call method getResearchLevel\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Cannot call method updateResearchQueue\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Offset ''decision'' might not exist on array\{start\: float, id\: int, end\: float, stock\: list\<float\>, decision\?\: float, queue\?\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Parameter \#1 \$player of method OGame\\Services\\ResearchQueueService\:\:add\(\) expects OGame\\Services\\PlayerService, OGame\\Services\\PlayerService\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Parameter \#2 \$account of method Modules\\AI\\Domain\\Choice\\EconomyChoiceEncoder\:\:point\(\) expects list\<float\>, non\-empty\-array\<int\<0, max\>, float\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Parameter \#3 \$origin of method Modules\\AI\\Actions\\ReplayAiEconomyScheduleAction\:\:step\(\) expects int, float\|int\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Actions/ReplayAiEconomyScheduleAction.php
+
+		-
+			message: '#^Cannot call method getId\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: app/Actions/ReplayAiWorldAction.php
+
+		-
+			message: '#^Cannot call method getUser\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/ReplayAiWorldAction.php
+
+		-
+			message: '#^Property Modules\\AI\\Actions\\ReplayAiWorldAction\:\:\$origins \(array\<int, int\>\) does not accept array\<int, float\|int\|string\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Actions/ReplayAiWorldAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ReviewAiAllianceApplicationsAction\:\:recruitmentPolicy\(\) should return array\{share_ceiling\: float, minimum_cohort\: int\}\|null but returns array\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/ReviewAiAllianceApplicationsAction.php
+
+		-
+			message: '#^Property Modules\\AI\\Actions\\ReviewAiAllianceApplicationsAction\:\:\$recruitmentCeiling type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/ReviewAiAllianceApplicationsAction.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\ChatMessage\>\|OGame\\Models\\ChatMessage\:\:\$message\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/RunAiConversationCycleAction.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\ChatMessage\>\|OGame\\Models\\ChatMessage\:\:\$sender_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/RunAiConversationCycleAction.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 2
+			path: app/Actions/RunAiConversationCycleAction.php
+
+		-
+			message: '#^Instanceof between Modules\\AI\\Domain\\Decision\\QueueableUnit and Modules\\AI\\Domain\\Decision\\QueueableUnit will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Actions/ScheduleAiIntentAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\ScheduleAiIntentAction\:\:bookedPlanets\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/ScheduleAiIntentAction.php
+
+		-
+			message: '#^Cannot call method addResources\(\) on OGame\\Services\\PlanetService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Cannot call method crystalStorage\(\) on OGame\\Services\\PlanetService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Cannot call method deuteriumStorage\(\) on OGame\\Services\\PlanetService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Cannot call method metalStorage\(\) on OGame\\Services\\PlanetService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Cannot call method save\(\) on OGame\\Services\\PlanetService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Cannot call method updateResourceStorageStats\(\) on OGame\\Services\\PlanetService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Parameter \#1 \$planet of method OGame\\Factories\\PlanetServiceFactory\:\:createMoonForPlanet\(\) expects OGame\\Services\\PlanetService, OGame\\Services\\PlanetService\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Parameter \#2 \$body of method Modules\\AI\\Actions\\StageAiAccountAction\:\:spend\(\) expects OGame\\Services\\PlanetService, OGame\\Services\\PlanetService\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Parameter \#2 \$home of method Modules\\AI\\Actions\\StageAiAccountAction\:\:colonyWithMoon\(\) expects OGame\\Services\\PlanetService, OGame\\Services\\PlanetService\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/StageAiAccountAction.php
+
+		-
+			message: '#^Method Modules\\AI\\Actions\\SummarizeAiCampaignAction\:\:handle\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Actions/SummarizeAiCampaignAction.php
+
+		-
+			message: '#^Offset ''kind'' on array\{kind\: string, metal\?\: int, crystal\?\: int, deuterium\?\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/Actions/SummarizeAiStorageHealthAction.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{kind\: string, external\: bool, priced\: false, ratio\: null, fee\: null, metal\: int, crystal\: int, deuterium\: int\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Actions/SummarizeAiStorageHealthAction.php
+
+		-
+			message: '#^Property Modules\\AI\\Ai\\Agents\\OgameHumanTextAgent\:\:\$act is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Ai/Agents/OgameHumanTextAgent.php
+
+		-
+			message: '#^Parameter \#1 \$callback of function array_map expects \(callable\(OGame\\Services\\PlanetService\|null\)\: mixed\)\|null, Closure\(OGame\\Services\\PlanetService\)\: OGame\\Services\\PlanetService given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/ExportAiRlCatalogue.php
+
+		-
+			message: '#^Parameter \#1 \$planets of method Modules\\AI\\Actions\\ExportAiEconomyCatalogueAction\:\:handle\(\) expects list\<OGame\\Services\\PlanetService\>, array\<OGame\\Services\\PlanetService\|null\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/ExportAiRlCatalogue.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function fclose expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/ExportAiTextReadings.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function fwrite expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/ExportAiTextReadings.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Responses\\StructuredAgentResponse and Laravel\\Ai\\Responses\\StructuredAgentResponse will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Console/Commands/JudgeAiWorld.php
+
+		-
+			message: '#^Parameter \#1 \$planet of method Modules\\AI\\Actions\\ReplayAiEconomyScheduleAction\:\:handle\(\) expects OGame\\Services\\PlanetService, OGame\\Services\\PlanetService\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/ReplayAiRlSchedule.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$kind\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Call to an undefined method Carbon\\CarbonImmutable\:\:floatDiffInHours\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Call to an undefined method FFI\:\:fight_battle_rounds\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Call to an undefined method FFI\:\:free_battle_result\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Method Modules\\AI\\Console\\Commands\\SimulateAiTime\:\:players\(\) should return list\<int\> but returns array\<int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Method Modules\\AI\\Console\\Commands\\SimulateAiTime\:\:runRows\(\) should return array\{sessions\: int, other\: int, errors\: int\} but returns non\-empty\-array\<\(float\|int\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Parameter \#1 \$rows of method Modules\\AI\\Console\\Commands\\SimulateAiTime\:\:runRows\(\) expects list\<object\>, array\<int, stdClass\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Parameter \#2 \$hour of method Modules\\AI\\Console\\Commands\\SimulateAiTime\:\:reportHour\(\) expects array\{sessions\: int, other\: int, errors\: int\}, non\-empty\-array\<\(float\|int\)\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Template type T of method Modules\\AI\\Console\\Commands\\SimulateAiTime\:\:timed\(\) is not referenced in a parameter\.$#'
+			identifier: method.templateTypeNotInParameter
+			count: 1
+			path: app/Console/Commands/SimulateAiTime.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Responses\\StructuredAgentResponse and Laravel\\Ai\\Responses\\StructuredAgentResponse will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Console/Commands/WriteAiHumanTexts.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function fclose expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/WriteAiHumanTexts.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function fwrite expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/WriteAiHumanTexts.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Responses\\StructuredAgentResponse and Laravel\\Ai\\Responses\\StructuredAgentResponse will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Console/Commands/WriteAiSocialVoices.php
+
+		-
+			message: '#^Parameter \#1 \$keys of method Modules\\AI\\Console\\Commands\\WriteAiSocialVoices\:\:checked\(\) expects list\<array\<string, mixed\>\>, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/WriteAiSocialVoices.php
+
+		-
+			message: '#^Parameter \#1 \$lines of method Modules\\AI\\Console\\Commands\\WriteAiSocialVoices\:\:sharedSlots\(\) expects list\<string\>, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/WriteAiSocialVoices.php
+
+		-
+			message: '#^Method Modules\\AI\\Contracts\\QueueAiRaid\:\:handle\(\) has parameter \$launchUnits with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Contracts/QueueAiRaid.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 3
+			path: app/Domain/Advisor/Advisor.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Domain/Advisor/AdvisorQuestion.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\CampaignConsultation\\CampaignConsultationRequest\:\:__construct\(\) has parameter \$evidenceIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/CampaignConsultation/CampaignConsultationRequest.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Choice\\ChoiceRecorder\:\:file\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domain/Choice/ChoiceRecorder.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Choice\\ChoiceRecorder\:\:file\(\) should return resource\|null but empty return statement found\.$#'
+			identifier: return.empty
+			count: 2
+			path: app/Domain/Choice/ChoiceRecorder.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Choice\\ErrandChoiceEncoder\:\:features\(\) should return list\<float\> but returns array\<int\<0, max\>, float\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Choice/ErrandChoiceEncoder.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Choice\\SocketChoicePolicy\:\:connection\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domain/Choice/SocketChoicePolicy.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Choice\\SocketChoicePolicy\:\:connection\(\) should return resource\|null but empty return statement found\.$#'
+			identifier: return.empty
+			count: 2
+			path: app/Domain/Choice/SocketChoicePolicy.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Choice\\YardChoiceEncoder\:\:features\(\) should return array\{list\<float\>, float\} but returns array\{array\<int\<0, max\>, float\>, float\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Choice/YardChoiceEncoder.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Coordinate.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Coordinates/Coordinate.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\CandidateActionFactory\:\:enemyReports\(\) should return list\<string\> but returns array\<non\-falsy\-string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/CandidateActionFactory.php
+
+		-
+			message: '#^Offset ''anchor_count'' on array\{doctrine\: string, anchor_count\: int\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Domain/Decision/DefenseCompositionPlanner.php
+
+		-
+			message: '#^Offset ''doctrine'' on array\{doctrine\: string, anchor_count\: int\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Domain/Decision/DefenseCompositionPlanner.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/Decision/DefenseNeedEvaluator.php
+
+		-
+			message: '#^Constant Modules\\AI\\Domain\\Decision\\EconomyUpgrades\:\:EXPERIENCE_WEIGHT_PERCENT is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: app/Domain/Decision/EconomyUpgrades.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\Enemies\:\:membersOf\(\) should return list\<int\> but returns array\<int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/Enemies.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\Enemies\:\:of\(\) should return array\<int, true\> but returns array\<int, bool\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/Enemies.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\Enemies\:\:spared\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/Enemies.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\Enemies\:\:truces\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/Enemies.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\FacilityChain\:\:withProducers\(\) should return list\<Modules\\AI\\Domain\\Decision\\BuildCandidate\> but returns array\<int\|string, Modules\\AI\\Domain\\Decision\\BuildCandidate\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/FacilityChain.php
+
+		-
+			message: '#^Parameter &\$ordered by\-ref type of method Modules\\AI\\Domain\\Decision\\FacilityChain\:\:sortOrdered\(\) expects array\<string, array\{level\: int, candidate\: Modules\\AI\\Domain\\Decision\\BuildCandidate\}\>, list\<array\{level\: int, candidate\: Modules\\AI\\Domain\\Decision\\BuildCandidate\}\> given\.$#'
+			identifier: parameterByRef.type
+			count: 1
+			path: app/Domain/Decision/FacilityChain.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\QueueableBuildingPlanner\:\:choiceSets\(\) should return list\<array\{planet\: OGame\\Services\\PlanetService, research\: bool, candidates\: list\<array\{candidate\: Modules\\AI\\Domain\\Decision\\BuildCandidate, pass\: string, legal\: bool, teacherOk\: bool, spendable\: bool, payableLater\: bool\}\>, teacher\: int\|null\}\> but returns list\<array\{planet\: OGame\\Services\\PlanetService, research\: bool, candidates\: list\<array\{candidate\: Modules\\AI\\Domain\\Decision\\BuildCandidate, pass\: string, legal\: bool, teacherOk\: bool, spendable\: bool\}\>, teacher\: int\|null\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Decision/QueueableBuildingPlanner.php
+
+		-
+			message: '#^Parameter \#1 \$player of method OGame\\Services\\ResearchQueueService\:\:activeResearchQueueItemCount\(\) expects OGame\\Services\\PlayerService, OGame\\Services\\PlayerService\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Decision/QueueableBuildingPlanner.php
+
+		-
+			message: '#^Binary operation "\+" between float\|int\|string and 3600 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: app/Domain/Decision/QueueableJumpGatePlanner.php
+
+		-
+			message: '#^Parameter \#2 \$transferable of method Modules\\AI\\Domain\\Decision\\QueueableJumpGatePlanner\:\:carries\(\) expects list\<string\>, array\<int, string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Decision/QueueableJumpGatePlanner.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Decision/QueueableOfficerPlanner.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Decision/QueueableRelocationPlanner.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Decision/QueueableTradePlanner.php
+
+		-
+			message: '#^Cannot call method getId\(\) on OGame\\Services\\PlayerService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Decision/QueueableUnitPlanner.php
+
+		-
+			message: '#^Instanceof between OGame\\GameObjects\\Models\\DefenseObject and OGame\\GameObjects\\Models\\UnitObject will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 2
+			path: app/Domain/Decision/QueueableUnitPlanner.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$arg1 of function max expects non\-empty\-array, list\<float\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Decision/QueueableUnitPlanner.php
+
+		-
+			message: '#^Parameter \#2 \$unit of method Modules\\AI\\Domain\\Decision\\QueueableUnitPlanner\:\:queueable\(\) expects OGame\\GameObjects\\Models\\UnitObject, OGame\\GameObjects\\Models\\UnitObject\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Decision/QueueableUnitPlanner.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>defenceValue" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/Decision/QueueableUnitPlanner.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Decision\\RaidPlanner\:\:reject\(\) never returns Modules\\AI\\Domain\\Decision\\QueueableRaid so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Domain/Decision/RaidPlanner.php
+
+		-
+			message: '#^Parameter \#2 \$targetMix of method Modules\\AI\\Domain\\Decision\\RaidPlanner\:\:counterScore\(\) expects list\<OGame\\GameObjects\\Models\\Units\\UnitEntry\>, non\-empty\-array\<OGame\\GameObjects\\Models\\Units\\UnitEntry\> given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Domain/Decision/RaidPlanner.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Decision/RaidPlanner.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Decision/RaidWavePlan.php
+
+		-
+			message: '#^Parameter \#3 \$threatenedPlanetIds of method Modules\\AI\\Domain\\Decision\\QueueableTransferPlanner\:\:evacuationPlan\(\) expects list\<int\>, array\<int, int\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Decision/ThreatResponsePlanner.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>defenceValue" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/Decision/ThreatResponsePlanner.php
+
+		-
+			message: '#^Argument of an invalid type list\<string\>\|false supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 1
+			path: app/Domain/Defense/AntiBallisticMissile.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Defense/AntiBallisticMissile.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Domain/Doctrine/ArchetypeDoctrine.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Domain/Doctrine/ArchetypeDoctrine.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 2
+			path: app/Domain/Doctrine/ArchetypeDoctrine.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Language\\DistilledTextModel\:\:probabilities\(\) should return list\<float\> but returns array\<float\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Language/DistilledTextModel.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<float\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Domain/Language/DistilledTextModel.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$arg1 of function max expects non\-empty\-array, array\<float\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Language/DistilledTextModel.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$arg1 of function max expects non\-empty\-array, list\<float\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Language/DistilledTextModel.php
+
+		-
+			message: '#^Property Modules\\AI\\Models\\AiGoal\:\:\$abandon_after \(Illuminate\\Support\\Carbon\) does not accept Carbon\\CarbonInterface\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/Login/GoalBoard.php
+
+		-
+			message: '#^Property Modules\\AI\\Models\\AiGoal\:\:\$started_at \(Illuminate\\Support\\Carbon\) does not accept Carbon\\CarbonImmutable\|Illuminate\\Support\\Carbon\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/Login/GoalBoard.php
+
+		-
+			message: '#^Offset ''label'' on array\{name\?\: string, points\?\: int\} on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domain/Operability/AiSituationOverview.php
+
+		-
+			message: '#^Offset ''return_at'' on array\{name\?\: string, points\?\: int\} on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domain/Operability/AiSituationOverview.php
+
+		-
+			message: '#^Offset ''source'' on array\{name\?\: string, points\?\: int\} on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domain/Operability/AiSituationOverview.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between '''' and ''phalanx'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Operability/AiSituationOverview.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type OGame\\Services\\PlayerService\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/Perception/ActivityIntelReader.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Domain/Position/Position.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Raid\\ReportedPlanet\:\:cheapestFighter\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Raid\\ReportedPlanet\:\:militaryValue\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Raid\\ReportedPlanet\:\:olderSection\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Result of && is always true\.$#'
+			identifier: booleanAnd.alwaysTrue
+			count: 1
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 1
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between array\<string, int\> and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between array\<string, int\> and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 2
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Raid/ReportedPlanet.php
+
+		-
+			message: '#^Offset ''id'' on array\{id\: int, resources\: array\<string, float\|int\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domain/Scheduling/SessionDecisionService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\Alliance\>\|OGame\\Models\\Alliance\:\:\$is_open\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:aiManagers\(\) should return list\<int\> but returns array\<int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:bandScore\(\) has parameter \$weights with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:commonEnemyScore\(\) has parameter \$fit with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:enemies\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:fitScore\(\) has parameter \$account with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:fitScore\(\) has parameter \$club with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:fitScore\(\) has parameter \$fit with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:fits\(\) has parameter \$account with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:fits\(\) has parameter \$club with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:fits\(\) has parameter \$fit with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:languageScore\(\) has parameter \$weights with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:tierScore\(\) has parameter \$tier with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Parameter \#1 \$alliance of method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:clubFit\(\) expects OGame\\Models\\Alliance, Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\Alliance\>\|OGame\\Models\\Alliance given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Parameter \#1 \$alliance of method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:holdsCohortShare\(\) expects OGame\\Models\\Alliance, Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\Alliance\>\|OGame\\Models\\Alliance given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Parameter \#2 \$alliance of method Modules\\AI\\Domain\\Social\\AllianceChoice\:\:holdsEnemy\(\) expects OGame\\Models\\Alliance, Illuminate\\Database\\Eloquent\\Collection\<int, OGame\\Models\\Alliance\>\|OGame\\Models\\Alliance given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Property Modules\\AI\\Domain\\Social\\AllianceChoice\:\:\$aiManagers \(list\<int\>\|null\) does not accept array\<int\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Property Modules\\AI\\Domain\\Social\\AllianceChoice\:\:\$enemies \(array\<int, list\<int\>\>\) does not accept non\-empty\-array\<int, array\<int, int\>\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Domain/Social/AllianceChoice.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Exceptions/InvalidCoordinateException.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>username" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/AIController.php
+
+		-
+			message: '#^Method Modules\\AI\\Http\\Controllers\\HarnessStatusController\:\:harnessState\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/HarnessStatusController.php
+
+		-
+			message: '#^Property Modules\\AI\\Infrastructure\\Cognition\\FatimaCognitionSession\:\:\$template is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Infrastructure/Cognition/FatimaCognitionSession.php
+
+		-
+			message: '#^Method Modules\\AI\\Infrastructure\\Cognition\\PsychSimClient\:\:decide\(\) should return ''cooperate''\|''defect''\|null but returns string\|null\.$#'
+			identifier: return.type
+			count: 2
+			path: app/Infrastructure/Cognition/PsychSimClient.php
+
+		-
+			message: '#^Method Modules\\AI\\Infrastructure\\Diplomacy\\AiAllianceRelationTreaties\:\:warsStartedBy\(\) should return list\<array\{int, int\}\> but returns array\<int, array\{int, int\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Infrastructure/Diplomacy/AiAllianceRelationTreaties.php
+
+		-
+			message: '#^Method Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties\:\:counterparts\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Infrastructure/Diplomacy/EmpireAllianceTreaties.php
+
+		-
+			message: '#^Method Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties\:\:warsStartedBy\(\) should return list\<array\{int, int\}\> but returns array\<int, array\{int, int\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Infrastructure/Diplomacy/EmpireAllianceTreaties.php
+
+		-
+			message: '#^Method Modules\\AI\\Infrastructure\\Experience\\CbrKitClient\:\:rankMany\(\) should return array\<string, array\<int, float\>\>\|null but returns array\<string, array\<int, float\>\|null\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Infrastructure/Experience/CbrKitClient.php
+
+		-
+			message: '#^Property Modules\\AI\\Infrastructure\\Experience\\CbrKitExperienceEngine\:\:\$similarityCache \(array\<string, array\<int, float\>\>\) does not accept array\<string, array\<int, float\>\|null\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Infrastructure/Experience/CbrKitExperienceEngine.php
+
+		-
+			message: '#^Call to function method_exists\(\) with ''\\\\OGame\\\\GameMissions…'' and ''binding'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Infrastructure/Experience/RustCaseSimilarity.php
+
+		-
+			message: '#^Method Modules\\AI\\Infrastructure\\Memory\\AgentOsClient\:\:recall\(\) should return list\<int\>\|null but returns array\<mixed, mixed\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Infrastructure/Memory/AgentOsClient.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Illuminate\\Queue\\Failed\\DatabaseUuidFailedJobProvider and ''ids'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Jobs/RunAiOperationJob.php
+
+		-
+			message: '#^Method Modules\\AI\\Models\\AiAllianceRelation\:\:counterparts\(\) should return list\<int\> but returns array\<int, int\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/AiAllianceRelation.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Providers/AIServiceProvider.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 2
+			path: app/Support/AiSettings.php
+
+		-
+			message: '#^Parameter \#1 \$filename of function is_file expects string, string\|true given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/AiSettings.php
+
+		-
+			message: '#^Parameter \#1 \$filename of static method Symfony\\Component\\Yaml\\Yaml\:\:parseFile\(\) expects string, string\|true given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/AiSettings.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method Modules\\AI\\Support\\AiSettings\:\:cast\(\) expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/AiSettings.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Support/AiSettings.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Support/PlanetLabel.php
+
+		-
+			message: '#^Resolve module\-managed objects through app\(\) or app\(\)\-\>makeWith\(\)\.$#'
+			identifier: ai.directInstantiation
+			count: 1
+			path: app/Support/SafetyProbeWindow.php

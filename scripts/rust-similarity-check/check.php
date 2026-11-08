@@ -1,4 +1,5 @@
 <?php
+
 // Compares the Rust case similarity (rank_case_similarities in the host's libbattle_engine_ffi.so) with the
 // CBRKit retriever's own Python measure on 60,000 random (case, query) pairs, including nulls, text, bools,
 // identity ids as ints/floats/strings and unknown features. Any mismatch above 1e-12 fails the check.
@@ -16,13 +17,22 @@ if ($p === null) {
 }
 $out = json_decode(FFI::string($p), true);
 $ffi->free_battle_result($p);
-$max = 0.0; $n = 0; $bad = 0;
+$max = 0.0;
+$n = 0;
+$bad = 0;
 foreach ($d['expected'] as $q => $scores) {
     foreach ($scores as $id => $expected) {
-        $got = $out[$q][$id] ?? null; $n++;
-        if ($got === null) { $bad++; continue; }
-        $diff = abs($got - $expected); $max = max($max, $diff);
-        if ($diff > 1e-12) { $bad++; }
+        $got = $out[$q][$id] ?? null;
+        $n++;
+        if ($got === null) {
+            $bad++;
+            continue;
+        }
+        $diff = abs($got - $expected);
+        $max = max($max, $diff);
+        if ($diff > 1e-12) {
+            $bad++;
+        }
     }
 }
 printf("compared %d scores, max abs diff %.3g, mismatches %d\n", $n, $max, $bad);

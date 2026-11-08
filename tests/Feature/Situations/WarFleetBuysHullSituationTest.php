@@ -23,8 +23,8 @@ function warFleetDearestHull(PlanetService $planet): ?string
     $dearestPrice = 0.0;
 
     foreach (ObjectService::getMilitaryShipObjects() as $hull) {
-        if (! ObjectService::objectRequirementsMet($hull->machine_name, $planet)
-            || ! ObjectService::objectCharacterClassMet($hull->machine_name, $planet)) {
+        if (!ObjectService::objectRequirementsMet($hull->machine_name, $planet)
+            || !ObjectService::objectCharacterClassMet($hull->machine_name, $planet)) {
             continue;
         }
 

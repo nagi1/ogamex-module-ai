@@ -12,7 +12,7 @@ function colonyConceptRoot(): string
 
 function colonyConceptSpecPath(): string
 {
-    return colonyConceptRoot() . '/plan/ogame/concepts/WIK-139-colony.md';
+    return colonyConceptRoot() . '/plan/archive/ogame/concepts/WIK-139-colony.md';
 }
 
 function colonyConceptSpec(): string
@@ -68,7 +68,7 @@ function colonyConceptPlanDocuments(): array
 {
     $root = colonyConceptRoot() . '/plan';
 
-    if (! is_dir($root)) {
+    if (!is_dir($root)) {
         return [];
     }
 

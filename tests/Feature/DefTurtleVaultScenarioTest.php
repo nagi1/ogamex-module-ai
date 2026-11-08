@@ -41,7 +41,7 @@ function referencesSlotEight(mixed $value): bool
         return false;
     }
 
-    if (! is_string($value)) {
+    if (!is_string($value)) {
         return false;
     }
 
