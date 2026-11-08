@@ -70,6 +70,11 @@ class QueueAiRaidAction implements QueueAiRaid
             // covers stay where they are, so that haul is still there to take
             // (LIFE_FIGHTS).
             $target = $this->planetServiceFactory->makeForCoordinate($targetCoordinate, false, PlanetType::from($targetType));
+            // A pact signed or a club joined between the decision and this launch binds now: the planners spare the same
+            // list (Enemies::spared), and a decision written before the pact must not fly at the partner.
+            if ($target !== null && in_array((int) $target->getPlayer()?->getId(), app(Enemies::class)->spared($playerId), true)) {
+                return AiActionResult::rejected(AiQueueActionReason::TargetSparedAtDispatch);
+            }
             // A moon strike flies at an online defender too: the fleet can be saved, the moon cannot. So does a strike on an
             // enemy at war: an alliance hits whoever is online, and the defender's answer (a save or a fight) is the war.
             $strike = $missionType === MoonDestructionMission::getTypeId()

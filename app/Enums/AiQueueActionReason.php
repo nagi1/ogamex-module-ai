@@ -19,6 +19,7 @@ enum AiQueueActionReason: string
     case NothingQueueable = 'nothing_queueable';
     case TargetActiveAtDispatch = 'target_active_at_dispatch';
     case TargetStagingAtDispatch = 'target_staging_at_dispatch';
+    case TargetSparedAtDispatch = 'target_spared_at_dispatch';
     case NoDeploymentToRecall = 'no_deployment_to_recall';
     case UnderAttack = 'under_attack';
     case NoDisposableFleet = 'no_disposable_fleet';

@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiSpy;
+use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use Modules\AI\Support\FlightFuel;
@@ -47,6 +48,13 @@ class QueueAiSpyAction implements QueueAiSpy
             }
             if ($player->isInVacationMode()) {
                 return AiActionResult::rejected(AiQueueActionReason::VacationMode);
+            }
+
+            // A pact signed or a club joined since the probe was decided binds now (Enemies::spared, as the planner reads it).
+            $owner = Planet::query()->where('galaxy', $targetGalaxy)->where('system', $targetSystem)->where('planet', $targetPosition)
+                ->where('planet_type', $targetType)->where('destroyed', 0)->value('user_id');
+            if ($owner !== null && in_array((int) $owner, app(Enemies::class)->spared($playerId), true)) {
+                return AiActionResult::rejected(AiQueueActionReason::TargetSparedAtDispatch);
             }
 
             $planet = $this->planetServiceFactory->makeForPlayer($player, $planetId, false);

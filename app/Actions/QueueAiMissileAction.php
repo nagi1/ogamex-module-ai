@@ -4,6 +4,7 @@ namespace Modules\AI\Actions;
 
 use Exception;
 use Modules\AI\Contracts\QueueAiMissile;
+use Modules\AI\Domain\Decision\Enemies;
 use Modules\AI\Enums\AiQueueActionReason;
 use Modules\AI\Support\AiActionResult;
 use OGame\Factories\PlanetServiceFactory;
@@ -61,6 +62,10 @@ class QueueAiMissileAction implements QueueAiMissile
             $target = $this->planetServiceFactory->makeForCoordinate($targetCoordinate, true, $type);
             if ($target === null) {
                 return AiActionResult::rejected(AiQueueActionReason::PlanetNotOwned);
+            }
+            // A pact signed or a club joined since the volley was decided binds now (Enemies::spared, as the planner reads it).
+            if (in_array((int) $target->getPlayer()?->getId(), app(Enemies::class)->spared($playerId), true)) {
+                return AiActionResult::rejected(AiQueueActionReason::TargetSparedAtDispatch);
             }
 
             $distance = abs($origin->getPlanetCoordinates()->system - $targetSystem);
