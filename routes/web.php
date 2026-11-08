@@ -41,6 +41,8 @@ Route::middleware(['auth', 'banned', 'globalgame', 'locale', 'firstlogin', 'admi
         Route::post('/account/switch', [AIController::class, 'switchAccount'])->name('account.switch');
         // The per-account drill-down is a read: the board links to it, it writes nothing.
         Route::get('/account/{player}', [AIController::class, 'account'])->name('account');
+        // The model lab is a dry run of the trained models on live state: a read, and a 404 unless config turns it on.
+        Route::get('/models', [AIController::class, 'models'])->name('models');
     });
 
 // The coalition campaign page is a read-only situation log: any logged-in player can read it,

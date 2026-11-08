@@ -23,14 +23,7 @@
                     <div class="ai-console">
                     {{-- The page splits into the same tabs the host's activity log uses, so one view
                          answers one question and the heavy report never slows the default load. --}}
-                    <p class="box_highlight textCenter no_buddies">
-                        <a class="btn_blue {{ $tab === 'health' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'health']) }}">{{ __('t_ai.tab_health') }}</a>
-                        <a class="btn_blue {{ $tab === 'llm' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'llm']) }}">{{ __('t_ai.tab_llm') }}</a>
-                        <a class="btn_blue {{ $tab === 'players' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'players']) }}">{{ __('t_ai.tab_players') }}</a>
-                        <a class="btn_blue {{ $tab === 'settings' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'settings']) }}">{{ __('t_ai.tab_settings') }}</a>
-                        <a class="btn_blue {{ $tab === 'operations' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'operations']) }}">{{ __('t_ai.tab_operations') }}</a>
-                        <a class="btn_blue {{ $tab === 'campaigns' ? 'active' : '' }}" href="{{ route('ai.index', ['tab' => 'campaigns']) }}">{{ __('t_ai.tab_campaigns') }}</a>
-                    </p>
+                    @include('ai::partials.console-tabs', ['tab' => $tab])
 
                     @if ($tab === 'health')
                         @include('ai::partials.health', [

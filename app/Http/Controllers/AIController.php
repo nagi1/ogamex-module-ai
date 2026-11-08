@@ -11,6 +11,7 @@ use Illuminate\Validation\Rule;
 use Modules\AI\Actions\BuildAiAuthenticityPanelAction;
 use Modules\AI\Actions\BuildAiCampaignControlAction;
 use Modules\AI\Actions\BuildAiLlmPanelAction;
+use Modules\AI\Actions\BuildAiModelLabAction;
 use Modules\AI\Actions\BuildAiOperationsPanelAction;
 use Modules\AI\Actions\BuildAiPilotReportAction;
 use Modules\AI\Actions\BuildAiPlayerRosterAction;
@@ -377,6 +378,30 @@ class AIController extends OGameController
     /**
      * The requested tab, or the overview when the value is not one of the offered ones.
      */
+    /**
+     * The model lab: the trained weight models run on every account's live login as a dry run (rolled back, nothing
+     * queued), so an operator sees what each model reads, scores and picks. Hidden unless `ai.model_lab.enabled`.
+     */
+    public function models(Request $request): Factory|View
+    {
+        abort_unless((bool) config('ai.model_lab.enabled'), 404);
+        $this->setBodyId('overview');
+        $model = $request->query('model');
+        $player = $request->query('player');
+
+        /** @var view-string $view */
+        $view = 'ai::models';
+
+        return view($view, [
+            'title' => __('t_ai.title'),
+            'tab' => 'models',
+            'lab' => app(BuildAiModelLabAction::class)->handle(
+                is_string($model) ? $model : null,
+                is_numeric($player) ? (int) $player : null,
+            ),
+        ]);
+    }
+
     private function tab(Request $request): string
     {
         $requested = $request->query('tab');
