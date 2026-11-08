@@ -812,6 +812,8 @@ test('a won raid on an enemy moon flies as moon destruction with every deathstar
     $this->planetAddUnit('deathstar', 2);
     $foreign = $this->createForeignPlanet();
     $moon = app(PlanetServiceFactory::class)->createMoonForPlanet($foreign, 2_000_000, 20, 15);
+    // The owner is a war enemy: a neutral moon worth raiding is raided, not destroyed.
+    AiRelationship::unguarded(fn () => AiRelationship::create(['player_id' => $this->currentUserId, 'other_player_id' => $foreign->getPlayer()->getId(), 'threat' => '1.0000', 'trust' => '-1.0000', 'revision' => 0]));
     $coordinates = $foreign->getPlanetCoordinates();
     $reportId = raidDepthReport($this->currentUserId, $coordinates->galaxy, $coordinates->system, $coordinates->position, ['metal' => 1_000_000, 'crystal' => 1_000_000, 'deuterium' => 1_000_000], $foreign->getPlayer()?->getId());
     EspionageReport::query()->whereKey($reportId)->update(['planet_type' => $moon->getPlanetType()->value]);

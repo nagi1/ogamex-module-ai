@@ -7,6 +7,7 @@ use OGame\Factories\PlayerServiceFactory;
 use OGame\Models\EspionageReport;
 use OGame\Models\FleetMission;
 use OGame\Models\FleetUnion;
+use OGame\Models\Planet;
 use OGame\Models\Resources;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
@@ -76,6 +77,12 @@ test('a mate attacking the target of an open ACS joins it', function (): void {
     $this->planetAddResources(new Resources(0, 0, 1_000_000));
     $this->planetAddUnit('cruiser', 20);
     [$mate, $target] = acsWar($this->currentUserId, fn () => $this->createForeignPlanet());
+    // The host joins a fleet that arrives within 30% of the union's remaining time; random placements put the mate
+    // too far some runs, so it waits in the target's own system.
+    $at = $target->getPlanetCoordinates();
+    $taken = Planet::query()->where('galaxy', $at->galaxy)->where('system', $at->system)->pluck('planet')->all();
+    Planet::query()->whereKey($mate->getPlanetId())->update(['galaxy' => $at->galaxy, 'system' => $at->system, 'planet' => min(array_diff(range(1, 15), $taken))]);
+    $mate->reloadPlanet();
     $opened = acsAttack($this->currentUserId, $this->currentPlanetId, $target);
 
     $joined = acsAttack($mate->getPlayer()->getId(), $mate->getPlanetId(), $target);

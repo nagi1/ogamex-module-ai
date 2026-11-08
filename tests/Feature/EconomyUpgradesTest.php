@@ -113,7 +113,7 @@ test('a warehouse about to fill is offered before the next upgrade', function ()
  */
 test('a store with room for an hour of output is raised only once it is half full', function (): void {
     $this->planetSetObjectLevel('solar_plant', 25);
-    $this->planetSetObjectLevel('metal_mine', 20);
+    $this->planetSetObjectLevel('metal_mine', 19); // level 20 out-produces a level-2 store on the warmest slots
     $this->planetSetObjectLevel('crystal_mine', 20);
     $this->planetSetObjectLevel('metal_store', 2);
     economyRefresh($this->planetService);
