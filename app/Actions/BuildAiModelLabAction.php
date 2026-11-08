@@ -5,21 +5,27 @@ namespace Modules\AI\Actions;
 use Illuminate\Support\Facades\DB;
 use JsonException;
 use Modules\AI\Domain\Choice\ChoicePoint;
+use Modules\AI\Domain\Choice\EconomyChoiceEncoder;
+use Modules\AI\Domain\Choice\EconomyPolicyModel;
 use Modules\AI\Domain\Choice\ErrandPolicyModel;
 use Modules\AI\Domain\Choice\WideErrandEncoder;
 use Modules\AI\Domain\Decision\DecisionEngine;
+use Modules\AI\Domain\Decision\QueueableBuildingPlanner;
 use Modules\AI\Domain\Login\LoginPlans;
 use Modules\AI\Domain\Perception\PlayerPerceptionBuilder;
 use Modules\AI\Models\AiProfile;
 use OGame\Factories\PlayerServiceFactory;
+use OGame\Services\ObjectService;
 use Throwable;
 
 /**
- * The model lab (config `ai.model_lab`): the trained weight models run on the live accounts' real game state.
+ * The model lab (config `ai.model_lab`): the two trained models the game can run, asked about every AI account's
+ * situation right now, in words an operator reads without knowing how they were trained.
  *
- * Each scenario is the login an account would have now: the same perception, the same engine ranking and the same wide
- * errand encoder the session uses, scored by the same `ErrandPolicyModel` the game deploys. It is a dry run: everything
- * happens inside a transaction that is rolled back, and nothing is queued, so opening the page never moves the game.
+ * The fleet model (`ai.rl.errand_model`) answers "what should my fleet do this login", the economy model
+ * (`ai.rl.economy_model`) "what should I build or research next". Each is asked exactly as the game asks it: the same
+ * perception, the same planner and the same encoders. It is a dry run: everything happens inside a transaction that is
+ * rolled back, and nothing is queued, so opening the page never moves the game.
  */
 class BuildAiModelLabAction
 {
@@ -30,80 +36,257 @@ class BuildAiModelLabAction
         private PlayerPerceptionBuilder $perceptions,
         private DecisionEngine $engine,
         private PlayerServiceFactory $players,
-        private WideErrandEncoder $encoder,
+        private WideErrandEncoder $errands,
+        private QueueableBuildingPlanner $planner,
+        private EconomyChoiceEncoder $economy,
     ) {
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function handle(string|null $modelKey, int|null $playerId): array
+    /** @return array<string, mixed> */
+    public function handle(int|null $playerId): array
     {
-        $models = $this->models();
-        $runnable = array_filter($models, static fn (array $model): bool => $model['runnable']);
-        $selected = $modelKey !== null && isset($runnable[$modelKey]) ? $modelKey : (string) (array_key_first($runnable) ?? '');
-        $profiles = AiProfile::query()->orderBy('player_id')->get();
+        $fleetPath = (string) (config('ai.model_lab.fleet_model') ?: config('ai.rl.errand_model'));
+        $economyPath = (string) (config('ai.model_lab.economy_model') ?: config('ai.rl.economy_model'));
+        $fleet = is_file($fleetPath) ? ErrandPolicyModel::parse((string) file_get_contents($fleetPath)) : null;
+        $economy = is_file($economyPath) ? EconomyPolicyModel::parse((string) file_get_contents($economyPath)) : null;
 
-        $overview = [];
-        if ($selected !== '') {
-            foreach ($profiles as $profile) {
-                $overview[] = $this->summary($profile, $this->scenario($profile, $models[$selected]));
-            }
-        }
-
+        $accounts = [];
         $detail = null;
-        $profile = $playerId === null ? null : $profiles->firstWhere('player_id', $playerId);
-        if ($profile instanceof AiProfile && $selected !== '') {
-            $detail = $this->scenario($profile, $models[$selected]);
-            $detail['compare'] = [];
-            foreach ($runnable as $key => $model) {
-                $other = $key === $selected ? $detail : $this->scenario($profile, $model);
-                $detail['compare'][] = ['key' => $key, 'label' => $model['label'], 'pick' => $other['model_pick_label'] ?? '-', 'share' => $other['model_pick_share'] ?? null, 'agrees' => $other['agrees'] ?? null, 'value' => $other['value'] ?? null];
-            }
+        foreach (AiProfile::query()->orderBy('player_id')->get() as $profile) {
+            $open = $profile->player_id === $playerId;
+            $account = $this->account($profile, $fleet, $fleetPath, $economy, $economyPath, $open);
+            $accounts[] = $account;
+            $detail = $open ? $account : $detail;
         }
 
         return [
-            'models' => $models,
-            'selected' => $selected,
-            'overview' => $overview,
-            'agreement' => $this->agreement($overview),
+            'fleet' => $this->modelCard($fleet, $fleetPath, (bool) config('ai.rl.errand_model'), array_column($accounts, 'fleet')),
+            'economy' => $this->modelCard($economy, $economyPath, config('ai.rl.policy') === 'model' && (bool) config('ai.rl.economy_model'), array_merge([], ...array_column($accounts, 'economy'))),
+            'accounts' => $accounts,
             'detail' => $detail,
-            'player_id' => $profile instanceof AiProfile ? $profile->player_id : null,
-            'sigma' => (float) config('ai.model_lab.outlier_sigma', 4.0),
         ];
     }
 
     /**
-     * The configured models, each with what its file says about itself and whether it can run on the game's state.
+     * One account: what its fleet and its builds would do now, by the planner and by each model.
      *
-     * @return array<string, array<string, mixed>>
+     * @return array<string, mixed>
      */
-    private function models(): array
+    private function account(AiProfile $profile, ErrandPolicyModel|null $fleet, string $fleetPath, EconomyPolicyModel|null $economy, string $economyPath, bool $open): array
     {
-        $models = [];
-        foreach (array_filter(array_map('trim', explode(',', (string) config('ai.model_lab.models', '')))) as $entry) {
-            [$label, $path] = array_pad(array_map('trim', explode('=', $entry, 2)), 2, '');
-            if ($path === '') {
-                continue;
+        $plans = app(LoginPlans::class);
+        $result = ['player_id' => $profile->player_id, 'archetype' => $profile->archetype->name, 'error' => null, 'fleet' => null, 'economy' => []];
+        DB::beginTransaction();
+        try {
+            $plans->reset();
+            $player = $this->players->make($profile->player_id, true);
+            if ($player->planets->all() === []) {
+                return [...$result, 'error' => __('t_ai.lab_no_planets')];
             }
-            $path = str_starts_with($path, '/') ? $path : storage_path('rl/ogsim/runs/' . $path);
-            $raw = $this->raw($path);
-            $model = $raw === null ? null : ErrandPolicyModel::parse((string) file_get_contents($path));
-            $models[md5($path)] = [
-                'label' => $label,
-                'path' => $path,
-                'exists' => is_file($path),
-                'trained_at' => is_file($path) ? date('Y-m-d H:i', (int) filemtime($path)) : null,
-                'deployed' => $path === config('ai.rl.errand_model'),
-                'runnable' => $model !== null,
-                'model' => $model,
-                'raw' => $raw,
-                'shape' => $raw === null ? [] : $this->shape($raw),
-                'why_not' => $model !== null ? null : $this->whyNot($path, $raw),
-            ];
+            if ($fleet !== null) {
+                $perception = $this->perceptions->build($profile->player_id, 60);
+                $trace = $this->engine->decide($profile, $perception, 'model-lab:' . $profile->player_id);
+                $point = $this->errands->point($profile->player_id, $player, $trace, 'model-lab:' . $profile->player_id);
+                $result['fleet'] = $this->fleetChoice($profile, $fleet, $fleetPath, $point, $open);
+                $result['fleet']['skipped'] = $perception->fleetsaveEligible ? __('t_ai.lab_skip_save') : ($perception->reactionWakeAt !== null ? __('t_ai.lab_skip_wake') : null);
+            }
+            if ($economy !== null) {
+                $steps = $this->planner->steps($profile->player_id, $player);
+                $state = $this->economy->account($profile, $player)['state'];
+                foreach ($this->planner->choiceSets($profile->player_id, $steps, $player) as $set) {
+                    $point = $this->economy->point($profile->player_id, $state, $set, 'model-lab:' . $profile->player_id);
+                    $result['economy'][] = $this->economyChoice($economy, $economyPath, $point, $set['planet']->getPlanetName(), $open);
+                }
+            }
+        } catch (Throwable $exception) {
+            $result['error'] = $exception->getMessage();
+        } finally {
+            $plans->reset();
+            DB::rollBack();
         }
 
-        return $models;
+        return $result;
+    }
+
+    /** @return array<string, mixed> */
+    private function fleetChoice(AiProfile $profile, ErrandPolicyModel $model, string $path, ChoicePoint $point, bool $open): array
+    {
+        $scores = $model->scores($point);
+        $pick = $model->best($point);
+        $label = fn (int $row): string => $this->errandLabel($point->candidates[$row]->reason ?? 'wait');
+        $choice = [
+            'planner' => $label($point->teacherIndex),
+            'model' => $label($pick),
+            'agrees' => $pick === $point->teacherIndex,
+            'in_game' => ErrandPolicyModel::configured($profile) !== null ? 'model' : 'planner',
+        ];
+        if (!$open) {
+            return $choice;
+        }
+
+        $raw = (array) $this->raw($path);
+        $state = array_combine(WideErrandEncoder::STATE, $point->state);
+        $unusual = $this->unusual(WideErrandEncoder::STATE, $point->state, (array) ($raw['state_mean'] ?? []), (array) ($raw['state_std'] ?? []));
+
+        return [...$choice,
+            'facts' => array_values(array_filter([
+                $state['incoming_hours'] > 0 ? __('t_ai.lab_fact_incoming', ['hours' => number_format($state['incoming_hours'], 1)]) : __('t_ai.lab_fact_no_incoming'),
+                __('t_ai.lab_fact_slots', ['slots' => (int) round($state['fleet_slots_free'])]),
+                $state['warship_value'] > 0 ? __('t_ai.lab_fact_warships') : __('t_ai.lab_fact_no_warships'),
+                $state['has_moon'] > 0 ? __('t_ai.lab_fact_moon') : null,
+            ])),
+            'options' => $this->options($scores, $pick, $point->teacherIndex, $label),
+            'checks' => $this->checks($scores, $model->scores($point), $point->candidates[$pick]->legal, $unusual),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function economyChoice(EconomyPolicyModel $model, string $path, ChoicePoint $point, string $planet, bool $open): array
+    {
+        $scores = $model->scores($point);
+        $pick = $model->choose($point);
+        $label = fn (int $row): string => $this->objectLabel($point, $row);
+        $choice = [
+            'where' => $point->isResearch() ? __('t_ai.lab_where_research') : __('t_ai.lab_where_planet', ['planet' => $planet]),
+            'planner' => $label($point->teacherIndex),
+            'model' => $label($pick),
+            'agrees' => $pick === $point->teacherIndex,
+        ];
+        if (!$open) {
+            return $choice;
+        }
+
+        $raw = (array) $this->raw($path);
+        $columns = $model->columns($point);
+        $names = [...EconomyPolicyModel::STATE, ...EconomyPolicyModel::ACCOUNT];
+        $state = array_combine($names, $columns['state']);
+        $unusual = $this->unusual($names, $columns['state'], (array) ($raw['state_mean'] ?? []), (array) ($raw['state_std'] ?? []));
+
+        return [...$choice,
+            'facts' => [
+                __('t_ai.lab_fact_stock', ['metal' => $this->amount(expm1($state['pl_metal'])), 'crystal' => $this->amount(expm1($state['pl_crystal'])), 'deuterium' => $this->amount(expm1($state['pl_deuterium']))]),
+                __('t_ai.lab_fact_energy', ['percent' => (int) round($state['pl_factor'] * 100)]),
+                __('t_ai.lab_fact_fields', ['percent' => (int) round($state['pl_fields_used'] * 100)]),
+                __('t_ai.lab_fact_rank', ['percent' => max(1, (int) round($state['rank'] * 100))]),
+            ],
+            'options' => array_slice($this->options($scores, $pick, $point->teacherIndex, $label), 0, 8),
+            'alone' => $label($model->choose($point, false)),
+            'checks' => $this->checks($scores, $model->scores($point), $point->candidates[$pick]->legal, $unusual),
+        ];
+    }
+
+    /**
+     * Every option the model weighed, best liked first, as a share of 100%.
+     *
+     * @param array<int, float> $scores
+     * @param callable(int): string $label
+     * @return list<array{label: string, share: float, model: bool, planner: bool}>
+     */
+    private function options(array $scores, int $pick, int $planner, callable $label): array
+    {
+        $options = [];
+        if ($scores === []) {
+            return $options;
+        }
+        $top = max($scores);
+        $sum = array_sum(array_map(static fn (float $score): float => exp($score - $top), $scores));
+        foreach ($scores as $row => $score) {
+            $options[] = ['label' => $label($row), 'share' => exp($score - $top) / $sum, 'model' => $row === $pick, 'planner' => $row === $planner];
+        }
+        usort($options, static fn (array $a, array $b): int => $b['share'] <=> $a['share']);
+
+        return $options;
+    }
+
+    /**
+     * The plain checks under each answer.
+     *
+     * @param array<int, float> $scores
+     * @param array<int, float> $again
+     * @param list<string> $unusual
+     * @return list<array{ok: bool, text: string}>
+     */
+    private function checks(array $scores, array $again, bool $allowed, array $unusual): array
+    {
+        return [
+            ['ok' => $allowed, 'text' => $allowed ? __('t_ai.lab_check_allowed') : __('t_ai.lab_check_waits')],
+            ['ok' => $scores === $again && array_filter($scores, static fn (float $score): bool => !is_finite($score)) === [], 'text' => __('t_ai.lab_check_same')],
+            ['ok' => $unusual === [], 'text' => $unusual === [] ? __('t_ai.lab_check_familiar') : __('t_ai.lab_check_unfamiliar', ['what' => implode(', ', $unusual)])],
+        ];
+    }
+
+    /**
+     * The plain names of the inputs that sit far outside anything the model saw in training.
+     *
+     * @param list<string> $names
+     * @param list<float> $values
+     * @param array<mixed> $mean
+     * @param array<mixed> $std
+     * @return list<string>
+     */
+    private function unusual(array $names, array $values, array $mean, array $std): array
+    {
+        $sigma = (float) config('ai.model_lab.outlier_sigma', 4.0);
+        $found = [];
+        foreach ($values as $i => $value) {
+            $average = is_numeric($mean[$i] ?? null) ? (float) $mean[$i] : 0.0;
+            $spread = is_numeric($std[$i] ?? null) ? (float) $std[$i] : 1.0;
+            if (abs(($value - $average) / max(1e-9, $spread)) > $sigma) {
+                $found[] = $this->words('t_ai.lab_input_' . $names[$i], $names[$i]);
+            }
+        }
+
+        return array_values(array_unique($found));
+    }
+
+    /**
+     * @param array<mixed> $choices
+     * @return array<string, mixed>
+     */
+    private function modelCard(ErrandPolicyModel|EconomyPolicyModel|null $model, string $path, bool $inGame, array $choices): array
+    {
+        $choices = array_values(array_filter($choices, is_array(...)));
+
+        return [
+            'loaded' => $model !== null,
+            'in_game' => $inGame && $model !== null,
+            'file' => $path === '' ? '-' : basename(dirname($path)) . '/' . basename($path),
+            'asked' => count($choices),
+            'agree' => count(array_filter($choices, static fn (array $choice): bool => ($choice['agrees'] ?? false) === true)),
+        ];
+    }
+
+    private function errandLabel(string $kind): string
+    {
+        return $this->words('t_ai.lab_do_' . $kind, $kind);
+    }
+
+    private function words(string $key, string $fallback): string
+    {
+        $text = __($key);
+
+        return $text === $key ? $fallback : $text;
+    }
+
+    private function objectLabel(ChoicePoint $point, int $row): string
+    {
+        $id = $point->candidates[$row]->objectId ?? null;
+        if ($id === null) {
+            return __('t_ai.lab_do_wait');
+        }
+        $title = ObjectService::getObjectById($id)->title;
+
+        return $point->candidates[$row]->legal ? $title : __('t_ai.lab_save_for', ['what' => $title]);
+    }
+
+    private function amount(float $value): string
+    {
+        return match (true) {
+            $value >= 1e9 => number_format($value / 1e9, 1) . 'B',
+            $value >= 1e6 => number_format($value / 1e6, 1) . 'M',
+            $value >= 1e3 => number_format($value / 1e3, 1) . 'k',
+            default => number_format($value, 0),
+        };
     }
 
     /** @return array<string, mixed>|null */
@@ -123,291 +306,5 @@ class BuildAiModelLabAction
         }
 
         return self::$raw[$key];
-    }
-
-    /**
-     * @param array<string, mixed> $raw
-     * @return array<string, string>
-     */
-    private function shape(array $raw): array
-    {
-        $shape = [];
-        foreach ($raw as $name => $value) {
-            if (str_ends_with((string) $name, '.weight') && is_array($value) && is_array($value[0] ?? null)) {
-                $shape[substr((string) $name, 0, -7)] = count($value[0]) . ' → ' . count($value);
-            }
-        }
-
-        return $shape;
-    }
-
-    /** @param array<string, mixed>|null $raw */
-    private function whyNot(string $path, array|null $raw): string
-    {
-        if (!is_file($path)) {
-            return __('t_ai.lab_why_missing');
-        }
-        if ($raw === null) {
-            return __('t_ai.lab_why_unreadable');
-        }
-        if (($raw['_errand_feature_version'] ?? null) === null) {
-            return __('t_ai.lab_why_layout', [
-                'state' => count((array) ($raw['state_mean'] ?? [])),
-                'candidate' => count((array) ($raw['cand_mean'] ?? [])),
-            ]);
-        }
-
-        return __('t_ai.lab_why_version', ['version' => (string) $raw['_errand_feature_version'], 'expected' => WideErrandEncoder::VERSION]);
-    }
-
-    /**
-     * One account's login now, scored by one model.
-     *
-     * @param array<string, mixed> $model
-     * @return array<string, mixed>
-     */
-    private function scenario(AiProfile $profile, array $model): array
-    {
-        $started = microtime(true);
-        $plans = app(LoginPlans::class);
-        DB::beginTransaction();
-        try {
-            $plans->reset();
-            $perception = $this->perceptions->build($profile->player_id, 60);
-            $trace = $this->engine->decide($profile, $perception, 'model-lab:' . $profile->player_id);
-            $player = $this->players->make($profile->player_id, true);
-            $point = $player->planets->all() === [] ? null : $this->encoder->point($profile->player_id, $player, $trace, 'model-lab:' . $profile->player_id);
-        } catch (Throwable $exception) {
-            return ['profile' => $profile, 'error' => $exception->getMessage()];
-        } finally {
-            $plans->reset();
-            DB::rollBack();
-        }
-        if ($point === null) {
-            return ['profile' => $profile, 'error' => __('t_ai.lab_no_planets')];
-        }
-
-        /** @var ErrandPolicyModel $network */
-        $network = $model['model'];
-        $scores = $network->scores($point);
-        $again = $network->scores($point);
-        $pick = $network->best($point);
-        $shares = $this->softmax($scores);
-        $raw = (array) $model['raw'];
-        $sigma = (float) config('ai.model_lab.outlier_sigma', 4.0);
-
-        $state = $this->columns(WideErrandEncoder::STATE, $point->state, (array) $raw['state_mean'], (array) $raw['state_std'], $sigma);
-        $rows = [];
-        foreach ($point->candidates as $index => $candidate) {
-            $engine = $candidate->objectId === null ? null : ($trace->candidates[$candidate->objectId] ?? null);
-            $columns = $this->columns(WideErrandEncoder::candidateNames(), $candidate->features, (array) $raw['cand_mean'], (array) $raw['cand_std'], $sigma);
-            $rows[] = [
-                'index' => $index,
-                'kind' => $candidate->reason,
-                'action' => $engine?->candidate->type->name ?? __('t_ai.lab_wait'),
-                'reason' => $engine?->candidate->reason ?? '',
-                'target' => $engine === null ? '' : $this->target($engine->candidate->parameters),
-                'engine_score' => $engine?->score,
-                'score' => $scores[$index] ?? null,
-                'share' => $shares[$index] ?? null,
-                'teacher' => $index === $point->teacherIndex,
-                'model' => $index === $pick,
-                'columns' => array_values(array_filter($columns, static fn (array $column): bool => $column['value'] != 0.0 || $column['outlier'])),
-                'outliers' => count(array_filter($columns, static fn (array $column): bool => $column['outlier'])),
-            ];
-        }
-
-        $label = static fn (int $index): string => isset($rows[$index]) && $index !== 0 ? $rows[$index]['action'] . ' · ' . $rows[$index]['kind'] : __('t_ai.lab_wait');
-
-        return [
-            'profile' => $profile,
-            'error' => null,
-            'flies' => ErrandPolicyModel::configured($profile) !== null ? 'model' : 'scripted',
-            'skipped' => $trace->perception->fleetsaveEligible ? __('t_ai.lab_skip_save') : ($trace->perception->reactionWakeAt !== null ? __('t_ai.lab_skip_wake') : null),
-            'engine_selected' => $trace->selected->candidate->type->name . ' · ' . $trace->selected->candidate->reason,
-            'engine_candidates' => count($trace->candidates),
-            'state' => $state,
-            'rows' => $rows,
-            'teacher' => $point->teacherIndex,
-            'pick' => $pick,
-            'teacher_label' => $label($point->teacherIndex),
-            'model_pick_label' => $label($pick),
-            'model_pick_share' => $shares[$pick] ?? null,
-            'agrees' => $pick === $point->teacherIndex,
-            'value' => $this->value($raw, $point),
-            'checks' => $this->checks($point, $scores, $again, $pick, $state, $rows),
-            'milliseconds' => (int) round((microtime(true) - $started) * 1000),
-        ];
-    }
-
-    /**
-     * @param list<string> $names
-     * @param list<float> $values
-     * @param array<mixed> $mean
-     * @param array<mixed> $std
-     * @return list<array{name: string, value: float, z: float, outlier: bool}>
-     */
-    private function columns(array $names, array $values, array $mean, array $std, float $sigma): array
-    {
-        $columns = [];
-        foreach ($values as $i => $value) {
-            $average = $mean[$i] ?? 0.0;
-            $spread = $std[$i] ?? 1.0;
-            $z = ($value - (is_numeric($average) ? (float) $average : 0.0)) / max(1e-9, is_numeric($spread) ? (float) $spread : 1.0);
-            $columns[] = ['name' => $names[$i] ?? ('#' . $i), 'value' => $value, 'z' => $z, 'outlier' => abs($z) > $sigma];
-        }
-
-        return $columns;
-    }
-
-    /**
-     * The scores as shares of one: how sure the model is between the rows it could take.
-     *
-     * @param array<int, float> $scores
-     * @return array<int, float>
-     */
-    private function softmax(array $scores): array
-    {
-        if ($scores === []) {
-            return [];
-        }
-        $top = max($scores);
-        $exp = array_map(static fn (float $score): float => exp($score - $top), $scores);
-        $sum = array_sum($exp);
-
-        return array_map(static fn (float $value): float => $value / $sum, $exp);
-    }
-
-    /**
-     * The value head: what the model expects this account to be worth at season end (ln of score), from its state alone.
-     *
-     * @param array<string, mixed> $raw
-     */
-    private function value(array $raw, ChoicePoint $point): float|null
-    {
-        if (!isset($raw['value.0.weight'], $raw['value.2.weight'])) {
-            return null;
-        }
-        $x = [];
-        foreach ($point->state as $i => $value) {
-            $x[] = ($value - (float) $raw['state_mean'][$i]) / max(1e-9, (float) $raw['state_std'][$i]);
-        }
-        foreach (['state_net.0', 'state_net.2', 'value.0', 'value.2'] as $layer) {
-            $x = $this->layer($raw, $layer, $x, $layer !== 'value.2');
-        }
-
-        return $x[0] ?? null;
-    }
-
-    /**
-     * @param array<string, mixed> $raw
-     * @param list<float> $input
-     * @return list<float>
-     */
-    private function layer(array $raw, string $layer, array $input, bool $relu): array
-    {
-        $out = [];
-        foreach ($raw[$layer . '.weight'] as $o => $weights) {
-            $sum = (float) $raw[$layer . '.bias'][$o];
-            foreach ($weights as $i => $weight) {
-                $sum += $weight * ($input[$i] ?? 0.0);
-            }
-            $out[] = $relu ? max(0.0, $sum) : $sum;
-        }
-
-        return $out;
-    }
-
-    /**
-     * What "behaves correctly" means for one decision, each a check an operator can read as pass, warn or fail.
-     *
-     * @param array<int, float> $scores
-     * @param array<int, float> $again
-     * @param list<array<string, mixed>> $state
-     * @param list<array<string, mixed>> $rows
-     * @return list<array{name: string, status: string, detail: string}>
-     */
-    private function checks(ChoicePoint $point, array $scores, array $again, int $pick, array $state, array $rows): array
-    {
-        $finite = array_filter($scores, static fn (float $score): bool => !is_finite($score)) === [];
-        $stateOutliers = array_column(array_filter($state, static fn (array $column): bool => $column['outlier']), 'name');
-        $rowOutliers = array_sum(array_column($rows, 'outliers'));
-        $picked = $rows[$pick] ?? null;
-        $odds = null;
-        foreach ($picked['columns'] ?? [] as $column) {
-            $odds = $column['name'] === 'odds' ? $column['value'] : $odds;
-        }
-        $incoming = 0.0;
-        foreach ($state as $column) {
-            $incoming = $column['name'] === 'incoming_hours' ? $column['value'] : $incoming;
-        }
-        $saveOffered = array_filter($rows, static fn (array $row): bool => $row['kind'] === 'save') !== [];
-
-        return [
-            ['name' => __('t_ai.lab_check_finite'), 'status' => $finite ? 'pass' : 'fail', 'detail' => count($scores) . ' ' . __('t_ai.lab_rows')],
-            ['name' => __('t_ai.lab_check_legal'), 'status' => ($point->candidates[$pick]->legal ?? false) ? 'pass' : 'fail', 'detail' => '#' . $pick],
-            ['name' => __('t_ai.lab_check_deterministic'), 'status' => $scores === $again ? 'pass' : 'fail', 'detail' => ''],
-            ['name' => __('t_ai.lab_check_state_range'), 'status' => $stateOutliers === [] ? 'pass' : 'warn', 'detail' => implode(', ', $stateOutliers)],
-            ['name' => __('t_ai.lab_check_row_range'), 'status' => $rowOutliers === 0 ? 'pass' : 'warn', 'detail' => (string) $rowOutliers],
-            ['name' => __('t_ai.lab_check_raid_odds'), 'status' => !in_array($picked['kind'] ?? '', ['raid', 'strike'], true) || $odds === null ? 'pass' : ($odds >= 0.5 ? 'pass' : 'warn'), 'detail' => $odds === null ? '' : number_format($odds, 2)],
-            ['name' => __('t_ai.lab_check_threat'), 'status' => $incoming > 0 && $saveOffered && ($picked['kind'] ?? '') === 'wait' ? 'warn' : 'pass', 'detail' => $incoming > 0 ? number_format($incoming, 1) . ' h' : ''],
-        ];
-    }
-
-    /** @param array<string, mixed> $parameters */
-    private function target(array $parameters): string
-    {
-        foreach (['target', 'coordinates', 'destination'] as $key) {
-            if (isset($parameters[$key]) && is_scalar($parameters[$key])) {
-                return (string) $parameters[$key];
-            }
-        }
-        if (isset($parameters['galaxy'], $parameters['system'], $parameters['position'])) {
-            return $parameters['galaxy'] . ':' . $parameters['system'] . ':' . $parameters['position'];
-        }
-
-        return '';
-    }
-
-    /**
-     * @param array<string, mixed> $scenario
-     * @return array<string, mixed>
-     */
-    private function summary(AiProfile $profile, array $scenario): array
-    {
-        $statuses = array_column($scenario['checks'] ?? [], 'status');
-
-        return [
-            'player_id' => $profile->player_id,
-            'archetype' => $profile->archetype->name,
-            'error' => $scenario['error'] ?? null,
-            'flies' => $scenario['flies'] ?? null,
-            'skipped' => $scenario['skipped'] ?? null,
-            'rows' => count($scenario['rows'] ?? []),
-            'teacher' => $scenario['teacher_label'] ?? '-',
-            'model' => $scenario['model_pick_label'] ?? '-',
-            'share' => $scenario['model_pick_share'] ?? null,
-            'agrees' => $scenario['agrees'] ?? null,
-            'value' => $scenario['value'] ?? null,
-            'checks' => in_array('fail', $statuses, true) ? 'fail' : (in_array('warn', $statuses, true) ? 'warn' : ($statuses === [] ? '-' : 'pass')),
-            'milliseconds' => $scenario['milliseconds'] ?? null,
-        ];
-    }
-
-    /**
-     * @param list<array<string, mixed>> $overview
-     * @return array{decided: int, agree: int, picks: array<string, int>}
-     */
-    private function agreement(array $overview): array
-    {
-        $decided = array_filter($overview, static fn (array $row): bool => $row['agrees'] !== null);
-        $picks = [];
-        foreach ($decided as $row) {
-            $kind = explode(' · ', (string) $row['model'])[1] ?? (string) $row['model'];
-            $picks[$kind] = ($picks[$kind] ?? 0) + 1;
-        }
-        arsort($picks);
-
-        return ['decided' => count($decided), 'agree' => count(array_filter($decided, static fn (array $row): bool => $row['agrees'] === true)), 'picks' => $picks];
     }
 }

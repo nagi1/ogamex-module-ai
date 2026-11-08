@@ -379,14 +379,13 @@ class AIController extends OGameController
      * The requested tab, or the overview when the value is not one of the offered ones.
      */
     /**
-     * The model lab: the trained weight models run on every account's live login as a dry run (rolled back, nothing
-     * queued), so an operator sees what each model reads, scores and picks. Hidden unless `ai.model_lab.enabled`.
+     * The model lab: the trained fleet and economy models asked what every account should do now, beside the built-in
+     * rules, as a dry run (rolled back, nothing queued). Hidden unless `ai.model_lab.enabled`.
      */
     public function models(Request $request): Factory|View
     {
         abort_unless((bool) config('ai.model_lab.enabled'), 404);
         $this->setBodyId('overview');
-        $model = $request->query('model');
         $player = $request->query('player');
 
         /** @var view-string $view */
@@ -395,10 +394,7 @@ class AIController extends OGameController
         return view($view, [
             'title' => __('t_ai.title'),
             'tab' => 'models',
-            'lab' => app(BuildAiModelLabAction::class)->handle(
-                is_string($model) ? $model : null,
-                is_numeric($player) ? (int) $player : null,
-            ),
+            'lab' => app(BuildAiModelLabAction::class)->handle(is_numeric($player) ? (int) $player : null),
         ]);
     }
 

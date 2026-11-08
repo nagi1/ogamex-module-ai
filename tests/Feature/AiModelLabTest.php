@@ -73,9 +73,9 @@ test('the model lab is hidden unless config turns it on', function (): void {
         ->and($this->get('/admin/ai')->getContent())->not->toContain(route('ai.models'));
 });
 
-test('the model lab scores an account\'s live login with the configured model and writes nothing', function (): void {
+test('the model lab asks the fleet model about an account in plain words and writes nothing', function (): void {
     $path = modelLabPolicy();
-    config(['ai.model_lab.enabled' => true, 'ai.model_lab.models' => 'tiny=' . $path . ',missing=/nowhere/x.policy.json']);
+    config(['ai.model_lab.enabled' => true, 'ai.model_lab.fleet_model' => $path, 'ai.model_lab.economy_model' => '/nowhere/x.policy.json']);
     AiProfile::create([
         'player_id' => $this->currentUserId,
         'archetype' => AiArchetype::Miner,
@@ -89,10 +89,10 @@ test('the model lab scores an account\'s live login with the configured model an
     unlink($path);
 
     expect($response->status())->toBe(200)
-        ->and($response->getContent())->toContain('tiny')
-        ->toContain(__('t_ai.lab_why_missing'))
-        ->toContain(__('t_ai.lab_detail_heading', ['player' => $this->currentUserId, 'archetype' => 'Miner']))
-        ->toContain(__('t_ai.lab_check_legal'))
+        ->and($response->getContent())->toContain(__('t_ai.lab_card_fleet'))
+        ->toContain(__('t_ai.lab_card_missing'))
+        ->toContain(__('t_ai.lab_why_heading', ['player' => $this->currentUserId, 'archetype' => 'Miner']))
+        ->toContain(__('t_ai.lab_check_same'))
         ->and($this->get('/admin/ai')->getContent())->toContain(route('ai.models'))
         ->and([DB::table('ai_decision_traces')->count(), DB::table('ai_work_items')->count(), DB::table('fleet_missions')->count()])->toBe($before);
 });
