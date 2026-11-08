@@ -2,30 +2,31 @@
 
 use Carbon\CarbonImmutable;
 use Modules\AI\Actions\BreakAiCeasefireAction;
-use Modules\AI\Actions\InitiateAiSocialContactAction;
-use Modules\AI\Enums\AiArchetype;
-use Modules\AI\Enums\AiSkillBand;
-use Modules\AI\Models\AiProfile;
-use OGame\Models\ChatMessage;
+use Modules\AI\Actions\BuildAuthoredSocialReplyAction;
+use Modules\AI\Actions\ClassifyInboundSocialExchangeAction;
 use Modules\AI\Actions\EvaluateAiSocialExchangeAction;
+use Modules\AI\Actions\InitiateAiSocialContactAction;
 use Modules\AI\Actions\RecordAiRelationshipInteractionAction;
 use Modules\AI\Actions\RecordAiSocialExchangeAction;
+use Modules\AI\Contracts\LongTermMemory;
 use Modules\AI\Contracts\SocialCognition;
+use Modules\AI\Domain\Conversation\MemoryRecallQuery;
 use Modules\AI\Domain\Conversation\NativeSocialCognition;
 use Modules\AI\Domain\Decision\Enemies;
+use Modules\AI\Enums\AiArchetype;
 use Modules\AI\Enums\AiCommitmentState;
+use Modules\AI\Enums\AiObservationKind;
+use Modules\AI\Enums\AiObservationSource;
+use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Enums\AiSocialResponse;
 use Modules\AI\Enums\AiSocialResponseReason;
-use Modules\AI\Contracts\LongTermMemory;
-use Modules\AI\Domain\Conversation\MemoryRecallQuery;
-use Modules\AI\Actions\BuildAuthoredSocialReplyAction;
-use Modules\AI\Actions\ClassifyInboundSocialExchangeAction;
-use Modules\AI\Enums\AiObservationKind;
-use Modules\AI\Enums\AiObservationSource;
 use Modules\AI\Models\AiCommitment;
 use Modules\AI\Models\AiObservation;
+use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiSocialExchange;
+use OGame\Models\BattleReport;
+use OGame\Models\ChatMessage;
 use OGame\Models\User;
 use OGame\Services\AllianceService;
 use Tests\IsolatedAccountTestCase;
@@ -135,6 +136,11 @@ test('an agreed and a broken truce are remembered as readable sentences', functi
 test('a refused truce names how many times the asker has hit the account', function (): void {
     $asker = User::factory()->create();
     foreach ([8101, 8102, 8103] as $reportId) {
+        // Raids on this account: reports on its planet with the asker attacking.
+        BattleReport::withoutEvents(fn () => BattleReport::unguarded(fn () => BattleReport::query()->create([
+            'id' => $reportId, 'planet_galaxy' => 1, 'planet_system' => 1, 'planet_position' => 1, 'planet_user_id' => $this->currentUserId,
+            'attacker' => ['player_id' => $asker->id, 'resource_loss' => 0], 'defender' => ['player_id' => $this->currentUserId, 'resource_loss' => 400],
+        ])));
         AiObservation::query()->create([
             'player_id' => $this->currentUserId,
             'source_type' => AiObservationSource::BattleReport,

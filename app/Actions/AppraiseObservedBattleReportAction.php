@@ -90,7 +90,12 @@ class AppraiseObservedBattleReportAction
             // forget": the relationship toward the attacker turns colder (the next social
             // decision toward them already reads these scores), and the attack is remembered
             // as an AttackReceived fact so later recall can weigh a betrayal or an apology.
-            $this->recordHostility($observation, $occurredAt);
+            // Only the side that was attacked holds it against the other: an account whose own probes or raid were shot
+            // down lost the fight, but it was the aggressor (live 8 Nov: a miner told the players it had spied on to
+            // stop attacking it).
+            if ((int) $battleReport->planet_user_id === $observation->player_id) {
+                $this->recordHostility($observation, $occurredAt);
+            }
         }
 
         return $episode;

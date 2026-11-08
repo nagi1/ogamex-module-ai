@@ -16,6 +16,7 @@ use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\RandomSource;
 use OGame\Models\Alliance;
+use OGame\Models\BattleReport;
 use OGame\Models\User;
 
 /**
@@ -118,6 +119,8 @@ class InitiateAiSocialContactAction
         return AiObservation::query()
             ->where('player_id', $playerId)
             ->where('kind', AiObservationKind::BattleReportObserved)
+            // Battles this account was attacked in: its own probes or raids shot down are no grievance.
+            ->whereIn('source_id', BattleReport::query()->where('planet_user_id', $playerId)->select('id'))
             ->whereIn('subject_player_id', $warned->keys()->all())
             ->whereNotIn('subject_player_id', $pleaded)
             ->oldest('id')
@@ -138,6 +141,8 @@ class InitiateAiSocialContactAction
         return AiObservation::query()
             ->where('player_id', $playerId)
             ->where('kind', AiObservationKind::BattleReportObserved)
+            // Battles this account was attacked in: its own probes or raids shot down are no grievance.
+            ->whereIn('source_id', BattleReport::query()->where('planet_user_id', $playerId)->select('id'))
             ->whereIn('subject_player_id', AiRelationship::query()->where('player_id', $playerId)->where('threat', '>=', Enemies::ENEMY_THREAT)->select('other_player_id'))
             ->whereNotIn('subject_player_id', AiSocialExchange::query()->where('player_id', $playerId)->where('type', AiSocialExchangeType::Warning)->select('counterparty_player_id'))
             ->oldest('id')
@@ -196,7 +201,7 @@ class InitiateAiSocialContactAction
         }
 
         // A player names what was done to them ("that's 6 attacks"); a bare "stop" repeated to everyone reads as a script.
-        $hits = AiObservation::query()->where('player_id', $profile->player_id)->where('kind', AiObservationKind::BattleReportObserved)->where('subject_player_id', $raiderId)->count();
+        $hits = AiObservation::query()->where('player_id', $profile->player_id)->where('kind', AiObservationKind::BattleReportObserved)->whereIn('source_id', BattleReport::query()->where('planet_user_id', $profile->player_id)->select('id'))->where('subject_player_id', $raiderId)->count();
         $detail = $hits > 1 ? $lines->line($profile, $key . '.detail', (string) $raiderId, ['hits' => (string) $hits]) : null;
         // Two sentences, not one run-on (9499: "truce? this is pointless for both of us 4 attacks is enough for anyone").
         $message = $detail === null ? $message : rtrim($message, '.?!') . '. ' . $detail;

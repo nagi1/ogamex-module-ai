@@ -177,6 +177,22 @@ test('an AI that came off worse turns colder toward the attacker and remembers t
     expect($fact->evidence_kind)->toBe(AiMemoryEvidenceKind::Verified);
 });
 
+test('an AI whose own probes are shot down holds no grievance against the player it spied on', function (): void {
+    // Live 8 Nov 2026: a miner lost its probes to a target's defence and told that target to stop attacking it.
+    $spy = $this->createUser();
+    $target = $this->createUser();
+    battleObservedAi($spy->id, AiArchetype::Miner);
+
+    // The spy is the attacker and lost everything it sent; the target lost nothing.
+    $report = battleReportRow($target->id, battleSide($spy->id, 5000.0), 0.0);
+    app(RecordObservedBattleReportAction::class)->handle($report->id);
+
+    $relationship = AiRelationship::query()->where('player_id', $spy->id)->where('other_player_id', $target->id)->first();
+
+    expect($relationship === null || (float) $relationship->threat <= 0.0)->toBeTrue()
+        ->and(AiMemoryFact::query()->where('player_id', $spy->id)->where('predicate', AiMemoryPredicate::AttackReceived)->exists())->toBeFalse();
+});
+
 test('both participating AIs observe the battle, each naming the player it faced', function (): void {
     $defender = $this->createUser();
     $attacker = $this->createUser();

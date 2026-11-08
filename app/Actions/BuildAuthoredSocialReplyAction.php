@@ -2,6 +2,7 @@
 
 namespace Modules\AI\Actions;
 
+use Illuminate\Support\Str;
 use Modules\AI\Enums\AiConversationReplyState;
 use Modules\AI\Enums\AiObservationKind;
 use Modules\AI\Enums\AiSocialExchangeType;
@@ -12,8 +13,8 @@ use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
 use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
-use Illuminate\Support\Str;
 use Modules\AI\Support\RandomSource;
+use OGame\Models\BattleReport;
 use Symfony\Component\Yaml\Yaml;
 
 class BuildAuthoredSocialReplyAction
@@ -77,7 +78,9 @@ class BuildAuthoredSocialReplyAction
      */
     private function hitsDetail(AiSocialExchange $exchange, AiProfile $profile, int &$hits): string|null
     {
+        // Only the battles the counterparty fought on this account's planets are hits it can name.
         $hits = AiObservation::query()->where('player_id', $exchange->player_id)->where('kind', AiObservationKind::BattleReportObserved)
+            ->whereIn('source_id', BattleReport::query()->where('planet_user_id', $exchange->player_id)->select('id'))
             ->where('subject_player_id', $exchange->counterparty_player_id)->count();
 
         return $hits < 2 ? null : $this->authoredLine($profile, Str::snake($exchange->type->name) . '.' . strtolower($exchange->response->name) . '.detail', (string) $exchange->id, ['hits' => (string) $hits]);

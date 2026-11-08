@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\CarbonImmutable;
+use Modules\AI\Actions\ClassifyInboundSocialExchangeAction;
 use Modules\AI\Actions\InitiateAiSocialContactAction;
 use Modules\AI\Contracts\SocialCognition;
 use Modules\AI\Domain\Conversation\NativeSocialCognition;
@@ -11,12 +12,17 @@ use Modules\AI\Enums\AiSkillBand;
 use Modules\AI\Enums\AiSocialExchangeType;
 use Modules\AI\Models\AiObservation;
 use Modules\AI\Models\AiProfile;
+use Modules\AI\Models\AiRelationship;
 use Modules\AI\Models\AiSocialExchange;
 use Modules\AI\Support\AiClock;
 use Modules\AI\Support\RandomSource;
 use Modules\AI\Support\SeededRandomSource;
 use Modules\AI\Tests\Support\FixtureAiClock;
+use OGame\Models\BattleReport;
 use OGame\Models\ChatMessage;
+use OGame\Models\User;
+use OGame\Services\AllianceService;
+use Symfony\Component\Yaml\Yaml;
 use Tests\IsolatedAccountTestCase;
 
 require_once __DIR__ . '/../Support/FixtureAiClock.php';
@@ -120,8 +126,8 @@ test('a chatty account thanks a whole pile of senders, a quiet one thanks one', 
 /** A club of the given accounts, as the host holds it: members carry the alliance id. */
 function initiationClub(int $founderId, int ...$memberIds): int
 {
-    $alliance = app(OGame\Services\AllianceService::class)->createAlliance($founderId, 'CLUB' . $founderId % 100, 'Club');
-    OGame\Models\User::query()->whereIn('id', $memberIds)->update(['alliance_id' => $alliance->id]);
+    $alliance = app(AllianceService::class)->createAlliance($founderId, 'CLUB' . $founderId % 100, 'Club');
+    User::query()->whereIn('id', $memberIds)->update(['alliance_id' => $alliance->id]);
 
     return $alliance->id;
 }
@@ -168,10 +174,16 @@ test('a newcomer is welcomed once by one member, not by every chatty one', funct
 
 function raidedObservation(int $playerId, int $raiderId, int $sourceId): AiObservation
 {
+    // A raid on this account: a stored report whose planet is the account's and whose attacker is the raider.
+    $report = BattleReport::withoutEvents(fn () => BattleReport::unguarded(fn () => BattleReport::query()->firstOrCreate(['id' => $sourceId], [
+        'planet_galaxy' => 1, 'planet_system' => 1, 'planet_position' => 1, 'planet_user_id' => $playerId,
+        'attacker' => ['player_id' => $raiderId, 'resource_loss' => 0], 'defender' => ['player_id' => $playerId, 'resource_loss' => 400],
+    ])));
+
     return AiObservation::query()->firstOrCreate([
         'player_id' => $playerId,
         'source_type' => AiObservationSource::BattleReport,
-        'source_id' => $sourceId,
+        'source_id' => $report->id,
     ], [
         'kind' => AiObservationKind::BattleReportObserved,
         'subject_player_id' => $raiderId,
@@ -185,7 +197,7 @@ test('a raider held at the war line is warned once and never twice', function (s
     $raider = $this->createUser();
     initiationProfile($this->currentUserId);
     raidedObservation($this->currentUserId, $raider->id, 7101);
-    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+    AiRelationship::unguarded(fn () => AiRelationship::create([
         'player_id' => $this->currentUserId, 'other_player_id' => $raider->id, 'threat' => $threat, 'revision' => 0,
     ]));
     $now = CarbonImmutable::parse('2024-01-01 00:00:00 UTC');
@@ -202,12 +214,12 @@ test('a raider held at the war line is warned once and never twice', function (s
 
 // Every persona's warning line must be one the classifier reads back as a warning, or the exchange never happens.
 test('every voice\'s raid warning is read as a warning by the receiving account', function (): void {
-    $voices = Symfony\Component\Yaml\Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/social-voices.yaml');
+    $voices = Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/social-voices.yaml');
     $lines = collect($voices)->flatMap(static fn (array $voice): array => $voice['raid_warning'] ?? [])
-        ->merge(Symfony\Component\Yaml\Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/social-lines.yaml')['default']['raid_warning']);
+        ->merge(Yaml::parseFile(dirname(__DIR__, 2) . '/resources/behavior/social-lines.yaml')['default']['raid_warning']);
 
     expect($lines)->not->toBeEmpty()
-        ->and($lines->reject(static fn (string $line): bool => app(Modules\AI\Actions\ClassifyInboundSocialExchangeAction::class)->handle($line)?->type === AiSocialExchangeType::Warning)->all())->toBe([]);
+        ->and($lines->reject(static fn (string $line): bool => app(ClassifyInboundSocialExchangeAction::class)->handle($line)?->type === AiSocialExchangeType::Warning)->all())->toBe([]);
 });
 
 // A warned raider that keeps hitting is asked for a truce once, a quarter day after the warning.
@@ -243,7 +255,7 @@ test('a warning to a repeat raider says how many times they hit', function (): v
     raidedObservation($this->currentUserId, $raider->id, 7301);
     raidedObservation($this->currentUserId, $raider->id, 7302);
     raidedObservation($this->currentUserId, $raider->id, 7303);
-    Modules\AI\Models\AiRelationship::unguarded(fn () => Modules\AI\Models\AiRelationship::create([
+    AiRelationship::unguarded(fn () => AiRelationship::create([
         'player_id' => $this->currentUserId, 'other_player_id' => $raider->id, 'threat' => '0.9000', 'revision' => 0,
     ]));
 
