@@ -7,6 +7,12 @@ parameters:
     level: 8
     paths:
         - app
+    ignoreErrors:
+        # Which treaty store answers depends on whether the Empire module is enabled where the analysis runs.
+        -
+            message: '#^Instanceof between Modules\\AI\\Infrastructure\\Diplomacy\\\w+ and Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties will always evaluate to (true|false)\.$#'
+            path: app/Actions/CheckSocialIntegrityAction.php
+            reportUnmatched: false
 
 services:
     -

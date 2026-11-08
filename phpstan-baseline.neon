@@ -133,12 +133,6 @@ parameters:
 			path: app/Actions/BuildAuthoredSocialReplyAction.php
 
 		-
-			message: '#^Instanceof between Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties and Modules\\AI\\Infrastructure\\Diplomacy\\EmpireAllianceTreaties will always evaluate to true\.$#'
-			identifier: instanceof.alwaysTrue
-			count: 1
-			path: app/Actions/CheckSocialIntegrityAction.php
-
-		-
 			message: '#^Method Modules\\AI\\Actions\\CheckSocialIntegrityAction\:\:between\(\) has parameter \$others with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
