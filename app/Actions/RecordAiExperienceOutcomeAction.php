@@ -15,7 +15,9 @@ class RecordAiExperienceOutcomeAction
             return null;
         }
 
-        return AiExperienceCase::query()->firstOrCreate([
+        // Two processes can see the same completion at once (the scheduler and a page load): insert first and read the
+        // winner's row on the unique key, so the loser does not throw into the host's queue processing.
+        return AiExperienceCase::query()->createOrFirst([
             'player_id' => $playerId,
             'outcome_observation_id' => $outcomeObservationId,
             'family' => $family,
