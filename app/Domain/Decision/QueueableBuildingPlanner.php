@@ -939,6 +939,11 @@ class QueueableBuildingPlanner
         }
 
         $price = ObjectService::getObjectPrice(ObjectService::getObjectById($candidate->buildingId)->machine_name, $planet);
+        // Mines short of energy are the one thing a saver never waits on: every hour they run slow delays the goal
+        // itself (live 8 Nov 2026: a planet froze on a store goal with its mines at 65% for want of an 854-metal plant).
+        if (str_starts_with($candidate->reason, 'energy:') && $planet->getResourceProductionFactor() < 100) {
+            return true;
+        }
         $spendable = $goal->spendable($planet->getResources());
 
         return $spendable->metal->get() >= $price->metal->get()
